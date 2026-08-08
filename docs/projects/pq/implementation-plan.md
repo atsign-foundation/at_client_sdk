@@ -1863,6 +1863,47 @@ thing that decides pass or fail, which makes the rail's colour a measure of the
 atServer's cache latency rather than of the client — the argument for fixing
 `pkam_verb_handler` rather than raising the bound again.
 
+### 14.9a The attribution above was never established — the test was
+
+**Everything before this heading is retained as the record of what was
+believed, and it should not be relied on.** Challenged 2026-08-08 by Gary
+("something is wrong about the test"), the instrument was examined instead of
+the atServer, and it did not support the conclusion.
+
+The revoke **is** properly awaited — every hop from the test through
+`EnrollmentServiceImpl.revoke`, at_auth, `AtLookupImpl._process` and the socket
+read, with no fire-and-forget anywhere, and an `error:` response would throw out
+of the call. That much of the original story survives. But:
+
+1. **The test discarded the acknowledgement.** `revoke()` returns an
+   `AtEnrollmentResponse` carrying the enrollment id and status, and nothing in
+   this tree ever checks it — not this test, not `enrollment_teardown.dart`,
+   not `nskey_rotation.dart`, not the CLI. A `data:` response whose status is
+   anything other than `revoked` was silently accepted. So "the credential
+   still works" was **equally explained by the revoke not having taken**, and
+   choosing the cache explanation over that one was a guess.
+2. **The revoked enrollment's own client was never stopped.** It held a live,
+   authenticated connection carrying that enrollment id for the whole 10-second
+   poll — while the posited mechanism is an atServer-side enrollment cache. The
+   test may have been holding open the very thing it waited to see expire. It
+   is not what the scenario describes either: the lost-laptop case is a keyfile
+   in someone else's hands, not a session still running.
+
+Both are fixed. The test now asserts the ack names this enrollment and reports
+`EnrollmentStatus.revoked`, and stops the doomed client before polling — after
+which the **full functional suite went green (143/143), first clean run in a
+session where it had failed four times in five.** One run is not proof and the
+rate above says why, but the atServer-lag attribution no longer has evidence
+behind it and should be treated as open rather than as a known server defect.
+Re-derive it from a run of the fixed test before spending anything on
+`pkam_verb_handler`.
+
+**The general lesson, which is why this is written up rather than quietly
+edited:** a test that throws away a response cannot distinguish "the thing did
+not happen" from "the thing happened and is not visible yet" — and the second
+is the more interesting story, so that is the one that gets written down. Assert
+the acknowledgement.
+
 ### 14.10 UC-B0.1 needs a legacy atServer image, or a waiver
 
 One of the two skipped acceptance rows. It needs an atServer **without** the
