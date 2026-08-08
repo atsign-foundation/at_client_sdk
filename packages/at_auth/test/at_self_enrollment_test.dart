@@ -152,8 +152,9 @@ void main() {
     verifyNever(() => mock.executeCommand(any(), auth: any(named: 'auth')));
   });
 
-  test('a non-approved response is an error, and nothing is persisted',
-      () async {
+  test(
+      'a non-approved response is an error, nothing is persisted, and the '
+      'pending enrollment it created is denied', () async {
     final (keysIo, session) = await sessionWithLegacyKeyfile();
     final mock = MockAtLookUp();
     when(() => mock.executeCommand(any(that: startsWith('enroll:')),
@@ -163,9 +164,50 @@ void main() {
 
     await expectLater(
         () => AtEnrollmentImpl().submit(requestFor(session), mock),
-        throwsA(isA<AtEnrollmentException>()));
+        throwsA(isA<AtEnrollmentException>().having((e) => e.message, 'message',
+            contains('new-123 it created was denied'))));
     final after = await keysIo.read(atSign);
     expect(after.keysForEnrollment('new-123'), isEmpty);
+
+    // An atServer without the self-retrofit auto-approve parks the request as
+    // `pending`, so aborting without this leaves a record nobody will act on —
+    // and a client that retries leaves one behind per attempt.
+    final commands = verify(() => mock.executeCommand(captureAny(),
+            auth: any(named: 'auth')))
+        .captured
+        .cast<String>();
+    final denials =
+        commands.where((c) => c.startsWith('enroll:deny')).toList();
+    expect(denials, hasLength(1),
+        reason: 'the abort must deny the enrollment it just created');
+    expect(denials.single, contains('new-123'));
+  });
+
+  test(
+      'when it cannot deny — a scoped parent — the error says the pending '
+      'enrollment was left behind', () async {
+    final (_, session) = await sessionWithLegacyKeyfile();
+    final mock = MockAtLookUp();
+    when(() => mock.executeCommand(any(that: startsWith('enroll:request')),
+            auth: any(named: 'auth')))
+        .thenAnswer((_) async =>
+            'data:{"enrollmentId":"new-123","status":"pending"}');
+    // Denying needs `__manage`, which a scoped parent enrollment does not
+    // hold. Observed live against a legacy atServer as AT0009, "The approving
+    // enrollment does not have access to __manage namespace" — so the cleanup
+    // is best effort and the message has to say which happened rather than
+    // implying the server was left clean.
+    when(() => mock.executeCommand(any(that: startsWith('enroll:deny')),
+            auth: any(named: 'auth')))
+        .thenThrow(AtLookUpException('AT0009', 'UnAuthorized client'));
+
+    await expectLater(
+        () => AtEnrollmentImpl().submit(requestFor(session), mock),
+        throwsA(isA<AtEnrollmentException>().having(
+            (e) => e.message,
+            'message',
+            allOf(contains('could NOT be denied'),
+                contains('a retry will add another')))));
   });
 
   test(

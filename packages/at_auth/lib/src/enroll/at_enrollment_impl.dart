@@ -319,9 +319,33 @@ class AtEnrollmentImpl implements AtEnrollment {
       final String newEnrollmentId = enrollJson[AtConstants.enrollmentId];
       final enrollStatus = getEnrollStatusFromString(enrollJson['status']);
       if (enrollStatus != EnrollmentStatus.approved) {
+        // Deny the record this call just created, before giving up on it.
+        //
+        // An atServer without the self-retrofit auto-approve accepts the
+        // request and parks it as `pending`, so aborting without cleaning up
+        // leaves a request nobody will ever act on — and a client that retries
+        // leaves one per attempt, which is how a roster fills with litter that
+        // only expiry clears.
+        //
+        // Best effort, and why it can only be best effort is worth stating:
+        // denying needs `__manage`, which the parent enrollment this
+        // connection authenticated as may not hold. A scoped parent cannot
+        // tidy up after itself, so the thrown message reports which happened
+        // rather than implying the server was left clean.
+        var cleanup = 'The pending enrollment $newEnrollmentId it created was '
+            'denied.';
+        try {
+          await deny(
+              EnrollmentRequestDecision.denied(newEnrollmentId, request.atSign),
+              atLookUp);
+        } catch (e) {
+          cleanup = 'The pending enrollment $newEnrollmentId it created could '
+              'NOT be denied ($e); it stays on the roster until it expires, '
+              'and a retry will add another.';
+        }
         throw AtEnrollmentException(
             'expected the self-enrollment to be auto-approved; the atServer '
-            'returned status "${enrollJson['status']}"');
+            'returned status "${enrollJson['status']}". $cleanup');
       }
 
       // Persist into the SAME keyfile: the new credentials land as typed

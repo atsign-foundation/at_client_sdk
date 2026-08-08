@@ -1,4 +1,13 @@
 ## 3.4.0
+- fix: an aborted self-retrofit denies the pending enrollment it created.
+  Against an atServer without the self-retrofit auto-approve, the
+  `enroll:request` is accepted and parked as `pending`, and the client then
+  threw — leaving a record nobody would ever act on, and leaving one more per
+  retry. It now denies that enrollment before giving up.
+  Best effort by necessity: denying needs `__manage`, which the parent
+  enrollment the connection authenticated as may not hold. The thrown message
+  says which happened, so a scoped parent that could not tidy up reports the
+  leftover rather than implying the server was left clean.
 - feat: `WrittenAtKeysIo.update(atsign, mutate)` — read, mutate and persist as
   **one** operation, and the call an addition should now go through instead of
   a hand-rolled `read` → mutate → `flush`. Those three steps interleave: two
