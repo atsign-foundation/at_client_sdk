@@ -393,7 +393,7 @@ no FileAtKeysIo use).
 needs at_auth added; use `melos bootstrap`.
 **coversD1:** D1-S S6.
 
-### KF-1 — `.atKeys`-at-rest protection + backup/restore · at_client, at_auth, at_client_flutter · L  *(new D1 scope, off the GA critical path — parallel)*
+### KF-1 — `.atKeys`-at-rest protection + backup/restore · at_client, at_auth, at_client_flutter · L — [#2129](https://github.com/atsign-foundation/at_client_sdk/issues/2129)  *(new D1 scope, off the GA critical path — parallel)*
 **Goal:** protect the PQ private material in the keyfile at rest and define a backup/restore story (including
 the stale-backup case). Off the GA critical path — runs in parallel.
 **Builds on:** S-3 (updatable `.atKeys`). Additive; gates nothing on the GA critical path.
@@ -859,7 +859,7 @@ with an empty AAD, so a ciphertext was bound to its content key but not to its r
 and a CK covers every record in its `(owner, namespace)` scope, so a valid ciphertext
 could be relocated between records by anyone able to write the store and would still
 authenticate. `at/symmetric/AES/GCM` now authenticates
-`providerId:sharedBy:sharedWith:namespace:key` as AAD, which is the layer-3 equivalent of
+`providerId:sharedBy:sharedWith:<key>.<namespace>` as AAD, which is the layer-3 equivalent of
 the HPKE `info` binding the conveyance already had. It is a value wire-format change,
 taken now because nothing written under the old form exists outside the spike.
 
@@ -893,7 +893,7 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~The bench harness `acceptance.md` says lands with B-1~~ — **built 2026-08-04**, `packages/at_client/benchmark/crypto_bench.dart`. Reports three **separately-based** groups and refuses to combine them: *per record* (what every put/get pays once a CK exists — AES-256-GCM vs the legacy AES-256-CTR path), *per (owner, namespace) conveyance* (where PQ actually costs something — X-Wing `pqSeal`/`pqOpen` vs RSA-2048 wrap, paid **once** and then covering every record in scope), and *per authentication* (the ML-DSA-65 ↔ RSA-2048 signature swap). Mixing them is what would produce a headline "PQ is N% slower" from incomparable denominators. **The desktop baseline is now recorded** in [decisions 28](decisions.md#28-the-pq-performance-budget-measured-2026-08-04) — the harness had been run when it was built, but its numbers were never written down, so the acceptance row was asking for a budget that existed nowhere a reader could find it. Headline: at the 256 B size that dominates real traffic, GCM costs **3 µs** more than CTR; the ML-DSA sign a client pays per authentication is **2.7 ms**. **The ceiling is still NOT pinned:** `acceptance.md` requires one reference *low-end* device and the recorded run is a 16-core arm64 Mac, which is the opposite. Nothing here is a regression gate — one desktop run is a baseline, not a threshold | **B-1** |
 | ~~`at_chops` `pqOpen` lets an `ArgumentError` escape~~ — **fixed in at_chops 3.4.2** (unpublished): a wrong-length secret key or KEM ciphertext now arrives as `PqOpenException(malformedEnvelope)`. `NskeyProvider`'s client-side guard stays until at_client's floor rises past 3.4.1 | `at_chops` |
 | ~~The CK cache and the owner's own nskey privates are process memory only~~ — **half of this was wrong.** Content keys are a genuine cache: the read path re-fetches the `__ck` conveyance record and re-opens it, so a restart costs a round trip, not data. The nskey private is the real exposure, and [decisions.md 21](decisions.md#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) ruling 1 files it into `AtKeys` on arrival. **Owed:** implement that filing, plus the current-`ckKid` pointer (ruling 2) so a restart stops minting a fresh CK per destination | **SS-3** / **SS-4** |
-| ~~`B-1e` does not work~~ — **found and fixed 2026-08-04** ([decisions.md 26](decisions.md#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04)). The two-client harness exposed it on its first run: the content-key conveyance was written local-first, so it reached the recipient's atServer only via sync — 31 seconds later in the captured reproduction — while the notification went out immediately over the monitor. The receive path raised `ContentKeyUnavailableException` correctly and the dispatch loop swallowed it at `finer`, dropping the notification silently with no retry. Both notify entry points now route the conveyance remote-first (the same rule as the `__ssenv` ordering fix), and the dispatch `catch` logs at `warning`. **UC-A3.4 / UC-A4.4 are met**, live-covered in `concurrent_notify_test.dart`. Still open, recorded in 26.3: a notification whose transform throws is gone, with nothing re-delivering it when the missing piece lands |
+| ~~`B-1e` does not work~~ — **found and fixed 2026-08-04** ([decisions.md 26](decisions.md#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04)). The two-client harness exposed it on its first run: the content-key conveyance was written local-first, so it reached the recipient's atServer only via sync — 31 seconds later in the captured reproduction — while the notification went out immediately over the monitor. The receive path raised `ContentKeyUnavailableException` correctly and the dispatch loop swallowed it at `finer`, dropping the notification silently with no retry. Both notify entry points now route the conveyance remote-first (the same rule as the `__ssenv` ordering fix), and the dispatch `catch` logs at `warning`. **UC-A4.4 is met**, live-covered in `tests/at_end2end_test/test/pq/nskey_notify_test.dart` (split out of `concurrent_notify_test.dart` 2026-08-08). **UC-A3.4 is NOT** — corrected 2026-08-09: both live notify tests are alice→bob, so the SELF direction (alice1→alice2) is asserted against a mock only. The harness limitation that made it unwritable is gone — `ConcurrentClients` and `EnrolledClient` both exist — so it is owed rather than blocked (#2093). Still open, recorded in 26.3: a notification whose transform throws is gone, with nothing re-delivering it when the missing piece lands |
 | An enrollment authorised for one namespace must be unable to **decrypt** another's nskey data, not merely unable to fetch it. Not testable yet and deliberately not written: nskey privates are per-ring in-memory until the substrate conveys them, so a second enrollment cannot decapsulate anything at all — the crypto half of the assertion would pass vacuously while the test read as covering it | **SS-4** |
 | ~~The notify **receive** half has no live coverage~~ — **closed 2026-08-04.** It did need harness work rather than a test, and the lever was `AtClientManager`'s public constructor: one manager per atSign, each owning its own client, `notificationService` and `syncService`, with `AtClientImpl`'s cache keyed by atSign so two *different* atSigns never collide. `ConcurrentClients` (`lib/src/concurrent_clients.dart`) plus `concurrent_notify_test.dart` now show a monitor on bob receiving and **decrypting** what alice sent, live — the existing `notify_test.dart` had worked around the limitation by switching atSigns and polling `notifyList`, which reads the atServer's queue and exercises neither the monitor nor decryption. Negative control run: reinstating the singleton fails with `@alice stopped=true` from `open`'s own guard. **The constraint to respect:** while a `ConcurrentClients` is open, nothing may call `getInstance().setCurrentAtSign` for either atSign — the cached `AtClientImpl` would be handed a fresh `notificationService`, and the symptom is a subscription that never fires, which reads as a product defect | `at_end2end_test` |
 | ~~Rename the atSign-level key in code, delete the `root-pqpublickey` variant~~ — **done.** `NskeyRecipientKind` has one member; no Dart source says `pqpublickey`; the cold-start throw now states why there is no PQ target rather than promising a fallback | **B-1c** |
@@ -1281,7 +1281,7 @@ negotiate their construction); discharges plan backlog
 [14.4](#144-a-suites-list-on-the-key-package--done) and
 [14.5](#145-a-write-side-envelope-version-selector-in-at_chops--done).
 
-### B-3 — selfEncryptionKey + shared_key.* retirement, phases 1-3 · at_client, **at_secondary_server**, at_auth · L
+### B-3 — selfEncryptionKey + shared_key.* retirement, phases 1-3 · at_client, **at_secondary_server**, at_auth · L — [#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128)
 **Goal:** retire the legacy self-encryption key (a distinct project from B-2's rotation work).
 **Builds on:** B-2.
 **Deliverables → [design.md](design.md)** (selfEncryptionKey retirement, **re-timed by
@@ -2036,3 +2036,40 @@ neither is today:
    `AT0010-Exception: RangeError (length): Invalid value: Not in inclusive range 0..47: 48`
    from `AtLookupImpl.pkamAuthenticate` — that signature means the image, not
    the client.
+
+### 14.16 Four residuals the issue-tree audit surfaced, 2026-08-09
+
+Updating the #1889 tree to the current state meant auditing every open issue's
+own deliverables against the code rather than against the plan. Four things were
+owed that no ledger recorded — and two plan claims were wrong, now corrected in
+place (the layer-3 AAD literal, and UC-A3.4 below).
+
+1. **The performance ceiling is not pinned.** [acceptance.md](acceptance.md)
+   asks for the deltas measured on *one reference low-end device*, with the
+   ceiling pinned when the harness lands. The harness exists and has been run —
+   but only on a 16-core arm64 Mac, which is the opposite of the device the
+   criterion names. Until it is re-run, "performance is measured, not assumed"
+   is not yet true. B-1's own unmet acceptance requirement (#2010).
+2. **UC-A3.4's self direction is unit-only.** Both live notify tests are
+   alice→bob; the alice1→alice2 case is asserted against a `MockAtClient`. The
+   plan claimed both A3.4 and A4.4 were live-covered — corrected. It is now
+   *owed rather than blocked*: the harness limitation the issue cites
+   (`AtClientManager` being a singleton) was removed by `ConcurrentClients` and
+   `EnrolledClient`, so the assertion is writable today (#2093).
+3. **SS-4: an interrupted mint does not resume.** The acceptance bullet asks
+   that it resume rather than re-generate; there is no persisted in-progress
+   marker, so it starts over. Worth deciding whether that is still required —
+   the mint lock and the immutable create may already make re-generation safe,
+   and the acceptance text predates both (#2087).
+4. **IS-1's record name drifted from its issue.** Deliverables 1 and 3 name
+   `pq_signing_publickey@<atSign>`; that string appears nowhere in the
+   implementation. The issue needs correcting against the code before anyone
+   builds on it, and its PR needs a re-review after the pare-back (#2049).
+
+**The general lesson, which is why this is a numbered entry rather than four
+comments.** A project's issue and the plan's project entry drift *independently*,
+and both drift away from the code. Three of the four above were invisible from
+the plan alone, because the plan records what a project set out to do and the
+issue records what someone thought it had done. Reading a project's own
+deliverable list against the code is a different check from reading the plan,
+and it found things the plan's own owed-tables had lost.
