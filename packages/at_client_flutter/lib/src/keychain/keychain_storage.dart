@@ -62,17 +62,8 @@ class KeychainStorage {
     if (atKeysData == null) {
       throw AtKeyException('No atsign found in keychain');
     }
-    for (int i = 0; i < atKeysData.keys.length; i++) {
-      // Check for both 'atsign' and legacy 'name' keys in metadata
-      if (atKeysData.keys[i].metadata.containsKey('atsign')) {
-        if (atKeysData.keys[i].metadata['atsign'] == atSign) {
-          return atKeysData.keys[i];
-        }
-      } else if (atKeysData.keys[i].metadata['name'] == atSign) {
-        return atKeysData.keys[i];
-      }
-    }
-    return null;
+    final index = _indexOf(atKeysData, atSign);
+    return index == -1 ? null : atKeysData.keys[index];
   }
 
   /// Get all Atsigns currently stored in the keychain
@@ -84,15 +75,73 @@ class KeychainStorage {
       return [];
     }
     final atSigns = <String>{};
-    for (int i = 0; i < atKeysData.keys.length; i++) {
-      // Check for both 'atsign' and legacy 'name' keys in metadata
-      if (atKeysData.keys[i].metadata.containsKey('atsign')) {
-        atSigns.add(atKeysData.keys[i].metadata['atsign']);
-      } else if (atKeysData.keys[i].metadata['name']) {
-        atSigns.add(atKeysData.keys[i].metadata['name']);
-      }
+    for (final keys in atKeysData.keys) {
+      final atSign = _atSignOf(keys);
+      if (atSign != null) atSigns.add(atSign);
     }
     return atSigns.toList();
+  }
+
+  /// Replace the stored [keys] for [atSign], or append them if this atSign has
+  /// no entry yet.
+  ///
+  /// One read and one write, with [assureUpdate] called in between on the entry
+  /// being replaced. That ordering is the point: the never-lose check has to
+  /// see the state this write is about to overwrite, and re-reading afterwards
+  /// would be checking a different state from the one replaced. There is no
+  /// keychain equivalent of the `.atKeys` file lock — `biometric_storage`
+  /// offers no compare-and-swap — so two isolates racing here still resolve
+  /// last-writer-wins; keeping the window to a single read/write pair is as
+  /// narrow as this backend allows.
+  ///
+  ///   [atSign] - Atsign whose entry should be replaced
+  ///
+  ///   [keys] - the complete new [AtKeys] state for that atSign
+  ///
+  ///   [assureUpdate] - called with the entry about to be replaced, before
+  ///   anything is written. Throwing from it abandons the write.
+  Future<void> updateAtKeysInKeychain({
+    required String atSign,
+    required AtKeys keys,
+    void Function(AtKeys existing)? assureUpdate,
+  }) async {
+    final atKeysData = await readAtKeysData();
+    if (atKeysData == null) {
+      await _write(
+        biometricStoreName: (await AtKeysStore.getName()),
+        keychainData: AtKeysData(keys: [keys]),
+      );
+      return;
+    }
+    final index = _indexOf(atKeysData, atSign);
+    if (index == -1) {
+      atKeysData.keys.add(keys);
+    } else {
+      assureUpdate?.call(atKeysData.keys[index]);
+      atKeysData.keys[index] = keys;
+    }
+    await _write(
+      biometricStoreName: (await AtKeysStore.getName()),
+      keychainData: atKeysData,
+    );
+  }
+
+  /// The atSign an entry belongs to: the typed `atsign` field when a
+  /// typed-keys document supplied one, else the `atsign` metadata entry, else
+  /// the `name` one an older release wrote.
+  String? _atSignOf(AtKeys keys) {
+    if (keys.atsign != null) return keys.atsign.toString();
+    final value = keys.metadata.containsKey('atsign')
+        ? keys.metadata['atsign']
+        : keys.metadata['name'];
+    return value is String ? value : null;
+  }
+
+  int _indexOf(AtKeysData atKeysData, String atSign) {
+    for (int i = 0; i < atKeysData.keys.length; i++) {
+      if (_atSignOf(atKeysData.keys[i]) == atSign) return i;
+    }
+    return -1;
   }
 
   /// Append a new [AtKeys] entry to the keychain
@@ -137,9 +186,9 @@ class KeychainStorage {
       );
       if (data != null) {
         final atKeysData = AtKeysData.fromJson(jsonDecode(data));
-        atKeysData.keys.removeWhere(
-          (element) => element.metadata['atsign'] == atSign,
-        );
+        // Same predicate the lookups use, so an entry written under the legacy
+        // `name` metadata key can be removed as well as read.
+        atKeysData.keys.removeWhere((element) => _atSignOf(element) == atSign);
         await _write(
           biometricStoreName: (await AtKeysStore.getName()),
           keychainData: atKeysData,

@@ -1,6 +1,23 @@
 # CHANGELOG
 
 ## 1.1.5
+- fix: the keychain is a usable key store for the post-quantum paths.
+  `KeychainAtKeysIo` implemented only `read`/`write`, so `flush` fell through
+  to the interface's throwing default — and on Flutter that is the *default*
+  store, so filing an nskey private or a signing-root private threw
+  `UnimplementedError` on the platform where those paths matter most. It now
+  replaces the atSign's entry, with the same never-lose assurance the `.atKeys`
+  file gets, and implements `update` through it.
+- fix: `KeychainAtKeysIo.write` refuses an atSign that already has an entry,
+  like every other `WrittenAtKeysIo`. It used to append unconditionally to a
+  list `read` scans front-to-back, so a second write left the newer keys
+  permanently unreachable behind the older ones — a silent loss that looked
+  like a successful write. Use `flush` to persist a change to existing keys.
+- fix: an entry written by an older release, which carries its atSign under the
+  `name` metadata key rather than `atsign`, is now found, replaced and removed
+  by the same predicate the reads use. `getAllAtsigns` threw a `TypeError` on
+  one (a `String` used as a condition) and `removeAtsignFromKeychain` silently
+  kept it.
 - feat: `CramDialog` and `PkamDialog` take an optional `authService`, and
   `ApkamActivationDialog` an optional `enrollmentService`. Both default to the
   real service, so existing call sites are unaffected; passing one lets the
