@@ -243,7 +243,7 @@ new config (there is no `CryptoRegistry`).
 `P-1`/`pqSeal` publish gate is **already satisfied** (at_chops 3.3.0, published 2026-06-23), leaving the SS-0
 baseline (PR #2037) as its prerequisite (see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)).
 
-### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **SATISFIED and PUBLISHED — at_auth 3.3.0 is on pub.dev (verified 2026-08-03); no residual.** Consequence: at_auth has **no in-progress version open**, so the next change to it needs a new one opened
+### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **SATISFIED and PUBLISHED — at_auth 3.3.0 is on pub.dev (re-verified 2026-08-08); no residual.** Consequence: **at_auth 3.4.0 is already open** in-tree and unpublished (opened 2026-08-03, `936241d8f`), so a further at_auth change folds into that heading rather than opening a new one
 **Goal:** extend the existing `AtKeys` in place so it holds every key (per-enrollment AND per-APKAM) via
 additive PQ-safe accessors while the legacy key fields deprecate; interface-first.
 **Builds on:** at_auth `AtKeys`. Additive only; gates nothing in Wave 2.
@@ -266,10 +266,14 @@ PQ add→read→retire (material never removed; legacy fields still readable via
 **Watch-outs:** ⚠️ **version** — resolved 2026-07-17: at_auth 3.1.1 published, then **3.2.0 was consumed by
 the validateAtServer network-timeout release**; S-1 ships as **3.3.0** (Open decision #D closed). The
 at_chops 3.4.x prerequisite (hashing-algo barrel exports) is satisfied — 3.4.0 published 2026-07-17.
-**Publish state:** S-1 landed via PR #2047 (+ #2080 tweaks) and is published as **`at_auth 3.3.0-rc1`**.
-The **rc1 → stable 3.3.0 promotion is an open gate**: S-6 (consumer bumps) and SS-2's at_auth work both
-need a stable at_auth 3.3.0 to pin against, and consumers cannot depend on a prerelease without an explicit
-prerelease constraint. Timing is unresolved — see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing).
+**Publish state:** S-1 landed via PR #2047 (+ #2080 tweaks). **`at_auth 3.3.0` is published stable on
+pub.dev** — the old rc1 → stable gate is **closed**, so S-6 (consumer bumps) and SS-2's at_auth work have
+the stable version they needed to pin against. **at_auth 3.4.0 is open in-tree and unpublished**
+(`936241d8f`, 2026-08-03) carrying `KeyAlgorithmType.mlKem1024` and the `.atKeys` passphrase-salt fix, so
+what ON-1 adds to at_auth — `mintLegacyMaterial` — folds under that heading.
+*(This paragraph asserted the rc1 gate for five days after the heading above was corrected, and a resume
+summary copied the body rather than the heading. A superseded claim gets deleted, not left standing beside
+its correction.)*
 **S-2 carries a sibling residual** (its `CryptoContext.keys` merged after `at_client 3.14.0` published), so
 both structural enablers are merged-but-unpublished and clear together on the next release round.
 **coversD1:** D1-S S2.
@@ -1349,8 +1353,9 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 | 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(published 2026-07-17, done)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046); P-2's `mldsa65` verify branch (#2056, 07-06) and #2039 (AES-GCM FFI, 07-09) folded into the same slot, which then published. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
 | 3  | `at_chops`          | minor `3.4.2 → 3.5.0` **(in-tree, UNPUBLISHED)** | KE-1 | `AtKemAlgorithm.newSeed` + `keyPairFromSeed`; `MlKem1024PureDartAlgo`; `pqSeal ver 0x03` (RFC 9180 at KEM `0x0042` / HKDF-SHA384 / AES-256-GCM). ⚠️ **MINOR because the two seed methods are abstract members on the exported `AtKemAlgorithm`** — an external `implements` must add them. at_client already pins `^3.5.0`, and workspace resolution hides the gap |
 | 4  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal. *(at_commons has since published 5.13.0, 2026-07-17, outside this program.)* |
-| 5  | `at_auth`           | minor `3.2.0 → 3.3.0` **(3.3.0-rc1 published 2026-07-17; stable pending)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. ⚠️ **the rc1 → stable promotion is an open gate** — S-6 and SS-2's at_auth work need a stable 3.3.0 to pin against; timing unresolved. KE-1's additive `KeyAlgorithmType.mlKem1024` rides whichever at_auth slot is open |
-| 6  | `at_auth`           | **major `3.3.0 → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
+| 5  | `at_auth`           | minor `3.2.0 → 3.3.0` **(published stable 2026-07-17, done)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. The rc1 → stable promotion is **closed** (re-verified against pub.dev 2026-08-08), so S-6 and SS-2's at_auth work have the stable version they pin against |
+| 5b | `at_auth`           | minor `3.3.0 → 3.4.0` **(in-tree, UNPUBLISHED)** | KE-1, ON-1 | opened 2026-08-03 (`936241d8f`): `KeyAlgorithmType.mlKem1024`; the `.atKeys` passphrase envelope derives from a random per-file salt (was salted with the passphrase itself). **This is the open at_auth slot** — ON-1's `mintLegacyMaterial` folds in here rather than opening a new version |
+| 6  | `at_auth`           | **major `3.4.x → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
 | 7  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2, KE-1 | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation; the selectable KEM. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it. ⚠️ **gated on row 3** — this release cannot go out against an unpublished `at_chops 3.5.0` |
 | 8  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | flip `disallowLegacyEncryption` default → true; dead-code removal. *(selfEncryptionKey stop-existing moved to a later ecosystem-gated release, [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05))* |
 | 9  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection. 1.16.0 published 2026-07-17, so 1.17.0 is a clean next slot |
