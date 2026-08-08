@@ -1377,11 +1377,14 @@ build.
 now exchange `ver 0x02` where they exchanged `0x01`, and an enrollment's KEM is frozen at
 `enroll:request`, so every enrollment created after KE-1 and before GA carries the shape GA ships. It also
 put an **unpublished `at_chops 3.5.0`** in front of the at_client GA publish (row 3 of the table above).
-**Branch state (2026-08-04):** `gkc-pq-d1-spike` is **68 commits ahead of `origin/trunk` and 2 behind**;
-both of those two are docs-only (the wasm-port plan, [#2118](https://github.com/atsign-foundation/at_client_sdk/pull/2118)),
-so the drift carries no code-merge risk today.
+**Branch state (2026-08-08):** `gkc-pq-d1-spike` is **pushed**, and is 168 commits ahead of
+`origin/trunk` and **17 behind**. The behind-count is no longer trivially docs-only, so the merge back
+is worth costing before ON-1 rather than after. It has **no PR**, so nothing runs CI on it.
 
-**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. **B-1 landed too, and R-1 was delivered 2026-08-05 as the flag alone** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)); **SH-1, RF-SRV's server half, RF-2b and RF-2c's switch-over all landed 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)–[44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)), and **B-2 landed 2026-08-06** ([decisions 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)) with all four UC-A5.x rows green. **KE-1 landed 2026-08-07** ([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)) — the selectable KEM, the negotiated construction, and plan-backlog 14.2/14.4/14.5 discharged — so the path now waits on **ON-1**, **R-2** and **S-3**. RF-2c's UC-B1.x e2e rows are done; two named residuals are left: RF-SRV's revocation cascade (server) — `parentEnrollmentId` is stored but `enroll:revoke` does not yet walk descendants ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 2) — and the **at_chops 3.5.0 publish** that KE-1 put in front of the GA release.
+**Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. **B-1 landed too, and R-1 was delivered 2026-08-05 as the flag alone** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)); **SH-1, RF-SRV's server half, RF-2b and RF-2c's switch-over all landed 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)–[44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)), and **B-2 landed 2026-08-06** ([decisions 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)) with all four UC-A5.x rows green. **KE-1 landed 2026-08-07** ([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)) — the selectable KEM, the negotiated construction, and plan-backlog 14.2/14.4/14.5 discharged — so the path now waits on **ON-1**, **R-2** and **S-3**. RF-2c's UC-B1.x e2e rows are done; two named residuals are left: RF-SRV's revocation cascade (server) — `parentEnrollmentId` is stored but `enroll:revoke` does not yet walk descendants ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 2) — the **at_chops 3.5.0 publish** that KE-1 put in front of the GA release, and a
+**revocation-visibility lag** on the atServer ([14.9](#149-a-revoked-enrollment-can-still-authenticate-briefly)).
+Separately, `at_lookup` 3.6.1 ([PR #2127](https://github.com/atsign-foundation/at_client_sdk/pull/2127),
+branched from trunk) is open and needs merging; it is not a GA gate.
 **Off-path (parallel):** `RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
 (builds on S-3), and the final `R-2`.
 
@@ -1550,7 +1553,7 @@ as of 2026-08-06 has not started.
 They are kept here rather than deleted because each names a hatch the wire now
 depends on, and a reader asking "why can the construction change without a flag
 day" needs to find the answer where the question was recorded. The live items
-are 14.1, 14.3, 14.6 and 14.7.
+are 14.1, 14.3, 14.6, 14.7 and 14.8-14.11.
 
 ### 14.1 The signing root's `keys[]` shape — DEADLINE: the first root we keep
 
@@ -1665,3 +1668,47 @@ signs with the encryption keypair and fetches `getRemotePK` rather than
 `_apsk` — so a migration here does not break it. But "nobody has this shape
 deployed" is wrong, and if the pitch becomes "our envelopes are RFC 7515" then
 NoPorts is a separately-owned second migration to name rather than discover.
+
+### 14.8 Domain separation on the signed envelope
+
+The `from:` challenge and a to-be-signed envelope are both signed by the
+enrollment's signing key, so their shapes must stay disjoint
+([decisions 51](decisions.md#51-the-from-challenge-and-a-signed-envelope-must-never-share-a-shape-2026-08-08)).
+They are today, and `at_lookup` 3.6.1 asserts the challenge half. Domain
+separating the envelope makes it true by construction rather than by coincidence
+of two formats.
+
+Belongs on the PQ branch, not trunk: it changes the signed bytes, and only the
+PQ branch has `signedEnvelopeVersion` to dispatch on. Doing it on trunk would
+break verification of envelopes written by published at_client 3.14.0.
+
+### 14.9 A revoked enrollment can still authenticate, briefly
+
+Observed 2026-08-07: a fresh connection PKAM-authenticated with a revoked
+enrollment's own keypair after `enrollmentService.revoke()` had returned, once
+in three consecutive full-suite runs. atServer-side — the PKAM path appears to
+resolve enrollment state through the same cache `enroll:listns` is served from,
+and the roster half of the same test already polls around that staleness.
+
+Matters because revocation is the enforcement that `excludeEnrollmentIds` is
+only a courtesy for. The client-side assertion is now bounded (`d6fe103ba`), so
+the suite still fails if the credential never stops working — that is a test
+fix, not a fix for the lag. Next step is `pkam_verb_handler` / the enrollment
+cache in at_server. Sits beside the RF-SRV cascade residual
+([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 2).
+
+### 14.10 UC-B0.1 needs a legacy atServer image, or a waiver
+
+The last skipped acceptance row. It needs an atServer **without** the retrofit
+verbs to abort cleanly against, and no image in this repo provides one. That is
+a harness gap rather than an unlanded project, so it is re-scoped or waived the
+way UC-A3.2 was — a decision, not an implementation. Until then the acceptance
+suite reads 42 of 45 with 3 skipped, and the other two skips are ON-1's.
+
+### 14.11 299 `deprecated_member_use` findings in at_client
+
+Everything else `dart analyze` reported is cleared (`3e3ac1075`); at_chops is
+clean outright. What remains is live use of deprecated-but-still-required APIs
+— the `AtChops` compatibility shim, `AtSigningInput`, `apkamPublicKey` — so
+clearing them means migrating call sites, which is a code change rather than a
+lint sweep and wants its own pass.
