@@ -1316,24 +1316,33 @@ had been labelled for the wrong layer since it was written. Running it opened
 [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record):
 the legacy-interop opt-out is honoured at activation but leaves an atSign that
 cannot write a public record at all.
-**Still owed:** the `at_client_flutter` / `at_onboarding_cli` call sites that
-would make PQ-native the activation an end user actually gets.
+**The `at_onboarding_cli` half landed 2026-08-08**, live-covered in
+`tests/at_onboarding_cli_functional_tests/test/pq_native_onboard_test.dart` —
+a CRAM activation with `--signingAlgoType mldsa65` against a real atServer,
+asserting all three products of a PQ-native activation together. That pack runs
+against the virtualenv container in CI, so this is CI-reachable coverage. It is
+deliberately **one test asserting three things**: the products are
+all-or-nothing, and a suite that could go green with two of them is not
+guarding the property that matters.
 
-⚠️ **The CLI cannot be done with a flag, and the half-measure is worse than
-nothing** (examined 2026-08-08). `AtOnboardingPreference` already carries
-`signingAlgoType` and `AtOnboardingServiceImpl` already threads it into
-`_atLookUp` — but *not* into the `AtOnboardingRequest`, so setting it today
-gives the broken combination: at_lookup signing PKAM with ML-DSA against an RSA
-APKAM. Threading it into the request alone would be worse still: the activation
-would mint an ML-DSA APKAM with **no key package and no signing root**, and
-`metadata.keyPackage` is written by the `enroll:request` that creates the record
-and never again — so that atSign could never be repaired, only abandoned. A CLI
-PQ activation therefore needs all three of `signingAlgoType`,
-`metadataBuilder: enrollmentKeyPackageBuilder(...)` and a post-activation
-`PqSigningRoot(...).mintIfAbsent(isFullyPrivileged: true)`, which is
-`pqNativeOnboard`'s body against the CLI's own `autoCompleteActivation: false`
-flow. And it needs a live test before it is believed — this repo has no CRAM
-harness for `at_onboarding_cli`, so that is the first thing the work builds.
+The work was not a flag. `AtOnboardingPreference` already carried
+`signingAlgoType` and the impl already threaded it into `_atLookUp` but *not*
+into the `AtOnboardingRequest`, so setting it gave ML-DSA PKAM signing against
+an RSA APKAM; and threading it into the request alone would have been worse
+still — an ML-DSA APKAM with no key package and no signing root, unrepairable
+because `metadata.keyPackage` is written once by the creating `enroll:request`.
+So at_client now exports the two halves (`makeActivationPqNative`,
+`mintSigningRootAfterActivation`) and both `pqNativeOnboard` and the CLI use
+them, rather than the CLI carrying a second copy of the definition.
+
+Two things the live run found, neither of which unit tests would have:
+`authenticate` threw `Null check operator used on a null value` from its
+local-secondary key back-up, which dereferenced the flat APKAM fields a PQ
+keyfile leaves empty; and a `!= rsa2048` test for "is this post-quantum" would
+have silently forced ML-DSA on a caller asking for `ecc_secp256r1`, which this
+package supports.
+
+**Still owed:** the `at_client_flutter` call site.
 **Goal:** a brand-new atSign onboards PQ-native (the root of Part-A coverage).
 **Builds on:** RF-2b (PQ-APKAM mint) + SS-4 (pqpublickey).
 **Deliverables → [design.md](design.md)** (PQ-native onboarding, **amended by
@@ -1839,11 +1848,11 @@ fix, not a fix for the lag. Next step is `pkam_verb_handler` / the enrollment
 cache in at_server. Sits beside the RF-SRV cascade residual
 ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 2).
 
-**Worse, 2026-08-08, and still intermittent.** Four full-suite runs in one
+**Worse, 2026-08-08, and still intermittent.** Five full-suite runs in one
 session: the revoked credential kept authenticating past the client's
-**10-second** bound (20 polls × 500ms) on the **first three**, and the fourth
-was green. So the rate moved sharply — 2026-08-07 saw one failure in three, this
-session saw three in four — without the behaviour changing kind. It is not a
+**10-second** bound (20 polls × 500ms) on **four of them**. So the rate moved
+sharply — 2026-08-07 saw one failure in three, this session saw four in five —
+without the behaviour changing kind. It is not a
 regression from anything in this repo: the suite was run with that session's new
 test file removed and with it restored, in the same session, and both arms
 failed identically at the same point.

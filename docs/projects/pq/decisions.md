@@ -68,6 +68,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [52. ON-1: a greenfield atSign starts where a retrofit ends (2026-08-08)](#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08) — *typed-only keyfile, the signing root names its algorithm, and the PQ mint is opt-in at the at_auth layer*
 - [53. UC-B4.2, and what asking for no legacy material actually costs (2026-08-08)](#53-uc-b42-and-what-asking-for-no-legacy-material-actually-costs-2026-08-08) — *the row was labelled for a layer that cannot CRAM-activate; the opt-out is honoured and unusable; a pre-seeded harness key was letting two assertions pass for the wrong reason*
 - [54. S-3: the two things an updatable key store turned out to be (2026-08-08)](#54-s-3-the-two-things-an-updatable-key-store-turned-out-to-be-2026-08-08) — *read-mutate-flush loses material at every client start; the keychain could not be written to at all; the self-enc-key re-wrap has no operator and is KF-1's*
+- [55. ON-1's consumer half: what "the CLI can do it too" actually cost (2026-08-08)](#55-on-1s-consumer-half-what-the-cli-can-do-it-too-actually-cost-2026-08-08) — *export the steps rather than describing them; "not rsa2048" is not "mldsa65"; the live run found what unit tests structurally could not*
 
 ---
 
@@ -4986,3 +4987,55 @@ belongs to the first project that needs one, which is **KF-1**: at-rest
 protection of the PQ privates, whose restore flow already needs an assurance
 override for the inverse case (an older backup over a newer keyfile). Building
 both escape hatches together, once, beats building one now on speculation.
+
+---
+
+## 55. ON-1's consumer half: what "the CLI can do it too" actually cost (2026-08-08)
+
+`at_onboarding_cli` can now activate an atSign PQ-native
+(`--signingAlgoType mldsa65`), which is what turns ON-1 from a capability into
+an activation an end user can reach. Three things are worth keeping from doing
+it.
+
+### 55.1 The definition of "PQ-native" lives in one place, or it drifts
+
+The obvious implementation was to set the three fields on the CLI's own
+`AtOnboardingRequest`. That is a second copy of a definition whose parts are
+**all-or-nothing**: an ML-DSA APKAM without a key package is not a partial
+success, because `metadata.keyPackage` is written by the `enroll:request` that
+creates the enrollment record and never again — so an atSign minted that way
+can never be repaired, only abandoned. A copy that falls one field behind
+produces exactly that.
+
+So `pqNativeOnboard` was split into `makeActivationPqNative` (stamp a request)
+and `mintSigningRootAfterActivation` (the guarded root step), both exported, and
+it is now those two plus the CRAM onboard. The CLI calls the same two against
+its own flow. **The general rule: when a second caller needs "the same thing" and
+the thing is a set of steps that must all happen, export the steps, don't
+describe them.**
+
+### 55.2 "Not the old one" is not the same as "the new one"
+
+The first cut tested `signingAlgoType != rsa2048` to decide whether to go
+post-quantum. This package supports a *third* value — `ecc_secp256r1`, which one
+of its own tests configures — and that predicate would have silently minted an
+ML-DSA APKAM for a caller who asked for elliptic curve. Matching `== mldsa65`
+is the whole fix, and the reason it was nearly wrong is that the enum had two
+members in mind and three in fact. Sibling of the
+[widening-a-list](implementation-plan.md#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record)
+hazard: a predicate written as a negation goes wrong the moment the set grows,
+with no site having changed.
+
+### 55.3 The live run found what unit tests structurally could not
+
+`authenticate()` threw `Null check operator used on a null value` from
+`_persistKeysLocalSecondary`, a legacy back-up step that dereferences the flat
+`apkamPublicKey`/`apkamPrivateKey` fields — which a PQ enrollment deliberately
+leaves empty ([52.1](#521-the-keyfile-shape-typed-only-and-the-flat-fields-stay-empty)),
+and which an atSign activated without legacy material lacks entirely. It now
+persists whatever the keyfile holds.
+
+Note where that landed: *after* a successful authentication, from a back-up
+step, with a message naming nothing. Only driving a real PQ keyfile through the
+real `authenticate()` finds it — which is the argument for the live test being
+the deliverable rather than its evidence.
