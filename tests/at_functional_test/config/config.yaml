@@ -13,5 +13,21 @@ atSign:
   # onboards needs an atSign no other test onboards. Both of the above are
   # already taken by enrollment_test.dart.
   apkamThirdAtSign: '@colin'
+  # The same one-shot ledger, continued for pq_legacy_interop_live_test.dart.
+  # Named by role rather than by position, because that file's three atSigns
+  # differ in what they are onboarded AS, and "fourth/fifth/sixth" would hide
+  # the only thing that distinguishes them. All three are spent by that one
+  # file; nothing else may onboard them.
+  #
+  # Pre-PQ: onboarded with the default RSA signing algorithm, so it has no
+  # signing root, no key package and no namespace key — the legacy peer of
+  # UC-B4.2, freshly minted rather than borrowed from a demo atSign the PQ
+  # tests have already retrofitted.
+  legacyPeerAtSign: '@chris'
+  # PQ-native, keeping legacy material by default.
+  pqNativeAtSign: '@xavier'
+  # PQ-native with mintLegacyMaterial:false — the legacy-interop opt-out, which
+  # is set once at activation and can never be taken back.
+  pqNativeOptOutAtSign: '@jeremy'
 
 

@@ -147,8 +147,15 @@ void main() {
     final publicKey = await client
         .getRemoteSecondary()!
         .executeCommand('plookup:publickey$atSign\n', auth: true);
-    expect(publicKey, startsWith('data:'),
+    // By VALUE, not by presence. The virtualenv image ships every demo atSign
+    // with a `public:publickey` already installed — an untouched `@denise` has
+    // one — so `startsWith('data:')` passes on provisioning state even if the
+    // activation published nothing. Only equality with the key just minted
+    // shows the activation wrote it.
+    expect(publicKey?.replaceFirst('data:', '').trim(),
+        keys.defaultEncryptionPublicKey.toString(),
         reason: 'UC-B4.2: a legacy peer must be able to send to a brand-new '
-            'atSign out of the box');
+            'atSign out of the box, and the key it finds has to be the one '
+            'this atSign holds the private half of');
   }, timeout: Timeout(Duration(minutes: 3)));
 }

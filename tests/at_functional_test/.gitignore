@@ -14,6 +14,9 @@ pubspec.lock
 test/testData/@srie.atKeys
 test/testData/@sachin.atKeys
 test/testData/@colin.atKeys
+test/testData/@chris.atKeys
+test/testData/@xavier.atKeys
+test/testData/@jeremy.atKeys
 test/testData/rf2b-legacy@*.atKeys
 # FileAtKeysIo.flush keeps the previous state recoverable beside the keyfile.
 test/testData/*.atKeys.bak
