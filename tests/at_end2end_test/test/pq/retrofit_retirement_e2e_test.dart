@@ -2,6 +2,9 @@
 // of this file.
 // ignore_for_file: experimental_member_use
 
+@Tags(['pq'])
+library;
+
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';

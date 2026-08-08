@@ -185,6 +185,13 @@ jobs:
             ./update_ce2e_images.sh
 
   # The Job runs end-to-end tests between two atSign's running on server trunk branch
+  #
+  # @ce2e1..@ce2e4 are LONG-LIVED atServers, so this job must never write
+  # post-quantum material to them: a signing root is immutable and create-once,
+  # and a published namespace key or a retrofitted enrollment outlives the run
+  # that made it. tests/at_end2end_test/dart_test.yaml allowlists the files a
+  # bare `dart test` runs, and the PQ ones under test/pq/ are not on it. The
+  # pqe2e_tests job runs those against a container it starts and throws away.
   end2end_tests:
     needs: [end2end_tests_prep]
     runs-on: ubuntu-latest
@@ -236,6 +243,10 @@ jobs:
   #          flags: end2end_tests
 
   # The Job runs end-to-end tests between server code running on trunk branch and canary (production ready) server
+  #
+  # Same allowlist as end2end_tests: @ce2e1..@ce2e4 are long-lived, so the
+  # post-quantum files under tests/at_end2end_test/test/pq/ are not on the
+  # `paths:` list in dart_test.yaml and a bare `dart test` cannot reach them.
   end2end_test_14:
     needs: [end2end_tests_prep]
     if: ${{ github.actor != 'dependabot[bot]' }}
@@ -284,3 +295,122 @@ jobs:
         if: ${{ !cancelled() }}
         working-directory: tests/at_end2end_test
         run: dart run test/enrollment_teardown.dart
+
+  # The post-quantum half of the end-to-end suite, against a virtualenv
+  # container this job starts and throws away.
+  #
+  # It exists because these tests write records that cannot be taken back: a
+  # signing root is immutable and create-once, a published namespace key, an
+  # `_apsk` and a retrofitted enrollment all outlive the run. On the long-lived
+  # @ce2e atSigns that would be permanent, so end2end_tests / end2end_test_14
+  # exclude them via the allowlist in tests/at_end2end_test/dart_test.yaml and
+  # this job names test/pq/ explicitly.
+  #
+  # REQUIRES an atServer image that verifies ML-DSA PKAM signatures. If the
+  # published virtualenv image does not yet, this job fails at authentication
+  # with a server-side
+  #   AT0010-Exception: RangeError (length): Invalid value: Not in inclusive
+  #   range 0..47: 48
+  # out of AtLookupImpl.pkamAuthenticate — the atServer choking on an ML-DSA
+  # public key. That signature means the image, not the client.
+  #
+  # The sequence below mirrors tests/at_end2end_test/runLocal.sh, including the
+  # per-atSign grace-hours step and its ordering constraint.
+  pqe2e_tests:
+    runs-on: ubuntu-latest
+    env:
+      # The e2e virtualenv runs in base-port mode so it never collides with the
+      # functional suite's fixed 64/25000-25999 range. Both the container and
+      # the Dart processes read this: check_local_env.dart and local_setup.dart
+      # fall back to root port 64 when it is unset, which would point them at
+      # an atDirectory that is not there.
+      VIRTUALENV_BASE_PORT: 26000
+      VE_TOP_PORT: 26099
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # No `with:` — this job has no matrix, so the action's own stable
+      # defaults apply rather than an expression that can only be empty.
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Install dependencies in at_client
+        working-directory: packages/at_client
+        run: dart pub get
+
+      - name: Install dependencies in at_end2end_test
+        working-directory: tests/at_end2end_test
+        run: dart pub get
+
+      - name: Add entry to hosts file
+        run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
+
+      # No VIRTUALENV_IMAGE set, so docker-compose.yaml takes its default:
+      # the published atsigncompany/virtualenv:vip.
+      - name: Start docker instance
+        working-directory: tests/at_end2end_test/test
+        run: docker compose pull && docker compose up -d
+
+      - name: Wait for supervisor
+        run: |
+          for i in $(seq 1 30); do
+            docker exec e2e_virtualenv supervisorctl status >/dev/null 2>&1 && break
+            sleep 2
+          done
+          docker exec e2e_virtualenv supervisorctl status
+
+      # One atSign gets a zero-hour self-enrollment grace so the retirement row
+      # can watch a capped legacy enrollment actually age out instead of waiting
+      # 30 days. Per-secondary rather than the container-wide
+      # apkamSelfEnrollmentGraceHours env var, which every secondary would
+      # inherit: at grace 0 a retrofit kills its parent within a millisecond,
+      # and the clone rows need a parent that survives its sibling's retrofit.
+      # Each secondary's `config` is a symlink to one shared directory, so
+      # replacing the symlink with a private copy is what makes the setting
+      # local to this atSign. The env var must stay unset for the yaml to be
+      # read at all (env beats yaml in AtSecondaryConfig).
+      #
+      # BEFORE pkamLoad, deliberately. Restarting a secondary mid-load severs
+      # whatever key install was in flight against it and nothing retries — the
+      # atSign would come up with no public key and every test on it would fail
+      # at authentication, a long way from this step.
+      - name: Set apkamSelfEnrollmentGraceHours=0 for @eve🛠
+        run: |
+          docker exec e2e_virtualenv sh -c "
+            set -e
+            d='/atsign/secondary/eve🛠'
+            rm -f \"\$d/config\"
+            mkdir -p \"\$d/config\"
+            cp /atsign/secondary/base/config/config.yaml \"\$d/config/config.yaml\"
+            printf '\nenrollment:\n  apkamSelfEnrollmentGraceHours: 0\n' >> \"\$d/config/config.yaml\"
+          "
+          docker exec e2e_virtualenv supervisorctl restart '25010_@eve🛠'
+
+      - name: Run PKAM
+        run: |
+          for i in $(seq 1 30); do
+            docker exec e2e_virtualenv supervisorctl start pkamLoad >/dev/null 2>&1 && break
+            sleep 2
+          done
+
+      # Probes the reconfigured atSign as well as the first one, so a load that
+      # missed it fails here rather than inside a test's setUpAll.
+      - name: Check test environment readiness
+        working-directory: tests/at_end2end_test
+        run: dart run test/check_local_env.dart
+
+      # Mints atKeys/ and writes config/config.yaml for the demo atSigns in the
+      # virtualenv. Both are gitignored; this job needs no CICD secret, so it
+      # also runs on forks.
+      - name: Generate atKeys and config
+        working-directory: tests/at_end2end_test
+        run: dart run test/local_setup.dart
+
+      # The explicit path overrides the allowlist in dart_test.yaml, which is
+      # what confines a bare `dart test` to the non-PQ files.
+      - name: Run post-quantum end-to-end tests
+        working-directory: tests/at_end2end_test
+        run: dart test --concurrency=1 test/pq
+
+      - name: Stop docker containers
+        if: ${{ !cancelled() }}
+        working-directory: tests/at_end2end_test/test
+        run: docker compose down

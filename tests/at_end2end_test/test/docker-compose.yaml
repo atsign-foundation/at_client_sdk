@@ -1,12 +1,17 @@
-# Local-only virtualenv for the end-to-end suite. Driven by ../runLocal.sh,
-# which exports VIRTUALENV_BASE_PORT (+ VE_TOP_PORT = base+99). A distinct
-# project name + container name let this run alongside the functional suite's
-# virtualenv on a different base port.
+# Virtualenv for the end-to-end suite's post-quantum tests. Driven by
+# ../runLocal.sh, which exports VIRTUALENV_BASE_PORT (+ VE_TOP_PORT = base+99),
+# and by the `pqe2e_tests` CI job. A distinct project name + container name let
+# this run alongside the functional suite's virtualenv on a different base port.
+#
+# The image defaults to the PUBLISHED one so CI is right without setting
+# anything. A local run that needs a build the registry does not have yet opts
+# in with VIRTUALENV_IMAGE — runLocal.sh sets it to at_virtual_env:local, since
+# the published image has lagged the PQ work throughout this branch.
 name: at_end2end_test
 services:
   virtualenv:
     container_name: e2e_virtualenv
-    image: atsigncompany/virtualenv:vip
+    image: ${VIRTUALENV_IMAGE:-atsigncompany/virtualenv:vip}
     # The published image's default CMD runs supervisord directly and ignores
     # VIRTUALENV_BASE_PORT. Run the base-port entrypoint explicitly so the
     # port-shift happens (it execs supervisord; no-op for an unset base port).

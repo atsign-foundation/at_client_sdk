@@ -1,3 +1,6 @@
+@Tags(['pq'])
+library;
+
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart' show XWingKeyPair;

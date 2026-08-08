@@ -5,14 +5,46 @@ set -euo pipefail
 # port. Pick a base port that does NOT overlap the functional suite's ports so
 # both can run at once (functional defaults to the fixed 64/25000-25999 range).
 #
-#   ./runLocal.sh [BASE_PORT]      # default 26000  -> root 26000, secondaries 26001-26080
+#   ./runLocal.sh [BASE_PORT] [TEST_PATHS...]
+#
+#   ./runLocal.sh                      # both sets: test/ and test/pq/
+#   ./runLocal.sh 26000 test/pq        # post-quantum only
+#   ./runLocal.sh 26000 test -x pq     # everything except post-quantum
+#
+# The default path argument is `test`, which recurses into test/pq/ — so a bare
+# run covers both sets. CI does NOT do that: `dart_test.yaml` allowlists the
+# files a bare `dart test` may run, and the post-quantum ones are deliberately
+# not on it, because the CI e2e jobs point at the long-lived @ce2e atSigns.
+# Anything passed here overrides that allowlist.
 #
 # Generates atKeys + config/config.yaml (test/local_setup.dart) from at_demo_data
 # for the PKAM demo atSigns, then runs the tests. Both are gitignored.
 
 BASE_PORT="${1:-26000}"
+shift || true
+# `A && B` as a bare statement under `set -e` exits the script whenever A is
+# false, so the default goes in an if.
+if [[ $# -eq 0 ]]; then
+  TEST_PATHS=("test")
+else
+  TEST_PATHS=("$@")
+fi
+
 export VIRTUALENV_BASE_PORT="$BASE_PORT"
 export VE_TOP_PORT=$((BASE_PORT + 99))
+
+# The virtualenv image. docker-compose.yaml defaults to the published
+# `atsigncompany/virtualenv:vip` so CI needs no environment; a local run wants
+# a build the registry does not have yet, so default the opposite way here and
+# let the caller override:
+#
+#   VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip ./runLocal.sh
+#
+# The published image has lagged the PQ work for the whole of this branch — as
+# of 2026-08-08 its atServer cannot verify an ML-DSA PKAM signature, and the
+# symptom is a server-side `AT0010-Exception: RangeError (length): Invalid
+# value: Not in inclusive range 0..47: 48` out of pkamAuthenticate.
+export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
 
 cd "$(dirname "$0")"
 
@@ -20,14 +52,13 @@ echo "*** Getting dependencies" && dart pub get
 
 cd test
 echo "*** docker compose down" && docker compose down
-# SWAPPED, DELIBERATELY, AND UNCOMMITTED. docker-compose.yaml points at a
-# locally built `at_virtual_env:local` instead of the published
-# `atsigncompany/virtualenv:vip`, and the pull is disabled to match. The
-# published image does not store `EnrollParams.metadata`, so the key-package
-# and two-enrollment paths cannot be exercised against it at all.
-# Revert this file AND test/docker-compose.yaml before opening a PR — the
-# functional pack carries the same pair of edits.
-echo "*** docker compose pull SKIPPED (local at_virtual_env:local image)"
+# A locally built image is on no registry, so pulling it fails the run. Only
+# pull what could actually have come from one.
+if [[ "$VIRTUALENV_IMAGE" == *"/"* ]]; then
+  echo "*** docker compose pull (${VIRTUALENV_IMAGE})" && docker compose pull
+else
+  echo "*** docker compose pull SKIPPED (local image ${VIRTUALENV_IMAGE})"
+fi
 echo "*** docker compose up (base port ${BASE_PORT}, range ${BASE_PORT}-${VE_TOP_PORT})"
 docker compose up -d
 cd ..
@@ -84,11 +115,11 @@ echo "*** Generating atKeys + config" && dart run test/local_setup.dart
 
 echo "*** Clearing client test storage" && rm -rf test/hive
 
-echo "*** Running e2e tests"
+echo "*** Running e2e tests (${TEST_PATHS[*]})"
 # Let the test run fail through to cleanup (so a flake doesn't leave the
 # container up), then propagate its exit code.
 set +e
-dart test --concurrency=1 -r expanded
+dart test --concurrency=1 -r expanded "${TEST_PATHS[@]}"
 TEST_EXIT=$?
 set -e
 

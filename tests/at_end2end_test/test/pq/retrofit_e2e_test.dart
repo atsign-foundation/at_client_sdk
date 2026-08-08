@@ -2,6 +2,9 @@
 // driving them end-to-end is the point of this file.
 // ignore_for_file: experimental_member_use
 
+@Tags(['pq'])
+library;
+
 import 'dart:io';
 import 'dart:typed_data';
 
