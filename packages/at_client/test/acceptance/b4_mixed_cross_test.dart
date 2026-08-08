@@ -46,8 +46,26 @@ void main() {
       //       toward alice via the explicit legacy fallback to her publickey;
       //       toward bob because even a PQ-native onboard publishes
       //       public:publickey by default. Only the opt-out refuses it.
-      fail('not implemented');
-    }, skip: on1CrossAtSign);
+      provenIn('tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
+          'UC-B4.2 inbound',
+          proves: 'the inbound half: a legacy app on a freshly CRAM-activated '
+              'pre-PQ atSign shares with a PQ-native one, and the PQ-native '
+              'one opens it with the RSA keypair its activation minted by '
+              'default — three live atSigns, all three minted by the test so '
+              '"pre-PQ" is asserted rather than borrowed');
+      provenIn('tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
+          'UC-B4.2 outbound',
+          proves: 'the outbound half, in both arms: a post-quantum app on the '
+              'PQ-native atSign is REFUSED by name toward a peer with no '
+              'namespace key, and with allowLegacyCryptoFallback set the same '
+              'write goes out stamped legacy and the legacy peer reads it');
+      provenIn('tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
+          'UC-B4.2 opt-out',
+          proves: 'the only atSign that refuses is the one that asked to: '
+              'activated with mintLegacyMaterial:false it publishes no '
+              'publickey, and a legacy peer\'s send fails rather than '
+              'producing ciphertext nobody holds a key for');
+    });
 
     test(
         'UC-B4.3 · mid-rollout @alice (one install active, one old) shares '

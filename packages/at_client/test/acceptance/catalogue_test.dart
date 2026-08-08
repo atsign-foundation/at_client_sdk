@@ -94,8 +94,12 @@ void main() {
     expect(int.parse(total![1]!), rows,
         reason: 'README.md says ${total[1]} rows; there are $rows');
 
+    // `is` as well as `are`: the count reached one, and a guard that forces
+    // "1 rows are skipped" is holding the prose to the regex rather than the
+    // other way round.
     final skippedStated =
-        RegExp(r'\*\*(\d+) of the (\d+)\*\* rows are skipped').firstMatch(text);
+        RegExp(r'\*\*(\d+) of the (\d+)\*\* rows? (?:are|is) skipped')
+            .firstMatch(text);
     expect(skippedStated, isNotNull,
         reason: 'README.md must state the skipped share as '
             '"**N of the M** rows are skipped"');

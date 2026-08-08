@@ -114,7 +114,7 @@ below), plus 9 cross-cutting invariants.
 | B1 · retrofit                 | B1.1 ✅, B1.2 ✅, B1.3 ✅           | —            |
 | B2 · retirement & lockout     | B2.1 ✅, B2.2 ✅                    | —            |
 | B3 · mixed-PQ intra-atSign    | B3.1 ✅, B3.2 ✅                    | —            |
-| B4 · mixed-PQ cross-atSign    | B4.1 ✅, B4.2, B4.3 ✅, B4.4 ✅     | ON-1         |
+| B4 · mixed-PQ cross-atSign    | B4.1 ✅, B4.2 ✅, B4.3 ✅, B4.4 ✅   | —            |
 | B5 · retrofit edge cases      | B5.1 ✅, B5.2 ✅, B5.3 ✅           | —            |
 | cross-cutting invariants      | 9 (9 ✅)                          | —            |
 
@@ -133,17 +133,27 @@ the 45** rows, and no data-path row could go green until **B-1** (XL) and
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**2 of the 45** rows are skipped. **UC-B4.2** is the remaining ON-1 row and is
-genuinely blocked on an e2e run: it asks that a legacy peer and a PQ-native
-atSign interoperate in *both* directions, and only two atSigns can show the
-inbound one. UC-A1.1 proves its outbound precondition — a PQ-native onboard
-publishes `public:publickey` by default — but a precondition is not the
-scenario. The other, **UC-B0.1**, is labelled `RF-SRV` but is really blocked on
-the *harness*. It needs a PQ-capable client to abort cleanly against an atServer
-that has none of the retrofit verbs, and no suite here can produce a legacy
-atServer image to run it against. Re-scope or waive it the way UC-A3.2 was,
-rather than leaving it looking like it is waiting on code that already
-exists. Nothing is *owed a test*: the last such rows, the B1 trio, were
+**1 of the 45** rows is skipped. **UC-B0.1** is labelled `RF-SRV` but is really
+blocked on the *harness*. It needs a PQ-capable client to abort cleanly against
+an atServer that has none of the retrofit verbs, and no suite here can produce a
+legacy atServer image to run it against. Re-scope or waive it the way UC-A3.2
+was, rather than leaving it looking like it is waiting on code that already
+exists.
+
+**UC-B4.2 went green 2026-08-08**, and how it did is worth keeping. It was
+labelled `blocked: ON-1 · layer: tests/at_end2end_test` on the reasoning that
+only two atSigns can show the inbound direction — true, but the layer was wrong
+twice over: `tests/at_end2end_test` runs in CI against long-lived cicd atSigns
+and so can never CRAM-activate anything, and its initializer dereferences
+`apkamPublicKey!`, which is null in every PQ-native keyfile. The functional pack
+runs against the virtualenv container in CI as well as locally, and drives two
+atSigns in one file. The row is proven there, by
+`tests/at_functional_test/test/pq_legacy_interop_live_test.dart`, which mints
+all three atSigns it needs — a pre-PQ one, a PQ-native one, and a PQ-native one
+that opted out of legacy material — so "legacy peer" is asserted rather than
+borrowed from a demo atSign some other file has already retrofitted.
+
+Nothing is *owed a test*: the last such rows, the B1 trio, were
 discharged 2026-08-05 by the retrofit e2e coverage. The guard asserts
 the skipped total, which is what it can measure; the blocked/owed split lives
 in `blockers.dart`'s labels and in this sentence. That is a much more

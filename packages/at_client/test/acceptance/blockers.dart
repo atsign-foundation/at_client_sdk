@@ -77,13 +77,12 @@ const _e2e = 'layer: tests/at_end2end_test';
 /// On the GA critical path per decisions.md 40.
 const rfSrv = 'blocked: RF-SRV (server self-retrofit enroll) · $_e2e';
 
-/// PQ-native greenfield onboarding + legacy-interop flag.
-///
-/// ON-1's client half has LANDED and UC-A1.1 is proven live, so `on1` is gone
-/// and that row cites its test. What is left is the cross-atSign half: UC-B4.2
-/// asks that a legacy peer and a PQ-native atSign interoperate in **both**
-/// directions, and only an e2e run with two atSigns can show the inbound
-/// direction. The functional row proves the outbound precondition — a
-/// PQ-native onboard publishes `public:publickey` by default — but a
-/// precondition is not the scenario.
-const on1CrossAtSign = 'blocked: ON-1 (PQ-native onboarding) · $_e2e';
+// ON-1 is fully discharged. Its cross-atSign row, UC-B4.2, was labelled
+// `blocked: ON-1 · layer: tests/at_end2end_test` on the reasoning that only an
+// e2e run with two atSigns could show the inbound direction. The layer was
+// wrong, and the reason is worth keeping: `tests/at_end2end_test` runs in CI
+// against long-lived cicd atSigns, so it can never CRAM-activate anything,
+// and its `TestSuiteInitializer` dereferences `apkamPublicKey!` — null in
+// every PQ-native keyfile. `tests/at_functional_test` runs against the
+// virtualenv container in CI as well as locally, already holds UC-A1.1, and
+// drives two atSigns in one file perfectly well. The row is proven there.
