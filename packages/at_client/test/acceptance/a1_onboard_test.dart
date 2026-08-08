@@ -5,7 +5,7 @@ library;
 
 import 'package:test/test.dart';
 
-import 'blockers.dart';
+import 'proven_elsewhere.dart';
 
 void main() {
   group('A1 · PQ-native onboard', () {
@@ -23,7 +23,21 @@ void main() {
       //       minted (the PQ data path never touches them) and
       //       public:publickey@alice is present unless the opt-OUT flag is
       //       set.
-      fail('not implemented');
-    }, skip: on1);
+      provenIn(
+        'tests/at_functional_test/test/pq_native_onboard_live_test.dart',
+        'UC-A1.1 · a CRAM activation is PQ-native, and still legacy-reachable',
+        proves: 'pqNativeOnboard activates a fresh atSign against a live '
+            'atServer and the ML-DSA-65 APKAM then authenticates on a NEW '
+            'connection from the keyfile alone — no RSA APKAM exists '
+            'anywhere, so the atServer can only have verified an ML-DSA PKAM '
+            'signature against the enrollment activation created. The APKAM '
+            'is filed as typed material with the flat fields left empty, the '
+            'signing root is created and a second create is refused by the '
+            'atServer, metadata.keyPackage is on the enrollment record via '
+            'enroll:listns, and the legacy encryption keypair, '
+            'selfEncryptionKey and public:publickey are all present by '
+            'default.',
+      );
+    });
   });
 }

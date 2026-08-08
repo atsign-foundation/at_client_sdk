@@ -26,7 +26,9 @@ library;
 // `at_client dart test` is not among them any more: every scenario that lands
 // in this package's own unit suite is now written, so no constant names that
 // layer. The next project to block a unit row adds it back.
-const _functional = 'layer: tests/at_functional_test runLocal.sh';
+// The functional layer has joined it: ON-1 was the last project blocking a
+// functional row, and UC-A1.1 now cites its live test instead. The next
+// project to block one adds the constant back.
 const _e2e = 'layer: tests/at_end2end_test';
 
 // ---------------------------------------------------------------------------
@@ -76,5 +78,12 @@ const _e2e = 'layer: tests/at_end2end_test';
 const rfSrv = 'blocked: RF-SRV (server self-retrofit enroll) · $_e2e';
 
 /// PQ-native greenfield onboarding + legacy-interop flag.
-const on1 = 'blocked: ON-1 (PQ-native onboarding) · $_functional';
+///
+/// ON-1's client half has LANDED and UC-A1.1 is proven live, so `on1` is gone
+/// and that row cites its test. What is left is the cross-atSign half: UC-B4.2
+/// asks that a legacy peer and a PQ-native atSign interoperate in **both**
+/// directions, and only an e2e run with two atSigns can show the inbound
+/// direction. The functional row proves the outbound precondition — a
+/// PQ-native onboard publishes `public:publickey` by default — but a
+/// precondition is not the scenario.
 const on1CrossAtSign = 'blocked: ON-1 (PQ-native onboarding) · $_e2e';

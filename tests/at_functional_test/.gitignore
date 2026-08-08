@@ -9,8 +9,11 @@ build/
 # https://dart.dev/guides/libraries/private-files#pubspeclock.
 pubspec.lock
 
+# Minted by the CRAM-onboarding tests, one atSign each — activation is
+# one-shot per virtualenv, so two tests must never share one.
 test/testData/@srie.atKeys
 test/testData/@sachin.atKeys
+test/testData/@colin.atKeys
 test/testData/rf2b-legacy@*.atKeys
 # FileAtKeysIo.flush keeps the previous state recoverable beside the keyfile.
 test/testData/*.atKeys.bak

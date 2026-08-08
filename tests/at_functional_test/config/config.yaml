@@ -9,5 +9,9 @@ atSign:
   secondAtSign: "@bob🛠"
   apkamFirstAtSign: '@srie'
   apkamSecondAtSign: '@sachin'
+  # CRAM activation is one-shot per atSign per virtualenv, so a test that
+  # onboards needs an atSign no other test onboards. Both of the above are
+  # already taken by enrollment_test.dart.
+  apkamThirdAtSign: '@colin'
 
 

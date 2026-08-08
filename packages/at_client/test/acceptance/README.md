@@ -19,7 +19,11 @@ is how far we've got.
 > rotation and revocation rows with it, and **KE-1 landed 2026-08-07**
 > (`decisions.md` 50), *adding* five rows — A2.4, A3.5, A4.5, A4.6, A4.7 — all
 > green on arrival, because the project that added them is the project that
-> proved them. The suite reads **42 of 45**
+> proved them. **ON-1's client half landed 2026-08-08**, taking **UC-A1.1**
+> with it: a CRAM activation is PQ-native, proven live — the ML-DSA-65 APKAM
+> re-authenticates on a fresh connection with no RSA APKAM in existence, so
+> the atServer verified an ML-DSA PKAM signature against the enrollment
+> activation created. The suite reads **43 of 45**
 > scenario rows green, up from 1 before the repair and 5 after it. (The runner's own count
 > is higher — it includes `catalogue_test.dart`'s three guards, which are not
 > scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
@@ -101,7 +105,7 @@ below), plus 9 cross-cutting invariants.
 
 | Cluster                       | Scenarios                        | Blocked on   |
 |-------------------------------|----------------------------------|--------------|
-| A1 · PQ-native onboard        | A1.1                             | ON-1         |
+| A1 · PQ-native onboard        | A1.1 ✅                           | —            |
 | A2 · enrollments              | A2.1 ✅, A2.2 ✅, A2.3 ✅, A2.4 ✅  | —            |
 | A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅, A3.5 ✅ | —      |
 | A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅, A4.5 ✅, A4.6 ✅, A4.7 ✅ | — |
@@ -129,10 +133,13 @@ the 45** rows, and no data-path row could go green until **B-1** (XL) and
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**3 of the 45** rows are skipped, and all three are *blocked* on a project
-that has not landed — ON-1 — with one exception that is worth naming
-separately: **UC-B0.1** is labelled `RF-SRV` but is really blocked on the
-*harness*. It needs a PQ-capable client to abort cleanly against an atServer
+**2 of the 45** rows are skipped. **UC-B4.2** is the remaining ON-1 row and is
+genuinely blocked on an e2e run: it asks that a legacy peer and a PQ-native
+atSign interoperate in *both* directions, and only two atSigns can show the
+inbound one. UC-A1.1 proves its outbound precondition — a PQ-native onboard
+publishes `public:publickey` by default — but a precondition is not the
+scenario. The other, **UC-B0.1**, is labelled `RF-SRV` but is really blocked on
+the *harness*. It needs a PQ-capable client to abort cleanly against an atServer
 that has none of the retrofit verbs, and no suite here can produce a legacy
 atServer image to run it against. Re-scope or waive it the way UC-A3.2 was,
 rather than leaving it looking like it is waiting on code that already
