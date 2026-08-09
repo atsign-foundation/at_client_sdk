@@ -4,10 +4,10 @@ import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
-/// Routes encryption/decryption to the [CryptoProvider] named by an [AtKey]'s
-/// `appMetadata.providerId`.
 final AtSignLogger _logger = AtSignLogger('CryptoRuntime');
 
+/// Routes encryption/decryption to the [CryptoProvider] named by an [AtKey]'s
+/// `appMetadata.providerId`.
 class CryptoRuntime {
   static const String legacyProviderId = legacyCryptoProviderId;
 

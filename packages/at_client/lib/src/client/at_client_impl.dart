@@ -1581,14 +1581,6 @@ class AtClientImpl implements AtClient {
     return chops;
   }
 
-  /// Fails fast at construction if the configured default provider id can't be
-  /// resolved — neither among `AtClientPreference.crypto.providers` nor the
-  /// built-in legacy provider. Crypto resolution itself is done by
-  /// [CryptoRuntime] against the live `preference.crypto`, so there is no
-  /// per-client registry to populate.
-  /// [options] with the crypto provider pinned to legacy, leaving the caller's
-  /// object untouched — it may be a shared instance, and one write's fallback
-  /// must not become every later write's default.
   /// Whether a write to a destination with no post-quantum key may go out
   /// legacy instead of failing.
   ///
@@ -1603,6 +1595,9 @@ class AtClientImpl implements AtClient {
       (preference?.allowLegacyCryptoFallback ?? false) &&
       preference?.disallowLegacyEncryption != true;
 
+  /// [options] with the crypto provider pinned to legacy, leaving the caller's
+  /// object untouched — it may be a shared instance, and one write's fallback
+  /// must not become every later write's default.
   static PutRequestOptions _copyOptionsForLegacyFallback(
           PutRequestOptions options) =>
       PutRequestOptions()
@@ -1610,6 +1605,11 @@ class AtClientImpl implements AtClient {
         ..shouldEncrypt = options.shouldEncrypt
         ..cryptoProviderId = legacyCryptoProviderId;
 
+  /// Fails fast at construction if the configured default provider id can't be
+  /// resolved — neither among `AtClientPreference.crypto.providers` nor the
+  /// built-in legacy provider. Crypto resolution itself is done by
+  /// [CryptoRuntime] against the live `preference.crypto`, so there is no
+  /// per-client registry to populate.
   void _validateDefaultCryptoProvider() {
     final config = CryptoConfig.forClient(this);
     final id = config.defaultProviderId;

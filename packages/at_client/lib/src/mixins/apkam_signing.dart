@@ -24,7 +24,7 @@ mixin ApkamSigning {
     return id;
   }
 
-  /// the uri (e.g. `public:apsk.<enrollment_id>.__wa@atsign`) of the
+  /// the uri (e.g. `public:_apsk.<enrollment_id>.a.__e@atsign`) of the
   /// [publicSigningKey]
   String get publicSigningKeyUri {
     return 'public:'

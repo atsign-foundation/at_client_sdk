@@ -188,26 +188,6 @@ String encodeTaggedApsk(
     jsonEncode(
         {'v': 1, 'signingAlgo': signingAlgo.name, 'publicKey': publicKey});
 
-/// Verifies an envelope produced by [signEnvelope] against
-/// [signerPublicKey] — the `_apsk` value the signer's enrollment published,
-/// in either its bare or its tagged form.
-///
-/// **The key's own declaration is authoritative** over the envelope's
-/// `signingAlgo` claim, matching PKAM's record-authoritative rule
-/// (`docs/projects/pq/decisions.md` 34): a tagged key names its algorithm and
-/// the envelope must agree; a bare key is RSA by definition, so an envelope
-/// claiming otherwise fails against it. Either way, a lie about `signingAlgo`
-/// fails the verify — it can never select a weaker routine than the published
-/// key calls for.
-///
-/// The same rule applies to `hashingAlgo`, which the envelope also names and
-/// the signature also does not cover. It is checked against an allowlist rather
-/// than resolved straight to a routine — `HashingAlgoType` carries `md5`, and
-/// an unsigned field must not be able to select a broken hash.
-///
-/// Throws [AtSigningVerificationException] if the signature does not check
-/// out. Verification needs no keypair of its own: the public key is the whole
-/// input, which is why this works on a client holding no keys at all.
 /// The hashes an envelope is allowed to name.
 ///
 /// `HashingAlgoType` also carries `md5` and `argon2id`. MD5's collision
@@ -249,6 +229,26 @@ HashingAlgoType _verifiableHashingAlgo(Object? claimed) {
   return algo;
 }
 
+/// Verifies an envelope produced by [signEnvelope] against
+/// [signerPublicKey] — the `_apsk` value the signer's enrollment published,
+/// in either its bare or its tagged form.
+///
+/// **The key's own declaration is authoritative** over the envelope's
+/// `signingAlgo` claim, matching PKAM's record-authoritative rule
+/// (`docs/projects/pq/decisions.md` 34): a tagged key names its algorithm and
+/// the envelope must agree; a bare key is RSA by definition, so an envelope
+/// claiming otherwise fails against it. Either way, a lie about `signingAlgo`
+/// fails the verify — it can never select a weaker routine than the published
+/// key calls for.
+///
+/// The same rule applies to `hashingAlgo`, which the envelope also names and
+/// the signature also does not cover. It is checked against an allowlist rather
+/// than resolved straight to a routine — `HashingAlgoType` carries `md5`, and
+/// an unsigned field must not be able to select a broken hash.
+///
+/// Throws [AtSigningVerificationException] if the signature does not check
+/// out. Verification needs no keypair of its own: the public key is the whole
+/// input, which is why this works on a client holding no keys at all.
 Future<void> verifyEnvelope(
   Map envelope, {
   required String signerPublicKey,

@@ -14,24 +14,6 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
-/// The approval chain: every enrollment's APKAM public key is signed by the
-/// enrollment that approved it, up to the atSign's signing root.
-///
-/// The link is a plain APKAM-signed envelope, which is what makes the chain
-/// self-describing: the envelope already names the enrollment that signed it,
-/// and verifying it already resolves that enrollment's published `_apsk`. So a
-/// verifier walks upward without any approval graph having been published, and
-/// a forged parent claim simply fails the signature check against the parent it
-/// names.
-///
-/// **The parent signs and the child publishes** ([decisions.md 22.2b][] ruling
-/// 7). `_apsk` writes are restricted to the owning enrollment's own
-/// authenticated connection, so the signer is not a permitted writer: the
-/// approver conveys the link over the substrate, and the child stamps it onto
-/// its own record on first run. Until the child runs, verifiers see a bare key,
-/// which the transition rule already tolerates.
-///
-/// [decisions.md 22.2b]: ../../../../../../docs/projects/pq/decisions.md
 /// How far up the approval chain a verifier got.
 ///
 /// Graded rather than boolean because a bare `_apsk` is deliberately tolerated
@@ -76,6 +58,24 @@ class ChainResult {
       '${reason == null ? '' : ', $reason'})';
 }
 
+/// The approval chain: every enrollment's APKAM public key is signed by the
+/// enrollment that approved it, up to the atSign's signing root.
+///
+/// The link is a plain APKAM-signed envelope, which is what makes the chain
+/// self-describing: the envelope already names the enrollment that signed it,
+/// and verifying it already resolves that enrollment's published `_apsk`. So a
+/// verifier walks upward without any approval graph having been published, and
+/// a forged parent claim simply fails the signature check against the parent it
+/// names.
+///
+/// **The parent signs and the child publishes** ([decisions.md 22.2b][] ruling
+/// 7). `_apsk` writes are restricted to the owning enrollment's own
+/// authenticated connection, so the signer is not a permitted writer: the
+/// approver conveys the link over the substrate, and the child stamps it onto
+/// its own record on first run. Until the child runs, verifiers see a bare key,
+/// which the transition rule already tolerates.
+///
+/// [decisions.md 22.2b]: ../../../../../../docs/projects/pq/decisions.md
 @experimental
 class PqSigningChain {
   /// Reserved [Secret] name for a conveyed chain link.

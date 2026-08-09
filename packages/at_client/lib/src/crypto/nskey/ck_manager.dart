@@ -8,6 +8,8 @@ import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
+final _logger = AtSignLogger('CkManager');
+
 /// Keeps a current content key in place for each destination a client writes to.
 ///
 /// Content keys are scoped **per recipient**, so the "no current CK" case is not
@@ -20,8 +22,6 @@ import 'package:at_utils/at_logger.dart' show AtSignLogger;
 /// conveyance record*, and that cannot happen inside `encrypt` — by then the put
 /// pipeline is mid-flight building a verb builder. So it runs as a preparation
 /// step before the pipeline starts, via [CryptoProvider.prepareForWrite].
-final _logger = AtSignLogger('CkManager');
-
 class CkManager {
   final ContentKeyCache cache;
   final NskeyKeyRing keyRing;

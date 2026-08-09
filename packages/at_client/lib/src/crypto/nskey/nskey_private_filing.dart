@@ -229,13 +229,6 @@ class NskeyPrivateFiling {
     }
   }
 
-  /// Every nskey private this client holds for [namespace], keyed by its
-  /// `nskeyKid`.
-  ///
-  /// All generations, not just the current one: data written under a
-  /// superseded key is still readable, and only its own private opens it. A
-  /// client given the current generation alone could read nothing written
-  /// before the last rotation.
   /// Every private this keyfile holds, grouped by namespace: `{namespace:
   /// {nskeyKid: private}}`.
   ///
@@ -272,6 +265,13 @@ class NskeyPrivateFiling {
     return held;
   }
 
+  /// Every nskey private this client holds for [namespace], keyed by its
+  /// `nskeyKid`.
+  ///
+  /// All generations, not just the current one: data written under a
+  /// superseded key is still readable, and only its own private opens it. A
+  /// client given the current generation alone could read nothing written
+  /// before the last rotation.
   Future<Map<String, Uint8List>> readAllFor(String namespace) async {
     final prefix = keyIdFor(namespace, '');
     try {
