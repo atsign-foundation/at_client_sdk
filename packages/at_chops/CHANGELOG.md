@@ -73,6 +73,9 @@
 - feat: `HkdfSha256.extract` and `HkdfSha256.expand` as separate operations.
   RFC 9180's key schedule derives several outputs from one PRK, and the fused
   `deriveKey` would re-extract per output and produce unrelated keys.
+- feat: `HkdfSha384.deriveKey` — the fused form existed only at SHA-256. The
+  two hash variants now share one RFC 5869 implementation internally, so the
+  public surface is symmetric.
 - feat: `pqSeal` takes a `version`, and `pqSealDefaultVersion` /
   `pqSealSupportedVersions` are public. The emitted version was a private
   constant, so there was no way to emit one construction to peers that had not

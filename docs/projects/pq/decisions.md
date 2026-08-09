@@ -5462,3 +5462,17 @@ surface, and the concrete classes keep their public `static const seedLength`
 (which the in-tree 3.5.0 changelog already promises). Landed before the
 3.5.0 publish because the mixin and its protected members are exported,
 interface-adjacent surface that could not be reshaped afterwards.
+
+### 59.5 One HKDF, parameterised by hash
+
+`hkdf.dart` carried three copies of the RFC 5869 expand loop (one inlined in
+`HkdfSha256.deriveKey`, which did not compose its own extract and expand),
+three length guards and two HMAC wrappers, differing only by hash. The
+construction now has one implementation — `Hkdf`, package-internal in
+`hkdf_core.dart`, instances by hash — and the published facade names
+(`HmacSha256`, `HkdfSha256`, `HmacSha384`, `HkdfSha384`) stay as one-line
+delegates, because the hash-pinned names ARE the public API and the 3.4.1
+surface is frozen. `HkdfSha384.deriveKey` now exists for free. Attestation
+unchanged and green over the unified core: the RFC 4231/5869 KATs at SHA-256,
+the HPKE WG `0x0042` key-schedule vector as SHA-384's only oracle, and the v1
+schedule/golden-envelope pins.
