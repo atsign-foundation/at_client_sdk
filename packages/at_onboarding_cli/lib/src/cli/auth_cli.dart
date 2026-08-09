@@ -876,8 +876,6 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
     deviceRegex = RegExp(drx);
   }
 
-  AtLookUp atLookup = atClient.getRemoteSecondary()!.atLookUp;
-
   // listen for enrollment requests
   stdout.writeln('Listening for new enrollment requests');
 

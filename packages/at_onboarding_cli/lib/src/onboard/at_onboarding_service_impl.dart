@@ -1,5 +1,9 @@
 // ignore_for_file: unnecessary_null_comparison
 
+// The PQ activation surface is deliberately @experimental while it matures;
+// this CLI ships from the same workspace and moves in step with it.
+// ignore_for_file: experimental_member_use
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
