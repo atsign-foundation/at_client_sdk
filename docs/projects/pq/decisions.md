@@ -5670,3 +5670,32 @@ client exists, and it writes the one record whose shape is frozen for the
 enrollment's life, so it stays at the `signEnvelope` default until the flip
 itself decides otherwise. Threading a posture through it is the capstone's
 business, not this commit's.
+
+### 60.4 Two verifiers that are not ours say the envelope is RFC 7515
+
+Per [48.5](#485-the-vectors-are-the-deliverable-not-the-migration), the
+deliverable is a committed vector plus a runnable third-party check.
+`test/vectors/jws_envelope_v2.json` holds one envelope per algorithm over a
+fixed payload (fixture keys, privates included so the deterministic arm can
+re-sign); `tool/verify_jws_vectors.mjs` hands them to panva's `jose`;
+`test/jws_vector_test.dart` holds our own verifier to the same fixed bytes —
+a sign→verify round trip agrees with itself about any drift, a committed
+vector does not — and re-signs the RS256 arm expecting the byte-identical
+envelope (PKCS#1 v1.5 is deterministic; ML-DSA is hedged, so that arm
+verifies only).
+
+Adjudicated 2026-08-09, two independent implementations:
+
+- **RS256 — jose 6.2.8 on Node 24.2.0**: verifies, refuses the tampered
+  payload, and ignores the wrapper's extra `v` member as RFC 7515 §7.2.2
+  requires (the script deliberately hands jose the whole envelope, never a
+  cleaned-up copy).
+- **ML-DSA-65 — OpenSSL 3.6.3 CLI**: `openssl pkeyutl -verify -rawin` over
+  the ASCII of `protected || '.' || payload`, public key wrapped as SPKI
+  (OID 2.16.840.1.101.3.4.3.18), verifies and refuses a one-bit tamper.
+  This is also the direct third-party proof of the RFC 9964 claim: pure
+  ML-DSA, empty context, over the JWS signing input.
+- jose's ML-DSA arm could not run locally: Node 24.2 bundles OpenSSL
+  3.0.16, which cannot even import the key — the runtime, not the vector.
+  The script says so in its header and stays committed for a Node whose
+  OpenSSL is ≥ 3.5.

@@ -35,3 +35,8 @@ doc/api/
 # Working notes, drafts, audits — not part of the published package.
 local/
 full_stack_tests/
+
+# npm droppings from tool/verify_jws_vectors.mjs
+tool/node_modules/
+tool/package.json
+tool/package-lock.json
