@@ -5333,3 +5333,19 @@ reshape. One more spelling family arrives later by design: the JWS wrapper
 brings its own registered names (`RS256`, `ML-DSA-65`) confined to the
 protected header (§56.5) — it replaces the envelope's `signingAlgo` spelling,
 never the keyfile's or the records'.
+
+### 57.8 `SecretSharingAlgos` stays as functions, not a suite table
+
+The audit proposed collapsing the file's seven switch-shaped lookups into one
+const `_SuiteSpec` row table, and the plan made the collapse conditional on
+the per-row rationale surviving. It would not survive: the rationale in that
+file attaches to the *questions*, not the rows — each lookup documents its own
+null-contract and failure direction ("null rather than defaulting, because
+sealing under a guessed construction produces a record the recipient cannot
+open"; "an unknown keyfile token means 'not mine', not 'malformed'") — and the
+per-row facts (KEM id, KDF, AEAD, version byte) already live on the suite
+constants' own dartdoc. A table would keep needing every one of those
+function docs on its derived lookups while moving the row facts away from
+the constants. The drift hazard the table was meant to fix — parallel
+switches disagreeing — is fenced instead by the wire pins, which assert every
+mapping with literals on both sides. Skipped, deliberately.
