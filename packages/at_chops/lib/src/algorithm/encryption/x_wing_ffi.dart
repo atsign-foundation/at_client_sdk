@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:ffi';
-import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
@@ -32,13 +31,19 @@ import 'package:pointycastle/digests/shake.dart';
 /// supports ML-KEM-768 and falls back to pure-Dart otherwise. Construct via
 /// [XWingFfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
 /// (e.g. loaded via [tryLoadLibCrypto]).
-final class XWingFfiAlgo implements AtKemAlgorithm {
+final class XWingFfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   final MlKem768FfiAlgo _mlKem;
   final X25519FfiAlgo _x25519;
 
   XWingFfiAlgo.fromLib(DynamicLibrary lib)
       : _mlKem = MlKem768FfiAlgo.fromLib(lib),
         _x25519 = X25519FfiAlgo.fromLib(lib);
+
+  @override
+  int get kemSeedLength => seedLength;
+
+  @override
+  String get kemSeedDescription => 'an X-Wing seed';
 
   static const int seedLength = 32;
   static const int publicKeyLength = 1216;
@@ -61,7 +66,7 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
   @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
       [Uint8List? seed]) async {
-    seed ??= _randomSeed();
+    seed ??= newSeed();
     final _Expanded e = await _expand(seed);
     try {
       final Uint8List publicKey = Uint8List(publicKeyLength)
@@ -73,16 +78,12 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
     }
   }
 
+  /// Unlike [MlKem768FfiAlgo], this backend's secret key is the seed itself
+  /// rather than an OpenSSL handle, so a key recovered through
+  /// [keyPairFromSeed] does survive a restart.
   @override
-  Uint8List newSeed() => _randomSeed();
-
-  /// The pair [seed] produces. Unlike [MlKem768FfiAlgo], this backend's secret
-  /// key is the seed itself rather than an OpenSSL handle, so a key recovered
-  /// here does survive a restart.
-  @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
-          Uint8List seed) =>
-      generateKeyPair(seed);
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      keyPairFromValidatedSeed(Uint8List seed) => generateKeyPair(seed);
 
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
@@ -171,12 +172,6 @@ final class XWingFfiAlgo implements AtKemAlgorithm {
           ..setRange(96, 128, pkX)
           ..setRange(128, 134, _label);
     return SHA3Digest(256).process(input);
-  }
-
-  Uint8List _randomSeed() {
-    final Random random = Random.secure();
-    return Uint8List.fromList(
-        List<int>.generate(seedLength, (_) => random.nextInt(256)));
   }
 }
 

@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
@@ -13,7 +12,7 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// whose secret keys are real, serializable byte arrays — the FFI variant
 /// ([MlKem768FfiAlgo]) stores OpenSSL `EVP_PKEY*` pointers and returns
 /// opaque process-lifetime handles instead.
-final class MlKem768PureDartAlgo implements AtKemAlgorithm {
+final class MlKem768PureDartAlgo with KemSeedMixin implements AtKemAlgorithm {
   static const MlKem768PureDartAlgo instance = MlKem768PureDartAlgo._();
 
   const MlKem768PureDartAlgo._();
@@ -26,24 +25,17 @@ final class MlKem768PureDartAlgo implements AtKemAlgorithm {
   static const int seedLength = 64;
 
   @override
-  Uint8List newSeed() {
-    final Random random = Random.secure();
-    return Uint8List.fromList(
-        List<int>.generate(seedLength, (_) => random.nextInt(256)));
-  }
+  int get kemSeedLength => seedLength;
 
-  /// The pair [seed] produces — the only correct way to recover this key from
-  /// storage, since [generateKeyPair]'s 2400-byte `secretKey` does not yield
-  /// the public half back.
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
-      Uint8List seed) {
-    if (seed.length != seedLength) {
-      throw ArgumentError.value(seed.length, 'seed',
-          'ML-KEM-768 seed must be $seedLength bytes (d || z)');
-    }
-    return generateKeyPair(seed);
-  }
+  String get kemSeedDescription => 'an ML-KEM-768 seed (d || z)';
+
+  /// The only correct way to recover this key from storage is
+  /// [keyPairFromSeed], since [generateKeyPair]'s 2400-byte `secretKey` does
+  /// not yield the public half back.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      keyPairFromValidatedSeed(Uint8List seed) => generateKeyPair(seed);
 
   /// Generate a fresh ML-KEM-768 key pair.
   ///

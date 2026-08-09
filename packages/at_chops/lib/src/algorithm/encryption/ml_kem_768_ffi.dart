@@ -23,7 +23,7 @@ import 'package:ffi/ffi.dart';
 /// intentionally does not auto-resolve standalone ML-KEM-768: this backend's
 /// secret keys are process-lifetime handles (see above), which is unsafe
 /// behind a generic facade whose pure-Dart branch returns serializable keys.
-final class MlKem768FfiAlgo implements AtKemAlgorithm {
+final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   final DynamicLibrary _lib;
   final Random _rng = Random.secure();
 
@@ -140,25 +140,25 @@ final class MlKem768FfiAlgo implements AtKemAlgorithm {
   static const int seedLength = 64;
 
   @override
-  Uint8List newSeed() => Uint8List.fromList(
-      List<int>.generate(seedLength, (_) => _rng.nextInt(256)));
+  int get kemSeedLength => seedLength;
 
-  /// The pair [seed] produces.
-  ///
-  /// The seed round-trips, but the `secretKey` this returns is still the
-  /// opaque handle described in the class docs — only the seed is persistable.
-  /// A caller holding this key across restarts stores [seed] and calls here
-  /// again on the next start.
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
-          Uint8List seed) =>
-      _generateKeyPairFromSeed(seed);
+  String get kemSeedDescription => 'an ML-KEM-768 seed (d || z)';
+
+  /// The seed round-trips, but the `secretKey` [keyPairFromSeed] returns is
+  /// still the opaque handle described in the class docs — only the seed is
+  /// persistable. A caller holding this key across restarts stores the seed
+  /// and calls [keyPairFromSeed] again on the next start.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      keyPairFromValidatedSeed(Uint8List seed) =>
+          _generateKeyPairFromSeed(seed);
 
   Future<({Uint8List publicKey, Uint8List secretKey})> _generateKeyPairFromSeed(
       Uint8List seed) async {
-    if (seed.length != 64) {
-      throw ArgumentError.value(
-          seed.length, 'seed', 'ML-KEM-768 seed must be 64 bytes (d || z)');
+    if (seed.length != seedLength) {
+      throw ArgumentError.value(seed.length, 'seed',
+          'an ML-KEM-768 seed (d || z) must be $seedLength bytes');
     }
     final Pointer<Utf8> algName = 'ML-KEM-768'.toNativeUtf8();
     final Pointer<Utf8> paramName = 'seed'.toNativeUtf8();

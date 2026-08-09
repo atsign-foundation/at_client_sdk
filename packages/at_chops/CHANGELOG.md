@@ -22,6 +22,14 @@
   them. That is what makes this a minor rather than a patch release. All six
   implementations in this repository are `final class … implements` and were
   caught at compile time.
+- feat: `KemSeedMixin` — the one implementation of that seed contract.
+  `newSeed` draws the backend's length from a secure random source and
+  `keyPairFromSeed` rejects any other length before the backend's
+  deterministic keygen runs. All five in-tree backends mix it in rather than
+  carrying five copies of the same two methods (one copy had already drifted
+  to validating against a hardcoded length). The length lives on the mixin as
+  a `@protected` member — still off the interface, still not caller-facing —
+  and the concrete classes keep their public `seedLength` constants.
 - feat: `pqSeal` version `0x03` — RFC 9180 Base mode at the **pure
   ML-KEM-1024** suite (KEM `0x0042`, KDF `0x0002` HKDF-SHA384, AEAD `0x0002`
   AES-256-GCM). The no-hybrid option, and the only published HPKE suite for that

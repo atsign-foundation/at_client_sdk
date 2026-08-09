@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
@@ -34,10 +33,18 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// shows up per sealed record.
 ///
 /// Stateless — safe to share the single [instance].
-final class MlKem1024PureDartAlgo implements AtKemAlgorithm {
+final class MlKem1024PureDartAlgo
+    with KemSeedMixin
+    implements AtKemAlgorithm {
   static const MlKem1024PureDartAlgo instance = MlKem1024PureDartAlgo._();
 
   const MlKem1024PureDartAlgo._();
+
+  @override
+  int get kemSeedLength => seedLength;
+
+  @override
+  String get kemSeedDescription => 'an ML-KEM-1024 seed (d || z)';
 
   // pqcrypto's KyberKem at k=4, eta1=2, eta2=2, du=11, dv=5 — FIPS 203's
   // ML-KEM-1024 parameter set.
@@ -69,26 +76,13 @@ final class MlKem1024PureDartAlgo implements AtKemAlgorithm {
     return (publicKey: pk, secretKey: sk);
   }
 
+  /// The only correct way to recover an ML-KEM-1024 key from storage is
+  /// [keyPairFromSeed], because [generateKeyPair]'s `secretKey` is the
+  /// 3168-byte expanded decapsulation key and nothing derives the public half
+  /// back out of it.
   @override
-  Uint8List newSeed() {
-    final Random random = Random.secure();
-    return Uint8List.fromList(
-        List<int>.generate(seedLength, (_) => random.nextInt(256)));
-  }
-
-  /// The pair [seed] produces — and the only correct way to recover an
-  /// ML-KEM-1024 key from storage, because [generateKeyPair]'s `secretKey` is
-  /// the 3168-byte expanded decapsulation key and nothing derives the public
-  /// half back out of it.
-  @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
-      Uint8List seed) {
-    if (seed.length != seedLength) {
-      throw ArgumentError.value(seed.length, 'seed',
-          'ML-KEM-1024 seed must be $seedLength bytes (d || z)');
-    }
-    return generateKeyPair(seed);
-  }
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      keyPairFromValidatedSeed(Uint8List seed) => generateKeyPair(seed);
 
   /// Encapsulate a fresh shared secret against [publicKey].
   ///

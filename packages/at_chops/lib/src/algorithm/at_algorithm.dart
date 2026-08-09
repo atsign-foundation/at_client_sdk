@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_iv.dart';
@@ -141,6 +142,51 @@ abstract class AtKemAlgorithm {
 
   /// Recover the shared secret from [ciphertext] using [secretKey].
   FutureOr<Uint8List> decapsulate(Uint8List secretKey, Uint8List ciphertext);
+}
+
+/// One seed contract for every [AtKemAlgorithm] backend: [newSeed] draws
+/// [kemSeedLength] bytes from a secure random source, and [keyPairFromSeed]
+/// rejects any other length before handing the seed to the backend's
+/// deterministic keygen.
+///
+/// The length lives here rather than on [AtKemAlgorithm] — it is
+/// backend-specific, and a caller has no use for it once [newSeed] produces a
+/// valid one and [keyPairFromSeed] rejects an invalid one. Concrete classes
+/// keep their public `static const seedLength` for the callers that do name a
+/// backend.
+mixin KemSeedMixin implements AtKemAlgorithm {
+  /// This backend's seed length in bytes. Feeds [newSeed] and
+  /// [keyPairFromSeed]; not part of the caller-facing contract.
+  @protected
+  int get kemSeedLength;
+
+  /// How a wrong-length diagnostic names this backend's seed, e.g.
+  /// `an X-Wing seed` or `an ML-KEM-768 seed (d || z)`.
+  @protected
+  String get kemSeedDescription;
+
+  @override
+  Uint8List newSeed() {
+    final Random random = Random.secure();
+    return Uint8List.fromList(
+        List<int>.generate(kemSeedLength, (_) => random.nextInt(256)));
+  }
+
+  @override
+  FutureOr<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
+      Uint8List seed) {
+    if (seed.length != kemSeedLength) {
+      throw ArgumentError.value(seed.length, 'seed',
+          '$kemSeedDescription must be $kemSeedLength bytes');
+    }
+    return keyPairFromValidatedSeed(seed);
+  }
+
+  /// The backend's deterministic keygen, called with a seed that
+  /// [keyPairFromSeed] has already length-checked.
+  @protected
+  FutureOr<({Uint8List publicKey, Uint8List secretKey})>
+      keyPairFromValidatedSeed(Uint8List seed);
 }
 
 /// Interface for a Diffie–Hellman key agreement primitive such as X25519.

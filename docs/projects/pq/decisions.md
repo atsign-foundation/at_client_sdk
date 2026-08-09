@@ -5446,3 +5446,19 @@ and force synchronous members onto backends that are inherently asynchronous.
 The dartdoc also now records that data-mode ML-DSA verification resolves here
 (the dispatch checks `signingAlgoType` before the pkam-mode branch), since
 'Pkam' in the name only describes the key-material slot.
+
+### 59.4 `KemSeedMixin` — one implementation of the seed contract
+
+[§50.4](#504-one-seed-contract-and-why-at_chops-350-is-a-minor) put
+`newSeed`/`keyPairFromSeed` on the interface; the five backends then each
+carried their own copy of the same two bodies, and the copies had begun to
+drift — `MlKem768FfiAlgo` validated against a hardcoded `64` rather than its
+own `seedLength`. The mixin holds the single implementation: draw
+`kemSeedLength` secure-random bytes, reject any other length with a
+diagnostic that names the backend, delegate to the backend's deterministic
+keygen through a protected member. Per §50.4 the length stays off
+`AtKemAlgorithm`; on the mixin it is `@protected`, so it is not caller-facing
+surface, and the concrete classes keep their public `static const seedLength`
+(which the in-tree 3.5.0 changelog already promises). Landed before the
+3.5.0 publish because the mixin and its protected members are exported,
+interface-adjacent surface that could not be reshaped afterwards.

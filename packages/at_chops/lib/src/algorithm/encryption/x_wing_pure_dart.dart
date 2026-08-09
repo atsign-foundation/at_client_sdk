@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
@@ -55,10 +54,16 @@ import 'package:pointycastle/digests/shake.dart';
 /// Pure-Dart composition of [MlKem768PureDartAlgo] (`pqcrypto`) and the
 /// `cryptography` package's X25519. Stateless — safe to share the single
 /// [instance].
-final class XWingPureDartAlgo implements AtKemAlgorithm {
+final class XWingPureDartAlgo with KemSeedMixin implements AtKemAlgorithm {
   static const XWingPureDartAlgo instance = XWingPureDartAlgo._();
 
   const XWingPureDartAlgo._();
+
+  @override
+  int get kemSeedLength => seedLength;
+
+  @override
+  String get kemSeedDescription => 'an X-Wing seed';
 
   static const int seedLength = 32;
   static const int publicKeyLength = 1216;
@@ -83,7 +88,7 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
       [Uint8List? seed]) async {
-    seed ??= _randomSeed();
+    seed ??= newSeed();
     final _Expanded expanded = await _expand(seed);
     final Uint8List publicKey = Uint8List(publicKeyLength)
       ..setRange(0, _mlKemPublicKeyLength, expanded.mlKemPublicKey)
@@ -91,17 +96,13 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
     return (publicKey: publicKey, secretKey: Uint8List.fromList(seed));
   }
 
+  /// For X-Wing this is the same call as [generateKeyPair] with a seed — the
+  /// secret key IS the seed — but callers that do not name the backend go
+  /// through [keyPairFromSeed], because that identity does not hold for
+  /// ML-KEM.
   @override
-  Uint8List newSeed() => _randomSeed();
-
-  /// The pair [seed] produces. For X-Wing this is the same call as
-  /// [generateKeyPair] with a seed — the secret key IS the seed — but callers
-  /// that do not name the backend must go through here, because that identity
-  /// does not hold for ML-KEM.
-  @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> keyPairFromSeed(
-          Uint8List seed) =>
-      generateKeyPair(seed);
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      keyPairFromValidatedSeed(Uint8List seed) => generateKeyPair(seed);
 
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
@@ -219,12 +220,6 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
           ..setRange(96, 128, pkX)
           ..setRange(128, 134, _label);
     return SHA3Digest(256).process(input);
-  }
-
-  Uint8List _randomSeed() {
-    final Random random = Random.secure();
-    return Uint8List.fromList(
-        List<int>.generate(seedLength, (_) => random.nextInt(256)));
   }
 }
 
