@@ -96,7 +96,7 @@ class PqOpenException implements Exception {
 /// Seal [plaintext] so only the holder of the secret key paired with
 /// [recipientPublicKey] can open it.
 ///
-/// [xwing] is the KEM instance to use (e.g. `XWingFfiAlgo` or
+/// [kem] is the KEM instance to use (e.g. `XWingFfiAlgo` or
 /// `XWingPureDartAlgo`). [info] binds the key schedule to a usage context;
 /// [aad] is authenticated-but-not-encrypted associated data. Both must be
 /// supplied identically to [pqOpen] or opening fails.
@@ -111,7 +111,7 @@ class PqOpenException implements Exception {
 ///
 /// Returns the serialized wire envelope (raw bytes).
 Future<Uint8List> pqSeal(
-  AtKemAlgorithm xwing,
+  AtKemAlgorithm kem,
   Uint8List recipientPublicKey,
   Uint8List plaintext, {
   Uint8List? info,
@@ -126,7 +126,7 @@ Future<Uint8List> pqSeal(
         'supports ${pqSealSupportedVersions.map((v) => '0x${v.toRadixString(16)}').join(', ')}');
   }
 
-  final enc = await xwing.encapsulate(recipientPublicKey);
+  final enc = await kem.encapsulate(recipientPublicKey);
   final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, version, info);
 
   // body = ciphertext || tag(16) in both versions.
@@ -151,12 +151,12 @@ Future<Uint8List> pqSeal(
 
 /// Open an envelope produced by [pqSeal] using [recipientSecretKey].
 ///
-/// [xwing] must be the same KEM type used by the sender. [info]/[aad] must
+/// [kem] must be the same KEM type used by the sender. [info]/[aad] must
 /// match what the sender supplied.
 ///
 /// Throws [PqOpenException] on any failure (see [PqOpenFailure]).
 Future<Uint8List> pqOpen(
-  AtKemAlgorithm xwing,
+  AtKemAlgorithm kem,
   Uint8List recipientSecretKey,
   Uint8List envelope, {
   Uint8List? info,
@@ -187,7 +187,7 @@ Future<Uint8List> pqOpen(
   // documented type with an uncaught error on a bad input.
   final Uint8List ss;
   try {
-    ss = await xwing.decapsulate(recipientSecretKey, kemCt);
+    ss = await kem.decapsulate(recipientSecretKey, kemCt);
   } on ArgumentError catch (e) {
     throw PqOpenException(PqOpenFailure.malformedEnvelope,
         'decapsulation rejected the input: $e');
