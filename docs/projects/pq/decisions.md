@@ -5190,3 +5190,35 @@ design and §27.2. `signingAlgoType` is handled per §56.6. Every other
 branch-added surface across all packages is unpublished and freely reshapeable,
 which is the window this pass uses to draw the deliberate public surface before
 publication.
+
+## 57. The wire vocabulary gets one home per family (2026-08-09)
+
+The Phase-0 pins made every wire literal safe to relocate: each emitted form
+is asserted as a raw string, so a centralisation that changed a byte would go
+red rather than silently changing the wire. This section records the
+centralisation rulings as they land. The emitted bytes never change — each
+entry names what moved and what stayed deliberately put.
+
+### 57.1 nskey record names live in nskey_records.dart
+
+The nskey subsystem's reserved record names were authored independently across
+five files: `__nskey` in the published ring, `_nskeylock` in the mint lock,
+`__ckcur` in the CK pointer, `pq_signing_root` in the root class, and the
+`nskey.<ns>.<kid>` / `__nskey.<kid>` at-rest ids in the private filing — which
+spelled its own `nskey.` prefix a second time in `readAll`. They now live in
+`lib/src/crypto/nskey/nskey_records.dart`: one registry of names plus the
+AtKey builders that emit them, a leaf file importing only at_commons, so any
+layer can read it without a cycle. The classes keep their public members
+(`NskeyMintLock.keyFor`, `PqSigningRoot.recordName`,
+`NskeyPrivateFiling.keyIdFor`, …) as one-line reads of the canonical
+definitions, so no call site and no pin moved.
+
+Surface ruling: of the vocabulary, only `nskeyAdvertisementKey` is exported —
+readers and tests address the published record — while the name constants and
+the other builders stay internal. Payload version constants deliberately stay
+beside their codecs: the formats version independently, and a shared constant
+would move them in lockstep.
+
+The `__ck` conveyance pair is deliberately **not** here yet: its builder and
+parser meet in a known defect (the eviction scope), so it moves under its own
+flagged entry rather than inside a pure-motion commit.

@@ -10,6 +10,8 @@ import 'package:at_auth/at_auth.dart'
         WrittenAtKeysIo;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
     show NskeyAdvertisement;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyKeyfileIdFor, nskeyKeyfileIdPrefix, nskeySecretNamePrefix;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -46,14 +48,14 @@ class NskeyPrivateFiling {
   /// `(owner, namespace, nskeyKid)` the design keys these by. The owner is
   /// implicit: the substrate only ever moves secrets between APKAM keypairs of
   /// **one** atSign, so an arriving nskey private is always this atSign's.
-  static const String secretNamePrefix = '__nskey.';
+  static const String secretNamePrefix = nskeySecretNamePrefix;
 
   /// The `AtKeys` key id a filed private is stored under. The namespace is
   /// part of it deliberately — kids are truncated hashes and are not unique
   /// across namespaces, the same reason the content-key cache is never keyed
   /// by `ckKid` alone.
   static String keyIdFor(String namespace, String nskeyKid) =>
-      'nskey.$namespace.$nskeyKid';
+      nskeyKeyfileIdFor(namespace, nskeyKid);
 
   final AtKeysIo keysIo;
   final String atSign;
@@ -238,7 +240,7 @@ class NskeyPrivateFiling {
   /// needs services the client has not been given yet, and what a holder can
   /// *answer* with is what it holds, not what it is authorised for.
   Future<Map<String, Map<String, Uint8List>>> readAll() async {
-    const prefix = 'nskey.';
+    const prefix = nskeyKeyfileIdPrefix;
     final AtKeys keys;
     try {
       keys = await keysIo.read(atSign);

@@ -22,6 +22,11 @@ export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 export 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 export 'package:at_client/src/crypto/nskey/nskey_provider.dart';
+// Of the record-name vocabulary, only the advertisement builder is public
+// surface (readers and tests address the published record); the name
+// constants and the other builders stay internal.
+export 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyAdvertisementKey;
 export 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
 export 'package:at_client/src/crypto/nskey/nskey_rotation.dart';
 export 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';

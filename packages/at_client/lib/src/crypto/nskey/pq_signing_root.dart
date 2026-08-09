@@ -13,7 +13,9 @@ import 'package:at_auth/at_auth.dart'
         WrittenAtKeysIo;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client.dart'
-    show AtClient, AtKey, AtValue, GetRequestOptions, Metadata;
+    show AtClient, AtKey, AtValue, GetRequestOptions;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show pqSigningRootKey, pqSigningRootRecordName;
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show PqSigningChain;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -47,7 +49,7 @@ final _logger = AtSignLogger('PqSigningRoot');
 /// privileged ones anyway.
 @experimental
 class PqSigningRoot {
-  static const String recordName = 'pq_signing_root';
+  static const String recordName = pqSigningRootRecordName;
 
   /// The `AtKeys` id the private half is filed under. It carries no namespace
   /// — the root is atSign-level, which is exactly what distinguishes it from
@@ -85,12 +87,7 @@ class PqSigningRoot {
 
   PqSigningRoot(this.atClient, {this.keysIo});
 
-  AtKey keyFor(String atSign) => AtKey()
-    ..key = recordName
-    ..sharedBy = atSign
-    ..metadata = (Metadata()
-      ..isPublic = true
-      ..immutable = true);
+  AtKey keyFor(String atSign) => pqSigningRootKey(atSign);
 
   /// The published root record's current public key.
   ///

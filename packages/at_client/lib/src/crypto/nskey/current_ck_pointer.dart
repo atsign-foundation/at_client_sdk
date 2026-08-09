@@ -1,7 +1,8 @@
 import 'dart:convert' show jsonDecode, jsonEncode;
 
 import 'package:at_client/at_client.dart'
-    show AtClient, AtKey, GetRequestOptions, Metadata;
+    show AtClient, AtKey, GetRequestOptions;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -32,13 +33,11 @@ typedef CurrentCk = ({String ckKid, String nskeyKid});
 class CurrentCkPointer {
   const CurrentCkPointer();
 
-  /// Named so it is hidden from an ordinary scan, and namespaced by the
-  /// namespace the nskey resolved to — matching the CK's own scope.
-  AtKey keyFor(AtClient atClient, String owner, String ckNs) => AtKey()
-    ..key = '__ckcur.${owner.replaceAll('@', '')}'
-    ..namespace = ckNs
-    ..sharedBy = atClient.getCurrentAtSign()
-    ..metadata = Metadata();
+  AtKey keyFor(AtClient atClient, String owner, String ckNs) =>
+      currentCkPointerKey(
+          sharedBy: atClient.getCurrentAtSign(),
+          destination: owner,
+          ckNs: ckNs);
 
   Future<CurrentCk?> read(AtClient atClient, String owner, String ckNs) async {
     try {

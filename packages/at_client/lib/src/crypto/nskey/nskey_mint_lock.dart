@@ -1,4 +1,5 @@
-import 'package:at_client/at_client.dart' show AtClient, AtKey, Metadata;
+import 'package:at_client/at_client.dart' show AtClient, AtKey;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_commons/at_builders.dart'
     show DeleteVerbBuilder, UpdateVerbBuilder;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -31,13 +32,8 @@ class NskeyMintLock {
 
   const NskeyMintLock(this.atClient, {this.ttl = const Duration(minutes: 2)});
 
-  AtKey keyFor(String owner, String namespace) => AtKey()
-    ..key = '_nskeylock'
-    ..namespace = namespace
-    ..sharedBy = owner
-    ..metadata = (Metadata()
-      ..immutable = true
-      ..ttl = ttl.inMilliseconds);
+  AtKey keyFor(String owner, String namespace) =>
+      nskeyMintLockKey(owner, namespace, ttl: ttl);
 
   /// Runs [mint] holding the lock, and returns its result.
   ///

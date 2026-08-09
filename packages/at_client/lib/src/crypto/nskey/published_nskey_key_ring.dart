@@ -6,6 +6,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/nskey_mint_lock.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
@@ -16,21 +17,6 @@ import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
 final _logger = AtSignLogger('PublishedNskeyKeyRing');
-
-/// The at-key an nskey's public half is published under.
-///
-/// The **double** underscore is what makes eager publication both safe and
-/// workable. Safe: an unauthenticated scan ignores `showhidden`, and a
-/// `public:__` key is revealed only *by* `showhidden`, so an outsider cannot
-/// enumerate which namespaces — which apps — an atSign uses, while `plookup`
-/// still serves the key to anyone who knows the namespace. Workable: a *single*
-/// underscore key is hidden from every scan but is written with **commit id -1**,
-/// so it sits outside the commit log and sync can never push it.
-AtKey nskeyAdvertisementKey(String owner, String namespace) => AtKey()
-  ..key = '__nskey'
-  ..namespace = namespace
-  ..sharedBy = owner
-  ..metadata = (Metadata()..isPublic = true);
 
 /// Checks that a fetched advertisement really came from the atSign that claims
 /// it, before anything is encapsulated to it.
