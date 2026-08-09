@@ -1,4 +1,5 @@
-/// The nskey subsystem's reserved record names, in one place.
+/// The nskey subsystem's wire vocabulary — reserved record names and
+/// provider ids — in one place.
 ///
 /// Every name here is **frozen wire vocabulary**: records on live atServers
 /// already carry these spellings — several as immutable or write-once records
@@ -118,3 +119,46 @@ const String nskeyKeyfileIdPrefix = 'nskey.';
 /// multi-segment namespace.
 String nskeyKeyfileIdFor(String namespace, String nskeyKid) =>
     '$nskeyKeyfileIdPrefix$namespace.$nskeyKid';
+
+// ---------------------------------------------------------------------------
+// Provider ids — the `appMetadata.providerId` every record is stamped with,
+// and what routes a read back to the scheme that wrote it. As frozen as the
+// record names: a stored record cites its id forever. The fourth id,
+// `legacyCryptoProviderId`, is deliberately not here — it names the
+// pre-pluggable default scheme, not nskey vocabulary, and lives beside
+// `CryptoConfig`, which is what consumes it.
+// ---------------------------------------------------------------------------
+
+/// Wire id of the CK-conveyance provider.
+///
+/// The id names the **role** (`at/nskey`) and then every algorithm a reader
+/// needs code for: the KEM the content key is encapsulated under, and the AEAD
+/// wrapping it inside the `pqSeal` envelope. Anything a reader can discover from
+/// the value itself — the envelope version, `ckKid`, `nskeyKid` — stays out.
+///
+/// That is what makes an algorithm change graceful rather than a flag day: a
+/// reader registers every scheme it supports, values route by their own id so
+/// old ones never stop opening, and a writer can *decide* whether a recipient
+/// can read a scheme instead of guessing.
+/// [mlKemNskeyCryptoProviderId] is the second one, and it coexists with this
+/// one exactly as this doc anticipated.
+const String nskeyCryptoProviderId = 'at/nskey/XWING/AES/GCM';
+
+/// Wire id of the CK-conveyance provider for the **no-hybrid** KEM.
+///
+/// The second id the [nskeyCryptoProviderId] doc anticipated, and the reason
+/// it is a second id rather than a field: a record routes back to its provider
+/// by this string on every read, so a conveyance sealed under either KEM keeps
+/// opening for as long as its id resolves — no flag day, and no reader that
+/// has to guess.
+const String mlKemNskeyCryptoProviderId = 'at/nskey/MLKEM1024/AES/GCM';
+
+/// The role prefix every CK-conveyance scheme shares, whatever its algorithms.
+const String nskeyProviderFamily = 'at/nskey';
+
+/// Wire id of the application-data provider.
+///
+/// This names the *algorithm* deliberately — it is the layer that needs
+/// crypto-agility. A future `at/symmetric/AES/SIV` coexists with it, and values
+/// written under this id keep their tag forever.
+const String symmetricAesGcmCryptoProviderId = 'at/symmetric/AES/GCM';

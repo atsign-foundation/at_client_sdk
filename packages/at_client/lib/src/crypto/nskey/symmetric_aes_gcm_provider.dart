@@ -7,13 +7,6 @@ import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
-/// Wire id of the application-data provider.
-///
-/// This names the *algorithm* deliberately — it is the layer that needs
-/// crypto-agility. A future `at/symmetric/AES/SIV` coexists with it, and values
-/// written under this id keep their tag forever.
-const String symmetricAesGcmCryptoProviderId = 'at/symmetric/AES/GCM';
-
 /// The value cites a CK this client cannot resolve *yet*.
 ///
 /// Distinct from a hard decryption failure on purpose: sync is unordered, so a

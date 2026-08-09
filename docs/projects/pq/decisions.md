@@ -5222,3 +5222,17 @@ would move them in lockstep.
 The `__ck` conveyance pair is deliberately **not** here yet: its builder and
 parser meet in a known defect (the eviction scope), so it moves under its own
 flagged entry rather than inside a pure-motion commit.
+
+### 57.2 The provider ids join the registry; `legacy` stays with CryptoConfig
+
+The three `at/*` provider ids — `at/nskey/XWING/AES/GCM`,
+`at/nskey/MLKEM1024/AES/GCM`, `at/symmetric/AES/GCM` — and the `at/nskey`
+family prefix move from the two provider files into `nskey_records.dart`,
+each keeping its rationale dartdoc. They are `appMetadata.providerId` wire
+vocabulary: a stored record cites its id forever, which is the same freeze
+the record names carry. `legacyCryptoProviderId` deliberately does not move —
+it names the pre-pluggable default scheme, not nskey vocabulary, and lives
+beside `CryptoConfig`, its consumer. `nskeyProviderIdFor` also stays put: it
+is keyAlgo→provider *routing*, not a name, and belongs with the provider it
+routes to. Both ids and the barrel surface are unchanged; the ids are now
+exported from the registry file instead of the provider files.

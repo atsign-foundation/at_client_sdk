@@ -4,6 +4,8 @@ import 'package:at_client/src/crypto/nskey/ck_manager.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show symmetricAesGcmCryptoProviderId;
 import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
@@ -22,11 +24,17 @@ export 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart';
 export 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 export 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 export 'package:at_client/src/crypto/nskey/nskey_provider.dart';
-// Of the record-name vocabulary, only the advertisement builder is public
-// surface (readers and tests address the published record); the name
-// constants and the other builders stay internal.
+// Of the wire vocabulary, only the advertisement builder and the provider
+// ids are public surface (readers address the published record; callers and
+// the CHANGELOG name providers by id). The record-name constants and the
+// other builders stay internal.
 export 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show nskeyAdvertisementKey;
+    show
+        mlKemNskeyCryptoProviderId,
+        nskeyAdvertisementKey,
+        nskeyCryptoProviderId,
+        nskeyProviderFamily,
+        symmetricAesGcmCryptoProviderId;
 export 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
 export 'package:at_client/src/crypto/nskey/nskey_rotation.dart';
 export 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
