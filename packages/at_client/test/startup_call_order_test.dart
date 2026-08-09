@@ -46,6 +46,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/recording_remote.dart';
 
 class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
@@ -104,99 +105,6 @@ void main() {
     } catch (_) {}
   });
 
-  /// A RemoteSecondary served from [remoteData], logging every wire operation
-  /// into [events]. The atLookUp carries no enrollment id, so the client is
-  /// fully privileged by construction — which is what makes the final sweep
-  /// step run and give the test its terminal marker.
-  MockRemoteSecondary recordingRemote() {
-    final remote = MockRemoteSecondary();
-    final lookUp = MockAtLookUpImpl();
-    when(() => remote.atLookUp).thenReturn(lookUp);
-    when(() => lookUp.enrollmentId).thenReturn(null);
-    when(() => remote.sync(any(), regex: any(named: 'regex')))
-        .thenAnswer((_) async => null);
-
-    String serveGet(String key) {
-      final value = remoteData[key];
-      if (value == null) {
-        throw KeyNotFoundException('$key not found');
-      }
-      return 'data:${jsonEncode({
-            'key': key,
-            'data': value,
-            'metaData': remoteMeta[key]?.toJson(),
-          })}';
-    }
-
-    when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
-        .thenAnswer((inv) async {
-      final builder = inv.positionalArguments[0];
-      if (builder is UpdateVerbBuilder) {
-        final key = builder.atKey.toString();
-        final additional = builder.atKey.metadata.appMetadata?.additional;
-        final tag = additional?.containsKey(PqSigningChain.rootLinkField) ==
-                true
-            ? ':rootlink'
-            : additional?.containsKey(PqSigningChain.linkField) == true
-                ? ':chainlink'
-                : '';
-        events.add('update:$key$tag');
-        remoteData[key] = builder.value;
-        remoteMeta[key] = builder.atKey.metadata;
-        return 'data:1';
-      }
-      if (builder is DeleteVerbBuilder) {
-        final key = builder.atKey.toString();
-        events.add('delete:$key');
-        remoteData.remove(key);
-        return 'data:1';
-      }
-      if (builder is ScanVerbBuilder) {
-        final regex = builder.regex;
-        events.add('scan:${regex ?? ''}');
-        final re = regex == null ? null : RegExp(regex);
-        final matches = remoteData.keys
-            .where((k) => re == null || re.hasMatch(k))
-            .toList();
-        return 'data:${jsonEncode(matches)}';
-      }
-      if (builder is LLookupVerbBuilder) {
-        final key = builder.buildKey();
-        events.add('get:$key');
-        return serveGet(key);
-      }
-      if (builder is PLookupVerbBuilder) {
-        final atKey = builder.atKey;
-        final ns = atKey.namespace;
-        final key = 'public:${atKey.key}'
-            '${ns == null || ns.isEmpty ? '' : '.$ns'}'
-            '${atKey.sharedBy ?? ''}';
-        events.add('get:$key');
-        return serveGet(key);
-      }
-      throw StateError('recordingRemote: unhandled ${builder.runtimeType}');
-    });
-
-    when(() => remote.executeCommand(any(), auth: any(named: 'auth')))
-        .thenAnswer((inv) async {
-      final command = inv.positionalArguments[0] as String;
-      final head = command.split(RegExp(r'[\n{]')).first;
-      events.add('cmd:$head');
-      if (command.startsWith('enroll:list')) return 'data:{}';
-      if (command.startsWith('enroll:listns')) return 'data:[]';
-      if (command.startsWith('scan')) {
-        final regexMatch = RegExp(r'scan (.*)\n?$').firstMatch(command);
-        final re = regexMatch == null ? null : RegExp(regexMatch.group(1)!);
-        final matches = remoteData.keys
-            .where((k) => re == null || re.hasMatch(k))
-            .toList();
-        return 'data:${jsonEncode(matches)}';
-      }
-      throw StateError('recordingRemote: unhandled command $command');
-    });
-    return remote;
-  }
-
   /// Waits for [marker] to appear in [events], failing after [timeout] —
   /// the filer is unawaited and exposes no completion future.
   Future<void> untilEvent(String marker,
@@ -225,7 +133,8 @@ void main() {
         AtClientPreference()
           ..hiveStoragePath = storageDir
           ..commitLogPath = '$storageDir/commit',
-        remoteSecondary: recordingRemote(),
+        remoteSecondary: buildRecordingRemote(
+            events: events, remoteData: remoteData, remoteMeta: remoteMeta),
         // A full keypair set: the put pipeline signs public records with the
         // encryption private key, served from atChops when it holds one.
         atChops: AtChopsImpl(AtChopsKeys.create(
