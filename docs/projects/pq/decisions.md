@@ -5304,3 +5304,32 @@ No stored record changes shape and no read-both window exists: the record
 format is untouched, and the CK cache is in-memory per process, so there are
 no entries under the old rule to migrate — the divergence was between two
 in-process rules, not two at-rest formats.
+
+### 57.7 The algorithm-spelling registry: three vocabularies, all string values frozen
+
+Ruled rather than "fixed", because the fix that suggests itself — one spelling
+— is impossible: records already published carry every form, several
+immutably. The vocabularies and where each applies:
+
+- **Wire / advertised-key ids** (hyphenated): `x-wing`, `ml-kem-1024`,
+  `ml-dsa-65` — nskey advertisements' `alg`, key-package `keys[].alg`, suite
+  ids, and the immutable root record's `keys[].alg`
+  (`PqSigningRoot.rootKeyAlgo`).
+- **Keyfile / pkam tokens** (compact): `xwing`, `mlkem1024`, `mldsa65`,
+  `rsa2048` — `AtKeysMaterial.keyAlgorithmType`, the signed-envelope
+  `signingAlgo` field, the tagged `_apsk` value, and root links
+  (`PqSigningChain.rootLinkAlgo`).
+- **Dart identifiers**: `SigningAlgoType.mldsa65` (at_chops),
+  `KeyAlgorithmType.mlDsa65` (at_auth) — code names whose *values* feed the
+  compact vocabulary.
+
+The two vocabularies meet in exactly one declared junction per axis:
+`SecretSharingAlgos.materialAlgoFor` / `keyAlgoForMaterial` for the KEMs, and
+the root record/link pair for signing — both constants now cross-reference
+each other in their dartdoc, and the pins hold every string apart on purpose.
+Identifier-level cleanups (the Dart names, at_chops barrel spellings) are
+deliberately deferred to the at_chops naming decisions and the at_auth model
+reshape. One more spelling family arrives later by design: the JWS wrapper
+brings its own registered names (`RS256`, `ML-DSA-65`) confined to the
+protected header (§56.5) — it replaces the envelope's `signingAlgo` spelling,
+never the keyfile's or the records'.

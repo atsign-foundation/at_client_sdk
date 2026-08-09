@@ -80,6 +80,10 @@ class PqSigningRoot {
   /// Not in `SecretSharingAlgos`: that registry names key-*establishment*
   /// algorithms, and the root is a signing key that nothing ever encapsulates
   /// to.
+  ///
+  /// The chain's root *links* spell the same algorithm `mldsa65`
+  /// ([PqSigningChain.rootLinkAlgo]) — the pkam/enrollment/keyfile
+  /// vocabulary. Both forms are frozen on records already published.
   static const String rootKeyAlgo = 'ml-dsa-65';
 
   final AtClient atClient;

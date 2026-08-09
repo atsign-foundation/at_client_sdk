@@ -100,7 +100,14 @@ class PqSigningChain {
   /// before it reads anything else.
   static const String rootLinkField = 'apskRootLink';
 
-  /// Signature algorithm marker on a root link.
+  /// Signature algorithm marker on a root link: the compact
+  /// pkam/enrollment/keyfile spelling, not the hyphenated `ml-dsa-65` the
+  /// immutable root *record* carries ([PqSigningRoot.rootKeyAlgo]).
+  ///
+  /// Both spellings are frozen — published records carry both, the root
+  /// record immutably — so a harmonising rename on either side would break
+  /// verification of everything already written. The pins in
+  /// `test/wire_literal_pins_test.dart` hold the two apart on purpose.
   static const String rootLinkAlgo = 'mldsa65';
 
   static final AtSignLogger _logger = AtSignLogger('PqSigningChain');
