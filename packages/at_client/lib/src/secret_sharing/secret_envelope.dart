@@ -8,9 +8,9 @@ import 'package:meta/meta.dart' show experimental;
 /// decrypting.
 ///
 /// The sealing-suite id ([suite]) and recipient key id ([kid]) are explicit
-/// for crypto agility: today [sealed] is an at_chops `pqSeal` envelope
-/// (X-Wing KEM encapsulation + AES-256-GCM AEAD over an HKDF key schedule);
-/// a future suite changes the id, not the schema.
+/// for crypto agility: today [sealed] is an at_chops `pqSeal` envelope (KEM
+/// encapsulation + AEAD over an HKDF key schedule, suite per the envelope's
+/// version byte); a future suite changes the id, not the schema.
 @experimental
 class SecretEnvelope {
   static const int currentVersion = 1;

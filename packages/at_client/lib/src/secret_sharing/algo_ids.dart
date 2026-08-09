@@ -7,7 +7,7 @@ import 'package:meta/meta.dart' show experimental;
 /// secret envelopes.
 ///
 /// These ids exist for crypto agility: a key package advertises which
-/// algorithms its X-Wing public key supports, envelopes record which
+/// algorithms its enc public key supports, envelopes record which
 /// algorithms were used to protect a payload, and readers ignore entries
 /// whose ids they do not recognise. Adding a new suite later is just a matter
 /// of appending new ids to the supported lists — no schema or protocol change.

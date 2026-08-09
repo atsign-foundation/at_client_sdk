@@ -34,7 +34,7 @@ String nskeyKidOf(Uint8List publicKey) =>
 
 /// Where the `at/nskey` provider gets namespace key material.
 ///
-/// Per `(atSign, namespace)` there is exactly **one live** X-Wing nskey keypair,
+/// Per `(atSign, namespace)` there is exactly **one live** nskey keypair,
 /// published at `public:__nskey.<ns>@<owner>` from the moment it is minted. It is
 /// the recipient key for both directions: the owner encapsulates her own CKs to it
 /// for self data, and external senders encapsulate CKs to it when sharing with her.
@@ -80,11 +80,9 @@ abstract class NskeyKeyRing {
 
 /// An in-memory [NskeyKeyRing] seeded directly with keypairs.
 ///
-/// This exists so the data path can be exercised end-to-end before the substrate
-/// delivers privates for real — it inverts the dependency order for demonstration
-/// only. The production path is unchanged: when nskey minting and per-APKAM
-/// conveyance land, they supply a real [NskeyKeyRing] and this becomes test-only
-/// scaffolding.
+/// Test scaffolding: every consumer is a test that wants the data path
+/// exercised without minting, publication or conveyance. The production ring
+/// is `PublishedNskeyKeyRing`, which does all three for real.
 class InMemoryNskeyKeyRing implements NskeyKeyRing {
   final Map<String, NskeyAdvertisement> _current = {};
   final Map<String, Uint8List> _private = {};

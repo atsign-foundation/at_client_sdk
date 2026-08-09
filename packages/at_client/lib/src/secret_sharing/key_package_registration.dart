@@ -44,7 +44,7 @@ class PersistedApkamKeys {
 /// Maintains this APKAM keypair's [KeyPackage] for same-atSign secret sharing.
 ///
 /// The recipient unit is the **APKAM keypair** (1:1:1 — one enrollment, one
-/// APKAM keypair, one key package): this client holds one X-Wing enc keypair
+/// APKAM keypair, one key package): this client holds one KEM enc keypair
 /// (its [kpid] is the SHA-256 prefix of the public key) and publishes its APKAM
 /// signing key so peers can verify the envelopes it sends. Its key package is
 /// conveyed into the enrollment record by riding `enroll:request` as opaque
@@ -149,7 +149,7 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// This key package wrapped in an APKAM-signed envelope — the value to store
   /// at `metadata.keyPackage` when the package rides `enroll:request`.
   ///
-  /// A key package *is* an encapsulation target: whoever's X-Wing public key
+  /// A key package *is* an encapsulation target: whoever's enc public key
   /// ends up here is who the atSign's other clients seal their secrets to. So
   /// it is advertised signed, and [VerbEnrollmentDirectory] verifies the
   /// signature against this enrollment's `_apsk` before treating the key as
@@ -160,7 +160,7 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   Future<Map<String, Object?>> signedKeyPackagePayload() async =>
       await wrapAndSign(myKeyPackage.toJson());
 
-  /// Generates (or loads, via [loadApkamKeys]) this APKAM keypair's X-Wing enc
+  /// Generates (or loads, via [loadApkamKeys]) this APKAM keypair's KEM enc
   /// keypair and publishes its APKAM signing key (so peers can verify its
   /// envelopes), then returns this client's [KeyPackage]. Idempotent.
   ///

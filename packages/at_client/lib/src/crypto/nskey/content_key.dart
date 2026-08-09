@@ -6,7 +6,7 @@ import 'package:crypto/crypto.dart' show sha256;
 /// A symmetric content key (CK) and its id.
 ///
 /// Application data is AES-256-GCM encrypted under a CK; the CK itself is
-/// X-Wing-sealed once to an nskey and written as a discrete conveyance record.
+/// KEM-sealed once to an nskey and written as a discrete conveyance record.
 /// Data values cite the CK by [ckKid] and never carry a sealed key inline.
 class ContentKey {
   /// Raw 32 bytes of AES-256 key material.

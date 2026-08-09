@@ -15,7 +15,7 @@ class HmacSha256 {
 ///
 /// Deterministic — the same `(ikm, salt, info, length)` always yields the
 /// same output, so two parties holding the same input key material derive
-/// identical sub-keys without communicating (e.g. a [SecureGroup]'s
+/// identical sub-keys without communicating (e.g. a shared group secret's
 /// per-label `export`, or NoPorts session keys).
 class HkdfSha256 {
   /// SHA-256 output size in bytes; the per-block expand step yields this much.

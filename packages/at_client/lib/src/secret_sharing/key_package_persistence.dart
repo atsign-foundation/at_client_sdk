@@ -20,7 +20,7 @@ final _logger = AtSignLogger('KeyPackagePersistence');
 /// authenticates from, so a running client's key package is the one its
 /// enrollment advertised.
 ///
-/// Without this the mixin generates a fresh X-Wing keypair on every
+/// Without this the mixin generates a fresh enc keypair on every
 /// construction, which gives the client a different `kpid` each process. Since
 /// a sender addresses an envelope to the kpid it read from the enrollment
 /// record, a client whose kpid moves can never be sent anything it can find:
@@ -48,7 +48,7 @@ void bindKeyPackageToAtKeys(
   registration.loadApkamKeys ??= () => _load(keysIo, owner, enrollmentId);
 }
 
-/// The X-Wing enc seed [atSign]'s keyfile holds for its key package, or null
+/// The KEM enc seed [atSign]'s keyfile holds for its key package, or null
 /// if it holds none.
 Future<PersistedApkamKeys?> _load(
     AtKeysIo keysIo, Atsign atSign, String? enrollmentId) async {
@@ -75,7 +75,7 @@ Future<PersistedApkamKeys?> _load(
 
 /// The private half of the key package in [keys], or null.
 ///
-/// An nskey private is also an X-Wing `privateDecapsulation`, so the part type
+/// An nskey private is also filed as `privateDecapsulation`, so the part type
 /// alone does not identify a key package — a client that had filed one would
 /// otherwise adopt it as its recipient identity and lose the ability to open
 /// anything addressed to it. What distinguishes the package is that both

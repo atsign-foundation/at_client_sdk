@@ -156,7 +156,7 @@ content-key kids. Working names marked.
 
 | Object | Shape | Published? | Who holds the private | Role |
 |---|---|---|---|---|
-| **nskey** | `public:__nskey.app_1.my_apps@alice` — written at mint, **mutable**, APKAM-signed `{v, nskeyKid, publicKey, alg, suites}` | published from mint; **unscannable** (single `_`) but served on an exact `plookup`, cross-atSign | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it; external senders encapsulate CKs to it |
+| **nskey** | `public:__nskey.app_1.my_apps@alice` — written at mint, **mutable**, APKAM-signed `{v, nskeyKid, publicKey, alg, suites}` | published from mint; **hidden from scan** (double `_` — revealed only by `scan showhidden:true`; a single `_` would never sync) but served on an exact `plookup`, cross-atSign | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it; external senders encapsulate CKs to it |
 | **nskey mint/rotate lock** *(working)* | `_nskeylock.app_1.my_apps@alice` (self key, immutable create, short ttl) | no | n/a | serialises create and rotate between the owner's own enrollments |
 | **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `pqSeal(ck)` to the nskey named by `nskeyKid`, under the KEM that nskey's `alg` names |
 | **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
@@ -649,7 +649,9 @@ The full built/gap inventory with `file:line` evidence is in
 
 **Envelope key shape.** `<msgId>.<kpid>.__ssenv.<ns>@<owner>` — a self key,
 `shouldEncrypt=false` (the value is already ciphertext). The body is raw `pqSeal`
-bytes (HPKE + AES-256-GCM, HKDF info domain-separation `'at_client/secret_sharing/v1'`).
+bytes (versioned HPKE sealing — KEM and AEAD per the version byte, see
+[seal-spec.md](seal-spec.md) — HKDF info domain-separation
+`'at_client/secret_sharing/v1'`).
 The same envelope carries both the *request* (pull) and the *response*.
 
 **Two gates protect every copy:**

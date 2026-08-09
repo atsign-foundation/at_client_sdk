@@ -201,7 +201,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
   }
 
   /// Signs and conveys approval-chain links for approved enrollments that
-  /// lack one — the chain sweep of `decisions.md` 38.3.
+  /// lack one — the chain sweep of `decisions.md` 38, decision 3.
   ///
   /// A scoped enrollment can never anchor itself (not fully privileged —
   /// correctly), and its approver is often the legacy parent enrollment,

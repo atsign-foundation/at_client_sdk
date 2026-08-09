@@ -63,7 +63,7 @@ class Secret {
 /// concern). Without one, the store is in-memory only.
 ///
 /// The SDK deliberately ships no implementation. Key material the SDK itself
-/// needs to survive a restart — an APKAM keypair, a key package's X-Wing
+/// needs to survive a restart — an APKAM keypair, a key package's KEM
 /// private half, an nskey private — is filed into `AtKeys` instead, where the
 /// `AtKeysIo` implementations already handle at-rest protection. That keeps
 /// this store free of anything whose loss would be unrecoverable, and keeps

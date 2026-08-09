@@ -267,11 +267,10 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     } on PqOpenException catch (e) {
       throw AtDecryptionException('could not decapsulate the content key: $e');
     } on ArgumentError catch (e) {
-      // at_chops 3.4.2 makes `pqOpen` honour its documented contract here; up
-      // to 3.4.1 its KEM decapsulate call sat outside the guard, so a
-      // wrong-length envelope escaped as a raw ArgumentError. This stays while
-      // the floor still admits those versions — the provider's contract must
-      // hold whatever the envelope is, and whichever at_chops resolves.
+      // `pqOpen`'s contract routes malformed envelopes to PqOpenException, but
+      // the provider's own contract must hold whatever the envelope is: a
+      // stray ArgumentError still surfaces as a decryption failure rather
+      // than escaping as a raw error.
       throw AtDecryptionException('malformed at/nskey envelope: $e');
     } on FormatException catch (e) {
       throw AtDecryptionException('at/nskey value is not valid base64: $e');

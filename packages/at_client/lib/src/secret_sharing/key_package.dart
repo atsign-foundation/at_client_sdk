@@ -52,7 +52,7 @@ class PackageKey {
   }
 }
 
-/// The X-Wing recipient key(s) one **APKAM keypair** advertises so that other
+/// The KEM recipient key(s) one **APKAM keypair** advertises so that other
 /// clients of the same atSign can seal secrets to it.
 ///
 /// The recipient unit is the APKAM keypair, not a client process. Enrollment
@@ -162,7 +162,7 @@ class KeyPackage {
   }
 
   /// The addressing token for this key package: the [kid] of its
-  /// enc-use key (the X-Wing public key a sender seals to). Null if the
+  /// enc-use key (the KEM public key a sender seals to). Null if the
   /// package advertises no key for [SecretSharingAlgos.keyAlgos].
   String? get kpid => bestKeyFor(SecretSharingAlgos.keyAlgos)?.kid;
 

@@ -696,8 +696,9 @@ class AtClientImpl implements AtClient {
           'next start retries: $e, $st');
     }
     try {
-      // The chain sweep (decisions.md 38.3): a fully privileged client signs
-      // and conveys links for approved enrollments that lack one. A scoped
+      // The chain sweep (decisions.md 38, decision 3): a fully privileged
+      // client signs and conveys links for approved enrollments that lack
+      // one. A scoped
       // enrollment cannot anchor itself and its approver may be a legacy
       // enrollment that can sign nothing, so without this sweep
       // chained-but-unanchored is a permanent state rather than a transient.

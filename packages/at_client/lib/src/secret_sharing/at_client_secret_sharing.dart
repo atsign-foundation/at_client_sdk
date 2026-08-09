@@ -22,7 +22,7 @@ import 'package:meta/meta.dart' show experimental;
 ///
 /// Prefer [AtClientSecretSharing.forClient] over the plain constructor: a
 /// secret-sharing instance is this APKAM keypair's recipient identity (its
-/// X-Wing enc keypair, registered key package, and envelope listener) plus its
+/// KEM enc keypair, registered key package, and envelope listener) plus its
 /// [SecretStore]. Reusing one instance per [AtClient] lets every consumer (the
 /// app and SDK-internal ones, e.g. a future CryptoProvider that distributes
 /// its keys as secrets) share a single store and a single registration rather
@@ -99,7 +99,7 @@ class AtClientSecretSharing
 
   /// The production gate for per-enrollment secret requests: the requester's
   /// enrollment record — the server's word, not the requester's — must grant
-  /// `rw` on both `*` and `__manage`.
+  /// write (`w`) on both `*` and `__manage`.
   Future<bool> _requesterIsFullyPrivileged(String requesterEnrollmentId) async {
     final theirs = (await EnrollmentServiceImpl(atClient, AtEnrollment.create())
             .fetchEnrollmentRequests())

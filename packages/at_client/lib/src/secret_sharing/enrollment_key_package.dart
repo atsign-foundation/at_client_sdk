@@ -28,7 +28,7 @@ import 'package:meta/meta.dart' show experimental;
 ///
 /// Two properties this relies on, both verified rather than assumed:
 ///
-/// - **The X-Wing private half survives.** The material is added to the very
+/// - **The KEM private half survives.** The material is added to the very
 ///   `AtKeys` at_auth carries forward and flushes into the app's `AtKeysIo` on
 ///   approval, so the private half lands in the same keyfile as the APKAM key.
 ///   Publishing an encapsulation target whose private half nobody kept would
