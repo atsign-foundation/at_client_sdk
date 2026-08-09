@@ -1,32 +1,33 @@
-import 'dart:convert';
+/// [pqSeal]/[pqOpen]: public-key encryption to a KEM-held key, in a versioned
+/// envelope `ver || ctLen || kemCt || aeadCiphertext || tag`.
+///
+/// The envelope framing is Atsign-Protocol-internal at every version; what
+/// `ver` selects is the construction inside it (one table row each, see
+/// `_versions`):
+///   - `0x01`, the default: HPKE-*style* — X-Wing with the custom
+///     `atPQv1-base` key schedule (HKDF-SHA256) and AES-256-GCM. Not RFC
+///     9180; do not expect interop with off-the-shelf HPKE implementations.
+///   - `0x02` and `0x03`: genuine RFC 9180 Base-mode key schedules (§5.1
+///     verbatim, in `rfc9180_hpke.dart`), checked against the IETF HPKE
+///     working group's published vectors.
+///
+/// The KEM's 32-byte shared secret is already uniformly random, so the KDF
+/// step provides context binding ([info]) and AEAD key/nonce derivation —
+/// not randomness extraction.
+///
+/// Byte-level specification: `docs/projects/pq/seal-spec.md`, with
+/// cross-implementation vectors in `test/vectors/pq_seal_v1.json`.
+library;
+
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/algorithm/at_iv.dart';
-import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
 import '../hashing/hkdf.dart';
-import 'aes_gcm.dart';
-import 'chacha20_poly1305.dart';
+import 'at_aead.dart';
 import 'rfc9180_hpke.dart';
-
-/// HPKE-*style* authenticated public-key encryption over an X-Wing KEM.
-///
-/// Reuses the RFC 9180 HPKE construction shape:
-///   - KEM      = caller-supplied [AtKemAlgorithm] (intended: X-Wing)
-///   - KDF      = HKDF-SHA256 ([HkdfSha256])
-///   - AEAD     = AES-256-GCM ([AesGcm256EncryptionAlgo])
-///
-/// NOT wire-compatible with RFC 9180 HPKE. This uses a custom, internal
-/// envelope (`ver || ctLen || kemCt || ct || tag`) and a custom key schedule,
-/// so do NOT expect interop with off-the-shelf HPKE implementations — it is an
-/// at_protocol-internal envelope only.
-///
-/// The KEM's 32-byte shared secret is already uniformly random, so the HKDF
-/// step provides context binding ([info]) and AEAD key/nonce derivation —
-/// not randomness extraction.
 
 /// The version [pqSeal] emits when the caller does not choose one.
 ///
@@ -39,35 +40,67 @@ const int pqSealDefaultVersion = 0x01;
 
 /// All versions [pqOpen] can decrypt, and therefore all [pqSeal] will emit.
 ///
-/// Add new versions here alongside their suite label in [_suiteLabelFor]; do
-/// not remove old ones until every peer has upgraded past them, because a
-/// removed version turns records already written into permanent
+/// Add new versions here alongside their row in [_versions]; do not remove
+/// old ones until every peer has upgraded past them, because a removed
+/// version turns records already written into permanent
 /// [PqOpenFailure.versionMismatch] failures.
 const Set<int> pqSealSupportedVersions = {0x01, 0x02, 0x03};
 
-const int _gcmNonceLen = AesGcm256EncryptionAlgo.nonceLength;
-const int _gcmTagLen = AesGcm256EncryptionAlgo.tagLength;
-
-/// Returns the suite label for [version]. Each version must have a distinct
-/// label so its HKDF-derived keys are domain-separated from every other version.
-Uint8List _suiteLabelFor(int version) => switch (version) {
-      0x01 => Uint8List.fromList('atPQv1-base'.codeUnits),
-      _ => throw ArgumentError(
-          'no suite label for version 0x${version.toRadixString(16)} — '
-          'version 0x02 is RFC 9180, whose domain separation is the suite_id '
-          'inside every labelled extract and expand, not a label of ours'),
-    };
-
-/// The RFC 9180 ciphersuite `ver = 0x02` emits — the hybrid.
-const HpkeSuite _v2Suite = HpkeSuite.xWingHkdfSha256ChaCha20Poly1305;
-
-/// The RFC 9180 ciphersuite `ver = 0x03` emits — pure ML-KEM-1024, no hybrid.
+/// What one wire version means: how the AEAD key and nonce are derived, and
+/// which AEAD seals the body.
 ///
-/// A separate version rather than a suite field on the wire because the KEM is
+/// A row carries either [suite] (an RFC 9180 ciphersuite, whose §5.1 schedule
+/// derives and whose `suite_id`-inside-every-label is the version's domain
+/// separation) or [suiteLabel] (the custom raw-concatenation schedule, whose
+/// distinct label is what keeps that version's HKDF-derived keys
+/// domain-separated from every other version's).
+final class _SealVersion {
+  /// The RFC 9180 ciphersuite this version derives and seals with; null for
+  /// the custom-schedule version.
+  final HpkeSuite? suite;
+
+  /// The custom schedule's domain-separation label; null for RFC 9180
+  /// versions, which must never be given one — relabelling an envelope across
+  /// versions has to keep failing in both directions.
+  final String? suiteLabel;
+
+  final AtAeadAlgorithm _customAead;
+
+  const _SealVersion.rfc9180(HpkeSuite this.suite)
+      : suiteLabel = null,
+        // Unused on this arm: the suite names its own AEAD.
+        _customAead = const AesGcm256Aead();
+
+  const _SealVersion.custom(
+      {required String this.suiteLabel, required AtAeadAlgorithm aead})
+      : suite = null,
+        _customAead = aead;
+
+  /// The suite's AEAD where there is a suite, so the cipher cannot diverge
+  /// from the `suite_id` the vectors pin; the row's own otherwise.
+  AtAeadAlgorithm get aead => suite?.aead ?? _customAead;
+}
+
+/// The version table — one row per wire version, keyed by the `ver` byte.
+///
+/// A version byte rather than a suite field on the wire because the KEM is
 /// already fixed by the recipient's advertised key: nothing can seal
 /// ML-KEM-1024 to a hybrid encapsulation key or the reverse. The version byte
 /// therefore names the whole suite, and an opener needs no other input.
-const HpkeSuite _v3Suite = HpkeSuite.mlKem1024HkdfSha384Aes256Gcm;
+/// [pqSealSupportedVersions] is the public face of this table's key set; a
+/// unit test pins them equal.
+const Map<int, _SealVersion> _versions = {
+  // HPKE-style over X-Wing: the custom `atPQv1-base` schedule. `0x01` is
+  // X-Wing's alone — there is no ML-KEM `atPQv1-base` envelope and there
+  // never was one.
+  0x01: _SealVersion.custom(suiteLabel: 'atPQv1-base', aead: AesGcm256Aead()),
+  // RFC 9180 at the hybrid suite — ChaCha20-Poly1305 because it is the only
+  // AEAD the HPKE working group publishes `0x647A` vectors for.
+  0x02: _SealVersion.rfc9180(HpkeSuite.xWingHkdfSha256ChaCha20Poly1305),
+  // RFC 9180 at pure ML-KEM-1024 — the no-hybrid option, and the only
+  // published HPKE suite for KEM `0x0042` at a 256-bit AEAD.
+  0x03: _SealVersion.rfc9180(HpkeSuite.mlKem1024HkdfSha384Aes256Gcm),
+};
 
 /// Why a [pqOpen] call failed.
 ///
@@ -118,7 +151,8 @@ Future<Uint8List> pqSeal(
   Uint8List? aad,
   int version = pqSealDefaultVersion,
 }) async {
-  if (!pqSealSupportedVersions.contains(version)) {
+  final _SealVersion? row = _versions[version];
+  if (row == null) {
     // Refused rather than emitted: an envelope this build cannot open is one
     // nobody can, since it would carry a suite label that exists nowhere.
     throw PqSealException(
@@ -129,17 +163,11 @@ Future<Uint8List> pqSeal(
   final enc = await kem.encapsulate(recipientPublicKey);
   final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, version, info);
 
-  // body = ciphertext || tag(16) in both versions.
-  final Uint8List body = version == 0x02
-      ? await const ChaCha20Poly1305Algo().encrypt(plaintext,
-          key: dk.key, nonce: dk.nonce, aad: aad ?? const <int>[])
-      : await AesGcm256EncryptionAlgo(_aesKey(dk.key)).encrypt(
-          plaintext,
-          iv: InitialisationVector(dk.nonce),
-          aad: aad ?? const <int>[],
-        );
+  // body = ciphertext || tag in every version.
+  final Uint8List body = await row.aead.encrypt(plaintext,
+      key: dk.key, nonce: dk.nonce, aad: aad ?? const <int>[]);
 
-  // envelope: ver(1) || ctLen(2,BE) || kemCt || gcmCipherText || tag(16)
+  // envelope: ver(1) || ctLen(2,BE) || kemCt || aeadCiphertext || tag
   final out = BytesBuilder(copy: false);
   out.addByte(version);
   out.addByte((enc.ciphertext.length >> 8) & 0xff);
@@ -167,18 +195,19 @@ Future<Uint8List> pqOpen(
         PqOpenFailure.malformedEnvelope, 'envelope shorter than header');
   }
   final int ver = envelope[0];
-  if (!pqSealSupportedVersions.contains(ver)) {
+  final _SealVersion? row = _versions[ver];
+  if (row == null) {
     throw PqOpenException(PqOpenFailure.versionMismatch,
         'unsupported envelope version 0x${ver.toRadixString(16)}');
   }
   final int ctLen = (envelope[1] << 8) | envelope[2];
-  if (envelope.length < 3 + ctLen + _gcmTagLen) {
+  if (envelope.length < 3 + ctLen + row.aead.tagLength) {
     throw PqOpenException(PqOpenFailure.malformedEnvelope,
         'declared ciphertext length overruns envelope');
   }
   final Uint8List kemCt = Uint8List.sublistView(envelope, 3, 3 + ctLen);
-  // gcmBody = gcmCipherText || tag(16); AesGcm256EncryptionAlgo splits the tag.
-  final Uint8List gcmBody = Uint8List.sublistView(envelope, 3 + ctLen);
+  // aeadBody = aeadCiphertext || tag; the AEAD splits the tag off itself.
+  final Uint8List aeadBody = Uint8List.sublistView(envelope, 3 + ctLen);
 
   // Decapsulation rejects a wrong-length secret key or KEM ciphertext with an
   // ArgumentError. That is still a malformed envelope from the caller's side,
@@ -195,14 +224,8 @@ Future<Uint8List> pqOpen(
   final _DerivedKey dk = _deriveKeyAndNonce(ss, ver, info);
 
   try {
-    return ver == 0x02
-        ? await const ChaCha20Poly1305Algo().decrypt(gcmBody,
-            key: dk.key, nonce: dk.nonce, aad: aad ?? const <int>[])
-        : await AesGcm256EncryptionAlgo(_aesKey(dk.key)).decrypt(
-            gcmBody,
-            iv: InitialisationVector(dk.nonce),
-            aad: aad ?? const <int>[],
-          );
+    return await row.aead.decrypt(aeadBody,
+        key: dk.key, nonce: dk.nonce, aad: aad ?? const <int>[]);
   } on AtDecryptionException {
     throw PqOpenException(
         PqOpenFailure.authFailure, 'AEAD authentication failed');
@@ -239,31 +262,36 @@ class _DerivedKey {
   _DerivedKey(this.key, this.nonce);
 }
 
-/// Derives the AEAD key and nonce from the KEM [ss], bound to the suite label
-/// for [version] and the caller's [info]. Two HKDF labels (`0x01`/`0x02`) keep
-/// key and nonce independent.
+/// Derives the AEAD key and nonce from the KEM [ss] per [version]'s table
+/// row: RFC 9180's schedule where the row has a suite, else the custom
+/// schedule bound to the row's label and the caller's [info] (two HKDF labels,
+/// `0x01`/`0x02`, keep key and nonce independent).
 _DerivedKey _deriveKeyAndNonce(Uint8List ss, int version, Uint8List? info) {
-  if (version == 0x02 || version == 0x03) {
+  final _SealVersion? row = _versions[version];
+  if (row == null) {
+    throw ArgumentError(
+        'no key schedule for version 0x${version.toRadixString(16)} — this '
+        'build knows ${pqSealSupportedVersions.map((v) => '0x${v.toRadixString(16)}').join(', ')}');
+  }
+  final HpkeSuite? suite = row.suite;
+  if (suite != null) {
     // RFC 9180 Base mode, verbatim. Both suites are checked against the IETF
     // HPKE working group's published vectors in test/rfc9180_hpke_test.dart —
     // bytes nobody here produced, which is the difference between these
     // versions and 0x01.
-    final ks = hpkeKeyScheduleBase(version == 0x03 ? _v3Suite : _v2Suite, ss,
-        info: info);
+    final ks = hpkeKeyScheduleBase(suite, ss, info: info);
     return _DerivedKey(ks.key, ks.baseNonce);
   }
-  final Uint8List suiteInfo =
-      _concat([_suiteLabelFor(version), info ?? Uint8List(0)]);
+  final Uint8List suiteInfo = _concat([
+    Uint8List.fromList(row.suiteLabel!.codeUnits),
+    info ?? Uint8List(0),
+  ]);
   final Uint8List key = HkdfSha256.deriveKey(ss,
       info: _concat([suiteInfo, _u8(0x01)]), length: 32);
   final Uint8List nonce = HkdfSha256.deriveKey(ss,
-      info: _concat([suiteInfo, _u8(0x02)]), length: _gcmNonceLen);
+      info: _concat([suiteInfo, _u8(0x02)]), length: row.aead.nonceLength);
   return _DerivedKey(key, nonce);
 }
-
-/// Wraps a raw 32-byte key as an [AESKey] (which carries it base64-encoded,
-/// per the at_chops contract).
-AESKey _aesKey(Uint8List rawKey) => AESKey(base64Encode(rawKey));
 
 Uint8List _u8(int b) => Uint8List.fromList([b]);
 

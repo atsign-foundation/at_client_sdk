@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
-import '../hashing/hkdf.dart';
+import '../hashing/hkdf_core.dart';
+import 'at_aead.dart';
 
 /// RFC 9180 HPKE, **Base mode**, single-shot.
 ///
@@ -98,6 +99,25 @@ class HpkeSuite {
         (kdfId >> 8) & 0xff, kdfId & 0xff,
         (aeadId >> 8) & 0xff, aeadId & 0xff,
       ]);
+
+  /// The KDF [kdfId] names — the one mapping [labeledExtract] and
+  /// [labeledExpand] both dispatch through.
+  Hkdf get kdf => switch (kdfId) {
+        _kdfHkdfSha256 => Hkdf.sha256,
+        _kdfHkdfSha384 => Hkdf.sha384,
+        _ => throw ArgumentError(
+            'no HPKE KDF for id 0x${kdfId.toRadixString(16)}'),
+      };
+
+  /// The AEAD [aeadId] names. Carried here so a version table can pick a
+  /// suite and get its cipher with it, instead of re-deriving the cipher
+  /// from the version byte at every call site.
+  AtAeadAlgorithm get aead => switch (aeadId) {
+        0x0002 => const AesGcm256Aead(),
+        0x0003 => const ChaCha20Poly1305Aead(),
+        _ => throw ArgumentError(
+            'no HPKE AEAD for id 0x${aeadId.toRadixString(16)}'),
+      };
 }
 
 /// What RFC 9180's key schedule produces.
@@ -130,12 +150,7 @@ Uint8List labeledExtract(
   Uint8List ikm,
 ) {
   final labeled = _cat([_hpkeV1, suite.suiteId, label.codeUnits, ikm]);
-  return switch (suite.kdfId) {
-    _kdfHkdfSha256 => HkdfSha256.extract(labeled, salt: salt),
-    _kdfHkdfSha384 => HkdfSha384.extract(labeled, salt: salt),
-    _ => throw ArgumentError(
-        'no HPKE KDF for id 0x${suite.kdfId.toRadixString(16)}'),
-  };
+  return suite.kdf.extract(labeled, salt: salt);
 }
 
 /// IANA HPKE KDF id `0x0001`.
@@ -163,12 +178,7 @@ Uint8List labeledExpand(
     label.codeUnits,
     info,
   ]);
-  return switch (suite.kdfId) {
-    _kdfHkdfSha256 => HkdfSha256.expand(prk, info: labeled, length: length),
-    _kdfHkdfSha384 => HkdfSha384.expand(prk, info: labeled, length: length),
-    _ => throw ArgumentError(
-        'no HPKE KDF for id 0x${suite.kdfId.toRadixString(16)}'),
-  };
+  return suite.kdf.expand(prk, info: labeled, length: length);
 }
 
 /// RFC 9180 §5.1 `KeySchedule` in Base mode (`mode = 0x00`).

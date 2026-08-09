@@ -313,4 +313,23 @@ void main() {
       );
     });
   });
+
+  test('the version table and pqSealSupportedVersions agree exactly', () {
+    // The advertised set and the internal version table are separate
+    // declarations; a version added to one without the other either refuses
+    // seals it claims to support or serves rows it never advertised. The
+    // schedule probe walks every possible byte, so this is an equality proof
+    // by behaviour rather than a copy of either declaration.
+    final ss = Uint8List(32);
+    for (var v = 0; v <= 0xff; v++) {
+      if (pqSealSupportedVersions.contains(v)) {
+        expect(() => pqSealDeriveKeyAndNonce(ss, version: v), returnsNormally,
+            reason: 'advertised version 0x${v.toRadixString(16)} has no row');
+      } else {
+        expect(
+            () => pqSealDeriveKeyAndNonce(ss, version: v), throwsArgumentError,
+            reason: 'unadvertised version 0x${v.toRadixString(16)} has a row');
+      }
+    }
+  });
 }

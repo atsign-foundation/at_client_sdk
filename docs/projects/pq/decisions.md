@@ -5505,3 +5505,25 @@ vector rows, because the published JSON is the oracle that catches a
 shared-core defect where interop tests would pass with both backends wrong in
 the same way. The FFI class doc and the changelog's second-copy rationale
 were rewritten in the same commit.
+
+### 59.8 pq_hpke: a version table, and the AEAD rides the suite
+
+Version dispatch was smeared across ten sites — a label switch, two suite
+consts, two AEAD ternaries re-deriving the cipher from the version byte, two
+membership checks, borrowed AES-GCM length constants. `HpkeSuite` was a
+half-suite: it named its AEAD by IANA id but did not carry it. Now `HpkeSuite`
+resolves `kdf` and `aead` from its own ids (one mapping each — the two
+labeled operations' duplicated KDF switches collapse into `suite.kdf`, and
+the AEAD adapters live behind the package-internal `AtAeadAlgorithm` face),
+and pq_hpke.dart holds one `_versions` table, one row per wire version. Each
+row is either an RFC 9180 suite (domain separation: the `suite_id` inside
+every label) or the custom `atPQv1-base` label (v1's domain separation) — by
+construction an RFC row has no label and the custom row no suite, so
+relabelling an envelope across versions keeps failing in both directions.
+Per [§57.8](#578-secretsharingalgos-stays-as-functions-not-a-suite-table)'s
+burden the per-version rationale rides the rows. `pqSealSupportedVersions` stays the
+public const (raw-literal-pinned); a 256-value behavioural probe pins the
+table's key set equal to it. The file header was rewritten — it described
+only v1 and called the file's contents not-RFC-9180 while two versions are
+§5.1 verbatim — and the envelope vocabulary now matches
+[seal-spec.md](seal-spec.md) (`aeadCiphertext || tag`, not `gcm*`).
