@@ -1,4 +1,9 @@
 ## 3.14.1
+- fix: startup namespace-key seeding files the minted private durably before
+  publishing the advertisement. The seeding path built its key ring without
+  the private filing the data path gets, so the mint skipped the filing and
+  published anyway — the only copy of the private lived in process memory,
+  and the first restart discarded what every peer was already sealing to.
 - feat: `makeActivationPqNative` and `mintSigningRootAfterActivation`, exported
   from `at_client_mixins.dart` — the two halves of a post-quantum activation,
   for a caller that builds its own onboarding request (`at_onboarding_cli`

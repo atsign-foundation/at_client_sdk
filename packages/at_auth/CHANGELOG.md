@@ -1,4 +1,7 @@
 ## 3.4.0
+- fix: a refused onboarding enrollment's `AtAuthenticationException` carries
+  the server's reason; it previously interpolated a `toString` tear-off, so
+  the message read `Closure: () => String...` instead of the cause.
 - fix: an aborted self-retrofit denies the pending enrollment it created.
   Against an atServer without the self-retrofit auto-approve, the
   `enroll:request` is accepted and parked as `pending`, and the client then

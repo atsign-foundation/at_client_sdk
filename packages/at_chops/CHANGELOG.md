@@ -1,4 +1,7 @@
 ## 3.5.0
+- fix: the unknown-version and unknown-KDF diagnostics thrown by the HPKE
+  paths carry the offending value; an escaped `$` had left the
+  interpolation's source text in the message instead.
 - feat: `AtKemAlgorithm.newSeed` and `AtKemAlgorithm.keyPairFromSeed` — one way
   to persist and recover a KEM key that means the same thing on every backend.
   `generateKeyPair`'s `secretKey` does not: X-Wing's **is** its 32-byte seed,
