@@ -453,7 +453,7 @@ class AtAuthImpl implements AtAuth {
       atEnrollmentResponse =
           await atEnrollment.submit(firstEnrollmentRequest, atLookUp!);
     } on AtEnrollmentException catch (e) {
-      throw AtAuthenticationException('Enrollment error:${e.toString}');
+      throw AtAuthenticationException('Enrollment error: $e');
     }
     _logger.finer('enrollment response: ${atEnrollmentResponse.toString()}');
     var enrollmentIdFromServer = atEnrollmentResponse.enrollmentId;

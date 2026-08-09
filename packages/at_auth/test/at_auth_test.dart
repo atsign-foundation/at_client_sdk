@@ -268,6 +268,12 @@ void main() {
   });
   group('AtAuthImpl onboarding tests', () {
     setUp(() {
+      // Fresh mocks per test: without these the group only runs after the
+      // authentication group has initialized the shared `late` variables.
+      mockAtLookUp = MockAtLookUp();
+      mockPkamAuthenticator = MockPkamAuthenticator();
+      mockAtEnrollment = MockAtEnrollment();
+      fakeSecondaryAddressFinder = FakeSecondaryAddressFinder();
       mockAtServerStatus = MockAtServerStatus();
       when(() => mockAtServerStatus.get(any())).thenAnswer((_) => Future.value(
           AtStatus(
@@ -301,6 +307,35 @@ void main() {
       expect(
           () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
           throwsA(isA<AtAuthenticationException>()));
+    });
+
+    test('an enrollment refusal surfaces the underlying reason in the message',
+        () async {
+      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtLookUp.executeVerb(any()))
+          .thenAnswer((_) => Future.value('data:2'));
+      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
+      when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenThrow(
+          AtEnrollmentException('server refused: enrollment quota exceeded'));
+
+      final atOnboardingRequest = AtOnboardingRequest('@ferris🛠')
+        ..atKeysIo = fileAtKeysIo
+        ..appName = 'wavi'
+        ..deviceName = 'iphone';
+
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
+
+      // The person reading this exception is mid-failure; the wrapped
+      // message is the only clue they get about what the server said.
+      expect(
+          () => atAuth.onboard(atOnboardingRequest, testCramSecret),
+          throwsA(isA<AtAuthenticationException>().having(
+              (e) => e.toString(),
+              'message',
+              allOf(contains('enrollment quota exceeded'),
+                  isNot(contains('Closure'))))));
     });
 
     test('Test onboard with appName and deviceName set in onboarding request',
