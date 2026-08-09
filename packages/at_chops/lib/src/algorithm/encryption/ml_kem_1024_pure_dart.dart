@@ -1,10 +1,6 @@
-import 'dart:async';
-import 'dart:typed_data';
-
-import 'package:at_chops/src/algorithm/at_algorithm.dart';
+import 'package:at_chops/src/algorithm/encryption/ml_kem_pure_dart.dart';
 // ignore: implementation_imports
 import 'package:pqcrypto/src/algos/kyber/kem.dart' show KyberLevel;
-import 'package:pqcrypto/pqcrypto.dart';
 
 /// ML-KEM-1024 (FIPS 203) KEM backed by pure-Dart (`package:pqcrypto`).
 ///
@@ -33,22 +29,10 @@ import 'package:pqcrypto/pqcrypto.dart';
 /// shows up per sealed record.
 ///
 /// Stateless — safe to share the single [instance].
-final class MlKem1024PureDartAlgo
-    with KemSeedMixin
-    implements AtKemAlgorithm {
+final class MlKem1024PureDartAlgo extends MlKemPureDart {
   static const MlKem1024PureDartAlgo instance = MlKem1024PureDartAlgo._();
 
-  const MlKem1024PureDartAlgo._();
-
-  @override
-  int get kemSeedLength => seedLength;
-
-  @override
-  String get kemSeedDescription => 'an ML-KEM-1024 seed (d || z)';
-
-  // pqcrypto's KyberKem at k=4, eta1=2, eta2=2, du=11, dv=5 — FIPS 203's
-  // ML-KEM-1024 parameter set.
-  static final KyberKem _kem = KyberKem(KyberLevel.kem1024);
+  const MlKem1024PureDartAlgo._() : super(KyberLevel.kem1024);
 
   static const int publicKeyLength = 1568;
   static const int secretKeyLength = 3168;
@@ -64,42 +48,6 @@ final class MlKem1024PureDartAlgo
   /// to be "the 64-octet ML-KEM seed d || z".
   static const int seedLength = 64;
 
-  /// Generate a fresh ML-KEM-1024 key pair.
-  ///
-  /// [seed] is the 64-byte `d || z`; supplying it makes generation
-  /// deterministic, which is what the published vectors need and what a
-  /// key file storing the seed rather than the expanded key relies on.
   @override
-  Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
-      [Uint8List? seed]) async {
-    final (Uint8List pk, Uint8List sk) = _kem.generateKeyPair(seed);
-    return (publicKey: pk, secretKey: sk);
-  }
-
-  /// The only correct way to recover an ML-KEM-1024 key from storage is
-  /// [keyPairFromSeed], because [generateKeyPair]'s `secretKey` is the
-  /// 3168-byte expanded decapsulation key and nothing derives the public half
-  /// back out of it.
-  @override
-  Future<({Uint8List publicKey, Uint8List secretKey})>
-      keyPairFromValidatedSeed(Uint8List seed) => generateKeyPair(seed);
-
-  /// Encapsulate a fresh shared secret against [publicKey].
-  ///
-  /// [seed] is the 32-byte FIPS 203 randomness `m`, for derandomised
-  /// encapsulation. Supply it only to reproduce a published vector — a real
-  /// seal must draw fresh randomness, or two seals share a shared secret.
-  @override
-  Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
-      Uint8List publicKey,
-      [Uint8List? seed]) async {
-    final (Uint8List ct, Uint8List ss) = _kem.encapsulate(publicKey, seed);
-    return (ciphertext: ct, sharedSecret: ss);
-  }
-
-  @override
-  Future<Uint8List> decapsulate(
-      Uint8List secretKey, Uint8List ciphertext) async {
-    return _kem.decapsulate(secretKey, ciphertext);
-  }
+  String get kemSeedDescription => 'an ML-KEM-1024 seed (d || z)';
 }

@@ -5476,3 +5476,16 @@ surface is frozen. `HkdfSha384.deriveKey` now exists for free. Attestation
 unchanged and green over the unified core: the RFC 4231/5869 KATs at SHA-256,
 the HPKE WG `0x0042` key-schedule vector as SHA-384's only oracle, and the v1
 schedule/golden-envelope pins.
+
+### 59.6 One pure-Dart ML-KEM, parameterised by level
+
+`ml_kem_768_pure_dart.dart` and `ml_kem_1024_pure_dart.dart` were the same
+class twice, and the copies had drifted — 1024 grew four public size
+constants 768 never got. The implementation now lives once in the
+package-internal `abstract base class MlKemPureDart` (level via constructor;
+one `KyberKem` per level), and the published leaf names stay as level-pinned
+`final class ... extends` shells carrying their own docs, `seedLength`, and
+diagnostics. `MlKem768PureDartAlgo`'s public shape (3.4.1, including the
+seeded `generateKeyPair`/`encapsulate` overloads) is byte-compatible;
+`MlKem1024PureDartAlgo` keeps its constants. The `instance` singletons remain
+`const`, so at_client's `same()`-identity resolution pins hold unchanged.
