@@ -134,7 +134,7 @@ Uint8List labeledExtract(
     _kdfHkdfSha256 => HkdfSha256.extract(labeled, salt: salt),
     _kdfHkdfSha384 => HkdfSha384.extract(labeled, salt: salt),
     _ => throw ArgumentError(
-        'no HPKE KDF for id 0x\${suite.kdfId.toRadixString(16)}'),
+        'no HPKE KDF for id 0x${suite.kdfId.toRadixString(16)}'),
   };
 }
 
@@ -167,7 +167,7 @@ Uint8List labeledExpand(
     _kdfHkdfSha256 => HkdfSha256.expand(prk, info: labeled, length: length),
     _kdfHkdfSha384 => HkdfSha384.expand(prk, info: labeled, length: length),
     _ => throw ArgumentError(
-        'no HPKE KDF for id 0x\${suite.kdfId.toRadixString(16)}'),
+        'no HPKE KDF for id 0x${suite.kdfId.toRadixString(16)}'),
   };
 }
 

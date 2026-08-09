@@ -53,7 +53,7 @@ const int _gcmTagLen = AesGcm256EncryptionAlgo.tagLength;
 Uint8List _suiteLabelFor(int version) => switch (version) {
       0x01 => Uint8List.fromList('atPQv1-base'.codeUnits),
       _ => throw ArgumentError(
-          'no suite label for version 0x\${version.toRadixString(16)} — '
+          'no suite label for version 0x${version.toRadixString(16)} — '
           'version 0x02 is RFC 9180, whose domain separation is the suite_id '
           'inside every labelled extract and expand, not a label of ours'),
     };
