@@ -9,7 +9,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show signableTextOf;
+    show envelopePayloadOf, jwsEnvelopeVersion, signEnvelope, signableTextOf;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -405,6 +405,31 @@ void main() {
       final link =
           await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
       await PqSigningChain.publishLink(childClient, 'child-1', link!);
+
+      final result =
+          await PqSigningChain.verifyChain(verifierClient, verifier, 'child-1');
+
+      expect(result.verdict, ChainVerdict.chained);
+      expect(result.path, ['child-1', 'parent-1']);
+    });
+
+    test('climbs a JWS-wrapped chain link the same way', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      await registered(childClient);
+
+      // The same payload the version-1 link carries, re-signed in the JWS
+      // wrapper — what a flipped producer will convey. The walk must read
+      // the signer from the protected header's kid and the payload out of
+      // base64url, or the chain dead-ends at its first version-2 link.
+      final v1 = await PqSigningChain.signLinkFor(
+          parentClient, parent, 'child-1');
+      final link = signEnvelope(envelopePayloadOf(v1!),
+          keys: parent.signingKeys,
+          enrollmentId: 'parent-1',
+          version: jwsEnvelopeVersion);
+      await PqSigningChain.publishLink(childClient, 'child-1', link);
 
       final result =
           await PqSigningChain.verifyChain(verifierClient, verifier, 'child-1');

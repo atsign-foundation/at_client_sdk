@@ -71,6 +71,39 @@ void main() {
     return lookUp;
   }
 
+  String b64u(String text) =>
+      base64Url.encode(utf8.encode(text)).replaceAll('=', '');
+
+  /// The JWS wrapper form of [lookupWith]'s envelope: the signer claim lives
+  /// in the protected header's `kid`, so the resolver must read it from there
+  /// to know which `_apsk` to look up at all.
+  MockAtLookUp lookupWithJws({required String signer}) {
+    final lookUp = MockAtLookUp();
+    when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
+        .thenAnswer((inv) async {
+      final command = inv.positionalArguments[0] as String;
+      if (command.startsWith('scan')) {
+        return 'data:${jsonEncode([envelopeKey])}';
+      }
+      if (command.contains('_apsk.$signer')) {
+        throw AtLookUpException(
+            'AT0015',
+            'key not found : public:_apsk.$signer.a.__e$atSign does not '
+                'exist in keystore');
+      }
+      if (command.contains(envelopeKey)) {
+        return 'data:${jsonEncode({
+              'v': 2,
+              'payload': b64u('{"toKpid":"$kpid"}'),
+              'protected': b64u('{"alg":"RS256","kid":"$signer","v":2}'),
+              'signature': 'unchecked-the-apsk-lookup-decides-first',
+            })}';
+      }
+      return null;
+    });
+    return lookUp;
+  }
+
   setUpAll(() => registerFallbackValue(''));
 
   test('an envelope whose signer has no _apsk is skipped, not fatal', () async {
@@ -91,6 +124,22 @@ void main() {
             'not from an approved enrollment and is skipped. Propagating the '
             'lookup error instead means one stale envelope from a revoked '
             'enrollment fails every later enrollment that walks past it');
+  });
+
+  test('a JWS envelope from a revoked signer is skipped the same way',
+      () async {
+    // Same outcome as the version-1 arm above, reached through the version-2
+    // claim path: the signer is named only by the protected header's kid, and
+    // the resolver must route the _apsk lookup from it before anything else
+    // can happen.
+    final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+        timeout: const Duration(milliseconds: 200),
+        pollInterval: const Duration(milliseconds: 50));
+
+    await expectLater(
+        resolve(withKeyPackage(), lookupWithJws(signer: 'revoked-enrollment')),
+        throwsA(isA<StateError>().having((e) => '$e', 'message',
+            contains('No conveyed apkamSymmetricKey arrived'))));
   });
 
   test('and a signer whose _apsk does not verify is skipped too', () async {

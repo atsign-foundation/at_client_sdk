@@ -4,7 +4,11 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show signedEnvelopeVersion;
+    show
+        ApkamSigningKeys,
+        jwsEnvelopeVersion,
+        signEnvelope,
+        signedEnvelopeVersion;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -214,6 +218,32 @@ void main() {
     test('a signed advertisement verifies against the published _apsk',
         () async {
       final c = client(payload: await signedPayloadFor(bobKey));
+
+      final advertised =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+
+      expect(advertised?.nskeyKid, nskeyKidOf(bobKey.publicKeyBytes));
+      expect(advertised?.publicKey, bobKey.publicKeyBytes);
+    });
+
+    test('a JWS-wrapped advertisement verifies and resolves the same key',
+        () async {
+      // The version-2 wrapper a flipped producer will emit, through the whole
+      // reader stack in one pass: the shape-aware field check, the signer
+      // claim from the protected header's kid, the verify over
+      // protected.payload, and the payload out of base64url.
+      final pair = bobChops.atChopsKeys.atPkamKeyPair!;
+      final envelope = signEnvelope(
+          {
+            'nskeyKid': nskeyKidOf(bobKey.publicKeyBytes),
+            'publicKey': base64Encode(bobKey.publicKeyBytes),
+          },
+          keys: ApkamSigningKeys(
+              publicKey: pair.atPublicKey.publicKey,
+              privateKey: pair.atPrivateKey.privateKey),
+          enrollmentId: 'enroll-bob',
+          version: jwsEnvelopeVersion);
+      final c = client(payload: jsonEncode(envelope));
 
       final advertised =
           await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);

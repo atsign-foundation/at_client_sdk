@@ -581,6 +581,91 @@ void main() {
               'lived — the payload never carried it');
     });
 
+    test('a key package in the JWS wrapper is read and sealed to', () async {
+      // The version-2 wrapper a flipped producer will emit: same payload,
+      // signer claim in the protected header's kid.
+      final b = await registered('enroll-b');
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [
+        record(
+            'enroll-b',
+            signEnvelope(b.myKeyPackage.toJson(),
+                keys: b.signingKeys,
+                enrollmentId: 'enroll-b',
+                version: jwsEnvelopeVersion)),
+      ]);
+
+      final member =
+          (await VerbEnrollmentDirectory(atClient).listForNamespace('myapp'))
+              .single;
+
+      expect(member.keyPackageStatus, KeyPackageStatus.present);
+      expect(member.keyPackage!.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub,
+          base64Encode(publicKeyA),
+          reason: 'the payload decodes out of base64url to the same package '
+              'the version-1 wrapper carries');
+    });
+
+    test('a JWS package claiming another signer in its kid is not sealed to',
+        () async {
+      // The version-2 form of the claim-mismatch refusal: the claim now lives
+      // in the protected header, and the directory must read it from there.
+      final d = await registered('enroll-d');
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [
+        record(
+            'enroll-b',
+            signEnvelope(d.myKeyPackage.toJson(),
+                keys: d.signingKeys,
+                enrollmentId: 'enroll-d',
+                version: jwsEnvelopeVersion)),
+      ]);
+
+      final member =
+          (await VerbEnrollmentDirectory(atClient).listForNamespace('myapp'))
+              .single;
+
+      expect(member.keyPackageStatus, KeyPackageStatus.rejected);
+    });
+
+    test('a wrapper version from a future build is unsupported, not rejected',
+        () async {
+      final b = await registered('enroll-b');
+      final envelope = await b.signedKeyPackagePayload()
+        ..['v'] = 3;
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [record('enroll-b', envelope)]);
+
+      final member =
+          (await VerbEnrollmentDirectory(atClient).listForNamespace('myapp'))
+              .single;
+
+      expect(member.keyPackageStatus, KeyPackageStatus.unsupported,
+          reason: 'a version-3 wrapper is a newer client at work — the same '
+              '"cannot parse" outcome as a payload shape from a later '
+              'version, not a hostile record');
+    });
+
+    test('a JWS package whose protected header cannot be read is rejected',
+        () async {
+      final b = await registered('enroll-b');
+      final envelope = signEnvelope(b.myKeyPackage.toJson(),
+          keys: b.signingKeys,
+          enrollmentId: 'enroll-b',
+          version: jwsEnvelopeVersion)
+        ..['protected'] = 'not!!!base64url';
+      final atClient = buildMockClient('enroll-self');
+      stubListns(atClient, [record('enroll-b', envelope)]);
+
+      final member =
+          (await VerbEnrollmentDirectory(atClient).listForNamespace('myapp'))
+              .single;
+
+      expect(member.keyPackageStatus, KeyPackageStatus.rejected,
+          reason: 'this wrapper version is one this build knows; a claim that '
+              'cannot be read out of it is malformation, not novelty');
+    });
+
     test('one bad advertisement does not cost the other members theirs',
         () async {
       final b = await registered('enroll-b');

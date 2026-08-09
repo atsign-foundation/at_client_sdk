@@ -5,7 +5,7 @@ import 'package:at_client/at_client.dart'
     show AtClientImpl, AtKey, AtValue, GetRequestOptions, IllegalStateException;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show apskUri, signEnvelope, verifyEnvelope;
+    show apskUri, envelopeSignerOf, signEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -97,9 +97,7 @@ mixin EnvelopeSigning on ApkamSigning {
     required String signerAtSign,
     String? signerEnrollmentId,
   }) async {
-    final claimed = envelope['enrollmentId'];
-    final String? id =
-        signerEnrollmentId ?? (claimed is String ? claimed : null);
+    final String? id = signerEnrollmentId ?? envelopeSignerOf(envelope);
     if (id == null) {
       throw AtSigningVerificationException(
           'Cannot verify an envelope that names no enrollment and was given '

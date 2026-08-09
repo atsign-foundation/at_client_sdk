@@ -11,6 +11,8 @@ import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show envelopePayloadOf, envelopeVersionOf, jwsEnvelopeVersion;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -76,9 +78,12 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
     }
     // Every field the verify reads, checked up front: a missing one otherwise
     // surfaces as a cast error, which reads like a bug rather than the refusal
-    // it is.
-    if (['signature', 'enrollmentId', 'signingAlgo', 'hashingAlgo']
-        .any((field) => envelope[field] is! String)) {
+    // it is. Which fields those are depends on the wrapper shape — the JWS
+    // wrapper carries its algorithm and signer claim inside `protected`.
+    final wrapperFields = envelopeVersionOf(envelope) == jwsEnvelopeVersion
+        ? ['signature', 'protected', 'payload']
+        : ['signature', 'enrollmentId', 'signingAlgo', 'hashingAlgo'];
+    if (wrapperFields.any((field) => envelope[field] is! String)) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner carries no APKAM signature, so the '
           'key sealed to would be only as trustworthy as the server that '
@@ -87,7 +92,7 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
 
     await _signer.verifyEnvelopeSignature(envelope, signerAtSign: owner);
 
-    final advertised = envelope['payload'];
+    final advertised = envelopePayloadOf(envelope);
     if (advertised is! Map) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner has a signature over a payload that '

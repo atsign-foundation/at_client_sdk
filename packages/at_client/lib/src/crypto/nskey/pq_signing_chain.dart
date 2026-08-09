@@ -8,7 +8,7 @@ import 'package:at_client/at_client_mixins.dart' show EnvelopeSigning;
 import 'package:at_client/src/signing/envelope_signature.dart'
     as envelope_signature show apskUri;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show signableTextOf;
+    show envelopePayloadOf, envelopeSignerOf, signableTextOf;
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -183,9 +183,12 @@ class PqSigningChain {
     String enrollmentId,
     Map<String, Object?> link,
   ) async {
+    // Resolved before the write: a link so malformed its signer cannot be
+    // read is refused here rather than published and then logged broken.
+    final signer = envelopeSignerOf(link);
     await _publishInto(atClient, enrollmentId, linkField, link);
     _logger.info('Published chain link for $enrollmentId, signed by enrollment '
-        '${link['enrollmentId']}');
+        '$signer');
   }
 
   /// Adds [value] under [field] in this enrollment's `_apsk` `appMetadata`,
@@ -377,7 +380,7 @@ class PqSigningChain {
     final Map payload;
     try {
       link = decodeConveyedLink(secret.value);
-      payload = link['payload'] as Map;
+      payload = envelopePayloadOf(link) as Map;
     } catch (e) {
       _logger.warning('Conveyed chain link is malformed; not publishing: $e');
       return false;
@@ -475,8 +478,8 @@ class PqSigningChain {
         return ChainResult(ChainVerdict.broken, path, failure);
       }
 
-      final parent = link['enrollmentId'];
-      if (parent is! String || parent.isEmpty) {
+      final parent = envelopeSignerOf(link);
+      if (parent == null || parent.isEmpty) {
         return ChainResult(
             ChainVerdict.broken,
             path,
@@ -505,7 +508,7 @@ class PqSigningChain {
       return 'the link on $enrollmentId does not verify against the '
           'enrollment it names as signer: $e';
     }
-    final payload = link['payload'];
+    final payload = envelopePayloadOf(link);
     if (payload is! Map) return 'the link on $enrollmentId has no payload';
     if (payload['childEnrollmentId'] != enrollmentId) {
       return 'the link on $enrollmentId vouches for '

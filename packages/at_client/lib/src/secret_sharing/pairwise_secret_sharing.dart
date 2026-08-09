@@ -23,6 +23,8 @@ import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
 import 'package:at_client/src/secret_sharing/secret_envelope.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show envelopePayloadOf, envelopeSignerOf;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:uuid/uuid.dart' show Uuid;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -469,16 +471,17 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     // bytes, but only the APKAM signature authenticates WHO sent it.
     await verifyEnvelopeSignature(signedEnvelope,
         signerAtSign: atClient.getCurrentAtSign()!);
-    final envelope = SecretEnvelope.fromJson(signedEnvelope['payload']);
+    final envelope = SecretEnvelope.fromJson(envelopePayloadOf(signedEnvelope));
 
     if (envelope.toKpid != kpid) {
       logger.warning('Envelope $envelopeKey is addressed to '
           '${envelope.toKpid}, not to this client; skipping');
       return null;
     }
-    if (signedEnvelope['enrollmentId'] != envelope.fromEnrollmentId) {
+    final signerClaim = envelopeSignerOf(signedEnvelope);
+    if (signerClaim != envelope.fromEnrollmentId) {
       logger.warning('Envelope $envelopeKey: signer enrollment '
-          '${signedEnvelope['enrollmentId']} does not match claimed sender '
+          '$signerClaim does not match claimed sender '
           'enrollment ${envelope.fromEnrollmentId}; skipping');
       return null;
     }

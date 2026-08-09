@@ -5621,3 +5621,36 @@ The version-2 emitted form is pinned FROZEN in `wire_literal_pins_test.dart`
 algorithms — the header bytes are under the signature, so member order is
 cryptographically bound). The version-1 pins group stays binding: it is
 retired by the 4.0 default flip, not by this migration.
+
+### 60.2 Every consumer reads through the shape-agnostic helpers
+
+The seven payload consumers and seven signer-claim reads move onto
+`envelopePayloadOf` / `envelopeSignerOf`, each keeping its own refusal
+semantics: the secret-sharing consumers still *skip* (one envelope this
+enrollment cannot use says nothing about the one it is waiting for), the
+nskey key ring still *throws* its typed refusal, and the chain walk still
+returns verdicts. Three sites needed more than substitution:
+
+- **The key ring's up-front field check is now shape-aware.** It required
+  `signingAlgo`/`hashingAlgo`/`enrollmentId` as wrapper fields, which would
+  have refused every version-2 envelope before verification ran; the JWS arm
+  checks `protected`/`payload`/`signature` instead.
+- **The enrollment directory distinguishes novelty from malformation.** An
+  unknown wrapper version maps to `KeyPackageStatus.unsupported` (a newer
+  client's package — same outcome as an unreadable payload, nobody here can
+  fix it), while a known-version envelope whose signer claim cannot be read
+  maps to `rejected`. The helper split supports exactly that:
+  `envelopeVersionOf` throws only on unknown versions, `envelopeSignerOf`
+  only on malformation.
+- **`publishLink` resolves the signer before the write**, so a link so
+  malformed its signer cannot be read is refused rather than published and
+  then logged broken — consistent with the file's own "a bad link on this
+  record is worse than no link".
+
+The version-2 flow arms ride the existing consumer rigs rather than new
+ones: a JWS-wrapped key package is read and sealed to (and rejected when its
+kid names another signer; `unsupported` at wrapper v3; `rejected` on an
+unreadable header), a JWS-wrapped nskey advertisement resolves the same key,
+the chain walk climbs a JWS-wrapped link, and the symmetric-key resolver
+skips a revoked signer named only by `kid`. The root-link sites are
+deliberately untouched per this section's scope note.

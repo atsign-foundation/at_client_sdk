@@ -15,7 +15,7 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
 import 'package:at_client/src/secret_sharing/secret_envelope.dart'
     show SecretEnvelope;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show apskUri, verifyEnvelope;
+    show apskUri, envelopePayloadOf, envelopeSignerOf, verifyEnvelope;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -195,7 +195,7 @@ Future<String?> _openIfSymmetricKey(
 
   final SecretEnvelope envelope;
   try {
-    envelope = SecretEnvelope.fromJson(signedEnvelope['payload']);
+    envelope = SecretEnvelope.fromJson(envelopePayloadOf(signedEnvelope));
   } catch (e) {
     _logger.warning('Envelope $envelopeKey is malformed; skipping: $e');
     return null;
@@ -206,7 +206,7 @@ Future<String?> _openIfSymmetricKey(
   // second list that has to agree with this one.
   final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
   if (envelope.toKpid != kpid ||
-      signedEnvelope['enrollmentId'] != envelope.fromEnrollmentId ||
+      envelopeSignerOf(signedEnvelope) != envelope.fromEnrollmentId ||
       kem == null ||
       // The suite's KEM must be the one this key package's key belongs to.
       // A sender that picked the other one produced something [secretKey]
@@ -250,8 +250,8 @@ Future<void> _verifyAgainstApsk(
   Map signedEnvelope,
   String atSign,
 ) async {
-  final claimed = signedEnvelope['enrollmentId'];
-  if (claimed is! String || claimed.isEmpty) {
+  final claimed = envelopeSignerOf(signedEnvelope);
+  if (claimed == null || claimed.isEmpty) {
     throw AtSigningVerificationException(
         'Envelope names no enrollment, so there is no _apsk to check its '
         'signature against');

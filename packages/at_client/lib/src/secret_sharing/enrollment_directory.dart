@@ -3,6 +3,10 @@ import 'dart:convert' show jsonDecode;
 import 'package:at_client/at_client.dart' show AtClient;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show envelopePayloadOf, envelopeSignerOf, envelopeVersionOf;
+import 'package:at_commons/at_commons.dart'
+    show AtSigningVerificationException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -223,6 +227,18 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
     return (null, KeyPackageStatus.rejected);
   }
 
+  // A wrapper version this build has no code for is a package written by a
+  // newer client, not a hostile one — the same "cannot parse" outcome as an
+  // unreadable payload below, and distinct from the malformed-envelope
+  // refusals that follow.
+  try {
+    envelopeVersionOf(advertised);
+  } on AtSigningVerificationException catch (e) {
+    _logger.info('enrollment $enrollmentId advertised a signed key package '
+        'this version cannot parse: $e');
+    return (null, KeyPackageStatus.unsupported);
+  }
+
   // The record names whose enrollment this is, and that is what the _apsk
   // lookup goes on. A package may also name its own signer; if it does and
   // the two disagree, one enrollment is offering a key package as another's
@@ -236,7 +252,14 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   // Named `claimedSigner`, not `signer`: that is the AtClientEnvelopeSigner
   // parameter, and a Map lookup is dynamic, so shadowing it compiles happily
   // and then fails at runtime on every verification.
-  final claimedSigner = advertised['enrollmentId'];
+  final String? claimedSigner;
+  try {
+    claimedSigner = envelopeSignerOf(advertised);
+  } on AtSigningVerificationException catch (e) {
+    _logger.severe('enrollment $enrollmentId advertised a key package whose '
+        'signer claim cannot be read; not sealing to it: $e');
+    return (null, KeyPackageStatus.rejected);
+  }
   if (claimedSigner != null && claimedSigner != enrollmentId) {
     _logger.severe('enrollment $enrollmentId advertised a key package signed '
         'by $claimedSigner; not sealing to it');
@@ -256,7 +279,7 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   try {
     return (
       KeyPackage.fromPayload(
-        advertised['payload'],
+        envelopePayloadOf(advertised),
         enrollmentId: enrollmentId,
         apkamId: apkamId,
       ),
