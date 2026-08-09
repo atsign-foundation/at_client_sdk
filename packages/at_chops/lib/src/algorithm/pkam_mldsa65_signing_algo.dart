@@ -19,10 +19,15 @@ import 'package:at_chops/src/algorithm/signing/ml_dsa_65_pure_dart.dart';
 /// ML-DSA computation is too — this class exists because the
 /// [AtSignatureAlgorithm] implementations wrap that computation in `Future`s
 /// the synchronous dispatch cannot await.
+///
+/// Despite the name, `AtChopsImpl`'s VERIFICATION dispatch also resolves
+/// non-pkam-mode mldsa65 input here (with an explicit `publicKey:` and no
+/// keypair), so data-mode ML-DSA verification lands on this class too.
 @Deprecated(
-    'Use AtPqc.mlDsa65 (AtSignatureAlgorithm) with explicit key material '
-    'instead. This compatibility API will be removed in the next major '
-    'release.')
+    'Constructed by AtChopsImpl\'s deprecated dispatch; not an API to build '
+    'on. Direct callers should use MlDsa65PureDartAlgo.signBytesSync / '
+    'verifyBytesSync with explicit key material. This compatibility API '
+    'will be removed in the next major release.')
 class PkamMlDsa65SigningAlgo implements AtSigningAlgorithm {
   final AtPkamKeyPair? _pkamKeyPair;
 

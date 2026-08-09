@@ -5427,3 +5427,22 @@ exists. This also frees `HpkeSuite` to be reshaped by the same phase's
 suite-table work without publishing the intermediate shapes. External
 implementations conform against `test/vectors/pq_seal_v1.json` and
 [seal-spec.md](seal-spec.md), never against these internals.
+
+### 59.3 `PkamMlDsa65SigningAlgo` stays deprecated, re-pointed at a replacement that works
+
+The class was born `@Deprecated` pointing at `AtPqc.mlDsa65` — an
+`AtSignatureAlgorithm` whose Future-returning verify is the exact defect the
+class was created to fix, so the deprecation named a replacement that cannot
+serve the class's only production caller (`AtChopsImpl`'s synchronous
+dispatch). Of the candidate resolutions — un-deprecate as the durable sync
+adapter, add a sync seam to `AtSignatureAlgorithm`, or delete it — the ruling
+is none of them: the deprecation is correct, only its pointer was wrong. The
+class exists solely to serve the deprecated `AtChopsImpl` dispatch and its
+lifespan is tied to it; direct callers already have a working synchronous
+route in `MlDsa65PureDartAlgo.signBytesSync`/`verifyBytesSync`, which is what
+the message now names. A sync seam on `AtSignatureAlgorithm` was rejected
+because it would break external implementers of the published 3.4.1 interface
+and force synchronous members onto backends that are inherently asynchronous.
+The dartdoc also now records that data-mode ML-DSA verification resolves here
+(the dispatch checks `signingAlgoType` before the pkam-mode branch), since
+'Pkam' in the name only describes the key-material slot.
