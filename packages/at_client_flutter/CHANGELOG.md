@@ -1,6 +1,12 @@
 # CHANGELOG
 
 ## 1.1.5
+- fix: a failed keychain read no longer wipes the store. The read's error
+  path wrote an empty entry over the stored data before rethrowing, so a
+  transient platform-channel error or a cancelled biometric prompt destroyed
+  the only copy of the atSign's keys. Recovery from a genuinely corrupt store
+  is now the caller's explicit decision, never a side effect of the read that
+  discovered it.
 - fix: the keychain is a usable key store for the post-quantum paths.
   `KeychainAtKeysIo` implemented only `read`/`write`, so `flush` fell through
   to the interface's throwing default — and on Flutter that is the *default*

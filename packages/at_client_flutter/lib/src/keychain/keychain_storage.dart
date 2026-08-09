@@ -448,13 +448,12 @@ class KeychainStorage {
         return value;
       }
     } catch (e, s) {
+      // A failure to read — a transient platform-channel error, a cancelled
+      // biometric prompt — must never touch what is stored: the only copies
+      // of the atSign's keys may live here, and recovery from a genuinely
+      // corrupt store is the caller's explicit decision, not a side effect
+      // of the read that discovered it.
       _logger.severe('_read failed with $e', e, s);
-      print(s);
-      _logger.severe('Removing data');
-      await _write(
-        biometricStoreName: keychainStoreName,
-        keychainData: EmptyKeychainData(),
-      );
       rethrow;
     }
   }
