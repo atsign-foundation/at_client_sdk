@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:at_lookup/at_lookup.dart';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -19,11 +20,22 @@ class FlutterEnrollmentService {
 
   final AtSignLogger _logger = AtSignLogger('FlutterEnrollmentService');
   final AtEnrollment _atEnrollment = AtEnrollment.create();
-  final KeychainStorage _keychainStorage = KeychainStorage();
-  final KeychainAtKeysIo _keychainAtKeysIo = KeychainAtKeysIo();
+  /// Injectable for tests, like [KeychainStorage.biometricStorage];
+  /// production uses the platform keychain.
+  @visibleForTesting
+  KeychainStorage keychainStorage = KeychainStorage();
+
+  /// Injectable for tests; production uses the platform keychain.
+  @visibleForTesting
+  KeychainAtKeysIo keychainAtKeysIo = KeychainAtKeysIo();
+
+  /// Injectable for tests; production resolves through [AtClientManager].
+  @visibleForTesting
+  AtClient? atClientOverride;
 
   /// Instance of [AtClient] for the current atSign
-  AtClient get atClient => AtClientManager.getInstance().atClient;
+  AtClient get atClient =>
+      atClientOverride ?? AtClientManager.getInstance().atClient;
 
   static const _kDefaultExpiry = Duration(minutes: 5);
 
@@ -71,7 +83,7 @@ class FlutterEnrollmentService {
         DateTime.now().toUtc().microsecondsSinceEpoch,
         namespace: (request is AtEnrollmentRequest) ? request.namespaces : null,
       );
-      await _keychainStorage.writeEnrollmentData(
+      await keychainStorage.writeEnrollmentData(
         atSign: request.atSign,
         enrollmentData: enrollmentData,
       );
@@ -98,7 +110,7 @@ class FlutterEnrollmentService {
   ) async {
     AtEnrollmentResponse? atEnrollmentResponse;
     try {
-      if (!await _keychainStorage.validateEnrollment(request.atSign)) {
+      if (!await keychainStorage.validateEnrollment(request.atSign)) {
         throw Exception('Invalid enrollment');
       }
       // Routed through at_client's EnrollmentService rather than at_auth
@@ -106,8 +118,14 @@ class FlutterEnrollmentService {
       // the new device's key package, and calling at_auth straight would
       // approve an enrollment that can authenticate and decrypt nothing.
       atEnrollmentResponse = await atClient.enrollmentService!.approve(request);
-      _keychainAtKeysIo.write(request.atSign, atEnrollmentResponse.atAuthKeys!);
-      _keychainStorage.deleteEnrollmentData(request.atSign);
+      // The approver holds no enrollee key material: approve() returns only
+      // the id and status, and the enrollee files its own keys on its own
+      // device. Write only what is actually present.
+      final approvedKeys = atEnrollmentResponse.atAuthKeys;
+      if (approvedKeys != null) {
+        await keychainAtKeysIo.write(request.atSign, approvedKeys);
+      }
+      keychainStorage.deleteEnrollmentData(request.atSign);
     } catch (e) {
       throw Exception('Enrollment failed: $e');
     }
@@ -244,7 +262,7 @@ class FlutterEnrollmentService {
     final atLookup = atClient.getRemoteSecondary()!.atLookUp;
     final otp = await _atEnrollment.setSpp(spp, atLookup, expiry: sppExpiry);
     _logger.info('SPP set on the server');
-    await _keychainStorage.saveSpp(atClient.getCurrentAtSign()!, otp);
+    await keychainStorage.saveSpp(atClient.getCurrentAtSign()!, otp);
     return otp;
   }
 
@@ -252,11 +270,11 @@ class FlutterEnrollmentService {
   ///
   /// Returns `null` if no SPP is set or the last SPP has expired.
   Future<SppData?> getActiveSpp() =>
-      _keychainStorage.getActiveSpp(atClient.getCurrentAtSign()!);
+      keychainStorage.getActiveSpp(atClient.getCurrentAtSign()!);
 
   /// Get all active (non-expired) SPPs from the keychain.
   Future<List<SppData>> getAllSpps() =>
-      _keychainStorage.getAllSpps(atClient.getCurrentAtSign()!);
+      keychainStorage.getAllSpps(atClient.getCurrentAtSign()!);
 
   /// Get the OTP from the server.
   ///

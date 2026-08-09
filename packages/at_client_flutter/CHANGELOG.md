@@ -7,6 +7,11 @@
   the only copy of the atSign's keys. Recovery from a genuinely corrupt store
   is now the caller's explicit decision, never a side effect of the read that
   discovered it.
+- fix: approving an enrollment no longer reports `Enrollment failed: Null
+  check operator used on a null value` after the server-side approval has
+  succeeded. `approve()` returns no key material — the enrollee files its own
+  keys on its own device — and the approver-side keychain write now runs only
+  when keys are actually present.
 - fix: the keychain is a usable key store for the post-quantum paths.
   `KeychainAtKeysIo` implemented only `read`/`write`, so `flush` fell through
   to the interface's throwing default — and on Flutter that is the *default*
