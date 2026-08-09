@@ -5,7 +5,12 @@ import 'package:at_client/at_client.dart'
     show AtClientImpl, AtKey, AtValue, GetRequestOptions, IllegalStateException;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show apskUri, envelopeSignerOf, signEnvelope, verifyEnvelope;
+    show
+        apskUri,
+        envelopeSignerOf,
+        signEnvelope,
+        signedEnvelopeVersion,
+        verifyEnvelope;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -32,6 +37,16 @@ mixin EnvelopeSigning on ApkamSigning {
     bool resetOnLookup
   })? publicKeyCacheSettings;
 
+  /// The wrapper shape [wrapAndSign] emits — the signer's rollout flag
+  /// (`docs/projects/pq/decisions.md` 56.4). Defaults to
+  /// `signedEnvelopeVersion` (1) for all of 3.x; flipping the default to the
+  /// JWS shape is a 4.0 deployment decision, made only once every reader in
+  /// the fleet accepts it, because the enrollment record's `keyPackage` is
+  /// write-once — an envelope frozen there in a shape the fleet cannot read
+  /// is unreadable for that enrollment's life. Verification accepts both
+  /// shapes regardless of this setting.
+  int envelopeVersion = signedEnvelopeVersion;
+
   /// Create a json envelope around [payload] in a format that can be verified
   /// by [verifyEnvelopeSignature].
   ///
@@ -55,6 +70,7 @@ mixin EnvelopeSigning on ApkamSigning {
         keys: signingKeys,
         enrollmentId: enrollmentId,
         signingAlgo: AtClientImpl.signingAlgoOf(atClient),
+        version: envelopeVersion,
         toEncodable: toEncodable,
       );
     } on Object catch (e, st) {

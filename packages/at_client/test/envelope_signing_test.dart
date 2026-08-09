@@ -4,7 +4,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show ApkamSigningKeys, signEnvelope;
+    show ApkamSigningKeys, jwsEnvelopeVersion, signEnvelope;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
@@ -98,6 +98,23 @@ void main() {
       expect(envelope['hashingAlgo'], 'sha256');
       expect(envelope['signingAlgo'], 'rsa2048');
       expect(envelope['enrollmentId'], 'enroll-a');
+    });
+
+    test('the envelopeVersion flag switches the emitted shape', () async {
+      // The signer-config rollout flag: version 1 by default, the JWS shape
+      // when set. Verification accepts both regardless of the flag.
+      expect((await signerA.wrapAndSign({'a': 1}))['v'], 1,
+          reason: 'the 3.x default — nothing on the wire moves until 4.0 '
+              'flips it');
+
+      signerA.envelopeVersion = jwsEnvelopeVersion;
+      final envelope = await signerA.wrapAndSign({'a': 1});
+      expect(envelope['v'], 2);
+      expect(envelope['protected'], isA<String>(),
+          reason: 'the claims ride the signed protected header in this shape');
+
+      stubApskGet(atClientB, pkamPublicKey(atChopsA));
+      await verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign);
     });
   });
 

@@ -5654,3 +5654,19 @@ unreadable header), a JWS-wrapped nskey advertisement resolves the same key,
 the chain walk climbs a JWS-wrapped link, and the symmetric-key resolver
 skips a revoked signer named only by `kid`. The root-link sites are
 deliberately untouched per this section's scope note.
+
+### 60.3 The version flag lives on the signer, defaulting v1
+
+`EnvelopeSigning.envelopeVersion` — the signed-envelope axis of
+[56.4](#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults)'s
+rollout table, in the "signer config" home that table names. `wrapAndSign`
+passes it through; the default is `signedEnvelopeVersion` for all of 3.x and
+4.0 flips it, no code fork. The Workstream A posture helper bundles this flag
+with the others when it lands.
+
+The key-package signer at `enroll:request` time
+(`enrollment_key_package.dart`) does not read the flag: it runs before any
+client exists, and it writes the one record whose shape is frozen for the
+enrollment's life, so it stays at the `signEnvelope` default until the flip
+itself decides otherwise. Threading a posture through it is the capstone's
+business, not this commit's.
