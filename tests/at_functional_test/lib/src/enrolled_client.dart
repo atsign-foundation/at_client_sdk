@@ -156,7 +156,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
     client: manager.atClient,
     enrollmentId: response.enrollmentId,
     kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
-    keys: await (response.session ?? session).atKeysIo!.read(atSign),
+    keys: await (response.session ?? session).atKeysIo.read(atSign),
     manager: manager,
   );
 }

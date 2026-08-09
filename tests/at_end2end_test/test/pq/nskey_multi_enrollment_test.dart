@@ -80,8 +80,8 @@ void main() {
       atSign: bob,
       namespace: sharedNamespace,
       preference: TestPreferences.getInstance().getPreference(bob),
-      rootDomain: bobPreference.rootDomain!,
-      rootPort: bobPreference.rootPort!,
+      rootDomain: bobPreference.rootDomain,
+      rootPort: bobPreference.rootPort,
       deviceName: 'bob2-${DateTime.now().microsecondsSinceEpoch}',
     );
 

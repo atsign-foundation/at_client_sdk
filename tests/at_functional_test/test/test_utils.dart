@@ -11,9 +11,6 @@ import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 
 class TestUtils {
-  static final ObjectLifeCycleOptions optionsTtlOneMinute =
-      ObjectLifeCycleOptions(timeToLive: Duration(minutes: 1));
-
   static AtSignLogger logger = AtSignLogger(' TestUtils ');
 
   /// Root server port for the virtualenv under test. Defaults to 64; a

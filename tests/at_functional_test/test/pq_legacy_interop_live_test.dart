@@ -3,6 +3,11 @@
 @Timeout(Duration(minutes: 5))
 library;
 
+// The substrate is deliberately marked @experimental and will be reshaped as
+// the group surface matures. Exercising it from another package is the point
+// of this file.
+// ignore_for_file: experimental_member_use
+
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';

@@ -1,3 +1,8 @@
+// The substrate is deliberately marked @experimental and will be reshaped as
+// the group surface matures. Exercising it from another package is the point
+// of this file.
+// ignore_for_file: experimental_member_use
+
 import 'dart:convert';
 import 'dart:io';
 
