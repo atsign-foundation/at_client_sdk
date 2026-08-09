@@ -5252,3 +5252,20 @@ by spelling keys. Emitted bytes unchanged; the pairwise suite passing
 untouched is the fidelity check. This extraction is the addressing slice of
 the god-mixin split the audit proposed — the transport/responder/fan-out
 slices stay put for the later structural phase.
+
+### 57.4 One builder for the `_apsk` address
+
+Four sites built `public:_apsk.<enrollmentId>.a.__e@<atSign>` independently —
+`PqSigningChain.apskUri`, `ApkamSigning.publicSigningKeyUri`,
+`EnvelopeSigning.getApkamPublicKey`, and a fully hardcoded `llookup` command
+string in the enrollment-symmetric-key collector that spelled `a.__e` without
+even the constant. The one builder is now `apskUri()` in
+`src/signing/envelope_signature.dart` — the signing leaf every consumer
+already imports, which is what lets the secret-sharing substrate reach it
+without importing `crypto/` (the layering the substrate keeps clean).
+`PqSigningChain.apskUri` stays as the public, pinned symbol and delegates.
+One deliberate hardening rides the move: `ApkamSigning.publicSigningKeyUri`
+now requires a current atSign (`getCurrentAtSign()!`) where it previously
+interpolated a null into the URI text — unreachable for any constructed
+client, and failing loudly beats publishing a record addressed to the text
+"null".

@@ -6,6 +6,8 @@ import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client_mixins.dart' show EnvelopeSigning;
 import 'package:at_client/src/signing/envelope_signature.dart'
+    as envelope_signature show apskUri;
+import 'package:at_client/src/signing/envelope_signature.dart'
     show signableTextOf;
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
@@ -105,9 +107,8 @@ class PqSigningChain {
 
   /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
   /// APKAM public key lives, and the one record its own connection may write.
-  static String apskUri(String atSign, String enrollmentId) => 'public:'
-      '_apsk.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
-      '$atSign';
+  static String apskUri(String atSign, String enrollmentId) =>
+      envelope_signature.apskUri(atSign, enrollmentId);
 
   /// The payload a parent signs to vouch for [childEnrollmentId].
   ///

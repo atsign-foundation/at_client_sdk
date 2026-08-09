@@ -109,11 +109,11 @@ void main() {
     });
 
     test('the _apsk URI is public:_apsk.<enrollmentId>.a.__e@<atSign>', () {
-      // Four sites build this URI independently (PqSigningChain.apskUri,
-      // ApkamSigning.publicSigningKeyUri, EnvelopeSigning.getApkamPublicKey,
-      // and a hardcoded llookup in enrollment_symmetric_key.dart) — this pins
-      // the shared shape; the write and read paths carry their own exact pins
-      // in key_package_registration_test.dart and envelope_signing_test.dart.
+      // One builder (apskUri in envelope_signature.dart) serves every site;
+      // PqSigningChain.apskUri delegates to it, so this pins the emitted
+      // shape for all of them. The write and read paths carry their own exact
+      // pins in key_package_registration_test.dart and
+      // envelope_signing_test.dart.
       expect(PqSigningChain.apskUri('@alice', 'enroll-1'),
           'public:_apsk.enroll-1.a.__e@alice');
     });

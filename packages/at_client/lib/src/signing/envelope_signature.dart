@@ -26,7 +26,20 @@ import 'package:at_chops/at_chops.dart'
         RsaKeyPair,
         RsaSigningAlgo,
         SigningAlgoType;
-import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
+import 'package:at_commons/at_commons.dart'
+    show AtSigningVerificationException, EnrollmentConstants;
+
+/// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
+/// APKAM public signing key lives, and the one record its own connection may
+/// write.
+///
+/// The single builder of that address: publishers, verifiers and the
+/// enrollment-key collector all resolve an `_apsk` through it. The atServer
+/// mints the record at approval, so the spelling is a cross-implementation
+/// contract; it is pinned in `test/wire_literal_pins_test.dart`.
+String apskUri(String atSign, String enrollmentId) =>
+    'public:_apsk.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
+    '$atSign';
 
 /// The version stamped on the signed-envelope wrapper.
 ///

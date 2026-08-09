@@ -1,13 +1,12 @@
 import 'package:at_client/at_client.dart'
     show
         AtClient,
-        EnrollmentConstants,
         AtKeyNotFoundException,
         AtKey,
         GetRequestOptions,
         PutRequestOptions;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show ApkamSigningKeys;
+    show ApkamSigningKeys, apskUri;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
 mixin ApkamSigning {
@@ -26,11 +25,8 @@ mixin ApkamSigning {
 
   /// the uri (e.g. `public:_apsk.<enrollment_id>.a.__e@atsign`) of the
   /// [publicSigningKey]
-  String get publicSigningKeyUri {
-    return 'public:'
-        '_apsk.$enrollmentId.${EnrollmentConstants.perEnrollmentApproved}'
-        '${atClient.getCurrentAtSign()}';
-  }
+  String get publicSigningKeyUri =>
+      apskUri(atClient.getCurrentAtSign()!, enrollmentId);
 
   Future publishPublicSigningKey() async {
     try {

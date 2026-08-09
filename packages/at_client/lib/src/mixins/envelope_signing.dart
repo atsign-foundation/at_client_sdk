@@ -2,15 +2,10 @@ import 'dart:async' show FutureOr, Timer;
 import 'dart:convert' show jsonEncode;
 
 import 'package:at_client/at_client.dart'
-    show
-        AtKey,
-        AtValue,
-        EnrollmentConstants,
-        GetRequestOptions,
-        IllegalStateException;
+    show AtKey, AtValue, GetRequestOptions, IllegalStateException;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show signEnvelope, verifyEnvelope;
+    show apskUri, signEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -130,9 +125,7 @@ mixin EnvelopeSigning on ApkamSigning {
     String? cached = lookupPubKey(atSign, enrollmentId);
     if (cached != null) return cached;
 
-    var s = 'public:_apsk.$enrollmentId'
-        '.${EnrollmentConstants.perEnrollmentApproved}'
-        '$atSign';
+    var s = apskUri(atSign, enrollmentId);
     final AtValue av = await atClient.get(
       AtKey.fromString(s),
       getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,

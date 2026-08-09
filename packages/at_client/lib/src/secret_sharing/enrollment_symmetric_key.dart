@@ -15,7 +15,7 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
 import 'package:at_client/src/secret_sharing/secret_envelope.dart'
     show SecretEnvelope;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show verifyEnvelope;
+    show apskUri, verifyEnvelope;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -260,9 +260,8 @@ Future<void> _verifyAgainstApsk(
   // `AtLookupImpl` throws it. That is the revoked-enrollment case this doc
   // comment describes, and the caller treats a throw from here the same way it
   // treats the refusal below — see the skip in [_openIfSymmetricKey].
-  final String? response = await atLookUp.executeCommand(
-      'llookup:public:_apsk.$claimed.a.__e$atSign\n',
-      auth: true);
+  final String? response = await atLookUp
+      .executeCommand('llookup:${apskUri(atSign, claimed)}\n', auth: true);
   final String? publicKey = response?.replaceFirst(RegExp('^data:'), '').trim();
   if (publicKey == null || publicKey.isEmpty) {
     throw AtSigningVerificationException(
