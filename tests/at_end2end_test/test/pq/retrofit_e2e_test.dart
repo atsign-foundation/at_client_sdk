@@ -174,7 +174,7 @@ void main() {
     privilegedKeysIo = session.atKeysIo;
 
     expect(client.enrollmentId, isNot(session.enrollmentId));
-    expect(client.signingAlgoType, SigningAlgoType.mldsa65);
+    expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65);
 
     // Checked, not assumed: if the atServer trimmed the grant, everything
     // below would be testing the scoped path while reading green.
@@ -383,7 +383,7 @@ void main() {
     final scoped = manager.atClient;
 
     expect(scoped.enrollmentId, isNot(session.enrollmentId));
-    expect(scoped.signingAlgoType, SigningAlgoType.mldsa65,
+    expect(AtClientImpl.signingAlgoOf(scoped), SigningAlgoType.mldsa65,
         reason: 'a scoped enrollment upgrades its authentication like any '
             'other — what it skips is the root, not the PQ');
 

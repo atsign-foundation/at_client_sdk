@@ -1104,7 +1104,9 @@ seal-once-reaches-every-host; revoke/expire-one-host; sync-less wake-up.
 **LANDED 2026-08-05** ([decisions 44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)
 for the switch-over, [45](decisions.md#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05)
 for the rows): `selfRetrofit(...)` runs submit → re-authenticate → switch, and
-`AtClient.signingAlgoType` (resolved from the keyfile) reaches the verb
+the client's signing algorithm (resolved from the keyfile; since 2026-08-09 an
+impl-only getter — [decisions 58.2](decisions.md#582-signingalgotype-comes-off-the-interface-the-key-material-answers)
+took it off the `AtClient` interface) reaches the verb
 connection, the monitor, sync, and `wrapAndSign`; key-package adoption is
 enrollment-scoped. The 20.3 kpid staleness is discharged by construction (a
 switch builds a NEW `(atSign, enrollmentId)` client; the enrollment never

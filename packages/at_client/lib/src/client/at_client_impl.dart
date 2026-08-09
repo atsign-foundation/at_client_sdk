@@ -259,11 +259,38 @@ class AtClientImpl implements AtClient {
 
   SigningAlgoType? _resolvedSigningAlgoType;
 
-  @override
+  /// The PKAM signing algorithm this client's connections authenticate with.
+  ///
+  /// Resolved from the enrollment's key material at init
+  /// ([_resolveSigningAlgoFromKeyMaterial]) — the algorithm is a fact about
+  /// the key you hold, not a preference; the preference's value is the
+  /// fallback for a legacy enrollment with no typed material. Every
+  /// connection the client owns — verb, monitor, sync — must sign with this,
+  /// or a reconnect re-authenticates with the wrong routine against the
+  /// record-authoritative atServer.
+  ///
+  /// Deliberately NOT on the [AtClient] interface: the published interface
+  /// has no such member, and adding one breaks every external
+  /// `implements AtClient`. Interface-typed callers use [signingAlgoOf].
   SigningAlgoType get signingAlgoType =>
       _resolvedSigningAlgoType ??
+      // The documented legacy fallback for untyped key material.
+      // ignore: deprecated_member_use_from_same_package
       _preference?.signingAlgoType ??
       SigningAlgoType.rsa2048;
+
+  /// The PKAM signing algorithm [atClient]'s connections authenticate with.
+  ///
+  /// An [AtClientImpl] answers with its key-material resolution
+  /// ([signingAlgoType]); any other implementation answers with its
+  /// preference — the legacy fallback — because the [AtClient] interface
+  /// deliberately carries no such member (see [signingAlgoType]).
+  static SigningAlgoType signingAlgoOf(AtClient atClient) {
+    if (atClient is AtClientImpl) return atClient.signingAlgoType;
+    // ignore: deprecated_member_use_from_same_package
+    return atClient.getPreferences()?.signingAlgoType ??
+        SigningAlgoType.rsa2048;
+  }
 
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
@@ -1545,6 +1572,7 @@ class AtClientImpl implements AtClient {
       _logger.warning(
           'Could not resolve the signing algorithm for enrollment $id from '
           'key material: $e. Connections will authenticate with the '
+          // ignore: deprecated_member_use_from_same_package
           'preference value (${_preference?.signingAlgoType}).');
     }
   }

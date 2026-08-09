@@ -140,7 +140,7 @@ class SyncServiceImpl implements SyncService {
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops,
         enrollmentId: atClient.enrollmentId,
-        signingAlgoType: atClient.signingAlgoType);
+        signingAlgoType: AtClientImpl.signingAlgoOf(atClient));
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();

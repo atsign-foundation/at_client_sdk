@@ -1094,6 +1094,7 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
         HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType])
     // Only consulted at activation; `auth` resolves the algorithm from the
     // keyfile. ArgParser has already rejected anything not in the enum.
+    // ignore: deprecated_member_use
     ..signingAlgoType =
         SigningAlgoType.values.byName(ar[AuthCliArgs.argNameSigningAlgoType]);
 

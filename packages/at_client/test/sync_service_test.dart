@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/at_notification.dart' as at_notification;
@@ -20,8 +19,6 @@ import 'package:test/test.dart';
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 class MockAtClient extends Mock implements AtClient {
-  @override
-  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
 
   @override
   String? getCurrentAtSign() => '@alice';

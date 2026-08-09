@@ -61,7 +61,11 @@ class RemoteSecondary implements Secondary {
             secureSocketConfig: secureSocketConfig,
             clientConfig: _getClientConfig());
     this.atLookUp.enrollmentId = enrollmentId;
-    final resolvedSigningAlgo = signingAlgoType ?? preference.signingAlgoType;
+    // The preference is the documented legacy fallback: the caller passes the
+    // key-material resolution when the enrollment has typed material.
+    final resolvedSigningAlgo =
+        // ignore: deprecated_member_use_from_same_package
+        signingAlgoType ?? preference.signingAlgoType;
     logger.finer(
         'signingAlgoType: $resolvedSigningAlgo hashingAlgoType: ${preference.hashingAlgoType}');
     this.atLookUp.signingAlgoType = resolvedSigningAlgo;

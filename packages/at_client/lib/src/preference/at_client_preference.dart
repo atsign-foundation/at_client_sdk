@@ -171,7 +171,16 @@ class AtClientPreference {
 
   AtClientParticulars atClientParticulars = AtClientParticulars();
 
-  /// signing algorithm to use for pkam authentication
+  /// Signing algorithm to use for pkam authentication.
+  ///
+  /// Consulted only for a legacy enrollment whose keyfile carries no typed
+  /// signing material: the algorithm is a fact about the key material — you
+  /// cannot sign ML-DSA with an RSA key — so the client resolves it from the
+  /// keyfile whenever typed material exists, and this value never overrides
+  /// that resolution.
+  @Deprecated('The signing algorithm is resolved from the enrollment\'s key '
+      'material; this value is only a fallback for legacy keyfiles with no '
+      'typed signing material')
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
   /// hashing algorithm to use for pkam authentication

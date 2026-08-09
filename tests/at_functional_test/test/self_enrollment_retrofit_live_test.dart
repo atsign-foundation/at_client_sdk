@@ -172,7 +172,7 @@ void main() {
     final client = manager.atClient;
     expect(client.enrollmentId, isNotNull);
     expect(client.enrollmentId, isNot(session.enrollmentId));
-    expect(client.signingAlgoType, SigningAlgoType.mldsa65,
+    expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
         reason: 'resolved from the keyfile\'s typed material — the '
             'preference still says rsa2048');
 

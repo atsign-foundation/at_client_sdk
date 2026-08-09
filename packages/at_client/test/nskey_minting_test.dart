@@ -10,10 +10,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 class MockAtClient extends Mock implements AtClient {
-  // The real spec getter has a concrete rsa2048 default; `implements` erases
-  // it, and an unstubbed mocktail getter returns null into a non-nullable.
-  @override
-  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
 }
 
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}

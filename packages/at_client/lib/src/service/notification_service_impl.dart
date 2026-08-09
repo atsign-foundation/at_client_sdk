@@ -77,7 +77,7 @@ class NotificationServiceImpl extends NotificationService {
           atClientPreference: atClient.getPreferences()!,
           atChops: atClient.atChops,
           enrollmentId: atClient.enrollmentId,
-          signingAlgoType: atClient.signingAlgoType,
+          signingAlgoType: AtClientImpl.signingAlgoOf(atClient),
           handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
           secondaryAddressFinder: this.secondaryAddressFinder,

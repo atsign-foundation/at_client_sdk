@@ -361,12 +361,18 @@
   current client runs under the new ML-DSA enrollment as a NEW
   `(atSign, enrollmentId)`-keyed instance — the enrollment never changes
   under a live client, so per-client caches cannot go stale (the deferred
-  kpid-staleness item, discharged by construction). `AtClient.signingAlgoType`
-  is resolved from the keyfile's typed material and threaded to every
-  connection the client owns — verb (`RemoteSecondary` takes a resolved
-  override instead of clobbering with the preference), monitor, and sync —
-  and `wrapAndSign` signs with it, so a retrofitted client's envelopes
-  verify against the tagged `_apsk` its record published. Key-package
+  kpid-staleness item, discharged by construction). The client's PKAM signing
+  algorithm is resolved from the keyfile's typed material as an explicit init
+  step and threaded to every connection the client owns — verb
+  (`RemoteSecondary` takes a resolved override instead of clobbering with the
+  preference), monitor, and sync — and `wrapAndSign` signs with it, so a
+  retrofitted client's envelopes verify against the tagged `_apsk` its record
+  published. The algorithm is a fact about the key material, so
+  `AtClientPreference.signingAlgoType` is now `@Deprecated`, consulted only
+  for a legacy keyfile with no typed signing material; the `AtClient`
+  interface deliberately gains no member for it (the published interface has
+  none, and adding one would break every external `implements AtClient`) —
+  `AtClientImpl.signingAlgoOf(atClient)` answers for interface-typed callers. Key-package
   adoption is enrollment-scoped: on a retrofitted keyfile each principal
   adopts its OWN package (its tagged one first, the untagged pre-id-era one
   as fallback, never a co-tenant's).

@@ -129,7 +129,7 @@ void main() {
       manager: AtClientManager(atSign),
     );
     final upgraded = manager.atClient;
-    expect(upgraded.signingAlgoType, SigningAlgoType.mldsa65,
+    expect(AtClientImpl.signingAlgoOf(upgraded), SigningAlgoType.mldsa65,
         reason: 'the retrofit itself must have succeeded, or the cap below '
             'is being attributed to a retrofit that never happened');
 

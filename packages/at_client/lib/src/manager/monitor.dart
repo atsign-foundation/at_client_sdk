@@ -109,7 +109,11 @@ class Monitor {
     MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory,
     SigningAlgoType? signingAlgoType,
   }) {
-    this.signingAlgoType = signingAlgoType ?? atClientPreference.signingAlgoType;
+    // The preference is the documented legacy fallback: the caller passes the
+    // key-material resolution when the enrollment has typed material.
+    this.signingAlgoType =
+        // ignore: deprecated_member_use_from_same_package
+        signingAlgoType ?? atClientPreference.signingAlgoType;
     logger = AtSignLogger('Monitor ($atSign)');
     logger.finer('enrollmentId: $enrollmentId');
     this.monitorOutboundConnectionFactory =

@@ -122,6 +122,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
     _atLookUp?.enrollmentId = enrollmentId;
+    // Activation-time: there is no key material to resolve from yet, which is
+    // the one case the deprecated preference field still exists to serve.
+    // ignore: deprecated_member_use
     _atLookUp?.signingAlgoType = atOnboardingPreference.signingAlgoType;
     _atLookUp?.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
     atClient ??= atClientManager.atClient;
@@ -210,6 +213,9 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // it as post-quantum would silently mint an ML-DSA APKAM for a caller who
     // asked for an elliptic-curve one.
     final bool pqNative =
+        // Activation-time input — what to mint, not what to sign with; there
+        // is no key material yet for the resolution that supersedes the field.
+        // ignore: deprecated_member_use
         atOnboardingPreference.signingAlgoType == SigningAlgoType.mldsa65;
     if (pqNative) {
       makeActivationPqNative(atOnboardingRequest,

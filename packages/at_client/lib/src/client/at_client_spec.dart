@@ -70,15 +70,6 @@ abstract class AtClient {
 
   String? get enrollmentId;
 
-  /// The PKAM signing algorithm this client's connections authenticate with.
-  ///
-  /// Resolved from the keyfile when [enrollmentId] names typed signing
-  /// material (a self-retrofit's ML-DSA enrollment); otherwise the
-  /// preference's value. Every connection the client owns — verb, monitor,
-  /// sync — must sign with this, or a reconnect re-authenticates with the
-  /// wrong routine against the record-authoritative atServer.
-  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
-
   set syncService(SyncService syncService);
 
   SyncService get syncService;

@@ -14,15 +14,12 @@
 // by `at_collections_events_both_test.dart`.
 
 import 'dart:async';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 
 import 'package:at_client/at_client.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 class _MockAtClient extends Mock implements AtClient {
-  @override
-  SigningAlgoType get signingAlgoType => SigningAlgoType.rsa2048;
 }
 
 class _FakeAtKey extends Fake implements AtKey {}

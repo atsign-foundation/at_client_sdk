@@ -5375,3 +5375,29 @@ to replace but cannot retroactively rewrite — sees byte-identical behaviour to
 3.14.0. Degrading to the published default was chosen over throwing because a
 missed dereference should reproduce the old era, not crash the app that never
 opted into the new one.
+
+### 58.2 `signingAlgoType` comes off the interface; the key material answers
+
+The §56.6 ruling, landed in two commits. First the behaviour: resolution from
+the enrollment's key material is an explicit `_init` step
+(`_resolveSigningAlgoFromKeyMaterial`, via `AtKeysIo` →
+`AtKeys.signingAlgorithmForEnrollment`, never `AtChops` — §20.6), running
+whether or not an `AtChops` was injected. It had been a side effect of
+`_createAtChops`, which an injected-`AtChops` client never runs, so that
+client signed the preference's rsa2048 default under an ML-DSA enrollment —
+differentially tested red-first on the injected arm
+(`signing_algo_resolution_test.dart`).
+
+Then the surface: the branch-added `AtClient.signingAlgoType` getter is
+removed from the interface — the published interface has no such member, and
+an interface addition breaks every external `implements AtClient`.
+`AtClientImpl` keeps the resolved getter, and interface-typed callers (the
+envelope-signing mixin, the notification and sync services) resolve through
+`AtClientImpl.signingAlgoOf(atClient)`, which answers with the key-material
+resolution for a real client and with the preference for anything else.
+`AtClientPreference.signingAlgoType` (pre-branch published, so it stays) is
+`@Deprecated` and demoted to the legacy fallback, consulted only when the
+keyfile has no typed signing material — you cannot sign ML-DSA with an RSA
+key, so a preference was never the right home. The onboarding CLI's reads
+keep deliberate ignores: at activation time there is no key material yet, so
+the preference remains the mint-time input there.
