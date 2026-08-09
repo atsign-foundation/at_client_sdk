@@ -27,9 +27,21 @@ fi
 
 echo "*** Getting dependencies" && dart pub get
 
+# The virtualenv image. Defaults to the locally built PQ-capable build (the
+# published vip lags the PQ work); override with
+# VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip (or a pinned tag) to run against
+# a registry image. docker-compose.yaml reads this var.
+export VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"
+
 cd test
 echo "*** docker compose down" && docker compose down
-echo "*** docker compose pull SKIPPED (local at_virtual_env:local image)"
+# A locally built image is on no registry, so pulling it fails the run. Only
+# pull what could actually have come from one.
+if [[ "$VIRTUALENV_IMAGE" == *"/"* ]]; then
+  echo "*** docker compose pull (${VIRTUALENV_IMAGE})" && docker compose pull
+else
+  echo "*** docker compose pull SKIPPED (local image ${VIRTUALENV_IMAGE})"
+fi
 echo "*** docker compose up" && docker compose up -d
 cd ..
 
