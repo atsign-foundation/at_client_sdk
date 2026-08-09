@@ -5039,3 +5039,154 @@ Note where that landed: *after* a successful authentication, from a back-up
 step, with a message naming nothing. Only driving a real PQ keyfile through the
 real `authenticate()` finds it — which is the argument for the live test being
 the deliverable rather than its evidence.
+
+## 56. The "make it right" quality pass, and the design goals it settled (2026-08-09)
+
+D1 development is complete (acceptance 45/45); the branch works. A structural
+quality refactor — readability, maintainability, explainability — was audited
+(every changed production file read in full) and planned phase by phase. The
+plan review grilled out several design questions the spike had left implicit,
+and settled them. This section records the **decisions**; per §46.7 the ledger
+names a mechanism only once its differential test is green, so what follows is
+the intent and the shape, and the build names the mechanism as each lands. The
+full plan lives outside the tree (it is scaffolding, not design of record); its
+durable rulings are here.
+
+### 56.1 The signing chain is root-anchored; chain links are provisional
+
+`verifyChain` has no production consumer today — it is exercised only by tests,
+and every one asserts `anchored`. Nothing consumes the `chained` intermediate.
+So the trust model is free to be settled rather than inherited, and it is:
+**every enrollment ends up directly anchored to the signing root.** A chain
+link is a provisional fast-path, not a durable trust edge; the privileged sweep
+is changed to *upgrade* chain→root (it anchors an enrollment that lacks a root
+link, rather than skipping one that already carries a chain link). `verifyChain`
+keeps its multi-hop walk dormant, so a future decentralised model — enrollments
+vouching for each other while the root is offline — remains open without being
+built now.
+
+The consequence that made this the right call: with no durable parent→child
+signatures, replacing any non-root enrollment's key orphans nobody, because it
+has no signed children. The cascade a key rotation would otherwise trigger
+(§56.3) dissolves into the sweep.
+
+### 56.2 A root-holder conveys root links, not chain links attributed to itself
+
+Today `sweepUnanchoredEnrollments` signs a chain link with the *sweeper's* own
+APKAM key and conveys it. For a client authenticating with the atSign's own root
+keys (no enrollment id, the sentinel `primary`), that is an RSA link attributed
+to `primary` — a fragile two-hop path. The ruling: **a signer that holds the
+root private conveys a *root* link** (root-private ML-DSA signature over
+`{childEnrollmentId, apkamPublicKey}`), which the child publishes into its own
+`_apsk`. `_checkRootLink` already verifies the root signature and does not care
+who published the link, so a conveyed root link is safe and anchors in one hop.
+
+The owner-keys `primary` client therefore **publishes and self-root-anchors its
+own `_apsk.primary`** (this already happens) but **never signs anyone else's
+chain link** — when it anchors others it uses the root key. Accepted residual:
+an RSA-signing enrollment (owner-keys, or a type-1 retrofit) is *root-endorsed*
+— the ML-DSA root link vouches for its RSA key — but its own leaf signatures
+stay classical; RSA-only peers trust it via the atServer's `_apsk` guarantee,
+PQ peers additionally verify the root link. This does not resolve whether an
+owner-keys client belongs in the trust chain at all (backlog 14.14); it makes
+`primary` a coherent leaf rather than a phantom intermediate.
+
+### 56.3 Three retrofit modes, and the signing-algorithm selector
+
+Retrofit is not one operation. Three modes, distinguished by whether the id is
+new and which signing algorithm the enrollment gets:
+
+- **Type-1 — new id, fresh RSA signing key.** The rollout-window mode: it gains
+  the 1:1:1 / key-package / nskey data-path structure while its signatures stay
+  RSA-verifiable, so peers that cannot yet read ML-DSA cope, and no atServer
+  ML-DSA-PKAM support is required. "The same RSA key" means the same
+  *algorithm*, not the same key object — a fresh RSA key under the new id keeps
+  1:1:1 intact and PKAM binding unambiguous.
+- **Mode B — new id, fresh ML-DSA signing key.** What `self_retrofit` does
+  today. The full PQ retrofit.
+- **Type-2 — same id, replace the RSA signing key with ML-DSA.** Not built;
+  needs atServer support; **seam only, no live path** — it has no operator yet.
+  Keeping the id is justified by *data-path continuity*: replacing only the
+  signing key leaves the KEM key package (kpid, nskey privates) untouched, so
+  the enrollment survives while its signing key rotates. Its repair falls out of
+  §56.1: replace the key, re-anchor that one enrollment with a new root link,
+  and let a sweep upgrade any provisional chain-linked children — no bespoke
+  walk-and-re-sign of a subtree.
+
+The SDK therefore needs a **per-retrofit signing-algorithm selector** (RSA vs
+ML-DSA), built now as an operation parameter, not a preference — a preference
+would reintroduce the disagrees-with-reality bug class §56.6 designs out. Built
+alongside it: the fix for `self_retrofit` hardcoding ML-DSA (which blocks
+type-1) and ignoring `keyEstablishmentAlgo` (the KEM axis). The selector is one
+of the rollout flags in §56.4.
+
+### 56.4 From the PQ project's view, 4.0 is final-3.x with different flag defaults
+
+Every rollout stage is a flag; **all the code ships in final 3.x, and 4.0 flips
+only the defaults.** (4.0 also does ordinary major-version cleanup — deprecation
+and dead-code removal — which is orthogonal to the PQ rollout; the deprecations
+this pass *adds*, §56.6 and the in-place-deprecated enrollment-model fields, are
+the 3.x→4.0 bridge that cleanup removes.) This is the correct deployment
+architecture, not merely a testing convenience: it auto-honours the
+`keyPackage`-write-once freeze (the JWS producer defaults on only in 4.0, by
+which point every 3.x client already *reads* the new shape — §56.5), and it
+makes the entire multi-stage rollout testable from one codebase by setting
+flags.
+
+Five rollout axes, each an independent flag in its natural home, plus a
+convenience posture helper that sets them as a group (applied at construction;
+per-operation flags still override per call):
+
+| Axis | home | 3.x default | 4.0 default |
+|---|---|---|---|
+| Crypto era default | `Expando` keyed by `AtClient` (§27.2 — never the shared preference) | reads-nskey, writes-legacy | writes-PQ |
+| `disallowLegacyEncryption` | `AtClientPreference`, final at construction | false | true |
+| Signed-envelope version | signer config | v1 | v2 (§56.5) |
+| `EnrollmentKeyExchangeMode` | `AtEnrollmentRequest` | legacy | pq |
+| Retrofit signing algorithm | per-retrofit parameter (§56.3) | RSA | ML-DSA |
+
+`EnrollmentKeyExchangeMode.pq` — the KEM-based `apkamSymmetricKey` conveyance,
+the one legitimate KEM in the enrollment path — is built and functionally
+tested but ships dark (production entry points default to `legacy`). It is
+wired into the production flows as a selectable option, not held back: it is the
+key-exchange axis of this same table.
+
+### 56.5 JWS ships both stages in 3.x; the producer is a flag, not a 4.x fork
+
+Backlog 14.3 (JWS Flattened JSON, ruled in §48.8) is implemented in **both**
+stages in final 3.x. Stage one — readers accept both the current and the JWS
+shape, dispatching on the wrapper's `v` field rather than on
+`payload is String`, with base64url normalisation at every decode site — is
+always on. Stage two — the producer emitting the JWS shape — ships behind the
+signed-envelope-version flag of §56.4, defaulting to v1. There is no 4.x code
+fork; 4.0 flips the default to v2. The measured base64 padding trap stands: a
+naive decode throws on every RSA signature and succeeds on every ML-DSA one, so
+the RSA arm must be tested specifically.
+
+### 56.6 `signingAlgoType` is a fact about the key material, not a preference
+
+The branch added `signingAlgoType` to the published `AtClient` interface, which
+breaks every external `implements`. It is removed from the interface (nothing
+published reads it — the addition was this branch's). The signing algorithm is
+resolved authoritatively from the enrollment's APKAM key material, via
+`AtKeys.signingAlgorithmForEnrollment` through `AtKeysIo` — not from `AtChops`
+(§20.6 forbids a new AtChops-as-source consumer) and not from a preference: you
+cannot sign ML-DSA with an RSA key, so the algorithm is a property of the key
+you hold. This also fixes a live bug where the value was set only as a
+side-effect of `_createAtChops`, so an injected-`AtChops` client signed rsa2048
+under an ML-DSA enrollment. The published `AtClientPreference.signingAlgoType`
+field stays (it predates the branch) but is deprecated and demoted to a
+legacy-only fallback.
+
+### 56.7 The two published-API breaks are repaired, not shipped
+
+Published at_client is **3.14.0** (not 3.13.0). The branch introduced exactly
+two breaks of its non-experimental surface, and both are repaired rather than
+shipped. `AtClientPreference.crypto` went non-nullable → nullable so the SDK
+could tell "app named a config" from "app did not"; it is restored to
+non-nullable with a distinguished `CryptoConfig.eraDefault()` sentinel that
+`forClient` dereferences through the `Expando` — preserving the era-default
+design and §27.2. `signingAlgoType` is handled per §56.6. Every other
+branch-added surface across all packages is unpublished and freely reshapeable,
+which is the window this pass uses to draw the deliberate public surface before
+publication.

@@ -27,7 +27,7 @@ path) and **D2** (the `at/pqmls` group provider, referenced not detailed here).
 
 ## Document map
 
-This is one of **five** docs. Each keeps to its lane; cross-references point at
+This is one of **six** docs. Each keeps to its lane; cross-references point at
 the canonical home rather than duplicating it.
 
 | Doc | What lives there |
@@ -37,6 +37,7 @@ the canonical home rather than duplicating it.
 | [`design.md`](design.md) | Detailed designs by subsystem — the D1 `nskey` data-path key shapes / 3 providers / `appMetadata` / CK model / cold-start / FS + rotation levers; the secret-sharing substrate (`kpid`, `__ssenv`, `SecretStore`, push/pull, `enroll:listns`, the enrollment record + self-retrofit flow); at_chops primitives; the `CryptoProvider` seam / key stores / WASM split; and the worked walkthroughs (NoPorts, at_talk). Build-level notes with `file:line`. |
 | [`acceptance.md`](acceptance.md) | The given/when/then use-case catalogue (A1.x–A5.x, B0.x–B5.x) with concrete at-keys plus the impl/verify steps and the test harness. |
 | [`decisions.md`](decisions.md) | The decision log — the design rulings (the verb wire shape, the 1:1:1 ruling), the resolved and open decisions, and a dated timeline. The WHY behind every choice. |
+| [`seal-spec.md`](seal-spec.md) | The byte-level `atPQv1-base` seal specification a second implementation builds from, paired with `packages/at_chops/test/vectors/pq_seal_v1.json`. |
 
 ## The two major deliverables (D1 / D2)
 
@@ -357,6 +358,21 @@ critical-path shape to GA is **seam → primitives → substrate → data path �
 rollout → rotation** (D1 GA), with the v4 default flip as the final gated
 cutover. The GA version slot is re-derived at execution against pub.dev — both
 `at_client` 3.13.0 and 3.14.0 published on 2026-07-17, so it is no longer 3.14.x.
+
+**D1 development is complete (acceptance 45/45); a "make it right" quality pass
+follows before GA** — structural refactoring (readability, maintainability,
+explainability) that lands the design goals the spike left implicit. Those goals
+are ruled in [`decisions.md` §56](decisions.md#56-the-make-it-right-quality-pass-and-the-design-goals-it-settled-2026-08-09):
+the signing chain is **root-anchored** (chain links provisional, the sweep
+upgrades them; a root-holder conveys root links, not chain links); retrofit has
+**three modes** with a per-retrofit signing-algorithm selector; and — the frame
+for the whole cutover — **from the PQ project's view, 4.0 is final-3.x code with
+only flag *defaults* changed.** Every rollout stage (the crypto era default,
+`disallowLegacyEncryption`, the signed-envelope version, `EnrollmentKeyExchangeMode`,
+the retrofit signing algorithm) is an independent flag with a 3.x and a 4.0
+default, plus a convenience posture that sets them as a group; all the code ships
+in 3.x, and the acceptance suite drives the entire rollout by flag manipulation.
+No PR opens until the published atServer image verifies ML-DSA PKAM.
 
 **Baseline on trunk** (so M0 and the M1 primitives are landed, not in flight):
 `#1930` (the M0 pluggable-crypto seam), `#1993` / `at_chops 3.3.0`
