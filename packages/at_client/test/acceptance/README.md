@@ -80,24 +80,21 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## How to work with it
 
-- **Picking up a project?** Grep its id in `blockers.dart` to see exactly which
-  scenarios you owe. That list is your definition of done.
-- **Landing a project?** Delete its constant from `blockers.dart`; the analyzer
-  then points at every scenario now owed an implementation.
+- **The burn-down is complete.** Every row is asserted here or cited to a live
+  test, and `blockers.dart` — which named the project each skipped scenario
+  waited on — is deleted rather than kept empty. If a future project blocks
+  rows again, restore the file and `catalogue_test.dart`'s declared-vs-used
+  cross-check from git history *together*: a bare `skip:` with nothing
+  declaring it hides a row from the count with nobody recorded as owing it.
 - **A scenario is green** when its `fail('not implemented')` is replaced by real
   assertions and its `skip:` is gone. Nothing else counts as done.
 - Some scenarios finally belong in `tests/at_functional_test` or
-  `tests/at_end2end_test` (separate packages). The `blockers.dart` constant names
-  the target layer. Keep the placeholder here until the real assertion exists
-  somewhere, so the count stays honest.
-- A constant names a scenario's **first** gate, so a project that is only ever a
-  *later* gate has none. The target moves: RF-2c's e2e rows sat behind R-1,
-  RF-2b and RF-SRV until all three landed (2026-08-05), at which point RF-2c
-  became their first gate — and, since its only remaining deliverable IS those
-  rows, they became `owed:` rather than `blocked:`.
+  `tests/at_end2end_test` (separate packages). Keep the placeholder here until
+  the real assertion exists somewhere, so the count stays honest.
 - `catalogue_test.dart` is the one test here that is not skipped. It fails if a
-  use case loses its scenario, if a blocker constant guards nothing, or if the
-  counts below drift from the tests. Fix the count in the same PR.
+  use case loses its scenario, if a scenario is skipped against the retired
+  blocker mechanism, or if the counts below drift from the tests. Fix the
+  count in the same PR.
 
 ## The catalogue
 
@@ -169,10 +166,10 @@ borrowed from a demo atSign some other file has already retrofitted.
 
 Nothing is *owed a test*: the last such rows, the B1 trio, were
 discharged 2026-08-05 by the retrofit e2e coverage. The guard asserts
-the skipped total, which is what it can measure; the blocked/owed split lives
-in `blockers.dart`'s labels and in this sentence. That is a much more
-useful ledger than the one this started as: grep a project id and you get
-exactly the scenarios it will turn green.
+the skipped total, which is what it can measure; with that count at zero the
+blocked/owed split has nothing left to describe, and `blockers.dart` — the
+ledger that held it — is deleted rather than kept empty. Its history, and the
+mechanism should a project block rows again, is one `git log` away.
 
 Four of the seventeen needed something other than a test to discharge them,
 which is the part worth remembering. Two were documentation problems in

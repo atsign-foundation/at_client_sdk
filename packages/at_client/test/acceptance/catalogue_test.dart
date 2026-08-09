@@ -1,10 +1,11 @@
 /// Guards the burn-down itself.
 ///
-/// Every other test here is a skipped placeholder, so a green build says nothing
-/// about whether this directory still mirrors the catalogue. These checks are
-/// **not** skipped: they fail when a use case loses its scenario, when a blocker
-/// constant stops guarding anything, or when the README's counts drift from the
-/// scenarios they describe.
+/// The scenarios here were skipped placeholders while D1 was in flight; a
+/// green build said nothing about whether this directory still mirrored the
+/// catalogue. These checks are what did: they fail when a use case loses its
+/// scenario, when a scenario is skipped against a blocker mechanism that has
+/// been retired, or when the README's counts drift from the scenarios they
+/// describe.
 ///
 /// Catalogue: `docs/projects/pq/acceptance.md`.
 library;
@@ -25,7 +26,6 @@ void main() {
   final catalogue = File('${root.path}/docs/projects/pq/acceptance.md');
   final dir = Directory('${root.path}/packages/at_client/test/acceptance');
   final readme = File('${dir.path}/README.md');
-  final blockers = File('${dir.path}/blockers.dart');
 
   /// Every scenario file — this guard excluded, since it holds no scenarios.
   final scenarios = dir
@@ -54,22 +54,21 @@ void main() {
         reason: 'scenarios naming a use case the catalogue does not define');
   });
 
-  test('every blocker constant guards at least one scenario', () {
-    final declared = RegExp(r'^const (\w+) =', multiLine: true)
-        .allMatches(blockers.readAsStringSync())
-        .map((m) => m[1]!)
-        .where((name) => !name.startsWith('_'))
-        .toSet();
-    final used = RegExp(r'skip: (\w+)\)')
-        .allMatches(allScenarioSource())
-        .map((m) => m[1]!)
-        .toSet();
-
-    expect(declared.difference(used), isEmpty,
-        reason: 'a blocker that guards nothing tells whoever greps it that the '
-            'project owes no scenarios — delete it, or use it');
-    expect(used.difference(declared), isEmpty,
-        reason: 'skip: refers to a constant blockers.dart does not declare');
+  test('the blocker mechanism stays retired until its guard comes back too',
+      () {
+    // `blockers.dart` named the project each skipped scenario waited on, and
+    // this test cross-checked declared constants against `skip:` uses in both
+    // directions. The burn-down reached zero and the file was deleted rather
+    // than kept empty. If a future project blocks rows again, restore the file
+    // AND the cross-check together (both are one `git log` away): a bare
+    // `skip:` with nothing declaring it hides a row from the count with
+    // nobody recorded as owing it.
+    expect(File('${dir.path}/blockers.dart').existsSync(), isFalse,
+        reason: 'blockers.dart is back without its guard — restore the '
+            'declared-vs-used cross-check from git history alongside it');
+    expect(RegExp(r'skip: \w+\)').allMatches(allScenarioSource()), isEmpty,
+        reason: 'a scenario is skipped against a named blocker, but nothing '
+            'declares blockers any more');
   });
 
   test('the README row counts match the scenarios', () {
@@ -81,10 +80,10 @@ void main() {
     // number that cannot change silently stops guarding.
     //
     // It asserts "skipped", not "blocked", because skipped is what it can
-    // measure: the constant's LABEL (`blocked:` vs `owed:`) lives in
-    // blockers.dart and is not visible here. Conflating the two is the exact
-    // error decisions.md 35 caught, so the README states the split in prose
-    // and this guard holds the total honest.
+    // measure: a blocker's label (`blocked:` vs `owed:`) lived in
+    // blockers.dart and was never visible here. Conflating the two is the
+    // exact error decisions.md 35 caught, so this guard holds the total
+    // honest and leaves the split to prose.
     final skipped = RegExp(r'skip: \w+\)').allMatches(source).length;
     final text = readme.readAsStringSync();
 
