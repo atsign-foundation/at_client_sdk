@@ -818,17 +818,21 @@
     forward-only: the check runs per write, so the first write after the
     destination publishes a key is post-quantum again, with no flag to flip.
     Records already written under the fallback stay legacy.
-- **breaking**: `AtClientPreference.crypto` is now `CryptoConfig?` and defaults
-  to null, meaning "whatever this SDK release encrypts with by default".
-  Almost every app should leave it null: the default is the SDK's to move as
-  the post-quantum migration proceeds, and an app that named
-  `CryptoConfig.legacy()` only because the field demanded a value would find
-  itself pinned to the old scheme after the release that changed it. Set it
-  only to register a custom provider or to hold a scheme deliberately. Reading
-  the field back no longer answers "what will this client encrypt with" —
-  `CryptoConfig.forClient(atClient)` does, and is the single place the era
-  default lives. The SDK does not write its resolution into the app's
-  preference object.
+- `AtClientPreference.crypto` now defaults to `const CryptoConfig.eraDefault()`,
+  a distinguished marker meaning "whatever this SDK release encrypts with by
+  default". The field keeps its published non-nullable type. Almost every app
+  should leave it alone: the default is the SDK's to move as the post-quantum
+  migration proceeds, and an app that named `CryptoConfig.legacy()` only
+  because the field demanded a value would find itself pinned to the old
+  scheme after the release that changed it. Assign a config only to register a
+  custom provider or to hold a scheme deliberately — assigning
+  `CryptoConfig.legacy()` is now an explicit opt-out, distinct from the
+  default. Reading the field back no longer answers "what will this client
+  encrypt with" — `CryptoConfig.forClient(atClient)` does, and is the single
+  place the era default lives. The SDK does not write its resolution into the
+  app's preference object; read as a config, the marker behaves exactly like
+  `CryptoConfig.legacy()`, which is the value the field's default held in
+  3.14.0.
 - fix: the notify request path copies metadata through `Metadata.copy()`
   (at_commons 5.14.0) instead of a hand-rolled field list, then clears the few
   fields a sender has no business asserting — the atServer-derived timestamps,

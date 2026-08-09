@@ -186,18 +186,19 @@ class AtClientPreference {
 
   /// Configures the crypto providers used for encrypted puts and reads.
   ///
-  /// **Leave this null** unless the app genuinely needs its own providers.
-  /// Null means "whatever this SDK release encrypts with by default", which is
-  /// what almost every app wants: the default is the SDK's to move as the
-  /// post-quantum migration proceeds, and an app that pinned
-  /// `CryptoConfig.legacy()` only because it had to name something would find
-  /// itself pinned to the old scheme after the release that changed it.
-  /// [CryptoConfig.forClient] is where that resolution happens.
+  /// **Leave this alone** unless the app genuinely needs its own providers.
+  /// The default, [CryptoConfig.eraDefault], means "whatever this SDK release
+  /// encrypts with by default", which is what almost every app wants: the
+  /// default is the SDK's to move as the post-quantum migration proceeds, and
+  /// an app that pinned `CryptoConfig.legacy()` only because it had to name
+  /// something would find itself pinned to the old scheme after the release
+  /// that changed it. [CryptoConfig.forClient] is where that resolution
+  /// happens.
   ///
-  /// Set it to opt out — to register a custom provider, or to hold a specific
-  /// scheme deliberately. Custom providers are initialised by [AtClientImpl]
-  /// before sync and notification services start.
-  CryptoConfig? crypto;
+  /// Assign a config to opt out — to register a custom provider, or to hold a
+  /// specific scheme deliberately. Custom providers are initialised by
+  /// [AtClientImpl] before sync and notification services start.
+  CryptoConfig crypto = const CryptoConfig.eraDefault();
 
   /// Whether a write that cannot go out under [crypto]'s scheme may fall back
   /// to legacy encryption instead of failing.

@@ -32,7 +32,8 @@ void main() {
 
     // Checked, not assumed: if the harness had named a config the assertions
     // below would be about the app's choice, not the SDK's default.
-    expect(client.getPreferences()?.crypto, isNull,
+    expect(client.getPreferences()?.crypto,
+        same(const CryptoConfig.eraDefault()),
         reason: 'this test is about what the SDK supplies when the app names '
             'nothing');
 

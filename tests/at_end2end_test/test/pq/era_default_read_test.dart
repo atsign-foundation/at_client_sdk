@@ -66,7 +66,8 @@ void main() {
     // it must exist before she writes. He mints through his OWN era ring, which
     // is the point — no config was ever handed to him.
     final bobClient = await clientFor(bob);
-    expect(bobClient.getPreferences()?.crypto, isNull,
+    expect(bobClient.getPreferences()?.crypto,
+        same(const CryptoConfig.eraDefault()),
         reason: 'if the harness named a config, this test would be about the '
             'app\'s choice rather than the SDK\'s default');
     expect(CryptoConfig.forClient(bobClient).defaultProviderId,

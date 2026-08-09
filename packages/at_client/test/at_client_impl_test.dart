@@ -417,8 +417,9 @@ void main() {
       // the next atSign built from the same preference object whatever this
       // one resolved — harmless while the default is a const, and a leak the
       // moment it holds per-atSign state.
-      expect(ac.getPreferences()?.crypto, isNull,
-          reason: 'the SDK resolves the default; it does not write it back');
+      expect(ac.getPreferences()?.crypto, same(const CryptoConfig.eraDefault()),
+          reason: 'the SDK resolves the default; it does not write it back — '
+              'the preference still holds the untouched marker');
     });
 
     test('registers configured crypto providers during at_client creation',

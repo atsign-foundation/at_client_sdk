@@ -5349,3 +5349,29 @@ function docs on its derived lookups while moving the row facts away from
 the constants. The drift hazard the table was meant to fix — parallel
 switches disagreeing — is fenced instead by the wire pins, which assert every
 mapping with literals on both sides. Skipped, deliberately.
+
+## 58. The two published-API breaks are repaired in place (2026-08-09)
+
+The §56.7 ruling, landed. Each entry records the mechanism as built, after its
+tests went green.
+
+### 58.1 `AtClientPreference.crypto` is non-nullable again; the marker carries "app named nothing"
+
+The field's published 3.14.0 type — non-nullable `CryptoConfig` — is restored.
+The nullable branch shape existed to distinguish "app named a config" from
+"app did not"; that distinction now travels as the field's new default value,
+`const CryptoConfig.eraDefault()`, a distinguished const the SDK recognises by
+its private subtype. `forClient` and `adoptEraDefault` treat it exactly as
+they treated null: resolve the per-client era default through the `Expando`
+(§27.2 intact — the marker is a signal, never per-atSign provider state, and
+nothing is resolved into the shared preference object). Assigning any real
+config, including `CryptoConfig.legacy()`, is an explicit opt-out, and the two
+legacy-shaped values being distinct is covered by test.
+
+The marker deliberately *behaves* as `CryptoConfig.legacy()` when read as a
+config: the published default was `const CryptoConfig.legacy()`, so external
+code that reads `preference.crypto` directly — the readers `forClient` exists
+to replace but cannot retroactively rewrite — sees byte-identical behaviour to
+3.14.0. Degrading to the published default was chosen over throwing because a
+missed dereference should reproduce the old era, not crash the app that never
+opted into the new one.

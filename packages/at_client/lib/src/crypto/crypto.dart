@@ -88,6 +88,24 @@ class CryptoConfig {
       : defaultProviderId = legacyCryptoProviderId,
         providers = const [];
 
+  /// The distinguished "the app named nothing" marker — the default value of
+  /// [AtClientPreference.crypto].
+  ///
+  /// The field is non-nullable (published that way in 3.14.0), yet the SDK
+  /// must still tell "the app chose a config" from "the app left the
+  /// default", because the era default is the SDK's to move. This
+  /// distinguished const instance is that signal: [forClient] treats it as
+  /// "no choice" and resolves the per-client era default instead. Assigning
+  /// any other config — including [CryptoConfig.legacy] — is an explicit
+  /// opt-out.
+  ///
+  /// A caller that uses this instance *as* a config — reading
+  /// [defaultProviderId] or [providers] directly instead of resolving through
+  /// [forClient] — gets exactly [CryptoConfig.legacy]'s behaviour, which is
+  /// the value the published 3.14.0 default held, so code compiled against
+  /// that release sees no change.
+  const factory CryptoConfig.eraDefault() = _EraDefaultSentinel;
+
   /// The nskey data path: application data under `at/symmetric/AES/GCM`, content
   /// keys conveyed by `at/nskey`, and the CK manager that mints one the first
   /// time a destination is written to.
@@ -158,11 +176,12 @@ class CryptoConfig {
   /// The config [atClient] encrypts under — the app's if it named one, else
   /// the SDK's default for this release.
   ///
-  /// **The single place the era default lives.** `AtClientPreference.crypto` is
-  /// nullable precisely so this decision belongs to the SDK: an app that had to
-  /// name a config just to have one would be pinned to whatever was current on
-  /// the day it was written, and would sit out the migration it was supposed to
-  /// ride. Moving the default is therefore an edit here and nowhere else.
+  /// **The single place the era default lives.** `AtClientPreference.crypto`
+  /// defaults to the [CryptoConfig.eraDefault] marker precisely so this
+  /// decision belongs to the SDK: an app that had to name a real config just
+  /// to have one would be pinned to whatever was current on the day it was
+  /// written, and would sit out the migration it was supposed to ride. Moving
+  /// the default is therefore an edit here and nowhere else.
   ///
   /// The era default is now [CryptoConfig.readsNskeyWritesLegacy], built once
   /// per client by [adoptEraDefault] at construction and looked up here. It
@@ -176,7 +195,7 @@ class CryptoConfig {
   /// one needs the client and this is also called *during* construction.
   static CryptoConfig forClient(AtClient? atClient) {
     final named = atClient?.getPreferences()?.crypto;
-    if (named != null) return named;
+    if (named != null && named is! _EraDefaultSentinel) return named;
     if (atClient == null) return const CryptoConfig.legacy();
     return _eraDefaults[atClient] ?? const CryptoConfig.legacy();
   }
@@ -192,7 +211,8 @@ class CryptoConfig {
   /// Idempotent — a re-used cached client keeps the set it was built with, so
   /// its content-key cache and key ring survive re-creation.
   static void adoptEraDefault(AtClient atClient, CryptoConfig config) {
-    if (atClient.getPreferences()?.crypto != null) return;
+    final named = atClient.getPreferences()?.crypto;
+    if (named != null && named is! _EraDefaultSentinel) return;
     _eraDefaults[atClient] ??= config;
   }
 
@@ -228,6 +248,15 @@ class CryptoConfig {
     }
     return null;
   }
+}
+
+/// The marker type behind [CryptoConfig.eraDefault]. A private subtype rather
+/// than a value comparison, so the check can never collide with a
+/// caller-built config: the only reachable instance is the canonical const
+/// one.
+class _EraDefaultSentinel extends CryptoConfig {
+  const _EraDefaultSentinel()
+      : super(defaultProviderId: legacyCryptoProviderId);
 }
 
 /// What a [CryptoProvider] is handed per operation.

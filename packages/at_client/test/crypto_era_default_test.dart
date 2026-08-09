@@ -16,8 +16,9 @@ void main() {
   late MockAtClient client;
 
   setUp(() {
+    // A fresh preference holds the CryptoConfig.eraDefault() marker — the
+    // "app named nothing" state under test here.
     client = MockAtClient();
-    client.getPreferences().crypto = null;
   });
 
   CryptoConfig eraConfig() =>
@@ -36,6 +37,43 @@ void main() {
             'cannot resolve it fails on data already sent to it');
   });
 
+  test('the untouched preference holds the eraDefault marker', () {
+    expect(client.getPreferences().crypto,
+        same(const CryptoConfig.eraDefault()),
+        reason: 'the field is non-nullable (published 3.14.0 shape), so this '
+            'marker — not null — is how the SDK tells "app named nothing"');
+
+    CryptoConfig.adoptEraDefault(client, eraConfig());
+    expect(
+        CryptoConfig.forClient(client).lookup(symmetricAesGcmCryptoProviderId),
+        isNotNull,
+        reason: 'the marker means no choice: the era set must resolve through '
+            'it exactly as it did through null');
+  });
+
+  test('naming CryptoConfig.legacy() is an opt-out, not the default', () {
+    client.getPreferences().crypto = const CryptoConfig.legacy();
+
+    CryptoConfig.adoptEraDefault(client, eraConfig());
+
+    expect(CryptoConfig.forClient(client).providers, isEmpty,
+        reason: 'an app that deliberately pinned legacy must hold it — the '
+            'marker and CryptoConfig.legacy() are distinct values even though '
+            'they behave identically when read as a config');
+    expect(CryptoConfig.eraDefaultFor(client), isNull);
+  });
+
+  test('the marker read as a config degrades to the published legacy shape',
+      () {
+    // External code compiled against 3.14.0 reads preference.crypto directly
+    // (the field defaulted to CryptoConfig.legacy() there). The marker must
+    // answer those reads with exactly that shape, or restoring non-nullability
+    // would change behaviour for the very callers it exists to keep working.
+    expect(const CryptoConfig.eraDefault().defaultProviderId,
+        legacyCryptoProviderId);
+    expect(const CryptoConfig.eraDefault().providers, isEmpty);
+  });
+
   test('an app that named its own config keeps it', () {
     final mine = CryptoConfig(defaultProviderId: 'custom');
     client.getPreferences().crypto = mine;
@@ -50,7 +88,6 @@ void main() {
 
   test('two clients get their own provider instances', () {
     final other = MockAtClient();
-    other.getPreferences().crypto = null;
 
     CryptoConfig.adoptEraDefault(client, eraConfig());
     CryptoConfig.adoptEraDefault(other, eraConfig());

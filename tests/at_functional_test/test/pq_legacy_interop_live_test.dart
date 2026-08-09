@@ -164,7 +164,8 @@ void main() {
       'and @bob reads it', () async {
     // GIVEN a pre-PQ atSign whose app has never heard of the nskey data path:
     //       a default preference, so its writes go out legacy.
-    expect(legacyClient.getPreferences()!.crypto, isNull,
+    expect(legacyClient.getPreferences()!.crypto,
+        same(const CryptoConfig.eraDefault()),
         reason: 'the sending app is legacy by construction — no crypto config '
             'at all, which is what every published app has today');
 
