@@ -99,7 +99,7 @@ void main() {
   test('the published advertisement emits its exact wire shape — raw literals',
       () async {
     // Emitter pin (frozen forever for the PAYLOAD; the WRAPPER around it is
-    // the signed envelope the JWS migration will replace). Raw strings
+    // the version-1 signed envelope, emitted until the 4.0 flip). Raw strings
     // deliberately: the sibling tests assert through the constants that
     // define these values, which follow a changed value silently. Absent-'v'
     // and absent-'alg'/'suites' reads are tolerated back-compat, so removing

@@ -4,13 +4,16 @@
   `ML-DSA-65`) and the signer's enrollment id (`kid`) inside the signed
   protected header rather than sitting unauthenticated beside the signature.
   Readers accept both shapes always; producers emit version 1 unchanged
-  unless asked (`signEnvelope`'s new `version` parameter), because the
+  unless asked (`signEnvelope`'s new `version` parameter, or the
+  `EnvelopeSigning.envelopeVersion` rollout flag), because the
   enrollment record's `metadata.keyPackage` is write-once — flipping the
   default is a deployment decision for 4.0, after every reader in the fleet
   understands version 2. `envelopePayloadOf` and `envelopeSignerOf` are the
   shape-agnostic reads; every base64url decode normalises padding first
   (Dart's decoder throws on unpadded input at RSA-signature lengths, so a
-  naive decode fails on every classical envelope and no PQ one).
+  naive decode fails on every classical envelope and no PQ one). The shape
+  is adjudicated by third-party verifiers over committed vectors
+  (`test/vectors/jws_envelope_v2.json`, `tool/verify_jws_vectors.mjs`).
 - fix: a deleted conveyance record now evicts the cached content key under
   the nskey owner the record names (`sharedWith ?? sharedBy` — the same scope
   every cache writer uses) instead of this client's own atSign. Previously an

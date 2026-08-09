@@ -302,8 +302,8 @@ void main() {
 
     test('the signed wrapper carries its own version', () async {
       // Separately from whatever payload it wraps — the two version each
-      // other's shape independently, which is what lets the wrapper move to
-      // JWS without touching any payload.
+      // other's shape independently, which is what let the wrapper gain its
+      // JWS shape without touching any payload.
       final envelope = await bobSigner.wrapAndSign({'anything': 1});
       expect(envelope['v'], signedEnvelopeVersion);
     });

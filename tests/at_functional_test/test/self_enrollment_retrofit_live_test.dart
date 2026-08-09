@@ -12,7 +12,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show verifyEnvelope;
+    show jwsEnvelopeVersion, verifyEnvelope;
 import 'package:at_demo_data/at_demo_data.dart' show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -238,6 +238,15 @@ void main() {
             auth: true))!
         .replaceFirst('data:', '');
     await verifyEnvelope(envelope, signerPublicKey: apsk);
+
+    // The same loop under the JWS wrapper: the signer's version flag is the
+    // rollout lever, and this is the flipped world in miniature against a
+    // REAL served key — ML-DSA under `protected.payload`, verified against
+    // the tagged _apsk the atServer composed at approval.
+    sharing.envelopeVersion = jwsEnvelopeVersion;
+    final jws = await sharing.wrapAndSign('rf2c-proof-v2');
+    expect(jws['v'], 2);
+    await verifyEnvelope(jws, signerPublicKey: apsk);
   });
 
   test('mint-once per keyfile: a rerun reuses the PQ enrollment', () async {

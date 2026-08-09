@@ -1743,14 +1743,19 @@ payload both carry a version field. Both records ARE rewritable, so this was
 cheap insurance rather than a deadline — but it is the hatch that makes 14.3
 reversible, which is why it went first of the three.
 
-### 14.3 JWS or JCS for the signed envelope
+### 14.3 JWS or JCS for the signed envelope — DONE (producer behind the flag)
 
 **RULED 2026-08-06 → JWS Flattened JSON Serialization, `b64=true`**
-([decisions 48.8](decisions.md#488-what-this-entry-does-not-rule)). Its
-prerequisite 14.2 landed in `3c2eddbe6`; the staged plan is written and lives in
-`untracked/2026-08-06-JWS-MIGRATION-PLAN.md` — all 7 payload consumers named
-with what each requires, the two encoders, the 6 test files to sweep, and the
-staging.
+([decisions 48.8](decisions.md#488-what-this-entry-does-not-rule)).
+**LANDED 2026-08-09** ([decisions 60](decisions.md#60-jws-stage-one-lands-readers-always-on-producer-behind-the-version-flag-2026-08-09)):
+readers accept both wrapper shapes always; the producer emits version 2 only
+via `signEnvelope`'s `version` parameter / `EnvelopeSigning.envelopeVersion`,
+defaulting v1 for all of 3.x — flipping the default is 4.0's deployment
+decision (the 14.6 freeze). Adjudicated by two third-party verifiers
+(jose for RS256, OpenSSL 3.6 for ML-DSA-65 — decisions 60.4), with committed
+vectors at `packages/at_client/test/vectors/jws_envelope_v2.json`. Its
+prerequisite 14.2 landed in `3c2eddbe6`; the staged plan it was executed from
+is `untracked/2026-08-06-JWS-MIGRATION-PLAN.md`.
 
 Why it became the cheapest standards adoption in the design rather than the
 most marginal: RFC 9964 (Proposed Standard, May 2026) registers `ML-DSA-65` as

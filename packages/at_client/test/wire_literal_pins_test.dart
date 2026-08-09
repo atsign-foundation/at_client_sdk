@@ -479,9 +479,10 @@ void main() {
     });
 
     test('a chain-link payload emits its exact JSON shape', () {
-      // Payload, not wrapper: these field names survive the JWS migration and
-      // are compared against live records by verifiers. The signature covers
-      // signableTextOf of exactly this map, so the key ORDER is
+      // Payload, not wrapper: these field names are the same under either
+      // wrapper shape and are compared against live records by verifiers.
+      // The signature covers signableTextOf of exactly this map (its JSON
+      // encoding under the JWS wrapper), so the key ORDER is
       // cryptographically bound.
       expect(
           jsonEncode(PqSigningChain.linkPayload(

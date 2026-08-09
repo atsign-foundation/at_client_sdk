@@ -5699,3 +5699,20 @@ Adjudicated 2026-08-09, two independent implementations:
   3.0.16, which cannot even import the key — the runtime, not the vector.
   The script says so in its header and stays committed for a Node whose
   OpenSSL is ≥ 3.5.
+
+### 60.5 One live arm, and the docs reconciled
+
+The functional pack's retrofit test (`self_enrollment_retrofit_live_test`,
+the rf2c client test) gained the flipped world in miniature: set
+`envelopeVersion` to 2, `wrapAndSign`, verify against the real tagged
+`_apsk` the atServer composed at approval — ML-DSA under
+`protected.payload` against a served key, not a mock. Green on the landing
+run. Nothing else in either test pack needed changing: readers only widened,
+producers are unchanged, so every existing pack test exercises the
+version-1 arm exactly as before.
+
+Reconciled in the same commit: implementation-plan 14.3 marked DONE
+(producer behind the flag), the untracked staged plan's "nothing here is
+implemented" header replaced with a pointer to this section and the two
+re-grep corrections, and the three future-tense "the JWS migration will…"
+comments in at_client's tests rewritten in present tense.
