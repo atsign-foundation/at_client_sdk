@@ -784,12 +784,16 @@ class AtClientImpl implements AtClient {
   Future<void> _seedNamespaceKeys() async {
     try {
       final keysIo = _atKeysIo;
+      final filing = keysIo == null
+          ? null
+          : NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign);
       await NskeySeeding(
         atClient: this,
-        ring: PublishedNskeyKeyRing(this),
-        privateFiling: keysIo == null
-            ? null
-            : NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign),
+        // The ring's own filing is what makes a mint durable-before-published;
+        // a ring without one skips the filing and publishes anyway, leaving
+        // the only copy of the private in process memory.
+        ring: PublishedNskeyKeyRing(this, privateFiling: filing),
+        privateFiling: filing,
         sharing: AtClientSecretSharing.forClient(this),
       ).seed();
     } catch (e, st) {
