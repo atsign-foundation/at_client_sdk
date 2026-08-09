@@ -197,7 +197,7 @@ class AtClientImpl implements AtClient {
     // runs during construction and the sync service does not exist yet.
     final cache = CryptoConfig.forClient(this).contentKeyCache;
     if (cache != null) {
-      syncService.addProgressListener(ContentKeyEviction(cache, _atSign));
+      syncService.addProgressListener(ContentKeyEviction(cache));
     }
   }
 

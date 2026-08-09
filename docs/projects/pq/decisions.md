@@ -5283,3 +5283,24 @@ constant the builder uses, so they cannot disagree by a byte.
 symbols and delegate. Pure motion — the known eviction-scope defect between
 the pair is deliberately preserved here and fixed in the next entry, so the
 behaviour change is its own reviewable diff.
+
+### 57.6 Eviction scope comes from the conveyance key, not the observing client (BEHAVIOURAL)
+
+The one deliberate behaviour change of the vocabulary pass. The eviction
+listener hard-wired this client's own atSign as the cache scope for every
+deleted conveyance it observed, while every *writer* of the CK cache scopes
+an entry to `sharedWith ?? sharedBy`. The two rules agree for self and
+inbound conveyances — which is why the unit suite was green — and disagree
+exactly on an outbound share observed by the deleting client's sibling
+device: `@bob:<ckKid>.__ck.<ns>@alice` is cached under bob, the eviction
+targeted alice, and the (bob, ns, ckKid) entry survived. Coarse forward
+secrecy, whose whole job is fleet-wide eviction, silently missed shared
+data. `parseCkConveyanceKey` now returns the nskey owner derived from the
+key (recipient prefix if present, else record owner) and the listener evicts
+under it; `ContentKeyEviction` loses its atSign parameter. Differentially
+tested — the outbound arm was run red against the old code first.
+
+No stored record changes shape and no read-both window exists: the record
+format is untouched, and the CK cache is in-memory per process, so there are
+no entries under the old rule to migrate — the divergence was between two
+in-process rules, not two at-rest formats.

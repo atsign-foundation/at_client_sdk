@@ -1,4 +1,12 @@
 ## 3.14.1
+- fix: a deleted conveyance record now evicts the cached content key under
+  the nskey owner the record names (`sharedWith ?? sharedBy` — the same scope
+  every cache writer uses) instead of this client's own atSign. Previously an
+  outbound share's CK (`@bob:<ckKid>.__ck.<ns>@alice`, cached under bob)
+  survived the deletion on the deleting client's sibling devices, so the
+  coarse forward-secrecy lever silently missed exactly the shared data it was
+  most needed for. `ContentKeyEviction`'s constructor drops its atSign
+  parameter — the scope now comes from the parsed key.
 - fix: startup namespace-key seeding files the minted private durably before
   publishing the advertisement. The seeding path built its key ring without
   the private filing the data path gets, so the mint skipped the filing and

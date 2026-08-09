@@ -31,13 +31,7 @@ final _logger = AtSignLogger('ContentKeyEviction');
 class ContentKeyEviction extends SyncProgressListener {
   final ContentKeyCache cache;
 
-  /// This client's atSign, which is the CK cache's scope for **every** record
-  /// this listener sees: a self conveyance is `…@alice` with no recipient, and
-  /// an inbound one is `@alice:…@bob` — in both cases the nskey that opened it
-  /// is alice's, and that is how `ContentKeyCache` keyed it.
-  final String atSign;
-
-  ContentKeyEviction(this.cache, this.atSign);
+  ContentKeyEviction(this.cache);
 
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
@@ -48,17 +42,24 @@ class ContentKeyEviction extends SyncProgressListener {
       }
       final conveyance = parse(keyInfo.key);
       if (conveyance == null) continue;
-      cache.evict(atSign, conveyance.ckNs, conveyance.ckKid);
+      // The eviction scope comes from the key itself, because the cache's did
+      // too: every writer scopes an entry to `sharedWith ?? sharedBy`. A self
+      // conveyance `…@alice` and an inbound one `@alice:…@bob` both landed
+      // under alice — and an outbound share `@bob:…@alice`, observed by
+      // alice's sibling device, landed under bob, which is why this client's
+      // own atSign cannot serve as the scope.
+      cache.evict(conveyance.nskeyOwner, conveyance.ckNs, conveyance.ckKid);
       _logger.info('Evicted content key ${conveyance.ckKid} for '
-          '$atSign:${conveyance.ckNs} — its conveyance record was deleted, so '
-          'data written under it is undecryptable from here on, by design');
+          '${conveyance.nskeyOwner}:${conveyance.ckNs} — its conveyance '
+          'record was deleted, so data written under it is undecryptable from '
+          'here on, by design');
     }
   }
 
-  /// Splits a conveyance key string into the CK it carries and the namespace
-  /// that CK lives in — see [parseCkConveyanceKey], which owns the format
+  /// Splits a conveyance key string into the CK it carries, its namespace and
+  /// its cache scope — see [parseCkConveyanceKey], which owns the format
   /// beside its builder.
   @visibleForTesting
-  static ({String ckKid, String ckNs})? parse(String key) =>
+  static ({String nskeyOwner, String ckKid, String ckNs})? parse(String key) =>
       parseCkConveyanceKey(key);
 }

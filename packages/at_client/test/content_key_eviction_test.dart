@@ -25,17 +25,25 @@ void main() {
     ..keyInfoList = keys;
 
   group('the key string a conveyance record arrives as', () {
-    test('splits a self conveyance into its CK and namespace', () {
+    test('splits a self conveyance into its CK, namespace and scope', () {
       expect(ContentKeyEviction.parse('abc123.__ck.$namespace$atSign'),
-          (ckKid: 'abc123', ckNs: namespace),
+          (nskeyOwner: atSign, ckKid: 'abc123', ckNs: namespace),
           reason: 'a multi-segment namespace is why this is parsed on the '
               '.__ck. marker rather than by AtKey.fromString, which cuts at '
               'the LAST dot and would report the namespace as "my_apps"');
     });
 
-    test('splits an inbound conveyance, which names its recipient first', () {
+    test('an inbound conveyance scopes to its recipient — this atSign', () {
       expect(ContentKeyEviction.parse('@alice:abc123.__ck.$namespace@bob'),
-          (ckKid: 'abc123', ckNs: namespace));
+          (nskeyOwner: '@alice', ckKid: 'abc123', ckNs: namespace));
+    });
+
+    test('an outbound conveyance scopes to its recipient — the other atSign',
+        () {
+      expect(ContentKeyEviction.parse('@bob:abc123.__ck.$namespace$atSign'),
+          (nskeyOwner: '@bob', ckKid: 'abc123', ckNs: namespace),
+          reason: 'the scope rule is sharedWith ?? sharedBy, matching every '
+              'writer of the CK cache');
     });
 
     test('declines anything that is not a conveyance record', () {
@@ -59,7 +67,7 @@ void main() {
 
     setUp(() {
       cache = ContentKeyCache();
-      eviction = ContentKeyEviction(cache, atSign);
+      eviction = ContentKeyEviction(cache);
       key = ck(1);
       cache.putAsCurrent(atSign, namespace, key, 'gen1');
     });
@@ -97,6 +105,24 @@ void main() {
           reason: 'this client already evicted through CkManager when it made '
               'the delete; reacting to its own push back would mean being '
               'right about a case this never sees');
+    });
+
+    test('an outbound share\'s deletion evicts under the recipient', () {
+      // alice → bob: the conveyance `@bob:<ckKid>.__ck.<ns>@alice` was cached
+      // under bob — `sharedWith ?? sharedBy`, the scope every cache writer
+      // uses — so that is where the eviction must land. Anywhere else leaves
+      // the (bob, ns, ckKid) entry alive on every sibling device, undoing
+      // the fleet-wide property the listener exists to provide.
+      final outbound = ck(7);
+      cache.putAsCurrent('@bob', namespace, outbound, 'gen1');
+
+      eviction.onSyncProgressEvent(synced([
+        KeyInfo('@bob:${outbound.ckKid}.__ck.$namespace$atSign',
+            SyncDirection.remoteToLocal, CommitOp.DELETE)
+      ]));
+
+      expect(cache.get('@bob', namespace, outbound.ckKid), isNull);
+      expect(cache.current('@bob', namespace), isNull);
     });
 
     test('a deletion in another namespace leaves this one alone', () {

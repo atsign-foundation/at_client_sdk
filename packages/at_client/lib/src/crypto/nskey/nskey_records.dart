@@ -133,23 +133,36 @@ AtKey ckConveyanceKey(AtKey value, String ckKid, String ckNs) => AtKey()
   ..sharedWith = value.sharedWith
   ..metadata = Metadata();
 
-/// Splits a conveyance key string into the CK it carries and the namespace
-/// that CK lives in, or null if it is not a conveyance record.
+/// Splits a conveyance key string into the CK it carries, the namespace that
+/// CK lives in, and the nskey owner whose cache scope it belongs to — or
+/// null if it is not a conveyance record.
 ///
 /// Parsed by hand rather than through `AtKey.fromString`, which cuts a key
 /// at its **last** dot: `abc.__ck.app_1.my_apps@alice` comes back with
 /// namespace `my_apps`, and evicting under that would miss the entry and
 /// leave the CK live. The `.__ck.` marker is the real boundary and a
 /// multi-segment namespace survives it.
-({String ckKid, String ckNs})? parseCkConveyanceKey(String key) {
+///
+/// `nskeyOwner` is the recipient prefix when the key carries one, else the
+/// record owner — the same `sharedWith ?? sharedBy` rule every writer of the
+/// CK cache uses, so an observed deletion lands on the entry the write
+/// created: a self conveyance `…@alice` and an inbound one `@alice:…@bob`
+/// both scope to alice, and an outbound share `@bob:…@alice` scopes to bob.
+({String nskeyOwner, String ckKid, String ckNs})? parseCkConveyanceKey(
+    String key) {
   // `@recipient:` on an inbound conveyance, and `@owner` on every one. What
   // is left is `<ckKid>.__ck.<ckNs>`.
   var body = key.trim();
   if (body.startsWith('cached:')) body = body.substring('cached:'.length);
+  String? recipient;
   final colon = body.indexOf(':');
-  if (colon >= 0) body = body.substring(colon + 1);
+  if (colon >= 0) {
+    recipient = body.substring(0, colon);
+    body = body.substring(colon + 1);
+  }
   final at = body.lastIndexOf('@');
   if (at <= 0) return null;
+  final owner = body.substring(at);
   body = body.substring(0, at);
 
   final marker = body.indexOf(ckConveyanceMarker);
@@ -157,7 +170,7 @@ AtKey ckConveyanceKey(AtKey value, String ckKid, String ckNs) => AtKey()
   final ckKid = body.substring(0, marker);
   final ckNs = body.substring(marker + ckConveyanceMarker.length);
   if (ckKid.isEmpty || ckNs.isEmpty) return null;
-  return (ckKid: ckKid, ckNs: ckNs);
+  return (nskeyOwner: recipient ?? owner, ckKid: ckKid, ckNs: ckNs);
 }
 
 /// The reserved substrate `Secret`-name prefix an nskey private travels
