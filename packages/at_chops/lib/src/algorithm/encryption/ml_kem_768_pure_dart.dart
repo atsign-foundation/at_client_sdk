@@ -1,3 +1,5 @@
+import 'dart:typed_data';
+
 import 'package:at_chops/src/algorithm/encryption/ml_kem_pure_dart.dart';
 // ignore: implementation_imports
 import 'package:pqcrypto/src/algos/kyber/kem.dart' show KyberLevel;
@@ -20,4 +22,21 @@ final class MlKem768PureDartAlgo extends MlKemPureDart {
 
   @override
   String get kemSeedDescription => 'an ML-KEM-768 seed (d || z)';
+
+  /// Encapsulate a fresh shared secret against [publicKey].
+  ///
+  /// The optional [seed] (the 32-byte FIPS 203 randomness `m`) is published
+  /// API this class cannot remove; it exists only to reproduce vectors, and a
+  /// production seal must not supply it.
+  @override
+  Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
+          Uint8List publicKey,
+          [@Deprecated('Vector tests use encapsulateDerand; a production seal '
+              'draws fresh randomness')
+          Uint8List? seed]) =>
+      seed == null
+          ? super.encapsulate(publicKey)
+          // The published compat path IS the derandomised testing hook.
+          // ignore: invalid_use_of_visible_for_testing_member
+          : encapsulateDerand(publicKey, seed);
 }

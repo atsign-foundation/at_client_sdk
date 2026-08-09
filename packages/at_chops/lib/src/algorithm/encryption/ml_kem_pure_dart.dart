@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
+import 'package:meta/meta.dart' show visibleForTesting;
 // ignore: implementation_imports
 import 'package:pqcrypto/src/algos/kyber/kem.dart' show KyberLevel;
 import 'package:pqcrypto/pqcrypto.dart';
@@ -49,14 +50,24 @@ abstract base class MlKemPureDart
 
   /// Encapsulate a fresh shared secret against [publicKey].
   ///
-  /// [seed] is the 32-byte FIPS 203 randomness `m`, for derandomised
-  /// encapsulation. Supply it only to reproduce a published vector — a real
-  /// seal must draw fresh randomness, or two seals share a shared secret.
+  /// Always draws fresh randomness — there is no derandomised variant in the
+  /// public API, because two seals sharing randomness share a shared secret.
+  /// Vector tests reproduce published ciphertexts via [encapsulateDerand].
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
-      Uint8List publicKey,
-      [Uint8List? seed]) async {
-    final (Uint8List ct, Uint8List ss) = _kem.encapsulate(publicKey, seed);
+      Uint8List publicKey) async {
+    final (Uint8List ct, Uint8List ss) = _kem.encapsulate(publicKey, null);
+    return (ciphertext: ct, sharedSecret: ss);
+  }
+
+  /// Derandomised encapsulation: [m] is the 32-byte FIPS 203 randomness.
+  ///
+  /// Exists to reproduce published vectors; production callers use
+  /// [encapsulate].
+  @visibleForTesting
+  Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulateDerand(
+      Uint8List publicKey, Uint8List m) async {
+    final (Uint8List ct, Uint8List ss) = _kem.encapsulate(publicKey, m);
     return (ciphertext: ct, sharedSecret: ss);
   }
 

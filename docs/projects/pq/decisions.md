@@ -5527,3 +5527,17 @@ table's key set equal to it. The file header was rewritten — it described
 only v1 and called the file's contents not-RFC-9180 while two versions are
 §5.1 verbatim — and the envelope vocabulary now matches
 [seal-spec.md](seal-spec.md) (`aeadCiphertext || tag`, not `gcm*`).
+
+### 59.9 Derandomised encapsulation is a testing hook, not public API
+
+[seal-spec.md](seal-spec.md): "There is no derandomised variant in the public
+API" — the concrete ML-KEM classes' optional-seed `encapsulate` overloads
+contradicted that sentence. The pure-Dart classes now expose
+`@visibleForTesting encapsulateDerand` (matching X-Wing's compliant shape)
+and their public `encapsulate` always draws fresh randomness.
+`MlKem768PureDartAlgo`'s overload is published 3.4.1 surface, so it stays
+callable with the parameter `@Deprecated` and delegates to the hook;
+`MlKem1024PureDartAlgo`'s was branch-added and is gone. The vector tests
+still reach the derandomised path — the `0x0042` published-ciphertext row
+calls the hook by name, and X-Wing's internal derand route branches to it
+explicitly under its own `@visibleForTesting` entry point.

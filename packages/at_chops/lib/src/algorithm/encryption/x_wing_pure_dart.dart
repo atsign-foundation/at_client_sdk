@@ -125,9 +125,14 @@ final class XWingPureDartAlgo with KemSeedMixin implements AtKemAlgorithm {
       Uint8List? mlKemRandomness) async {
     final halves = XWingCore.splitPublicKey(publicKey);
 
-    final (ciphertext: ctM, sharedSecret: ssM) = await MlKem768PureDartAlgo
-        .instance
-        .encapsulate(halves.mlKem, mlKemRandomness);
+    // The seeded arm is reached only via this backend's own
+    // @visibleForTesting encapsulateDerand, so the testing hook is the right
+    // callee.
+    final (ciphertext: ctM, sharedSecret: ssM) = mlKemRandomness == null
+        ? await MlKem768PureDartAlgo.instance.encapsulate(halves.mlKem)
+        : await MlKem768PureDartAlgo.instance
+            // ignore: invalid_use_of_visible_for_testing_member
+            .encapsulateDerand(halves.mlKem, mlKemRandomness);
 
     final crypto.SimpleKeyPair ephemeral =
         await _x25519.newKeyPairFromSeed(ephemeralX25519Secret);

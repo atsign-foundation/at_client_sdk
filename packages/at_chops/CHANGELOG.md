@@ -76,6 +76,12 @@
 - feat: `HkdfSha384.deriveKey` — the fused form existed only at SHA-256. The
   two hash variants now share one RFC 5869 implementation internally, so the
   public surface is symmetric.
+- feat: `encapsulateDerand` (`@visibleForTesting`) on the pure-Dart ML-KEM
+  classes; the public `encapsulate` always draws fresh randomness. The
+  seal spec's contract is that there is no derandomised variant in the public
+  API — two seals sharing randomness share a shared secret — and the optional
+  seed parameter the classes carried contradicted it. `MlKem768PureDartAlgo`'s
+  published overload stays callable with the parameter deprecated.
 - feat: `pqSeal` takes a `version`, and `pqSealDefaultVersion` /
   `pqSealSupportedVersions` are public. The emitted version was a private
   constant, so there was no way to emit one construction to peers that had not

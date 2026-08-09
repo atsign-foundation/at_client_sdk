@@ -61,7 +61,7 @@ void main() {
       () async {
     // ikmE is 32 bytes here (FIPS 203 `m`) rather than the hybrid's 64, so
     // this also pins which randomness the pure KEM consumes.
-    final r = await algo.encapsulate(
+    final r = await algo.encapsulateDerand(
         _hex(v['pkRm'] as String), _hex(v['ikmE'] as String));
     expect(_toHex(r.ciphertext), v['enc']);
     expect(_toHex(r.sharedSecret), v['shared_secret']);
