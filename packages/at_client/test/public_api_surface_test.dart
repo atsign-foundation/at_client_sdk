@@ -8,6 +8,8 @@
 /// stops being exported, this file stops compiling.
 library;
 
+import 'dart:io';
+
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
@@ -56,4 +58,87 @@ void main() {
       expect(ReportsReadiness, isA<Type>());
     });
   });
+
+  // The group above proves the REQUIRED symbols are reachable — it catches a
+  // surface REMOVAL. This one catches the opposite, which is the likelier
+  // mistake while the PQ surface is still unpublished and moving: an `src/`
+  // file exported by accident. Every change to what a barrel exports is a
+  // deliberate, reviewable diff against a checked-in set — on an intended
+  // change, update the golden set in the SAME commit; that edit is the review.
+  group('the exported file surface is a reviewed golden', () {
+    Set<String> exportsOf(String barrel) {
+      final file = File('lib/$barrel');
+      if (!file.existsSync()) {
+        fail('cannot read lib/$barrel — run this from the at_client package '
+            'root (dart test does so by default)');
+      }
+      final re = RegExp("export\\s+'([^']+)'");
+      return file
+          .readAsLinesSync()
+          .map((line) => re.firstMatch(line)?.group(1))
+          .whereType<String>()
+          .toSet();
+    }
+
+    test('at_client.dart exports exactly the reviewed set', () {
+      expect(exportsOf('at_client.dart'), _atClientBarrelExports,
+          reason: 'The public export surface of at_client.dart changed. If '
+              'intentional, update _atClientBarrelExports in the same commit.');
+    });
+
+    test('at_client_mixins.dart exports exactly the reviewed set', () {
+      expect(exportsOf('at_client_mixins.dart'), _atClientMixinsBarrelExports,
+          reason: 'The public export surface of at_client_mixins.dart changed. '
+              'If intentional, update _atClientMixinsBarrelExports in the same '
+              'commit.');
+    });
+  });
 }
+
+/// The exports of `lib/at_client.dart`, as reviewed. A refactor that narrows or
+/// widens this surface updates the set here in the same commit.
+const Set<String> _atClientBarrelExports = {
+  'package:at_client/src/client/at_client_impl.dart',
+  'package:at_client/src/client/at_client_spec.dart',
+  'package:at_client/src/client/data_event.dart',
+  'package:at_client/src/client/local_secondary.dart',
+  'package:at_client/src/client/remote_secondary.dart',
+  'package:at_client/src/client/request_options.dart',
+  'package:at_client/src/crypto/crypto.dart',
+  'package:at_client/src/crypto/crypto_runtime.dart',
+  'package:at_client/src/key_stream/key_stream.dart',
+  'package:at_client/src/listener/connectivity_listener.dart',
+  'package:at_client/src/manager/at_client_manager.dart',
+  'package:at_client/src/preference/at_client_preference.dart',
+  'package:at_client/src/response/at_notification.dart',
+  'package:at_client/src/response/enrollment.dart',
+  'package:at_client/src/secret_sharing/algo_ids.dart',
+  'package:at_client/src/rpc/at_rpc.dart',
+  'package:at_client/src/rpc/at_rpc_types.dart',
+  'package:at_client/src/service/enrollment_service.dart',
+  'package:at_client/src/service/notification_service.dart',
+  'package:at_client/src/service/sync_service.dart',
+  'package:at_client/src/telemetry/at_client_telemetry.dart',
+  'package:at_client/src/util/at_client_util.dart',
+  'package:at_client/src/util/encryption_util.dart',
+  'package:at_client/src/util/enroll_list_request_param.dart',
+  'package:at_commons/at_commons.dart',
+  'package:at_client/src/collections/collections.dart',
+  'package:at_client/src/at_collection/collections.dart',
+  'package:at_client/src/at_collection/at_collection_model.dart',
+  'package:at_client/src/at_collection/at_json_collection_model.dart',
+  'package:at_client/src/at_collection/at_collection_model_factory.dart',
+};
+
+/// The exports of `lib/at_client_mixins.dart`, as reviewed. The PQ work will
+/// narrow this (the `enroll/` activation flows and the signing files are on
+/// this surface today); each such move updates the set here in the same commit.
+const Set<String> _atClientMixinsBarrelExports = {
+  'package:at_client/src/mixins/at_client_bindings.dart',
+  'package:at_client/src/mixins/apkam_signing.dart',
+  'package:at_client/src/mixins/at_client_envelope_signer.dart',
+  'package:at_client/src/mixins/envelope_signing.dart',
+  'package:at_client/src/enroll/pq_native_onboard.dart',
+  'package:at_client/src/enroll/self_retrofit.dart',
+  'package:at_client/src/secret_sharing/secret_sharing.dart',
+};
