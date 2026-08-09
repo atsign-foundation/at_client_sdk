@@ -12,6 +12,8 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+// Package-internal key-schedule machinery under test; not barrel-exported.
+import 'package:at_chops/src/algorithm/encryption/rfc9180_hpke.dart';
 import 'package:at_commons/at_commons.dart' show AtDecryptionException;
 import 'package:test/test.dart';
 

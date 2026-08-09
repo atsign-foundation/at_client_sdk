@@ -16,6 +16,9 @@ library;
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
+// HpkeSuite is package-internal; its wire identities stay pinned here.
+import 'package:at_chops/src/algorithm/encryption/rfc9180_hpke.dart'
+    show HpkeSuite;
 import 'package:test/test.dart';
 
 void main() {

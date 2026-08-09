@@ -86,10 +86,12 @@
   `info` and `aad` entirely. **These are self-generated** — nobody publishes
   vectors for an Atsign-internal construction — so they attest that two
   implementations agree and nothing more, which the fixture says of itself.
-- feat: `pqSealDeriveKeyAndNonce`, `@visibleForTesting`, exposes the
-  `atPQv1-base` key schedule so a conformance suite can compare it directly. A
-  schedule mismatch otherwise surfaces only as an AEAD authentication failure,
-  which says nothing about which side is wrong.
+- feat: `pqSealDeriveKeyAndNonce` (package-internal, `@visibleForTesting`)
+  exposes the `atPQv1-base` key schedule so the in-tree conformance suite can
+  compare it directly. A schedule mismatch otherwise surfaces only as an AEAD
+  authentication failure, which says nothing about which side is wrong. Not
+  exported by the barrel: external implementations conform against
+  `test/vectors/pq_seal_v1.json`, not this package's internals.
 - test: **ML-DSA-65 conformance against NIST's ACVP vectors** (FIPS 204). Until
   now `ml_dsa_65_algo_test.dart` asserted key and signature lengths and that a
   signature round-trips, which two wrong implementations agreeing with each

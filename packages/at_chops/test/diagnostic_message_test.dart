@@ -6,7 +6,11 @@ library;
 
 import 'dart:typed_data';
 
-import 'package:at_chops/at_chops.dart';
+// Package-internal symbols under test; not exported by the barrel.
+import 'package:at_chops/src/algorithm/encryption/pq_hpke.dart'
+    show pqSealDeriveKeyAndNonce;
+import 'package:at_chops/src/algorithm/encryption/rfc9180_hpke.dart'
+    show HpkeSuite, labeledExtract, labeledExpand;
 import 'package:test/test.dart';
 
 void main() {

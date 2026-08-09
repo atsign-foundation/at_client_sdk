@@ -30,6 +30,9 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+// Package-internal schedule probe; not exported by the barrel.
+import 'package:at_chops/src/algorithm/encryption/pq_hpke.dart'
+    show pqSealDeriveKeyAndNonce;
 import 'package:test/test.dart';
 
 Uint8List _hex(String s) {

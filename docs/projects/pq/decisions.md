@@ -5401,3 +5401,29 @@ keyfile has no typed signing material — you cannot sign ML-DSA with an RSA
 key, so a preference was never the right home. The onboarding CLI's reads
 keep deliberate ignores: at activation time there is no key material yet, so
 the preference remains the mint-time input there.
+
+## 59. Phase-3 at_chops surface rulings (2026-08-09)
+
+### 59.1 `pqSeal`/`pqOpen` name their KEM parameter `kem`
+
+[seal-spec.md](seal-spec.md) says "the KEM is a parameter of `pqSeal`" and
+version `0x03` passes ML-KEM-1024 through it, so a parameter named `xwing` was
+describing one argument it takes, not the parameter. Renamed. Both parameters
+are positional and nothing anywhere bound them by name, so no call site moved.
+`0x01` remains X-Wing's alone — the rename widens the parameter's name to
+match its type, not v1's contract.
+
+### 59.2 The barrel exports the seal surface only
+
+`labeledExtract`, `labeledExpand`, `hpkeKeyScheduleBase`, `HpkeSuite` and
+`pqSealDeriveKeyAndNonce` had zero consumers outside at_chops — only the
+package's own tests, which now import the src files directly. The
+`rfc9180_hpke.dart` export is dropped and `pqSealDeriveKeyAndNonce` hidden:
+the public seal surface is `pqSeal`/`pqOpen`, their exceptions, and the
+version constants. Everything exported freezes when 3.5.0 publishes (the
+post-3.4.0 stability ruling), and an export added later is a minor while one
+removed later is a major — so the internals stay internal until a consumer
+exists. This also frees `HpkeSuite` to be reshaped by the same phase's
+suite-table work without publishing the intermediate shapes. External
+implementations conform against `test/vectors/pq_seal_v1.json` and
+[seal-spec.md](seal-spec.md), never against these internals.
