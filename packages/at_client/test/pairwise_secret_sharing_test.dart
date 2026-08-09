@@ -265,6 +265,23 @@ void main() {
       expect(envOpts!.shouldEncrypt, isFalse);
     });
 
+    test('the envelope key emits its exact layout, segment by segment',
+        () async {
+      // Emitter pin (frozen forever): <msgId uuidV4>.<recipientKpid>.__ssenv
+      // .<appNamespace>@<sender>. The layout is hand-built and hand-parsed at
+      // seven sites in this file's production twin plus two more in
+      // enrollment_symmetric_key.dart — the sibling tests match fragments,
+      // which would survive a segment being added, dropped or reordered.
+      await sharerA
+          .sendEnvelope(sharerB.myKeyPackage, 'myapp', {'hello': 'bob'});
+
+      final key = remoteData.keys.singleWhere((k) => k.contains('.__ssenv.'));
+      expect(
+          key,
+          matches(RegExp(
+              '^[0-9a-f-]{36}\\.${sharerB.kpid}\\.__ssenv\\.myapp@alice\$')));
+    });
+
     test('writes the envelope remote-first, so the wake-up cannot outrun it',
         () async {
       await sharerA

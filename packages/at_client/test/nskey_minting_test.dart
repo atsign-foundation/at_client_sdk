@@ -1,4 +1,6 @@
 
+import 'dart:convert';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -35,12 +37,13 @@ void main() {
   /// A client whose remote verbs succeed, recording what was sent. [lockTaken]
   /// makes the lock's immutable create fail, which is how the atServer reports
   /// that another enrollment already holds it.
-  ({MockAtClient client, List<AtKey> verbs}) client(
-      {bool lockAlreadyHeld = false}) {
+  ({MockAtClient client, List<AtKey> verbs, Map<String, String?> values})
+      client({bool lockAlreadyHeld = false}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookupImpl();
     final verbs = <AtKey>[];
+    final values = <String, String?>{};
 
     when(() => atClient.atChops).thenReturn(AtChopsImpl(
         AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
@@ -61,6 +64,7 @@ void main() {
       final builder = inv.positionalArguments[0];
       if (builder is UpdateVerbBuilder) {
         verbs.add(builder.atKey);
+        values[builder.atKey.key] = builder.value;
         if (builder.atKey.key == '_nskeylock' && lockAlreadyHeld) {
           // What the atServer says to the loser of the race.
           throw AtLookUpException(
@@ -69,7 +73,7 @@ void main() {
       }
       return 'data:1';
     });
-    return (client: atClient, verbs: verbs);
+    return (client: atClient, verbs: verbs, values: values);
   }
 
   Future<NskeyPrivateFiling> filing() async {
@@ -94,6 +98,34 @@ void main() {
     final published =
         c.verbs.where((k) => k.key.startsWith('__nskey') == true);
     expect(published, hasLength(1));
+  });
+
+  test('the published advertisement emits its exact wire shape — raw literals',
+      () async {
+    // Emitter pin (frozen forever for the PAYLOAD; the WRAPPER around it is
+    // the signed envelope the JWS migration will replace). Raw strings
+    // deliberately: the sibling tests assert through the constants that
+    // define these values, which follow a changed value silently. Absent-'v'
+    // and absent-'alg'/'suites' reads are tolerated back-compat, so removing
+    // a field here changes meaning rather than failing — only this pin says.
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    final advertisement = await ring.mintAndPublish(namespace);
+
+    final envelope = jsonDecode(c.values['__nskey']!) as Map<String, dynamic>;
+    expect(envelope.keys.toList(),
+        ['v', 'payload', 'signature', 'hashingAlgo', 'signingAlgo',
+            'enrollmentId'],
+        reason: 'the wrapper — jws-will-move, pinned as shape documentation');
+    final payload = envelope['payload'] as Map<String, dynamic>;
+    expect(payload.keys.toList(),
+        ['v', 'nskeyKid', 'publicKey', 'alg', 'suites'],
+        reason: 'the payload — frozen forever');
+    expect(payload['v'], 1);
+    expect(payload['nskeyKid'], advertisement.nskeyKid);
+    expect(payload['alg'], 'x-wing');
+    expect(payload['suites'], ['x-wing-rfc9180-v1', 'x-wing-hpke-v1']);
   });
 
   test('a mint that cannot store its private publishes nothing', () async {

@@ -130,6 +130,33 @@ void main() {
     expect(jsonDecode(record.value!)['keys'], hasLength(1));
   });
 
+  test('the published record emits its exact wire shape — raw literals',
+      () async {
+    // Emitter pin (frozen forever): the record is immutable create-once and
+    // the root never rotates, so this byte shape is permanent on every atSign
+    // that holds one. Raw strings deliberately — the sibling tests assert
+    // through PqSigningRoot's own constants, which follow a changed value.
+    final c = client();
+
+    await PqSigningRoot(c.client, keysIo: await keysIo())
+        .mintIfAbsent(isFullyPrivileged: true);
+
+    final record = c.published.single;
+    expect(record.atKey.toString(), 'public:pq_signing_root@alice');
+    final body = jsonDecode(record.value!) as Map<String, dynamic>;
+    expect(body.keys.toList(), ['v', 'keys', 'successor']);
+    expect(body['v'], 1);
+    expect(body['successor'], isNull);
+    final entry = (body['keys'] as List).single as Map<String, dynamic>;
+    expect(entry.keys.toList(), ['alg', 'pub']);
+    expect(entry['alg'], 'ml-dsa-65',
+        reason: 'hyphenated — the advertised-key vocabulary, deliberately NOT '
+            'the "mldsa65" the root link and pkam wire use; both spellings '
+            'are frozen on already-published records');
+    expect(base64Decode(entry['pub'] as String), hasLength(1952),
+        reason: 'a raw ML-DSA-65 public key, not PEM');
+  });
+
   test('a restricted enrollment mints nothing', () async {
     final c = client();
     final io = await keysIo();
