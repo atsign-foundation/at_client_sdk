@@ -433,6 +433,10 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _init({AtLookUp? atLookUp}) async {
+    // Always an explicit step, never a side effect of building AtChops: a
+    // client whose AtChops was injected never builds one, and it must not
+    // sign the preference's rsa2048 default under an ML-DSA enrollment.
+    await _resolveSigningAlgoFromKeyMaterial();
     if (_preference!.isLocalStoreRequired) {
       if (_localSecondaryKeyStore == null) {
         _storageManager = StorageManager(preference);
@@ -1524,6 +1528,27 @@ class AtClientImpl implements AtClient {
     return result ??= '';
   }
 
+  /// Resolves this client's PKAM signing algorithm from the enrollment's key
+  /// material — the authoritative source; you cannot sign ML-DSA with an RSA
+  /// key. A null resolution (a legacy flat-fields enrollment, or no keyfile
+  /// source at all) leaves the preference's value as the fallback.
+  Future<void> _resolveSigningAlgoFromKeyMaterial() async {
+    final id = enrollmentId;
+    if (_atKeysIo == null || id == null) return;
+    try {
+      final keys = await _atKeysIo!.read(_atSign);
+      _resolvedSigningAlgoType = keys.signingAlgorithmForEnrollment(id);
+    } on Exception catch (e) {
+      // Unresolved is survivable — connections fall back to the preference's
+      // algorithm — but it must not be silent: under a typed enrollment that
+      // fallback PKAMs with the wrong routine on every reconnect.
+      _logger.warning(
+          'Could not resolve the signing algorithm for enrollment $id from '
+          'key material: $e. Connections will authenticate with the '
+          'preference value (${_preference?.signingAlgoType}).');
+    }
+  }
+
   Future<AtChops> _createAtChops(String atSign) async {
     // When the client was handed an AtKeysIo *source* (and no live
     // AtChops/AtLookUp was injected by auth), derive our own PKAM+encryption
@@ -1536,13 +1561,11 @@ class AtClientImpl implements AtClient {
       // its own signing keypair and algorithm; the flat fields keep carrying
       // the original enrollment's RSA credentials, so reading them here
       // would sign PKAM with the wrong key under this client's enrollment
-      // id. Mirrors AtAuthImpl.authenticate's resolution.
+      // id. _resolveSigningAlgoFromKeyMaterial has already run, so its
+      // answer is the decision. Mirrors AtAuthImpl.authenticate's resolution.
       final id = enrollmentId;
-      final typedAlgo =
-          id == null ? null : keys.signingAlgorithmForEnrollment(id);
-      if (typedAlgo != null) {
-        _resolvedSigningAlgoType = typedAlgo;
-        return keys.toAtChopsForEnrollment(id!);
+      if (id != null && _resolvedSigningAlgoType != null) {
+        return keys.toAtChopsForEnrollment(id);
       }
       return keys.toAtChops();
     }
