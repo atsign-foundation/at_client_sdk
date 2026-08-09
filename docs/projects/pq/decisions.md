@@ -5269,3 +5269,17 @@ now requires a current atSign (`getCurrentAtSign()!`) where it previously
 interpolated a null into the URI text — unreachable for any constructed
 client, and failing loudly beats publishing a record addressed to the text
 "null".
+
+### 57.5 The `__ck` builder and parser meet in the registry
+
+The conveyance name was the one split-brain pair in the vocabulary: the
+builder (`SymmetricAesGcmProvider.conveyanceKeyFor`) spelled `'$ckKid.__ck'`
+in one file while the eviction listener parsed on an independent
+`'.__ck.'` literal in another, with nothing binding the two bytes together.
+Both now live in `nskey_records.dart` as `ckConveyanceKey` /
+`parseCkConveyanceKey`, and the parse marker is *derived from* the record-name
+constant the builder uses, so they cannot disagree by a byte.
+`conveyanceKeyFor` and `ContentKeyEviction.parse` stay as the public/test
+symbols and delegate. Pure motion — the known eviction-scope defect between
+the pair is deliberately preserved here and fixed in the next entry, so the
+behaviour change is its own reviewable diff.

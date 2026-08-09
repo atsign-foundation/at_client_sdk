@@ -105,6 +105,61 @@ AtKey pqSigningRootKey(String atSign) => AtKey()
     ..isPublic = true
     ..immutable = true);
 
+/// The record-name segment of a CK conveyance, between the `ckKid` and the
+/// namespace the content key lives in.
+const String ckConveyanceRecordName = '__ck';
+
+/// The `.__ck.` boundary a conveyance key string is parsed on. Derived from
+/// [ckConveyanceRecordName] so the builder and the parser cannot disagree by
+/// a byte.
+const String ckConveyanceMarker = '.$ckConveyanceRecordName.';
+
+/// The at-key the CK for [value] was conveyed under.
+///
+/// A conveyance mirrors the value's own addressing —
+/// `<ckKid>.__ck.<ckNs>@<owner>` for self data,
+/// `@<recipient>:<ckKid>.__ck.<ckNs>@<sender>` for a share. Deriving it from
+/// the value rather than from the nskey owner alone is what keeps the inbound
+/// case addressable, since there sender and recipient are different atSigns.
+///
+/// [ckNs] is the namespace the nskey resolved to, **not** the value's own. One
+/// conveyance therefore serves every namespace beneath it — which is what
+/// makes an AtCollection sub-collection viable, since its namespace carries a
+/// per-item id and would otherwise need a conveyance record per item.
+AtKey ckConveyanceKey(AtKey value, String ckKid, String ckNs) => AtKey()
+  ..key = '$ckKid.$ckConveyanceRecordName'
+  ..namespace = ckNs
+  ..sharedBy = value.sharedBy
+  ..sharedWith = value.sharedWith
+  ..metadata = Metadata();
+
+/// Splits a conveyance key string into the CK it carries and the namespace
+/// that CK lives in, or null if it is not a conveyance record.
+///
+/// Parsed by hand rather than through `AtKey.fromString`, which cuts a key
+/// at its **last** dot: `abc.__ck.app_1.my_apps@alice` comes back with
+/// namespace `my_apps`, and evicting under that would miss the entry and
+/// leave the CK live. The `.__ck.` marker is the real boundary and a
+/// multi-segment namespace survives it.
+({String ckKid, String ckNs})? parseCkConveyanceKey(String key) {
+  // `@recipient:` on an inbound conveyance, and `@owner` on every one. What
+  // is left is `<ckKid>.__ck.<ckNs>`.
+  var body = key.trim();
+  if (body.startsWith('cached:')) body = body.substring('cached:'.length);
+  final colon = body.indexOf(':');
+  if (colon >= 0) body = body.substring(colon + 1);
+  final at = body.lastIndexOf('@');
+  if (at <= 0) return null;
+  body = body.substring(0, at);
+
+  final marker = body.indexOf(ckConveyanceMarker);
+  if (marker <= 0) return null;
+  final ckKid = body.substring(0, marker);
+  final ckNs = body.substring(marker + ckConveyanceMarker.length);
+  if (ckKid.isEmpty || ckNs.isEmpty) return null;
+  return (ckKid: ckKid, ckNs: ckNs);
+}
+
 /// The reserved substrate `Secret`-name prefix an nskey private travels
 /// under: `__nskey.<nskeyKid>`, in the namespace the key belongs to.
 const String nskeySecretNamePrefix = '__nskey.';

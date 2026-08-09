@@ -1,4 +1,6 @@
 import 'package:at_client/src/crypto/nskey/content_key.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show parseCkConveyanceKey;
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show CommitOp;
@@ -37,10 +39,6 @@ class ContentKeyEviction extends SyncProgressListener {
 
   ContentKeyEviction(this.cache, this.atSign);
 
-  /// The marker separating a conveyance's `ckKid` from the namespace its
-  /// content key lives in.
-  static const String _marker = '.__ck.';
-
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
     for (final keyInfo in syncProgress.keyInfoList ?? const <KeyInfo>[]) {
@@ -58,30 +56,9 @@ class ContentKeyEviction extends SyncProgressListener {
   }
 
   /// Splits a conveyance key string into the CK it carries and the namespace
-  /// that CK lives in, or null if it is not a conveyance record.
-  ///
-  /// Parsed by hand rather than through `AtKey.fromString`, which cuts a key
-  /// at its **last** dot: `abc.__ck.app_1.my_apps@alice` comes back with
-  /// namespace `my_apps`, and evicting under that would miss the entry and
-  /// leave the CK live. The `.__ck.` marker is the real boundary and a
-  /// multi-segment namespace survives it.
+  /// that CK lives in — see [parseCkConveyanceKey], which owns the format
+  /// beside its builder.
   @visibleForTesting
-  static ({String ckKid, String ckNs})? parse(String key) {
-    // `@recipient:` on an inbound conveyance, and `@owner` on every one. What
-    // is left is `<ckKid>.__ck.<ckNs>`.
-    var body = key.trim();
-    if (body.startsWith('cached:')) body = body.substring('cached:'.length);
-    final colon = body.indexOf(':');
-    if (colon >= 0) body = body.substring(colon + 1);
-    final at = body.lastIndexOf('@');
-    if (at <= 0) return null;
-    body = body.substring(0, at);
-
-    final marker = body.indexOf(_marker);
-    if (marker <= 0) return null;
-    final ckKid = body.substring(0, marker);
-    final ckNs = body.substring(marker + _marker.length);
-    if (ckKid.isEmpty || ckNs.isEmpty) return null;
-    return (ckKid: ckKid, ckNs: ckNs);
-  }
+  static ({String ckKid, String ckNs})? parse(String key) =>
+      parseCkConveyanceKey(key);
 }

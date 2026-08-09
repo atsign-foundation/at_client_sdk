@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show ckConveyanceKey;
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
@@ -257,25 +259,10 @@ class SymmetricAesGcmProvider
     return cache.get(owner, namespace, ckKid);
   }
 
-  /// The at-key the CK for [value] was conveyed under.
-  ///
-  /// A conveyance mirrors the value's own addressing —
-  /// `<ckKid>.__ck.<ckNs>@<owner>` for self data,
-  /// `@<recipient>:<ckKid>.__ck.<ckNs>@<sender>` for a share. Deriving it from
-  /// the value rather than from the nskey owner alone is what keeps the inbound
-  /// case addressable, since there sender and recipient are different atSigns.
-  ///
-  /// [ckNs] is the namespace the nskey resolved to, **not** the value's own. One
-  /// conveyance therefore serves every namespace beneath it — which is what
-  /// makes an AtCollection sub-collection viable, since its namespace carries a
-  /// per-item id and would otherwise need a conveyance record per item.
+  /// The at-key the CK for [value] was conveyed under — see [ckConveyanceKey],
+  /// which owns the format.
   static AtKey conveyanceKeyFor(AtKey value, String ckKid, String ckNs) =>
-      AtKey()
-        ..key = '$ckKid.__ck'
-        ..namespace = ckNs
-        ..sharedBy = value.sharedBy
-        ..sharedWith = value.sharedWith
-        ..metadata = Metadata();
+      ckConveyanceKey(value, ckKid, ckNs);
 
   /// The CK cache's scope: whose nskey the CK was conveyed under. On an inbound
   /// value this is the recipient, matching how the conveyance was cached.
