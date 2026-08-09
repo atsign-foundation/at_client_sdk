@@ -5541,3 +5541,83 @@ callable with the parameter `@Deprecated` and delegates to the hook;
 still reach the derandomised path — the `0x0042` published-ciphertext row
 calls the hook by name, and X-Wing's internal derand route branches to it
 explicitly under its own `@visibleForTesting` entry point.
+
+## 60. JWS stage one lands: readers always-on, producer behind the version flag (2026-08-09)
+
+Backlog 14.3, ruled in
+[48.8](#488-what-this-entry-does-not-rule) and staged in
+[56.5](#565-jws-ships-both-stages-in-3x-the-producer-is-a-flag-not-a-4x-fork):
+the signed envelope gains its RFC 7515 shape. This section records the
+implementation rulings as the commits land.
+
+The re-grep of the 2026-08-06 migration plan's site table (the plan's own
+instruction — audits go stale) found all 8 sites alive at shifted lines, and
+three corrections worth recording:
+
+- **The root link is not a signed envelope.** `PqSigningChain.anchorSelf`
+  builds its own `{v, alg, payload, signature}` wrapper signed by the *root*
+  key, not by `signEnvelope` with APKAM keys; `_checkRootLink` verifies it
+  directly. The plan's table listed it as consumer #5, but it is a separate
+  format family with its own version field, and this migration does not touch
+  it. If root links ever move to JWS, that is that format's own decision.
+- **The signer claim is a second migration axis the table missed.** Seven
+  production sites read `enrollmentId` off the wrapper (the verify mixin, both
+  secret-sharing consumers and their cross-checks, the enrollment directory,
+  the chain walk and its logging); in the JWS shape that claim lives in the
+  protected header as `kid`, so every one of them needs the shape-agnostic
+  read, not just the payload consumers.
+- One test-side consumer had appeared since the audit
+  (`secret_sharing_delivery_test.dart`), confirming the re-grep rule.
+
+### 60.1 The wrapper's second shape: RFC 7515 Flattened JSON at `v: 2`
+
+`signEnvelope` gains a `version` parameter defaulting to
+`signedEnvelopeVersion` (1); nothing on the wire moves. At
+`jwsEnvelopeVersion` (2) it emits
+`{"v": 2, "payload": ..., "protected": ..., "signature": ...}` — all three
+members unpadded base64url, signing input the ASCII of
+`protected || '.' || payload`, protected header
+`{"alg": ..., "kid": <enrollmentId>, "v": 2}` with `kid` omitted exactly when
+version 1 omits `enrollmentId` (nothing truthful to stamp at
+`enroll:request`). The top-level `v` is the same unauthenticated parsing hint
+version 1 carries; RFC 7515 requires unrecognised members to be ignored, so
+off-the-shelf verifiers are undisturbed. Readers dispatch on it and the
+verifier then requires the *signed* header `v` to agree — the signed claim is
+the one that counts.
+
+The `alg` mapping is deliberately minimal per
+[48.7](#487-two-corrections-to-findings-both-mine)'s finding that every RSA
+envelope in the system is SHA-256: `rsa2048` ↔ `RS256`, `mldsa65` ↔
+`ML-DSA-65` (RFC 9964), and a version-2 signing request under `sha512` is
+refused until a producer exists to need it. Verification keeps the
+record-authoritative rule: the published `_apsk`'s declaration picks the
+routine and the envelope's `alg` must agree, so a lie can never select a
+weaker algorithm — same as version 1's `signingAlgo`, except now the claim is
+also under the signature, which the tests prove by tampering `kid` (signature
+fails: the header is covered) separately from mismatching `alg` (typed
+refusal: the key decides).
+
+`envelopePayloadOf` and `envelopeSignerOf` are the shape-agnostic reads the
+consumer sites migrate to; `envelopeVersionOf` refuses versions this build
+has no code for rather than guessing. A version-2 payload is always the JSON
+encoding of the payload — including a String, which version 1 signs verbatim
+— so decode is unconditional. In passing, the version-1 verifier's
+missing-signature path became a typed refusal instead of a cast error, the
+same fix family as 48.7's `hashingAlgo` repair.
+
+Every decode normalises first: `base64Decode(base64.normalize(s))`. The
+migration plan measured the trap at signature lengths (RSA-2048's 342 chars
+throws, ML-DSA-65's 4412 decodes), and the red proof found it is **broader
+than the plan's table**: the protected header itself is a mod-4-remainder
+length, so dropping the normalisation turned *both* arms red, not just RSA.
+The unit suite pins the RSA arm anyway (`base64Decode(signature)` must throw,
+length pinned 342) so the covering test can never silently stop covering the
+throwing case. Red proofs run and reverted: dispatch disabled → the six
+version-2 verifies red, all version-1 arms green; normalisation dropped →
+eight red across both arms as above.
+
+The version-2 emitted form is pinned FROZEN in `wire_literal_pins_test.dart`
+(wrapper field order, unpadded members, protected-header bytes for both
+algorithms — the header bytes are under the signature, so member order is
+cryptographically bound). The version-1 pins group stays binding: it is
+retired by the 4.0 default flip, not by this migration.
