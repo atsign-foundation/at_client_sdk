@@ -5489,3 +5489,19 @@ diagnostics. `MlKem768PureDartAlgo`'s public shape (3.4.1, including the
 seeded `generateKeyPair`/`encapsulate` overloads) is byte-compatible;
 `MlKem1024PureDartAlgo` keeps its constants. The `instance` singletons remain
 `const`, so at_client's `same()`-identity resolution pins hold unchanged.
+
+### 59.7 `XWingCore` — the construction's pure computation lives once
+
+The pure-Dart and FFI X-Wing backends each carried the combiner, the
+SHAKE-256 seed expansion, the byte layouts and their validations — justified
+at the time as keeping the FFI backend checkable "in its own right". That was
+an argument for independent VECTORS, which the working group's published
+`0x647A` JSON already supplies, not for independently maintained code. The
+shared bytes now live in the package-internal `XWingCore` (free of
+`dart:ffi`, so the pure backend stays out of the ffi import graph); each
+backend keeps its own orchestration — component materialisation, OpenSSL
+handle release, the pure-only derandomised path — and BOTH keep their own
+vector rows, because the published JSON is the oracle that catches a
+shared-core defect where interop tests would pass with both backends wrong in
+the same way. The FFI class doc and the changelog's second-copy rationale
+were rewritten in the same commit.

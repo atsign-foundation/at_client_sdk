@@ -5,23 +5,22 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_ffi.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_ffi_algo.dart';
-import 'package:pointycastle/digests/sha3.dart';
-import 'package:pointycastle/digests/shake.dart';
+import 'package:at_chops/src/algorithm/encryption/x_wing_core.dart';
 
 /// X-Wing hybrid post-quantum/traditional KEM (IANA HPKE KEM id `0x647A`)
 /// backed by OpenSSL 3 via Dart FFI.
 ///
-/// See [XWingPureDartAlgo] for which document to cite and why. This backend
-/// carries its own copy of the combiner and the SHAKE-256 seed expansion, so
-/// it is checked against the published `0x647A` vectors in its own right —
-/// the pure-Dart/FFI interop tests would pass with both backends wrong.
+/// See [XWingPureDartAlgo] for which document to cite and why.
 ///
 /// X-Wing has no native OpenSSL primitive, so this composes [MlKem768FfiAlgo]
-/// (ML-KEM-768) and [X25519FfiAlgo] (X25519). The seed expansion (SHAKE-256)
-/// and the shared-secret combiner (SHA3-256) are pure-Dart (pointycastle) and
-/// byte-identical to `XWingPureDartAlgo`, so public keys, ciphertexts and
-/// shared secrets are fully interoperable between the FFI and pure-Dart
-/// backends.
+/// (ML-KEM-768) and [X25519FfiAlgo] (X25519). The seed expansion (SHAKE-256),
+/// the shared-secret combiner (SHA3-256) and the byte layouts are the
+/// package-internal `XWingCore`, shared with `XWingPureDartAlgo`, so public
+/// keys, ciphertexts and shared secrets are fully interoperable between the
+/// FFI and pure-Dart backends. This backend is still checked against the
+/// published `0x647A` vectors in its own right — the working group's JSON is
+/// the independent oracle, and interop tests alone would pass with both
+/// backends wrong in the same way.
 ///
 /// Unlike `XWingPureDartAlgo`, there is no derandomized encapsulation: OpenSSL's
 /// ML-KEM encapsulation does not accept external randomness, so draft test
@@ -45,17 +44,10 @@ final class XWingFfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   @override
   String get kemSeedDescription => 'an X-Wing seed';
 
-  static const int seedLength = 32;
-  static const int publicKeyLength = 1216;
-  static const int ciphertextLength = 1120;
-  static const int sharedSecretLength = 32;
-
-  static const int _mlKemPublicKeyLength = 1184;
-  static const int _mlKemCiphertextLength = 1088;
-
-  /// `XWingLabel`: the ASCII bytes of `\.//^\`.
-  static final Uint8List _label =
-      Uint8List.fromList([0x5c, 0x2e, 0x2f, 0x2f, 0x5e, 0x5c]);
+  static const int seedLength = XWingCore.seedLength;
+  static const int publicKeyLength = XWingCore.publicKeyLength;
+  static const int ciphertextLength = XWingCore.ciphertextLength;
+  static const int sharedSecretLength = XWingCore.sharedSecretLength;
 
   /// Generate an X-Wing key pair.
   ///
@@ -69,9 +61,8 @@ final class XWingFfiAlgo with KemSeedMixin implements AtKemAlgorithm {
     seed ??= newSeed();
     final _Expanded e = await _expand(seed);
     try {
-      final Uint8List publicKey = Uint8List(publicKeyLength)
-        ..setRange(0, _mlKemPublicKeyLength, e.mlKemKeyPair.publicKey)
-        ..setRange(_mlKemPublicKeyLength, publicKeyLength, e.x25519Public);
+      final Uint8List publicKey = XWingCore.concatPublicKey(
+          e.mlKemKeyPair.publicKey, e.x25519Public);
       return (publicKey: publicKey, secretKey: Uint8List.fromList(seed));
     } finally {
       _mlKem.releaseKeyPair(e.mlKemKeyPair);
@@ -88,90 +79,53 @@ final class XWingFfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
       Uint8List publicKey) async {
-    if (publicKey.length != publicKeyLength) {
-      throw ArgumentError.value(publicKey.length, 'publicKey',
-          'X-Wing public key must be $publicKeyLength bytes');
-    }
-    final Uint8List mlKemPublic = publicKey.sublist(0, _mlKemPublicKeyLength);
-    final Uint8List x25519Public = publicKey.sublist(_mlKemPublicKeyLength);
+    final halves = XWingCore.splitPublicKey(publicKey);
 
     final (ciphertext: ctM, sharedSecret: ssM) =
-        await _mlKem.encapsulate(mlKemPublic);
+        await _mlKem.encapsulate(halves.mlKem);
 
     final ephemeral = await _x25519.generateKeyPair();
     final Uint8List ctX = ephemeral.publicKey;
-    final Uint8List ssX = await _x25519.dh(ephemeral.privateKey, x25519Public);
+    final Uint8List ssX = await _x25519.dh(ephemeral.privateKey, halves.x25519);
 
-    final Uint8List ciphertext = Uint8List(ciphertextLength)
-      ..setRange(0, _mlKemCiphertextLength, ctM)
-      ..setRange(_mlKemCiphertextLength, ciphertextLength, ctX);
     return (
-      ciphertext: ciphertext,
-      sharedSecret: _combine(ssM, ssX, ctX, x25519Public),
+      ciphertext: XWingCore.concatCiphertext(ctM, ctX),
+      sharedSecret: XWingCore.combine(ssM, ssX, ctX, halves.x25519),
     );
   }
 
   @override
   Future<Uint8List> decapsulate(
       Uint8List secretKey, Uint8List ciphertext) async {
-    if (secretKey.length != seedLength) {
-      throw ArgumentError.value(secretKey.length, 'secretKey',
-          'X-Wing secret key must be the $seedLength-byte seed');
-    }
-    if (ciphertext.length != ciphertextLength) {
-      throw ArgumentError.value(ciphertext.length, 'ciphertext',
-          'X-Wing ciphertext must be $ciphertextLength bytes');
-    }
-    final Uint8List ctM = ciphertext.sublist(0, _mlKemCiphertextLength);
-    final Uint8List ctX = ciphertext.sublist(_mlKemCiphertextLength);
+    XWingCore.checkDecapsulationInputs(secretKey, ciphertext);
+    final ct = XWingCore.splitCiphertext(ciphertext);
 
     final _Expanded e = await _expand(secretKey);
     try {
       final Uint8List ssM =
-          await _mlKem.decapsulate(e.mlKemKeyPair.secretKey, ctM);
-      final Uint8List ssX = await _x25519.dh(e.x25519Secret, ctX);
-      return _combine(ssM, ssX, ctX, e.x25519Public);
+          await _mlKem.decapsulate(e.mlKemKeyPair.secretKey, ct.mlKem);
+      final Uint8List ssX = await _x25519.dh(e.x25519Secret, ct.x25519);
+      return XWingCore.combine(ssM, ssX, ct.x25519, e.x25519Public);
     } finally {
       _mlKem.releaseKeyPair(e.mlKemKeyPair);
     }
   }
 
-  /// `expandDecapsulationKey(sk)`: SHAKE-256(sk, 96 bytes); bytes [0:64] are
-  /// ML-KEM-768's (d || z), bytes [64:96] the X25519 secret key. The ML-KEM key
-  /// pair is materialised in OpenSSL via [MlKem768FfiAlgo.generateKeyPair]
-  /// — callers must release it (see [generateKeyPair]/[decapsulate]).
+  /// Materialises [XWingCore.expandSeed]'s halves with this backend's
+  /// components. The ML-KEM key pair is materialised in OpenSSL via
+  /// [MlKem768FfiAlgo.generateKeyPair] — callers must release it (see
+  /// [generateKeyPair]/[decapsulate]).
   Future<_Expanded> _expand(Uint8List seed) async {
-    if (seed.length != seedLength) {
-      throw ArgumentError.value(
-          seed.length, 'seed', 'X-Wing seed must be $seedLength bytes');
-    }
-    final SHAKEDigest shake = SHAKEDigest(256);
-    shake.update(seed, 0, seed.length);
-    final Uint8List expanded = Uint8List(96);
-    shake.doOutput(expanded, 0, 96);
-
+    final halves = XWingCore.expandSeed(seed);
     final ({Uint8List publicKey, Uint8List secretKey}) mlKemKeyPair =
-        await _mlKem.generateKeyPair(expanded.sublist(0, 64));
-    final Uint8List skX = expanded.sublist(64, 96);
+        await _mlKem.generateKeyPair(halves.mlKemSeed);
+    final Uint8List skX = halves.x25519Secret;
     final Uint8List pkX = _x25519.publicKeyFromPrivate(skX);
     return _Expanded(
       mlKemKeyPair: mlKemKeyPair,
       x25519Secret: skX,
       x25519Public: pkX,
     );
-  }
-
-  /// `SHA3-256(ss_M || ss_X || ct_X || pk_X || XWingLabel)`.
-  Uint8List _combine(
-      Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
-    final Uint8List input =
-        Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
-          ..setRange(0, 32, ssM)
-          ..setRange(32, 64, ssX)
-          ..setRange(64, 96, ctX)
-          ..setRange(96, 128, pkX)
-          ..setRange(128, 134, _label);
-    return SHA3Digest(256).process(input);
   }
 }
 

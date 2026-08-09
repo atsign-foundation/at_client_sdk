@@ -142,9 +142,12 @@
   `draft-connolly-cfrg-xwing-kem-10`'s Appendix C. Both published rows are
   checked across all three operations — key generation from the seed,
   derandomised encapsulation, and decapsulation — in both the pure-Dart and
-  OpenSSL FFI backends. The FFI backend gets its own rows because it carries a
-  second copy of the combiner and the SHAKE-256 seed expansion, and the
-  existing interop tests would pass with both backends wrong in the same way.
+  OpenSSL FFI backends. The FFI backend keeps its own rows because interop
+  tests alone would pass with both backends wrong in the same way; the
+  published JSON is the independent oracle. (The combiner, seed expansion and
+  byte layouts the two backends once duplicated now live in one internal
+  `XWingCore` — independence comes from the vectors, not from maintaining the
+  same bytes twice.)
   This matters because the draft is an Independent Submission CFRG never
   adopted, it expires 2026-09-03, and its own Appendix C is marked TODO by its
   authors, so it was the weakest citation available for the construction.
