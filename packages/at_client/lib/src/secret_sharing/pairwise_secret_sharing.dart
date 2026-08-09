@@ -19,6 +19,7 @@ import 'package:at_client/at_client.dart'
         SyncProgress,
         SyncProgressListener;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
 import 'package:at_client/src/secret_sharing/secret_envelope.dart';
@@ -90,8 +91,9 @@ typedef SecretRequestPolicy = FutureOr<bool> Function(
 /// envelopes expire via [envelopeTtl].
 @experimental
 mixin PairwiseSecretSharing on KeyPackageRegistration {
-  /// Marker segment in envelope key names.
-  static const String envelopeKeyMarker = '__ssenv';
+  /// Marker segment in envelope key names — see [EnvelopeAddressing], which
+  /// owns the address format.
+  static const String envelopeKeyMarker = EnvelopeAddressing.marker;
 
   /// Domain-separation context bound into every sealed envelope's key
   /// schedule (the `info` argument to at_chops `pqSeal`/`pqOpen`). Ties a
@@ -288,11 +290,13 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     // verify before decrypting).
     final String signedJson = await wrapAndSignAndJsonEncode(envelope.toJson());
 
-    final atKey = AtKey()
-      ..key = '${Uuid().v4()}.${recipientKey.kid}.$envelopeKeyMarker'
-      ..namespace = appNamespace
-      ..sharedBy = atClient.getCurrentAtSign()
-      ..metadata.ttl = envelopeTtl.inMilliseconds;
+    final atKey = EnvelopeAddressing.envelopeKey(
+      msgId: Uuid().v4(),
+      recipientKpid: recipientKey.kid,
+      appNamespace: appNamespace,
+      sharedBy: atClient.getCurrentAtSign(),
+      ttl: envelopeTtl,
+    );
     // shouldEncrypt=false: the value is already end-to-end encrypted to the
     // recipient; self-key encryption would only obscure that the payload is
     // our own ciphertext. The value is raw JSON (never whole-value base64) so
@@ -362,7 +366,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       return;
     }
     // Throws StateError if not registered:
-    final String marker = '.$kpid.$envelopeKeyMarker.';
+    final String marker = EnvelopeAddressing.fragmentFor(kpid);
 
     _syncListener = _EnvelopeSyncListener(marker, () {
       unawaited(sweepOnce());
@@ -373,7 +377,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     // it triggers reads remote.
     _wakeUpSubscription = atClient.notificationService
         .subscribe(
-            regex: '\\.$kpid\\.$envelopeKeyMarker\\.', shouldDecrypt: false)
+            regex: EnvelopeAddressing.regexFor(kpid), shouldDecrypt: false)
         .listen((_) => unawaited(sweepOnce(fromRemote: true)));
     // Envelopes only reach the local store via sync, so a client that does
     // not sync must sweep the atServer or its periodic sweep can never find
@@ -409,7 +413,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// no synced local copy — can still receive envelopes.
   Future<int> sweepOnce({bool fromRemote = false}) async {
     final List<AtKey> envelopeKeys = await atClient.getAtKeys(
-        regex: '.*\\.$kpid\\.$envelopeKeyMarker\\..*',
+        regex: EnvelopeAddressing.sweepRegexFor(kpid),
         useRemoteAtServer: fromRemote);
     int consumed = 0;
     for (final envelopeKey in envelopeKeys) {
@@ -520,24 +524,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     return ReceivedEnvelope(
       fromKpid: envelope.fromKpid,
       fromEnrollmentId: envelope.fromEnrollmentId,
-      appNamespace: _appNamespaceOf(envelopeKey),
+      appNamespace: EnvelopeAddressing.appNamespaceOf(envelopeKey),
       payload: jsonDecode(utf8.decode(plaintext)) as Map<String, dynamic>,
     );
-  }
-
-  /// The full application namespace of an envelope key: everything between
-  /// the `.__ssenv.` marker and the atSign. `AtKey.namespace` only carries
-  /// the last dot segment, which would truncate dotted app namespaces
-  /// (`examples.demos` would arrive as `demos`).
-  String _appNamespaceOf(AtKey envelopeKey) {
-    final String keyString = envelopeKey.toString();
-    final int markerIndex = keyString.indexOf('.$envelopeKeyMarker.');
-    final int atIndex = keyString.lastIndexOf('@');
-    if (markerIndex < 0 || atIndex <= markerIndex) {
-      return envelopeKey.namespace ?? '';
-    }
-    return keyString.substring(
-        markerIndex + envelopeKeyMarker.length + 2, atIndex);
   }
 
   /// Payload `kind` marker for envelopes that carry a [Secret].
@@ -726,7 +715,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   Future<Set<String>> _envelopeKeysFor(String kpid, String appNamespace) async {
     try {
       final keys = await atClient.getAtKeys(
-          regex: '.*\\.$kpid\\.$envelopeKeyMarker\\.$appNamespace.*',
+          regex: EnvelopeAddressing.namespaceSweepRegexFor(kpid, appNamespace),
           useRemoteAtServer: true);
       return keys.map((k) => k.toString()).toSet();
     } catch (e) {

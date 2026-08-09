@@ -8,6 +8,8 @@ import 'package:at_commons/at_builders.dart' show ScanVerbBuilder;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_envelope.dart'
@@ -131,7 +133,7 @@ Future<(String, Uint8List, String)> _keyPackageHalves(AtKeys keys) async {
 /// this side knows in advance is its own kpid.
 Future<List<String>> _envelopeKeys(AtLookUp atLookUp, String kpid) async {
   final builder = ScanVerbBuilder()
-    ..regex = '\\.$kpid\\.${PairwiseSecretSharing.envelopeKeyMarker}\\.';
+    ..regex = EnvelopeAddressing.regexFor(kpid);
   try {
     final String? response =
         await atLookUp.executeCommand(builder.buildCommand(), auth: true);

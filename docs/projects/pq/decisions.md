@@ -5236,3 +5236,19 @@ beside `CryptoConfig`, its consumer. `nskeyProviderIdFor` also stays put: it
 is keyAlgo→provider *routing*, not a name, and belongs with the provider it
 routes to. Both ids and the barrel surface are unchanged; the ids are now
 exported from the registry file instead of the provider files.
+
+### 57.3 EnvelopeAddressing owns the `__ssenv` address
+
+The substrate's envelope address —
+`<msgId>.<recipientKpid>.__ssenv.<appNamespace>@<atSign>` — was hand-built and
+hand-parsed at seven sites (the key builder, a substring fragment, three
+subtly different regexes, the namespace parse with its magic `+2`, and a scan
+regex in the enrollment-symmetric-key collector). All of it now lives on
+`EnvelopeAddressing` (`src/secret_sharing/envelope_addressing.dart`), a
+static namespace over the one format. `PairwiseSecretSharing.envelopeKeyMarker`
+stays public and pinned, now reading the canonical constant. The type is
+deliberately not exported: apps address envelopes through `sendEnvelope`, not
+by spelling keys. Emitted bytes unchanged; the pairwise suite passing
+untouched is the fidelity check. This extraction is the addressing slice of
+the god-mixin split the audit proposed — the transport/responder/fan-out
+slices stay put for the later structural phase.
