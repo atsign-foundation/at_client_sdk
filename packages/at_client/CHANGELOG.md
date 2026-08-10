@@ -104,9 +104,11 @@
   Flattened JSON Serialization (`v: 2`), with `alg` (`RS256` / RFC 9964's
   `ML-DSA-65`) and the signer's enrollment id (`kid`) inside the signed
   protected header rather than sitting unauthenticated beside the signature.
-  Readers accept both shapes always; producers emit version 1 unchanged
-  unless asked (`signEnvelope`'s new `version` parameter, or the
-  `EnvelopeSigning.envelopeVersion` rollout flag), because the
+  Readers accept both shapes always; producers emit version 1 unless asked
+  (`signEnvelope`'s `version` parameter, the `EnvelopeSigning.envelopeVersion`
+  rollout flag, or — since `ReleasePosture` landed in this same release — the
+  client's posture, which is what reaches the signers the SDK builds
+  internally), because the
   enrollment record's `metadata.keyPackage` is write-once — flipping the
   default is a deployment decision for 4.0, after every reader in the fleet
   understands version 2. `envelopePayloadOf` and `envelopeSignerOf` are the

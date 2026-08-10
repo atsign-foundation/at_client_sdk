@@ -128,7 +128,7 @@ separately.
 ## The shape of the problem this exposes
 
 Sorting by blocker showed why D1 felt slow for so long: B-1 alone gated **11 of
-the 45** rows, and no data-path row could go green until **B-1** (XL) and
+the 45** rows as the catalogue stood then, and no data-path row could go green until **B-1** (XL) and
 **SS-4** (L–XL) landed, so the programme had no demonstrable increment in its
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.

@@ -2,8 +2,9 @@
 
 **Status:** acceptance catalogue (current). Lives in `docs/`.
 **Purpose:** the single ordered, testable burn-down target for the D1
-post-quantum work — the full use-case list **A1.x–A5.x** (PQ-native greenfield)
-and **B0.x–B5.x** (retrofit / mixed), each as **Given / When / Then** with
+post-quantum work — the full use-case list **A1.x–A5.x** (PQ-native greenfield),
+**B0.x–B5.x** (retrofit / mixed) and **C1.x** (the rollout itself, driven by
+flags), each as **Given / When / Then** with
 concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 > **Reconciled with the 2026-08-03 ruling.** `pqpublickey` is gone: the
@@ -29,6 +30,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 - [12. B5 · Retrofit edge cases](#12-b5--retrofit-edge-cases)
 - [13. Cross-cutting acceptance (applies to all flows)](#13-cross-cutting-acceptance-applies-to-all-flows)
 - [14. Test harness & impl/verify mapping](#14-test-harness--implverify-mapping)
+- [15. C1 · The rollout posture (capstone of `decisions.md` 56.4)](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564)
 
 ---
 
@@ -42,6 +44,10 @@ is specified and built **before** Part B (retrofit / mixed,
 sections [7](#7-b0--prerequisite--atserver-upgrade)–[12](#12-b5--retrofit-edge-cases)). [Section 13](#13-cross-cutting-acceptance-applies-to-all-flows)
 states invariants that hold across every flow; [section 14](#14-test-harness--implverify-mapping)
 maps each UC cluster to its test layer and owning project.
+[Section 15](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564) (Part C)
+comes last because it asserts the *mechanism that drives* Parts A and B into
+production — each of the five rollout flag axes in isolation, and the grouped
+`ReleasePosture` — rather than any crypto behaviour of its own.
 
 **Lane discipline — what this doc does NOT do.** This doc states *what must be
 true* and *how to test it*; it does not re-explain *how the mechanism works*.
@@ -1235,8 +1241,11 @@ restates project IDs, and only as a coverage map):
 | A2.4 / A3.5 / A4.5 / A4.6 / A4.7 (KEM selection + construction negotiation)      | **KE-1**                        |
 | B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path per [`decisions.md` 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)); the B3.x/B4.x data-path halves are built (B-1 + the decisions-36 ladder; R-1's surviving scope is the `disallowLegacyEncryption` flag) |
 
+| C1.x (the rollout driven by flags: era, refusal, envelope, key exchange, retrofit, grouped posture) | **Workstream A** (the rollout-posture capstone, [`decisions.md` 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)) — landed; the default-flip these rows will then guard is **R-2** |
+
 Project names follow the `implementation-plan.md` scheme (RF-SRV / RF-2b /
-RF-2c).
+RF-2c); Workstreams A and B are the cross-cutting strands of the "make it
+right" pass rather than numbered projects.
 
 - **Cross-ref:** `implementation-plan.md` (full plan, dependency graph, waves,
   effort, critical path); `design.md` (harness mechanics).

@@ -268,8 +268,13 @@ model's detail lives in [`design.md`](design.md) §1.8, the sequencing in
    both directions; a mixed pair stays legacy *in that direction only*, by the
    app's own choice of fallback.
 4. **Retire legacy, then the v4 default flip** — lazy re-encrypt on touch, then
-   `at_client 4.0` flips the `disallowLegacyEncryption` default to `true`
-   (legacy *reads* and the legacy provider remain). Minting/conveying legacy key
+   `at_client 4.0` flips its default posture from `ReleasePosture.migration()`
+   to `ReleasePosture.postQuantum()`: one edit moving all five rollout axes at
+   once (era config, `disallowLegacyEncryption`, signed-envelope version,
+   enrolment key exchange, retrofit signing algorithm), which is why the flag
+   and the era default can no longer be flipped apart
+   ([`decisions.md` 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)).
+   Legacy *reads* and the legacy provider remain. Minting/conveying legacy key
    material stops only in a later, **ecosystem-gated** release
    ([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 
@@ -359,7 +364,7 @@ rollout → rotation** (D1 GA), with the v4 default flip as the final gated
 cutover. The GA version slot is re-derived at execution against pub.dev — both
 `at_client` 3.13.0 and 3.14.0 published on 2026-07-17, so it is no longer 3.14.x.
 
-**D1 development is complete (acceptance 45/45); a "make it right" quality pass
+**D1 development is complete; a "make it right" quality pass
 follows before GA** — structural refactoring (readability, maintainability,
 explainability) that lands the design goals the spike left implicit. Those goals
 are ruled in [`decisions.md` §56](decisions.md#56-the-make-it-right-quality-pass-and-the-design-goals-it-settled-2026-08-09):

@@ -6,6 +6,10 @@
   its atSign and root domain restored before the handshake runs (the
   checkpoint file deliberately strips the atSign), and at_auth's progress
   events are forwarded to this service's subscribers for the duration.
+  The `at_auth` constraint floor rises to `^3.4.0` in the same change: the
+  delegation depends on that version's legacy-IV fix and on `atLookup` being
+  on the `AtEnrollment` interface, and workspace resolution would otherwise
+  hide a stale floor from a consumer.
 - feat: `onboard` can activate an atSign **post-quantum**. Pass
   `--signingAlgoType mldsa65` (or set `AtOnboardingPreference.signingAlgoType`)
   and the activation mints an ML-DSA-65 APKAM, advertises the first
