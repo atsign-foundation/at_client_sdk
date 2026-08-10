@@ -940,6 +940,36 @@ void main() {
         expect(got, isNot(contains('OTHERAPPEN')));
       });
 
+      test('a handler failure after emission never re-emits the envelope',
+          () async {
+        // The gate is the injection point: it runs inside the request
+        // handler, strictly after the envelope has been emitted on
+        // [receivedEnvelopes] — so a claim released on ITS failure would
+        // hand the same envelope to the next sweep for a second emission.
+        var gateCalls = 0;
+        sharerB.perEnrollmentSecretRequestGate = (enrollmentId) async {
+          gateCalls++;
+          throw StateError('resolver outage');
+        };
+        final emitted = <ReceivedEnvelope>[];
+        final sub = sharerB.receivedEnvelopes.listen(emitted.add);
+
+        await sharerA.requestSecretsFromNamespace('myapp', names: [rootName]);
+        await sharerB.sweepOnce();
+        await sharerB.sweepOnce();
+        await pumpEventQueue();
+
+        expect(emitted, hasLength(1),
+            reason: 'sweepOnce\'s own contract: the same payload is never '
+                'emitted twice. A handler failure is not a consume failure — '
+                'the envelope has already been delivered to listeners, and '
+                'retrying it from scratch re-emits it');
+        expect(gateCalls, 1,
+            reason: 'the claim must survive the handler failure — a released '
+                'claim is what turns the next sweep into a repeat');
+        await sub.cancel();
+      });
+
       test('a requester the resolver accepts is served', () async {
         sharerB.perEnrollmentSecretRequestGate =
             (enrollmentId) async => enrollmentId == 'enroll-a';

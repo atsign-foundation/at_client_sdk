@@ -6070,3 +6070,24 @@ the record's metadata rides the write. Test-first pins in
 non-PreparesWrites skip. The duplicated prose lives once, on the
 method's dartdoc; MetadataWireCodec stays deferred as the plan ruled —
 nothing new justified touching every record's metadata.
+
+## 65. Phase 4g: the secret-sharing seam work (2026-08-10)
+
+### 65.1 sweepOnce's catch no longer spans the emission boundary
+
+The sweep's single `catch` covered consume, emit and the two payload
+handlers, and its recovery — release the claim, retry next sweep — was
+correct only for the consume half. A handler failing *after*
+`_receivedController.add` (a thrown privilege gate, a store write)
+released the claim too, so the next sweep re-consumed and re-emitted
+the same envelope: the method's own dartdoc promises "the same payload
+is never emitted twice", and the wide try broke it. The house rule in
+its literal shape — a catch that names one cause (transient consume
+failure) mis-reporting everything else that lands inside it. Now each
+operation has its own guard: a consume failure releases the claim and
+retries in-process (nothing was emitted, a retry repeats nothing); a
+handler failure keeps the claim and the envelope, logged at warning,
+for a fresh process — whose stream has no listeners yet — to retry
+whole. Test-first with the gate as the injection point (it runs inside
+the request handler, strictly after emission): red showed exactly two
+emissions of one envelope, green shows one emission and one gate call.

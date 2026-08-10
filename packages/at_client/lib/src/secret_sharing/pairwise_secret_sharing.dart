@@ -424,27 +424,37 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       if (!_consumedEnvelopeKeys.add(keyString)) {
         continue;
       }
+      final ReceivedEnvelope? received;
       try {
-        final ReceivedEnvelope? received =
-            await _consume(envelopeKey, fromRemote: fromRemote);
-        if (received == null) {
-          // Not (or not yet) processable by this client; leave it for a
-          // sibling/upgraded client or for ttl expiry.
-          _consumedEnvelopeKeys.remove(keyString);
-          continue;
-        }
-        _receivedController.add(received);
-        await _handleSecretPayload(received); // no-op unless kind=='secret'
-        await _handleRequestPayload(received); // no-op unless kind=='request'
-        consumed++;
+        received = await _consume(envelopeKey, fromRemote: fromRemote);
       } catch (e) {
         // Includes transient failures (e.g. fetching the signer's _apsk key)
         // — never delete on failure; release the claim so the next sweep
-        // retries.
+        // retries. Nothing has been emitted yet, so a retry repeats nothing.
         _consumedEnvelopeKeys.remove(keyString);
         logger.warning('Failed to process envelope $envelopeKey: $e');
         continue;
       }
+      if (received == null) {
+        // Not (or not yet) processable by this client; leave it for a
+        // sibling/upgraded client or for ttl expiry.
+        _consumedEnvelopeKeys.remove(keyString);
+        continue;
+      }
+      _receivedController.add(received);
+      try {
+        await _handleSecretPayload(received); // no-op unless kind=='secret'
+        await _handleRequestPayload(received); // no-op unless kind=='request'
+      } catch (e) {
+        // The envelope has been EMITTED: releasing the claim here would hand
+        // it to the next sweep for a second emission. Keep the claim and keep
+        // the envelope (no delete) — a fresh process, whose stream has no
+        // listeners yet, retries the whole thing.
+        logger.warning('Envelope $envelopeKey was received but its payload '
+            'handler failed; it is kept for a retry at the next start: $e');
+        continue;
+      }
+      consumed++;
       try {
         await atClient.delete(envelopeKey,
             deleteRequestOptions: DeleteRequestOptions()
