@@ -6405,3 +6405,66 @@ self-enroll against the real atServer — auto-approve, fresh-RSA
 keyfile material, and RSA PKAM under the new id — beside the existing
 ML-DSA row, which also exercises per-algo idempotence live since both
 rows share one keyfile.
+
+## 70. Workstream A capstone: ReleasePosture, the five flags as one value (2026-08-10)
+
+**Status:** accepted and landed. The convenience posture helper the 56.4
+ruling promised — the five rollout axes, each still an independent flag in
+its natural home, settable as a group. `ReleasePosture` (at_client, main
+barrel) has exactly two constructors and no general one: `migration()` is
+the 3.x column of the 56.4 table, `postQuantum()` the 4.0 column, and a
+deployment wanting a mixture sets the individual flag beside the posture
+rather than minting a hybrid no release ever shipped. It rides
+`AtClientPreference(posture:)` — final at construction, like
+`disallowLegacyEncryption` and for the same reason — and is consulted at
+each axis's home: the era adoption site picks `CryptoConfig.nskey` vs
+`readsNskeyWritesLegacy` (still built per-client from the bootstrap's
+ring, preserving 27.2); the preference derives `disallowLegacyEncryption`
+when the app passed none; `EnvelopeSigning.envelopeVersion` became a
+getter that falls back per-signer-override → posture → v1, which is the
+only mechanism that reaches the signers the SDK constructs out of a
+caller's reach (four sites — assignment never could); `selfRetrofit`'s
+`signingAlgo` went nullable and resolves against the posture (the "policy
+default" 69 promised the posture would flip). Every consult is
+red-proofed by a mutation probe.
+
+**60.3's open item is resolved: the key-package signer now takes the
+version.** `enrollmentKeyPackageBuilder` (and `makeActivationPqNative`
+above it) gained `envelopeVersion`, default v1, threaded from
+`preference.posture` by `selfRetrofit` and `pqNativeOnboard`. Emitting v2
+into the write-once `metadata.keyPackage` under an early-adopter posture
+is safe by the 56.5 sequencing: every 3.x reader already accepts both
+shapes.
+
+**The key-exchange axis stays caller-composed.** Submission goes through
+at_auth, which cannot see a preference (dependency direction), and pq
+mode needs the builder and resolver only at_client can supply — so the
+posture CARRIES `keyExchangeMode` and whoever builds the
+`AtEnrollmentRequest` applies it, with the request's own hard `legacy`
+default untouched (the at_auth major flips that, per its dartdoc).
+`EnrollmentKeyExchangeMode` is re-exported show-narrowed on the at_client
+barrel so the override is nameable without importing at_auth — the same
+discoverability argument as `SecretSharingAlgos`.
+
+**Deliberately NOT axes:** `allowLegacyCryptoFallback` (an app's knowing
+per-app exception, meaningful in both eras — a posture flipping it would
+turn an explicit opt-in into an ambient one), `keyEstablishmentAlgo` (a
+deployment's choice between two live options, not an era — neither
+column of the table could name a "right" value), and `seedNamespaceKeys`
+(its false default guards "experimental", not "3.x"; whether the 4.0
+release flips it is a separate ruling this entry deliberately does not
+make).
+
+**Acceptance Part C** (`acceptance.md` section 15, UC-C1.1–C1.6) is the
+"drive the full rollout by flags" family: each axis in isolation plus the
+grouped posture, all proven-in against the differential tests (the
+retrofit axis live: an argless `selfRetrofit` under the postQuantum
+posture resolves into the ML-DSA idempotence pool, where the migration
+posture resolves RSA). The catalogue guard's `UC-[AB]` regexes widened to
+`UC-[ABC]` in the same commit — both of them, doc-side and test-side.
+
+**Housekeeping note, not a renumber:** the ledger carries TWO sections
+numbered 68 (`enroll:updateMetadata`, and Workstream B(ii) approvals —
+a parallel-edit interleave). Renumbering would break inbound anchors, so
+this entry records the collision and leaves both standing; cite them by
+title.

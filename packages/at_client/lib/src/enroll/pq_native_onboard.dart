@@ -9,6 +9,8 @@ import 'package:at_client/src/secret_sharing/enrollment_key_package.dart'
     show enrollmentKeyPackageBuilder;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show signedEnvelopeVersion;
 import 'package:at_commons/at_commons.dart'
     show AtClientException, AtRootDomain;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -31,7 +33,10 @@ final _logger = AtSignLogger('pqNativeOnboard');
 ///
 /// [keyEstablishmentAlgo] is read from the caller's preference rather than
 /// resolved here, because the builder runs before any client exists. It is
-/// frozen at this call for the life of the enrollment.
+/// frozen at this call for the life of the enrollment. [envelopeVersion] —
+/// the wrapper shape of the key package's signed envelope, frozen the same
+/// way — is explicit for the same reason; pass
+/// `preference.posture.envelopeVersion` to follow the rollout posture.
 ///
 /// Deliberately says nothing about [AtOnboardingRequest.mintLegacyMaterial]:
 /// whether an atSign keeps legacy material is a separate decision from whether
@@ -42,12 +47,14 @@ void makeActivationPqNative(
   AtOnboardingRequest request, {
   required String atSign,
   String keyEstablishmentAlgo = SecretSharingAlgos.xWing,
+  int envelopeVersion = signedEnvelopeVersion,
 }) {
   request
     ..signingAlgoType = SigningAlgoType.mldsa65
     ..metadataBuilder = enrollmentKeyPackageBuilder(atSign,
         signingAlgo: SigningAlgoType.mldsa65,
-        keyEstablishmentAlgo: keyEstablishmentAlgo);
+        keyEstablishmentAlgo: keyEstablishmentAlgo,
+        envelopeVersion: envelopeVersion);
 }
 
 /// Creates the atSign-level ML-DSA-65 signing root at
@@ -137,7 +144,9 @@ Future<AtClientManager> pqNativeOnboard({
     ..mintLegacyMaterial = mintLegacyMaterial;
   // Mints the ML-DSA APKAM and advertises the first enrollment's key package.
   makeActivationPqNative(request,
-      atSign: atSign, keyEstablishmentAlgo: preference.keyEstablishmentAlgo);
+      atSign: atSign,
+      keyEstablishmentAlgo: preference.keyEstablishmentAlgo,
+      envelopeVersion: preference.posture.envelopeVersion);
 
   final response =
       await (atAuth ?? AtAuth.create()).onboard(request, cramSecret);

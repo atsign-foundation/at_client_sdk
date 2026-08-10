@@ -599,9 +599,17 @@ class AtClientImpl implements AtClient {
   /// mint into and file from, so a private the seeding step just minted is
   /// visible to the very next read.
   void _adoptEraCryptoDefault() {
+    // The posture picks which era set this client is born with: the 3.x
+    // default keeps writes legacy, the 4.0 posture makes post-quantum writes
+    // the default. Both read everything. An app-named `crypto` still wins —
+    // adoptEraDefault leaves it alone either way.
+    final writesPq =
+        _preference?.posture.writesPqByDefault ?? false;
     CryptoConfig.adoptEraDefault(
       this,
-      CryptoConfig.readsNskeyWritesLegacy(keyRing: _pqBootstrap!.ring),
+      writesPq
+          ? CryptoConfig.nskey(keyRing: _pqBootstrap!.ring)
+          : CryptoConfig.readsNskeyWritesLegacy(keyRing: _pqBootstrap!.ring),
     );
   }
 
@@ -631,7 +639,8 @@ class AtClientImpl implements AtClient {
         'disallowLegacyEncryption is false, so this client may still encrypt '
         'new data with the legacy (RSA/AES) provider — harvestable now, '
         'openable by a quantum computer later. It becomes the default in '
-        'at_client 4.0; set it on AtClientPreference to opt in early.');
+        'at_client 4.0; set it on AtClientPreference — or adopt '
+        'ReleasePosture.postQuantum() — to opt in early.');
   }
 
   /// Arms (or re-arms) the one-shot expiry [Timer] at the

@@ -1,6 +1,7 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/preference/release_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
@@ -43,7 +44,25 @@ class AtClientPreference {
   /// this flag.
   final bool disallowLegacyEncryption;
 
-  AtClientPreference({this.disallowLegacyEncryption = false});
+  /// The post-quantum rollout posture this client runs under — the five
+  /// rollout flags set as a group. Defaults to [ReleasePosture.migration],
+  /// the 3.x posture; pass [ReleasePosture.postQuantum] to run the 4.0
+  /// defaults today.
+  ///
+  /// Individual flags still win: an explicit [disallowLegacyEncryption]
+  /// argument, an assigned [crypto], a per-signer envelope version, or a
+  /// per-call algorithm each override the posture's value for that one axis.
+  ///
+  /// Final at construction, like [disallowLegacyEncryption] and for the same
+  /// reason: what a client writes must not change meaning mid-run. A cached
+  /// client keeps the posture it was built under.
+  final ReleasePosture posture;
+
+  AtClientPreference(
+      {this.posture = const ReleasePosture.migration(),
+      bool? disallowLegacyEncryption})
+      : disallowLegacyEncryption =
+            disallowLegacyEncryption ?? posture.disallowLegacyEncryption;
 
   /// Local device path of hive storage
   String? hiveStoragePath;

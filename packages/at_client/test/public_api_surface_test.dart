@@ -57,6 +57,17 @@ void main() {
       expect(CryptoRuntime, isA<Type>());
       expect(ReportsReadiness, isA<Type>());
     });
+
+    test('the rollout posture and its key-exchange axis are nameable', () {
+      // Both the posture and EnrollmentKeyExchangeMode (an at_auth type,
+      // show-narrowed onto this barrel) must be reachable, or the per-axis
+      // override the posture documents cannot be written by an app that only
+      // imports at_client.
+      final preference =
+          AtClientPreference(posture: const ReleasePosture.postQuantum());
+      expect(preference.posture.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
+      expect(preference.disallowLegacyEncryption, true);
+    });
   });
 
   // The group above proves the REQUIRED symbols are reachable — it catches a
@@ -110,6 +121,11 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/listener/connectivity_listener.dart',
   'package:at_client/src/manager/at_client_manager.dart',
   'package:at_client/src/preference/at_client_preference.dart',
+  'package:at_client/src/preference/release_posture.dart',
+  // show-narrowed to EnrollmentKeyExchangeMode: ReleasePosture.keyExchangeMode
+  // holds one, and its per-axis override must be nameable without importing
+  // at_auth directly.
+  'package:at_auth/at_auth.dart',
   'package:at_client/src/response/at_notification.dart',
   'package:at_client/src/response/enrollment.dart',
   // show-narrowed to EnrollmentConveyanceException: approve() throws it after

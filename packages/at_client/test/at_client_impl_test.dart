@@ -422,6 +422,52 @@ void main() {
               'the preference still holds the untouched marker');
     });
 
+    test('the migration posture keeps writes legacy in the adopted era set',
+        () async {
+      AtClientPreference preferences = AtClientPreference()
+        ..hiveStoragePath = 'test/hive'
+        ..commitLogPath = 'test/hive/path';
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+
+      final config = CryptoConfig.eraDefaultFor(ac)!;
+      expect(config.defaultProviderId, legacyCryptoProviderId,
+          reason: 'the 3.x posture: read everything, write legacy');
+      expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull,
+          reason: 'reading PQ records is unconditional in every posture');
+    });
+
+    test('the postQuantum posture makes PQ writes the adopted era default',
+        () async {
+      AtClientPreference preferences =
+          AtClientPreference(posture: const ReleasePosture.postQuantum())
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/path';
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+
+      final config = CryptoConfig.eraDefaultFor(ac)!;
+      expect(config.defaultProviderId, symmetricAesGcmCryptoProviderId,
+          reason: 'the 4.0 posture: new data goes out under the nskey data '
+              'path, not the legacy provider');
+      expect(config.lookup(nskeyCryptoProviderId), isNotNull);
+      expect(ac.getPreferences()?.crypto, same(const CryptoConfig.eraDefault()),
+          reason: 'the posture moves the era, not the app\'s preference — an '
+              'app-named crypto config would still win');
+    });
+
     test('registers configured crypto providers during at_client creation',
         () async {
       final provider = _RecordingCryptoProvider('test-provider');

@@ -41,14 +41,28 @@ mixin EnvelopeSigning on ApkamSigning {
   })? publicKeyCacheSettings;
 
   /// The wrapper shape [wrapAndSign] emits — the signer's rollout flag
-  /// (`docs/projects/pq/decisions.md` 56.4). Defaults to
-  /// `signedEnvelopeVersion` (1) for all of 3.x; flipping the default to the
-  /// JWS shape is a 4.0 deployment decision, made only once every reader in
-  /// the fleet accepts it, because the enrollment record's `keyPackage` is
-  /// write-once — an envelope frozen there in a shape the fleet cannot read
-  /// is unreadable for that enrollment's life. Verification accepts both
-  /// shapes regardless of this setting.
-  int envelopeVersion = signedEnvelopeVersion;
+  /// (`docs/projects/pq/decisions.md` 56.4). Defaults to the client's
+  /// `ReleasePosture` — `signedEnvelopeVersion` (1) under the 3.x posture;
+  /// flipping the fleet default to the JWS shape is a 4.0 deployment
+  /// decision, made only once every reader in the fleet accepts it, because
+  /// the enrollment record's `keyPackage` is write-once — an envelope frozen
+  /// there in a shape the fleet cannot read is unreadable for that
+  /// enrollment's life. Verification accepts both shapes regardless of this
+  /// setting.
+  ///
+  /// Assigning the field overrides the posture for this signer instance only.
+  /// The posture consult is what lets one preference flip *every* signer the
+  /// SDK builds internally — there are several, constructed out of a caller's
+  /// reach, and each would otherwise be born holding the compile-time
+  /// default.
+  int get envelopeVersion =>
+      _envelopeVersion ??
+      atClient.getPreferences()?.posture.envelopeVersion ??
+      signedEnvelopeVersion;
+
+  set envelopeVersion(int version) => _envelopeVersion = version;
+
+  int? _envelopeVersion;
 
   /// Create a json envelope around [payload] in a format that can be verified
   /// by [verifyEnvelopeSignature].

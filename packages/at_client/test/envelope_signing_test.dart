@@ -116,6 +116,25 @@ void main() {
       stubApskGet(atClientB, pkamPublicKey(atChopsA));
       await verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign);
     });
+
+    test('the client posture decides the shape when the signer was not told',
+        () async {
+      when(() => atClientA.getPreferences()).thenReturn(
+          AtClientPreference(posture: const ReleasePosture.postQuantum()));
+
+      final envelope = await signerA.wrapAndSign({'a': 1});
+      expect(envelope['v'], 2,
+          reason: 'the SDK builds signers a caller never sees; the posture '
+              'is what reaches all of them at once');
+
+      // A per-signer assignment still beats the posture.
+      signerA.envelopeVersion = 1;
+      expect((await signerA.wrapAndSign({'a': 1}))['v'], 1);
+
+      // The posture-emitted shape verifies exactly like an assigned one.
+      stubApskGet(atClientB, pkamPublicKey(atChopsA));
+      await verifierB.verifyEnvelopeSignature(envelope, signerAtSign: atSign);
+    });
   });
 
   group('verifyEnvelopeSignature', () {

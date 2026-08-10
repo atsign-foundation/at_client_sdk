@@ -53,10 +53,11 @@ final _logger = AtSignLogger('selfRetrofit');
 /// (idempotent per keyfile) retries the step.
 ///
 /// [signingAlgo] selects the retrofit mode — one of the rollout axes, a
-/// per-operation parameter rather than a preference. `rsa2048` (the default
-/// while classical is the ecosystem's norm) is the rollout-window mode: a
-/// fresh RSA keypair under a new enrollment id, no ML-DSA anywhere.
-/// `mldsa65` is the PQ retrofit. The 4.0 posture flips the default.
+/// per-operation parameter rather than a preference. When the caller names
+/// none, [AtClientPreference.posture] decides: `rsa2048` under the migration
+/// posture (the rollout-window mode — a fresh RSA keypair under a new
+/// enrollment id, no ML-DSA anywhere), `mldsa65` under
+/// `ReleasePosture.postQuantum` (the PQ retrofit).
 ///
 /// The new enrollment's KEM comes from
 /// [AtClientPreference.keyEstablishmentAlgo] and is **frozen at this call**:
@@ -71,7 +72,7 @@ Future<AtClientManager> selfRetrofit({
   required Map<String, String> namespaces,
   Duration? apkamKeysExpiryDuration,
   AtClientManager? manager,
-  SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
+  SigningAlgoType? signingAlgo,
 }) async {
   final atLookUp = session.atLookUp;
   if (atLookUp == null) {
@@ -79,6 +80,7 @@ Future<AtClientManager> selfRetrofit({
         'the self-retrofit submits on the session\'s authenticated AtLookUp');
   }
 
+  final algo = signingAlgo ?? preference.posture.retrofitSigningAlgo;
   final response = await AtEnrollment.create().submit(
       AtSelfEnrollmentRequest(
           session: session,
@@ -86,10 +88,11 @@ Future<AtClientManager> selfRetrofit({
           deviceName: deviceName,
           namespaces: namespaces,
           apkamKeysExpiryDuration: apkamKeysExpiryDuration,
-          signingAlgo: signingAlgo,
+          signingAlgo: algo,
           metadataBuilder: enrollmentKeyPackageBuilder(session.atSign,
-              signingAlgo: signingAlgo,
-              keyEstablishmentAlgo: preference.keyEstablishmentAlgo)),
+              signingAlgo: algo,
+              keyEstablishmentAlgo: preference.keyEstablishmentAlgo,
+              envelopeVersion: preference.posture.envelopeVersion)),
       atLookUp);
 
   // Authenticate under the new enrollment: the retrofit response's session

@@ -1,4 +1,19 @@
 ## 3.14.1
+- feat: `ReleasePosture` — the five post-quantum rollout flags as one value,
+  set on `AtClientPreference(posture:)`. `ReleasePosture.migration()` (the
+  default) is the 3.x column of the rollout table; `postQuantum()` runs the
+  4.0 defaults today: the era `CryptoConfig` writes PQ, legacy writes are
+  refused, signers emit the JWS envelope shape, the posture names the pq
+  enrollment key exchange, and an argless `selfRetrofit` mints ML-DSA.
+  Every axis is still individually overridable — an explicit constructor
+  argument, an assigned `crypto`, a per-signer `envelopeVersion`, a
+  per-request `keyExchangeMode` or a per-call `signingAlgo` each beat the
+  posture for that one axis. A bare preference is byte-identical to the
+  pre-posture SDK. `EnrollmentKeyExchangeMode` is re-exported (show-narrowed)
+  on the main barrel so the per-axis override is nameable without importing
+  at_auth. `enrollmentKeyPackageBuilder` and `makeActivationPqNative` gain an
+  `envelopeVersion` parameter (default v1) so the write-once
+  `metadata.keyPackage` envelope can follow the posture.
 - fix: a secret-sharing broadcast identifies itself by **enrollment** rather
   than by kpid. `pushSecretToNamespaceMembers` and
   `requestSecretsFromNamespace` skipped the roster entry for this client by

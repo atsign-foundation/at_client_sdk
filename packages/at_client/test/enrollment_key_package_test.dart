@@ -126,6 +126,23 @@ void main() {
     );
   });
 
+  test('the envelope version is a parameter, frozen at the build', () async {
+    final (io, _, apkam) = await freshKeys();
+
+    // The default is the 3.x wire shape — the package rides the write-once
+    // metadata.keyPackage, so nothing may emit the new shape by accident.
+    final v1 = (await enrollmentKeyPackageBuilder(atSign)(io))!['keyPackage']
+        as Map;
+    expect(envelopeVersionOf(v1), 1);
+
+    // A posture that says v2 threads through, and the result still verifies
+    // against the same APKAM key.
+    final v2 = (await enrollmentKeyPackageBuilder(atSign,
+        envelopeVersion: jwsEnvelopeVersion)(io))!['keyPackage'] as Map;
+    expect(envelopeVersionOf(v2), 2);
+    await verifyEnvelope(v2, signerPublicKey: apkam.atPublicKey.publicKey);
+  });
+
   test('carries no enrollmentId claim — the atServer has not assigned one yet',
       () async {
     final (io, _, _) = await freshKeys();
