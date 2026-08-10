@@ -1283,7 +1283,7 @@ negotiate their construction); discharges plan backlog
 [14.4](#144-a-suites-list-on-the-key-package--done) and
 [14.5](#145-a-write-side-envelope-version-selector-in-at_chops--done).
 
-### KE-2 — `enroll:updateMetadata` + a multi-kpid receiver · at_commons, **every atServer implementation**, at_client · L
+### KE-2 — `enroll:updateMetadata` + a multi-kpid receiver · at_commons, **every atServer implementation**, at_client · L — [#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133)
 **Goal:** KE-1 made the KEM selectable and the construction negotiable; this makes the choice
 **revisable**. An enrollment can amend its own `metadata.keyPackage` after approval, so a package can gain
 a key, an envelope shape can be rolled forward, and an unparseable package stops being terminal.
