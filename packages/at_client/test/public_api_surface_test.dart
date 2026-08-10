@@ -112,6 +112,9 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/preference/at_client_preference.dart',
   'package:at_client/src/response/at_notification.dart',
   'package:at_client/src/response/enrollment.dart',
+  // show-narrowed to EnrollmentConveyanceException: approve() throws it after
+  // a server-side approval whose conveyance refused the advertised package.
+  'package:at_client/src/enroll/enrollment_conveyance.dart',
   'package:at_client/src/secret_sharing/algo_ids.dart',
   'package:at_client/src/rpc/at_rpc.dart',
   'package:at_client/src/rpc/at_rpc_types.dart',

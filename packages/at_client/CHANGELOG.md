@@ -1,4 +1,18 @@
 ## 3.14.1
+- fix: a conveyance refusal no longer discards the approval it follows.
+  When a server-side approval succeeds but the enrollee's advertised key
+  package is refused, `approve()` now throws
+  `EnrollmentConveyanceException` — an `AtEnrollmentException` subtype
+  carrying the successful `AtEnrollmentResponse` and the
+  `KeyPackageStatus` — so a caller can tell "approved but the device
+  cannot decrypt; consider revoking" from "the approval failed", instead
+  of losing the response inside a generic throw.
+- refactor: the approval-time secret conveyance and the unanchored-
+  enrollment sweep live behind a new injected seam,
+  `EnrollmentConveyance`, with the envelope-sealing production
+  implementation extracted out of `EnrollmentServiceImpl`. `approve()`'s
+  signature and behaviour are unchanged apart from the carrying
+  exception above.
 - fix: an nskey private conveyed to the atSign's other enrollments is now
   the generation's **seed**, never the expanded decapsulation key. The
   receiver validates an arrival by re-deriving the advertised public half,
