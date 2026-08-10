@@ -103,9 +103,9 @@ void main() {
     // cannot stamp it directly, because _apsk accepts writes only from its
     // own enrollment's connection.
     expect(await enrollee.sweepOnce(), greaterThan(0));
-    await PqSigningChain.publishPendingLink(enrolleeClient);
+    await PqSigningChain(enrolleeClient).publishPendingLink();
 
-    final published = await PqSigningChain.readLink(sweeperClient, enrolleeId);
+    final published = await PqSigningChain(sweeperClient).readLink(enrolleeId);
     expect(published, isNotNull,
         reason: 'the link must end up ON THE RECORD, where a verifier walks — '
             'a link that only ever sat in a transit store vouches for nothing');

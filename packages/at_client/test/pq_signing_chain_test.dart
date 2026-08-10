@@ -60,7 +60,7 @@ void main() {
     await registered(client('child-1'));
 
     final link =
-        await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+        await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
 
     expect(link, isNotNull);
     final payload = link!['payload'] as Map;
@@ -81,7 +81,7 @@ void main() {
     final parent = await registered(parentClient);
 
     final link =
-        await PqSigningChain.signLinkFor(parentClient, parent, 'never-existed');
+        await PqSigningChain(parentClient).signLinkFor(parent, 'never-existed');
 
     expect(link, isNull,
         reason: 'the approval has already happened on the atServer by this '
@@ -100,14 +100,14 @@ void main() {
     final publishedKey = remoteData[uri];
 
     final link =
-        await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
-    await PqSigningChain.publishLink(childClient, 'child-1', link!);
+        await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+    await PqSigningChain(childClient).publishLink('child-1', link!);
 
     expect(remoteData[uri], publishedKey,
         reason: 'the link is additive metadata — rewriting the record must '
             'not disturb the signing key every verifier resolves');
 
-    final read = await PqSigningChain.readLink(childClient, 'child-1');
+    final read = await PqSigningChain(childClient).readLink('child-1');
     expect(read, isNotNull);
     expect(read!['enrollmentId'], 'parent-1');
   });
@@ -119,10 +119,10 @@ void main() {
     await registered(childClient);
 
     final link =
-        await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
-    await PqSigningChain.publishLink(childClient, 'child-1', link!);
+        await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+    await PqSigningChain(childClient).publishLink('child-1', link!);
 
-    final read = await PqSigningChain.readLink(childClient, 'child-1');
+    final read = await PqSigningChain(childClient).readLink('child-1');
 
     // A third party verifying: it resolves the signer from the envelope's own
     // claim and checks against that enrollment's published _apsk.
@@ -151,11 +151,11 @@ void main() {
       final child = await registered(childClient);
 
       final link =
-          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
       await convey(child, link!);
 
-      expect(await PqSigningChain.publishPendingLink(childClient), isTrue);
-      final published = await PqSigningChain.readLink(childClient, 'child-1');
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
+      final published = await PqSigningChain(childClient).readLink('child-1');
       expect(published?['signature'], link['signature']);
     });
 
@@ -166,11 +166,11 @@ void main() {
       final child = await registered(childClient);
 
       final link =
-          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
       await convey(child, link!);
 
       clearInteractions(childClient);
-      expect(await PqSigningChain.publishPendingLink(childClient), isTrue);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
 
       expect(apskGetCount(childClient, atSign, 'child-1'), 1,
           reason: 'the key the link vouches for, the already-published '
@@ -183,10 +183,10 @@ void main() {
       final childClient = client('child-1');
       await registered(childClient);
 
-      expect(await PqSigningChain.publishPendingLink(childClient), isFalse,
+      expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
           reason: 'this runs at every client start, so an enrollment that '
               'will never have a link must cost nothing');
-      expect(await PqSigningChain.readLink(childClient, 'child-1'), isNull);
+      expect(await PqSigningChain(childClient).readLink('child-1'), isNull);
     });
 
     test('refuses a link conveyed for a different enrollment', () async {
@@ -198,14 +198,14 @@ void main() {
 
       // A link genuinely signed by the parent, but vouching for a sibling.
       final link =
-          await PqSigningChain.signLinkFor(parentClient, parent, 'sibling-1');
+          await PqSigningChain(parentClient).signLinkFor(parent, 'sibling-1');
       await convey(child, link!);
 
-      expect(await PqSigningChain.publishPendingLink(childClient), isFalse,
+      expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
           reason: 'the link says which enrollment it vouches for, and '
               'stamping it on another would advertise a chain hop that was '
               'never made');
-      expect(await PqSigningChain.readLink(childClient, 'child-1'), isNull);
+      expect(await PqSigningChain(childClient).readLink('child-1'), isNull);
     });
 
     test('refuses a link whose signature does not verify', () async {
@@ -215,13 +215,13 @@ void main() {
       final child = await registered(childClient);
 
       final link =
-          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
       await convey(child, {...link!, 'signature': 'not-the-signature'});
 
-      expect(await PqSigningChain.publishPendingLink(childClient), isFalse,
+      expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
           reason: 'publishing a link no verifier can follow would advertise '
               'this enrollment as chained when it is not');
-      expect(await PqSigningChain.readLink(childClient, 'child-1'), isNull);
+      expect(await PqSigningChain(childClient).readLink('child-1'), isNull);
     });
 
     test('is idempotent across restarts', () async {
@@ -231,11 +231,11 @@ void main() {
       final child = await registered(childClient);
 
       final link =
-          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
       await convey(child, link!);
 
-      expect(await PqSigningChain.publishPendingLink(childClient), isTrue);
-      expect(await PqSigningChain.publishPendingLink(childClient), isFalse,
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
           reason: 'it runs at every start, and rewriting an unchanged record '
               'each time would be traffic for nothing');
     });
@@ -260,11 +260,10 @@ void main() {
       final c = await rootHolder('priv-1', pair.secretKey);
 
       expect(
-          await PqSigningChain.publishOwnRootLink(c,
-              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
+          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
           isTrue);
 
-      final link = await PqSigningChain.readRootLink(c, 'priv-1');
+      final link = await PqSigningChain(c).readRootLink('priv-1');
       expect(link, isNotNull);
       expect(link!['alg'], PqSigningChain.rootLinkAlgo);
 
@@ -279,8 +278,7 @@ void main() {
           isTrue);
 
       expect(
-          await PqSigningChain.publishOwnRootLink(c,
-              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
+          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
           isFalse,
           reason: 'this runs at every start, so an anchored enrollment must '
               'not rewrite its record each time');
@@ -291,13 +289,12 @@ void main() {
       final c = await rootHolder('priv-1', pair.secretKey);
 
       expect(
-          await PqSigningChain.publishOwnRootLink(c,
-              isFullyPrivileged: () async => false, keysIo: c.atKeysIo),
+          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => false, keysIo: c.atKeysIo),
           isFalse,
           reason: 'only the fully privileged class carries a root link; '
               'possession and privilege should never diverge, and if they do '
               'the grant is what decides');
-      expect(await PqSigningChain.readRootLink(c, 'priv-1'), isNull);
+      expect(await PqSigningChain(c).readRootLink('priv-1'), isNull);
     });
 
     test('an enrollment holding no root private anchors nothing', () async {
@@ -309,8 +306,7 @@ void main() {
 
       var privilegeChecked = false;
       expect(
-          await PqSigningChain.publishOwnRootLink(c,
-              isFullyPrivileged: () async {
+          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async {
             privilegeChecked = true;
             return true;
           }, keysIo: io),
@@ -327,8 +323,7 @@ void main() {
 
       clearInteractions(c);
       expect(
-          await PqSigningChain.publishOwnRootLink(c,
-              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
+          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
           isTrue);
 
       expect(apskGetCount(c, atSign, 'priv-1'), 1,
@@ -344,15 +339,14 @@ void main() {
       final parent = await registered(parentClient);
 
       final chain =
-          await PqSigningChain.signLinkFor(parentClient, parent, 'priv-1');
-      await PqSigningChain.publishLink(c, 'priv-1', chain!);
-      await PqSigningChain.publishOwnRootLink(c,
-          isFullyPrivileged: () async => true, keysIo: c.atKeysIo);
+          await PqSigningChain(parentClient).signLinkFor(parent, 'priv-1');
+      await PqSigningChain(c).publishLink('priv-1', chain!);
+      await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: c.atKeysIo);
 
-      expect(await PqSigningChain.readLink(c, 'priv-1'), isNotNull,
+      expect(await PqSigningChain(c).readLink('priv-1'), isNotNull,
           reason: 'writing one link must not drop the other — they are '
               'separate fields on one record, and a walk may want either');
-      expect(await PqSigningChain.readRootLink(c, 'priv-1'), isNotNull);
+      expect(await PqSigningChain(c).readRootLink('priv-1'), isNotNull);
     });
   });
 
@@ -383,8 +377,7 @@ void main() {
       await PqSigningRoot(c, keysIo: io).store(atSign, secret);
       when(() => c.atKeysIo).thenReturn(io);
       await registered(c);
-      await PqSigningChain.publishOwnRootLink(c,
-          isFullyPrivileged: () async => true, keysIo: io);
+      await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: io);
       return c;
     }
 
@@ -394,7 +387,7 @@ void main() {
       await anchored('priv-1', pair.secretKey);
 
       final result =
-          await PqSigningChain.verifyChain(verifierClient, verifier, 'priv-1');
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'priv-1');
 
       expect(result.verdict, ChainVerdict.anchored);
       expect(result.path, ['priv-1']);
@@ -408,11 +401,11 @@ void main() {
       await registered(childClient);
 
       final link =
-          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
-      await PqSigningChain.publishLink(childClient, 'child-1', link!);
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await PqSigningChain(childClient).publishLink('child-1', link!);
 
       final result =
-          await PqSigningChain.verifyChain(verifierClient, verifier, 'child-1');
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'child-1');
 
       expect(result.verdict, ChainVerdict.anchored);
       expect(result.path, ['child-1', 'priv-1'],
@@ -424,8 +417,8 @@ void main() {
       final c = client('lonely-1');
       await registered(c);
 
-      final result = await PqSigningChain.verifyChain(
-          verifierClient, verifier, 'lonely-1');
+      final result = await PqSigningChain(verifierClient).verifyChain(
+          verifier, 'lonely-1');
 
       expect(result.verdict, ChainVerdict.unsigned,
           reason: 'this is the ordinary state during the changeover, and it '
@@ -439,11 +432,11 @@ void main() {
       await registered(childClient);
 
       final link =
-          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
-      await PqSigningChain.publishLink(childClient, 'child-1', link!);
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await PqSigningChain(childClient).publishLink('child-1', link!);
 
       final result =
-          await PqSigningChain.verifyChain(verifierClient, verifier, 'child-1');
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'child-1');
 
       expect(result.verdict, ChainVerdict.chained);
       expect(result.path, ['child-1', 'parent-1']);
@@ -459,16 +452,16 @@ void main() {
       // wrapper — what a flipped producer will convey. The walk must read
       // the signer from the protected header's kid and the payload out of
       // base64url, or the chain dead-ends at its first version-2 link.
-      final v1 = await PqSigningChain.signLinkFor(
-          parentClient, parent, 'child-1');
+      final v1 = await PqSigningChain(parentClient).signLinkFor(
+          parent, 'child-1');
       final link = signEnvelope(envelopePayloadOf(v1!),
           keys: parent.signingKeys,
           enrollmentId: 'parent-1',
           version: jwsEnvelopeVersion);
-      await PqSigningChain.publishLink(childClient, 'child-1', link);
+      await PqSigningChain(childClient).publishLink('child-1', link);
 
       final result =
-          await PqSigningChain.verifyChain(verifierClient, verifier, 'child-1');
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'child-1');
 
       expect(result.verdict, ChainVerdict.chained);
       expect(result.path, ['child-1', 'parent-1']);
@@ -482,12 +475,12 @@ void main() {
       await registered(childClient);
 
       final link =
-          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
-      await PqSigningChain.publishLink(childClient, 'child-1',
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await PqSigningChain(childClient).publishLink('child-1',
           {...link!, 'signature': base64Encode(utf8.encode('forged'))});
 
       final result =
-          await PqSigningChain.verifyChain(verifierClient, verifier, 'child-1');
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'child-1');
 
       expect(result.verdict, ChainVerdict.broken,
           reason: 'an absent link means nobody vouched yet; a bad one means '
@@ -502,7 +495,7 @@ void main() {
       await anchored('priv-1', other.secretKey);
 
       final result =
-          await PqSigningChain.verifyChain(verifierClient, verifier, 'priv-1');
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'priv-1');
 
       expect(result.verdict, ChainVerdict.broken,
           reason: 'the anchor is only worth anything if it is checked against '
@@ -516,13 +509,13 @@ void main() {
       final sharingB = await registered(b);
 
       // Each vouches for the other: individually well-formed, jointly a ring.
-      final linkForB = await PqSigningChain.signLinkFor(a, sharingA, 'loop-b');
-      await PqSigningChain.publishLink(b, 'loop-b', linkForB!);
-      final linkForA = await PqSigningChain.signLinkFor(b, sharingB, 'loop-a');
-      await PqSigningChain.publishLink(a, 'loop-a', linkForA!);
+      final linkForB = await PqSigningChain(a).signLinkFor(sharingA, 'loop-b');
+      await PqSigningChain(b).publishLink('loop-b', linkForB!);
+      final linkForA = await PqSigningChain(b).signLinkFor(sharingB, 'loop-a');
+      await PqSigningChain(a).publishLink('loop-a', linkForA!);
 
       final result =
-          await PqSigningChain.verifyChain(verifierClient, verifier, 'loop-a');
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'loop-a');
 
       expect(result.verdict, ChainVerdict.broken,
           reason: 'the chain is built from records a compromised enrollment '
@@ -540,7 +533,7 @@ void main() {
     // The impostor signs a perfectly well-formed link for child-1 — anyone
     // can — but then claims it came from parent-1.
     final link =
-        await PqSigningChain.signLinkFor(impostorClient, impostor, 'child-1');
+        await PqSigningChain(impostorClient).signLinkFor(impostor, 'child-1');
     await registered(client('parent-1'));
     final forged = Map<String, Object?>.from(link!)
       ..['enrollmentId'] = 'parent-1';

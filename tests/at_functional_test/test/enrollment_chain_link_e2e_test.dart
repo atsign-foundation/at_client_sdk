@@ -58,7 +58,7 @@ void main() {
       childApkamPublicKey: before.value as String,
     ));
 
-    await PqSigningChain.publishLink(atClient, enrollmentId, link);
+    await PqSigningChain(atClient).publishLink(enrollmentId, link);
 
     final after = await atClient.get(AtKey.fromString(uri),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
@@ -68,7 +68,7 @@ void main() {
             'key every verifier on this atSign resolves — a write that '
             'disturbed it would break every signature check at once');
 
-    final read = await PqSigningChain.readLink(atClient, enrollmentId);
+    final read = await PqSigningChain(atClient).readLink(enrollmentId);
     expect(read, isNotNull,
         reason: 'this is the property the whole parent-signs/child-publishes '
             'arrangement is built on: appMetadata a client adds to _apsk '
@@ -79,7 +79,7 @@ void main() {
   test('a live published link verifies against the key it names', () async {
     final sharing = AtClientSecretSharing.forClient(atClient);
     final read =
-        await PqSigningChain.readLink(atClient, sharing.enrollmentId);
+        await PqSigningChain(atClient).readLink(sharing.enrollmentId);
 
     await expectLater(
         sharing.verifyEnvelopeSignature(read!, signerAtSign: atSign),
@@ -97,18 +97,18 @@ void main() {
         .mintIfAbsent(isFullyPrivileged: true);
 
     final sharing = AtClientSecretSharing.forClient(atClient);
-    await PqSigningChain.publishOwnRootLink(atClient,
-        isFullyPrivileged: () async => true, keysIo: keysIo);
+    await PqSigningChain(atClient)
+        .publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: keysIo);
 
     final link =
-        await PqSigningChain.readRootLink(atClient, sharing.enrollmentId);
+        await PqSigningChain(atClient).readRootLink(sharing.enrollmentId);
     expect(link, isNotNull,
         reason: 'the anchor is metadata on a public record the atServer also '
             'writes, so that it survives is the property worth watching '
             'rather than assuming');
 
-    final result = await PqSigningChain.verifyChain(
-        atClient, sharing, sharing.enrollmentId);
+    final result = await PqSigningChain(atClient).verifyChain(
+        sharing, sharing.enrollmentId);
 
     expect(result.verdict, ChainVerdict.anchored,
         reason: 'the walk fetches the published root and checks the ML-DSA '

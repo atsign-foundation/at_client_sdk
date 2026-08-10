@@ -317,7 +317,7 @@ class PqSigningRoot {
   /// pair on a loss, would destroy the key to a record that exists.
   Future<void> _anchorSelf(String atSign) async {
     try {
-      await PqSigningChain.publishOwnRootLink(atClient,
+      await PqSigningChain(atClient).publishOwnRootLink(
           isFullyPrivileged: () async => true, keysIo: keysIo);
     } catch (e) {
       _logger.warning('Minted the signing root for $atSign but could not '

@@ -145,6 +145,7 @@ class PqClientBootstrap {
       sharing: sharing,
     );
     root = PqSigningRoot(_atClient, keysIo: keysIo);
+    chain = PqSigningChain(_atClient);
   }
 
   final AtClient _atClient;
@@ -171,6 +172,9 @@ class PqClientBootstrap {
 
   /// This client's view of the atSign's signing root.
   late final PqSigningRoot root;
+
+  /// This client's view of the approval chain.
+  late final PqSigningChain chain;
 
   String get _atSign => _atClient.getCurrentAtSign()!;
 
@@ -355,7 +359,7 @@ class PqClientBootstrap {
   Future<void> _publishRootLink() async {
     if (!_gates.publishRootLink) return;
     try {
-      await PqSigningChain.publishOwnRootLink(_atClient,
+      await chain.publishOwnRootLink(
           isFullyPrivileged: _privilege.isFullyPrivileged, keysIo: _keysIo);
     } catch (e, st) {
       _logger.warning('Anchoring $_atSign to its signing root failed; the '
@@ -367,7 +371,7 @@ class PqClientBootstrap {
   Future<void> _publishChainLink() async {
     if (!_gates.publishChainLink) return;
     try {
-      await PqSigningChain.publishPendingLink(_atClient);
+      await chain.publishPendingLink();
     } catch (e, st) {
       _logger.warning('Publishing the approval-chain link failed for '
           '$_atSign; the enrollment stays unsigned, which verifiers '

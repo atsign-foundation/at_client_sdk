@@ -138,8 +138,8 @@ class EnrollmentServiceImpl implements EnrollmentService {
     // unsigned, which verifiers already tolerate during the changeover, and
     // that is a far better outcome than failing an approval that has already
     // happened on the atServer.
-    final link = await PqSigningChain.signLinkFor(
-        _atClient, sharing, enrollment.enrollmentId!);
+    final link = await PqSigningChain(_atClient)
+        .signLinkFor(sharing, enrollment.enrollmentId!);
     if (link != null) {
       await sharing.shareSecretWith(
           keyPackage,
@@ -240,6 +240,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
         enrollmentListParams: EnrollmentListRequestParam()
           ..enrollmentListFilter = [EnrollmentStatus.approved]);
 
+    final chain = PqSigningChain(_atClient);
     int conveyed = 0;
     for (final enrollment in approved) {
       final id = enrollment.enrollmentId;
@@ -247,8 +248,8 @@ class EnrollmentServiceImpl implements EnrollmentService {
       try {
         // Already vouched for, either way: a chain link, or a direct root
         // anchor (a privileged enrollment that holds the root needs no hop).
-        if (await PqSigningChain.readLink(_atClient, id) != null) continue;
-        if (await PqSigningChain.readRootLink(_atClient, id) != null) continue;
+        if (await chain.readLink(id) != null) continue;
+        if (await chain.readRootLink(id) != null) continue;
 
         // No key package, no conveyance channel: a legacy enrollment cannot
         // receive a link and has no PQ key for one to vouch for.
@@ -264,7 +265,7 @@ class EnrollmentServiceImpl implements EnrollmentService {
           continue;
         }
 
-        final link = await PqSigningChain.signLinkFor(_atClient, sharing, id);
+        final link = await chain.signLinkFor(sharing, id);
         if (link == null) continue;
         await sharing.shareSecretWith(
             keyPackage,

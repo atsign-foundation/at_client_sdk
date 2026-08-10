@@ -206,10 +206,10 @@ void main() {
     // Anchored, verified against the published record rather than an
     // in-memory copy of it.
     final sharing = AtClientSecretSharing.forClient(client);
-    expect(await PqSigningChain.readRootLink(client, client.enrollmentId!),
+    expect(await PqSigningChain(client).readRootLink(client.enrollmentId!),
         isNotNull);
     final verdict =
-        await PqSigningChain.verifyChain(client, sharing, client.enrollmentId!);
+        await PqSigningChain(client).verifyChain(sharing, client.enrollmentId!);
     expect(verdict.verdict, ChainVerdict.anchored,
         reason: 'the minter anchors itself at mint — waiting for a later '
             'start would leave a freshly published root vouching for nothing. '
@@ -336,12 +336,12 @@ void main() {
 
     // Now it can anchor itself, under its own distinct enrollment id.
     expect(
-        await PqSigningChain.publishOwnRootLink(clone,
+        await PqSigningChain(clone).publishOwnRootLink(
             isFullyPrivileged: () async => true,
             keysIo: cloneSession.atKeysIo),
         isTrue);
-    final verdict = await PqSigningChain.verifyChain(
-        clone, cloneSharing, clone.enrollmentId!);
+    final verdict = await PqSigningChain(clone).verifyChain(
+        cloneSharing, clone.enrollmentId!);
     expect(verdict.verdict, ChainVerdict.anchored,
         reason: 'Reason if not: ${verdict.reason}');
   }, timeout: const Timeout(Duration(minutes: 4)));
@@ -411,7 +411,7 @@ void main() {
             'that vouches for every enrollment on the atSign — asking would '
             'be refused, and asking anyway announces to every holder that '
             'something unentitled is looking for it');
-    expect(await PqSigningChain.readRootLink(scoped, scoped.enrollmentId!),
+    expect(await PqSigningChain(scoped).readRootLink(scoped.enrollmentId!),
         isNull,
         reason: 'it cannot anchor itself: its route to the chain is a link '
             'signed for it by a privileged enrollment');

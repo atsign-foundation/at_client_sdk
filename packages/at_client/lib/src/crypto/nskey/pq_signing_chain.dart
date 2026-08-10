@@ -85,6 +85,16 @@ class ChainResult {
 /// [decisions.md 22.2b]: ../../../../../../docs/projects/pq/decisions.md
 @experimental
 class PqSigningChain {
+  /// One chain view per client. The wire vocabulary (the field names, the
+  /// secret name, [apskUri], the codecs) stays static — it belongs to the
+  /// protocol, not to any client.
+  PqSigningChain(this._atClient)
+      : _logger = AtSignLogger(
+            'PqSigningChain (${_atClient.getCurrentAtSign()})');
+
+  final AtClient _atClient;
+  final AtSignLogger _logger;
+
   /// Reserved [Secret] name for a conveyed chain link.
   ///
   /// Per-enrollment, so it is never forwarded on: a link vouches for one
@@ -114,8 +124,6 @@ class PqSigningChain {
   /// verification of everything already written. The pins in
   /// `test/wire_literal_pins_test.dart` hold the two apart on purpose.
   static const String rootLinkAlgo = 'mldsa65';
-
-  static final AtSignLogger _logger = AtSignLogger('PqSigningChain');
 
   /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
   /// APKAM public key lives, and the one record its own connection may write.
@@ -148,15 +156,14 @@ class PqSigningChain {
   /// Returns null when the child's `_apsk` is not readable, which is not worth
   /// failing an approval over — the chain link is additive, and an enrollment
   /// without one is simply unsigned, which verifiers already tolerate.
-  static Future<Map<String, Object?>?> signLinkFor(
-    AtClient atClient,
+  Future<Map<String, Object?>?> signLinkFor(
     EnvelopeSigning signer,
     String childEnrollmentId,
   ) async {
-    final atSign = atClient.getCurrentAtSign()!;
+    final atSign = _atClient.getCurrentAtSign()!;
     final String childKey;
     try {
-      final value = await atClient.get(
+      final value = await _atClient.get(
         AtKey.fromString(apskUri(atSign, childEnrollmentId)),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
@@ -185,8 +192,7 @@ class PqSigningChain {
   /// The provider id is the legacy one, which is accurate rather than a
   /// placeholder: `_apsk` is a public plaintext key and no provider encrypts
   /// it. Only `additional` carries anything new.
-  static Future<void> publishLink(
-    AtClient atClient,
+  Future<void> publishLink(
     String enrollmentId,
     Map<String, Object?> link, {
     AtValue? current,
@@ -194,7 +200,7 @@ class PqSigningChain {
     // Resolved before the write: a link so malformed its signer cannot be
     // read is refused here rather than published and then logged broken.
     final signer = envelopeSignerOf(link);
-    await _publishInto(atClient, enrollmentId, linkField, link,
+    await _publishInto(enrollmentId, linkField, link,
         current: current);
     _logger.info('Published chain link for $enrollmentId, signed by enrollment '
         '$signer');
@@ -213,17 +219,16 @@ class PqSigningChain {
   /// Existing `additional` entries are carried forward, so the chain link and
   /// the root link coexist on the same record instead of overwriting each
   /// other.
-  static Future<void> _publishInto(
-    AtClient atClient,
+  Future<void> _publishInto(
     String enrollmentId,
     String field,
     Map<String, Object?> value, {
     AtValue? current,
   }) async {
-    final atSign = atClient.getCurrentAtSign()!;
+    final atSign = _atClient.getCurrentAtSign()!;
     final uri = apskUri(atSign, enrollmentId);
 
-    current ??= await atClient.get(
+    current ??= await _atClient.get(
       AtKey.fromString(uri),
       getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
     );
@@ -237,7 +242,7 @@ class PqSigningChain {
       },
     );
 
-    await atClient.put(
+    await _atClient.put(
       atKey,
       current.value,
       putRequestOptions: PutRequestOptions()..useRemoteAtServer = true,
@@ -248,20 +253,18 @@ class PqSigningChain {
   ///
   /// An absent link is ordinary — the enrollment has not run since approval,
   /// or predates the chain — so this reports absence rather than failing.
-  static Future<Map<String, Object?>?> readLink(
-    AtClient atClient,
+  Future<Map<String, Object?>?> readLink(
     String enrollmentId,
   ) async =>
-      _readField(atClient, enrollmentId, linkField);
+      _readField(enrollmentId, linkField);
 
-  static Future<Map<String, Object?>?> _readField(
-    AtClient atClient,
+  Future<Map<String, Object?>?> _readField(
     String enrollmentId,
     String field,
   ) async {
-    final atSign = atClient.getCurrentAtSign()!;
+    final atSign = _atClient.getCurrentAtSign()!;
     try {
-      final value = await atClient.get(
+      final value = await _atClient.get(
         AtKey.fromString(apskUri(atSign, enrollmentId)),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
@@ -299,20 +302,19 @@ class PqSigningChain {
   /// privileged peer that predates the root, one approved afterwards, one
   /// approved by a non-root-holding approver, and a root minted late: the retro
   /// case needs no migration because it is not a special case.
-  static Future<bool> publishOwnRootLink(
-    AtClient atClient, {
+  Future<bool> publishOwnRootLink( {
     required Future<bool> Function() isFullyPrivileged,
     AtKeysIo? keysIo,
   }) async {
-    final atSign = atClient.getCurrentAtSign()!;
-    final enrollmentId = AtClientSecretSharing.forClient(atClient).enrollmentId;
+    final atSign = _atClient.getCurrentAtSign()!;
+    final enrollmentId = AtClientSecretSharing.forClient(_atClient).enrollmentId;
 
     // Possession is checked first because it is a local `AtKeys` read, where
     // establishing privilege costs a round trip. An enrollment holding no root
     // private cannot anchor itself whatever its privileges, so the cheap gate
     // is also the one that eliminates almost every client at start.
     final private =
-        await PqSigningRoot(atClient, keysIo: keysIo).privateHalf(atSign);
+        await PqSigningRoot(_atClient, keysIo: keysIo).privateHalf(atSign);
     if (private == null) return false;
 
     if (!await isFullyPrivileged()) {
@@ -324,7 +326,7 @@ class PqSigningChain {
 
     final AtValue current;
     try {
-      current = await atClient.get(
+      current = await _atClient.get(
         AtKey.fromString(apskUri(atSign, enrollmentId)),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
@@ -346,7 +348,6 @@ class PqSigningChain {
     );
 
     await _publishInto(
-        atClient,
         enrollmentId,
         rootLinkField,
         {
@@ -361,11 +362,10 @@ class PqSigningChain {
   }
 
   /// The root link an enrollment has published, or null if it has none.
-  static Future<Map<String, Object?>?> readRootLink(
-    AtClient atClient,
+  Future<Map<String, Object?>?> readRootLink(
     String enrollmentId,
   ) async =>
-      _readField(atClient, enrollmentId, rootLinkField);
+      _readField(enrollmentId, rootLinkField);
 
   /// Publishes the chain link this enrollment was conveyed, if one is waiting
   /// and its key does not already carry it. Returns whether it published.
@@ -389,9 +389,9 @@ class PqSigningChain {
   ///   verified downstream is not published as though it could;
   /// - the key it vouches for is the key actually published, so a link that
   ///   silently covers something else is refused.
-  static Future<bool> publishPendingLink(AtClient atClient) async {
-    final sharing = AtClientSecretSharing.forClient(atClient);
-    final atSign = atClient.getCurrentAtSign()!;
+  Future<bool> publishPendingLink() async {
+    final sharing = AtClientSecretSharing.forClient(_atClient);
+    final atSign = _atClient.getCurrentAtSign()!;
     final enrollmentId = sharing.enrollmentId;
 
     final secret = sharing.secretStore
@@ -428,7 +428,7 @@ class PqSigningChain {
 
     final AtValue current;
     try {
-      current = await atClient.get(
+      current = await _atClient.get(
         AtKey.fromString(apskUri(atSign, enrollmentId)),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
@@ -449,7 +449,7 @@ class PqSigningChain {
       return false;
     }
 
-    await publishLink(atClient, enrollmentId, link, current: current);
+    await publishLink(enrollmentId, link, current: current);
     return true;
   }
 
@@ -464,13 +464,12 @@ class PqSigningChain {
   /// a cycle or an absurdly long chain is an input to expect rather than an
   /// impossibility. Either ends the walk as [ChainVerdict.broken] — a chain
   /// that cannot be walked is not a chain that is merely unanchored.
-  static Future<ChainResult> verifyChain(
-    AtClient atClient,
+  Future<ChainResult> verifyChain(
     EnvelopeSigning verifier,
     String enrollmentId, {
     int maxDepth = 16,
   }) async {
-    final atSign = atClient.getCurrentAtSign()!;
+    final atSign = _atClient.getCurrentAtSign()!;
     final path = <String>[];
     final seen = <String>{};
     String current = enrollmentId;
@@ -482,12 +481,12 @@ class PqSigningChain {
       }
       path.add(current);
 
-      final rootLink = await readRootLink(atClient, current);
+      final rootLink = await readRootLink(current);
       if (rootLink != null) {
-        return await _checkRootLink(atClient, atSign, current, rootLink, path);
+        return await _checkRootLink(atSign, current, rootLink, path);
       }
 
-      final link = await readLink(atClient, current);
+      final link = await readLink(current);
       if (link == null) {
         return ChainResult(
             path.length == 1 ? ChainVerdict.unsigned : ChainVerdict.chained,
@@ -497,7 +496,7 @@ class PqSigningChain {
       }
 
       final failure =
-          await _checkChainLink(atClient, verifier, atSign, current, link);
+          await _checkChainLink(verifier, atSign, current, link);
       if (failure != null) {
         return ChainResult(ChainVerdict.broken, path, failure);
       }
@@ -519,8 +518,7 @@ class PqSigningChain {
   }
 
   /// Null when [link] is sound for [enrollmentId]; otherwise why it is not.
-  static Future<String?> _checkChainLink(
-    AtClient atClient,
+  Future<String?> _checkChainLink(
     EnvelopeSigning verifier,
     String atSign,
     String enrollmentId,
@@ -541,7 +539,7 @@ class PqSigningChain {
     // The signature proves the parent said something; this proves it said it
     // about the key actually published. Without it a genuine link could sit
     // over a key it never covered.
-    final published = await _publishedKey(atClient, atSign, enrollmentId);
+    final published = await _publishedKey(atSign, enrollmentId);
     if (published != payload['apkamPublicKey']) {
       return 'the link on $enrollmentId vouches for a key other than the one '
           'published for it';
@@ -549,14 +547,13 @@ class PqSigningChain {
     return null;
   }
 
-  static Future<ChainResult> _checkRootLink(
-    AtClient atClient,
+  Future<ChainResult> _checkRootLink(
     String atSign,
     String enrollmentId,
     Map<String, Object?> link,
     List<String> path,
   ) async {
-    final rootKey = await _rootPublicKey(atClient, atSign);
+    final rootKey = await _rootPublicKey(atSign);
     if (rootKey == null) {
       return ChainResult(
           ChainVerdict.broken,
@@ -568,7 +565,7 @@ class PqSigningChain {
     if (payload is! Map ||
         payload['childEnrollmentId'] != enrollmentId ||
         payload['apkamPublicKey'] !=
-            await _publishedKey(atClient, atSign, enrollmentId)) {
+            await _publishedKey(atSign, enrollmentId)) {
       return ChainResult(
           ChainVerdict.broken,
           path,
@@ -595,10 +592,9 @@ class PqSigningChain {
             "atSign's signing root");
   }
 
-  static Future<String?> _publishedKey(
-      AtClient atClient, String atSign, String enrollmentId) async {
+  Future<String?> _publishedKey(String atSign, String enrollmentId) async {
     try {
-      final value = await atClient.get(
+      final value = await _atClient.get(
         AtKey.fromString(apskUri(atSign, enrollmentId)),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
@@ -608,10 +604,9 @@ class PqSigningChain {
     }
   }
 
-  static Future<Uint8List?> _rootPublicKey(
-      AtClient atClient, String atSign) async {
+  Future<Uint8List?> _rootPublicKey(String atSign) async {
     try {
-      return await PqSigningRoot.publishedPublicKey(atClient, atSign);
+      return await PqSigningRoot.publishedPublicKey(_atClient, atSign);
     } catch (e) {
       // Verification wants one answer — "nothing to check against" — for
       // absent and unreadable alike; the distinction matters only to code

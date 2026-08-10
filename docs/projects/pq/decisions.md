@@ -5926,3 +5926,19 @@ against the old code with the fix reverted. The plan's survey line
 consistent pair — mint's cache and `read()` both carry the expanded
 form deliberately; the real defect was in the conveyances, and only the
 types found it.
+
+### 62.6 PqSigningChain gets a constructor
+
+The chain was a bag of statics each threading `AtClient` (and often the
+same derived state) through every call. It is now an instance per
+client — `PqSigningChain(atClient)` — with the client-bound operations
+(`signLinkFor`, `publishLink`, `readLink`, `readRootLink`,
+`publishOwnRootLink`, `publishPendingLink`, `verifyChain`) as instance
+methods and a per-instance logger that names its atSign. The wire
+vocabulary stays static where it was: the field names, the secret name,
+`apskUri`, `linkPayload` and the codecs belong to the protocol, not to
+any client, and the raw-literal pins in `wire_literal_pins_test`
+continue to address them unchanged. The bootstrap now owns one chain
+beside its one ring/filing/sharing/root; the enrollment service's sweep
+builds one per sweep. Pure motion — behaviour identical, all three test
+packages swept in the same commit.
