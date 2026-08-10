@@ -8,7 +8,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 // The socket seams are internal, so tests construct the impl directly.
 import 'package:at_lookup/src/at_lookup_impl.dart';
-import 'package:at_lookup/src/connection/at_lookup_socket_factories.dart';
 import 'package:at_lookup/src/connection/at_connection.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:test/test.dart';
@@ -106,15 +105,22 @@ void main() {
     });
   });
 
-  /// The challenge shape an atServer should emit for a client:
-  /// `data:_<uuid><atSign>:<uuid>`.
-  const fromChallenge = 'data:_03fe0ff2-ac50-4c80-8f43-88480beba888@alice'
+  /// The challenge shape an atServer emits for a client: `_<uuid><atSign>:<uuid>`.
+  /// [AtLookupImpl] refuses to sign anything else, so every `from:` stub below
+  /// has to answer with a well-formed one.
+  const fromChallenge = '_03fe0ff2-ac50-4c80-8f43-88480beba888@alice'
       ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+
+  /// A second challenge, for the tests that handshake twice and need the two
+  /// rounds to be distinguishable.
+  const altFromChallenge = '_9d1e5c07-3b42-4a8f-9e60-7c2f1a4b8d33@alice'
+      ':41f6b0a9-8e57-4c31-b2d8-5a90e37c6f14';
 
   group('A group of tests to verify atlookup pkam authentication', () {
     test('pkam auth without enrollmentId - auth success', () async {
-      when(() => mockOutboundListener.read())
-          .thenAnswer((_) => Future.value('data:success'));
+      var reads = 0;
+      when(() => mockOutboundListener.read()).thenAnswer((_) =>
+          Future.value(reads++ == 0 ? 'data:$fromChallenge' : 'data:success'));
 
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
@@ -156,8 +162,9 @@ void main() {
 
     test('pkam auth with enrollmentId - auth success', () async {
       final enrollmentIdFromServer = '5a21feb4-dc04-4603-829c-15f523789170';
-      when(() => mockOutboundListener.read())
-          .thenAnswer((_) => Future.value('data:success'));
+      var reads = 0;
+      when(() => mockOutboundListener.read()).thenAnswer((_) =>
+          Future.value(reads++ == 0 ? 'data:$fromChallenge' : 'data:success'));
 
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
@@ -202,8 +209,9 @@ void main() {
 
     test('the constructor enrollmentId is used when none is passed', () async {
       final enrollmentIdFromCtor = 'ctor-enrollment-id';
-      when(() => mockOutboundListener.read())
-          .thenAnswer((_) => Future.value('data:success'));
+      var reads = 0;
+      when(() => mockOutboundListener.read()).thenAnswer((_) =>
+          Future.value(reads++ == 0 ? 'data:$fromChallenge' : 'data:success'));
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
@@ -220,8 +228,9 @@ void main() {
 
     test('an algorithm hashing intrinsically omits the hashingAlgo token',
         () async {
-      when(() => mockOutboundListener.read())
-          .thenAnswer((_) => Future.value('data:success'));
+      var reads = 0;
+      when(() => mockOutboundListener.read()).thenAnswer((_) =>
+          Future.value(reads++ == 0 ? 'data:$fromChallenge' : 'data:success'));
       when(() => mockOutBoundConnection.getMetaData())
           .thenReturn(OutboundConnectionMetadata()..isAuthenticated = false);
       when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
@@ -242,8 +251,7 @@ void main() {
 
     test('the from challenge is what gets signed, with the retained key',
         () async {
-      final challenge =
-          '_03fe0ff2-ac50-4c80-8f43-88480beba888@alice:c3d345fc-5691-4f90-bc34-17cba31f060f';
+      const challenge = fromChallenge;
       var reads = 0;
       when(() => mockOutboundListener.read()).thenAnswer((_) =>
           Future.value(reads++ == 0 ? 'data:$challenge' : 'data:success'));
@@ -274,7 +282,7 @@ void main() {
     });
 
     test('cram auth digests the secret and challenge with SHA-512', () async {
-      final challenge = '_abc@alice:def';
+      const challenge = fromChallenge;
       var reads = 0;
       when(() => mockOutboundListener.read(
               transientWaitTimeMillis: any(named: 'transientWaitTimeMillis'),
@@ -325,7 +333,7 @@ void main() {
         () async {
       final rsa = RsaSigningAlgo();
       final (:publicKey, :secretKey) = await rsa.generateKeyPair();
-      const challenge = '_abc@alice:def';
+      const challenge = fromChallenge;
 
       final command = await pkamCommandFrom(
         () => AtLookupImpl(
@@ -356,7 +364,7 @@ void main() {
         () async {
       final mlDsa = MlDsa65PureDartAlgo();
       final (:publicKey, :secretKey) = await mlDsa.generateKeyPair();
-      const challenge = '_ghi@alice:jkl';
+      const challenge = altFromChallenge;
 
       final command = await pkamCommandFrom(
         () => AtLookupImpl(
@@ -417,7 +425,7 @@ void main() {
       when(() => mockOutBoundConnection.write(any()))
           .thenAnswer((_) => Future.value());
       // The `from` challenge, the `pkam` result, then the verb's own response.
-      final reads = ['data:_abc@alice:def', 'data:success', llookupResponse];
+      final reads = ['data:$fromChallenge', 'data:success', llookupResponse];
       var read = 0;
       when(() => mockOutboundListener.read())
           .thenAnswer((_) => Future.value(reads[read++]));
@@ -485,10 +493,10 @@ void main() {
       });
       // Each round: the `from` challenge, the `pkam` result, the verb response.
       final reads = [
-        'data:_abc@alice:def',
+        'data:$fromChallenge',
         'data:success',
         'data:1234',
-        'data:_ghi@alice:jkl',
+        'data:$altFromChallenge',
         'data:success',
         'data:5678',
       ];

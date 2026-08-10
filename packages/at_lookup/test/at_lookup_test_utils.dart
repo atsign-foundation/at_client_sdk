@@ -4,7 +4,6 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_lookup/src/connection/at_lookup_socket_factories.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:mocktail/mocktail.dart';
 
