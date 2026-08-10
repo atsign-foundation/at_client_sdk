@@ -6588,3 +6588,64 @@ on `WrittenAtKeysIo`. `AtKeysFileLock` is not reentrant, so a caller
 invoking `flush` inside the seam would deadlock on its own lock — the seam
 needs a reentrancy design (or a lock-free inner flush contract) before it
 can be offered, and it has no production consumer yet to shape it.
+
+## 73. Phase 5: `AtEnrollmentImpl` splits into submitter, approver, handshake (2026-08-10)
+
+**Status:** accepted and landed. The 927-line class was three jobs that
+shared nothing but a progress stream, and the three are separated by
+*which authority they hold*, which is why they were never one thing:
+
+- **`EnrollmentSubmitter`** asks. Its three paths differ only in the
+  authority they carry — a CRAM connection for the first enrollment, an
+  OTP for a new device, an already-enrolled APKAM connection for the
+  retrofit — and none of them may decide their own request.
+- **`EnrollmentApprover`** decides, and issues the passcodes a request
+  has to quote. `approve`/`deny`/`revoke`/`list`/`generateOtp`/`setSpp`
+  are one family because they need one thing: a connection authenticated
+  as an enrollment holding `__manage`. The passcode verbs sit here rather
+  than with submission because an OTP is minted by the app that will
+  approve and handed to the app that will request.
+- **`EnrollmentHandshake`** waits out somebody else's decision. PKAM
+  authentication is retried until it succeeds, which is both the approval
+  signal and the earliest moment the enrollment may read anything; what
+  approval released is then collected, decrypted and persisted.
+- **`EnrollmentProgress`** owns the one broadcast stream. A caller listens
+  to `progressStream` once, across a submission and the wait that follows
+  it, so the stream has to outlive whichever collaborator is running.
+
+The only cross-family edge is the submitter holding the approver for the
+self-enrollment's best-effort `deny` cleanup — the same coupling the code
+already had as a self-call, now visible.
+
+**Defaults belong to the class that implements the published interface.**
+`AtEnrollmentImpl` keeps every default (`retryInterval`, `logProgress`,
+`maxRetries`, the OTP `expiry`); the collaborators take those values as
+required parameters. A caller's unstated retry interval is therefore
+decided in exactly one place instead of two.
+
+**Pure motion, and checked as such:** 839 of the 850 non-blank original
+lines moved verbatim. The 11 that did not are the seam and were
+enumerated before the commit — per-class loggers, `_addProgress` →
+`_progress.add`, `deny` → `_approver.deny`, the duplicate logger the PKAM
+loop constructed locally, and the two OTP default signatures. The
+`AtEnrollment` interface is untouched (seven `Mock implements` of it
+across three packages make it the safe seam), `AtEnrollmentImpl` keeps
+every member it implements, and the single member it loses is
+`waitBriefly`, which no caller anywhere had.
+
+**Found while mapping, NOT fixed here** (each is its own decision, and
+fusing either into a motion commit would hide it):
+
+- `waitForApproval`'s defaults differ between the interface (48 retries,
+  1 minute apart, `logProgress` false) and the implementation (15
+  retries, 2 seconds apart, `logProgress` true), so the polling regime a
+  caller gets depends on whether it holds `AtEnrollment` or
+  `AtEnrollmentImpl` — 48 minutes of patience versus 30 seconds. Legal
+  Dart, silent, and it pre-dates this branch (`9e87a9a04`). Phase 6
+  surface work.
+- Both post-approval key fetches log their `keys:get` command at
+  `shout`. Phase 7 hygiene.
+
+Older entries in this ledger cite `at_enrollment_impl.dart` with line
+numbers (§ entries at lines 1448, 1807, 2095 of this file); that code now
+lives in `enrollment_submitter.dart` and `enrollment_approver.dart`.
