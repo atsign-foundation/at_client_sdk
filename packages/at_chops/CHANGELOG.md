@@ -1,5 +1,7 @@
 ## 3.5.0
-- feat: add `RsaSignatureAlgorithm`, deprecating the old RsaSigningAlgorithm which implements the deprecated signing type.
+- feat: add `RsaSignatureAlgo`, a stateless `AtSignatureAlgorithm` implementation for RSA-2048 and RSA-4096 signing, with key material passed per call
+- deprecate: `RsaSigningAlgo`, which implements the deprecated `AtSigningAlgorithm` interface — use `RsaSignatureAlgo` instead. The two produce byte-identical signatures, so the swap is transparent on the wire
+- deprecate: redirect the `DefaultSigningAlgo` and `PkamSigningAlgo` deprecation notices at `RsaSignatureAlgo`; they previously pointed at `RsaSigningAlgo`, which is now itself deprecated
 
 ## 3.4.1
 - fix: export `Argon2idHashingAlgo` and `Md5HashingAlgo` from the main `at_chops.dart` barrel so callers can use all supported hashing algorithms through the public package import.

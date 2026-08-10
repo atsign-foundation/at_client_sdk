@@ -32,9 +32,11 @@ import 'package:crypton/crypton.dart';
 /// [RsaSignatureAlgo.rsa4096] instance is usable for data and envelope
 /// signing, but not for PKAM authentication.
 ///
-/// [generateKeyPair] runs RSA key generation on the calling isolate and takes
-/// appreciable wall-clock time, seconds for 4096 bits. Prefer generating once
-/// and persisting over generating per operation.
+/// [generateKeyPair] runs RSA key generation on the calling isolate, so it
+/// blocks the event loop while it runs. It is a probabilistic prime search with
+/// a long tail — usually well under a second at 4096 bits, but occasionally
+/// much longer. Prefer generating once and persisting over generating per
+/// operation, and run it off the UI isolate.
 final class RsaSignatureAlgo implements AtSignatureAlgorithm {
   final SigningAlgoType signingAlgoType;
   String get name => signingAlgoType.name;
@@ -126,9 +128,10 @@ final class RsaSignatureAlgo implements AtSignatureAlgorithm {
     }
     final int bits = key.asPointyCastle.n!.bitLength;
     if (bits != _modulusBits) {
-      throw AtSigningException('Key is $bits-bit but this algorithm reports '
-          '${signingAlgoType.name}; construct RsaSignatureAlgo for the '
-          'matching modulus size');
+      throw AtSigningException('Cannot sign with a $bits-bit key using '
+          'RsaSignatureAlgo.${signingAlgoType.name} — the signature would go '
+          'on the wire labelled ${signingAlgoType.name}. Construct the '
+          'RsaSignatureAlgo whose name matches the key you hold.');
     }
     return key;
   }
@@ -144,19 +147,21 @@ final class RsaSignatureAlgo implements AtSignatureAlgorithm {
     final int bits = key.asPointyCastle.modulus!.bitLength;
     if (bits != _modulusBits) {
       throw AtSigningVerificationException(
-          'Key is $bits-bit but this algorithm reports '
-          '${signingAlgoType.name}; construct RsaSignatureAlgo for the '
-          'matching modulus size');
+          'Cannot verify with a $bits-bit key using '
+          'RsaSignatureAlgo.${signingAlgoType.name} — a key of another size '
+          'was not produced by the algorithm this instance claims to be. '
+          'Construct the RsaSignatureAlgo whose name matches the key you '
+          'hold.');
     }
     return key;
   }
 }
 
-@Deprecated(
-    'Use RsaSignatureAlgo, this uses the deprecated AtSigningAlgo as the base class')
-
 /// Data signing and verification using atsign encryption keypair
 /// Allowed algorithms are listed in [SigningAlgoType] and [HashingAlgoType]
+@Deprecated('Use RsaSignatureAlgo instead. This implements the deprecated '
+    'AtSigningAlgorithm interface and will be removed in the next major '
+    'release.')
 class RsaSigningAlgo implements AtSigningAlgorithm {
   final AsymmetricKeyPair? _encryptionKeyPair;
   final HashingAlgoType _hashingAlgoType;
