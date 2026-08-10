@@ -5869,3 +5869,25 @@ so the public surface is unchanged (one addition:
 `@visibleForTesting clearEraDefault`). The
 don't-resolve-into-the-shared-preference property is now the registry
 type's documented contract rather than a comment on a private field.
+
+### 62.4 The `_apsk` publishes read one snapshot (the 3-read race)
+
+`publishOwnRootLink` and `publishPendingLink` each read the enrollment's
+own `_apsk` **three** times per operation — once for the key the link
+vouches for, once for the already-published check, and once inside
+`_publishInto` for the value the put re-sends. Three reads of one record
+mean the key vouched for, the check and the republished value could each
+come from a *different* state of the record: anything writing between
+them (another device of the same enrollment starting, a registration
+re-put) made the published link vouch for a key that was no longer the
+record's value, or resurrected state the check had ruled out.
+
+Now each operation reads the record once and every check and the write
+use that snapshot: `_publishInto` and `publishLink` take an optional
+pre-read `current`, and the field checks have an in-hand flavour
+(`_fieldFrom`) beside the fetching one. Test-first: the new
+read-count pins in `pq_signing_chain_test` asserted 1 and measured 3
+before the fix, on both paths. Cross-process writers still exist —
+read-merge-write against a shared record remains the pattern until the
+store grows an atomic verb — but one operation is no longer a race with
+itself, and in-process the bootstrap already serialised the writers.

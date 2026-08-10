@@ -159,6 +159,26 @@ void main() {
       expect(published?['signature'], link['signature']);
     });
 
+    test('reads its own record exactly once while publishing', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link =
+          await PqSigningChain.signLinkFor(parentClient, parent, 'child-1');
+      await convey(child, link!);
+
+      clearInteractions(childClient);
+      expect(await PqSigningChain.publishPendingLink(childClient), isTrue);
+
+      expect(apskGetCount(childClient, atSign, 'child-1'), 1,
+          reason: 'the key the link vouches for, the already-published '
+              'check and the value republished must come from ONE '
+              'snapshot — separate reads let the record change between '
+              'them');
+    });
+
     test('writes nothing when nobody vouched for it', () async {
       final childClient = client('child-1');
       await registered(childClient);
@@ -299,6 +319,22 @@ void main() {
           reason: 'establishing privilege costs a round trip, so the local '
               'possession check has to come first — otherwise every client '
               'pays for it at every start');
+    });
+
+    test('reads its own record exactly once while anchoring', () async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = await rootHolder('priv-1', pair.secretKey);
+
+      clearInteractions(c);
+      expect(
+          await PqSigningChain.publishOwnRootLink(c,
+              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
+          isTrue);
+
+      expect(apskGetCount(c, atSign, 'priv-1'), 1,
+          reason: 'the key vouched for, the existing-link check and the '
+              'value republished must come from ONE snapshot — separate '
+              'reads let the record change between them');
     });
 
     test('a root link and a chain link coexist on one record', () async {
@@ -517,4 +553,13 @@ void main() {
             'is checked against that parent\'s own published key — otherwise '
             'any enrollment could name any other as its approver');
   });
+}
+
+/// How many of [c]'s remote gets fetched [enrollmentId]'s own `_apsk`.
+int apskGetCount(MockAtClient c, String atSign, String enrollmentId) {
+  final uri = PqSigningChain.apskUri(atSign, enrollmentId);
+  final captured = verify(() => c.get(captureAny(),
+          getRequestOptions: any(named: 'getRequestOptions')))
+      .captured;
+  return captured.where((k) => k.toString() == uri).length;
 }

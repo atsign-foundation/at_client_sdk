@@ -177,8 +177,10 @@ class PqSigningChain {
   ///
   /// Rewrites the record with its value unchanged and the link added to
   /// `appMetadata.additional`. The value has to be re-sent because a put
-  /// replaces the record; re-reading it first means the key published is the
-  /// one already there rather than one this client believes it should be.
+  /// replaces the record; what is sent back is the record's current state —
+  /// [current] when the caller already read it, else read here — so the key
+  /// published is the one already there rather than one this client believes
+  /// it should be.
   ///
   /// The provider id is the legacy one, which is accurate rather than a
   /// placeholder: `_apsk` is a public plaintext key and no provider encrypts
@@ -186,12 +188,14 @@ class PqSigningChain {
   static Future<void> publishLink(
     AtClient atClient,
     String enrollmentId,
-    Map<String, Object?> link,
-  ) async {
+    Map<String, Object?> link, {
+    AtValue? current,
+  }) async {
     // Resolved before the write: a link so malformed its signer cannot be
     // read is refused here rather than published and then logged broken.
     final signer = envelopeSignerOf(link);
-    await _publishInto(atClient, enrollmentId, linkField, link);
+    await _publishInto(atClient, enrollmentId, linkField, link,
+        current: current);
     _logger.info('Published chain link for $enrollmentId, signed by enrollment '
         '$signer');
   }
@@ -199,9 +203,12 @@ class PqSigningChain {
   /// Adds [value] under [field] in this enrollment's `_apsk` `appMetadata`,
   /// leaving the record's value and any other field alone.
   ///
-  /// The value is re-read and re-sent because a put replaces the record;
+  /// The record's current state is re-sent because a put replaces the record;
   /// sending back what is already there means the key published stays the one
-  /// every verifier resolves rather than one this client believes it should be.
+  /// every verifier resolves rather than one this client believes it should
+  /// be. A caller that already read the record passes it as [current], so the
+  /// checks it made and the write here come from ONE snapshot — a separate
+  /// read would let the record change in between.
   ///
   /// Existing `additional` entries are carried forward, so the chain link and
   /// the root link coexist on the same record instead of overwriting each
@@ -210,12 +217,13 @@ class PqSigningChain {
     AtClient atClient,
     String enrollmentId,
     String field,
-    Map<String, Object?> value,
-  ) async {
+    Map<String, Object?> value, {
+    AtValue? current,
+  }) async {
     final atSign = atClient.getCurrentAtSign()!;
     final uri = apskUri(atSign, enrollmentId);
 
-    final AtValue current = await atClient.get(
+    current ??= await atClient.get(
       AtKey.fromString(uri),
       getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
     );
@@ -257,13 +265,20 @@ class PqSigningChain {
         AtKey.fromString(apskUri(atSign, enrollmentId)),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
-      final link = value.metadata?.appMetadata?.additional?[field];
-      if (link is Map) return link.cast<String, Object?>();
-      return null;
+      return _fieldFrom(value, field);
     } catch (e) {
       _logger.info('No _apsk readable for enrollment $enrollmentId: $e');
       return null;
     }
+  }
+
+  /// The link under [field] in an already-read `_apsk` [value], or null.
+  /// The in-hand flavour of [_readField], for callers that must make every
+  /// check against one snapshot of the record.
+  static Map<String, Object?>? _fieldFrom(AtValue value, String field) {
+    final link = value.metadata?.appMetadata?.additional?[field];
+    if (link is Map) return link.cast<String, Object?>();
+    return null;
   }
 
   /// Signs and publishes this enrollment's **root** link, if it is entitled to
@@ -319,8 +334,7 @@ class PqSigningChain {
       return false;
     }
 
-    final existing = await readRootLink(atClient, enrollmentId);
-    if (existing != null) return false;
+    if (_fieldFrom(current, rootLinkField) != null) return false;
 
     final payload = linkPayload(
       childEnrollmentId: enrollmentId,
@@ -331,12 +345,17 @@ class PqSigningChain {
       secretKey: private,
     );
 
-    await _publishInto(atClient, enrollmentId, rootLinkField, {
-      'v': 1,
-      'alg': rootLinkAlgo,
-      'payload': payload,
-      'signature': base64Encode(signature),
-    });
+    await _publishInto(
+        atClient,
+        enrollmentId,
+        rootLinkField,
+        {
+          'v': 1,
+          'alg': rootLinkAlgo,
+          'payload': payload,
+          'signature': base64Encode(signature),
+        },
+        current: current);
     _logger.info('Anchored $enrollmentId to the signing root');
     return true;
   }
@@ -425,12 +444,12 @@ class PqSigningChain {
       return false;
     }
 
-    final existing = await readLink(atClient, enrollmentId);
+    final existing = _fieldFrom(current, linkField);
     if (existing != null && existing['signature'] == link['signature']) {
       return false;
     }
 
-    await publishLink(atClient, enrollmentId, link);
+    await publishLink(atClient, enrollmentId, link, current: current);
     return true;
   }
 
