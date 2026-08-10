@@ -10,16 +10,20 @@ import 'package:flutter/material.dart';
 /// It listens to real-time updates and provides approval/denial functionality.
 /// {@endtemplate}
 class EnrollmentRequestList extends StatefulWidget {
-  const EnrollmentRequestList({super.key, this.useShrinkWrap = false});
+  const EnrollmentRequestList(
+      {super.key, this.useShrinkWrap = false, this.enrollmentService});
 
   final bool useShrinkWrap;
+
+  /// Injection seam for tests; defaults to a real [FlutterEnrollmentService].
+  final FlutterEnrollmentService? enrollmentService;
 
   @override
   State<EnrollmentRequestList> createState() => _EnrollmentRequestListState();
 }
 
 class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
-  final FlutterEnrollmentService _service = FlutterEnrollmentService();
+  late final FlutterEnrollmentService _service;
   final List<ServerEnrollmentRequest> _requests = [];
   final List<Timer> _overlayTimers = [];
   StreamSubscription? _subscription;
@@ -29,6 +33,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   @override
   void initState() {
     super.initState();
+    _service = widget.enrollmentService ?? FlutterEnrollmentService();
     _fetchAndSubscribe();
   }
 
@@ -65,9 +70,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
           );
 
       // Initial fetch of pending requests
-      final atLookUp = AtClientManager.getInstance().atClient
-          .getRemoteSecondary()!
-          .atLookUp;
+      final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
       final initialRequests = await _service.list([
         EnrollmentStatus.pending,
       ], atLookUp);
@@ -94,15 +97,19 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
   Future<void> _handleApprove(ServerEnrollmentRequest request) async {
     try {
-      final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
-      final atLookUp = AtClientManager.getInstance().atClient
-          .getRemoteSecondary()!
-          .atLookUp;
+      // Through the service's own client seam, so the whole flow is
+      // testable by injecting one service; in production it is the same
+      // AtClientManager-resolved instance either way.
+      final atSign = _service.atClient.getCurrentAtSign()!;
+      final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
       await _service.approve(
         EnrollmentRequestDecision.approved(
           enrollmentId: request.enrollmentId,
+          // Absent on a pq-mode request: the enrollee wrapped no key and the
+          // approver mints one, so empty — not a crash — is the signal the
+          // approve path expects.
           apkamSymmetricKey: AtBytes.fromString(
-            request.encryptedAPKAMSymmetricKey!,
+            request.encryptedAPKAMSymmetricKey ?? '',
           ),
           atSign: atSign,
         ),
@@ -113,6 +120,20 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
           _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
         });
         _showFeedbackOverlay(request, EnrollmentStatus.approved);
+      }
+      // ignore: experimental_member_use
+    } on EnrollmentConveyanceException catch (e) {
+      // The server-side approval succeeded — only the secret conveyance was
+      // refused, so the request is no longer pending and leaves the list,
+      // and the message (approved, cannot decrypt, consider revoking) is
+      // shown as-is rather than wrapped in a failure claim.
+      if (mounted) {
+        setState(() {
+          _requests.removeWhere((r) => r.enrollmentId == request.enrollmentId);
+        });
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(e.message)));
       }
     } catch (e) {
       if (mounted) {
@@ -131,10 +152,8 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
 
   Future<void> _handleDeny(ServerEnrollmentRequest request) async {
     try {
-      final atSign = AtClientManager.getInstance().atClient.getCurrentAtSign()!;
-      final atLookUp = AtClientManager.getInstance().atClient
-          .getRemoteSecondary()!
-          .atLookUp;
+      final atSign = _service.atClient.getCurrentAtSign()!;
+      final atLookUp = _service.atClient.getRemoteSecondary()!.atLookUp;
       await _service.deny(
         EnrollmentRequestDecision.denied(request.enrollmentId, atSign),
         atLookUp,

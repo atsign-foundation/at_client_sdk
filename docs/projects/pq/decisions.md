@@ -6117,3 +6117,26 @@ record-backed resolver test including the no-record-is-no-privilege
 arm. The interface widening swept the one `implements` fake in the
 same edit, per the Mock-implements rule. The PairwiseSecretSharing
 mixin split stays elective, not taken — nothing here needed it.
+
+## 66. The approval list's last hop tells the truth (2026-08-10)
+
+**Status:** accepted. The two items 63.3 deferred, done now at Gary's
+direction. `EnrollmentRequestList._handleApprove` null-banged
+`encryptedAPKAMSymmetricKey` — null on every pq-mode request, whose
+whole signal is that the approver mints the key — so every such
+approval crashed before `FlutterEnrollmentService.approve` was even
+called, and the generic catch dressed the crash as `Failed to
+approve`. Fixed to pass empty (the mint signal the approve path
+expects). And the widget now catches `EnrollmentConveyanceException`:
+the row leaves the list (the request is no longer pending — the
+approval *happened*) and the refusal's own prose is shown unwrapped.
+To make any of it testable the widget gained an injectable
+`enrollmentService` (the `ApkamActivationDialog` pattern, the third
+use of it in the package) and resolves its `AtClient` through the
+service's existing seam instead of reaching for the
+`AtClientManager` singleton at four sites — production-identical, and
+the whole flow now drives through one injected mock. Widget tests
+red-proofed with a single-token flip of the null-bang, which sends
+both arms through the old path; restored by inverse edit, not
+`git checkout`, because the file was uncommitted — the lesson of this
+morning's self-inflicted rewrite applied.
