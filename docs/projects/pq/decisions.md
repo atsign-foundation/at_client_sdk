@@ -7115,3 +7115,50 @@ follow a change silently — and one behavioural arm observes the *applied*
 default that has a visible effect on a single successful poll. Both were run
 red: flipping `defaultLogProgress` fails the behavioural arm and the literal
 pin together.
+
+## 81. Phase 6: the key-exchange mode is wired, and there is nothing left to wire it to (2026-08-10)
+
+**Status:** accepted (2026-08-10). Plan decision #7 — "`EnrollmentKeyExchangeMode.pq`:
+wire it or ship dark" — resolves as *neither*, because the question
+presupposed a wiring target that does not exist.
+
+### What the code says
+
+`keyExchangeMode` is declared on `AtEnrollmentRequest` alone, not on the
+`EnrollmentRequest` base, and that is correct rather than an oversight: the
+mode describes how an `apkamSymmetricKey` travels **from an approver to an
+enrollee**, and only that request type has an approver. The other two have
+nothing to exchange —
+
+- `FirstEnrollmentRequest` is the atSign's own first enrollment, submitted
+  over a CRAM-authenticated connection and auto-approved;
+- `AtSelfEnrollmentRequest` is auto-approved on a connection whose APKAM
+  privilege already authorizes it, and ships no `encryptedAPKAMSymmetricKey`
+  at all. The client is retrofitting itself: it already holds the atSign's
+  keys, mints the new material locally and files it in the same process.
+
+The plan carried a consequence out of the capstone: *the posture carries
+`keyExchangeMode` but nothing in at_client applies it, so if Phase 6 adds an
+at_client-side submission entry point, that is what must consult
+`preference.posture.keyExchangeMode`.* at_client has exactly one submission
+entry point — `selfRetrofit`, at `src/enroll/self_retrofit.dart` — and it
+submits `AtSelfEnrollmentRequest`, the type with nothing to exchange. So the
+consequence has no target, and manufacturing one would mean adding an
+app-enrollment entry point to at_client for no caller, which is the
+mechanism-with-no-operator shape.
+
+### The ruling
+
+Nothing to build. pq mode is not dark: it is selectable through
+`AtEnrollmentRequest.pq(...)`, which requires the two companions it cannot
+work without, and it is exercised live by the functional pack's
+`enrollment_pq_key_exchange_e2e_test.dart`. `ReleasePosture.keyExchangeMode`
+carries the release default for the app that builds the request — `legacy`
+in 3.x, `pq` under `postQuantum()` — which is exactly the Workstream A
+table, and exactly what the field's own dartdoc already described.
+
+One imprecision fixed with it: `ReleasePosture.postQuantum()`'s summary read
+"enrollments exchange their symmetric key post-quantum" alongside four
+things the posture really does apply by itself. It now says that this one
+takes effect when the app builds its request from the value — the same
+correction §70.1 made to that constructor's "safe to adopt early".

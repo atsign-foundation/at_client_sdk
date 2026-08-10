@@ -78,8 +78,11 @@ class ReleasePosture {
   /// The 4.0 defaults — post-quantum by default.
   ///
   /// New data is written under the nskey data path, legacy writes are
-  /// refused, envelopes go out in the JWS shape, enrollments exchange their
-  /// symmetric key post-quantum, and a retrofit mints ML-DSA.
+  /// refused, envelopes go out in the JWS shape, and a retrofit mints
+  /// ML-DSA. [keyExchangeMode] becomes pq, which — unlike the others — this
+  /// posture cannot apply on its own: at_client submits no app enrollment,
+  /// so that value takes effect when the app builds its request from it
+  /// (`AtEnrollmentRequest.pq`).
   ///
   /// **This is tomorrow's posture, adoptable today only with eyes open.** It
   /// exists so the whole rollout is drivable from one codebase — the
