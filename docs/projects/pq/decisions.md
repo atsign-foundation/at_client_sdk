@@ -7045,3 +7045,73 @@ Phase 7 / 4.0:
   dialog leaves the loop polling until the process ends; a caller can race
   it with its own timer but cannot cancel it. A deadline or a cancellation
   token is new machinery with its own design questions, so it waits.
+
+## 80. Phase 6: one set of enrollment defaults, and the divergence that never was (2026-08-10)
+
+**Status:** accepted (2026-08-10). Zero behaviour change; the values that
+land here are the values that were already being applied.
+
+### The recorded premise was wrong
+
+Section 73 recorded, and the refactor plan carried, that `waitForApproval`'s
+defaults diverge between the `AtEnrollment` interface (48 retries, a minute
+apart, `logProgress` false) and `AtEnrollmentImpl` (15, two seconds, true),
+so that "which regime a caller gets depends on the static type it holds: 48
+minutes of patience or 30 seconds". The two declarations do differ. The
+consequence does not follow, and it took a red proof that refused to go red
+to notice: reintroducing the divergence deliberately left the pin green.
+
+**Dart resolves a default parameter value in the method that runs, not from
+the static type at the call site.** Six lines settle it — an interface
+declaring `{int x = 1}`, an implementation declaring `{int x = 2}`, and an
+interface-typed reference prints 2. So `AtEnrollmentImpl`'s list has always
+won for every caller, including every `AtEnrollment.create()` in production,
+and the interface's 48-and-a-minute was never applied to anything.
+
+What the divergence actually was, then, is a **published interface
+advertising a polling regime that nothing implements** — a documentation
+defect, and one that had already misled this project's own plan.
+
+### The ruling
+
+The four defaults become constants on `AtEnrollment` —
+`defaultRetryInterval` (2 seconds), `defaultMaxRetries` (15),
+`defaultLogProgress` (true) and `defaultOtpExpiry` (5 minutes) — and both
+the interface and the implementation state those constants rather than
+literals. Gary chose the applied values over any adjustment once the true
+baseline was on the record: at two seconds an enrollee learns of an approval
+almost at once, and the alternative on the table (ten seconds, an 80% cut in
+`from:`/`pkam:` round trips) traded that away for traffic nobody had
+measured a problem with.
+
+Because a default is resolved in the callee, the constants do not *enforce*
+agreement — nothing can, short of the interface declining to declare
+defaults at all. What they do is make the interface's documentation and the
+implementation's behaviour the same edit.
+
+### The prose that was wrong with it
+
+- The interface dartdoc said polling "continues until a final status is
+  received or the maximum number of retries is reached" and that
+  `maxRetries` "specifies the maximum number of polling attempts before
+  giving up". Section 79 proved both false. It now states that the wait for
+  a decision is unbounded and that `maxRetries` budgets consecutive failures
+  to reach the atServer.
+- `AtOnboardingService.awaitApproval`'s dartdoc said an exception is thrown
+  if the request "was denied, or times out". It cannot time out.
+- The CLI's `--max-retries` help on the enroll path said "Number of times to
+  check for approval before giving up", describing a give-up that does not
+  exist. The onboard path's identically-named option is untouched: it feeds
+  a `RetryOptions` on the activation check, which really is a bounded retry,
+  so its help was already true.
+- `AtEnrollmentImpl`'s class dartdoc claimed the class owns the published
+  API's defaults. It now points at the constants.
+
+### Pins
+
+`test/enrollment_handshake_test.dart` pins the four constants as raw
+literals — asserting them against the constants that declare them would
+follow a change silently — and one behavioural arm observes the *applied*
+default that has a visible effect on a single successful poll. Both were run
+red: flipping `defaultLogProgress` fails the behavioural arm and the literal
+pin together.

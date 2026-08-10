@@ -1,4 +1,11 @@
 ## 1.17.0
+- docs: `auth enroll --max-retries` and `AtOnboardingService.awaitApproval`
+  both described a give-up that does not exist. Waiting for an approval
+  decision is unbounded — somebody has to decide the request, on their own
+  schedule — and the option budgets consecutive failures to reach the
+  atServer instead. `auth onboard --max-retries` is unchanged and its help
+  was already accurate: that one feeds a `RetryOptions` on the activation
+  check, which really is a bounded retry.
 - refactor: the `.atKeys` file is written by at_auth's `FileAtKeysIo` — the
   same store `authenticate()` has always read it back through — instead of
   being assembled here. The legacy fields keep their names and their exact

@@ -215,7 +215,7 @@ class EnrollmentHandshake {
     AtLookUp atLookUp,
     String enrollmentIdFromServer,
     Duration retryInterval, {
-    bool logProgress = true,
+    required bool logProgress,
     required int maxRetries,
   }) async {
     // [maxRetries] is a budget for failures to REACH the atServer, and only

@@ -81,7 +81,12 @@ abstract class AtOnboardingService implements ProgressPublisher {
       {Duration? apkamKeysExpiryDuration});
 
   /// Attempts PKAM auth until successful (i.e. request was approved).
-  /// If the request was denied, or times out, then an exception is thrown.
+  /// If the request was denied, an exception is thrown.
+  ///
+  /// The wait itself is not bounded — somebody has to decide this request, on
+  /// their own schedule. [maxRetries] budgets consecutive failures to reach
+  /// the atServer, the exit from an atServer that is genuinely gone; an
+  /// answer from it restores the budget.
   ///
   /// Once successful, the full set of keys are available in
   /// [enrollmentResponse].atAuthKeys

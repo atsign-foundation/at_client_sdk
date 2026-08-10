@@ -1,4 +1,15 @@
 ## 3.4.0
+- docs: `AtEnrollment` publishes its defaults as constants —
+  `defaultRetryInterval` (2 seconds), `defaultMaxRetries` (15),
+  `defaultLogProgress` (true) and `defaultOtpExpiry` (5 minutes) — and both
+  the interface and `AtEnrollmentImpl` now state those rather than literals.
+  The interface had been declaring a different regime for `waitForApproval`
+  (48 retries a minute apart, silent) which no implementation applied: Dart
+  resolves a default in the method that runs, not from the static type at the
+  call site, so `AtEnrollmentImpl`'s values were always the ones in effect.
+  Those are the values that land here, so nothing changes behaviour. The
+  `waitForApproval` dartdoc no longer claims that `maxRetries` bounds the
+  polling, and says instead that the wait for a decision is unbounded.
 - fix: `waitForApproval`'s `maxRetries` is a budget for consecutive failures
   to reach the atServer, which is what its name has always claimed. It used
   to count total polls and never reset, so a wait tolerated connection

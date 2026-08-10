@@ -445,7 +445,8 @@ class AuthCliArgs {
         mandatory: false);
     p.addOption(
       argNameMaxRetries,
-      help: 'Number of times to check for approval before giving up',
+      help: 'Consecutive failures to reach the atServer to ride out before '
+          'giving up. Waiting for the approval itself is not bounded',
       defaultsTo: '${AtOnboardingService.defaultMaxApkamRetries}',
       mandatory: false,
       hide: false,

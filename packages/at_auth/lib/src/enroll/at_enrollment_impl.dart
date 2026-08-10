@@ -21,12 +21,12 @@ import 'package:at_utils/at_progress.dart';
 /// released. They share one [EnrollmentProgress] because a caller listens to
 /// [progressStream] once, across a submission and the wait that follows it.
 ///
-/// This class holds no enrollment state of its own. What it does own are the
-/// defaults of the published API: the collaborators take those values
-/// explicitly, so there is exactly one place a caller's unstated retry
-/// interval or passcode expiry is decided.
+/// This class holds no enrollment state of its own, and it declares no
+/// defaults of its own either: every unstated value comes from the constants
+/// on [AtEnrollment], which is where a caller's unstated retry interval or
+/// passcode expiry is decided whichever of the two types it holds. The
+/// collaborators then take those values explicitly.
 class AtEnrollmentImpl implements AtEnrollment {
-  static const _defaultOtpExpiry = Duration(minutes: 5);
 
   AtEnrollmentImpl();
 
@@ -73,20 +73,20 @@ class AtEnrollmentImpl implements AtEnrollment {
 
   @override
   Future<Otp> generateOtp(AtLookUp atLookUp,
-          {Duration expiry = _defaultOtpExpiry}) =>
+          {Duration expiry = AtEnrollment.defaultOtpExpiry}) =>
       _approver.generateOtp(atLookUp, expiry: expiry);
 
   @override
   Future<Otp> setSpp(String spp, AtLookUp atLookUp,
-          {Duration expiry = _defaultOtpExpiry}) =>
+          {Duration expiry = AtEnrollment.defaultOtpExpiry}) =>
       _approver.setSpp(spp, atLookUp, expiry: expiry);
 
   @override
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
-    Duration retryInterval = const Duration(seconds: 2),
-    bool logProgress = true,
-    int maxRetries = 15,
+    Duration retryInterval = AtEnrollment.defaultRetryInterval,
+    bool logProgress = AtEnrollment.defaultLogProgress,
+    int maxRetries = AtEnrollment.defaultMaxRetries,
     AtLookUp? atLookup,
   }) =>
       _handshake.waitForApproval(

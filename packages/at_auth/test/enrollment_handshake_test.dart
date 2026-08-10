@@ -155,4 +155,36 @@ void main() {
           reason: 'two failures tolerated, the third fatal');
     });
   });
+
+  group('the published polling regime', () {
+    test('is these numbers', () {
+      // Raw literals on purpose. These ARE the published defaults, so a
+      // change to one has to be a deliberate edit here, and that edit is the
+      // review — asserting them against the constants that declare them
+      // would follow any change silently.
+      expect(AtEnrollment.defaultRetryInterval, const Duration(seconds: 2));
+      expect(AtEnrollment.defaultMaxRetries, 15);
+      expect(AtEnrollment.defaultLogProgress, true);
+      expect(AtEnrollment.defaultOtpExpiry, const Duration(minutes: 5));
+    });
+
+    test('is what a caller stating no preference actually gets', () async {
+      // Observes the applied default rather than the declared one. Dart
+      // resolves a default in the callee, so what a caller gets is the
+      // implementation's list whichever type it holds — which is why the
+      // interface declaring a different list was a documentation defect
+      // rather than a behavioural one. `logProgress` is the member of the
+      // list with a visible effect on a single successful poll.
+      final (response, lookup, _) = await rig([Poll.approved]);
+      final enrollment = AtEnrollmentImpl();
+      final events = <Object>[];
+      final subscription = enrollment.progressStream.listen(events.add);
+
+      await enrollment.waitForApproval(response, atLookup: lookup);
+      await subscription.cancel();
+
+      expect(events, isNotEmpty,
+          reason: 'a wait that states no preference narrates itself');
+    });
+  });
 }
