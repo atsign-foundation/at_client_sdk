@@ -1211,13 +1211,16 @@ class AtClientImpl implements AtClient {
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
     if (!atKey.metadata.isPublic && options.shouldEncrypt) {
       try {
-        await CryptoRuntime(this).prepareForPut(
+        await CryptoRuntime(this).prepareWrite(
           atKey,
-          CryptoRuntime.providerIdFor(this, options.cryptoProviderId,
-              atKey: atKey),
+          requestedProviderId: options.cryptoProviderId,
           // Any record the provider writes here is one this write will cite, so
           // it has to travel the same route this write does.
           useRemoteAtServer: options.useRemoteAtServer,
+          // Not stamped here: the catch below may re-route this write to
+          // legacy, and a key stamped with the provider that then declined
+          // would claim a scheme its value was never sealed under.
+          stampProviderId: false,
         );
       } on NamespaceKeyUnavailableException catch (e) {
         if (!mayFallBackToLegacy(_preference)) rethrow;

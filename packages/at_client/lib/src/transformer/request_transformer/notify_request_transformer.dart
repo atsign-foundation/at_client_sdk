@@ -32,24 +32,8 @@ class NotificationRequestTransformer
     _resolveNamespace(notificationParams);
 
     if (_shouldRouteThroughProvider(notificationParams)) {
-      final providerId = CryptoRuntime.providerIdFor(
-          _atClient, notificationParams.cryptoProviderId,
-          atKey: notificationParams.atKey);
-      notificationParams.atKey.metadata.appMetadata ??=
-          AppMetadata(providerId: providerId);
-      // Same preparation step the put path runs, and for the same reason: a
-      // provider that has to write a record of its own — a key conveyance —
-      // cannot do it from inside encrypt, which is called part-way through
-      // building the verb builder below.
-      //
-      // Routed remote, unconditionally, where a put passes its own routing
-      // through: a notification is remote-only by construction. It leaves for
-      // the recipient's atServer the moment this returns, so a conveyance left
-      // to reach the atServer by sync is announced before it exists — and the
-      // recipient resolves the content key inline, on arrival, with nothing to
-      // find.
-      await CryptoRuntime(_atClient).prepareForPut(
-          notificationParams.atKey, providerId,
+      await CryptoRuntime(_atClient).prepareWrite(notificationParams.atKey,
+          requestedProviderId: notificationParams.cryptoProviderId,
           useRemoteAtServer: true);
     }
     // prepares notification builder

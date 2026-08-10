@@ -82,6 +82,65 @@ void main() {
       });
     });
 
+    group('prepareWrite', () {
+      late _PreparingProvider preparing;
+
+      setUp(() {
+        preparing = _PreparingProvider('preparing');
+        configure([legacyProvider, preparing], defaultId: 'preparing');
+      });
+
+      test('resolves, stamps, and runs the provider pre-write step', () async {
+        final atKey = AtKey()..metadata = Metadata();
+
+        final id = await CryptoRuntime(mockAtClient)
+            .prepareWrite(atKey, useRemoteAtServer: true);
+
+        expect(id, 'preparing');
+        expect(atKey.metadata.appMetadata?.providerId, 'preparing');
+        expect(preparing.prepareCalls, 1);
+        expect(preparing.lastUseRemoteAtServer, true);
+      });
+
+      test('a key already carrying routing metadata keeps it', () async {
+        final atKey = AtKey()
+          ..metadata = (Metadata()
+            ..appMetadata =
+                AppMetadata(providerId: 'legacy', additional: {'k': 'v'}));
+
+        await CryptoRuntime(mockAtClient).prepareWrite(atKey);
+
+        expect(atKey.metadata.appMetadata?.providerId, 'legacy');
+        expect(atKey.metadata.appMetadata?.additional, {'k': 'v'});
+      });
+
+      test('stampProviderId: false leaves the key unstamped', () async {
+        final atKey = AtKey()..metadata = Metadata();
+
+        final id = await CryptoRuntime(mockAtClient).prepareWrite(atKey,
+            stampProviderId: false, useRemoteAtServer: false);
+
+        expect(id, 'preparing');
+        expect(atKey.metadata.appMetadata, isNull,
+            reason: 'the put pre-pass may fall back to legacy after this '
+                'call; a key stamped with the provider that then declined '
+                'would claim a scheme its value was never sealed under');
+        expect(preparing.prepareCalls, 1);
+        expect(preparing.lastUseRemoteAtServer, false);
+      });
+
+      test('a provider that does not prepare writes is skipped', () async {
+        final atKey = AtKey()..metadata = Metadata();
+
+        final id = await CryptoRuntime(mockAtClient)
+            .prepareWrite(atKey, requestedProviderId: 'legacy');
+
+        expect(id, 'legacy');
+        expect(atKey.metadata.appMetadata?.providerId, 'legacy');
+        expect(preparing.prepareCalls, 0);
+      });
+    });
+
     test('throws when the routed provider is not registered', () async {
       final atKey = AtKey()
         ..metadata = (Metadata()
@@ -199,6 +258,20 @@ class _RecordingProvider extends CryptoProvider {
     decryptCalls++;
     lastContext = context;
     return '$id decrypted $value';
+  }
+}
+
+class _PreparingProvider extends _RecordingProvider implements PreparesWrites {
+  _PreparingProvider(super.id);
+
+  int prepareCalls = 0;
+  bool? lastUseRemoteAtServer;
+
+  @override
+  Future<void> prepareForWrite(CryptoContext context, AtKey atKey,
+      {bool? useRemoteAtServer}) async {
+    prepareCalls++;
+    lastUseRemoteAtServer = useRemoteAtServer;
   }
 }
 

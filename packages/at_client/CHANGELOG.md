@@ -9,6 +9,11 @@
   package's `KeyPackageStatus`, so a caller can tell "approved but the
   device cannot decrypt; consider revoking" from "the approval failed"
   instead of losing the response inside a generic throw.
+- feat: `CryptoRuntime.prepareWrite()` — the resolve/stamp/prepare
+  sequence every encrypting write path runs before composing anything,
+  as one entry point (the put pre-pass passes `stampProviderId: false`
+  because its legacy fallback must not leave a key claiming a provider
+  that declined it).
 - refactor: the approval-time secret conveyance and the unanchored-
   enrollment sweep live behind a new injected seam,
   `EnrollmentConveyance`, with the envelope-sealing production

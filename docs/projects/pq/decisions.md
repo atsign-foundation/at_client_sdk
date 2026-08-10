@@ -6048,3 +6048,25 @@ workflows get worktree isolation from here on — one finder
 mutation-probed the shared working tree (it restored the file itself,
 and the mutation post-dated the functional run by two minutes, so the
 143/143 stood — but only the timestamps proved that).
+
+## 64. Phase 4f: one CryptoRuntime.prepareWrite() (2026-08-10)
+
+**Status:** accepted. The resolve/stamp/prepare block that the notify
+transformer, the text-notification path and the put pre-pass each
+carried — with the same rationale comment duplicated word-for-word at
+the two notification sites — is one runtime entry point:
+`CryptoRuntime.prepareWrite(atKey, {requestedProviderId,
+useRemoteAtServer, stampProviderId})`, returning the resolved id.
+Additive on the concrete runtime, as ruled: capability dispatch stays
+is-checks and `CryptoProvider` gains no member. The one real asymmetry
+between the sites is now a *documented parameter* instead of a shape
+difference: the put pre-pass must not stamp early, because its
+`NamespaceKeyUnavailableException` catch may re-route the write to
+legacy, and a key already stamped with the provider that declined would
+claim a scheme its value was never sealed under — permanently, since
+the record's metadata rides the write. Test-first pins in
+`crypto_runtime_test.dart`: stamp-when-absent, keep-existing-stamp
+(`??=`), the unstamped arm with that rationale, and the
+non-PreparesWrites skip. The duplicated prose lives once, on the
+method's dartdoc; MetadataWireCodec stays deferred as the plan ruled —
+nothing new justified touching every record's metadata.

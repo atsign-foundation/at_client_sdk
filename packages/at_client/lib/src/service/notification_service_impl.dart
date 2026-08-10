@@ -344,17 +344,8 @@ class NotificationServiceImpl extends NotificationService {
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      // Resolve through the runtime so a provider that cannot serve this key —
-      // the nskey path declines anything without a namespace — is not selected
-      // for it, and so the same preparation step runs as on any other write.
-      final providerId =
-          CryptoRuntime.providerIdFor(atClient, cryptoProviderId, atKey: atKey);
-      atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
-      // Remote, unconditionally: a notification is remote-only by construction,
-      // so a conveyance left to reach the atServer by sync is announced before
-      // it exists and the recipient resolves the key inline with nothing there.
-      await CryptoRuntime(atClient)
-          .prepareForPut(atKey, providerId, useRemoteAtServer: true);
+      await CryptoRuntime(atClient).prepareWrite(atKey,
+          requestedProviderId: cryptoProviderId, useRemoteAtServer: true);
       notifPayload =
           await CryptoRuntime(atClient).encryptForNotification(atKey, body);
       atKey.metadata.isEncrypted = true;

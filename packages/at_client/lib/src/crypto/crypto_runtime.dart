@@ -15,6 +15,41 @@ class CryptoRuntime {
 
   CryptoRuntime(this._atClient);
 
+  /// The resolve/stamp/prepare sequence every encrypting write path runs
+  /// before composing anything: resolves the provider this write will use
+  /// ([providerIdFor]), stamps it into the key's `appMetadata` when the key
+  /// carries none, and gives the provider its pre-write step
+  /// ([prepareForPut]). Returns the resolved provider id.
+  ///
+  /// A provider that has to write a record of its own — a key conveyance —
+  /// cannot do it from inside `encrypt`, which is called part-way through
+  /// building a verb builder; this runs while nothing is in flight.
+  ///
+  /// [useRemoteAtServer] carries how this write is being routed, so a record
+  /// the provider writes travels the same route as the write that will cite
+  /// it. A notification passes `true` unconditionally: it is remote-only by
+  /// construction, so a conveyance left to reach the atServer by sync would
+  /// be announced before it exists.
+  ///
+  /// [stampProviderId] exists for the one caller that must NOT stamp early:
+  /// the put pre-pass, whose catch may re-route the write to legacy when the
+  /// prepare step finds the recipient has no post-quantum key. A key already
+  /// stamped with the provider that then declined would claim a scheme its
+  /// value was never sealed under.
+  Future<String> prepareWrite(AtKey atKey,
+      {String? requestedProviderId,
+      bool? useRemoteAtServer,
+      bool stampProviderId = true}) async {
+    final providerId =
+        providerIdFor(_atClient, requestedProviderId, atKey: atKey);
+    if (stampProviderId) {
+      atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
+    }
+    await prepareForPut(atKey, providerId,
+        useRemoteAtServer: useRemoteAtServer);
+    return providerId;
+  }
+
   /// Give the provider that will handle this write a chance to act *before* the
   /// pipeline starts — see [PreparesWrites]. Providers that do not implement it
   /// are skipped, which is nearly all of them.
