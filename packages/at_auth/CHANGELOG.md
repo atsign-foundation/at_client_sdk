@@ -1,4 +1,14 @@
 ## 3.4.0
+- fix: `waitForApproval`'s `maxRetries` is a budget for consecutive failures
+  to reach the atServer, which is what its name has always claimed. It used
+  to count total polls and never reset, so a wait tolerated connection
+  trouble for its first `maxRetries` polls and was then fatal to a single
+  blip for as long as it ran. An answer from the atServer — including a
+  refusal, which is an answer about the enrollment — now costs nothing and
+  restores the budget. The wait for a pending decision stays deliberately
+  unbounded (`maxRetries` never bounded it, whatever the dartdoc said), and
+  an atServer unreachable from the first poll still gives up after exactly
+  the same number of attempts.
 - fix: a legacy atKeys document that names its own atSign can be upgraded to
   the typed-keys shape. `AtKeysAssurance.validateMapUpdate` strips the
   reserved top-level keys (`version`/`atsign`/`keys`) from a typed document

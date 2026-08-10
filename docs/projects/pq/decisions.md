@@ -6977,3 +6977,71 @@ quietly becoming load-bearing — the raw-string label, the legacy top level
 with no reserved names, the widget as sole owner of its service. None was
 reachable by reading the new code alone; each needed the diff against trunk
 and a run.
+
+## 79. Phase 6: `maxRetries` becomes a budget for the thing it is named after (2026-08-10)
+
+**Status:** accepted (2026-08-10). Gary ruled it after the two probes below
+put the actual behaviour on the record; the mechanism is named here only
+because its differential is green.
+
+### What `maxRetries` did
+
+`EnrollmentHandshake._waitForPkamAuthSuccess` polls PKAM until the
+enrollment is approved. It took a `maxRetries`, the published dartdoc said
+the polling "continues until a final status is received or the maximum
+number of retries is reached", and the CLI's `--max-retries` help said
+"Number of times to check for approval before giving up". None of that was
+true, in two separate ways, and both were captured by a throwaway probe
+rather than argued from the source:
+
+- **It never bounded the wait for approval.** With `maxRetries: 2` against an
+  enrollment answering `error:AT0401`, the handshake made **21** PKAM
+  attempts, returning only when the mock relented and approved. The loop is
+  `while (true)`; the budget is consulted in the generic `catch` alone. That
+  much is deliberate and the code says so — a decision belongs to a person,
+  who takes as long as they take.
+- **It counted total polls, not failures.** `retryAttempt` incremented at the
+  top of every iteration and was never reset, so the budget measured how long
+  the wait had been running. Five pending polls then a single network blip,
+  with `maxRetries: 2`, and the blip was fatal. The practical shape: a wait is
+  tolerant of connection trouble for its first `maxRetries` polls and then
+  fragile to one blip, forever — the opposite of what a retry budget is for,
+  and the opposite of what the code's own comment intended ("The check ...
+  should only occur when the secondary server is unreachable due to network
+  issues").
+
+### The ruling
+
+The budget counts **consecutive failures to reach the atServer**, and
+nothing else. An answer from the atServer — including a refusal, which is an
+answer about the enrollment — costs nothing and restores what earlier
+failures spent. The unbounded wait for a pending decision stays exactly as
+it was; what the budget buys is the exit from an atServer that is genuinely
+gone.
+
+**Mechanism:** `consecutiveUnreachable`, incremented only in the generic
+`catch` and reset on any poll that reached the atServer. The exhaustion
+count is unchanged — `maxRetries` failures are tolerated and the next one
+propagates — so an atServer that is down from the first poll behaves as
+before, down to the number of attempts.
+
+**The differential** is `test/enrollment_handshake_test.dart`, three arms,
+and its middle arm was run red before the fix existed: six unreachable polls
+against a budget of two, spread so that no three are consecutive, must
+complete. The arms on either side of it were green before the fix and stayed
+green — the unbounded pending wait, and the escape hatch exhausting at
+exactly three consecutive failures — so the change is pinned as narrowly as
+the ruling describes it.
+
+### Recorded, not fixed
+
+Two findings from the same reading, both ruled out of Phase 6 and into
+Phase 7 / 4.0:
+
+- An `UnAuthenticatedException` whose message matches none of `AT0401`,
+  `AT0026` or `AT0025` is swallowed and retried forever. A permanently
+  wrong key polls for the life of the process.
+- There is no way to stop a wait. A user who backs out of the Flutter APKAM
+  dialog leaves the loop polling until the process ends; a caller can race
+  it with its own timer but cannot cancel it. A deadline or a cancellation
+  token is new machinery with its own design questions, so it waits.

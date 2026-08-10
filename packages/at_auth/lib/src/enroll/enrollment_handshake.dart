@@ -218,25 +218,31 @@ class EnrollmentHandshake {
     bool logProgress = true,
     required int maxRetries,
   }) async {
-    int retryAttempt = 0;
+    // [maxRetries] is a budget for failures to REACH the atServer, and only
+    // those. An enrollment nobody has decided yet is not a failure — the
+    // decision is a person's, taken on their own schedule — so a pending
+    // answer spends nothing and restores what earlier failures spent. What
+    // the budget buys is an exit from an atServer that is genuinely gone,
+    // which is why only an unbroken run of failures can exhaust it.
+    int consecutiveUnreachable = 0;
     while (true) {
-      retryAttempt++;
       _logger.info('Attempting pkam auth');
       if (logProgress) {
         _progress.add('PKAM', 'attempting PKAM auth', ProgressEventType.info);
         await _waitBriefly();
       }
       bool pkamAuthSucceeded = false;
+      bool reachedAtServer = true;
       try {
         // _attemptPkamAuth returns boolean value true when authentication is successful.
         // Returns UnAuthenticatedException when authentication fails.
         pkamAuthSucceeded = await atLookUp.pkamAuthenticate(
             enrollmentId: enrollmentIdFromServer);
       } on UnAuthenticatedException catch (e) {
+        // A refusal is an ANSWER: the atServer was reached and reported on the
+        // enrollment, so this costs nothing against the budget.
         // Error codes AT0401 and AT0026 indicate authentication failure due to unapproved enrollment. Retry until the enrollment is approved.
         // The variable _pkamAuthSucceeded is false, allowing for PKAM authentication retries.
-        // Avoid checking "retryAttempt > _maxActivationRetries" here, as we want to continue retrying until enrollment is approved.
-        // The check for "retryAttempt > _maxActivationRetries" should only occur when the secondary server is unreachable due to network issues.
         if (e.message.contains('error:AT0401') ||
             e.message.contains('error:AT0026')) {
           _logger.info('Pkam auth failed: ${e.message}');
@@ -247,15 +253,21 @@ class EnrollmentHandshake {
               'The enrollment: $enrollmentIdFromServer is denied');
         }
       } catch (e) {
+        reachedAtServer = false;
+        consecutiveUnreachable++;
         String message =
             'Exception occurred when authenticating the atSign caused by ${e.toString()}';
-        if (retryAttempt > maxRetries) {
-          message += ' Activation failed after $maxRetries attempts';
+        if (consecutiveUnreachable > maxRetries) {
+          message +=
+              ' Activation failed after $maxRetries consecutive attempts';
           _logger.severe(message);
           _progress.add('PKAM', message, ProgressEventType.error);
           rethrow;
         }
         _logger.severe(message);
+      }
+      if (reachedAtServer) {
+        consecutiveUnreachable = 0;
       }
       if (pkamAuthSucceeded) {
         if (logProgress) {
