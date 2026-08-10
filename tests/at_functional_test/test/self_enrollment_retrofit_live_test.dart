@@ -195,6 +195,9 @@ void main() {
       timeout: const Timeout(Duration(seconds: 90)), () async {
     final session = await legacySession();
     final manager = await selfRetrofit(
+        // Mode B, explicitly: this row tests the PQ retrofit, and the
+        // parameter default is the rollout-window RSA mode.
+        signingAlgo: SigningAlgoType.mldsa65,
         session: session,
         preference: TestUtils.getPreference(atSign),
         appName: 'rf2b-app',
