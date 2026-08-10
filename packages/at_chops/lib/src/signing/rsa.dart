@@ -7,6 +7,7 @@ import 'package:at_chops/src/secure_random.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:pointycastle/api.dart'
     show
+        AsymmetricKeyPair,
         KeyParameter,
         ParametersWithRandom,
         PrivateKeyParameter,
@@ -60,10 +61,11 @@ class RsaSigningAlgo implements AtSignatureAlgorithm {
       ..init(ParametersWithRandom(
           RSAKeyGeneratorParameters(_publicExponent, _keySize, 12), random));
 
-    final keyPair = generator.generateKeyPair();
+    final AsymmetricKeyPair keyPair = generator.generateKeyPair();
     return (
-      publicKey: RsaKeyCodec.encodePublicKey(keyPair.publicKey),
-      secretKey: RsaKeyCodec.encodePrivateKey(keyPair.privateKey),
+      publicKey: RsaKeyCodec.encodePublicKey(keyPair.publicKey as RSAPublicKey),
+      secretKey:
+          RsaKeyCodec.encodePrivateKey(keyPair.privateKey as RSAPrivateKey),
     );
   }
 

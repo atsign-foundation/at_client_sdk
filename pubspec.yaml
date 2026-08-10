@@ -32,7 +32,6 @@ dependencies:
   # normal dependencies
   archive: ^4.0.7
   args: ^2.6.0
-  asn1lib: ^1.5.3
   async: ^2.9.0
   at_base2e15: ^1.0.0
   at_file_saver: ^0.1.2
@@ -40,7 +39,6 @@ dependencies:
   at_persistence_spec: ^3.0.0
   at_utf7: ^1.0.0
   basic_utils: ^5.6.1
-  better_cryptography: ^1.0.0+1
   biometric_storage: ^5.0.0
   cached_network_image: ^3.3.1
   chalkdart: ">=2.0.9<4.0.0" # no breaking changes in 3.0.0
@@ -48,13 +46,10 @@ dependencies:
   convert: ^3.0.2
   cron: ^0.5.1
   crypto: ^3.0.5
-  cryptography: ^2.7.0
   crypton: ^2.2.1
   dart_periphery: ^0.9.5
   device_info_plus: ^11.3.3
   duration: ^4.0.3
-  ecdsa: ^0.1.0
-  elliptic: ^0.3.10
   emoji_picker_flutter: ^4.3.0
   encrypt: ^5.0.3
   file_picker: ^11.0.0

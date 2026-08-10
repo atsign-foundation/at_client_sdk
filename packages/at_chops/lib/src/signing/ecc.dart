@@ -5,6 +5,7 @@ import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/secure_random.dart';
 import 'package:pointycastle/api.dart'
     show
+        AsymmetricKeyPair,
         KeyParameter,
         ParametersWithRandom,
         PrivateKeyParameter,
@@ -48,10 +49,10 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
     final generator = ECKeyGenerator()
       ..init(ParametersWithRandom(ECKeyGeneratorParameters(_domain), random));
 
-    final keyPair = generator.generateKeyPair();
+    final AsymmetricKeyPair keyPair = generator.generateKeyPair();
     return (
-      publicKey: keyPair.publicKey.Q!.getEncoded(false),
-      secretKey: _encodeScalar(keyPair.privateKey.d!),
+      publicKey: (keyPair.publicKey as ECPublicKey).Q!.getEncoded(false),
+      secretKey: _encodeScalar((keyPair.privateKey as ECPrivateKey).d!),
     );
   }
 
