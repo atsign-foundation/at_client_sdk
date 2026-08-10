@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -43,6 +44,49 @@ void main() {
       final Uint8List bad = await algo.decapsulate(priv, tampered);
       expect(bad, isNot(equals(enc.sharedSecret)));
       expect(bad.length, equals(32));
+    });
+
+    test('encapsulate throws ArgumentError for a too-short public key',
+        () async {
+      final Uint8List badPub = Uint8List(MlKem768Sizes.publicKeyBytes - 1);
+      expect(
+          () => MlKem768PureDartAlgo.instance.encapsulate(badPub),
+          throwsA(isA<ArgumentError>().having(
+              (e) => e.message, 'message', contains('ML-KEM-768 public key'))));
+    });
+
+    test('encapsulate throws ArgumentError for a too-long public key',
+        () async {
+      final Uint8List badPub = Uint8List(MlKem768Sizes.publicKeyBytes + 1);
+      expect(
+          () => MlKem768PureDartAlgo.instance.encapsulate(badPub),
+          throwsA(isA<ArgumentError>().having(
+              (e) => e.message, 'message', contains('ML-KEM-768 public key'))));
+    });
+
+    test('decapsulate throws ArgumentError for a wrong-length ciphertext',
+        () async {
+      final MlKem768KeyPair kp = await MlKem768KeyPair.generate();
+      final Uint8List priv = base64Decode(kp.atPrivateKey.privateKey);
+      final Uint8List badCt = Uint8List(MlKem768Sizes.ciphertextBytes + 1);
+
+      expect(
+          () => MlKem768PureDartAlgo.instance.decapsulate(priv, badCt),
+          throwsA(isA<ArgumentError>().having(
+              (e) => e.message, 'message', contains('ML-KEM-768 ciphertext'))));
+    });
+
+    test('decapsulate throws ArgumentError for a wrong-length secret key',
+        () async {
+      // secretKey length is checked before ciphertext is touched, so a
+      // same-length dummy ciphertext suffices — no real encapsulate() needed.
+      final Uint8List badSecretKey = Uint8List(2399);
+      final Uint8List ct = Uint8List(MlKem768Sizes.ciphertextBytes);
+
+      expect(
+          () => MlKem768PureDartAlgo.instance.decapsulate(badSecretKey, ct),
+          throwsA(isA<ArgumentError>().having(
+              (e) => e.message, 'message', contains('ML-KEM-768 secret key'))));
     });
   });
 }
