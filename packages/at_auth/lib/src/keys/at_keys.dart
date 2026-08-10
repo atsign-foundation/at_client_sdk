@@ -58,6 +58,60 @@ class AtKeys {
         material.keyId, () => {})[material.keyPartType] = material;
   }
 
+  /// Files a freshly minted APKAM keypair as an enrollment's signing
+  /// material, under the keyId `apkam:<enrollmentId>`.
+  ///
+  /// This is the one place that id shape is written. [algorithm] is a
+  /// [KeyAlgorithmType] token, which is also the enrollment `signingAlgo`
+  /// spelling — the keyfile and the wire use the same strings. Both halves
+  /// are filed and share one creation timestamp: the private one is what
+  /// PKAM signs with, and the public one is what a reader checks this
+  /// enrollment's server-side record against.
+  void fileApkamMaterial({
+    required String enrollmentId,
+    required String algorithm,
+    required String publicKey,
+    required String privateKey,
+  }) {
+    final now = DateTime.now().toUtc();
+    addKey(AtKeysMaterial(
+        keyId: 'apkam:$enrollmentId',
+        enrollmentId: enrollmentId,
+        keyPartType: CryptographicKeyType.privateSigning,
+        keyAlgorithmType: algorithm,
+        bytes: AtBytes.fromString(privateKey),
+        createdAt: now));
+    addKey(AtKeysMaterial(
+        keyId: 'apkam:$enrollmentId',
+        enrollmentId: enrollmentId,
+        keyPartType: CryptographicKeyType.publicVerification,
+        keyAlgorithmType: algorithm,
+        bytes: AtBytes.fromString(publicKey),
+        createdAt: now));
+  }
+
+  /// Adopts [materials] — what an enrollment request's metadataBuilder filed
+  /// into the construction keys it was handed — tagged with the enrollment id
+  /// they now belong to.
+  ///
+  /// Every other field rides across untouched, `createdAt` and `status`
+  /// included: at_auth carries key material and does not interpret it, so the
+  /// only thing an adoption may change is whose enrollment it is.
+  void adoptMaterials(Iterable<AtKeysMaterial> materials,
+      {required String enrollmentId}) {
+    for (final material in materials.toList()) {
+      addKey(AtKeysMaterial(
+          keyId: material.keyId,
+          enrollmentId: enrollmentId,
+          keyPartType: material.keyPartType,
+          keyAlgorithmType: material.keyAlgorithmType,
+          bytes: material.bytes,
+          operations: material.operations,
+          createdAt: material.createdAt,
+          status: material.status));
+    }
+  }
+
   /// Marks every material of [keyId] as [to] ([KeyPartStatus.retired] by
   /// default). Key material is never removed — retired/dead bytes are still
   /// needed to decrypt data they protected — so this is the delete

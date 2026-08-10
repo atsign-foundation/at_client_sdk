@@ -6649,3 +6649,40 @@ fusing either into a motion commit would hide it):
 Older entries in this ledger cite `at_enrollment_impl.dart` with line
 numbers (§ entries at lines 1448, 1807, 2095 of this file); that code now
 lives in `enrollment_submitter.dart` and `enrollment_approver.dart`.
+
+## 74. Phase 5: enrollment material gets one filing path (2026-08-10)
+
+**Status:** accepted and landed. Two writer sites — the first enrollment of
+an onboard (`AtAuthImpl._fileFirstEnrollmentMaterial`) and the
+self-enrollment retrofit (`EnrollmentSubmitter`) — each hand-built the same
+`AtKeysMaterial` shapes: an APKAM keypair filed under `apkam:<enrollmentId>`
+with both halves sharing one timestamp, then every material the request's
+metadataBuilder minted re-tagged with the enrollment id the atServer just
+assigned. Two chances to disagree about an at-rest shape that no compiler
+and no test would have caught disagreeing, since each site is exercised by
+its own flow.
+
+They are now `AtKeys.fileApkamMaterial` and `AtKeys.adoptMaterials`, on the
+class that already owns `addKey`/`retireKey`/`keysForEnrollment` and runs
+the assurance validation. Both are red-proofed: dropping the re-tag reddens
+three adoption arms, and changing the id prefix reddens the shape arm (but
+not the "resolves its own signing algorithm" arm, which reads by enrollment
+id — the two properties are pinned separately, as they should be).
+
+**No interpretation moved with the plumbing.** `adoptMaterials` copies
+`bytes`, `operations`, `createdAt` and `status` across untouched and changes
+only whose enrollment the material belongs to. at_auth still carries key
+material without understanding it; the key package's meaning stays in
+at_client.
+
+Two consequences worth recording:
+
+- The wire pin for `apkam:<enrollmentId>` claimed "three writer sites
+  today" and there were two. The comment is now a checkable claim again —
+  one writer — and the pin still freezes the shape independently of it,
+  because every PQ keyfile already written carries these ids.
+- `onboarding_mint.dart` moved from `keys/` to `auth/` in its own commit.
+  `keys/` is where material is held, persisted and serialized; minting what
+  a fresh activation starts from is an onboarding step, and its only caller
+  is the onboard path that sits beside `AtOnboardingRequest` in
+  `auth/models/`.

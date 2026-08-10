@@ -374,4 +374,134 @@ void main() {
       );
     });
   });
+
+  group('AtKeys fileApkamMaterial', () {
+    test('files both halves under one apkam:<enrollmentId> keyId', () {
+      final atKeys = AtKeys();
+
+      atKeys.fileApkamMaterial(
+          enrollmentId: 'enroll-9',
+          algorithm: KeyAlgorithmType.mlDsa65,
+          publicKey: 'cHVibGljLWhhbGY=',
+          privateKey: 'cHJpdmF0ZS1oYWxm');
+
+      final filed = atKeys.keysForKeyId('apkam:enroll-9').toList();
+      expect(filed, hasLength(2));
+      expect(
+        atKeys
+            .getKey('apkam:enroll-9', CryptographicKeyType.privateSigning)!
+            .bytes
+            .toString(),
+        'cHJpdmF0ZS1oYWxm',
+      );
+      expect(
+        atKeys
+            .getKey('apkam:enroll-9', CryptographicKeyType.publicVerification)!
+            .bytes
+            .toString(),
+        'cHVibGljLWhhbGY=',
+      );
+      expect(filed.map((m) => m.enrollmentId), everyElement('enroll-9'));
+      expect(filed.map((m) => m.keyAlgorithmType),
+          everyElement(KeyAlgorithmType.mlDsa65));
+      // One mint is one event: both halves carry the same timestamp.
+      expect(filed.first.createdAt, filed.last.createdAt);
+    });
+
+    test('the filed enrollment resolves its own signing algorithm', () {
+      final atKeys = AtKeys();
+
+      atKeys.fileApkamMaterial(
+          enrollmentId: 'enroll-9',
+          algorithm: KeyAlgorithmType.rsa2048,
+          publicKey: 'cHVibGljLWhhbGY=',
+          privateKey: 'cHJpdmF0ZS1oYWxm');
+
+      expect(atKeys.keysForEnrollment('enroll-9'), hasLength(2));
+      expect(atKeys.signingAlgorithmForEnrollment('enroll-9'),
+          SigningAlgoType.rsa2048);
+    });
+  });
+
+  group('AtKeys adoptMaterials', () {
+    test('re-tags the enrollment id and changes nothing else', () {
+      final built = DateTime.utc(2026, 3, 4, 5, 6, 7);
+      final source = AtKeys(keysList: [
+        symmetricKey('kem:xwing',
+            value: 'c2VjcmV0',
+            enrollmentId: 'the-old-enrollment',
+            createdAt: built),
+      ]);
+      final target = AtKeys();
+
+      target.adoptMaterials(source.keys, enrollmentId: 'the-new-enrollment');
+
+      final adopted = target.keysForKeyId('kem:xwing').single;
+      expect(adopted.enrollmentId, 'the-new-enrollment');
+      expect(adopted.keyId, 'kem:xwing');
+      expect(adopted.keyPartType, CryptographicKeyType.symmetricEncryption);
+      expect(adopted.keyAlgorithmType, KeyAlgorithmType.aes256);
+      expect(adopted.bytes.toString(), 'c2VjcmV0');
+      // The builder's own timestamp, not the adoption's.
+      expect(adopted.createdAt, built);
+      // The source keeps its own tag: adoption copies, it does not move.
+      expect(source.keysForKeyId('kem:xwing').single.enrollmentId,
+          'the-old-enrollment');
+    });
+
+    test('carries a non-default status and operations across', () {
+      final source = AtKeys(keysList: [
+        AtKeysMaterial(
+            keyId: 'kem:xwing',
+            enrollmentId: 'the-old-enrollment',
+            keyPartType: CryptographicKeyType.privateDecapsulation,
+            keyAlgorithmType: KeyAlgorithmType.xWing,
+            bytes: AtBytes.fromString('c2VjcmV0'),
+            operations: const ['decapsulate'],
+            createdAt: DateTime.utc(2026, 3, 4),
+            status: KeyPartStatus.retired),
+      ]);
+      final target = AtKeys();
+
+      target.adoptMaterials(source.keys, enrollmentId: 'the-new-enrollment');
+
+      final adopted = target.keysForKeyId('kem:xwing').single;
+      expect(adopted.status, KeyPartStatus.retired);
+      expect(adopted.operations, ['decapsulate']);
+      expect(adopted.keyAlgorithmType, KeyAlgorithmType.xWing);
+    });
+
+    test('adopts every material of a multi-part keyId', () {
+      final source = AtKeys(keysList: [
+        ...rsaKeyPair('pair', enrollmentId: 'the-old-enrollment'),
+      ]);
+      final target = AtKeys();
+
+      target.adoptMaterials(source.keys, enrollmentId: 'the-new-enrollment');
+
+      expect(target.keysForEnrollment('the-new-enrollment'), hasLength(2));
+      expect(target.keysForEnrollment('the-old-enrollment'), isEmpty);
+    });
+
+    test('refuses to adopt onto a keyId another enrollment already holds', () {
+      final target = AtKeys(keysList: [
+        symmetricKey('kem:xwing', enrollmentId: 'the-sitting-enrollment'),
+      ]);
+      final source = AtKeys(keysList: [
+        AtKeysMaterial(
+            keyId: 'kem:xwing',
+            enrollmentId: 'the-old-enrollment',
+            keyPartType: CryptographicKeyType.privateDecapsulation,
+            keyAlgorithmType: KeyAlgorithmType.xWing,
+            bytes: AtBytes.fromString('c2VjcmV0'),
+            createdAt: DateTime.utc(2026, 3, 4)),
+      ]);
+
+      expect(
+        () => target.adoptMaterials(source.keys,
+            enrollmentId: 'the-new-enrollment'),
+        throwsA(isA<ArgumentError>()),
+      );
+    });
+  });
 }

@@ -376,34 +376,15 @@ class EnrollmentSubmitter {
       // materials tagged with the new enrollment id, while the legacy flat
       // fields — frozen by the keyfile's never-lose contract — keep carrying
       // the original enrollment's.
-      final now = DateTime.now().toUtc();
-      existing.addKey(AtKeysMaterial(
-          keyId: 'apkam:$newEnrollmentId',
+      existing.fileApkamMaterial(
           enrollmentId: newEnrollmentId,
-          keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: materialAlgo,
-          bytes: AtBytes.fromString(apkamPrivate),
-          createdAt: now));
-      existing.addKey(AtKeysMaterial(
-          keyId: 'apkam:$newEnrollmentId',
-          enrollmentId: newEnrollmentId,
-          keyPartType: CryptographicKeyType.publicVerification,
-          keyAlgorithmType: materialAlgo,
-          bytes: AtBytes.fromString(apkamPublic),
-          createdAt: now));
+          algorithm: materialAlgo,
+          publicKey: apkamPublic,
+          privateKey: apkamPrivate);
       // Whatever the metadataBuilder filed (the X-Wing key package's two
       // halves), re-tagged with the enrollment id it now belongs to.
-      for (final material in constructionKeys.keys) {
-        existing.addKey(AtKeysMaterial(
-            keyId: material.keyId,
-            enrollmentId: newEnrollmentId,
-            keyPartType: material.keyPartType,
-            keyAlgorithmType: material.keyAlgorithmType,
-            bytes: material.bytes,
-            operations: material.operations,
-            createdAt: material.createdAt,
-            status: material.status));
-      }
+      existing.adoptMaterials(constructionKeys.keys,
+          enrollmentId: newEnrollmentId);
       await keysIo.flush(request.atSign.toAtsign(), existing);
 
       return AtEnrollmentResponse(newEnrollmentId, enrollStatus,

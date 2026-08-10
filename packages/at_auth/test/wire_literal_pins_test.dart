@@ -249,9 +249,9 @@ void main() {
     });
 
     test('the typed keyfile ids APKAM material files under', () {
-      // 'apkam:<enrollmentId>' — declared at three writer sites today; the
-      // shape is what readAll-style scans and signingAlgorithmForEnrollment
-      // match on in every existing PQ keyfile.
+      // 'apkam:<enrollmentId>' — AtKeys.fileApkamMaterial is the only writer
+      // of this shape now, but the shape itself is frozen independently of
+      // it: every PQ keyfile already written carries these ids.
       final material = AtKeysMaterial(
           keyId: 'apkam:enroll-1',
           keyPartType: CryptographicKeyType.privateSigning,

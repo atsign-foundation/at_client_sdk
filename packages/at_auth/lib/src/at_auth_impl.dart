@@ -16,7 +16,6 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
-import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -489,34 +488,15 @@ class AtAuthImpl implements AtAuth {
       OnboardingMint mint,
       SigningAlgoType signingAlgo,
       String enrollmentId) {
-    final now = DateTime.now().toUtc();
     if (signingAlgo != SigningAlgoType.rsa2048) {
-      atAuthKeys.addKey(AtKeysMaterial(
-          keyId: 'apkam:$enrollmentId',
+      atAuthKeys.fileApkamMaterial(
           enrollmentId: enrollmentId,
-          keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: signingAlgo.name,
-          bytes: AtBytes.fromString(mint.apkamPrivateKey),
-          createdAt: now));
-      atAuthKeys.addKey(AtKeysMaterial(
-          keyId: 'apkam:$enrollmentId',
-          enrollmentId: enrollmentId,
-          keyPartType: CryptographicKeyType.publicVerification,
-          keyAlgorithmType: signingAlgo.name,
-          bytes: AtBytes.fromString(mint.apkamPublicKey),
-          createdAt: now));
+          algorithm: signingAlgo.name,
+          publicKey: mint.apkamPublicKey,
+          privateKey: mint.apkamPrivateKey);
     }
-    for (final material in constructionKeys.keys) {
-      atAuthKeys.addKey(AtKeysMaterial(
-          keyId: material.keyId,
-          enrollmentId: enrollmentId,
-          keyPartType: material.keyPartType,
-          keyAlgorithmType: material.keyAlgorithmType,
-          bytes: material.bytes,
-          operations: material.operations,
-          createdAt: material.createdAt,
-          status: material.status));
-    }
+    atAuthKeys.adoptMaterials(constructionKeys.keys,
+        enrollmentId: enrollmentId);
   }
 
   Future<void> _defaultProbeSocket(String host, int port) async {

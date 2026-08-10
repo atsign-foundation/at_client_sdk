@@ -1,4 +1,12 @@
 ## 3.4.0
+- feat: `AtKeys.fileApkamMaterial` and `AtKeys.adoptMaterials` — the two
+  operations by which an enrollment's key material enters a keyfile. Filing
+  an APKAM keypair (both halves under `apkam:<enrollmentId>`, sharing one
+  creation timestamp) and adopting what a request's metadataBuilder minted
+  (re-tagged with the enrollment id it now belongs to, every other field
+  untouched) were open-coded at both writer sites — the first enrollment of
+  an onboard, and the self-enrollment retrofit — which is two chances to
+  disagree about an at-rest shape.
 - fix: `InMemoryAtKeysIo.write` honours the interface's create-only
   contract — a second write for the same atSign throws
   `AtKeysFileOverwriteException`, exactly as the file store does, instead
