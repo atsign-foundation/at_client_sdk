@@ -3,7 +3,6 @@
 - fix: ML-KEM-768 and ML-DSA-65 (FFI and pure-Dart) validate key, ciphertext, and signature lengths themselves, throwing `ArgumentError`/`AtSigningException`/`StateError` on mismatch.
 - fix: `MlDsa65KeyPair.create` throws `AtSigningException` for non-base64 `publicKey`/`privateKey`.
 - fix: `MlKem768FfiAlgo.encapsulate`/`decapsulate` throw `ArgumentError` for a wrong-length public key/ciphertext.
-- refactor: X-Wing size constants and byte-assembly/shared-secret-combiner logic consolidated into shared internals. No behavior change.
 
 ## 3.4.1
 - fix: export `Argon2idHashingAlgo` and `Md5HashingAlgo` from the main `at_chops.dart` barrel so callers can use all supported hashing algorithms through the public package import.
