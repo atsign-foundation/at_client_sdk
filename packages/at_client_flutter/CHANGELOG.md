@@ -1,6 +1,13 @@
 # CHANGELOG
 
 ## 1.1.5
+- fix: an approval whose secret conveyance was refused is no longer
+  re-reported as `Enrollment failed`. at_client's `approve()` now throws
+  `EnrollmentConveyanceException` after a server-side approval whose
+  enrollee advertised an unverifiable key package; `approve()` here finishes
+  the approval bookkeeping and rethrows it, so the caller sees the true
+  state — approved, cannot decrypt, consider revoking — instead of a
+  failure claim about an enrollment that is live.
 - fix: a failed keychain read no longer wipes the store. The read's error
   path wrote an empty entry over the stored data before rethrowing, so a
   transient platform-channel error or a cancelled biometric prompt destroyed

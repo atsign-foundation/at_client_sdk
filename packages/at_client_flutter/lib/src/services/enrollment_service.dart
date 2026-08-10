@@ -126,6 +126,15 @@ class FlutterEnrollmentService {
         await keychainAtKeysIo.write(request.atSign, approvedKeys);
       }
       keychainStorage.deleteEnrollmentData(request.atSign);
+      // ignore: experimental_member_use
+    } on EnrollmentConveyanceException {
+      // The server-side approval succeeded — only the conveyance to the new
+      // device was refused, so the enrollment is live and cannot decrypt.
+      // Finish the approval bookkeeping and surface the true state rather
+      // than re-reporting the success as a failed enrollment.
+      keychainStorage.deleteEnrollmentData(request.atSign);
+      await atLookUp.close();
+      rethrow;
     } catch (e) {
       throw Exception('Enrollment failed: $e');
     }

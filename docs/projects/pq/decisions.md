@@ -5997,3 +5997,22 @@ approval failed". Exported from the main barrel `show`-narrowed to the
 exception alone — the seam interface stays internal, consistent with
 the minimal-surface rulings. Red-first: the seam test's rejected arm
 demanded the carrying type before it existed.
+
+### 63.2 at_client_flutter reports approved-but-cannot-decrypt truthfully
+
+The remaining half of the Phase-1 flutter approve fix, deferred to here
+because 4e sets the contract it needs. `FlutterEnrollmentService
+.approve`'s generic catch wrapped *everything* in
+`Exception('Enrollment failed: …')` — including the refusal at_client's
+`approve()` throws **after** a successful server-side approval. Same
+misreporting class as the null-bang: a live enrollment presented as a
+failed one, inviting a retry of an approval that already went through.
+Now that the refusal is the carrying `EnrollmentConveyanceException`
+(63.1), the wrapper catches it by type, finishes the approval
+bookkeeping (the pending-enrollment delete — the approval *did*
+happen), closes the lookup, and rethrows it unwrapped so the caller
+sees the true state: approved, cannot decrypt, consider revoking.
+First cross-package use of an unpublished at_client 3.14.1 API, so
+at_client_flutter's floor rises to `^3.14.1` in the same commit, with
+the why recorded beside it in the pubspec as the at_auth floor's
+comment already does.

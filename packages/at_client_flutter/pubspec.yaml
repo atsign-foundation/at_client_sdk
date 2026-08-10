@@ -23,7 +23,10 @@ dependencies:
   # it reachable on this platform, and workspace resolution would hide a floor
   # too low for a consumer resolving from pub.dev.
   at_auth: ^3.4.0
-  at_client: ^3.11.0
+  # 3.14.1 for EnrollmentConveyanceException — approve() rethrows it, and
+  # workspace resolution would hide a floor too low for a consumer resolving
+  # from pub.dev.
+  at_client: ^3.14.1
   encrypt: ^5.0.3
   intl: ^0.20.2
   file_picker: ^11.0.02
