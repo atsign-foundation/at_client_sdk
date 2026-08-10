@@ -472,6 +472,16 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   }
 
   /// Write newly created encryption key-pairs into atKeys file
+  ///
+  /// The keyfile is written by [FileAtKeysIo] — the same store [authenticate]
+  /// reads it back through. This class used to assemble the document itself,
+  /// which made it a second writer of a format at_auth owns: it self-encrypted
+  /// the four legacy fields by hand (byte-identically, as it happens), rolled
+  /// its own passphrase envelope, and could file no typed key material at all.
+  /// It also dereferenced the flat APKAM and self-encryption fields
+  /// unconditionally, which holds only while every enrollment mints an RSA
+  /// APKAM and every atSign has legacy material — the same assumption that
+  /// broke `_persistKeysLocalSecondary` on a PQ-native keyfile.
   Future<File> _generateAtKeysFile(
     AtKeys atAuthKeys, {
     String? enrollmentId,
@@ -486,58 +496,46 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       atKeysFile = File(atOnboardingPreference.atKeysFilePath!);
     }
 
-    if (atKeysFile.existsSync() && !allowOverwrite) {
-      throw StateError('atKeys file ${atKeysFile.path} already exists');
+    if (atKeysFile.existsSync()) {
+      if (!allowOverwrite) {
+        throw StateError('atKeys file ${atKeysFile.path} already exists');
+      }
+      // `write` is create-only by contract and `flush` is never-lose, so
+      // neither of them means "replace" — which is exactly what allowOverwrite
+      // asks for. The old file goes first, at the caller's request, rather
+      // than by weakening a store verb.
+      await atKeysFile.delete();
     }
 
     logger.finer('Generating keys file at ${atKeysFile.path}'
         ' with enrollmentId $enrollmentId');
 
-    final atKeysMap = <String, String>{
-      AuthKeyType.aesEncryptedPkamPublicKey: EncryptionUtil.encryptValue(
-        atAuthKeys.apkamPublicKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      ),
-      AuthKeyType.aesEncryptedEncryptionPublicKey: EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPublicKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      ),
-      AuthKeyType.aesEncryptedEncryptionPrivateKey: EncryptionUtil.encryptValue(
-        atAuthKeys.defaultEncryptionPrivateKey!.toString(),
-        atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      ),
-      AuthKeyType.selfEncryptionKey:
-          atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      _atSign: atAuthKeys.defaultSelfEncryptionKey!.toString(),
-      AuthKeyType.apkamSymmetricKey: atAuthKeys.apkamSymmetricKey!.toString()
-    };
-
     if (enrollmentId != null) {
-      atKeysMap['enrollmentId'] = enrollmentId;
+      atAuthKeys.enrollmentId = enrollmentId;
+    }
+    // Every .atKeys file in existence carries the self-encryption key a second
+    // time under the atSign itself. Nothing in this repo reads it, and a
+    // freshly built AtKeys has no metadata to emit it from, so it is put there
+    // deliberately — a reader that has always found it must keep finding it.
+    final selfEncryptionKey = atAuthKeys.defaultSelfEncryptionKey;
+    if (selfEncryptionKey != null) {
+      atAuthKeys.metadata[_atSign] = selfEncryptionKey.toString();
+    }
+    if (atOnboardingPreference.authMode != PkamAuthMode.keysFile) {
+      // In a SIM or another secure element the private half cannot be read
+      // and has never been in this file.
+      atAuthKeys.apkamPrivateKey = null;
     }
 
-    if (atOnboardingPreference.authMode == PkamAuthMode.keysFile) {
-      atKeysMap[AuthKeyType.aesEncryptedPkamPrivateKey] =
-          EncryptionUtil.encryptValue(atAuthKeys.apkamPrivateKey!.toString(),
-              atAuthKeys.defaultSelfEncryptionKey!.toString());
-    }
-
-    atKeysFile.createSync(recursive: true);
-    IOSink fileWriter = atKeysFile.openWrite();
-    String encodedAtKeysString = jsonEncode(atKeysMap);
+    await FileAtKeysIo(
+      filePath: (_) => atKeysFile!.path,
+      passPhrase: atOnboardingPreference.passPhrase,
+    ).write(_atSign, atAuthKeys);
 
     if (atOnboardingPreference.passPhrase != null) {
-      AtEncrypted atEncrypted = await AtKeysCrypto.fromHashingAlgorithm(
-              atOnboardingPreference.hashingAlgoType)
-          .encrypt(encodedAtKeysString, atOnboardingPreference.passPhrase!);
-      encodedAtKeysString = atEncrypted.toString();
       stdout.writeln(
           '${chalk.blue('[Information]')} Encrypted atKeys file with the given pass phrase');
     }
-    //generating .atKeys file at path provided in onboardingConfig
-    fileWriter.write(encodedAtKeysString);
-    await fileWriter.flush();
-    await fileWriter.close();
     await AtFileUtil.setSecureFilePermissions(atKeysFile.path);
     stdout.writeln(
         '${chalk.green('[Success]')} Your .atKeys file saved at ${atKeysFile.path}\n');

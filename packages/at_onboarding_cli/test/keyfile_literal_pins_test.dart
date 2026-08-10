@@ -1,12 +1,11 @@
 /// Exact-shape pins over the CLI's at-rest keyfile and checkpoint writers.
 ///
-/// The CLI's `_generateAtKeysFile` is a SECOND declaration of the legacy
-/// keyfile format — same field names as at_auth's writer, different key
-/// order, plus a `<@atSign>` trailer entry at_auth does not emit. The
-/// writer-consolidation work routes this through `FileAtKeysIo`; until the
-/// formats are reconciled deliberately, these pins hold what existing
-/// keyfiles actually look like. No test asserted a single field name of
-/// either writer before this file.
+/// The CLI no longer declares the keyfile format: `_generateAtKeysFile`
+/// writes through `FileAtKeysIo`, the same store `authenticate` reads back
+/// through. These pins hold what that produces — the legacy fields under
+/// their historical names, the `<@atSign>` entry the CLI still contributes,
+/// and the typed-keys document's `version`/`atsign`/`keys`. A change to any
+/// of it changes files users already hold, so it edits this list first.
 library;
 
 import 'dart:convert';
@@ -52,19 +51,24 @@ void main() {
 
       final json = jsonDecode(File(file.path).readAsStringSync())
           as Map<String, dynamic>;
-      // The exact emission, in map-literal order. The '@alice_pins' entry is
-      // the atSign itself as a JSON key, carrying the plaintext
-      // selfEncryptionKey a second time — at_auth's writer has no such
-      // trailer, and the consolidation must decide its fate deliberately.
+      // The exact emission, in the store's order. '@alice_pins' is the atSign
+      // itself as a JSON key, carrying the plaintext selfEncryptionKey a
+      // second time: it is in every keyfile ever written, so the CLI files it
+      // into AtKeys.metadata rather than let the consolidation drop it. Note
+      // it sits beside the store's own 'atsign' field, which is a different
+      // thing — the name, not a key.
       expect(json.keys.toList(), [
         'aesPkamPublicKey',
+        'aesPkamPrivateKey',
         'aesEncryptPublicKey',
         'aesEncryptPrivateKey',
         'selfEncryptionKey',
-        atsign,
         'apkamSymmetricKey',
         'enrollmentId',
-        'aesPkamPrivateKey',
+        atsign,
+        'version',
+        'atsign',
+        'keys',
       ]);
       // Plaintext where plaintext, encrypted where encrypted.
       expect(json['selfEncryptionKey'], selfEncryptionKey);
@@ -77,6 +81,54 @@ void main() {
               'selfEncryptionKey, never plaintext');
       expect(json['aesEncryptPrivateKey'],
           isNot(encryptionPair.atPrivateKey.privateKey));
+      // The typed-keys document the store adds. `keys` is empty for a keyset
+      // with no typed material — a legacy onboard — and is where a PQ-native
+      // enrollment's APKAM lands, which the hand-built writer had nowhere to
+      // put.
+      expect(json['version'], 1);
+      expect(json['atsign'], atsign);
+      expect(json['keys'], isEmpty);
+    });
+
+    test('the store reads back exactly what the CLI wrote', () async {
+      const atsign = '@alice_roundtrip';
+      final preference = AtOnboardingPreference()
+        ..hiveStoragePath = 'test/storage/hive/client'
+        ..commitLogPath = 'test/storage/hive/client/commit'
+        ..atKeysFilePath = '${Directory.current.path}/test/$atsign';
+      final service = AtOnboardingServiceImpl(atsign, preference);
+
+      final encryptionPair = service.generateRsaKeypair();
+      final pkamPair = service.generateRsaKeypair();
+      final selfEncryptionKey = service.generateAESKey();
+      final response = AtEnrollmentResponse('789', EnrollmentStatus.approved)
+        ..atAuthKeys = (AtKeys()
+          ..enrollmentId = '789'
+          ..defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey)
+          ..defaultEncryptionPublicKey =
+              AtBytes.fromString(encryptionPair.atPublicKey.publicKey)
+          ..defaultEncryptionPrivateKey =
+              AtBytes.fromString(encryptionPair.atPrivateKey.privateKey)
+          ..apkamPublicKey = AtBytes.fromString(pkamPair.atPublicKey.publicKey)
+          ..apkamPrivateKey =
+              AtBytes.fromString(pkamPair.atPrivateKey.privateKey)
+          ..apkamSymmetricKey = AtBytes.fromString(service.generateAESKey()));
+
+      final file = await service.createAtKeysFile(response);
+      addTearDown(() => File(file.path).deleteSync());
+
+      // authenticate() reads through this same store, so a file this CLI
+      // writes and cannot read is the failure mode that matters.
+      final readBack = await FileAtKeysIo(filePath: (_) => file.path)
+          .read(atsign);
+      expect(readBack.apkamPrivateKey!.toString(),
+          pkamPair.atPrivateKey.privateKey);
+      expect(readBack.defaultEncryptionPrivateKey!.toString(),
+          encryptionPair.atPrivateKey.privateKey);
+      expect(readBack.defaultSelfEncryptionKey!.toString(), selfEncryptionKey);
+      expect(readBack.enrollmentId, '789');
+      expect(readBack.metadata[atsign], selfEncryptionKey,
+          reason: 'the atSign-keyed entry survives the round trip as metadata');
     });
 
     test('the AuthKeyType field names, as raw strings', () {

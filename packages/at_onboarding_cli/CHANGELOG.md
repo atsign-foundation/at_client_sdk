@@ -1,4 +1,21 @@
 ## 1.17.0
+- refactor: the `.atKeys` file is written by at_auth's `FileAtKeysIo` — the
+  same store `authenticate()` has always read it back through — instead of
+  being assembled here. The legacy fields keep their names and their exact
+  self-encrypted bytes, and the atSign-keyed copy of the self-encryption key
+  that every keyfile carries is preserved; the document gains the typed-keys
+  `version`/`atsign`/`keys` fields, which is what lets a keyfile hold
+  post-quantum key material at all. `allowOverwrite: true` now replaces the
+  file explicitly, since the store's `write` is create-only by contract.
+- **Compatibility, passphrase-protected keyfiles only:** a keyfile written
+  with `AtOnboardingPreference.passPhrase` set now uses at_auth's version 1
+  envelope, which derives its AES key from a random per-file salt. The
+  previous envelope used the passphrase itself as the salt, so two users who
+  chose the same passphrase derived the same key. at_auth reads both, but
+  **older tooling cannot read a version 1 envelope** — keep an older
+  `.atKeys` file if you need to open it with an older client.
+  `AtOnboardingPreference.hashingAlgoType` no longer affects the written
+  file: version 1 is argon2id.
 - refactor: `awaitApproval` delegates the approval handshake —
   PKAM-until-approved, then fetching and decrypting the encryption private
   key and self-encryption key — to at_auth's `waitForApproval`, deleting

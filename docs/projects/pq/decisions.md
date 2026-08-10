@@ -6872,8 +6872,13 @@ Passphrase files are opt-in, so the blast radius is the users who set one.
   `PkamAuthMode.keysFile`, as before: in a SIM or another secure element the
   private half is not the file's to hold.
 
-This also retires a latent fault. The hand-built map dereferences
-`apkamPublicKey!` and `defaultSelfEncryptionKey!` unconditionally, and a
-PQ-native enrollment leaves the flat APKAM fields empty by design — the same
-shape that already broke `_persistKeysLocalSecondary` with a null-check
-error after a *successful* authentication.
+This also retires a latent fault, stated precisely because the live version
+of it is somebody else's: the hand-built map dereferences `apkamPublicKey!`,
+`apkamPrivateKey!` and `defaultSelfEncryptionKey!` unconditionally. That
+holds only while every enrollment mints an RSA APKAM into the flat fields and
+every atSign has legacy material — true of the CLI's enrollment path today,
+which is why no test caught it, and false for an ML-DSA enrollment or an
+atSign minted with `mintLegacyMaterial: false`. The same assumption in its
+live form did break `_persistKeysLocalSecondary`, with a null-check error
+after a *successful* authentication. The store treats every one of those
+fields as optional, which is the shape the keyfile actually has.
