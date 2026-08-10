@@ -287,6 +287,29 @@ void main() {
     await verifyEnvelope(jws, signerPublicKey: apsk);
   });
 
+  test(
+      'the postQuantum posture decides an argless retrofit: no signingAlgo '
+      'anywhere, and the enrollment is ML-DSA', () async {
+    final session = await legacySession();
+    // No signingAlgo argument. Under the migration posture (or the old
+    // parameter default) this call resolves rsa2048 and lands in the RSA
+    // idempotence pool — the assertion below is what tells the two apart.
+    final manager = await selfRetrofit(
+        session: session,
+        preference: TestUtils.getPreference(atSign,
+            posture: const ReleasePosture.postQuantum()),
+        appName: 'rf2b-app',
+        deviceName: 'rf2d-${Uuid().v4().hashCode}',
+        namespaces: {namespace: 'rw'},
+        manager: AtClientManager(atSign));
+
+    final client = manager.atClient;
+    expect(client.enrollmentId, isNot(session.enrollmentId));
+    expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
+        reason: 'nothing in this test named an algorithm — the posture is '
+            'the only thing that could have chosen ML-DSA');
+  });
+
   test('mint-once per keyfile: a rerun reuses the PQ enrollment', () async {
     final session = await legacySession();
 

@@ -15,11 +15,11 @@ import 'dart:io';
 import 'package:test/test.dart';
 
 /// A use-case id as written in both the catalogue and a scenario's name.
-final _ucId = RegExp(r'UC-[AB]\d+\.\d+');
+final _ucId = RegExp(r'UC-[ABC]\d+\.\d+');
 
 /// The same id at the start of a `test('UC-…')` name — the quote is what keeps
 /// this to scenario names and out of the Given/When/Then prose.
-final _scenarioName = RegExp(r"'(UC-[AB]\d+\.\d+)");
+final _scenarioName = RegExp(r"'(UC-[ABC]\d+\.\d+)");
 
 void main() {
   final root = _repoRoot();

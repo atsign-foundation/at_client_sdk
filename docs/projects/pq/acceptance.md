@@ -1240,3 +1240,75 @@ RF-2c).
 
 - **Cross-ref:** `implementation-plan.md` (full plan, dependency graph, waves,
   effort, critical path); `design.md` (harness mechanics).
+
+# Part C — The rollout, driven by flags
+
+## 15. C1 · The rollout posture (capstone of `decisions.md` 56.4)
+
+From the PQ project's view, at_client 4.0 is final-3.x code with different flag
+defaults, so every stage of the rollout must be reachable from this codebase by
+flag manipulation: each of the five axes flipped in isolation, and all five as
+the grouped `ReleasePosture`. These rows assert the mechanism itself — the
+posture reaching each flag's natural home, and every axis remaining
+individually overridable — not the underlying crypto behaviours, which Parts A
+and B already own.
+
+### 15.1 UC-C1.1 — The era axis: a postured client writes PQ by default
+
+- **Given:** a client built with `ReleasePosture.postQuantum()` and no
+  app-named `crypto` config.
+- **When:** its era `CryptoConfig` is adopted at construction.
+- **Then:** new writes default to the nskey data path (the AES-GCM provider),
+  while a migration-postured client's stay legacy; an app-named config beats
+  both.
+
+### 15.2 UC-C1.2 — The refusal axis: the posture disallows legacy writes
+
+- **Given:** a preference built with `ReleasePosture.postQuantum()` and no
+  explicit `disallowLegacyEncryption` argument.
+- **When:** a write would fall back to the legacy provider.
+- **Then:** it is refused (`LegacyEncryptionRefusedException`) because the
+  posture set the flag; an explicit constructor argument beats the posture in
+  both directions.
+
+### 15.3 UC-C1.3 — The envelope axis: postured signers emit the JWS shape
+
+- **Given:** a client whose preference carries `ReleasePosture.postQuantum()`.
+- **When:** any signer the SDK builds for it wraps a payload, with no
+  per-signer version assigned.
+- **Then:** the envelope goes out in the JWS (v2) shape and verifies exactly
+  as v1 does; a per-signer assignment still wins; a key package built under
+  the posture freezes the threaded version in the write-once
+  `metadata.keyPackage`.
+
+### 15.4 UC-C1.4 — The key-exchange axis: the posture names pq enrollment
+
+- **Given:** a submitter composing an `AtEnrollmentRequest` under
+  `ReleasePosture.postQuantum()`. Submission goes through `package:at_auth`,
+  which cannot read a preference, so the posture's value is applied by
+  whoever builds the request — together with the two things pq mode requires
+  (the key-package builder and the symmetric-key resolver).
+- **When:** the request is submitted with `keyExchangeMode = pq`.
+- **Then:** no RSA-wrapped `apkamSymmetricKey` rides the wire; the approver
+  mints and conveys instead; the bare-request default stays `legacy`, so the
+  3.x wire is byte-identical until a posture or the at_auth major flips it.
+
+### 15.5 UC-C1.5 — The retrofit axis: an argless retrofit follows the posture
+
+- **Given:** a legacy atSign and a preference carrying
+  `ReleasePosture.postQuantum()`.
+- **When:** `selfRetrofit` runs with no `signingAlgo` argument.
+- **Then:** the minted enrollment is ML-DSA. Under the migration posture the
+  same call mints RSA — the two postures resolve into different per-algorithm
+  idempotence pools, which is what tells them apart live.
+
+### 15.6 UC-C1.6 — The grouped posture: one value moves all five axes
+
+- **Given:** nothing but
+  `AtClientPreference(posture: const ReleasePosture.postQuantum())`.
+- **When:** a client, its signers, its enrollment submissions and its
+  retrofits are built from that one preference.
+- **Then:** all five axes run the 4.0 defaults — the pinned columns of the
+  `decisions.md` 56.4 table — and each remains individually overridable
+  (UC-C1.1–C1.5 prove the arms). A bare preference runs the migration
+  posture, byte-identical to the pre-posture SDK.

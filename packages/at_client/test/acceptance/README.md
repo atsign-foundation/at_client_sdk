@@ -99,7 +99,7 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## The catalogue
 
-**47 rows** — the catalogue's 37 use cases become 38 scenarios (UC-A5.1 splits,
+**53 rows** — the catalogue's 43 use cases become 44 scenarios (UC-A5.1 splits,
 below), plus 9 cross-cutting invariants.
 
 | Cluster                       | Scenarios                        | Blocked on   |
@@ -115,6 +115,7 @@ below), plus 9 cross-cutting invariants.
 | B3 · mixed-PQ intra-atSign    | B3.1 ✅, B3.2 ✅                    | —            |
 | B4 · mixed-PQ cross-atSign    | B4.1 ✅, B4.2 ✅, B4.3 ✅, B4.4 ✅   | —            |
 | B5 · retrofit edge cases      | B5.1 ✅, B5.2 ✅, B5.3 ✅           | —            |
+| C1 · rollout by flags         | C1.1 ✅, C1.2 ✅, C1.3 ✅, C1.4 ✅, C1.5 ✅, C1.6 ✅ | — |
 | cross-cutting invariants      | 9 (9 ✅)                          | —            |
 
 Note that **A5.1 is split into (a) and (b)** here where the catalogue writes it
@@ -132,7 +133,7 @@ the 45** rows, and no data-path row could go green until **B-1** (XL) and
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**2 of the 47** rows are skipped, and the burn-down went back above zero on
+**2 of the 53** rows are skipped, and the burn-down went back above zero on
 2026-08-10 rather than drifting there. `enroll:updateMetadata` was ruled
 ([`decisions.md` 68](../../../../docs/projects/pq/decisions.md)) and brought two
 new rows with it — UC-A2.5 and UC-A2.6 — so the catalogue grew by two use cases

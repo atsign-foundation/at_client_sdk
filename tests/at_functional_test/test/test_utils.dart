@@ -19,8 +19,13 @@ class TestUtils {
   static int get rootServerPort =>
       int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
 
-  static AtClientPreference getPreference(String atsign) {
-    var preference = AtClientPreference();
+  /// [posture] must be threaded here because it is final at construction —
+  /// a test cannot set it on the returned instance.
+  static AtClientPreference getPreference(String atsign,
+      {ReleasePosture? posture}) {
+    var preference = posture == null
+        ? AtClientPreference()
+        : AtClientPreference(posture: posture);
     preference.hiveStoragePath = 'test/hive/client/$atsign';
     preference.commitLogPath = 'test/hive/client/$atsign';
     preference.rootDomain = 'vip.ve.atsign.zone';
