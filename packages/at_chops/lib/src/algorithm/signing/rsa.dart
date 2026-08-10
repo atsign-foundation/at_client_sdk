@@ -102,20 +102,36 @@ final class RsaSignatureAlgo implements AtSignatureAlgorithm {
 
   /// Verify [signature] over [message] against [publicKey] (X.509 DER).
   ///
-  /// Throws [AtSigningVerificationException] if [publicKey] is not parseable,
-  /// or if its modulus size differs from this instance's — a key of another
-  /// size was not produced by the algorithm this instance claims to be.
+  /// Returns `false` rather than throwing when [publicKey] is unparseable,
+  /// when its modulus size differs from this instance's, or when [signature]
+  /// is malformed. Both arguments usually arrive off the wire, where the
+  /// sender chooses them — "this did not verify" is the honest answer for
+  /// every shape of bad input, and callers should not have to wrap verify in
+  /// a try/catch to reach it.
+  ///
+  /// Note the asymmetry with [signBytes], which still throws: a secret key is
+  /// local material the caller is responsible for, and there is no `false` to
+  /// return in its place.
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
-    final RSAPublicKey key = _parsePublicKey(publicKey);
-    return switch (hashingAlgoType) {
-      HashingAlgoType.sha256 => key.verifySHA256Signature(message, signature),
-      HashingAlgoType.sha512 => key.verifySHA512Signature(message, signature),
-      // Unreachable — see signBytes.
-      _ => throw AtSigningVerificationException(
-          'Invalid hashing algo $hashingAlgoType provided'),
-    };
+    final RSAPublicKey? key = _parsePublicKeyOrNull(publicKey);
+    if (key == null) {
+      return false;
+    }
+    try {
+      return switch (hashingAlgoType) {
+        HashingAlgoType.sha256 => key.verifySHA256Signature(message, signature),
+        HashingAlgoType.sha512 => key.verifySHA512Signature(message, signature),
+        // Unreachable — the constructor admits only the two above. Unlike
+        // signBytes, false is the safe answer here: nothing gets trusted.
+        _ => false,
+      };
+    } catch (_) {
+      // A signature the backend cannot even parse is a failed verification,
+      // not an error condition.
+      return false;
+    }
   }
 
   RSAPrivateKey _parsePrivateKey(Uint8List der) {
@@ -139,27 +155,20 @@ final class RsaSignatureAlgo implements AtSignatureAlgorithm {
     return key;
   }
 
-  RSAPublicKey _parsePublicKey(Uint8List der) {
+  /// Null unless [der] is an X.509 `SubjectPublicKeyInfo` holding an RSA key
+  /// of this instance's modulus size.
+  ///
+  /// A key of another size was not produced by the algorithm this instance
+  /// claims to be, so it cannot have produced a signature this instance should
+  /// call valid.
+  RSAPublicKey? _parsePublicKeyOrNull(Uint8List der) {
     final RSAPublicKey key;
     try {
       key = RSAPublicKey.fromString(base64Encode(der));
-    } catch (e) {
-      throw AtSigningVerificationException(
-          'publicKey is not a readable RSA public key. Expected the raw DER '
-          'bytes of an X.509 SubjectPublicKeyInfo — if what you hold is a '
-          'base64 string (RsaKeyPair.atPublicKey.publicKey), base64Decode it '
-          'first. Parse error: $e');
+    } catch (_) {
+      return null;
     }
-    final int bits = key.asPointyCastle.modulus!.bitLength;
-    if (bits != _modulusBits) {
-      throw AtSigningVerificationException(
-          'Cannot verify with a $bits-bit key using '
-          'RsaSignatureAlgo.${signingAlgoType.name} — a key of another size '
-          'was not produced by the algorithm this instance claims to be. '
-          'Construct the RsaSignatureAlgo whose name matches the key you '
-          'hold.');
-    }
-    return key;
+    return key.asPointyCastle.modulus?.bitLength == _modulusBits ? key : null;
   }
 }
 

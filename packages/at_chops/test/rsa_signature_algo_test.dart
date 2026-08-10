@@ -146,16 +146,14 @@ void main() {
               e.toString().contains('rsa4096'))));
     });
 
-    test('rejects a 2048-bit public key on verify', () async {
+    test('a 2048-bit public key does not verify, and does not throw', () async {
       final small = await RsaSignatureAlgo.rsa2048().generateKeyPair();
       final sig = await RsaSignatureAlgo.rsa2048()
           .signBytes(message, secretKey: small.secretKey);
       expect(
-          () => RsaSignatureAlgo.rsa4096()
+          await RsaSignatureAlgo.rsa4096()
               .verifyBytes(message, signature: sig, publicKey: small.publicKey),
-          throwsA(predicate((e) =>
-              e is AtSigningVerificationException &&
-              e.toString().contains('2048-bit'))));
+          isFalse);
     });
 
     // RSA-4096 key generation is slow and probabilistic; the default 30s
@@ -183,14 +181,37 @@ void main() {
               e.toString().contains('PKCS#8 PrivateKeyInfo'))));
     });
 
-    test('unparseable public key throws AtSigningVerificationException', () {
+    // verifyBytes is the boundary where wire-supplied bytes arrive, so every
+    // shape of bad input has to come back as false rather than as an
+    // exception the caller is obliged to catch.
+    test('unparseable public key verifies false', () async {
       expect(
-          () => RsaSignatureAlgo.rsa2048().verifyBytes(message,
+          await RsaSignatureAlgo.rsa2048().verifyBytes(message,
               signature: Uint8List.fromList([1, 2, 3]),
               publicKey: Uint8List.fromList([1, 2, 3])),
-          throwsA(predicate((e) =>
-              e is AtSigningVerificationException &&
-              e.toString().contains('X.509 SubjectPublicKeyInfo'))));
+          isFalse);
+    });
+
+    test('an empty public key verifies false', () async {
+      expect(
+          await RsaSignatureAlgo.rsa2048().verifyBytes(message,
+              signature: Uint8List(0), publicKey: Uint8List(0)),
+          isFalse);
+    });
+
+    test('a malformed signature verifies false against a good key', () async {
+      final kp = await RsaSignatureAlgo.rsa2048().generateKeyPair();
+      for (final bad in [
+        Uint8List(0),
+        Uint8List.fromList([1, 2, 3]),
+        Uint8List(4096), // right ballpark of length, all zero bytes
+      ]) {
+        expect(
+            await RsaSignatureAlgo.rsa2048()
+                .verifyBytes(message, signature: bad, publicKey: kp.publicKey),
+            isFalse,
+            reason: 'signature of ${bad.length} bytes should not verify');
+      }
     });
   });
 

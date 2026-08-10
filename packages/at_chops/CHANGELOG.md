@@ -1,5 +1,5 @@
 ## 3.5.0
-- feat: add `RsaSignatureAlgo`, a stateless `AtSignatureAlgorithm` implementation for RSA-2048 and RSA-4096 signing, with key material passed per call
+- feat: add `RsaSignatureAlgo`, a stateless `AtSignatureAlgorithm` implementation for RSA-2048 and RSA-4096 signing, with key material passed per call. `verifyBytes` returns `false` for unparseable, wrong-sized, or malformed key and signature bytes rather than throwing — they arrive off the wire, so "did not verify" is the answer for every shape of bad input. `signBytes` still throws `AtSigningException` on bad secret key material, which is local to the caller
 - deprecate: `RsaSigningAlgo`, which implements the deprecated `AtSigningAlgorithm` interface — use `RsaSignatureAlgo` instead. The two produce byte-identical signatures, so the swap is transparent on the wire
 - deprecate: redirect the `DefaultSigningAlgo` and `PkamSigningAlgo` deprecation notices at `RsaSignatureAlgo`; they previously pointed at `RsaSigningAlgo`, which is now itself deprecated
 
