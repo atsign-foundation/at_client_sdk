@@ -17,6 +17,8 @@ import 'package:at_client/src/service/enrollment_service_impl.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
+import 'package:at_client/src/signing/resolved_signing_algo.dart'
+    as resolved_algo;
 import 'package:at_client/src/stream/at_stream_notification.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';
 import 'package:at_client/src/stream/file_transfer_object.dart';
@@ -257,8 +259,6 @@ class AtClientImpl implements AtClient {
   @override
   String? enrollmentId;
 
-  SigningAlgoType? _resolvedSigningAlgoType;
-
   /// The PKAM signing algorithm this client's connections authenticate with.
   ///
   /// Resolved from the enrollment's key material at init
@@ -272,25 +272,17 @@ class AtClientImpl implements AtClient {
   /// Deliberately NOT on the [AtClient] interface: the published interface
   /// has no such member, and adding one breaks every external
   /// `implements AtClient`. Interface-typed callers use [signingAlgoOf].
-  SigningAlgoType get signingAlgoType =>
-      _resolvedSigningAlgoType ??
-      // The documented legacy fallback for untyped key material.
-      // ignore: deprecated_member_use_from_same_package
-      _preference?.signingAlgoType ??
-      SigningAlgoType.rsa2048;
+  /// The resolution itself is recorded in `resolved_signing_algo.dart`,
+  /// below the impl layer, so the signing mixins can read it without
+  /// depending on this class.
+  SigningAlgoType get signingAlgoType => resolved_algo.signingAlgoOf(this);
 
-  /// The PKAM signing algorithm [atClient]'s connections authenticate with.
-  ///
-  /// An [AtClientImpl] answers with its key-material resolution
-  /// ([signingAlgoType]); any other implementation answers with its
+  /// The PKAM signing algorithm [atClient]'s connections authenticate with:
+  /// the key-material resolution when one was recorded at init, else the
   /// preference — the legacy fallback — because the [AtClient] interface
   /// deliberately carries no such member (see [signingAlgoType]).
-  static SigningAlgoType signingAlgoOf(AtClient atClient) {
-    if (atClient is AtClientImpl) return atClient.signingAlgoType;
-    // ignore: deprecated_member_use_from_same_package
-    return atClient.getPreferences()?.signingAlgoType ??
-        SigningAlgoType.rsa2048;
-  }
+  static SigningAlgoType signingAlgoOf(AtClient atClient) =>
+      resolved_algo.signingAlgoOf(atClient);
 
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
@@ -1564,7 +1556,8 @@ class AtClientImpl implements AtClient {
     if (_atKeysIo == null || id == null) return;
     try {
       final keys = await _atKeysIo!.read(_atSign);
-      _resolvedSigningAlgoType = keys.signingAlgorithmForEnrollment(id);
+      resolved_algo.recordResolvedSigningAlgo(
+          this, keys.signingAlgorithmForEnrollment(id));
     } on Exception catch (e) {
       // Unresolved is survivable — connections fall back to the preference's
       // algorithm — but it must not be silent: under a typed enrollment that
@@ -1592,7 +1585,7 @@ class AtClientImpl implements AtClient {
       // id. _resolveSigningAlgoFromKeyMaterial has already run, so its
       // answer is the decision. Mirrors AtAuthImpl.authenticate's resolution.
       final id = enrollmentId;
-      if (id != null && _resolvedSigningAlgoType != null) {
+      if (id != null && resolved_algo.resolvedSigningAlgoFor(this) != null) {
         return keys.toAtChopsForEnrollment(id);
       }
       return keys.toAtChops();

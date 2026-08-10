@@ -2,8 +2,10 @@ import 'dart:async' show FutureOr, Timer;
 import 'dart:convert' show jsonEncode;
 
 import 'package:at_client/at_client.dart'
-    show AtClientImpl, AtKey, AtValue, GetRequestOptions, IllegalStateException;
+    show AtKey, AtValue, GetRequestOptions, IllegalStateException;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
+import 'package:at_client/src/signing/resolved_signing_algo.dart'
+    show signingAlgoOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show
         apskUri,
@@ -69,7 +71,7 @@ mixin EnvelopeSigning on ApkamSigning {
         payload,
         keys: signingKeys,
         enrollmentId: enrollmentId,
-        signingAlgo: AtClientImpl.signingAlgoOf(atClient),
+        signingAlgo: signingAlgoOf(atClient),
         version: envelopeVersion,
         toEncodable: toEncodable,
       );

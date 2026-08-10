@@ -5,6 +5,8 @@ import 'dart:convert';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/json_utils.dart';
+import 'package:at_client/src/signing/resolved_signing_algo.dart'
+    show signingAlgoOf;
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/util/sync_util.dart';
 import 'package:at_commons/at_builders.dart';
@@ -140,7 +142,7 @@ class SyncServiceImpl implements SyncService {
         atClient.getCurrentAtSign()!, atClient.getPreferences()!,
         atChops: atClient.atChops,
         enrollmentId: atClient.enrollmentId,
-        signingAlgoType: AtClientImpl.signingAlgoOf(atClient));
+        signingAlgoType: signingAlgoOf(atClient));
     final syncService = SyncServiceImpl._(atClient, remoteSecondary);
     await syncService.statsServiceListener();
     syncService._startPeriodicSyncTimer();

@@ -7,6 +7,8 @@ import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/response/default_response_parser.dart';
 import 'package:at_client/src/response/notification_response_parser.dart';
 import 'package:at_client/src/response/response.dart';
+import 'package:at_client/src/signing/resolved_signing_algo.dart'
+    show signingAlgoOf;
 import 'package:at_client/src/transformer/request_transformer/notify_request_transformer.dart';
 import 'package:at_client/src/transformer/response_transformer/notification_response_transformer.dart';
 import 'package:at_client/src/util/at_client_validation.dart';
@@ -77,7 +79,7 @@ class NotificationServiceImpl extends NotificationService {
           atClientPreference: atClient.getPreferences()!,
           atChops: atClient.atChops,
           enrollmentId: atClient.enrollmentId,
-          signingAlgoType: AtClientImpl.signingAlgoOf(atClient),
+          signingAlgoType: signingAlgoOf(atClient),
           handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
           secondaryAddressFinder: this.secondaryAddressFinder,
