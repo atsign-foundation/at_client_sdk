@@ -347,8 +347,52 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   [`implementation-plan.md` 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
   (the one-way door this freezes against).
 
+### 3.5 UC-A2.5 — An enrollment amends its own key package (`enroll:updateMetadata`)
+
+- **Given:** `@alice` pq-native; `alice4` enrolled (E4) with a key package advertising a
+  **single** X-Wing key, and secrets already sealed to that kpid sitting unread at
+  `<msgId>.<kpidOld>.__ssenv.app_1.my_apps@alice`.
+- **When:** `alice4` mints a second KEM keypair (ML-KEM-1024), rebuilds and re-signs its key
+  package with **both** keys, and sends `enroll:updateMetadata` on its own
+  APKAM-authenticated connection.
+- **Then:**
+  - `enroll:listns` returns the amended package: `keys[]` has two entries and `suites`
+    covers both KEMs' constructions, still derived from the package's own keys and never
+    from what the writing build supports;
+  - the amended package still verifies against E4's `_apsk` — it is re-signed by the same
+    APKAM private, and nothing about the update path relaxes the signature check;
+  - a peer sealing to E4 now negotiates to whichever key its own `keyAlgos` order prefers,
+    and stamps the matching `pqSeal` version;
+  - **the pre-existing envelope at `kpidOld` still opens.** `alice4` retains the superseded
+    private half and keeps answering at the old address. This is the row that fails if a
+    replaced kpid is treated as retired, and the failure would otherwise be a silent,
+    unattributable loss of a secret that was correctly sent;
+  - nothing already sealed is re-sealed, and no conveyance fires: the updater is an
+    enrollment that already holds the plaintext and re-files it locally.
+- **Then (an unnamed metadata key survives):** setting `keyPackage` leaves any sibling
+  top-level metadata key untouched. Whole-map replace is read-mutate-write against shared
+  durable state, so a client that has never heard of a future field must not clobber it.
+
+### 3.6 UC-A2.6 — Only the enrollment itself may amend its metadata
+
+- **Given:** `@alice` pq-native; `alice1` (E1, fully privileged, `*`) and `alice4` (E4,
+  namespace-scoped) both enrolled and online.
+- **When:** E1 sends `enroll:updateMetadata` naming **E4**; separately, a legacy-PKAM /
+  owner connection (no enrollmentId) sends the same request.
+- **Then:** both are refused — the second one **despite** carrying full permissions
+  everywhere else. `isAuthorized` short-circuits a connection with no enrollment id to
+  `true`, so this arm is the one that goes green for the wrong reason if the self-only
+  check is written as an authorization lookup rather than an identity test.
+- **Then (state gate):** the same request against a **revoked** E4 is refused, so a revoked
+  enrollment cannot re-advertise an encapsulation target.
+- **Then (the arms must differ):** the accepted arm — E4 updating E4 — has to run in the
+  same session, or the two refusals prove only that the verb refuses everything.
+- **Cross-ref:** [`decisions.md` 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
+  rulings 2, 3 and 6.
+
 - **Impl/verify (A2.x):** projects **SS-2 / SS-4** + **RF-2b**, and **KE-1** for
-  UC-A2.4; harness
+  UC-A2.4; **KE-2** for UC-A2.5 / UC-A2.6, which need the live verb and therefore
+  `tests/at_functional_test` against the locally built virtualenv image; harness
   `tests/at_functional_test` runLocal.sh (enroll/approve round-trip, `__ssenv` delivery).
   UC-A2.4 is a unit row — the shapes it asserts are decided entirely client-side, before
   anything reaches an atServer.

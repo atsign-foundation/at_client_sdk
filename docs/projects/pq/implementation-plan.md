@@ -1283,6 +1283,36 @@ negotiate their construction); discharges plan backlog
 [14.4](#144-a-suites-list-on-the-key-package--done) and
 [14.5](#145-a-write-side-envelope-version-selector-in-at_chops--done).
 
+### KE-2 — `enroll:updateMetadata` + a multi-kpid receiver · at_commons, **every atServer implementation**, at_client · L
+**Goal:** KE-1 made the KEM selectable and the construction negotiable; this makes the choice
+**revisable**. An enrollment can amend its own `metadata.keyPackage` after approval, so a package can gain
+a key, an envelope shape can be rolled forward, and an unparseable package stops being terminal.
+**Builds on:** KE-1 (the `keys[]`/`suites` agility it makes reachable), SS-2 (the `EnrollParams.metadata`
+passthrough it complements).
+**Ruled → [decisions 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)**
+(eight rulings, the verb's shape, and the site-by-site receiver change list).
+**Deliverables — server half:** one alternation entry on `syntax.dart`'s `enroll` pattern (verified not to
+disturb `force`/`listNamespace` or the `request`/`listns` captures); a `case 'updateMetadata'` handler that
+is **self-only** (the connection's `enrollmentId` must equal the target — an explicit exception to
+`isAuthorized`'s "no enrollmentId ⇒ full permissions" default, so an owner or legacy-PKAM connection is
+refused), **approved-state-only**, and **per-key set** rather than whole-map replace; the server keeps no
+opinion on the contents. No new `EnrollParams` fields.
+**Deliverables — client half (the larger one):** the receiver holds a **set** of KEM keypairs and answers at
+every held kpid. `PersistedApkamKeys` becomes a list, `keyPackageMaterial` returns every material for the
+enrollment, `EnvelopeAddressing` gains an any-of form, the sweep/subscribe/marker paths watch every address,
+and `pqOpen` is handed **the secret selected by `envelope.kid`**. A replaced kpid is retained, never retired
+— an envelope written before the update must still open. Fold in the `to.kpid != kpid` self-check at
+`pairwise_secret_sharing.dart:575,910`, which multi-key breaks: it should compare `enrollmentId`.
+**Acceptance → [acceptance.md](acceptance.md):** UC-A2.5 (a package gains a second KEM key; a peer negotiates
+to it; envelopes at the old kpid still open) and UC-A2.6 (a foreign enrollment, and an owner connection, are
+both refused).
+**Effort:** L.
+**Watch-outs:** the multi-repo seam is useless landed on one side; the self-only exception is the whole
+security argument, so its differential test must prove a *refused* arm, not only an accepted one; and the
+dozen dartdocs across `at_client` that state the freeze are the sweep list for the landing commit.
+**coversD1:** retires plan backlog [14.6](#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
+and unblocks `jwsEnvelopeVersion`'s producer.
+
 ### B-3 — selfEncryptionKey + shared_key.* retirement, phases 1-3 · at_client, **at_secondary_server**, at_auth · L — [#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128)
 **Goal:** retire the legacy self-encryption key (a distinct project from B-2's rotation work).
 **Builds on:** B-2.
@@ -1816,6 +1846,15 @@ So it belongs on the one-way-door list beside the signing root
 and 14.3's wrapper shape has to be settled before enrolments that matter are
 created. [decisions 46](decisions.md#46-rfc-9180-and-where-the-designs-version-hatches-are-2026-08-05)
 does not list it.
+
+**Ruled 2026-08-10 — the door gets a handle, and the deadline goes with it**
+([decisions 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)).
+`enroll:updateMetadata` makes the record rewritable by the enrollment that owns
+it, so 14.3's wrapper shape stops being an irreversible bet and the remedy for an
+unparseable package stops being delete-and-re-enrol. It is unbuilt — the item
+above stands until **KE-2** ships — but it is a scheduling problem now rather than
+a shape-freezing deadline, and it is the same ruling that unblocks
+`jwsEnvelopeVersion`'s producer.
 
 ### 14.7 NoPorts carries its own copy of the envelope shape
 

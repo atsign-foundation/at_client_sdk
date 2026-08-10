@@ -6186,3 +6186,155 @@ entitled state directly rather than through `mintIfAbsent`, whose
 publish rides `executeVerb` — a verb the remote-backed mock does not
 model; its lost-create reconciliation silently retires the pair there,
 which the probe test established before the fixture was redesigned.
+
+---
+
+## 68. The enrollment record stops being a one-way door: `enroll:updateMetadata` (2026-08-10)
+
+**Status:** accepted as a design ruling. Nothing is built; this section is the
+specification the work is written against, and the mechanism is named here
+because no defect is being fixed — this reverses a scope decision.
+
+It reverses one half of [section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)
+and [section 20](#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03):
+the "no post-enrollment metadata write, **ever**". It does not reverse the other
+half, and the difference matters.
+
+### 68.1 What is not changing: one key package, many keys
+
+The 1:1:1 cardinality and the **singular** `metadata.keyPackage` stand. A
+format-keyed `keyPackages` map was rejected in section 12 as redundant with the
+agility already inside the package, and that reasoning survives intact:
+
+- `KeyPackage.keys` is a **list** of `{kid, use, alg, pub}`, and a sender picks
+  across it — `bestKeyFor(SecretSharingAlgos.keyAlgos)`
+  (`pairwise_secret_sharing.dart:234`);
+- `KeyPackage.suites` is a **list** of constructions the holder can open, and the
+  sender intersects it — `bestSuiteFor` (`:253`), mapped to a `pqSeal` version by
+  `sealVersionFor`;
+- `openableSuitesForAll` already derives the suite list from an arbitrary set of
+  advertised key algorithms.
+
+So an enrollment that must offer two KEMs advertises **two keys in its one
+package**, never two packages. Nothing about that needs a protocol change; the
+minting side is what is singular, not the schema — `enrollmentKeyPackageBuilder`
+takes one `keyEstablishmentAlgo` and emits one `PackageKey`.
+
+What was wrong was never the cardinality. It was the **freeze**.
+
+### 68.2 What the freeze costs, and what it never bought
+
+Three costs, all present in the tree today:
+
+1. **A package can never gain a key.** `keyEstablishmentAlgo` is frozen at
+   `enroll:request`; a client that later needs the other KEM cannot add it, and
+   `register()` deliberately keeps the loaded key's algorithm over a changed
+   preference (`key_package_registration.dart:180`) because the kpid is the
+   address peers seal to. The preference takes effect on the *next enrollment*.
+2. **The envelope-shape ratchet is frozen with it.** `jwsEnvelopeVersion`'s
+   producer stays behind a flag because "an envelope emitted in a shape the fleet
+   cannot read yet is frozen unreadable for that enrollment's life"
+   (`envelope_signature.dart:87`). The version hatch exists and cannot be used.
+3. **An unparseable package is terminal.** `KeyPackageStatus.unsupported` ends
+   that enrollment's ability to receive a sealed conveyance for good; the only
+   remedy is delete-and-re-enrol
+   ([implementation-plan 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)).
+
+Against that, note what the freeze never bought. **It is not a security
+property.** Nothing trusts a key package because the record is immutable — a
+reader trusts it because the APKAM signature verifies against *that enrollment's*
+`_apsk` (section 12), and that check is indifferent to whether the record can be
+rewritten. The "ever" was scope: SS-2 wanted zero grammar change, and the
+sentence outlived the reason for it.
+
+### 68.3 The rulings
+
+| # | Ruling |
+|---|--------|
+| 1 | **A new `enroll:updateMetadata` sub-command** sets named top-level metadata keys on an existing enrollment. Not a general enrollment-update verb: it reaches `metadata` and nothing else. `apkamPublicKey`, `signingAlgo`, `namespaces` and the approval state stay out of reach — an enrollment that wants a different APKAM keypair is a different enrollment |
+| 2 | **Self-only.** The connection's `enrollmentId` must equal `enrollParams.enrollmentId`. This is an explicit **exception to the "no enrollmentId ⇒ full permissions" default** in `isAuthorized` (`abstract_verb_handler.dart:218`) — an owner or legacy-PKAM connection is refused, not waved through. Two reasons, and the second is the one that carries the design: an owner cannot sign a package with that enrollment's APKAM private, so anything it wrote would fail every reader's verification and buys only a denial-of-service; and self-only is precisely what makes replace-semantics safe, because the only party who can reinstate a stale package is the holder of the key it was signed with, which makes rollback self-harm rather than an attack |
+| 3 | **Approved state only.** Pending, denied, revoked and expired are refused, mirroring `_verifyEnrollmentStateBeforeAction`. A revoked enrollment must not be able to re-advertise |
+| 4 | **Per-key set, never whole-map replace.** The request names the keys to set; keys it does not name survive untouched. Whole-map replace is read-mutate-write against shared durable state — a client that does not know about a future sibling field clobbers it, and two processes of one device are concurrent by construction |
+| 5 | **The server keeps no opinion.** Metadata stays opaque: no parsing, no signature check, no ordering of successive packages. The consequence is stated rather than mitigated — the server cannot detect a downgrade to an older validly-signed package, which is why ruling 2 carries the weight it does |
+| 6 | **A replaced kpid is not retired.** The client keeps the superseded private half and keeps answering at the old address. An envelope written before the update is addressed to the old kpid and must still open; the alternative is silent, unattributable loss of a secret that was correctly sent |
+| 7 | **A server without the sub-command must fail loudly**, and does: an unknown operation does not match the verb regex. This is strictly better than the `EnrollParams.metadata` passthrough it complements, which an old atServer drops silently — the gap recorded at [implementation-plan §14 backlog](implementation-plan.md#14-backlog--carried-items-with-no-owning-project) ("a PQ-capable client cannot tell a legacy atServer from an old peer") |
+| 8 | **No peer invalidation is owed today, and the reason is checkable.** `VerbEnrollmentDirectory.listForNamespace` executes `enroll:listns` against the atServer on every call (`enrollment_directory.dart:141`) and caches nothing, so a sender reads the current package at seal time. Any future cache inherits an invalidation obligation from this ruling |
+
+### 68.4 The verb
+
+**Grammar.** One alternation entry in `syntax.dart`'s `enroll` pattern. Verified
+against the existing regex rather than assumed:
+`enroll:updateMetadata:{"enrollmentId":…,"metadata":{…}}` parses to
+`operation=updateMetadata` plus the JSON in `enrollParams`, with `force` and
+`listNamespace` unmatched (the `listNamespace` group excludes `{`, so it cannot
+swallow the payload), and `enroll:request` / `enroll:listns` keep their current
+captures.
+
+**Params.** No new fields. `EnrollParams.enrollmentId` names the target and
+`EnrollParams.metadata` carries the keys to set (ruling 4), which is the same
+field `enroll:request` already uses — so a client builds the value through the
+path it already has.
+
+**Handler.** A `case 'updateMetadata'` beside the existing operations.
+Authentication is already required for every operation but `request`
+(`enroll_verb_handler.dart:65`), so the net-new checks are the self-only identity
+test (ruling 2), the approved-state test (ruling 3), and a `_validateParams` arm
+requiring a non-empty `enrollmentId` and `metadata`. The write is the same
+`enMgr.put` the approve path uses, with the enrollment's state and TTL untouched.
+
+**Response.** `{enrollmentId, status}`, matching the approve/revoke shape.
+
+**Reach.** at_commons (grammar, `EnrollVerbBuilder`), the server spec, **every
+atServer implementation**, and at_client's caller — one coordinated sweep, per
+the multi-repo protocol-seam rule. The grammar and the client half are useless
+alone.
+
+### 68.5 The receiver becomes multi-kpid
+
+This is the larger half of the work, and it is client-side only. Today a client
+holds exactly one KEM keypair and one kpid, and that singleton is threaded
+through the receive path. Every site, verified by enumeration:
+
+| Site | What it assumes | What it becomes |
+|------|-----------------|-----------------|
+| `key_package_registration.dart:67-105` (`_encSeed` / `_encPublicKey` / `_encSecretKey` / `_encKeyAlgo`) | one keypair per client | a set, keyed by kid |
+| `key_package_registration.dart:130` (`kpid`) | one address | `kpids` — a set; the scalar survives only as "the one this client would advertise first" |
+| `key_package_registration.dart:136` (`myKeyPackage`) | a one-element `keys` list | one entry per held key; `suites` still derives itself |
+| `key_package_persistence.dart:98` (`keyPackageMaterial`) | returns one material, newest-wins | returns every material for this enrollment; newest-wins survives only as *ordering*, not as *selection* |
+| `key_package_registration.dart:31` (`PersistedApkamKeys`) | one `(encSeed, keyAlgo)` | a list |
+| `envelope_addressing.dart:38-49` (`fragmentFor` / `regexFor` / `sweepRegexFor` / `namespaceSweepRegexFor`) | one kpid per regex | an any-of form over a set |
+| `pairwise_secret_sharing.dart:368,379,415` (sync marker, wake-up subscription, sweep scan) | one address to watch | watches every held address |
+| `pairwise_secret_sharing.dart:483,506` (`toKpid` / `kid` checks in `_consume`) | equality with the one kpid | membership in the held set |
+| `pairwise_secret_sharing.dart:525` (`encSecretKey` passed to `pqOpen`) | the only secret | **the secret selected by `envelope.kid`** — the substantive change; handing `pqOpen` the wrong key fails as an indistinguishable AEAD error |
+| `pairwise_secret_sharing.dart:725,761` (`_envelopeKeysFor` / `_answerAlreadySent`) | one address decides whether an answer is already waiting | any held address does |
+| `enrollment_symmetric_key.dart:64,107` (`_keyPackageHalves`) | one `(kpid, secretKey, keyAlgo)` triple, pre-client | tries each held key |
+
+One defect that multi-key **forces into the open**: the self-identification checks
+at `pairwise_secret_sharing.dart:575` and `:910` skip a member by comparing
+`to.kpid != kpid` — a peer's *sender-preference-derived* kid against this
+client's own. Once a package advertises more than one key, `KeyPackage.kpid`
+returns whichever key the reading build prefers, so two clients with different
+`keyAlgos` orderings disagree about a package's kid and a client can fail to
+recognise itself. The check should compare `enrollmentId`, which is what it
+actually means and what `NamespaceMember` already carries.
+
+### 68.6 What this does not do
+
+- **It re-seals nothing.** Material already sealed to the old key stays sealed to
+  it. That costs nothing here, because ruling 2 makes the updater an enrollment
+  that already holds the plaintext — it re-files locally under the new key. No
+  conveyance, no peer involvement, no approver.
+- **It does not make an approval bind to a target.** An approver that inspected a
+  key package at approve time is not told when it changes. That is not privilege
+  escalation — the principal is unchanged — but any interface that says "you
+  approved this key" stops being true, and that is a UX claim to fix, not a
+  protocol one.
+- **It does not rotate an APKAM keypair.** `apkamPublicKey` is not metadata
+  (ruling 1).
+- **It does not retire the dartdoc that states the freeze.** Roughly a dozen
+  comments across `at_client` correctly describe today's behaviour — in
+  `key_package.dart`, `enrollment_key_package.dart`, `envelope_signature.dart`,
+  `key_package_persistence.dart`, `pq_native_onboard.dart`,
+  `key_package_registration.dart`, `envelope_signing.dart` and
+  `response/enrollment.dart`. They stay accurate until the verb ships and are the
+  sweep list for the commit that lands it.

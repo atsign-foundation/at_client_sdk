@@ -857,8 +857,21 @@ keypair and one key package, so the element is flat.
 **opaque `Map<String,dynamic>` on `EnrollParams.metadata`** at `enroll:request`
 time (a JSON tail on the existing request — **no grammar change**); the server
 stores it on the enrollment record and returns it from the discovery verb. There
-is **no `enroll:metadata` verb** and **no post-enrollment metadata write, ever**.
+is **no `enroll:metadata` verb** and, as built, **no post-enrollment metadata
+write** — the metadata is persisted by the branch that creates the record and
+never afterwards.
 Old clients tolerate an absent `metadata` (the discovery element simply omits it).
+
+That freeze is no longer permanent by design. It was scope, not a security
+property — a reader trusts a key package because its APKAM signature verifies
+against that enrollment's `_apsk`, which is indifferent to whether the record can
+be rewritten — and it costs a package that can never gain a key, an envelope-shape
+ratchet that cannot be turned, and an unparseable package that ends an
+enrollment's ability to receive a conveyance for good. `enroll:updateMetadata` is
+ruled in [decisions.md 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10):
+self-only, approved-state-only, per-key set rather than whole-map replace, with
+the server keeping no opinion on the contents. Nothing of it is built; until it
+ships, the paragraph above describes the behaviour.
 
 The key package sits at a **singular `metadata.keyPackage`** (1:1:1 — one enrollment,
 one key package; **no format-keyed `keyPackages` map** — key/suite agility already
