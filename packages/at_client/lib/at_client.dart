@@ -16,6 +16,12 @@ export 'package:at_client/src/manager/at_client_manager.dart';
 export 'package:at_client/src/preference/at_client_preference.dart';
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';
+// The exception only: approve() throws it after a server-side approval whose
+// conveyance refused the advertised key package, and callers need the type to
+// tell "approved but cannot decrypt" from "the approval failed". The seam
+// interface itself stays internal.
+export 'package:at_client/src/enroll/enrollment_conveyance.dart'
+    show EnrollmentConveyanceException;
 // The algorithm ids only, not the rest of the (experimental) secret-sharing
 // surface: `AtClientPreference.keyEstablishmentAlgo` takes one of them, and a
 // preference on the main barrel whose values are only nameable through

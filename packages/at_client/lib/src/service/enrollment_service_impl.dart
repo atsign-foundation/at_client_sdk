@@ -117,12 +117,16 @@ class EnrollmentServiceImpl implements EnrollmentService {
           mintedApkamSymmetricKey: mintedApkamSymmetricKey);
       if (status == KeyPackageStatus.rejected) {
         // The approval has already happened on the atServer, so refusing
-        // loudly here is what lets the approver learn what it has approved.
-        throw AtEnrollmentException(
+        // loudly here is what lets the approver learn what it has approved —
+        // and the response rides along so the refusal cannot cost the caller
+        // the evidence of that success.
+        throw EnrollmentConveyanceException(
             'Enrollment ${enrollment.enrollmentId} is approved, but the key '
             'package it advertised does not verify against its _apsk, so no '
             'secrets were shared with it and it will be unable to decrypt '
-            'anything. Revoke it unless this is understood.');
+            'anything. Revoke it unless this is understood.',
+            response: response,
+            keyPackageStatus: status);
       }
     }
 

@@ -130,16 +130,30 @@ void main() {
 
     await expectLater(
         approveThrough(conveyance, enrollment: enrollment),
-        throwsA(isA<AtEnrollmentException>()
-            .having((e) => e.message, 'message', contains('Revoke'))),
+        throwsA(isA<EnrollmentConveyanceException>()
+            .having((e) => e.message, 'message', contains('Revoke'))
+            .having((e) => e.response.enrollmentId, 'response.enrollmentId',
+                enrolleeId)
+            .having((e) => e.keyPackageStatus, 'keyPackageStatus',
+                KeyPackageStatus.rejected)),
         reason: 'the conveyance only reports the status; refusing is '
             'approve()\'s policy, so the approver learns it has approved a '
-            'device that cannot decrypt');
+            'device that cannot decrypt — and the server-side approval this '
+            'refusal is NOT about must ride along rather than be lost');
 
     expect(enrollment.approvals, hasLength(1),
         reason: 'the refusal is about conveyance, not the approval itself — '
             'the server-side approve had already happened when it fired');
     expect(conveyance.conveyed, hasLength(1));
+  });
+
+  test('the conveyance refusal still reads as an AtEnrollmentException',
+      () async {
+    await expectLater(
+        approveThrough(_StatusConveyance(KeyPackageStatus.rejected)),
+        throwsA(isA<AtEnrollmentException>()),
+        reason: 'callers already catching the published exception type must '
+            'keep working; the carrying type is a subtype, not a replacement');
   });
 
   test('an absent package approves quietly', () async {

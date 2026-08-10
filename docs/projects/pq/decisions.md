@@ -5980,3 +5980,20 @@ had to leave the service because the conveyance impl consults it and
 importing the service back would have opened a new in-package cycle.
 Log messages moved verbatim; the logger name follows the class, as with
 the 4d moves.
+
+### 63.1 A conveyance refusal no longer discards the approval it follows
+
+The audit defect: `approve()` could throw **after** the server-side
+approval had succeeded, losing the `AtEnrollmentResponse` — a caller
+saw "the approval failed" for an enrollment that was in fact live, and
+the natural reaction (retry, or report failure upstream) is wrong both
+ways. Fixed within the byte-identical-signature constraint by making
+the rejected-package throw a carrying subtype:
+`EnrollmentConveyanceException extends AtEnrollmentException`, holding
+the successful `response` and the four-way `keyPackageStatus`. Existing
+catch sites keep working (subtype, pinned by test); new callers can
+tell "approved but cannot decrypt — consider revoking" from "the
+approval failed". Exported from the main barrel `show`-narrowed to the
+exception alone — the seam interface stays internal, consistent with
+the minimal-surface rulings. Red-first: the seam test's rejected arm
+demanded the carrying type before it existed.

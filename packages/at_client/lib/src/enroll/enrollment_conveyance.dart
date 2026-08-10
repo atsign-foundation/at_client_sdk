@@ -1,6 +1,8 @@
+import 'package:at_auth/at_auth.dart' show AtEnrollmentResponse;
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
     show KeyPackageStatus;
+import 'package:at_commons/at_commons.dart' show AtEnrollmentException;
 import 'package:meta/meta.dart' show experimental;
 
 /// Conveys to an approved enrollment the secrets its approval entitles it
@@ -54,4 +56,28 @@ abstract interface class EnrollmentConveyance {
   /// unanchored enrollment adds a hop without reaching the root. Returns
   /// how many links were conveyed.
   Future<int> sweepUnanchoredEnrollments();
+}
+
+/// An approval whose server-side approve **succeeded** but whose conveyance
+/// refused the advertised key package ([KeyPackageStatus.rejected]) — the
+/// enrollment is live and will be unable to decrypt anything, and the
+/// approver can revoke it.
+///
+/// Carries the approval [response] so refusing the conveyance cannot cost
+/// the caller the evidence that the approval itself happened: a plain throw
+/// here would report a server-side success as a failure, which is how an
+/// approver ends up retrying an approval that already went through.
+///
+/// A subtype of the published [AtEnrollmentException], so callers already
+/// catching that type keep working unchanged.
+@experimental
+class EnrollmentConveyanceException extends AtEnrollmentException {
+  /// The successful server-side approval this exception is *not* about.
+  final AtEnrollmentResponse response;
+
+  /// Why the conveyance refused.
+  final KeyPackageStatus keyPackageStatus;
+
+  EnrollmentConveyanceException(super.message,
+      {required this.response, required this.keyPackageStatus});
 }
