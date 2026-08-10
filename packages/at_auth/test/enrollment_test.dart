@@ -489,6 +489,87 @@ void main() {
               'never obtain one');
     });
   });
+
+  group('waitForApproval decrypts the fetched keys', () {
+    // The two wire shapes of an approval-time key record: a modern approver
+    // stores an IV beside the value; a legacy approver stored the value
+    // alone, encrypted under the zero IV ("the bad old days"). Both must
+    // open — the record's vintage is the writing approver's, not this
+    // client's.
+    for (final legacyIv in [true, false]) {
+      test(
+          legacyIv
+              ? 'a legacy record with no iv field opens under the zero IV'
+              : 'a modern record opens under its stored IV', () async {
+        String atSign = '@alice\ud83d\udee0';
+        final apkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
+        final encryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
+        final selfEncryptionKey = aesKeyMap[atSign]!;
+
+        final String? storedIvB64 =
+            legacyIv ? null : base64Encode(List<int>.filled(16, 7));
+        final iv = storedIvB64 == null
+            ? AtChopsUtil.generateIVLegacy()
+            : AtChopsUtil.generateIVFromBase64String(storedIvB64);
+
+        AtChopsKeys atChopsKeys = AtChopsKeys.create(
+            AtEncryptionKeyPair.create(
+                encryptionPublicKeyMap[atSign]!, encryptionPrivateKey),
+            AtPkamKeyPair.create(
+                pkamPublicKeyMap[atSign]!, pkamPrivateKeyMap[atSign]!));
+        atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
+        AtChopsImpl atChopsImpl = AtChopsImpl(atChopsKeys);
+
+        Future<String> sealed(String value) async =>
+            (await atChopsImpl.encryptString(value, EncryptionKeyType.aes256,
+                    keyName: 'apkamSymmetricKey', iv: iv))
+                .result;
+
+        AtLookUp mockAtLookUp = MockAtLookUp();
+        when(() => mockAtLookUp.pkamAuthenticate(enrollmentId: '123'))
+            .thenAnswer((_) async => true);
+        when(() => mockAtLookUp.executeCommand(
+                any(
+                    that: startsWith(
+                        'keys:get:keyName:123.default_enc_private_key')),
+                auth: any(named: 'auth')))
+            .thenAnswer((_) async => 'data:${jsonEncode({
+                  'value': await sealed(encryptionPrivateKey),
+                  if (storedIvB64 != null) 'iv': storedIvB64,
+                })}');
+        when(() => mockAtLookUp.executeCommand(
+                any(
+                    that: startsWith(
+                        'keys:get:keyName:123.default_self_enc_key')),
+                auth: any(named: 'auth')))
+            .thenAnswer((_) async => 'data:${jsonEncode({
+                  'value': await sealed(selfEncryptionKey),
+                  if (storedIvB64 != null) 'iv': storedIvB64,
+                })}');
+
+        final keys = AtKeys()
+          ..apkamPublicKey = AtBytes.fromString(pkamPublicKeyMap[atSign]!)
+          ..apkamPrivateKey = AtBytes.fromString(pkamPrivateKeyMap[atSign]!)
+          ..defaultEncryptionPublicKey =
+              AtBytes.fromString(encryptionPublicKeyMap[atSign]!)
+          ..apkamSymmetricKey = AtBytes.fromString(apkamSymmetricKey);
+        final response = AtEnrollmentResponse('123', EnrollmentStatus.approved,
+            atSign: atSign,
+            rootDomain: AtRootDomain.atsignDomain,
+            atAuthKeys: keys);
+
+        await AtEnrollmentImpl().waitForApproval(response,
+            atLookup: mockAtLookUp,
+            retryInterval: const Duration(milliseconds: 1),
+            logProgress: false);
+
+        expect(response.atAuthKeys!.defaultEncryptionPrivateKey!.toString(),
+            encryptionPrivateKey);
+        expect(response.atAuthKeys!.defaultSelfEncryptionKey!.toString(),
+            selfEncryptionKey);
+      });
+    }
+  });
 }
 
 class LookUpVerbBuilderMatcher extends Matcher {

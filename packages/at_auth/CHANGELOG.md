@@ -1,4 +1,12 @@
 ## 3.4.0
+- fix: `waitForApproval` decrypts a key record that carries no `iv` field —
+  a record written by a legacy approver, encrypted under the zero IV —
+  instead of crashing on the absent field. The record's vintage is the
+  writing approver's, not the fetching client's.
+- feat: `waitForApproval`'s `atLookup` parameter is on the `AtEnrollment`
+  interface (it was an implementation-only extra, invisible to callers
+  holding the interface type) and is typed `AtLookUp`, which is all the
+  handshake uses.
 - feat: `AtSelfEnrollmentRequest.signingAlgo` selects the algorithm of the
   APKAM keypair a self-enrollment mints — `mldsa65` (the default, today's
   PQ retrofit) or `rsa2048` for a rollout-window retrofit that needs no

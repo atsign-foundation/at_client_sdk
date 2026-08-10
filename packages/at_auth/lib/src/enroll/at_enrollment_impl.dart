@@ -555,7 +555,7 @@ class AtEnrollmentImpl implements AtEnrollment {
     Duration retryInterval = const Duration(seconds: 2),
     bool logProgress = true,
     int maxRetries = 15,
-    AtLookupImpl? atLookup,
+    AtLookUp? atLookup,
   }) async {
     if (enrollmentResponse.atSign == null ||
         enrollmentResponse.atSign!.isEmpty) {
@@ -634,14 +634,23 @@ class AtEnrollmentImpl implements AtEnrollment {
     final aesEncryption = StringAESEncryptor(
         AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString()));
 
+    // A record written by a legacy approver carries no `iv` field — those
+    // values were encrypted under the zero IV — so its absence selects the
+    // legacy IV rather than crashing. The record's vintage is the writing
+    // approver's, not this client's.
+    InitialisationVector ivOf(Map<String, dynamic> keyResponse) =>
+        keyResponse['iv'] == null
+            ? AtChopsUtil.generateIVLegacy()
+            : AtChopsUtil.generateIVFromBase64String(keyResponse['iv']);
+
     String decryptedSelfEncryptionKey = aesEncryption.decrypt(
       selfEncKeyResponse['value'],
-      iv: AtChopsUtil.generateIVFromBase64String(selfEncKeyResponse['iv']),
+      iv: ivOf(selfEncKeyResponse),
     );
 
     String decryptedDefaultEncryptionPrivateKey = aesEncryption.decrypt(
       encPrivKeyResponse['value'],
-      iv: AtChopsUtil.generateIVFromBase64String(encPrivKeyResponse['iv']),
+      iv: ivOf(encPrivKeyResponse),
     );
 
     // set the fetched & decrypted keys in the reference

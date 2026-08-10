@@ -186,10 +186,14 @@ abstract class AtEnrollment {
   ///   // Handle errors
   /// }
   /// ```
+  /// [atLookup] is the connection the approval handshake runs on — the PKAM
+  /// retries and the post-approval key fetches. When null, one is built from
+  /// the response's atSign and rootDomain.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
     bool logProgress = false,
     int maxRetries = 48,
     Duration retryInterval = const Duration(minutes: 1),
+    AtLookUp? atLookup,
   });
 }
