@@ -5942,3 +5942,41 @@ continue to address them unchanged. The bootstrap now owns one chain
 beside its one ring/filing/sharing/root; the enrollment service's sweep
 builds one per sweep. Pure motion — behaviour identical, all three test
 packages swept in the same commit.
+
+## 63. Phase 4e: EnrollmentConveyance out of EnrollmentServiceImpl (2026-08-10)
+
+**Status:** accepted. The approval-time sealing (the old private
+`_shareSecretsWith`, 134 lines carrying five conveyances with five
+failure policies as prose) and the fleet-repair sweep move out of
+`EnrollmentServiceImpl` behind a new injected seam:
+`EnrollmentConveyance` (`src/enroll/enrollment_conveyance.dart`, a leaf
+interface beside the privilege resolver) with the production
+`EnvelopeEnrollmentConveyance` in `src/service/`. The service keeps its
+original verb-wrapper job — fetch/approve/deny/revoke — plus a
+delegating `sweepUnanchoredEnrollments()`, so every call site (the
+bootstrap wiring included) is unchanged. The published `approve()`
+signature is byte-identical, and both external approve paths
+(at_client_flutter's `FlutterEnrollmentService.approve` and
+at_onboarding_cli's `auth_cli`) were re-verified to route through
+`atClient.enrollmentService.approve` — ruling [20.2](#202-the-rulings)
+#1 survives the extraction untouched.
+
+**The seam reports; the caller enforces.** `conveySecretsTo` returns
+the four-way `KeyPackageStatus` (20.2 #3) instead of throwing on a
+rejected package: what to convey is substrate policy, but whether a
+just-approved device that cannot decrypt should fail the approval is
+the approver's policy, so the throw (same exception type, same message)
+now lives in `approve()` where the party who can revoke is listening.
+The register()-precondition throw stays inside the conveyance — it is a
+conveyance precondition, not approval policy. Seam pins in
+`enrollment_conveyance_seam_test.dart` cover all four status arms, the
+minted-key pass-through, the no-record guard and the sweep delegation;
+the rejected-arm pin was red-proofed by neutering the status check. The
+pure privilege classifier moved from the service's static to a
+top-level `isFullyPrivileged` in `src/enroll/privilege_resolver.dart`
+(the static delegates, so `EnrollmentServiceImpl.isFullyPrivileged`
+callers — the functional pack included — are unchanged); the classifier
+had to leave the service because the conveyance impl consults it and
+importing the service back would have opened a new in-package cycle.
+Log messages moved verbatim; the logger name follows the class, as with
+the 4d moves.
