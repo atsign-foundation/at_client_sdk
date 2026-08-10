@@ -68,9 +68,16 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
     );
   }
 
-  /// Records the owner on both the typed `atsign` field, which
-  /// `AtKeys.toJson` requires before it will serialize typed material, and the
-  /// `metadata` entry the keychain indexes its list by.
+  /// Records the owner on the typed `atsign` field, which `AtKeys.toJson`
+  /// requires before it will serialize typed material, and on the `metadata`
+  /// entry an older release wrote instead — the one the keychain still falls
+  /// back to for entries that predate the typed field.
+  ///
+  /// Neither is overwritten once set. The metadata entry is a legacy value the
+  /// never-lose assurance holds to be preserved, so restamping it in the
+  /// canonical spelling would have every flush onto an entry stored under a
+  /// different spelling refused as a lost value — and the spelling does not
+  /// need to match, because the keychain compares normalized.
   void _stampAtSign(String atSign, AtKeys atKeys) {
     final normalized = atSign.toAtsign();
     if (atKeys.atsign != null && atKeys.atsign != normalized) {
@@ -80,7 +87,7 @@ class KeychainAtKeysIo extends WrittenAtKeysIo {
       );
     }
     atKeys.atsign ??= normalized;
-    atKeys.metadata['atsign'] = atSign;
+    atKeys.metadata['atsign'] ??= normalized.toString();
   }
 
   /// The entry for [atSign], or null — including when the keychain holds no

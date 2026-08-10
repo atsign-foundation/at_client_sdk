@@ -73,8 +73,9 @@ void main() {
 
   AtKeys keysFor(String atSign) => AtKeys()
     ..apkamPublicKey = AtBytes.fromString(base64Encode(utf8.encode('apkam')))
-    ..defaultSelfEncryptionKey =
-        AtBytes.fromString(base64Encode(utf8.encode('self')))
+    ..defaultSelfEncryptionKey = AtBytes.fromString(
+      base64Encode(utf8.encode('self')),
+    )
     ..enrollmentId = 'e-$atSign';
 
   AtKeysMaterial material(String keyId) => AtKeysMaterial(
@@ -92,7 +93,8 @@ void main() {
     await expectLater(
       io.write('@alice', keysFor('@alice')),
       throwsA(isA<AtKeysFileOverwriteException>()),
-      reason: 'appending a second entry would leave the newer keys unreachable '
+      reason:
+          'appending a second entry would leave the newer keys unreachable '
           'behind the older ones, which is a silent loss rather than a write',
     );
     expect(entryCount(), 1, reason: 'and nothing was appended');
@@ -114,26 +116,32 @@ void main() {
     expect((await io.read('@alice')).enrollmentId, 'e-@alice');
   });
 
-  test('flush REPLACES rather than appends, and the new state is what reads',
-      () async {
-    final keys = keysFor('@alice');
-    await io.write('@alice', keys);
+  test(
+    'flush REPLACES rather than appends, and the new state is what reads',
+    () async {
+      final keys = keysFor('@alice');
+      await io.write('@alice', keys);
 
-    keys.addKey(material('nskey.wavi'));
-    await io.flush('@alice'.toAtsign(), keys);
+      keys.addKey(material('nskey.wavi'));
+      await io.flush('@alice'.toAtsign(), keys);
 
-    expect(entryCount(), 1,
-        reason: 'a flush that appended would leave read() answering with the '
-            'pre-flush entry forever');
-    final reread = await io.read('@alice');
-    expect(
-      reread
-          .getKey('nskey.wavi', CryptographicKeyType.symmetricEncryption)
-          ?.bytes
-          .toString(),
-      base64Encode(utf8.encode('nskey.wavi')),
-    );
-  });
+      expect(
+        entryCount(),
+        1,
+        reason:
+            'a flush that appended would leave read() answering with the '
+            'pre-flush entry forever',
+      );
+      final reread = await io.read('@alice');
+      expect(
+        reread
+            .getKey('nskey.wavi', CryptographicKeyType.symmetricEncryption)
+            ?.bytes
+            .toString(),
+        base64Encode(utf8.encode('nskey.wavi')),
+      );
+    },
+  );
 
   test('flush leaves other atSigns\' entries alone', () async {
     await io.write('@alice', keysFor('@alice'));
@@ -147,21 +155,23 @@ void main() {
     expect((await io.read('@bob')).enrollmentId, 'e-@bob');
   });
 
-  test('flush refuses a candidate that drops material, and writes nothing',
-      () async {
-    final keys = keysFor('@alice');
-    keys.addKey(material('nskey.wavi'));
-    await io.write('@alice', keys);
-    final before = blob;
+  test(
+    'flush refuses a candidate that drops material, and writes nothing',
+    () async {
+      final keys = keysFor('@alice');
+      keys.addKey(material('nskey.wavi'));
+      await io.write('@alice', keys);
+      final before = blob;
 
-    // The same atSign, without the key it already had. The never-lose contract
-    // is what makes a bootstrap store safe to flush from several places.
-    await expectLater(
-      io.flush('@alice'.toAtsign(), keysFor('@alice')),
-      throwsA(isA<AtKeysAssuranceException>()),
-    );
-    expect(blob, before, reason: 'a refused flush must not have written');
-  });
+      // The same atSign, without the key it already had. The never-lose contract
+      // is what makes a bootstrap store safe to flush from several places.
+      await expectLater(
+        io.flush('@alice'.toAtsign(), keysFor('@alice')),
+        throwsA(isA<AtKeysAssuranceException>()),
+      );
+      expect(blob, before, reason: 'a refused flush must not have written');
+    },
+  );
 
   test('an entry stored under the legacy `name` metadata key is found, '
       'replaced and removed by the same predicate', () async {
@@ -192,5 +202,71 @@ void main() {
 
     await keychain.removeAtsignFromKeychain('@alice');
     expect(entryCount(), 0);
+  });
+
+  test('an atSign is one entry however the caller spells it', () async {
+    // Nothing normalizes on the way in: `AuthRequest.atSign` is a plain
+    // mutable String, and at_auth hands this layer that string verbatim on
+    // `read`/`write` while passing `toAtsign()` on `flush` — so both spellings
+    // reach the same keyset on one flow. Matching on the raw string would make
+    // an entry unreachable by the very spelling that created it.
+    await io.write('@Alice', keysFor('@alice'));
+
+    expect(
+      (await io.read('@Alice')).enrollmentId,
+      'e-@alice',
+      reason: 'the spelling that wrote the entry must find it again',
+    );
+    expect((await io.read('@alice')).enrollmentId, 'e-@alice');
+    expect(
+      (await io.read('alice')).enrollmentId,
+      'e-@alice',
+      reason: 'toAtsign() supplies the missing @',
+    );
+    await expectLater(
+      io.write('alice', keysFor('@alice')),
+      throwsA(isA<AtKeysFileOverwriteException>()),
+      reason: 'a second spelling is not a second atSign',
+    );
+    expect(entryCount(), 1);
+  });
+
+  test('a stored spelling that differs from its normal form is replaced, '
+      'not appended beside', () async {
+    // The dangerous half of the same mismatch. An entry an older release wrote
+    // under the spelling the user typed — `@colin.constable` normalizes to
+    // `@colinconstable`, dots in the right-hand side being decoration — is
+    // found by `read`, because that is the raw string the caller still holds,
+    // and then flushed under the normalized one. An index that missed it would
+    // append: `read` answers with the first match, so the flushed material
+    // would be unreachable behind the entry it was meant to replace.
+    blob = jsonEncode({
+      'keys': [
+        {
+          'atsign': '@colin.constable',
+          'aesPkamPublicKey': base64Encode(utf8.encode('apkam')),
+          'selfEncryptionKey': base64Encode(utf8.encode('self')),
+          'enrollmentId': 'e-@colinconstable',
+        },
+      ],
+    });
+    final keychain = KeychainStorage()..biometricStorage = storage;
+    final legacyIo = KeychainAtKeysIo(keychainStorage: keychain);
+
+    final keys = await legacyIo.read('@colin.constable');
+    keys.addKey(material('nskey.wavi'));
+    await legacyIo.flush('@colin.constable'.toAtsign(), keys);
+
+    expect(entryCount(), 1, reason: 'replaced in place, not appended beside');
+    expect(
+      (await legacyIo.read(
+        '@colinconstable',
+      )).getKey('nskey.wavi', CryptographicKeyType.symmetricEncryption),
+      isNotNull,
+      reason: 'and the flushed material is what reads back',
+    );
+
+    await keychain.removeAtsignFromKeychain('@colinconstable');
+    expect(entryCount(), 0, reason: 'removal matches the same way');
   });
 }

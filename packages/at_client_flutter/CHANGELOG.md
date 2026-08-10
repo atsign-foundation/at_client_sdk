@@ -1,6 +1,18 @@
 # CHANGELOG
 
 ## 1.1.5
+- fix: an atSign names one keychain entry however the caller spells it.
+  Nothing normalizes on the way in — `AuthRequest.atSign` is a plain String,
+  and at_auth passes that string verbatim to `read`/`write` while passing
+  `toAtsign()` to `flush` — so once entries started recording the canonical
+  spelling, `write('@Alice', …)` succeeded and the very next `read('@Alice')`
+  reported the atSign as absent. Worse for `flush`: an entry stored under a
+  spelling that normalizes differently (`@colin.constable` →
+  `@colinconstable`) was not found, so the flush appended beside it and left
+  the newer keys unreachable behind the older ones. `KeychainStorage` now
+  compares normalized in `_indexOf` and `removeAtsignFromKeychain`, and still
+  returns the stored spelling; a value `toAtsign()` rejects is compared as it
+  stands, so a malformed entry stays readable and removable.
 - fix: the enrollment request list can approve a pq-mode request. The
   approve action null-banged `encryptedAPKAMSymmetricKey`, which a
   request that expects the approver to mint its key does not carry, so

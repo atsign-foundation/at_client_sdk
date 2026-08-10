@@ -126,9 +126,9 @@ class KeychainStorage {
     );
   }
 
-  /// The atSign an entry belongs to: the typed `atsign` field when a
-  /// typed-keys document supplied one, else the `atsign` metadata entry, else
-  /// the `name` one an older release wrote.
+  /// The atSign an entry belongs to, in whatever spelling it was stored: the
+  /// typed `atsign` field when a typed-keys document supplied one, else the
+  /// `atsign` metadata entry, else the `name` one an older release wrote.
   String? _atSignOf(AtKeys keys) {
     if (keys.atsign != null) return keys.atsign.toString();
     final value = keys.metadata.containsKey('atsign')
@@ -137,9 +137,32 @@ class KeychainStorage {
     return value is String ? value : null;
   }
 
+  /// Two spellings of one atSign name one entry, so the comparison is made on
+  /// the normalized form rather than the stored one.
+  ///
+  /// Nothing normalizes on the way in — `AuthRequest.atSign` is a plain
+  /// mutable String, and at_auth passes that string verbatim to `read`/`write`
+  /// while passing `toAtsign()` to `flush`, on one keyset. A raw comparison
+  /// therefore makes an entry unreachable by the very spelling that created
+  /// it, and makes a flush append beside the entry it meant to replace —
+  /// leaving the newer keys behind the older ones, which is the loss
+  /// [KeychainAtKeysIo.write]'s create-only guard exists to prevent.
+  ///
+  /// A value `toAtsign()` rejects is compared as it stands rather than
+  /// dropped, so a malformed stored entry is still readable and removable.
+  String? _normalized(String? atSign) {
+    if (atSign == null) return null;
+    try {
+      return atSign.toAtsign().toString();
+    } on InvalidAtSignException {
+      return atSign;
+    }
+  }
+
   int _indexOf(AtKeysData atKeysData, String atSign) {
+    final wanted = _normalized(atSign);
     for (int i = 0; i < atKeysData.keys.length; i++) {
-      if (_atSignOf(atKeysData.keys[i]) == atSign) return i;
+      if (_normalized(_atSignOf(atKeysData.keys[i])) == wanted) return i;
     }
     return -1;
   }
@@ -187,8 +210,12 @@ class KeychainStorage {
       if (data != null) {
         final atKeysData = AtKeysData.fromJson(jsonDecode(data));
         // Same predicate the lookups use, so an entry written under the legacy
-        // `name` metadata key can be removed as well as read.
-        atKeysData.keys.removeWhere((element) => _atSignOf(element) == atSign);
+        // `name` metadata key, or under a different spelling of this atSign,
+        // can be removed as well as read.
+        final wanted = _normalized(atSign);
+        atKeysData.keys.removeWhere(
+          (element) => _normalized(_atSignOf(element)) == wanted,
+        );
         await _write(
           biometricStoreName: (await AtKeysStore.getName()),
           keychainData: atKeysData,
