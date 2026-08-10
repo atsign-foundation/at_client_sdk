@@ -106,6 +106,11 @@ void main() {
     });
   });
 
+  /// The challenge shape an atServer should emit for a client:
+  /// `data:_<uuid><atSign>:<uuid>`.
+  const fromChallenge = 'data:_03fe0ff2-ac50-4c80-8f43-88480beba888@alice'
+      ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+
   group('A group of tests to verify atlookup pkam authentication', () {
     test('pkam auth without enrollmentId - auth success', () async {
       when(() => mockOutboundListener.read())

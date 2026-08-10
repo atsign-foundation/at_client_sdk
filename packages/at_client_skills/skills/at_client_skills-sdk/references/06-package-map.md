@@ -80,8 +80,39 @@ internally.
 dart pub add at_client at_cli_commons
 ```
 
-`at_cli_commons` provides helpers for Dart CLI/server apps: flag parsing, key
-loading, `AtClient` setup for headless environments. Not needed in Flutter apps.
+`at_cli_commons` provides helpers for Dart CLI/server apps: `CLIBase`
+(one-line arg parsing + `.atKeys` loading + PKAM auth — see
+[14-multi-agent.md](14-multi-agent.md)) and
+`ServiceFactoryWithNoOpSyncService` for stateless no-sync instances. Not
+needed in Flutter apps.
+
+---
+
+### Zero-open-port TCP tunnels
+
+```sh
+dart pub add noports_core
+```
+
+NoPorts creates end-to-end encrypted TCP tunnels through the Atsign Platform
+with **no open listening ports** on either side — no firewall changes needed
+to reach a remote device. CLI: the `npt` binary; programmatic: the `Npt`
+class. Docs: <https://docs.noports.com/>. Add only when the app needs raw
+TCP/socket connectivity to remote machines; ordinary data exchange belongs in
+`AtCollection<T>` / notifications.
+
+---
+
+### Streaming (pre-release)
+
+```sh
+dart pub add at_stream
+```
+
+`at_stream` streams data over the Atsign Platform through Dart's async stream
+interfaces. **Pre-release** (`0.1.0-dev.x`) — expect API churn; for most
+continuous-update cases, `notificationService.subscribe()` or a collection
+`watch()` is the stable choice.
 
 ---
 
@@ -92,6 +123,14 @@ loading, `AtClient` setup for headless environments. Not needed in Flutter apps.
 **Deprecated.** The package's own README states it is deprecated in favour of
 `at_client_flutter`. Do not add this to any new or existing app. Migrate to
 `at_client_flutter` equivalents.
+
+### `at_onboarding_flutter` ⛔
+
+**Discontinued.** pub.dev marks this package discontinued and names
+`at_client_flutter` as its replacement. Do not add it, and do not reach for it
+when a task calls for onboarding, activation, or sign-in — the
+`at_client_flutter` auth dialogs (`AtSignSelectionDialog`, `AtKeysFileDialog`,
+`ApkamActivationDialog`, `PkamDialog`) cover all of it.
 
 ### `at_backupkey_flutter` ⛔
 

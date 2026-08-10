@@ -57,6 +57,13 @@ connection by itself.
 See `docs/auth-key-material.md` for why the design landed here, and
 `example/bin/example.dart` for the intended wiring.
 
+## 3.6.1
+
+- fix: strengthen the from challenge. A client now checks that a `from:`
+  challenge has the shape an atServer issues — `_<uuid><atSign>:<uuid>`, and
+  that the atSign it names is the one this client asked for — before signing
+  it. Defensive in anticipation of broader use of the APKAM keypair in future.
+
 ## 3.6.0
 
 - feat: `CacheableSecondaryAddressFinder` takes an optional `cacheDuration` to override the default 1-hour cache TTL.
