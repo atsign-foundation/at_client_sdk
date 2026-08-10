@@ -32,6 +32,24 @@ const List<String> legacyNskeySuites = [SecretSharingAlgos.xWingHpke];
 String nskeyKidOf(Uint8List publicKey) =>
     sha256.convert(publicKey).toString().substring(0, 16);
 
+/// An nskey generation's **seed**: the compact form the whole keypair
+/// re-derives from — the ONLY form that may be filed durably or conveyed
+/// to another enrollment.
+///
+/// Distinct from [NskeyDecapsulationKey] at the type level because the two
+/// are the same bytes for X-Wing and NOT for ML-KEM, whose decapsulation
+/// key is expanded and cannot be turned back into a public half. Code that
+/// files or conveys the expanded form compiles clean under bare
+/// `Uint8List`s and strands the generation after a restart — every record
+/// sealed to it becomes permanently unopenable. The type makes that
+/// mistake a compile error instead.
+extension type const NskeySeed(Uint8List bytes) {}
+
+/// An nskey generation's **decapsulation key**: the expanded form `pqOpen`
+/// opens conveyances with — derived from an [NskeySeed], held in memory,
+/// never filed and never conveyed.
+extension type const NskeyDecapsulationKey(Uint8List bytes) {}
+
 /// Where the `at/nskey` provider gets namespace key material.
 ///
 /// Per `(atSign, namespace)` there is exactly **one live** nskey keypair,
@@ -62,19 +80,18 @@ abstract class NskeyKeyRing {
   /// post-quantum target and the write fails unless legacy is opted into.
   Future<NskeyAdvertisement?> currentPublic(String owner, String namespace);
 
-  /// The **decapsulation key** this client holds for a *named generation* of
-  /// `(owner, namespace)` — what `pqOpen` takes, ready to use.
+  /// The [NskeyDecapsulationKey] this client holds for a *named generation*
+  /// of `(owner, namespace)` — what `pqOpen` takes, ready to use.
   ///
-  /// Not the persisted seed. The two are the same bytes for X-Wing but not for
-  /// ML-KEM, whose decapsulation key is expanded from its seed, so an
-  /// implementation that stores seeds expands here rather than making every
-  /// caller know which it holds.
+  /// Not the persisted [NskeySeed] — see the two types for why the
+  /// distinction is critical. An implementation that stores seeds
+  /// expands here rather than making every caller know which it holds.
   ///
   /// Null when this client is not authorised for the namespace, or has not yet
   /// received that generation. Holding none at all leaves the value undecryptable
   /// rather than silently skipped; missing only an older one is recoverable by
   /// pulling that generation over the substrate.
-  Future<Uint8List?> privateHalf(
+  Future<NskeyDecapsulationKey?> privateHalf(
       String owner, String namespace, String nskeyKid);
 }
 
@@ -85,7 +102,7 @@ abstract class NskeyKeyRing {
 /// is `PublishedNskeyKeyRing`, which does all three for real.
 class InMemoryNskeyKeyRing implements NskeyKeyRing {
   final Map<String, NskeyAdvertisement> _current = {};
-  final Map<String, Uint8List> _private = {};
+  final Map<String, NskeyDecapsulationKey> _private = {};
 
   static String _scope(String owner, String namespace) => '$owner|$namespace';
 
@@ -108,7 +125,8 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
     final kid =
         seedPublicOnly(owner, namespace,
             publicKey: publicKey, keyAlgo: keyAlgo);
-    _private[_generation(owner, namespace, kid)] = privateKey;
+    _private[_generation(owner, namespace, kid)] =
+        NskeyDecapsulationKey(privateKey);
     return kid;
   }
 
@@ -141,7 +159,7 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
       _current[_scope(owner, namespace)];
 
   @override
-  Future<Uint8List?> privateHalf(
+  Future<NskeyDecapsulationKey?> privateHalf(
           String owner, String namespace, String nskeyKid) async =>
       _private[_generation(owner, namespace, nskeyKid)];
 }

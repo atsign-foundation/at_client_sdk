@@ -1,9 +1,10 @@
 import 'dart:async' show unawaited;
 import 'dart:convert' show base64Encode;
-import 'dart:typed_data' show Uint8List;
 
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show NskeySeed;
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
@@ -133,7 +134,7 @@ class NskeySeeding {
     // authorised for would add a round trip, and — because this runs during
     // client construction, before the manager has wired the enrollment
     // service — would fail and silently prime nothing.
-    final Map<String, Map<String, Uint8List>> held;
+    final Map<String, Map<String, NskeySeed>> held;
     try {
       held = await filing.readAll();
     } catch (e) {
@@ -145,7 +146,7 @@ class NskeySeeding {
         await sharing.secretStore.putIfNewer(Secret(
           namespace: namespace,
           name: '${NskeyPrivateFiling.secretNamePrefix}${entry.key}',
-          value: base64Encode(entry.value),
+          value: base64Encode(entry.value.bytes),
         ));
         hydrated++;
       }
@@ -247,7 +248,7 @@ class NskeySeeding {
             Secret(
               namespace: namespace,
               name: '${NskeyPrivateFiling.secretNamePrefix}${entry.key}',
-              value: base64Encode(entry.value),
+              value: base64Encode(entry.value.bytes),
             ));
         sent++;
       }
@@ -262,13 +263,19 @@ class NskeySeeding {
   /// private that failed to persist is never sent to anyone.
   Future<void> _convey(String namespace, String nskeyKid) async {
     final sharing = this.sharing;
-    final private = await privateFiling?.read(namespace, nskeyKid);
-    if (sharing == null || private == null) return;
+    // The SEED, never the expanded decapsulation key: the receiver validates
+    // an arrival by re-deriving the published public half from it, which only
+    // the seed can do. For X-Wing the two are the same bytes, which is the
+    // accident that let this path read the expanded form and still work; for
+    // ML-KEM the expanded form is refused on arrival and the other
+    // enrollments never get the key.
+    final seed = await privateFiling?.readSeed(namespace, nskeyKid);
+    if (sharing == null || seed == null) return;
 
     await sharing.pushSecretToNamespaceMembers(Secret(
       namespace: namespace,
       name: '${NskeyPrivateFiling.secretNamePrefix}$nskeyKid',
-      value: base64Encode(private),
+      value: base64Encode(seed.bytes),
     ));
   }
 }

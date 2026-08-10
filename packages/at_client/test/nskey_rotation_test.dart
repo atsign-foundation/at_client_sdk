@@ -4,6 +4,8 @@ import 'dart:typed_data';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
+    show NskeySeeding;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show signedEnvelopeVersion;
@@ -222,14 +224,84 @@ void main() {
       expect(secret.namespace, namespace);
       expect(secret.name,
           '${NskeyPrivateFiling.secretNamePrefix}${outcome.advertisement.nskeyKid}');
-      expect(base64Decode(secret.value),
-          await filer.read(namespace, outcome.advertisement.nskeyKid),
-          reason: 'what the other enrollments receive must be exactly what '
-              'this client will itself use — the durable copy, not a value '
-              'held only in the mint call');
+      expect(
+          base64Decode(secret.value),
+          (await filer.readSeed(namespace, outcome.advertisement.nskeyKid))!
+              .bytes,
+          reason: 'what the other enrollments receive must be the durable '
+              'SEED — not a value held only in the mint call, and not the '
+              'expanded decapsulation key');
       expect(excluded, isEmpty);
       expect(outcome.conveyedTo, 2);
       expect(outcome.supersededKid, isNot(outcome.advertisement.nskeyKid));
+    });
+
+    // The mint-time push (NskeySeeding.seed -> _convey) shares the
+    // conveyance discipline this file pins for rotation, and this rig is
+    // the one that can actually mint — which is why the arm lives here.
+    test('the mint-time push conveys the SEED too, under ML-KEM', () async {
+      final c = client();
+      // The legacy-PKAM shape: no enrollment, namespaces named by the
+      // preference — the path seed() takes without a roster round trip.
+      final lookUp = c.client.getRemoteSecondary()!.atLookUp;
+      when(() => lookUp.enrollmentId).thenReturn(null);
+      when(() => c.client.getPreferences()).thenReturn(AtClientPreference()
+        ..namespace = namespace
+        ..keyEstablishmentAlgo = SecretSharingAlgos.mlKem1024);
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      final s = sharing();
+      // seed()'s push omits excludeEnrollmentIds, so stub that call shape.
+      when(() => s.sharing.pushSecretToNamespaceMembers(any()))
+          .thenAnswer((inv) async {
+        s.pushes.add((inv.positionalArguments[0] as Secret, const {}));
+        return 1;
+      });
+
+      final seeding = NskeySeeding(
+          atClient: c.client,
+          ring: ring,
+          privateFiling: filer,
+          sharing: s.sharing);
+      expect(await seeding.seed(), {namespace});
+
+      final conveyed =
+          Uint8List.fromList(base64Decode(s.pushes.single.$1.value));
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final rederived = await kem.keyPairFromSeed(conveyed);
+      final advertised = await ring.currentPublic(atSign, namespace);
+      expect(rederived.publicKey, advertised!.publicKey,
+          reason: 'the receiver validates an arrival by re-deriving the '
+              'advertised public half from it, which only the SEED can do');
+    });
+
+    test('conveys a seed the receiver can re-derive the public half from, '
+        'under ML-KEM where seed and decapsulation key differ', () async {
+      final c = client();
+      when(() => c.client.getPreferences()).thenReturn(AtClientPreference()
+        ..keyEstablishmentAlgo = SecretSharingAlgos.mlKem1024);
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      await ring.mintAndPublish(namespace);
+      final s = sharing();
+      final rotation = NskeyRotation(
+          atClient: c.client,
+          ring: ring,
+          privateFiling: filer,
+          sharing: s.sharing);
+
+      final outcome = await rotation.rotateNamespaceKey(namespace);
+
+      final conveyed =
+          Uint8List.fromList(base64Decode(s.pushes.single.$1.value));
+      final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final rederived = await kem.keyPairFromSeed(conveyed);
+      expect(rederived.publicKey, outcome.advertisement.publicKey,
+          reason: 'the receiver validates an arrival by re-deriving the '
+              'advertised public half from it, which only the SEED can do — '
+              'a conveyed decapsulation key is refused on arrival and the '
+              'other enrollments never get the generation. X-Wing hid this: '
+              'its seed and secretKey are the same bytes');
     });
 
     test('does not push to an excluded enrollment', () async {

@@ -6,7 +6,9 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
-    show nskeyKidOf;
+    show NskeySeed, nskeyKidOf;
+import 'package:at_client/src/secret_sharing/algo_ids.dart'
+    show SecretSharingAlgos;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:test/test.dart';
 
@@ -196,5 +198,34 @@ void main() {
     expect(await filer.filePending(held), 0,
         reason: 'the substrate converges by re-sending, so the same secret is '
             'drained at every start; filing is idempotent on the keyfile');
+  });
+
+  test('what is stored is the seed; read() expands, readSeed() does not',
+      () async {
+    // ML-KEM is the arm where the two forms actually differ — X-Wing's seed
+    // and secretKey are the same bytes, which is the accident that let a
+    // conveyed decapsulation key pass for a seed until it reached ML-KEM.
+    final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+    final seed = NskeySeed(kem.newSeed());
+    final pair = await kem.keyPairFromSeed(seed.bytes);
+    final (_, filer) = await filing();
+    await filer.store(
+        namespace: namespace,
+        nskeyKid: 'kid-mlkem',
+        seed: seed,
+        keyAlgo: SecretSharingAlgos.mlKem1024);
+
+    final readBack = await filer.readSeed(namespace, 'kid-mlkem');
+    expect(readBack!.bytes, seed.bytes,
+        reason: 'readSeed is the conveyable durable form, byte-identical to '
+            'what was stored');
+
+    final expanded = await filer.read(namespace, 'kid-mlkem');
+    expect(expanded!.bytes, pair.secretKey,
+        reason: 'read() answers with the expanded decapsulation key, ready '
+            'for pqOpen');
+    expect(expanded.bytes, isNot(seed.bytes),
+        reason: 'under ML-KEM the two forms differ — the distinction the '
+            'NskeySeed/NskeyDecapsulationKey types exist to keep');
   });
 }

@@ -104,7 +104,7 @@ void main() {
       final held = await filing();
       final kid = nskeyKidOf(pair.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, seed: pair.privateKeyBytes);
+          namespace: namespace, nskeyKid: kid, seed: NskeySeed(pair.privateKeyBytes));
       final ring = PublishedNskeyKeyRing(atClient, privateFiling: held);
       ring.rememberOwn(
           atSign,
@@ -244,7 +244,7 @@ void main() {
       final held = await filing();
       final kid = nskeyKidOf(pair.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, seed: pair.privateKeyBytes);
+          namespace: namespace, nskeyKid: kid, seed: NskeySeed(pair.privateKeyBytes));
 
       final sharing = _RecordingStoreSharing();
       final primed = await NskeySeeding(
@@ -274,11 +274,11 @@ void main() {
       final kid = nskeyKidOf(pair.publicKeyBytes);
       final otherKid = nskeyKidOf(other.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, seed: pair.privateKeyBytes);
+          namespace: namespace, nskeyKid: kid, seed: NskeySeed(pair.privateKeyBytes));
       await held.store(
           namespace: 'second.my_apps',
           nskeyKid: otherKid,
-          seed: other.privateKeyBytes);
+          seed: NskeySeed(other.privateKeyBytes));
 
       final sharing = _RecordingStoreSharing();
       expect(
@@ -354,7 +354,7 @@ void main() {
       final held = await filing();
       final kid = nskeyKidOf(pair.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, seed: pair.privateKeyBytes);
+          namespace: namespace, nskeyKid: kid, seed: NskeySeed(pair.privateKeyBytes));
       final asked = <(String, String)>[];
       final ring = PublishedNskeyKeyRing(
         atClient,

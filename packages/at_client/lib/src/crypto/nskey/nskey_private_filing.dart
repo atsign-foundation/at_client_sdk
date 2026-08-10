@@ -9,7 +9,7 @@ import 'package:at_auth/at_auth.dart'
         CryptographicKeyType,
         WrittenAtKeysIo;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
-    show NskeyAdvertisement;
+    show NskeyAdvertisement, NskeyDecapsulationKey, NskeySeed;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyKeyfileIdFor, nskeyKeyfileIdPrefix, nskeySecretNamePrefix;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -113,7 +113,7 @@ class NskeyPrivateFiling {
           'it opens');
       return false;
     }
-    final seed = Uint8List.fromList(base64Decode(secret.value));
+    final seed = NskeySeed(Uint8List.fromList(base64Decode(secret.value)));
     final advertised = await _publishedFor(secret.namespace, nskeyKid);
     // An arriving seed carries no algorithm of its own, so the advertisement
     // is what names it. With no advertisement to consult, the hybrid is the
@@ -151,7 +151,7 @@ class NskeyPrivateFiling {
   /// `(namespace, nskeyKid)`. True when nothing was published to compare
   /// against — the check is secondary, and refusing everything for want of it
   /// would be worse than not making it.
-  Future<bool> _corresponds(String namespace, String nskeyKid, Uint8List seed,
+  Future<bool> _corresponds(String namespace, String nskeyKid, NskeySeed seed,
       String keyAlgo, NskeyAdvertisement? advertised) async {
     if (advertised == null) return true;
 
@@ -166,7 +166,7 @@ class NskeyPrivateFiling {
     // exactly — for either KEM.
     final Uint8List derived;
     try {
-      derived = (await kem.keyPairFromSeed(seed)).publicKey;
+      derived = (await kem.keyPairFromSeed(seed.bytes)).publicKey;
     } on ArgumentError catch (e) {
       _logger.severe('Refusing the nskey seed for $namespace:$nskeyKid — it is '
           'not a valid $keyAlgo seed: $e');
@@ -195,7 +195,7 @@ class NskeyPrivateFiling {
   ///
   /// Read from `AtKeys` rather than from memory, so it survives the restart
   /// that is the whole reason for filing it there.
-  Future<Uint8List?> read(String namespace, String nskeyKid) async {
+  Future<NskeyDecapsulationKey?> read(String namespace, String nskeyKid) async {
     try {
       final keys = await keysIo.read(atSign);
       final material = keys.getKey(keyIdFor(namespace, nskeyKid),
@@ -212,9 +212,9 @@ class NskeyPrivateFiling {
         return null;
       }
       try {
-        return (await kem.keyPairFromSeed(
+        return NskeyDecapsulationKey((await kem.keyPairFromSeed(
                 Uint8List.fromList(material.bytes.bytes)))
-            .secretKey;
+            .secretKey);
       } on ArgumentError catch (e) {
         // Held, but not a usable seed for the algorithm it is filed under.
         // Loud, because it is indistinguishable from holding nothing at every
@@ -231,6 +231,24 @@ class NskeyPrivateFiling {
     }
   }
 
+  /// The stored **seed** for `(namespace, nskeyKid)`, or null if this client
+  /// does not hold it — the form that is conveyed to other enrollments, who
+  /// validate an arrival by re-deriving the published public half from it.
+  /// [read] is the expanded flavour for opening; this is the durable one for
+  /// conveying.
+  Future<NskeySeed?> readSeed(String namespace, String nskeyKid) async {
+    try {
+      final keys = await keysIo.read(atSign);
+      final material = keys.getKey(keyIdFor(namespace, nskeyKid),
+          CryptographicKeyType.privateDecapsulation);
+      if (material == null) return null;
+      return NskeySeed(Uint8List.fromList(material.bytes.bytes));
+    } catch (e) {
+      _logger.finer('No nskey private for $namespace:$nskeyKid ($e)');
+      return null;
+    }
+  }
+
   /// Every private this keyfile holds, grouped by namespace: `{namespace:
   /// {nskeyKid: private}}`.
   ///
@@ -239,7 +257,7 @@ class NskeyPrivateFiling {
   /// asking the atServer which namespaces this enrollment is authorised for
   /// needs services the client has not been given yet, and what a holder can
   /// *answer* with is what it holds, not what it is authorised for.
-  Future<Map<String, Map<String, Uint8List>>> readAll() async {
+  Future<Map<String, Map<String, NskeySeed>>> readAll() async {
     const prefix = nskeyKeyfileIdPrefix;
     final AtKeys keys;
     try {
@@ -248,7 +266,7 @@ class NskeyPrivateFiling {
       _logger.finer('No nskey privates held ($e)');
       return const {};
     }
-    final held = <String, Map<String, Uint8List>>{};
+    final held = <String, Map<String, NskeySeed>>{};
     for (final material in keys.keys) {
       if (material.keyPartType != CryptographicKeyType.privateDecapsulation ||
           !material.keyId.startsWith(prefix)) {
@@ -262,7 +280,7 @@ class NskeyPrivateFiling {
       if (cut <= 0) continue;
       held.putIfAbsent(
               rest.substring(0, cut), () => {})[rest.substring(cut + 1)] =
-          Uint8List.fromList(material.bytes.bytes);
+          NskeySeed(Uint8List.fromList(material.bytes.bytes));
     }
     return held;
   }
@@ -274,7 +292,7 @@ class NskeyPrivateFiling {
   /// superseded key is still readable, and only its own private opens it. A
   /// client given the current generation alone could read nothing written
   /// before the last rotation.
-  Future<Map<String, Uint8List>> readAllFor(String namespace) async {
+  Future<Map<String, NskeySeed>> readAllFor(String namespace) async {
     final prefix = keyIdFor(namespace, '');
     try {
       final keys = await keysIo.read(atSign);
@@ -284,7 +302,7 @@ class NskeyPrivateFiling {
                   CryptographicKeyType.privateDecapsulation &&
               material.keyId.startsWith(prefix))
             material.keyId.substring(prefix.length):
-                Uint8List.fromList(material.bytes.bytes)
+                NskeySeed(Uint8List.fromList(material.bytes.bytes))
       };
     } catch (e) {
       _logger.finer('No nskey privates for $namespace ($e)');
@@ -308,7 +326,7 @@ class NskeyPrivateFiling {
   Future<bool> store({
     required String namespace,
     required String nskeyKid,
-    required Uint8List seed,
+    required NskeySeed seed,
     String keyAlgo = SecretSharingAlgos.xWing,
     DateTime? createdAt,
   }) async {
@@ -348,7 +366,7 @@ class NskeyPrivateFiling {
           keyId: keyId,
           keyPartType: CryptographicKeyType.privateDecapsulation,
           keyAlgorithmType: materialAlgo,
-          bytes: AtBytes(seed),
+          bytes: AtBytes(seed.bytes),
           createdAt: createdAt ?? DateTime.now().toUtc(),
         ));
         filed = true;

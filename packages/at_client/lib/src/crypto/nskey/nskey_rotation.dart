@@ -153,8 +153,11 @@ class NskeyRotation {
 
     // Read back the durable copy rather than trusting the mint's return: a
     // private that failed to persist must never be conveyed, and this is the
-    // same discipline the mint-time push uses.
-    final private = await privateFiling.read(namespace, advertisement.nskeyKid);
+    // same discipline the mint-time push uses. The SEED, never the expanded
+    // decapsulation key — the receiver re-derives the published public half
+    // from what arrives, which only the seed can do.
+    final private = await privateFiling.readSeed(
+        namespace, advertisement.nskeyKid);
     if (private == null) {
       throw StateError(
           'rotated $owner:$namespace to ${advertisement.nskeyKid} but cannot '
@@ -172,7 +175,7 @@ class NskeyRotation {
         namespace: namespace,
         name: '${NskeyPrivateFiling.secretNamePrefix}'
             '${advertisement.nskeyKid}',
-        value: base64Encode(private),
+        value: base64Encode(private.bytes),
       ),
       excludeEnrollmentIds: excludeEnrollmentIds,
     );

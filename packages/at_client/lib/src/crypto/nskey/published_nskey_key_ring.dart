@@ -248,7 +248,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   void rememberOwn(
           String owner, String namespace, NskeyAdvertisement advertisement) =>
       _ownCurrent[_scope(owner, namespace)] = advertisement;
-  final Map<String, Uint8List> _ownPrivates = {};
+  final Map<String, NskeyDecapsulationKey> _ownPrivates = {};
   final Map<String, ({NskeyAdvertisement advertisement, DateTime fetchedAt})>
       _remote = {};
 
@@ -341,8 +341,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     // ML-KEM the decapsulation key is expanded and cannot be turned back into
     // a public half, so filing it would leave the generation unopenable after
     // a restart.
-    final Uint8List seed = kem.newSeed();
-    final pair = await kem.keyPairFromSeed(seed);
+    final seed = NskeySeed(kem.newSeed());
+    final pair = await kem.keyPairFromSeed(seed.bytes);
     final advertisement = (
       nskeyKid: nskeyKidOf(pair.publicKey),
       publicKey: pair.publicKey,
@@ -406,7 +406,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
 
     _ownCurrent[_scope(owner, namespace)] = advertisement;
     _ownPrivates[_generation(owner, namespace, advertisement.nskeyKid)] =
-        pair.secretKey;
+        NskeyDecapsulationKey(pair.secretKey);
     return advertisement;
   }
 
@@ -474,7 +474,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   }
 
   @override
-  Future<Uint8List?> privateHalf(
+  Future<NskeyDecapsulationKey?> privateHalf(
       String owner, String namespace, String nskeyKid) async {
     // Memory first — this process minted it, or has already read it once.
     final held = _ownPrivates[_generation(owner, namespace, nskeyKid)];

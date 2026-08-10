@@ -213,7 +213,9 @@ class _FixedRing implements NskeyKeyRing {
       _advertised;
 
   @override
-  Future<Uint8List?> privateHalf(
+  Future<NskeyDecapsulationKey?> privateHalf(
           String owner, String namespace, String nskeyKid) async =>
-      nskeyKid == _advertised.nskeyKid ? _secretKey : null;
+      nskeyKid == _advertised.nskeyKid
+          ? NskeyDecapsulationKey(_secretKey)
+          : null;
 }

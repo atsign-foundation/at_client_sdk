@@ -233,7 +233,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     try {
       ckBytes = await pqOpen(
         _kem,
-        private,
+        private.bytes,
         Uint8List.fromList(base64Decode(ciphertext)),
         info: _info(_recordOwnerOf(atKey), namespace),
       );

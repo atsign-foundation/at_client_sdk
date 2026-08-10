@@ -5891,3 +5891,38 @@ before the fix, on both paths. Cross-process writers still exist —
 read-merge-write against a shared record remains the pattern until the
 store grows an atomic verb — but one operation is no longer a race with
 itself, and in-process the bootstrap already serialised the writers.
+
+### 62.5 NskeySeed vs NskeyDecapsulationKey — and the two conveyances the types caught
+
+The nskey path carried two different byte meanings through one bare
+`Uint8List`: the **seed** (compact, re-derivable — what is filed and what
+conveyance must send) and the **expanded decapsulation key** (what
+`pqOpen` takes — for ML-KEM it cannot be turned back into a public half).
+X-Wing's seed and secretKey are the same bytes, so any confusion between
+the two was invisible until ML-KEM — the exact accident class the
+2026-08-07 at_chops seed lesson named, one layer up. They are now
+distinct extension types in `nskey_key_ring.dart` (zero runtime cost;
+the swap is a compile error): `NskeyKeyRing.privateHalf` returns
+`NskeyDecapsulationKey`, `NskeyPrivateFiling.store` takes an `NskeySeed`,
+`read()` expands, the new `readSeed()` answers with the durable form,
+and the bulk reads (`readAll`/`readAllFor`) are typed as the seeds they
+return.
+
+**Retyping the flow immediately surfaced two real data-loss bugs**, both
+fixed test-first in this commit: `NskeySeeding._convey` (the mint-time
+push) and `NskeyRotation.rotateNamespaceKey`'s successor fan-out both
+conveyed `filing.read(...)` — the EXPANDED key — as the "seed". The
+receiver validates an arrival by re-deriving the advertised public half
+(`keyPairFromSeed`), so an ML-KEM private conveyed this way is refused
+on arrival and the other enrollments simply never get the generation:
+under 1:1:1 that is every other device unable to open the namespace.
+Both sites now convey `readSeed()`. The rotation test's old conveyed-
+value assertion had compared against the same wrong source
+(`filer.read`) — a self-consistent pin, collapsed arms — and was
+corrected in the same commit; the new ML-KEM arms (rotation fan-out,
+mint-time push, and the filing seed/expanded meaning-pin) each went red
+against the old code with the fix reverted. The plan's survey line
+("mint files the SEED but caches the expanded key") described a
+consistent pair — mint's cache and `read()` both carry the expanded
+form deliberately; the real defect was in the conveyances, and only the
+types found it.
