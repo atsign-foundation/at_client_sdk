@@ -1,4 +1,3 @@
-import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
@@ -89,15 +88,6 @@ void main() {
           throwsA(isA<ArgumentError>()));
       expect(() => algo.decapsulate(Uint8List(33), Uint8List(1120)),
           throwsA(isA<ArgumentError>()));
-    });
-
-    test('AtChopsUtil.generateXWingKeyPair round-trips via base64', () async {
-      final atKp = await XWingKeyPair.generate();
-      final pub = base64Decode(atKp.atPublicKey.publicKey);
-      final seed = base64Decode(atKp.atPrivateKey.privateKey);
-      final enc = await algo.encapsulate(pub);
-      final ss = await algo.decapsulate(seed, enc.ciphertext);
-      expect(ss, enc.sharedSecret);
     });
   });
 }

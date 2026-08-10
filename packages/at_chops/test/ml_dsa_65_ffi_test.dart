@@ -1,11 +1,14 @@
 @Tags(['ffi'])
 library;
 
-import 'dart:convert';
 import 'dart:ffi';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
+// `show`: at_commons exports its own StringBuffer, which would shadow
+// dart:core's and break the loadedPath argument below.
+import 'package:at_commons/at_commons.dart'
+    show AtSigningException, AtSigningVerificationException;
 import 'package:test/test.dart';
 
 void main() {
@@ -30,6 +33,9 @@ void main() {
       }
 
       final algo = MlDsa65FfiAlgo.fromLib(lib);
+      expect(algo.name, equals('mldsa65'),
+          reason: 'must match MlDsa65PureDartAlgo.name — a downstream '
+              'protocol sees one identifier regardless of backend');
       final kp = await algo.generateKeyPair();
 
       expect(kp.publicKey.length, equals(1952));
@@ -37,11 +43,13 @@ void main() {
 
       final Uint8List message =
           Uint8List.fromList('Hello ML-DSA-65 FFI'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
       expect(sig.length, equals(3309));
 
-      final bool ok = await algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey);
-      expect(ok, isTrue);
+      await expectLater(
+          algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey),
+          completes);
     });
 
     test('Interop A: pure-Dart keygen → FFI sign → pure-Dart verify', () async {
@@ -52,18 +60,18 @@ void main() {
         fail('libcrypto does not support ML-DSA-65 (requires OpenSSL >= 3.5)');
       }
 
-      final MlDsa65KeyPair kp = await MlDsa65KeyPair.generate();
-      final Uint8List pub = base64Decode(kp.atPublicKey.publicKey);
-      final Uint8List sk = base64Decode(kp.atPrivateKey.privateKey);
+      final kp = await MlDsa65PureDartAlgo().generateKeyPair();
 
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
       final Uint8List message =
           Uint8List.fromList('cross-backend signing'.codeUnits);
-      final Uint8List sig = await ffiAlgo.signBytes(message, secretKey: sk);
+      final Uint8List sig =
+          await ffiAlgo.signBytes(message, secretKey: kp.secretKey);
 
-      final bool ok =
-          await MlDsa65PureDartAlgo().verifyBytes(message, signature: sig, publicKey: pub);
-      expect(ok, isTrue);
+      await expectLater(
+          MlDsa65PureDartAlgo()
+              .verifyBytes(message, signature: sig, publicKey: kp.publicKey),
+          completes);
     });
 
     test('Interop B: FFI keygen → pure-Dart sign → FFI verify', () async {
@@ -79,14 +87,15 @@ void main() {
 
       final Uint8List message =
           Uint8List.fromList('cross-backend verification'.codeUnits);
-      final Uint8List sig =
-          await MlDsa65PureDartAlgo().signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig = await MlDsa65PureDartAlgo()
+          .signBytes(message, secretKey: kp.secretKey);
 
-      final bool ok = await ffiAlgo.verifyBytes(message, signature: sig, publicKey: kp.publicKey);
-      expect(ok, isTrue);
+      await expectLater(
+          ffiAlgo.verifyBytes(message, signature: sig, publicKey: kp.publicKey),
+          completes);
     });
 
-    test('FFI verify returns false for tampered message', () async {
+    test('FFI verify throws for tampered message', () async {
       if (lib == null) {
         fail('libcrypto not available on this host');
       }
@@ -98,11 +107,24 @@ void main() {
       final kp = await algo.generateKeyPair();
 
       final Uint8List message = Uint8List.fromList('original'.codeUnits);
-      final Uint8List sig = await algo.signBytes(message, secretKey: kp.secretKey);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
 
       final Uint8List tampered = Uint8List.fromList('tampered'.codeUnits);
-      final bool ok = await algo.verifyBytes(tampered, signature: sig, publicKey: kp.publicKey);
-      expect(ok, isFalse);
+      await expectLater(
+          algo.verifyBytes(tampered, signature: sig, publicKey: kp.publicKey),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test(
+        'fromLib throws AtSigningException when the injected probe reports '
+        'no ML-DSA-65 support — runs on every host, no libcrypto required', () {
+      final DynamicLibrary probedLib = lib ?? DynamicLibrary.process();
+
+      expect(
+          () =>
+              MlDsa65FfiAlgo.fromLib(probedLib, supportsMlDsa65: (_) => false),
+          throwsA(isA<AtSigningException>()));
     });
   });
 }
