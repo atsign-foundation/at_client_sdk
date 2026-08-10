@@ -22,8 +22,8 @@ import 'package:at_client/src/util/encryption_util.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
-import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
+import 'package:at_client/src/client/pq_client_bootstrap.dart';
+import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/client/verb_builder_manager.dart';
 import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/response/response.dart';
@@ -269,7 +269,22 @@ class AtClientImpl implements AtClient {
   @override
   EncryptionService? get encryptionService => _encryptionService;
 
-  static late AtSignLogger _logger;
+  late final AtSignLogger _logger;
+
+  /// For the few static contexts (the service [Finalizer]) that cannot use
+  /// the per-instance logger.
+  static final AtSignLogger _staticLogger = AtSignLogger('AtClientImpl');
+
+  PqClientBootstrap? _pqBootstrap;
+
+  /// This client's PQ startup — the owner of the one key ring, filing,
+  /// secret-sharing and signing-root instance set, and of the ordered
+  /// fire-and-forget startup steps. Null only for a client whose `_init`
+  /// has not run (a cached instance re-served by [create] keeps the one it
+  /// was built with). Await its `startupComplete` to know the startup tail
+  /// has finished — tests do; production code must not.
+  @experimental
+  PqClientBootstrap? get pqBootstrap => _pqBootstrap;
 
   @override
   String? enrollmentId;
@@ -322,7 +337,7 @@ class AtClientImpl implements AtClient {
       enrollmentId == null ? atSign : '$atSign|$enrollmentId';
 
   static final Finalizer<String> _finalizer = Finalizer((service) {
-    _logger.finer('Outgoing $service has been garbage collected');
+    _staticLogger.finer('Outgoing $service has been garbage collected');
   });
 
   // Cache key combines (namespace, eventSource). Two collections on
@@ -534,24 +549,29 @@ class AtClientImpl implements AtClient {
 
     _cascadeSetTelemetryService();
 
+    // Built before the crypto config adopts its era default, because the
+    // config's nskey providers read through the bootstrap's key ring — the
+    // same ring the startup steps mint into and file from.
+    _pqBootstrap = PqClientBootstrap(
+      this,
+      keysIo: _atKeysIo,
+      privilege: EnrollmentRecordPrivilegeResolver(this),
+      sweepUnanchoredEnrollments: () =>
+          EnrollmentServiceImpl(this, AtEnrollment.create())
+              .sweepUnanchoredEnrollments(),
+    );
+
     _adoptEraCryptoDefault();
 
     _announceLegacyEncryptionPosture();
 
-    // Seeding is deliberately not awaited. It publishes to the atServer, and a
-    // client's startup must not wait on — or fail because of — a rollout
-    // action; a namespace missed now is minted at the next start, and the
-    // write path already fails cold start by name.
-    if (_preference?.seedNamespaceKeys == true) {
-      unawaited(_seedNamespaceKeys());
-    }
-
-    // Collect whatever key material other enrollments of this atSign have
-    // conveyed, and stamp the approval-chain link this enrollment was given
-    // onto its own `_apsk`. Not awaited: neither a round trip nor a publish is
-    // something startup should wait on or fail for, and anything missed is
-    // retried at the next start.
-    unawaited(_fileConveyedKeysAndAnchor());
+    // The PQ startup — seeding, collecting conveyed key material, chain-link
+    // publishes — as one ordered fire-and-forget task. Deliberately not
+    // awaited: neither a round trip nor a publish is something a client's
+    // startup should wait on or fail for, and anything a step missed is
+    // retried at the next start. Awaitable via [pqBootstrap]'s
+    // `startupComplete` for callers that need the tail to have run.
+    unawaited(_pqBootstrap!.startup());
   }
 
   /// Gives this client the era's crypto default: the nskey providers wired for
@@ -572,27 +592,14 @@ class AtClientImpl implements AtClient {
   /// which is the same limitation it already had.
   ///
   /// Built once per client because these providers hold per-atSign state; a
-  /// shared instance would let two atSigns see each other's cached content keys.
+  /// shared instance would let two atSigns see each other's cached content
+  /// keys. The ring is the bootstrap's — the same instance the startup steps
+  /// mint into and file from, so a private the seeding step just minted is
+  /// visible to the very next read.
   void _adoptEraCryptoDefault() {
-    final keysIo = _atKeysIo;
     CryptoConfig.adoptEraDefault(
       this,
-      CryptoConfig.readsNskeyWritesLegacy(
-        keyRing: PublishedNskeyKeyRing(
-          this,
-          privateFiling: keysIo == null
-              ? null
-              : NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign),
-          // The read path's self-heal (decisions.md 38): a miss on an own
-          // generation broadcasts a pull, so a record that arrived before its
-          // key stops being permanently unreadable and becomes merely early.
-          // Only when the answer has somewhere durable to land.
-          requestConveyance: keysIo == null
-              ? null
-              : (namespace, secretName) => AtClientSecretSharing.forClient(this)
-                  .requestSecretsFromNamespace(namespace, names: [secretName]),
-        ),
-      ),
+      CryptoConfig.readsNskeyWritesLegacy(keyRing: _pqBootstrap!.ring),
     );
   }
 
@@ -623,222 +630,6 @@ class AtClientImpl implements AtClient {
         'new data with the legacy (RSA/AES) provider — harvestable now, '
         'openable by a quantum computer later. It becomes the default in '
         'at_client 4.0; set it on AtClientPreference to opt in early.');
-  }
-
-  /// Files the key material conveyed to this enrollment, then publishes
-  /// whichever approval-chain link it can.
-  ///
-  /// Ordered: filing the root private first is what lets the same start also
-  /// self-sign a root link, rather than needing a second start to notice the
-  /// private had arrived.
-  Future<void> _fileConveyedKeysAndAnchor() async {
-    final keysIo = _atKeysIo;
-    // The SUPPLY side runs first, before anything sweeps. The one sweep every
-    // client performs at start consumes and DELETES the envelopes it finds,
-    // including other enrollments' pull requests — and it answers them out of
-    // this in-memory store, which a restart empties. Hydrated afterwards, that
-    // sweep is guaranteed to destroy every request waiting for this holder
-    // while holding nothing to answer them with, and the requester's only
-    // recourse is to ask again and lose the next one the same way.
-    if (keysIo != null) {
-      try {
-        await _hydrateHeldSecretsForAnswering(keysIo);
-      } catch (e, st) {
-        _logger.warning('Could not prime what $_atSign holds for answering '
-            'other enrollments; their pulls go unanswered until the next '
-            'start retries: $e, $st');
-      }
-    }
-    if (keysIo != null) {
-      try {
-        await collectConveyedKeyMaterial(this, keysIo);
-      } catch (e, st) {
-        _logger.warning('Collecting conveyed key material failed for $_atSign; '
-            'this enrollment holds only what it already had, and the next '
-            'start retries: $e, $st');
-      }
-    }
-    try {
-      // Ask for the root private if this enrollment should have one and does
-      // not — an enrollment that was offline when it was approved has no other
-      // way to get it, since the root carries no namespace and so never rides
-      // the enroll:listns fan-out. The call broadcasts and returns; the answer
-      // is filed by the collection step above at this or a later start.
-      //
-      // Placed before anchoring rather than after because anchoring needs the
-      // private, so on the rare start where an answer is already waiting, both
-      // succeed in one pass.
-      // The request rides the client's own namespace, because that is where
-      // its key package is registered and so where holders can be enumerated.
-      // A client with no namespace has nowhere to ask and is skipped rather
-      // than force-unwrapped — this runs on every start, and a null here would
-      // turn a missing preference into a failed client construction.
-      final askIn = _preference?.namespace;
-      if (askIn != null && askIn.isNotEmpty) {
-        await PqSigningRoot(this, keysIo: _atKeysIo).requestPrivateIfAbsent(
-          isFullyPrivileged: _resolveFullPrivilege,
-          sharing: AtClientSecretSharing.forClient(this),
-          namespace: askIn,
-        );
-      }
-    } catch (e, st) {
-      _logger.warning('Could not ask for the signing root private for '
-          '$_atSign; this enrollment stays unanchored and the next start '
-          'retries: $e, $st');
-    }
-    try {
-      // Ask for any nskey privates this enrollment is entitled to and does
-      // not hold — the pull half of the self-heal invariant (decisions.md 38).
-      // An enrollment created after a namespace was minted missed the
-      // mint-time push, and this is its route to the key; without it the
-      // namespace reads as one this client can never open. Guarded on the
-      // keysIo because the answer must have somewhere durable to land.
-      final filingIo = _atKeysIo;
-      if (filingIo != null) {
-        final filing = NskeyPrivateFiling(keysIo: filingIo, atSign: _atSign);
-        final seeding = NskeySeeding(
-          atClient: this,
-          ring: PublishedNskeyKeyRing(this, privateFiling: filing),
-          privateFiling: filing,
-        );
-        final sharing = AtClientSecretSharing.forClient(this);
-        // The supply side already ran, before the sweep that answers with it
-        // (see _hydrateHeldSecretsForAnswering).
-        final asked = await seeding.requestMissingPrivates(sharing);
-        if (asked.isNotEmpty) {
-          _logger.info('Asked other enrollments for the nskey private(s) of '
-              '${asked.join(', ')}; answers are filed as they arrive');
-        }
-      }
-    } catch (e, st) {
-      _logger.warning('Could not request missing nskey privates for '
-          '$_atSign; the affected namespaces stay unreadable until the next '
-          'start retries: $e, $st');
-    }
-    try {
-      // Anchoring is attempted before the chain link because it is the better
-      // outcome of the two: an enrollment that can reach the root directly has
-      // no need of a hop through whoever approved it.
-      await PqSigningChain.publishOwnRootLink(this,
-          isFullyPrivileged: _resolveFullPrivilege, keysIo: _atKeysIo);
-    } catch (e, st) {
-      _logger.warning('Anchoring $_atSign to its signing root failed; the '
-          'enrollment falls back to its approval-chain link and the next '
-          'start retries: $e, $st');
-    }
-    try {
-      await PqSigningChain.publishPendingLink(this);
-    } catch (e, st) {
-      _logger.warning('Publishing the approval-chain link failed for $_atSign; '
-          'the enrollment stays unsigned, which verifiers tolerate, and the '
-          'next start retries: $e, $st');
-    }
-    try {
-      // The chain sweep (decisions.md 38, decision 3): a fully privileged
-      // client signs and conveys links for approved enrollments that lack
-      // one. A scoped
-      // enrollment cannot anchor itself and its approver may be a legacy
-      // enrollment that can sign nothing, so without this sweep
-      // chained-but-unanchored is a permanent state rather than a transient.
-      // Gated on privilege here rather than inside, because a link signed by
-      // an unanchored sweeper adds a hop without reaching the root.
-      if (await _resolveFullPrivilege()) {
-        await EnrollmentServiceImpl(this, AtEnrollment.create())
-            .sweepUnanchoredEnrollments();
-      }
-    } catch (e, st) {
-      _logger.warning('The chain sweep failed for $_atSign; unanchored '
-          'enrollments stay unanchored, which verifiers tolerate, and the '
-          'next privileged start retries: $e, $st');
-    }
-  }
-
-  /// Primes the in-memory secret store with the key material this client
-  /// holds durably, so it can **answer** other enrollments' pull requests.
-  ///
-  /// Must run before anything sweeps: a sweep consumes and deletes the
-  /// requests it finds and answers them from this store, so a holder that
-  /// hydrates afterwards destroys exactly the requests it was supposed to
-  /// serve. The store is in-memory by design and a restart empties it, which
-  /// is why this is a re-prime on every start rather than a one-off.
-  Future<void> _hydrateHeldSecretsForAnswering(AtKeysIo keysIo) async {
-    final sharing = AtClientSecretSharing.forClient(this);
-    await NskeySeeding(
-      atClient: this,
-      ring: PublishedNskeyKeyRing(this,
-          privateFiling: NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign)),
-      privateFiling: NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign),
-    ).hydrateStoreFromFiling(sharing);
-
-    // The signing root, which is atSign-level and so has no namespace of its
-    // own: it is offered under the client's namespace, because that is where
-    // requesters ask. Cheap check first — holding nothing settles it without
-    // the round trip that resolving privilege costs, and that is every client
-    // but the rare privileged one.
-    final askIn = _preference?.namespace;
-    if (askIn == null || askIn.isEmpty) return;
-    final root = PqSigningRoot(this, keysIo: keysIo);
-    if (await root.privateHalf(_atSign) == null) return;
-
-    // Before offering it, check it is the right key. A private that
-    // corresponds to nothing published — the residue of a create this client
-    // lost, or of a crash — otherwise blocks its own repair forever: it
-    // satisfies the pull's "already holding it" guard, so this enrollment
-    // never asks, and it would be served to enrollments that asked, spending
-    // their broadcast on bytes their own check then rejects. This is the
-    // "a later start reconciles it" the mint's severe log promises, and it is
-    // promised HERE because a mint is once per keyfile while a start is
-    // every time.
-    if (await root.reconcileHeldPrivate(_atSign)) return;
-
-    // A scoped enrollment should not be holding this at all; one that somehow
-    // does must not go on to offer it to others.
-    if (!await _resolveFullPrivilege()) return;
-    await root.hydrateStore(sharing, askIn);
-  }
-
-  /// Whether this client's enrollment holds `rw` on both `*` and `__manage`.
-  ///
-  /// Read off the enrollment record rather than anything this client asserts
-  /// about itself, so an enrollment cannot anchor itself to the signing root by
-  /// claiming a privilege it was never granted.
-  ///
-  /// Costs a round trip, which is why it is only ever called once the client is
-  /// known to hold the root private — almost no client reaches it.
-  ///
-  /// A client with no enrollment id is authenticating with the atSign's own
-  /// keys, which is full privilege by construction rather than by grant.
-  Future<bool> _resolveFullPrivilege() async {
-    final id = _remoteSecondary?.atLookUp.enrollmentId;
-    if (id == null) return true;
-    final mine = (await EnrollmentServiceImpl(this, AtEnrollment.create())
-            .fetchEnrollmentRequests())
-        .where((e) => e.enrollmentId == id)
-        .firstOrNull;
-    return EnrollmentServiceImpl.isFullyPrivileged(mine?.namespace);
-  }
-
-  /// Mints and publishes namespace keys for this client's authorised
-  /// namespaces, per [AtClientPreference.seedNamespaceKeys].
-  Future<void> _seedNamespaceKeys() async {
-    try {
-      final keysIo = _atKeysIo;
-      final filing = keysIo == null
-          ? null
-          : NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign);
-      await NskeySeeding(
-        atClient: this,
-        // The ring's own filing is what makes a mint durable-before-published;
-        // a ring without one skips the filing and publishes anyway, leaving
-        // the only copy of the private in process memory.
-        ring: PublishedNskeyKeyRing(this, privateFiling: filing),
-        privateFiling: filing,
-        sharing: AtClientSecretSharing.forClient(this),
-      ).seed();
-    } catch (e, st) {
-      _logger.warning('Seeding namespace keys failed for $_atSign; the next '
-          'start retries whatever is still missing: $e, $st');
-    }
   }
 
   /// Arms (or re-arms) the one-shot expiry [Timer] at the

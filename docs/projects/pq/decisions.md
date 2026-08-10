@@ -5769,3 +5769,83 @@ The plan's optional `src/signing/` file move (relocating the chain/root
 files with re-export shims) was skipped: the cycle cut needed import
 narrowing, not motion, and the nskey files' home is not what any later
 phase depends on.
+
+## 62. PqClientBootstrap: one owner for the PQ startup (2026-08-10)
+
+Phase 4d, the keystone. Before it, `AtClientImpl` built a fresh
+`PublishedNskeyKeyRing` inside each startup action — five constructions
+per client (the era crypto config's, seeding's, hydration's,
+missing-private request's, and the mint path's), plus four
+`NskeyPrivateFiling`s and two `PqSigningRoot`s — so a private held in one
+instance's memory was invisible to every other, and the whole startup ran
+as two *racing* unawaited tasks (`_seedNamespaceKeys` and
+`_fileConveyedKeysAndAnchor`).
+
+`src/client/pq_client_bootstrap.dart` now owns ONE ring, filing, sharing
+(`AtClientSecretSharing.forClient`, which was already per-client cached —
+the bootstrap holds that instance rather than a rival), seeding and root
+per client, and runs the startup as one ordered fire-and-forget task of
+NAMED steps — the names are 14.13's gate-site list, each classified
+active-write vs read-precondition in the dartdoc:
+
+1. `hydrateHeldSecrets` (read-precondition), 2. `collectConveyedKeys`
+(read-precondition, the only route conveyed material reaches the
+keyfile), 3. `seedNamespaceKeys` (active, keeps its own
+`AtClientPreference.seedNamespaceKeys` knob), 4. `requestRootPrivate`,
+5. `requestMissingPrivates`, 6. `publishRootLink`, 7. `publishChainLink`,
+8. `sweepUnanchoredEnrollments` (all active, each behind a
+`PqStartupGates` bool defaulting ON). The gates object is the *seam* for
+14.13's passive-by-default posture — building the flag later is config,
+not a re-survey. The two read-preconditions have no gate field at all:
+ungateable by construction. 14.13's remaining active sites live outside
+the startup and outside this object: `register()`'s
+`publishPublicSigningKey`, and the read-path conveyance hook, which IS
+gated here (`askOnReadMiss` controls whether the ring gets the hook).
+
+Deliberate structural change, not just motion: the two racing tasks are
+now one serial sequence (seed placed between collect and the asks), which
+eliminates the seeding-vs-filing interleaving class outright — the
+2026-08-08 lost-update was one member of it. And the era config's ring IS
+the bootstrap's ring, so a private the seeding step just minted is
+visible to the very next read even for a client with no durable filing.
+
+`startupComplete` is awaitable (tests may; `_init` never does — it fires
+`startup()` unawaited, preserving fire-and-forget). No live-test timing
+updates were needed: the functional pack's PQ tests drive the steps
+directly with their own instances rather than waiting on the client's
+startup tail. Loggers: the bootstrap logs per-instance, and
+`AtClientImpl`'s `static late _logger` — which let a second client
+re-point the first client's log name — became per-instance, with a small
+static logger kept for the service `Finalizer`'s static context.
+
+### 62.1 One privilege-resolver seam
+
+`EnrollmentPrivilegeResolver` (`src/enroll/privilege_resolver.dart`, a
+leaf interface) is the ONE injected seam for "is this enrollment fully
+privileged" — consumed by the root-private request and the unanchored
+sweep, and intended (4g) to replace the secret-sharing request gate's own
+copy of the same question. The production implementation,
+`EnrollmentRecordPrivilegeResolver` (in `src/service/`), is the old
+`AtClientImpl._resolveFullPrivilege` moved verbatim: it answers from the
+enrollment record, never from the client's own claims, and a client with
+no enrollment id is fully privileged by construction (14.14's posture,
+carried as-is). The sweep itself is injected as a callback, so the
+bootstrap imports no service code.
+
+### 62.2 The impl↔service cycle is gone (4d-0)
+
+`EnrollmentServiceImpl`'s import closure reached back to `AtClientImpl`
+through three incidental edges, each cut in the preparatory commit:
+dartdoc-only imports of the impl/manager in `at_client_preference`,
+`local_secondary` and `at_client_spec` (now plain-code references), a
+deprecated ignored `AtClientManager` parameter on
+`NotificationServiceImpl.create` (removed — internal signature), and
+`RemoteSecondary`'s `AtClientManager.getInstance().secondaryAddressFinder`
+reach-up, now behind `secondary_address_finder_source.dart`: the
+manager's constructors register a source reading the singleton's field,
+the read stays lazy and per-call, so the semantics — including the quirk
+that per-atSign managers' own finder fields are never consulted — are
+preserved exactly. `import_topology_test.dart` pins the cut (red-proofed
+before the edits): the service impl's closure contains neither the client
+impl nor the manager. The impl still calls the service — one-directional,
+by design.
