@@ -79,8 +79,27 @@ class ReleasePosture {
   ///
   /// New data is written under the nskey data path, legacy writes are
   /// refused, envelopes go out in the JWS shape, enrollments exchange their
-  /// symmetric key post-quantum, and a retrofit mints ML-DSA. Safe to adopt
-  /// early: every 3.x client already reads all of it.
+  /// symmetric key post-quantum, and a retrofit mints ML-DSA.
+  ///
+  /// **This is tomorrow's posture, adoptable today only with eyes open.** It
+  /// exists so the whole rollout is drivable from one codebase — the
+  /// acceptance suite runs it, and a deployment that controls every client
+  /// of its namespaces can run it once those namespaces are seeded. Two
+  /// consequences to accept before adopting it early:
+  ///
+  /// - a destination with no published namespace key is **refused**, never
+  ///   written legacy — and seeding is a separate, deliberate knob
+  ///   ([AtClientPreference.seedNamespaceKeys]), not something this posture
+  ///   turns on;
+  /// - the SDK's own namespace-less internal writes (the sync and
+  ///   notification watermarks among them) are refused under this posture
+  ///   today: no post-quantum scheme serves a key with no namespace, and
+  ///   the 4.0 release owes a decision on those writes before this posture
+  ///   can become the default (the R-2 project in `docs/projects/pq/`).
+  ///
+  /// The readers for everything this posture emits — nskey records, JWS
+  /// envelopes — ship in the **same release line as the posture itself**, so
+  /// its peers must be on at least that release, not merely "any 3.x".
   const ReleasePosture.postQuantum()
       : writesPqByDefault = true,
         disallowLegacyEncryption = true,

@@ -551,12 +551,14 @@ keypair, its own namespaces. Apps migrate independently and never have to agree.
 2. **Active use (4.x, or an explicit opt-in today).** The app now writes the
    nskey data path. **The SDK never decides to write PQ — the app tells it
    to**, implicitly by riding the 4.x default, or explicitly by naming a
-   `crypto` config — or, since decisions 70, by building its preference with
-   `ReleasePosture.postQuantum()`, which runs all five 4.0 flag defaults
-   (era config, `disallowLegacyEncryption`, JWS envelopes, pq enrollment key
-   exchange, ML-DSA retrofits) on a 3.x build. 4.0 itself is that posture
-   becoming the default — final-3.x code, different flag defaults
-   (decisions 56.4).
+   `crypto` config — or, since
+   [`decisions.md` 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10),
+   by building its preference with `ReleasePosture.postQuantum()`, which runs
+   all five 4.0 flag defaults (era config, `disallowLegacyEncryption`, JWS
+   envelopes, pq enrollment key exchange, ML-DSA retrofits) on a 3.x build.
+   4.0 itself is that posture becoming the default — final-3.x code,
+   different flag defaults
+   ([`decisions.md` 56.4](decisions.md#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults)).
 
 `appMetadata.providerId` on each stored value **and** on the notification frame
 tells the recipient which provider opens it; **reads are universal** regardless of

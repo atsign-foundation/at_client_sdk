@@ -177,16 +177,19 @@ class CryptoConfig {
   /// The config [atClient] encrypts under — the app's if it named one, else
   /// the SDK's default for this release.
   ///
-  /// **The single place the era default lives.** `AtClientPreference.crypto`
+  /// **The resolution seam for the era default.** `AtClientPreference.crypto`
   /// defaults to the [CryptoConfig.eraDefault] marker precisely so this
   /// decision belongs to the SDK: an app that had to name a real config just
   /// to have one would be pinned to whatever was current on the day it was
-  /// written, and would sit out the migration it was supposed to ride. Moving
-  /// the default is therefore an edit here and nowhere else.
+  /// written, and would sit out the migration it was supposed to ride.
   ///
-  /// The era default is now [CryptoConfig.readsNskeyWritesLegacy], built once
-  /// per client by [adoptEraDefault] at construction and looked up here. It
-  /// stopped being a constant because the nskey providers hold per-atSign state
+  /// The era default is chosen by the client's `ReleasePosture` at
+  /// construction — [CryptoConfig.readsNskeyWritesLegacy] under the
+  /// migration posture (the 3.x default), [CryptoConfig.nskey] under
+  /// `ReleasePosture.postQuantum` — built once per client, adopted by
+  /// [adoptEraDefault], and looked up here. Moving the fleet default is
+  /// therefore an edit to the default posture and nowhere else. It stopped
+  /// being a constant because the nskey providers hold per-atSign state
   /// (a [ContentKeyCache], a key ring bound to one client), so one shared
   /// instance would let two atSigns read each other's cached content keys.
   ///

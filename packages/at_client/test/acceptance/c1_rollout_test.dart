@@ -57,6 +57,14 @@ void main() {
         'the envelope version is a parameter, frozen at the build',
         proves: 'the write-once keyPackage envelope follows the threaded '
             'version');
+    provenIn(
+        'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
+        'the postQuantum posture decides an argless retrofit',
+        proves: 'live: the posture\'s version frozen in a real enrollment '
+            'record\'s keyPackage');
+    provenIn('packages/at_client/test/pq_native_onboard_test.dart',
+        'a threaded envelopeVersion reaches the frozen key package',
+        proves: 'the PQ-native activation stamp threads the same parameter');
   });
 
   test('UC-C1.4 · the key-exchange axis: the posture names pq enrollment', () {
@@ -90,6 +98,11 @@ void main() {
         'the postQuantum posture decides an argless retrofit',
         proves: 'the live arm: posture-resolved ML-DSA against a real '
             'atServer');
+    provenIn(
+        'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
+        'an argless retrofit under the default preference stays rsa2048',
+        proves: 'the migration column\'s red: a consult replaced by a '
+            'constant fails this arm');
   });
 
   test('UC-C1.6 · the grouped posture: one value moves all five axes', () {

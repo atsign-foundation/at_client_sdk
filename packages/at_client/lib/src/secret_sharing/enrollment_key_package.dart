@@ -58,8 +58,9 @@ import 'package:meta/meta.dart' show experimental;
 /// emitted in — pass `preference.posture.envelopeVersion` to follow the
 /// client's rollout posture. An explicit parameter for the same reason as
 /// the KEM: no client exists yet, and the value is frozen in the write-once
-/// `metadata.keyPackage`. Safe under either posture — every 3.x reader
-/// accepts both shapes.
+/// `metadata.keyPackage`. The readers for both shapes ship in the same
+/// release line as this parameter, so emit v2 only where the fleet that
+/// must read this package is on that line or later — not merely "any 3.x".
 @experimental
 Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
   String atSign, {

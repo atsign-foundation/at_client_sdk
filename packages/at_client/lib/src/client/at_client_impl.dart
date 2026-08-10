@@ -639,8 +639,7 @@ class AtClientImpl implements AtClient {
         'disallowLegacyEncryption is false, so this client may still encrypt '
         'new data with the legacy (RSA/AES) provider — harvestable now, '
         'openable by a quantum computer later. It becomes the default in '
-        'at_client 4.0; set it on AtClientPreference — or adopt '
-        'ReleasePosture.postQuantum() — to opt in early.');
+        'at_client 4.0; set it on AtClientPreference to opt in early.');
   }
 
   /// Arms (or re-arms) the one-shot expiry [Timer] at the

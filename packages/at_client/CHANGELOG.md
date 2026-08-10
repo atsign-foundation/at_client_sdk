@@ -5,6 +5,10 @@
   4.0 defaults today: the era `CryptoConfig` writes PQ, legacy writes are
   refused, signers emit the JWS envelope shape, the posture names the pq
   enrollment key exchange, and an argless `selfRetrofit` mints ML-DSA.
+  Adopting `postQuantum()` early is a deliberate, eyes-open move — see its
+  dartdoc: destinations without seeded namespace keys are refused, and the
+  SDK's own namespace-less internal writes are refused until the 4.0
+  release settles them.
   Every axis is still individually overridable — an explicit constructor
   argument, an assigned `crypto`, a per-signer `envelopeVersion`, a
   per-request `keyExchangeMode` or a per-call `signingAlgo` each beat the

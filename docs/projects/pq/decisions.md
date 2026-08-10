@@ -6468,3 +6468,46 @@ numbered 68 (`enroll:updateMetadata`, and Workstream B(ii) approvals —
 a parallel-edit interleave). Renumbering would break inbound anchors, so
 this entry records the collision and leaves both standing; cite them by
 title.
+
+### 70.1 The review harvest: the posture's claims corrected, two consults get their reds (2026-08-10)
+
+An adversarial review (4 finders → 2 refuters per finding, all in worktrees)
+confirmed 7 of 15 findings against the capstone commits; the refuted 8 were
+mostly the key-exchange "no apply site" family, which is the ruled
+caller-composed design working as intended. What changed:
+
+- **postQuantum()'s "Safe to adopt early" was false and is rewritten.** Under
+  the posture the era default declines local and namespace-less keys, the
+  fallback is legacy, and the posture's own `disallowLegacyEncryption`
+  refuses it — so the SDK's internal watermarks (sync, notification) throw
+  on every write, which is exactly the open R-2 decision this tree already
+  records. Confirmed empirically by both refuters' probes. The dartdoc now
+  states the two eyes-open consequences and cites R-2; the SHOUT recommends
+  the flag alone again, not the posture; the CHANGELOG carries the caveat.
+  Also false: "every 3.x client already reads all of it" — published 3.14.0
+  reads none of it. The readers ship in the same release line as the
+  posture, and the prose (here and on `enrollmentKeyPackageBuilder`) now
+  says that instead.
+- **70's "every consult is red-proofed" overclaimed by three.** The retrofit
+  consult's migration direction, `selfRetrofit`'s envelopeVersion threading,
+  and `pqNativeOnboard`'s posture consult all survived deletion or constant
+  mutations with the whole corpus green. Now: a live argless-migration arm
+  pins rsa2048 (a `mldsa65` constant lands the call in the ML-DSA
+  idempotence pool — red); the live posture arm mints on its OWN fresh
+  keyfile — removing the reuse ambiguity the review flagged — and asserts
+  the record's frozen `keyPackage` envelope is v2 (deleting the threading
+  emits v1 — red); and `makeActivationPqNative`'s version plumbing is
+  unit-pinned in both directions, verified against the tagged ML-DSA _apsk
+  form. **Still open, recorded rather than hidden:** `pqNativeOnboard`'s own
+  posture consult is pinned at the parameter level only — observing it end
+  to end needs a live postured CRAM onboard (one-shot state), which belongs
+  to R-2's acceptance work.
+- **crypto.dart's era dartdoc** no longer claims `readsNskeyWritesLegacy` is
+  "the" era default with the edit living "here and nowhere else": the
+  chooser is the client's posture at the adoption site, and moving the fleet
+  default is an edit to the default posture.
+- The barrel and surface-test comments no longer imply the
+  `EnrollmentKeyExchangeMode` re-export makes the override *writable* from
+  at_client (it makes the value readable and comparable; composition still
+  goes through at_auth), and the design/plan section refs became clickable
+  links per the docs convention.

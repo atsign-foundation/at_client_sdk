@@ -16,9 +16,10 @@ export 'package:at_client/src/manager/at_client_manager.dart';
 export 'package:at_client/src/preference/at_client_preference.dart';
 export 'package:at_client/src/preference/release_posture.dart';
 // The key-exchange mode only: `ReleasePosture.keyExchangeMode` holds one, and
-// a posture on the main barrel whose per-axis override is only nameable by
-// importing at_auth directly is a knob most apps would never find. Enrollment
-// submission itself still goes through `package:at_auth`.
+// a posture on the main barrel whose key-exchange value could only be read or
+// compared by importing at_auth directly is a knob most apps would never
+// find. Composing an enrollment request from it still goes through
+// `package:at_auth`.
 export 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';

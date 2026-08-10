@@ -12,7 +12,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show jwsEnvelopeVersion, verifyEnvelope;
+    show envelopeVersionOf, jwsEnvelopeVersion, verifyEnvelope;
 import 'package:at_demo_data/at_demo_data.dart' show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -39,14 +39,12 @@ void main() {
   final rootDomain = AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
   String keysFilePath(String a) => 'test/testData/rf2b-legacy$a.atKeys';
 
-  setUpAll(() async {
-    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    final manager = await TestUtils.initAtClient(atSign, namespace);
-    atClient = manager.atClient;
-
-    // A pre-PQ (RSA APKAM) enrollment with its own fresh keyfile — the
-    // retrofit's precondition. Deliberately carries no key package: a
-    // genuinely legacy enrollment.
+  /// Mints a fresh pre-PQ (RSA APKAM) enrollment and writes its keyfile at
+  /// [pathFor] — the retrofit's precondition. Deliberately carries no key
+  /// package: a genuinely legacy enrollment. Reusable wherever an arm needs
+  /// a keyfile no earlier arm has already retrofitted, since retrofit
+  /// idempotence is per keyfile.
+  Future<void> mintLegacyKeyfile(String Function(String) pathFor) async {
     final otp = (await atClient.getOTP()).response;
     final response = await AtEnrollment.create().submit(
         AtEnrollmentRequest(
@@ -73,11 +71,18 @@ void main() {
       ..defaultEncryptionPrivateKey =
           AtBytes.fromString(encryptionPrivateKeyMap[atSign]!);
 
-    final existingKeys = File(keysFilePath(atSign));
+    final existingKeys = File(pathFor(atSign));
     if (existingKeys.existsSync()) {
       existingKeys.deleteSync();
     }
-    await FileAtKeysIo(filePath: keysFilePath).write(atSign, keys);
+    await FileAtKeysIo(filePath: pathFor).write(atSign, keys);
+  }
+
+  setUpAll(() async {
+    atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
+    final manager = await TestUtils.initAtClient(atSign, namespace);
+    atClient = manager.atClient;
+    await mintLegacyKeyfile(keysFilePath);
   });
 
   Future<AtAuthSession> legacySession() async {
@@ -289,11 +294,23 @@ void main() {
 
   test(
       'the postQuantum posture decides an argless retrofit: no signingAlgo '
-      'anywhere, and the enrollment is ML-DSA', () async {
-    final session = await legacySession();
+      'anywhere, the enrollment is ML-DSA, and its key package is v2',
+      () async {
+    // A keyfile of its own, so the retrofit MINTS under the posture rather
+    // than reusing an enrollment an earlier arm minted with different
+    // settings — the reuse would satisfy the algorithm assertion and
+    // silently void the key-package one.
+    String posturePath(String a) => 'test/testData/rf2d-posture$a.atKeys';
+    await mintLegacyKeyfile(posturePath);
+    final auth = await AtAuth.create().authenticate(
+        AtAuthRequest(atSign, atKeysIo: FileAtKeysIo(filePath: posturePath))
+          ..rootDomain = rootDomain);
+    expect(auth.isSuccessful, true);
+    final session = auth.session!;
+
     // No signingAlgo argument. Under the migration posture (or the old
-    // parameter default) this call resolves rsa2048 and lands in the RSA
-    // idempotence pool — the assertion below is what tells the two apart.
+    // parameter default) this call resolves rsa2048 and mints RSA — the
+    // assertions below are what tell the two apart.
     final manager = await selfRetrofit(
         session: session,
         preference: TestUtils.getPreference(atSign,
@@ -308,6 +325,35 @@ void main() {
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
         reason: 'nothing in this test named an algorithm — the posture is '
             'the only thing that could have chosen ML-DSA');
+
+    // The posture also threads the envelope version into the key package
+    // frozen on the enrollment record — fetched with the fully privileged
+    // owner client, since the scoped retrofit cannot run enroll:list.
+    final record = (await atClient.enrollmentService!.fetchEnrollmentRequests())
+        .firstWhere((e) => e.enrollmentId == client.enrollmentId);
+    expect(envelopeVersionOf(record.metadata!['keyPackage'] as Map), 2,
+        reason: 'the write-once metadata.keyPackage must carry the posture\'s '
+            'JWS shape; a v1 here means the threading was dropped');
+  });
+
+  test(
+      'an argless retrofit under the default preference stays rsa2048 — the '
+      'migration posture is really consulted, not a constant', () async {
+    final session = await legacySession();
+    final manager = await selfRetrofit(
+        session: session,
+        preference: TestUtils.getPreference(atSign),
+        appName: 'rf2b-app',
+        deviceName: 'rf2e-${Uuid().v4().hashCode}',
+        namespaces: {namespace: 'rw'},
+        manager: AtClientManager(atSign));
+
+    final client = manager.atClient;
+    expect(client.enrollmentId, isNot(session.enrollmentId));
+    expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.rsa2048,
+        reason: 'a consult replaced by a mldsa65 constant would land this '
+            'argless call in the ML-DSA idempotence pool — this arm is the '
+            'migration column\'s red');
   });
 
   test('mint-once per keyfile: a rerun reuses the PQ enrollment', () async {

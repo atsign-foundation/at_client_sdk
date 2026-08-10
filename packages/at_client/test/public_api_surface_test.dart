@@ -60,9 +60,10 @@ void main() {
 
     test('the rollout posture and its key-exchange axis are nameable', () {
       // Both the posture and EnrollmentKeyExchangeMode (an at_auth type,
-      // show-narrowed onto this barrel) must be reachable, or the per-axis
-      // override the posture documents cannot be written by an app that only
-      // imports at_client.
+      // show-narrowed onto this barrel) must be reachable, or the posture's
+      // key-exchange value cannot be read or compared by an app that only
+      // imports at_client. Composing an enrollment request from it still
+      // goes through package:at_auth.
       final preference =
           AtClientPreference(posture: const ReleasePosture.postQuantum());
       expect(preference.posture.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
