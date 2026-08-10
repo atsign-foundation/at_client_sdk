@@ -182,6 +182,16 @@ class PqClientBootstrap {
   /// it answers "has the startup finished?", not "did every step work?".
   Future<void> get startupComplete => _startupComplete.future;
 
+  bool _stopped = false;
+
+  /// Halts the startup at the next step boundary. A step already running
+  /// finishes — steps are atomic — but no further step starts, so a
+  /// stopped client stops publishing. Idempotent; [startupComplete] still
+  /// completes.
+  void stop() {
+    _stopped = true;
+  }
+
   /// Runs the ordered steps. Fired unawaited by the client's init;
   /// idempotent — a second call returns [startupComplete] without
   /// re-running anything.
@@ -189,14 +199,23 @@ class PqClientBootstrap {
     if (_started) return startupComplete;
     _started = true;
     try {
-      await _hydrateHeldSecrets();
-      await _collectConveyedKeys();
-      await _seedNamespaceKeys();
-      await _requestRootPrivate();
-      await _requestMissingPrivates();
-      await _publishRootLink();
-      await _publishChainLink();
-      await _sweepUnanchoredEnrollments();
+      for (final step in [
+        _hydrateHeldSecrets,
+        _collectConveyedKeys,
+        _seedNamespaceKeys,
+        _requestRootPrivate,
+        _requestMissingPrivates,
+        _publishRootLink,
+        _publishChainLink,
+        _sweepUnanchoredEnrollments,
+      ]) {
+        if (_stopped) {
+          _logger.info('PQ startup stopped for $_atSign; the remaining '
+              'steps will not run (the next start retries them)');
+          break;
+        }
+        await step();
+      }
     } finally {
       _startupComplete.complete();
     }

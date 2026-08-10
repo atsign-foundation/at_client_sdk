@@ -757,6 +757,9 @@ class AtClientImpl implements AtClient {
   }
 
   Future<void> _stopBackgroundProcesses() async {
+    // First, so a stopped client publishes nothing further: the PQ startup
+    // halts at its next step boundary.
+    _pqBootstrap?.stop();
     try {
       _expiryTimer?.cancel();
       _expiryTimer = null;

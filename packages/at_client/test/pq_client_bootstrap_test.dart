@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:at_auth/at_auth.dart' show WrittenAtKeysIo;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
@@ -15,6 +18,10 @@ class MockAtClient extends Mock implements AtClient {}
 class MockRemoteSecondary extends Mock implements RemoteSecondary {}
 
 class MockAtLookupImpl extends Mock implements AtLookupImpl {}
+
+// AtKeysIo itself is sealed; its abstract written flavour is the mockable
+// face.
+class MockAtKeysIo extends Mock implements WrittenAtKeysIo {}
 
 class _FakePrivilege implements EnrollmentPrivilegeResolver {
   _FakePrivilege(this.answer);
@@ -104,6 +111,35 @@ void main() {
       await build(privilege: _FakePrivilege(false), sweep: () async => ++swept)
           .startup();
       expect(swept, 0, reason: 'an unprivileged client must not sweep');
+    });
+
+    test('stop() between steps halts the startup', () async {
+      // Park the first step: hydration reads the keyfile, and the read's
+      // future is under this test's control.
+      final keysIo = MockAtKeysIo();
+      final readGate = Completer<Never>();
+      when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
+
+      var swept = 0;
+      final privilege = _FakePrivilege(true);
+      final bootstrap = PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: privilege,
+        sweepUnanchoredEnrollments: () async => ++swept,
+      );
+
+      final startup = bootstrap.startup();
+      bootstrap.stop();
+      // The parked step finishes (by failing, which hydration contains);
+      // no step after it may start.
+      readGate.completeError(Exception('the test releases the parked read'));
+      await startup;
+      await bootstrap.startupComplete;
+
+      expect(swept, 0, reason: 'a stopped client must not sweep');
+      expect(privilege.calls, 0,
+          reason: 'no step after the stop may run at all');
     });
 
     test('gates silence the active steps', () async {
