@@ -1,4 +1,18 @@
 ## 3.4.0
+- fix: `InMemoryAtKeysIo.write` honours the interface's create-only
+  contract — a second write for the same atSign throws
+  `AtKeysFileOverwriteException`, exactly as the file store does, instead
+  of silently replacing. `flush` remains the replace/mutate verb. The
+  divergence made the double lie as a stand-in: double-writing code
+  passed against memory and threw in production.
+- fix: three raceable paths in `AtKeysFileLock` — a token write that
+  fails after the exclusive create now takes the lock back down and
+  propagates the IO failure (an empty lock could never be released by
+  token comparison, stalling every contender until staleness); breaking
+  a stale lock that vanishes mid-break contends instead of crashing the
+  acquire; and release claims the lock by rename before checking the
+  token, closing the window in which it could evict a live holder that
+  replaced a stale-broken lock.
 - fix: `waitForApproval` decrypts a key record that carries no `iv` field —
   a record written by a legacy approver, encrypted under the zero IV —
   instead of crashing on the absent field. The record's vintage is the

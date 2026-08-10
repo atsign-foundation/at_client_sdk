@@ -22,10 +22,22 @@ class InMemoryAtKeysIo extends WrittenAtKeysIo {
         (throw AtKeysNotInMemoryException('$atsign not found in memory'));
   }
 
-  /// Replaces any existing in-memory keys for [atsign].
+  /// Create-only, like every [WrittenAtKeysIo.write]: throws
+  /// [AtKeysFileOverwriteException] when keys for [atsign] are already
+  /// loaded. Use [flush] (or [update]) for later mutations.
+  ///
+  /// This double used to replace silently, which made it lie as a stand-in:
+  /// code that double-wrote passed against memory and threw against the
+  /// file store.
   @override
   Future<void> write(String atsign, AtKeys atKeys) async {
-    _internal[atsign.toAtsign()] = atKeys;
+    final key = atsign.toAtsign();
+    if (_internal.containsKey(key)) {
+      throw AtKeysFileOverwriteException(
+          'Keys for $atsign are already loaded; write is create-only — '
+          'flush persists mutations');
+    }
+    _internal[key] = atKeys;
   }
 
   /// Literal mirror to write as there is no need to flush to memory.

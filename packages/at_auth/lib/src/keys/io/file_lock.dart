@@ -65,33 +65,54 @@ class AtKeysFileLock {
       await parent.create(recursive: true);
     }
     while (true) {
+      File? created;
       try {
         // The atomic step: an O_EXCL create fails if the file exists, so
         // exactly one contender wins however many race.
-        final sink = await File(lockPath).create(exclusive: true);
-        final token = '$pid ${DateTime.now().toUtc().toIso8601String()}\n';
-        await sink.writeAsString(token);
-        return token;
+        created = await File(lockPath).create(exclusive: true);
       } on FileSystemException {
-        // Held by someone. Stale?
+        created = null; // Held by someone — the contention path below.
+      }
+
+      if (created != null) {
+        final token = '$pid ${DateTime.now().toUtc().toIso8601String()}\n';
         try {
-          final stat = File(lockPath).statSync();
-          if (DateTime.now().difference(stat.modified) > staleAfter) {
-            _breakStale();
-            continue;
-          }
+          await created.writeAsString(token, flush: true);
+          return token;
         } on FileSystemException {
-          // The holder released between our failure and the stat — contend.
+          // The create succeeded but the token did not land (disk full, a
+          // vanished parent). An empty lock we hold could never be released
+          // by token comparison — a guaranteed stall for every contender
+          // until staleness breaks it — so take it back down and let the
+          // real IO failure propagate rather than proceed holding an
+          // unreleasable lock, or retry a failure contention cannot fix.
+          try {
+            created.deleteSync();
+          } on FileSystemException {
+            // Already gone; nothing left to leak.
+          }
+          rethrow;
+        }
+      }
+
+      // Held by someone. Stale?
+      try {
+        final stat = File(lockPath).statSync();
+        if (DateTime.now().difference(stat.modified) > staleAfter) {
+          _breakStale();
           continue;
         }
-        if (DateTime.now().isAfter(deadline)) {
-          throw FileSystemException(
-              'Could not acquire the keyfile lock within $timeout — another '
-              'process holds it and is not releasing. Nothing was written.',
-              lockPath);
-        }
-        await Future<void>.delayed(pollInterval);
+      } on FileSystemException {
+        // The holder released between our failure and the stat — contend.
+        continue;
       }
+      if (DateTime.now().isAfter(deadline)) {
+        throw FileSystemException(
+            'Could not acquire the keyfile lock within $timeout — another '
+            'process holds it and is not releasing. Nothing was written.',
+            lockPath);
+      }
+      await Future<void>.delayed(pollInterval);
     }
   }
 
@@ -107,22 +128,39 @@ class AtKeysFileLock {
   void _breakStale() {
     final claimPath =
         '$lockPath.breaking.$pid.${DateTime.now().microsecondsSinceEpoch}';
-    final claimed = File(lockPath).renameSync(claimPath);
-    if (DateTime.now().difference(claimed.statSync().modified) > staleAfter) {
-      claimed.deleteSync();
-    } else {
-      claimed.renameSync(lockPath);
+    try {
+      final claimed = File(lockPath).renameSync(claimPath);
+      if (DateTime.now().difference(claimed.statSync().modified) > staleAfter) {
+        claimed.deleteSync();
+      } else {
+        claimed.renameSync(lockPath);
+      }
+    } on FileSystemException {
+      // The corpse vanished between our staleness check and the rename — the
+      // holder released, or a faster breaker took it. Either way there is
+      // nothing left to break; the caller loops and contends for the fresh
+      // state. Letting this propagate would crash an acquire that merely
+      // raced a release.
     }
   }
 
   void _release(String token) {
+    // Claim-by-rename, the same discipline as [_breakStale]: a bare
+    // read-then-delete has a window in which a stale-breaker could replace
+    // our (over-held) lock with a new holder's between the two steps, and
+    // the delete would evict that live holder. Renaming claims exactly one
+    // file; reading the claim tells us whose it was.
+    final claimPath =
+        '$lockPath.releasing.$pid.${DateTime.now().microsecondsSinceEpoch}';
     try {
-      final lockFile = File(lockPath);
-      if (lockFile.readAsStringSync() == token) {
-        lockFile.deleteSync();
+      final claimed = File(lockPath).renameSync(claimPath);
+      if (claimed.readAsStringSync() == token) {
+        claimed.deleteSync();
+      } else {
+        // Someone else's content: our lock was broken as stale and a new
+        // holder has since acquired. Put their lock straight back.
+        claimed.renameSync(lockPath);
       }
-      // Someone else's content means our lock was broken as stale and a new
-      // holder has since acquired — deleting here would evict them.
     } on FileSystemException {
       // Already gone — a stale-breaker took it. The next holder's exclusive
       // create still serialises correctly.

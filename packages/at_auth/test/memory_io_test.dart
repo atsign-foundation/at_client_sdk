@@ -25,15 +25,23 @@ void main() {
       expect(await io.read('@alice'), same(keys));
     });
 
-    test('write replaces any existing keys for the atsign', () async {
-      await io.write(
-          '@alice',
-          AtKeys(
-              atsign: '@alice'.toAtsign(), keysList: [symmetricKey('first')]));
+    test('write is create-only: a second write for the atsign throws',
+        () async {
+      final first = AtKeys(
+          atsign: '@alice'.toAtsign(), keysList: [symmetricKey('first')]);
+      await io.write('@alice', first);
       final replacement = AtKeys(
           atsign: '@alice'.toAtsign(), keysList: [symmetricKey('second')]);
-      await io.write('@alice', replacement);
 
+      await expectLater(() => io.write('@alice', replacement),
+          throwsA(isA<AtKeysFileOverwriteException>()));
+      expect(await io.read('@alice'), same(first),
+          reason: 'the double must refuse exactly where the file store '
+              'refuses, or code passes against memory and throws in '
+              'production; flush is the replace verb');
+
+      // flush, by contrast, replaces.
+      await io.flush('@alice'.toAtsign(), replacement);
       expect(await io.read('@alice'), same(replacement));
     });
 

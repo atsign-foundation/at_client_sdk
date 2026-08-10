@@ -6552,3 +6552,39 @@ the CLI layer had no live tier before this change either).
 `at_onboarding_cli`'s at_auth floor rises to `^3.4.0` in the same commit:
 the delegation depends on this at_auth's null-IV fix and interface
 parameter, and workspace resolution would mask a stale floor.
+
+## 72. Phase 5: the keyfile store's double stops lying, and the lock's three races close (2026-08-10)
+
+**Status:** accepted and landed. Two hardenings from the Phase 5 list, both
+derived freshly from the code (the audit digests that named them are gone
+with their session — the items were re-grounded, not taken on faith):
+
+- **`InMemoryAtKeysIo.write` is create-only now.** The interface documents
+  `write` as "create-only initial persist; implementations throw if the
+  target already exists", `FileAtKeysIo` enforces it, and the in-memory
+  double silently replaced — the exact second-implementation accident
+  class: code correct against the double, throwing against the store.
+  It now throws `AtKeysFileOverwriteException` like the file store; the
+  test that pinned the wrong behaviour ("write replaces") is flipped to
+  pin the contract, and the whole workspace ran green over the change —
+  no double-writer existed.
+- **`AtKeysFileLock`'s three raceable paths:** (i) an exclusive create
+  whose token write then fails (disk full) left an empty lock the holder
+  could never token-match at release — a guaranteed stall for every
+  contender until staleness; now the lock is taken back down and the IO
+  failure propagates instead of being retried as contention. (ii)
+  `_breakStale`'s rename crashing the acquire when the corpse vanished
+  between the staleness check and the rename (a release raced it); now
+  it contends. (iii) `_release`'s read-then-delete could evict a LIVE
+  holder that replaced a stale-broken lock between the two steps; release
+  now claims by rename — the same discipline `_breakStale` already used —
+  and puts a foreign lock straight back. Paths (i) and (ii) are
+  fault-injection paths with no test seam; the existing lock arms (stale
+  break, foreign-content release, no residue) pin the observable
+  semantics and stayed green.
+
+**Deferred, with the reason on record:** the `withExclusiveAccess<T>` seam
+on `WrittenAtKeysIo`. `AtKeysFileLock` is not reentrant, so a caller
+invoking `flush` inside the seam would deadlock on its own lock — the seam
+needs a reentrancy design (or a lock-free inner flush contract) before it
+can be offered, and it has no production consumer yet to shape it.
