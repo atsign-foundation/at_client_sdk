@@ -1,8 +1,6 @@
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
@@ -11,7 +9,8 @@ import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:version/version.dart';
 
 /// Class to hold attributes for client preferences.
-/// Set the preferences for your application and pass it to [AtClientManager.setCurrentAtSign].
+/// Set the preferences for your application and pass it to
+/// `AtClientManager.setCurrentAtSign`.
 class AtClientPreference {
   /// Never encrypt *new* data with the legacy (pre-post-quantum) provider:
   /// take a post-quantum path, or refuse the write.
@@ -212,8 +211,8 @@ class AtClientPreference {
   /// happens.
   ///
   /// Assign a config to opt out — to register a custom provider, or to hold a
-  /// specific scheme deliberately. Custom providers are initialised by
-  /// [AtClientImpl] before sync and notification services start.
+  /// specific scheme deliberately. Custom providers are initialised by the
+  /// client implementation before sync and notification services start.
   CryptoConfig crypto = const CryptoConfig.eraDefault();
 
   /// Whether a write that cannot go out under [crypto]'s scheme may fall back

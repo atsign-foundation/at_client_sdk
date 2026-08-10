@@ -49,4 +49,40 @@ void main() {
         reason: 'lib/src files must import concrete src files, '
             'never a public barrel');
   });
+
+  test('the enrollment service cannot reach the client impl', () {
+    // AtClientImpl constructs and calls EnrollmentServiceImpl; the reverse
+    // reach — the service impl's import closure containing the client impl —
+    // is the AtClientImpl↔EnrollmentServiceImpl cycle the bootstrap work
+    // cut. The edges that used to close it were incidental: a dartdoc-only
+    // import in at_client_preference, and a deprecated ignored
+    // AtClientManager parameter on NotificationServiceImpl.create.
+    final closure = _importClosure('lib/src/service/enrollment_service_impl.dart');
+    expect(closure, isNot(contains(p.canonicalize('lib/src/client/at_client_impl.dart'))),
+        reason: 'the impl may depend on the service, never the reverse');
+    expect(closure, isNot(contains(p.canonicalize('lib/src/manager/at_client_manager.dart'))),
+        reason: 'the manager constructs clients; nothing below it may '
+            'import it back');
+    // A positive control: the closure walk must actually walk.
+    expect(closure, contains(p.canonicalize('lib/src/crypto/crypto.dart')));
+  });
+}
+
+/// Canonicalized transitive at_client-internal import closure of [root].
+Set<String> _importClosure(String root) {
+  final directive =
+      RegExp(r'''^\s*(?:import|export)\s+['"]package:at_client/([^'"]+)['"]''',
+          multiLine: true);
+  final seen = <String>{};
+  final stack = [p.canonicalize(root)];
+  while (stack.isNotEmpty) {
+    final file = stack.removeLast();
+    if (!seen.add(file)) continue;
+    final f = File(file);
+    if (!f.existsSync()) continue;
+    for (final m in directive.allMatches(f.readAsStringSync())) {
+      stack.add(p.canonicalize(p.join('lib', m.group(1)!)));
+    }
+  }
+  return seen;
 }

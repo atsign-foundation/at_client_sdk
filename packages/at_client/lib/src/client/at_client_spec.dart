@@ -6,7 +6,6 @@ import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -97,7 +96,7 @@ abstract class AtClient {
 
   AtClientPreference? getPreferences();
 
-  /// Whether this client has been stopped via [AtClientManager].
+  /// Whether this client has been stopped via `AtClientManager`.
   ///
   /// Once true, the instance is unusable — all sub-services have been torn down
   /// and the instance has been removed from the internal cache.
@@ -109,7 +108,7 @@ abstract class AtClient {
   ///
   /// Local storage is NOT closed. The instance remains in the internal cache
   /// and reuses its still-open local keystore when resumed by calling
-  /// [AtClientManager.setCurrentAtSign] for the same atSign, which wires up
+  /// `AtClientManager.setCurrentAtSign` for the same atSign, which wires up
   /// fresh services against the same store.
   Future<void> stop();
 

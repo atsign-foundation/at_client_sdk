@@ -887,7 +887,6 @@ void main() {
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl.getPreferences())
@@ -919,7 +918,6 @@ void main() {
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       NotificationParams notificationParams =
@@ -946,7 +944,6 @@ void main() {
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationParams = NotificationParams.forUpdate(
@@ -981,8 +978,7 @@ void main() {
     test('Verify lastReceipt', () async {
       DateTime testStartTime = DateTime.now().toUtc();
 
-      var ns = await NotificationServiceImpl.create(mockAtClientImpl,
-          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl) as NotificationServiceImpl;
 
       var atNotification = AtNotification(
           '124',
@@ -1007,8 +1003,7 @@ void main() {
     });
 
     test('Verify monitor delivers notification', () async {
-      var ns = await NotificationServiceImpl.create(mockAtClientImpl,
-          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl) as NotificationServiceImpl;
 
       var atNotification = AtNotification(
           '124',
@@ -1046,7 +1041,6 @@ void main() {
 
       var notificationService = await NotificationServiceImpl.create(
         mockAtClientImpl,
-        atClientManager: mockAtClientManager,
         monitor: fakeMonitor,
       ) as NotificationServiceImpl;
 
@@ -1068,7 +1062,6 @@ void main() {
 
       var notificationService = await NotificationServiceImpl.create(
         mockAtClientImpl,
-        atClientManager: mockAtClientManager,
         monitor: fakeMonitor,
       ) as NotificationServiceImpl;
 
@@ -1103,7 +1096,6 @@ void main() {
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
@@ -1126,7 +1118,6 @@ void main() {
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       var notificationStream = notificationServiceImpl.subscribe(
@@ -1150,7 +1141,6 @@ void main() {
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
@@ -1177,7 +1167,6 @@ void main() {
         () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
@@ -1217,7 +1206,6 @@ void main() {
     test('A test to verify remote secondary timeouts to respond', () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
@@ -1241,7 +1229,6 @@ void main() {
     test('A test to verify remote secondary is not reachable', () async {
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       var remoteSecondary = RemoteSecondary('@alice', AtClientPreference());
@@ -1281,7 +1268,6 @@ void main() {
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.stopAllSubscriptions();
@@ -1303,7 +1289,6 @@ void main() {
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       notificationServiceImpl.stopAllSubscriptions();
@@ -1340,7 +1325,6 @@ void main() {
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl
@@ -1380,7 +1364,6 @@ void main() {
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       when(() => mockAtClientImpl
@@ -1420,7 +1403,6 @@ void main() {
 
       var notificationServiceImpl = await NotificationServiceImpl.create(
           mockAtClientImpl,
-          atClientManager: mockAtClientManager,
           monitor: fakeMonitor) as NotificationServiceImpl;
 
       // Default: any key NOT explicitly stubbed below is absent.
@@ -1474,8 +1456,7 @@ void main() {
           AtKey.fromString('local:lastReceivedNotification.wavi@alice');
 
       NotificationServiceImpl service = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+          mockAtClientImpl) as NotificationServiceImpl;
 
       expect(lastReceivedNotification.toString(),
           service.lastReceivedNotificationAtKey.toString());
@@ -1680,8 +1661,7 @@ void main() {
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenReturn(MockSecondaryAddressFinder());
       final notificationService = await NotificationServiceImpl.create(
-          mockAtClientImpl,
-          atClientManager: mockAtClientManager) as NotificationServiceImpl;
+          mockAtClientImpl) as NotificationServiceImpl;
 
       await notificationService.stop();
       expect(notificationService.isStopped, true);

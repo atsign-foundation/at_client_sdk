@@ -4,6 +4,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/secondary_address_finder_source.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -52,14 +53,28 @@ class AtClientManager {
 
   static final AtClientManager _singleton = AtClientManager._internal();
 
-  AtClientManager._internal();
+  AtClientManager._internal() {
+    _registerAddressFinderSource();
+  }
 
   factory AtClientManager.getInstance() {
     return _singleton;
   }
 
   // ignore: no_leading_underscores_for_local_identifiers
-  AtClientManager(this._atSign);
+  AtClientManager(this._atSign) {
+    _registerAddressFinderSource();
+  }
+
+  /// Points `RemoteSecondary`'s process-wide finder source at the singleton
+  /// manager's field — the reach-up it has always performed, now behind a
+  /// seam so it does not import this class. Registered by every constructor
+  /// (idempotently — the closure is the same either way) so the source
+  /// exists as soon as any manager does.
+  static void _registerAddressFinderSource() {
+    registerSecondaryAddressFinderSource(
+        () => AtClientManager.getInstance().secondaryAddressFinder);
+  }
 
   void setSecondaryAddressFinder(
       {SecondaryAddressFinder? secondaryAddressFinder}) {

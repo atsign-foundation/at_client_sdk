@@ -4,7 +4,6 @@ import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -57,9 +56,7 @@ class NotificationServiceImpl extends NotificationService {
 
   /// - [monitor] is providable for unit test purposes
   static Future<NotificationService> create(AtClient atClient,
-      {@Deprecated('will be removed in a future version')
-      AtClientManager? atClientManager,
-      Monitor? monitor,
+      {Monitor? monitor,
       SecondaryAddressFinder? secondaryAddressFinder}) async {
     return NotificationServiceImpl._(
         atClient: atClient,

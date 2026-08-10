@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/src/client/at_client_impl.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -31,8 +30,8 @@ class LocalSecondary implements Secondary {
   /// not the commit log.
   AtKeyValueStore<String, AtData, AtMetaData?>? keyStore;
 
-  /// Sink for keystore-mutation events. Wired by [AtClientImpl] at
-  /// construction to its [AtClientImpl.emitDataEvent]; left null by
+  /// Sink for keystore-mutation events. Wired by `AtClientImpl` at
+  /// construction to its `emitDataEvent`; left null by
   /// callers that don't need event propagation (most unit-test
   /// fixtures). Emits are silently dropped when null.
   final void Function(DataEvent)? _onEvent;
@@ -556,7 +555,7 @@ class LocalSecondary implements Secondary {
   /// Callers arming a timer via [AtClient.dataEvents] should suppress
   /// re-arms while a sweep is in flight (the events fired during this
   /// method would otherwise cause N redundant re-arms).
-  /// [AtClientImpl._onExpiryFire] does this via a `_sweepInFlight`
+  /// `AtClientImpl._onExpiryFire` does this via a `_sweepInFlight`
   /// flag.
   ///
   /// Returns 0 (no-op) when there is no local keystore.
@@ -699,7 +698,7 @@ class LocalSecondary implements Secondary {
 
   /// Keys whose `availableAt` is at-or-before [cutoff] and that
   /// haven't already been fired for the same crossing
-  /// ([_firedAvailableAt]). Drives [AtClientImpl._onAvailableFire]'s
+  /// ([_firedAvailableAt]). Drives `AtClientImpl._onAvailableFire`'s
   /// visibility-onset sweep.
   ///
   /// Sources the born-key set from [AtKeyValueStore.peekNewlyAvailable]
@@ -737,7 +736,7 @@ class LocalSecondary implements Secondary {
 
   /// Pre-marks every key whose `availableAt` is at or before [now] as
   /// "already fired" in the in-memory [_firedAvailableAt] map. The
-  /// availability sweep ([AtClientImpl._onAvailableFire]) checks this
+  /// availability sweep (`AtClientImpl._onAvailableFire`) checks this
   /// map and skips matching entries, so this prevents the sweep from
   /// replaying historical `availableAt` crossings on every process
   /// start.

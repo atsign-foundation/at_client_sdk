@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
-import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/client/secondary_address_finder_source.dart';
 import 'package:at_client/src/preference/at_client_config.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
@@ -56,8 +56,7 @@ class RemoteSecondary implements Secondary {
         AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
             privateKey: privateKey,
             cramSecret: preference.cramSecret,
-            secondaryAddressFinder:
-                AtClientManager.getInstance().secondaryAddressFinder,
+            secondaryAddressFinder: processSecondaryAddressFinder(),
             secureSocketConfig: secureSocketConfig,
             clientConfig: _getClientConfig());
     this.atLookUp.enrollmentId = enrollmentId;
@@ -182,9 +181,8 @@ class RemoteSecondary implements Secondary {
   }
 
   Future<String?> findSecondaryUrl() async {
-    var secondaryAddress = await AtClientManager.getInstance()
-        .secondaryAddressFinder!
-        .findSecondary(_atSign);
+    var secondaryAddress =
+        await processSecondaryAddressFinder()!.findSecondary(_atSign);
     return secondaryAddress.toString();
   }
 
