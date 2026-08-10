@@ -10,8 +10,11 @@ import 'package:flutter/material.dart';
 /// It listens to real-time updates and provides approval/denial functionality.
 /// {@endtemplate}
 class EnrollmentRequestList extends StatefulWidget {
-  const EnrollmentRequestList(
-      {super.key, this.useShrinkWrap = false, this.enrollmentService});
+  const EnrollmentRequestList({
+    super.key,
+    this.useShrinkWrap = false,
+    this.enrollmentService,
+  });
 
   final bool useShrinkWrap;
 
@@ -24,6 +27,14 @@ class EnrollmentRequestList extends StatefulWidget {
 
 class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   late final FlutterEnrollmentService _service;
+
+  /// Whether this widget made [_service], and may therefore close it.
+  ///
+  /// An injected one belongs to the caller, who may share it across routes:
+  /// [FlutterEnrollmentService.dispose] closes the request stream and drops
+  /// the controller, so disposing someone else's service makes every later
+  /// use of it throw on a null controller.
+  late final bool _ownsService;
   final List<ServerEnrollmentRequest> _requests = [];
   final List<Timer> _overlayTimers = [];
   StreamSubscription? _subscription;
@@ -33,6 +44,7 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   @override
   void initState() {
     super.initState();
+    _ownsService = widget.enrollmentService == null;
     _service = widget.enrollmentService ?? FlutterEnrollmentService();
     _fetchAndSubscribe();
   }
@@ -218,7 +230,9 @@ class _EnrollmentRequestListState extends State<EnrollmentRequestList> {
   @override
   void dispose() {
     _subscription?.cancel();
-    _service.dispose();
+    if (_ownsService) {
+      _service.dispose();
+    }
     for (var timer in _overlayTimers) {
       timer.cancel();
     }

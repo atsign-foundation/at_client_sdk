@@ -13,6 +13,11 @@
   compares normalized in `_indexOf` and `removeAtsignFromKeychain`, and still
   returns the stored spelling; a value `toAtsign()` rejects is compared as it
   stands, so a malformed entry stays readable and removable.
+- fix: `EnrollmentRequestList` no longer disposes an `enrollmentService` it
+  was given. `FlutterEnrollmentService.dispose()` closes the request stream
+  and drops the controller, so routing away from the widget left a caller's
+  shared service throwing on every later `getEnrollments()`. It now closes
+  only a service it created itself.
 - fix: the enrollment request list can approve a pq-mode request. The
   approve action null-banged `encryptedAPKAMSymmetricKey`, which a
   request that expects the approver to mint its key does not carry, so
