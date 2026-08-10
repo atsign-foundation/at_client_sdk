@@ -198,5 +198,42 @@ void main() {
       expect(() => MlDsa65KeyPair.create(validPub, '!!!invalid-base64!!!'),
           throwsA(isA<AtSigningException>()));
     });
+
+    // The wrong-length cases above never reach pqcrypto — the length gate
+    // rejects them first, so they say nothing about what MlDsa.verify does
+    // with input it actually sees. These two do reach it, and pin the
+    // "never throws" half of verifyBytes' contract for the pure-Dart backend
+    // the way ml_dsa_65_ffi_test.dart pins it for the FFI one.
+    test('verifyBytes returns false for a right-length garbage public key',
+        () async {
+      final algo = MlDsa65PureDartAlgo();
+      final kp = await algo.generateKeyPair();
+      final Uint8List message = Uint8List.fromList('data'.codeUnits);
+      final Uint8List sig =
+          await algo.signBytes(message, secretKey: kp.secretKey);
+
+      final Uint8List garbagePub = Uint8List.fromList(List<int>.generate(
+          MlDsa65Sizes.publicKeyBytes, (int i) => (i * 7 + 13) % 256));
+
+      expect(
+          await algo.verifyBytes(message,
+              signature: sig, publicKey: garbagePub),
+          isFalse);
+    });
+
+    test('verifyBytes returns false for a right-length garbage signature',
+        () async {
+      final algo = MlDsa65PureDartAlgo();
+      final kp = await algo.generateKeyPair();
+      final Uint8List message = Uint8List.fromList('data'.codeUnits);
+
+      final Uint8List garbageSig = Uint8List.fromList(List<int>.generate(
+          MlDsa65Sizes.signatureBytes, (int i) => (i * 11 + 29) % 256));
+
+      expect(
+          await algo.verifyBytes(message,
+              signature: garbageSig, publicKey: kp.publicKey),
+          isFalse);
+    });
   });
 }
