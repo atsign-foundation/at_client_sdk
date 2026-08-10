@@ -328,6 +328,12 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
       try {
         final int result =
             _digestVerify(ctx, sigBuf, signature.length, dataBuf, data.length);
+        // 1 = valid, 0 = signature mismatch, < 0 = the operation itself
+        // failed. Only the middle case is a verification result; folding the
+        // last one into `false` would make a backend failure indistinguishable
+        // from a forged signature, which is what dropping verifyBytes'
+        // catch-all set out to prevent.
+        if (result < 0) throw StateError('EVP_DigestVerify failed');
         return result == 1;
       } finally {
         calloc.free(dataBuf);
