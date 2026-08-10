@@ -109,6 +109,27 @@ void main() {
           isTrue);
     });
 
+    test('a tampered message does not verify', () async {
+      final algo = RsaSignatureAlgo.rsa4096();
+      final sig = await algo.signBytes(message, secretKey: kp.secretKey);
+      final tampered = Uint8List.fromList(message)..[0] ^= 0xff;
+      expect(
+          await algo.verifyBytes(tampered,
+              signature: sig, publicKey: kp.publicKey),
+          isFalse);
+    });
+
+    test('signing with sha256 does not verify under sha512', () async {
+      final sig = await RsaSignatureAlgo.rsa4096()
+          .signBytes(message, secretKey: kp.secretKey);
+      final verifier =
+          RsaSignatureAlgo.rsa4096(hashing: HashingAlgoType.sha512);
+      expect(
+          await verifier.verifyBytes(message,
+              signature: sig, publicKey: kp.publicKey),
+          isFalse);
+    });
+
     test('reports rsa4096', () {
       expect(RsaSignatureAlgo.rsa4096().signingAlgoType,
           equals(SigningAlgoType.rsa4096));
@@ -159,7 +180,7 @@ void main() {
               .signBytes(message, secretKey: Uint8List.fromList([1, 2, 3])),
           throwsA(predicate((e) =>
               e is AtSigningException &&
-              e.toString().contains('PKCS#8 RSA private key'))));
+              e.toString().contains('PKCS#8 PrivateKeyInfo'))));
     });
 
     test('unparseable public key throws AtSigningVerificationException', () {
@@ -169,7 +190,7 @@ void main() {
               publicKey: Uint8List.fromList([1, 2, 3])),
           throwsA(predicate((e) =>
               e is AtSigningVerificationException &&
-              e.toString().contains('X.509 RSA public key'))));
+              e.toString().contains('X.509 SubjectPublicKeyInfo'))));
     });
   });
 

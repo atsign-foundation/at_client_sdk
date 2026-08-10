@@ -124,7 +124,10 @@ final class RsaSignatureAlgo implements AtSignatureAlgorithm {
       key = RSAPrivateKey.fromString(base64Encode(der));
     } catch (e) {
       throw AtSigningException(
-          'Could not parse secretKey as a PKCS#8 RSA private key: $e');
+          'secretKey is not a readable RSA private key. Expected the raw DER '
+          'bytes of a PKCS#8 PrivateKeyInfo — if what you hold is a base64 '
+          'string (RsaKeyPair.atPrivateKey.privateKey, or the contents of a '
+          '.atKeys file), base64Decode it first. Parse error: $e');
     }
     final int bits = key.asPointyCastle.n!.bitLength;
     if (bits != _modulusBits) {
@@ -142,7 +145,10 @@ final class RsaSignatureAlgo implements AtSignatureAlgorithm {
       key = RSAPublicKey.fromString(base64Encode(der));
     } catch (e) {
       throw AtSigningVerificationException(
-          'Could not parse publicKey as an X.509 RSA public key: $e');
+          'publicKey is not a readable RSA public key. Expected the raw DER '
+          'bytes of an X.509 SubjectPublicKeyInfo — if what you hold is a '
+          'base64 string (RsaKeyPair.atPublicKey.publicKey), base64Decode it '
+          'first. Parse error: $e');
     }
     final int bits = key.asPointyCastle.modulus!.bitLength;
     if (bits != _modulusBits) {
