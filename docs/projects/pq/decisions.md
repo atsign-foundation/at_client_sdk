@@ -5849,3 +5849,23 @@ preserved exactly. `import_topology_test.dart` pins the cut (red-proofed
 before the edits): the service impl's closure contains neither the client
 impl nor the manager. The impl still calls the service — one-directional,
 by design.
+
+### 62.3 Cancellable stop, and the registry out of the value type
+
+Two adjacent commits on the keystone. **Stop:** `AtClient.stop()` now
+reaches the bootstrap, which checks between steps — a running step
+finishes (steps are atomic), no further step starts. Before this a
+stopped client's fire-and-forget startup kept publishing. Test-first with
+a parked-startup arrangement (the keyfile read blocked under test
+control); red-proofed by neutering the boundary check and watching the
+sweep run after stop.
+
+**EraDefaults:** the per-client era-default registry moved out of
+`CryptoConfig` — which was carrying a static `Expando` registry inside
+the value type it stores — into `src/crypto/era_defaults.dart`, a small
+generic `EraDefaults<T>` (of / adoptIfAbsent / clear, Expando-backed).
+`CryptoConfig.forClient` / `adoptEraDefault` / `eraDefaultFor` delegate,
+so the public surface is unchanged (one addition:
+`@visibleForTesting clearEraDefault`). The
+don't-resolve-into-the-shared-preference property is now the registry
+type's documented contract rather than a comment on a private field.

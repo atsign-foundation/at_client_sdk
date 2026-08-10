@@ -1,5 +1,6 @@
 import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/era_defaults.dart';
 import 'package:at_client/src/crypto/nskey/ck_manager.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
@@ -197,15 +198,14 @@ class CryptoConfig {
     final named = atClient?.getPreferences()?.crypto;
     if (named != null && named is! _EraDefaultSentinel) return named;
     if (atClient == null) return const CryptoConfig.legacy();
-    return _eraDefaults[atClient] ?? const CryptoConfig.legacy();
+    return _eraDefaults.of(atClient) ?? const CryptoConfig.legacy();
   }
 
-  /// Per-client era defaults. An [Expando] rather than a field on the
-  /// preference object: the SDK must not resolve its own default *into* the
-  /// app's preference, because a preference is routinely shared across atSigns
-  /// and this value is per-atSign the moment it stops being a const.
-  static final Expando<CryptoConfig> _eraDefaults =
-      Expando('CryptoConfig.eraDefault');
+  /// Per-client era defaults ([EraDefaults] — beside the client, never
+  /// resolved into the shared preference object). The registry lives in its
+  /// own type now; this value type just holds the production instance.
+  static final EraDefaults<CryptoConfig> _eraDefaults =
+      EraDefaults<CryptoConfig>();
 
   /// Gives [atClient] the era's default config, unless the app named its own.
   /// Idempotent — a re-used cached client keeps the set it was built with, so
@@ -213,13 +213,19 @@ class CryptoConfig {
   static void adoptEraDefault(AtClient atClient, CryptoConfig config) {
     final named = atClient.getPreferences()?.crypto;
     if (named != null && named is! _EraDefaultSentinel) return;
-    _eraDefaults[atClient] ??= config;
+    _eraDefaults.adoptIfAbsent(atClient, config);
   }
 
   /// The era default [atClient] holds, or null if it was never given one.
   @visibleForTesting
   static CryptoConfig? eraDefaultFor(AtClient atClient) =>
-      _eraDefaults[atClient];
+      _eraDefaults.of(atClient);
+
+  /// Forgets [atClient]'s era default, so a test can rebuild a client's
+  /// crypto world from scratch.
+  @visibleForTesting
+  static void clearEraDefault(AtClient atClient) =>
+      _eraDefaults.clear(atClient);
 
   /// The content-key cache this config's nskey providers share, or null for a
   /// config that has none (the legacy set, or a caller's own providers).
