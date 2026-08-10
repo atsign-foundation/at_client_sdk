@@ -10,8 +10,57 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_utils.dart' show AtUtils;
+import 'package:meta/meta.dart' show visibleForTesting;
 import 'package:mutex/mutex.dart';
 import 'package:at_chops/at_chops.dart';
+
+/// The `from:` challenge an atServer issues a client, once the `data:` prefix
+/// is stripped: `_<uuid><atSign>:<uuid>`.
+///
+final RegExp _fromChallengeUuid = RegExp(
+    r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+    caseSensitive: false);
+
+/// Returns [challenge] when it is a well-formed `from:` challenge issued to
+/// [atSign]; throws [UnAuthenticatedException] otherwise.
+///
+/// [challenge] is the response with any `data:` prefix already stripped.
+@visibleForTesting
+String validatedFromChallenge(String challenge, String atSign) {
+  void refuse(String why) {
+    // The challenge itself is not secret — it is a session id and a nonce the
+    // server just sent in clear — and naming what arrived is what makes a
+    // genuine protocol mismatch diagnosable rather than a silent auth failure.
+    throw UnAuthenticatedException(
+        'Refusing to sign a malformed from: challenge for $atSign ($why). '
+        'Expected `_<uuid><atSign>:<uuid>`, got "$challenge"');
+  }
+
+  final int lastColon = challenge.lastIndexOf(':');
+  if (lastColon <= 0) {
+    refuse('no proof separator');
+  }
+  if (!_fromChallengeUuid.hasMatch(challenge.substring(lastColon + 1))) {
+    refuse('the proof is not a uuid');
+  }
+
+  // The atSign this client asked for has to be the one the challenge names, so
+  // a challenge minted for somebody else cannot be replayed through it.
+  final String head = challenge.substring(0, lastColon);
+  final String expected = AtUtils.fixAtSign(atSign);
+  if (!head.endsWith(expected)) {
+    refuse('it does not name $expected');
+  }
+
+  final String sessionId = head.substring(0, head.length - expected.length);
+  if (!sessionId.startsWith('_') ||
+      !_fromChallengeUuid.hasMatch(sessionId.substring(1))) {
+    refuse('the session id is not `_<uuid>`');
+  }
+
+  return challenge;
+}
 
 class AtLookupImpl implements AtLookUp {
   final logger = AtSignLogger('AtLookup');
@@ -448,6 +497,7 @@ class AtLookupImpl implements AtLookUp {
           return false;
         }
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
+        fromResponse = validatedFromChallenge(fromResponse, _currentAtSign);
         logger.finer('fromResponse $fromResponse');
         // RSA SHA-256 sign via at_chops (wraps the same crypton
         // RSAPrivateKey.createSHA256Signature; only the private key is used).
@@ -488,6 +538,7 @@ class AtLookupImpl implements AtLookUp {
           return false;
         }
         fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
+        fromResponse = validatedFromChallenge(fromResponse, _currentAtSign);
         logger.finer('fromResponse $fromResponse');
         logger.finer(
             'signingAlgoType: $signingAlgoType hashingAlgoType:$hashingAlgoType');
