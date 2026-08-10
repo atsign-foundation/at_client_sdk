@@ -66,6 +66,17 @@
   real service, so existing call sites are unaffected; passing one lets the
   dialogs' error and timeout paths be widget-tested without a live atServer
   (#1909).
+- fix: `FlutterEnrollmentService.approve` waits for the pending enrollment
+  record to be dropped. The delete was started and never awaited, so it
+  outlived the call that began it and a keychain failure had no caller left to
+  catch it — it surfaced as an unhandled async error. It is now awaited under
+  its own guard: by the time it runs the atServer has already recorded the
+  decision, so a keychain failure logs a warning and costs a pending row that
+  lingers until it expires, never a successful approval reported as a failure.
+- fix: `approve`, `deny` and `revoke` close the `AtLookUp` they were given even
+  when the operation throws. Each closed only after its `try`, so every failure
+  path leaked the caller's connection — the same defect fixed in `enroll` in
+  1.1.4, in the three methods that still had it.
 
 ## 1.1.4
 

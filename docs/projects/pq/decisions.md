@@ -7162,3 +7162,63 @@ One imprecision fixed with it: `ReleasePosture.postQuantum()`'s summary read
 things the posture really does apply by itself. It now says that this one
 takes effect when the app builds its request from the value — the same
 correction §70.1 made to that constructor's "safe to adopt early".
+
+## 82. Phase 7: an approval finishes its own bookkeeping, and every decision closes its connection (2026-08-11)
+
+**Status:** accepted (2026-08-11). Both defects predate this branch; the
+at_client_flutter audit (§78) found the first, ruled it out of scope there
+because it was not the branch's doing, and recorded it for closing hygiene.
+The second was found by sweeping the file for the same shape and is fixed
+here with it.
+
+### The unawaited delete
+
+`FlutterEnrollmentService.approve` ended its bookkeeping with
+
+```dart
+keychainStorage.deleteEnrollmentData(request.atSign);
+```
+
+in both arms — the success arm and the `EnrollmentConveyanceException` arm.
+No `await`. The delete therefore outlives the call that started it, and the
+enclosing `try` has already been left by the time it can fail, so a keychain
+failure reaches no caller at all: it surfaces as an unhandled async error,
+attributed to nothing, in a path whose other arm is already throwing.
+
+The reason this survived a test that verifies the call is worth recording.
+`verify(() => mockKeychainStorage.deleteEnrollmentData(atSign)).called(1)`
+passes just as well unawaited — the mock records the invocation
+synchronously. Only *ordering* separates the two, so the new pin makes the
+stub take 20ms and sets a flag when it finishes, then asserts the flag is
+set once `approve` has returned. Unfixed, that reads `false`.
+
+### Why awaiting it is not enough on its own
+
+Awaiting it inside the existing `try` puts a keychain failure into the
+generic `catch`, which rewrites everything it sees as
+`Exception('Enrollment failed: $e')`. That is a widened guard across an
+operation boundary: by the time the delete runs, the atServer has recorded
+the decision, so reporting the approval as failed is the exact mis-report
+§78's own test file was written to prevent — the red proof produced
+`Enrollment failed: Exception: keychain unavailable` after a successful
+approval.
+
+So the delete gets its own guard, `_forgetPendingRequest`, which logs at
+warning and returns. What a failure costs is a pending row that lingers
+until `KeychainStorage.validateEnrollment` expires it, which it does on the
+next read; what it must not cost is a live enrollment reported as a failed
+one.
+
+### The leaked connections
+
+`approve`, `deny` and `revoke` each closed the caller's `AtLookUp` on the
+line *after* their `try`, so every throwing path skipped the close. 1.1.4
+fixed exactly this in `enroll` by moving the close into a `finally` and said
+so in its changelog; the other three kept the shape. All three now close in
+a `finally`. `approve`'s conveyance arm loses its explicit close with it, so
+the connection is still closed exactly once on that path — pinned, since a
+double close is the obvious way to get this wrong.
+
+The sweep matters more than the fix here: the audit recorded `approve`
+because it was reading `approve`. Two siblings three lines away had the same
+defect and nothing had looked.

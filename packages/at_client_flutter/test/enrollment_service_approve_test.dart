@@ -142,4 +142,103 @@ void main() {
       verify(() => mockAtLookUp.close()).called(1);
     },
   );
+
+  test('the pending record is dropped before approve() returns', () async {
+    // Ordering, not the call itself: an unawaited delete is still *recorded*
+    // by the mock, so verify() alone cannot tell the two apart.
+    var dropped = false;
+    when(() => mockKeychainStorage.deleteEnrollmentData(atSign)).thenAnswer((
+      _,
+    ) async {
+      await Future<void>.delayed(const Duration(milliseconds: 20));
+      dropped = true;
+    });
+    when(() => mockEnrollmentService.approve(any())).thenAnswer(
+      (_) async =>
+          AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved),
+    );
+
+    final decision = EnrollmentRequestDecision.approved(
+      enrollmentId: enrollmentId,
+      apkamSymmetricKey: AtBytes.fromString('QUJD'),
+      atSign: atSign,
+    );
+
+    await service.approve(decision, mockAtLookUp);
+
+    expect(
+      dropped,
+      isTrue,
+      reason:
+          'left unawaited, the delete outlives the call that started it — so '
+          'a failure in it has no caller left to catch it and surfaces as an '
+          'unhandled async error',
+    );
+  });
+
+  test('a keychain failure after approval is not a failed approval', () async {
+    // The atServer has already recorded the decision by this point. Losing
+    // the local pending row costs a stale row, not an enrollment.
+    when(
+      () => mockKeychainStorage.deleteEnrollmentData(atSign),
+    ).thenThrow(Exception('keychain unavailable'));
+    when(() => mockEnrollmentService.approve(any())).thenAnswer(
+      (_) async =>
+          AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved),
+    );
+
+    final decision = EnrollmentRequestDecision.approved(
+      enrollmentId: enrollmentId,
+      apkamSymmetricKey: AtBytes.fromString('QUJD'),
+      atSign: atSign,
+    );
+
+    final response = await service.approve(decision, mockAtLookUp);
+
+    expect(response.enrollStatus, EnrollmentStatus.approved);
+    verify(() => mockAtLookUp.close()).called(1);
+  });
+
+  test('a refused approval still closes the connection', () async {
+    when(
+      () => mockEnrollmentService.approve(any()),
+    ).thenThrow(Exception('the atServer refused the approval'));
+
+    final decision = EnrollmentRequestDecision.approved(
+      enrollmentId: enrollmentId,
+      apkamSymmetricKey: AtBytes.fromString('QUJD'),
+      atSign: atSign,
+    );
+
+    await expectLater(
+      service.approve(decision, mockAtLookUp),
+      throwsA(isA<Exception>()),
+    );
+
+    verify(() => mockAtLookUp.close()).called(1);
+  });
+
+  test('a failed denial still closes the connection', () async {
+    // The mock answers nothing, so the real deny() fails partway through —
+    // which is the point: the connection is the caller's either way.
+    final decision = EnrollmentRequestDecision.denied(enrollmentId, atSign);
+
+    await expectLater(
+      service.deny(decision, mockAtLookUp),
+      throwsA(isA<Exception>()),
+    );
+
+    verify(() => mockAtLookUp.close()).called(1);
+  });
+
+  test('a failed revocation still closes the connection', () async {
+    final decision = EnrollmentRequestDecision.revoked(enrollmentId, atSign);
+
+    await expectLater(
+      service.revoke(decision, mockAtLookUp),
+      throwsA(isA<Exception>()),
+    );
+
+    verify(() => mockAtLookUp.close()).called(1);
+  });
 }

@@ -126,21 +126,40 @@ class FlutterEnrollmentService {
       if (approvedKeys != null) {
         await keychainAtKeysIo.write(request.atSign, approvedKeys);
       }
-      keychainStorage.deleteEnrollmentData(request.atSign);
+      await _forgetPendingRequest(request.atSign);
       // ignore: experimental_member_use
     } on EnrollmentConveyanceException {
       // The server-side approval succeeded — only the conveyance to the new
       // device was refused, so the enrollment is live and cannot decrypt.
       // Finish the approval bookkeeping and surface the true state rather
       // than re-reporting the success as a failed enrollment.
-      keychainStorage.deleteEnrollmentData(request.atSign);
-      await atLookUp.close();
+      await _forgetPendingRequest(request.atSign);
       rethrow;
     } catch (e) {
       throw Exception('Enrollment failed: $e');
+    } finally {
+      // Every exit closes the connection, the two throwing ones included —
+      // otherwise a refused approval leaks the caller's AtLookUp.
+      await atLookUp.close();
     }
-    await atLookUp.close();
     return atEnrollmentResponse;
+  }
+
+  /// Drop the local record of a request that has now been decided.
+  ///
+  /// Guarded on its own, because by the time it runs the atServer has already
+  /// recorded the decision: a keychain failure here is not a failed
+  /// enrollment and must not be reported as one. What it costs is a pending
+  /// row that lingers until [KeychainStorage.validateEnrollment] expires it.
+  Future<void> _forgetPendingRequest(String atSign) async {
+    try {
+      await keychainStorage.deleteEnrollmentData(atSign);
+    } catch (e) {
+      _logger.warning(
+        'Decided the enrollment for $atSign but could not drop its pending '
+        'record; it will linger until it expires: $e',
+      );
+    }
   }
 
   /// Deny a pending enrollment request
@@ -162,8 +181,9 @@ class FlutterEnrollmentService {
       atEnrollmentResponse = await _atEnrollment.deny(request, atLookUp);
     } catch (e) {
       throw Exception('Denial failed: $e');
+    } finally {
+      await atLookUp.close();
     }
-    await atLookUp.close();
     return atEnrollmentResponse;
   }
 
@@ -186,8 +206,9 @@ class FlutterEnrollmentService {
       atEnrollmentResponse = await _atEnrollment.revoke(request, atLookUp);
     } catch (e) {
       throw Exception('Revocation failed: $e');
+    } finally {
+      await atLookUp.close();
     }
-    await atLookUp.close();
     return atEnrollmentResponse;
   }
 
