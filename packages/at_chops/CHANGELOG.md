@@ -1,6 +1,6 @@
 ## 3.5.0
 - breaking: `MlDsa65FfiAlgo.verifyBytes` throws `StateError` when the pinned libcrypto cannot perform ML-DSA-65. Signature mismatches still return `false`. Gate on `libCryptoSupportsMlDsa65`, or use `AtPqc.mlDsa65`, which already does.
-- fix: ML-KEM-768 and ML-DSA-65 (FFI and pure-Dart) validate key, ciphertext, and signature lengths themselves, throwing `ArgumentError`/`AtSigningException`/`StateError` on mismatch.
+- fix: ML-KEM-768 and ML-DSA-65 (FFI and pure-Dart) validate key, ciphertext, and signature lengths themselves, throwing `ArgumentError`/`AtSigningException`/`StateError` on mismatch. Both ML-DSA-65 backends also check the lengths of the key pair they generate, so a wrong-size public or secret key fails at the point it is minted rather than at first use.
 - fix: `MlDsa65KeyPair.create` throws `AtSigningException` for non-base64 `publicKey`/`privateKey`.
 - fix: `MlKem768FfiAlgo.encapsulate`/`decapsulate` throw `ArgumentError` for a wrong-length public key/ciphertext.
 

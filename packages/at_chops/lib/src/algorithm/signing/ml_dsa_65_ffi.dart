@@ -118,10 +118,13 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
         }
         final Pointer<EVP_PKEY> pkey = pkeyPtr.value;
         try {
-          return (
-            publicKey: _extractRawPublicKey(pkey),
-            secretKey: _extractRawPrivateKey(pkey),
-          );
+          final Uint8List pk = _extractRawPublicKey(pkey);
+          final Uint8List sk = _extractRawPrivateKey(pkey);
+          checkOutputLength(pk.length, MlDsa65Sizes.publicKeyBytes,
+              operation: 'EVP_PKEY_keygen', label: 'public key');
+          checkOutputLength(sk.length, MlDsa65Sizes.secretKeyBytes,
+              operation: 'EVP_PKEY_keygen', label: 'secret key');
+          return (publicKey: pk, secretKey: sk);
         } finally {
           _pkeyFree(pkey);
         }
