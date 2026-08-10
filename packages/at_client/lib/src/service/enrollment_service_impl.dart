@@ -113,8 +113,21 @@ class EnrollmentServiceImpl implements EnrollmentService {
     final enrollment =
         await _enrollmentById(enrollmentRequestDecision.enrollmentId);
     if (enrollment != null) {
-      final status = await _conveyance.conveySecretsTo(enrollment,
-          mintedApkamSymmetricKey: mintedApkamSymmetricKey);
+      final KeyPackageStatus status;
+      try {
+        status = await _conveyance.conveySecretsTo(enrollment,
+            mintedApkamSymmetricKey: mintedApkamSymmetricKey);
+      } on EnrollmentConveyanceException {
+        rethrow;
+      } on AtEnrollmentException catch (e) {
+        // A thrown refusal — the unregistered-approver guard, the
+        // no-ordinary-namespace refusal — fires just as much after the
+        // successful server-side approval as a rejected package does, so it
+        // carries the response the same way. The package itself was fine as
+        // far as the conveyance got, which is what `present` records here.
+        throw EnrollmentConveyanceException(e.message,
+            response: response, keyPackageStatus: KeyPackageStatus.present);
+      }
       if (status == KeyPackageStatus.rejected) {
         // The approval has already happened on the atServer, so refusing
         // loudly here is what lets the approver learn what it has approved —

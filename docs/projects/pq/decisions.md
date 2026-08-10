@@ -6016,3 +6016,35 @@ First cross-package use of an unpublished at_client 3.14.1 API, so
 at_client_flutter's floor rises to `^3.14.1` in the same commit, with
 the why recorded beside it in the pubspec as the at_auth floor's
 comment already does.
+
+### 63.3 The adversarial review's harvest, and what it cost to learn
+
+A 19-agent find-and-refute pass over the three 4e commits confirmed two
+defects and sharpened one contract. Confirmed: (1) the barrel export in
+63.1 landed without its golden-set edit, so
+`public_api_surface_test.dart` — whose own dartdoc demands the edit in
+the same commit — was red from that commit until the paperwork commit;
+the miss survived because only the seam/guard/topology tests were run
+after the export, and the full-suite number reported at the time was
+arithmetic, not a measurement. The full unit suite is the per-commit
+rail; a projected count is not a rail. (2) The at_client CHANGELOG
+entry existed only in the working tree while the flutter commit had
+carried its own — both now committed. Sharpened: the refuted-but-
+accurate findings showed the no-lost-response contract covered only the
+rejected-package arm — the unregistered-approver guard and the
+no-ordinary-namespace refusal still escaped `approve()` as plain
+`AtEnrollmentException` after a successful server-side approval. Now
+every post-approval conveyance refusal is wrapped into the carrying
+exception (test-first; the package's own status rides as `present`
+when the package was not the refusal), and a composition pin drives a
+tampered package through the *real* conveyance — red under exactly the
+status-flip mutation a review agent probed with. Deferred to the
+backlog, deliberately: the enrollment-list widget's generic
+"Failed to approve" snackbar for a post-approval refusal (needs the
+widget to take an injectable service before it is testable, the
+`ApkamDialog` pattern) and its `encryptedAPKAMSymmetricKey!` null-bang
+on pq-mode requests that wrapped no key. Process ruling: review
+workflows get worktree isolation from here on — one finder
+mutation-probed the shared working tree (it restored the file itself,
+and the mutation post-dated the functional run by two minutes, so the
+143/143 stood — but only the timestamps proved that).

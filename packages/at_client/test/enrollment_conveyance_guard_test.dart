@@ -233,6 +233,28 @@ void main() {
     });
   });
 
+  test('a tampered key package is refused through the real conveyance',
+      () async {
+    final approver = buildMockClient('approver-1');
+    await AtClientSecretSharing.forClient(approver).register();
+    final pkg = (await advertisedKeyPackage()) as Map;
+    final tampered = Map<String, Object?>.from(pkg)
+      ..['signature'] = base64Encode(List<int>.filled(64, 1));
+    stubPendingEnrollment(approver, tampered);
+
+    await expectLater(
+        approveWith(approver),
+        throwsA(isA<EnrollmentConveyanceException>().having(
+            (e) => e.keyPackageStatus,
+            'keyPackageStatus',
+            KeyPackageStatus.rejected)),
+        reason: 'this drives the whole chain — the real verification '
+            'classifies the tampered signature as rejected, the real '
+            'conveyance reports it, and approve() refuses with the response '
+            'riding — where the seam test above it only pins the policy '
+            'against a fake');
+  });
+
   test('the guard does not fire when there is nothing to convey', () async {
     final approver = buildMockClient('approver-1');
     // Same enrollment, except it wrapped its own key: the legacy path, where

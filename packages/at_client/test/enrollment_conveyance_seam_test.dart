@@ -54,6 +54,22 @@ class _StatusConveyance implements EnrollmentConveyance {
   }
 }
 
+/// An [EnrollmentConveyance] that refuses by throwing, the way the production
+/// preconditions do.
+class _ThrowingConveyance implements EnrollmentConveyance {
+  _ThrowingConveyance(this.refusal);
+
+  final AtEnrollmentException refusal;
+
+  @override
+  Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment,
+          {String? mintedApkamSymmetricKey}) =>
+      throw refusal;
+
+  @override
+  Future<int> sweepUnanchoredEnrollments() async => 0;
+}
+
 /// approve() consults the injected [EnrollmentConveyance] and owns the policy
 /// about what its answer means: the conveyance *reports* the advertised key
 /// package's status, and whether a rejected one fails the approval is decided
@@ -109,7 +125,7 @@ void main() {
   }
 
   Future<AtEnrollmentResponse> approveThrough(
-    _StatusConveyance conveyance, {
+    EnrollmentConveyance conveyance, {
     Map<String, Object?> record = mintingRecord,
     _RecordingAtEnrollment? enrollment,
   }) {
@@ -154,6 +170,28 @@ void main() {
         throwsA(isA<AtEnrollmentException>()),
         reason: 'callers already catching the published exception type must '
             'keep working; the carrying type is a subtype, not a replacement');
+  });
+
+  test('every post-approval conveyance refusal carries the response',
+      () async {
+    // The other way a conveyance refuses: a thrown precondition — the
+    // unregistered-approver guard and the no-ordinary-namespace refusal both
+    // fire after the server-side approval has succeeded.
+    final throwing = _ThrowingConveyance(AtEnrollmentException(
+        'Enrollment $enrolleeId expects this approver to convey its '
+        'symmetric key, but this client has not registered a key package to '
+        'seal it from. Call register() on '
+        'AtClientSecretSharing.forClient(atClient) before approving.'));
+
+    await expectLater(
+        approveThrough(throwing),
+        throwsA(isA<EnrollmentConveyanceException>()
+            .having((e) => e.message, 'message', contains('register()'))
+            .having((e) => e.response.enrollmentId, 'response.enrollmentId',
+                enrolleeId)),
+        reason: 'losing the response on these paths and carrying it on the '
+            'rejected one would make the no-lost-response contract depend on '
+            'which way the conveyance refused');
   });
 
   test('an absent package approves quietly', () async {

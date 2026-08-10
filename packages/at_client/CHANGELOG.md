@@ -1,12 +1,14 @@
 ## 3.14.1
 - fix: a conveyance refusal no longer discards the approval it follows.
-  When a server-side approval succeeds but the enrollee's advertised key
-  package is refused, `approve()` now throws
-  `EnrollmentConveyanceException` — an `AtEnrollmentException` subtype
-  carrying the successful `AtEnrollmentResponse` and the
-  `KeyPackageStatus` — so a caller can tell "approved but the device
-  cannot decrypt; consider revoking" from "the approval failed", instead
-  of losing the response inside a generic throw.
+  When a server-side approval succeeds but the secret conveyance to the
+  new device refuses — a key package that does not verify, an approver
+  with no registered package to seal from, an enrollment with no ordinary
+  namespace to carry the envelope — `approve()` now throws
+  `EnrollmentConveyanceException`, an `AtEnrollmentException` subtype
+  carrying the successful `AtEnrollmentResponse` and the advertised
+  package's `KeyPackageStatus`, so a caller can tell "approved but the
+  device cannot decrypt; consider revoking" from "the approval failed"
+  instead of losing the response inside a generic throw.
 - refactor: the approval-time secret conveyance and the unanchored-
   enrollment sweep live behind a new injected seam,
   `EnrollmentConveyance`, with the envelope-sealing production

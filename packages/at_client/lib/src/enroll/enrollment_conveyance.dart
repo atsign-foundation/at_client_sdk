@@ -75,7 +75,10 @@ class EnrollmentConveyanceException extends AtEnrollmentException {
   /// The successful server-side approval this exception is *not* about.
   final AtEnrollmentResponse response;
 
-  /// Why the conveyance refused.
+  /// The advertised key package's status when the conveyance stopped:
+  /// [KeyPackageStatus.rejected] when the package itself was the refusal,
+  /// [KeyPackageStatus.present] when the package was fine and the conveyance
+  /// refused for another reason — the message says which.
   final KeyPackageStatus keyPackageStatus;
 
   EnrollmentConveyanceException(super.message,
