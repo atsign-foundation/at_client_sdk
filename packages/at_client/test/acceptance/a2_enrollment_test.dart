@@ -6,6 +6,7 @@ library;
 
 import 'package:test/test.dart';
 
+import 'blockers.dart';
 import 'proven_elsewhere.dart';
 
 void main() {
@@ -129,5 +130,39 @@ void main() {
             'no suite" hold the failing-closed direction.',
       );
     });
+
+    test('UC-A2.5 · an enrollment amends its own key package', () {
+      // GIVEN alice4 enrolled (E4) advertising a single X-Wing key, with
+      //       secrets already sealed to that kpid sitting unread.
+      // WHEN  alice4 mints a second KEM keypair, rebuilds and re-signs its key
+      //       package with BOTH keys, and sends enroll:updateMetadata on its
+      //       own APKAM-authenticated connection.
+      // THEN  enroll:listns returns the amended package (two keys, suites
+      //       covering both KEMs, still derived from the package's own keys);
+      //       it still verifies against E4's _apsk, because the update path
+      //       relaxes no signature check; a peer negotiates to whichever key
+      //       its own keyAlgos order prefers; the pre-existing envelope at the
+      //       OLD kpid still opens, because a replaced kpid is retained rather
+      //       than retired; nothing already sealed is re-sealed and no
+      //       conveyance fires, the updater holding the plaintext already; and
+      //       an unnamed sibling metadata key survives the write.
+      fail('not implemented');
+    }, skip: ke2);
+
+    test('UC-A2.6 · only the enrollment itself may amend its metadata', () {
+      // GIVEN alice1 (E1, fully privileged) and alice4 (E4, scoped) enrolled.
+      // WHEN  E1 sends enroll:updateMetadata naming E4; and separately a
+      //       legacy-PKAM / owner connection (no enrollmentId) sends the same.
+      // THEN  both are refused — the second DESPITE carrying full permissions
+      //       everywhere else, which is the arm that goes green for the wrong
+      //       reason if the self-only check is written as an authorization
+      //       lookup rather than an identity test (isAuthorized short-circuits
+      //       a connection with no enrollment id to true). The same request
+      //       against a REVOKED E4 is refused, so a revoked enrollment cannot
+      //       re-advertise an encapsulation target. The accepted arm — E4
+      //       updating E4 — runs in the same session, or the two refusals
+      //       prove only that the verb refuses everything.
+      fail('not implemented');
+    }, skip: ke2);
   });
 }

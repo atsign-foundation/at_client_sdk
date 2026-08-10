@@ -711,6 +711,49 @@ void main() {
     });
   });
 
+  group('a broadcast identifies itself by enrollment, not by kpid', () {
+    // The roster serves enroll-a a package whose kpid is NOT the one this
+    // instance holds. That is not hypothetical: an instance whose enrollment
+    // changed under it (the self-retrofit) keeps its old keypair while the
+    // directory serves the new package, and once a package may advertise more
+    // than one key, KeyPackage.kpid is the *reader's* preferred key rather than
+    // an identity. A kpid comparison calls that entry a peer and sends to an
+    // address nobody is listening on; an enrollment comparison does not.
+    late TestSharer staleSelf;
+
+    setUp(() async {
+      directory.authorize('myapp', 'enroll-a');
+      directory.authorize('myapp', 'enroll-b');
+      // Same enrollment, different key material -> different kpid.
+      staleSelf = buildSharer('enroll-a', seedC);
+      await staleSelf.register();
+      directory.seed('enroll-a', staleSelf.myKeyPackage);
+      expect(directory.registered['enroll-a']!.kpid, isNot(sharerA.kpid),
+          reason: 'the arms must differ: a roster entry with this client\'s '
+              'own kpid would pass either comparison');
+    });
+
+    test('pushSecretToNamespaceMembers reaches the peer and not itself',
+        () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v'));
+      final pushed = await sharerA.pushSecretToNamespaceMembers(
+          sharerA.secretStore.getSecret('myapp', 'token')!);
+      expect(pushed, 1);
+      expect(
+          remoteData.keys.where(
+              (k) => k.contains('.${staleSelf.kpid}.__ssenv.myapp@alice')),
+          isEmpty,
+          reason: 'nothing may be addressed to the stale self entry');
+    });
+
+    test('requestSecretsFromNamespace reaches the peer and not itself',
+        () async {
+      final sent = await sharerA.requestSecretsFromNamespace('myapp');
+      expect(sent, 1);
+    });
+  });
+
   group('request/response pull flow', () {
     setUp(() {
       // Both enrollments authorized for the namespace so they discover each

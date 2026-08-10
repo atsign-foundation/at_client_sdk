@@ -16,6 +16,8 @@ import 'package:at_client/src/service/sync_service.dart'
     show SyncDirection, SyncProgress, SyncProgressListener;
 import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
+    show NamespaceMember;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
@@ -554,6 +556,25 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// resolves any racing [waitForSecret]).
   static const String secretRequestKind = 'request';
 
+  /// Whether [member] is this client, so a broadcast skips itself.
+  ///
+  /// Identity is the **enrollment**, not the kpid. Comparing kpids reads a
+  /// package's addressing token, and that token is a *reader's* choice —
+  /// [KeyPackage.kpid] returns the first key in this build's
+  /// [SecretSharingAlgos.keyAlgos] order, so once a package advertises more
+  /// than one key two builds with different orderings disagree about the same
+  /// package's kpid and a client can fail to recognise itself. It also misses
+  /// the drift case with one key: an instance whose enrollment changed under it
+  /// holds the old keypair while the directory serves the new package, so the
+  /// kpids differ and it sends to an address it is not listening on.
+  ///
+  /// A client with no enrollment matches nothing, which is right — `enroll:listns`
+  /// enumerates enrollments, so a legacy PKAM client is not on the roster it is
+  /// comparing against. [selfEnrollmentId] is read once by the caller rather
+  /// than per member: the getter warns every time it falls back to `primary`.
+  bool _isSelf(NamespaceMember member, String selfEnrollmentId) =>
+      member.enrollmentId == selfEnrollmentId;
+
   /// Broadcasts a pull request for held secrets to every key package
   /// registered for [namespace] (minus this client). Holders that pass the
   /// answer policy reply by sharing the matching secrets; the caller typically
@@ -569,10 +590,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }) async {
     final members = await directory.listForNamespace(namespace,
         excludeEnrollmentIds: excludeEnrollmentIds);
+    final String selfId = enrollmentId;
     int sent = 0;
     for (final member in members) {
       final to = member.keyPackage;
-      if (to != null && to.kpid != null && to.kpid != kpid) {
+      if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
         await sendEnvelope(to, namespace, {
           'kind': secretRequestKind,
           if (names != null) 'want': names,
@@ -904,10 +926,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }) async {
     final members = await directory.listForNamespace(secret.namespace,
         excludeEnrollmentIds: excludeEnrollmentIds);
+    final String selfId = enrollmentId;
     int pushed = 0;
     for (final member in members) {
       final to = member.keyPackage;
-      if (to != null && to.kpid != null && to.kpid != kpid) {
+      if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
         await shareSecretWith(to, secret);
         pushed++;
       }

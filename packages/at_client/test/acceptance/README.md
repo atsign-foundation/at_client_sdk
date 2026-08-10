@@ -80,31 +80,32 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## How to work with it
 
-- **The burn-down is complete.** Every row is asserted here or cited to a live
-  test, and `blockers.dart` — which named the project each skipped scenario
-  waited on — is deleted rather than kept empty. If a future project blocks
-  rows again, restore the file and `catalogue_test.dart`'s declared-vs-used
-  cross-check from git history *together*: a bare `skip:` with nothing
-  declaring it hides a row from the count with nobody recorded as owing it.
+- **Two rows are blocked; the rest are done.** `blockers.dart` names the project
+  each skipped scenario waits on, and `catalogue_test.dart` cross-checks the
+  declared constants against the `skip:` uses in both directions — a bare
+  `skip:` with nothing declaring it hides a row from the count with nobody
+  recorded as owing it, and a constant guarding nothing tells whoever greps it
+  that the project owes no scenarios. When the last blocker goes, delete the
+  file and restore the stays-retired guard with it.
 - **A scenario is green** when its `fail('not implemented')` is replaced by real
   assertions and its `skip:` is gone. Nothing else counts as done.
 - Some scenarios finally belong in `tests/at_functional_test` or
   `tests/at_end2end_test` (separate packages). Keep the placeholder here until
   the real assertion exists somewhere, so the count stays honest.
-- `catalogue_test.dart` is the one test here that is not skipped. It fails if a
-  use case loses its scenario, if a scenario is skipped against the retired
-  blocker mechanism, or if the counts below drift from the tests. Fix the
-  count in the same PR.
+- `catalogue_test.dart` is the one test here that is never skipped. It fails if a
+  use case loses its scenario, if a `skip:` and the blocker declaring it fall out
+  of step, or if the counts below drift from the tests. Fix the count in the
+  same PR.
 
 ## The catalogue
 
-**45 rows** — the catalogue's 35 use cases become 36 scenarios (UC-A5.1 splits,
+**47 rows** — the catalogue's 37 use cases become 38 scenarios (UC-A5.1 splits,
 below), plus 9 cross-cutting invariants.
 
 | Cluster                       | Scenarios                        | Blocked on   |
 |-------------------------------|----------------------------------|--------------|
 | A1 · PQ-native onboard        | A1.1 ✅                           | —            |
-| A2 · enrollments              | A2.1 ✅, A2.2 ✅, A2.3 ✅, A2.4 ✅  | —            |
+| A2 · enrollments              | A2.1 ✅, A2.2 ✅, A2.3 ✅, A2.4 ✅, A2.5 ⏳, A2.6 ⏳ | KE-2 |
 | A3 · self data                | A3.1 ✅, A3.2 ✅, A3.3 ✅, A3.4 ✅, A3.5 ✅ | —      |
 | A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅, A4.5 ✅, A4.6 ✅, A4.7 ✅ | — |
 | A5 · rotation & revocation    | A5.1(a) ✅, A5.1(b) ✅, A5.2 ✅, A5.3 ✅ | —            |
@@ -131,8 +132,16 @@ the 45** rows, and no data-path row could go green until **B-1** (XL) and
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**0 of the 45** rows are skipped — every scenario in the catalogue is now
-either asserted here or cited to a live test that asserts it.
+**2 of the 47** rows are skipped, and the burn-down went back above zero on
+2026-08-10 rather than drifting there. `enroll:updateMetadata` was ruled
+([`decisions.md` 68](../../../../docs/projects/pq/decisions.md)) and brought two
+new rows with it — UC-A2.5 and UC-A2.6 — so the catalogue grew by two use cases
+that nothing yet implements. That is the mechanism working: a ruling that adds
+scope adds rows, and the count says so on the same day rather than at review.
+`blockers.dart` and `catalogue_test.dart`'s declared-vs-used cross-check came
+back together with them, which is the contract the retired guard stated.
+
+Every other scenario is asserted here or cited to a live test that asserts it.
 
 **UC-B0.1 was the last, and it went green 2026-08-08.** It had carried the
 label `blocked: RF-SRV` long after RF-SRV's server half landed, because nobody

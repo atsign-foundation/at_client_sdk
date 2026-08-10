@@ -1,4 +1,11 @@
 ## 3.14.1
+- fix: a secret-sharing broadcast identifies itself by **enrollment** rather
+  than by kpid. `pushSecretToNamespaceMembers` and
+  `requestSecretsFromNamespace` skipped the roster entry for this client by
+  comparing key-package ids, but a kpid is a reader's choice — it is the first
+  key in this build's preference order — so an instance whose enrollment
+  changed under it, or any package advertising more than one key, could fail
+  to recognise itself and address an envelope to a kpid it is not listening on.
 - feat: a fully privileged approver conveys a **root** link at approval,
   so the enrollments it approves are born anchored rather than healed
   later by the sweep; an approver outside that class keeps signing the
