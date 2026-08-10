@@ -1,4 +1,21 @@
 ## 3.14.1
+- fix: an nskey private conveyed to the atSign's other enrollments is now
+  the generation's **seed**, never the expanded decapsulation key. The
+  receiver validates an arrival by re-deriving the advertised public half,
+  which only the seed can do — under ML-KEM the expanded form was refused
+  on arrival, so no other enrollment ever received a conveyed generation
+  (X-Wing was unaffected: its seed and secret key are the same bytes). The
+  two forms are now distinct types (`NskeySeed`,
+  `NskeyDecapsulationKey`) on the `NskeyKeyRing`/`NskeyPrivateFiling`
+  surfaces, so the confusion is a compile error.
+- feat: `PqClientBootstrap` — one owner per client for the PQ startup's
+  key ring, private filing, secret sharing, signing root and chain, run
+  as one ordered fire-and-forget task of named steps (awaitable via
+  `startupComplete`; `AtClient.stop()` now halts it at the next step
+  boundary, where before a stopped client kept publishing). Each active
+  step sits behind a `PqStartupGates` bool, all defaulting on.
+  `PqSigningChain` is constructed per client now
+  (`PqSigningChain(atClient)`), with the wire vocabulary still static.
 - feat: the signed envelope has a second wrapper shape — RFC 7515 JWS
   Flattened JSON Serialization (`v: 2`), with `alg` (`RS256` / RFC 9964's
   `ML-DSA-65`) and the signer's enrollment id (`kid`) inside the signed
