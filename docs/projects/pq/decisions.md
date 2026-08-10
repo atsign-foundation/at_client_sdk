@@ -6882,3 +6882,98 @@ atSign minted with `mintLegacyMaterial: false`. The same assumption in its
 live form did break `_persistKeysLocalSecondary`, with a null-check error
 after a *successful* authentication. The store treats every one of those
 fields as optional, which is the shape the keyfile actually has.
+
+## 78. Phase 5: the keychain is reachable, flushable, and no longer closes someone else's service (2026-08-10)
+
+**Status:** accepted (2026-08-10). Three defects, all introduced on this
+branch, all found by auditing the branch's own diff against trunk in
+`at_client_flutter`, and all fixed test-first — each test was run red before
+the fix existed.
+
+### 78.1 An atSign is one entry however the caller spells it
+
+`KeychainStorage` matched a lookup against the stored label as a raw string.
+The branch gave `AtKeys` a typed `atsign` field, `AtKeys.fromJson`
+normalizes it through `toAtsign()`, and `_atSignOf` prefers it — so the
+stored label became the *canonical* spelling while lookups still arrived in
+whatever spelling the caller held.
+
+Nothing normalizes on the way in: `AuthRequest.atSign` is a plain mutable
+`String`, and at_auth hands this layer that string verbatim to `read`/`write`
+while passing `toAtsign()` to `flush`, on one keyset in one flow.
+
+Captured, not reasoned about — `write('@Alice', …)` succeeded and the very
+next `read('@Alice')` threw `AtsignKey not found in keychain for atSign:
+@Alice`. Trunk had no such gap: it stamped and compared the same raw string.
+The sharper half is `flush`: an entry stored as `@colin.constable` (dots in
+the right-hand side are decoration, so it normalizes to `@colinconstable`)
+was not found by the index, so the flush **appended** — leaving the newer
+keys unreachable behind the older ones, which is exactly the loss the
+branch's own create-only `write` guard exists to prevent.
+
+**Mechanism:** `KeychainStorage` compares normalized (`_normalized`), in
+`_indexOf` and in `removeAtsignFromKeychain`, and keeps returning the stored
+spelling. A value `toAtsign()` rejects is compared as it stands, so a
+malformed entry stays readable and removable rather than becoming
+unreachable. `_stampAtSign` no longer overwrites a label that is already
+there (see 78.2).
+
+### 78.2 A legacy keychain entry could never be flushed
+
+Found by 78.1's test walking into it, then isolated with a throwaway probe
+using a plain `@alice` — so it is not about spelling at all.
+
+`AtKeysAssurance.validateMapUpdate` compares the two documents' legacy
+portions. `_legacyJsonOf` strips the reserved top-level keys
+(`version`/`atsign`/`keys`) from a *typed* document but not from a legacy
+one, which has no reserved names. A keychain entry written by any published
+`at_client_flutter` carries the owner under a top-level `atsign` — that is
+where the keychain has always recorded it, predating the typed shape
+reserving the name. So on the first flush the existing side offered `atsign`
+as a legacy entry, the candidate's typed side had stripped it, and the
+assurance refused with `map.legacy.atsign is not preserved`.
+
+The blast radius is every device already in the field: the first flush onto
+any pre-existing keychain entry — nskey filing, the signing-root store, key
+package filing, the paths the branch added `flush` for — threw.
+
+`validateMapUpdate` already carried a carve-out for this upgrade ("a legacy
+-> typed-keys upgrade legitimately introduces the atsign and version"), but
+only for *introducing* them; the case where the legacy side already had one
+was missed.
+
+**Mechanism:** on a legacy → typed upgrade the owner is checked against the
+reserved field and taken out of the legacy comparison, because the upgrade
+re-homes that value rather than dropping it. Compared normalized on both
+sides, since `AtKeys.fromJson` has already normalized the reserved one. A
+candidate naming a *different* atSign is still refused, and its test pins the
+message path (`map.atsign`) so it cannot pass for the wrong reason. `version`
+and `keys` get no such treatment: neither is re-homed, so a legacy document
+carrying those names would genuinely lose them.
+
+Note the shape — this is the reserved-name collision between two formats that
+share a top level, and it was invisible because the file store never hits it:
+a legacy `.atKeys` file names its atSign as *the key itself* (`"@alice":
+"<selfEncryptionKey>"`, see §77), not as a literal `atsign`.
+
+### 78.3 The list widget closed a service it did not own
+
+The branch gave `EnrollmentRequestList` an injectable `enrollmentService`
+(the seam its tests need) but left `dispose()` calling `_service.dispose()`
+unconditionally. `FlutterEnrollmentService.dispose()` closes the broadcast
+controller and drops it, so routing away from the widget left a caller's
+shared service with every later `getEnrollments()` throwing on a null
+controller.
+
+**Mechanism:** the state records whether it made the service and closes it
+only then. Pinned by `verifyNever(() => service.dispose())` after the widget
+is disposed.
+
+### What this says about the audit
+
+All three are the same class: a *second* implementation or a *second* caller
+arriving behind an existing shape, and the first one's incidental properties
+quietly becoming load-bearing — the raw-string label, the legacy top level
+with no reserved names, the widget as sole owner of its service. None was
+reachable by reading the new code alone; each needed the diff against trunk
+and a run.
