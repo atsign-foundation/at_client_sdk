@@ -1297,7 +1297,8 @@ and B already own.
   which cannot read a preference, so the posture's value is applied by
   whoever builds the request — together with the two things pq mode requires
   (the key-package builder and the symmetric-key resolver).
-- **When:** the request is submitted with `keyExchangeMode = pq`.
+- **When:** the request is submitted as an `AtEnrollmentRequest.pq(...)`,
+  which reports `keyExchangeMode = pq`.
 - **Then:** no RSA-wrapped `apkamSymmetricKey` rides the wire; the approver
   mints and conveys instead; the bare-request default stays `legacy`, so the
   3.x wire is byte-identical until a posture or the at_auth major flips it.

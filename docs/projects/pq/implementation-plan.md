@@ -1404,9 +1404,10 @@ directions; only the opt-out refuses it).
 `ReleasePosture.postQuantum()` — one edit that flips all five rollout axes
 (era `CryptoConfig` → nskey writes, `disallowLegacyEncryption` → true — SHOUT
 if re-enabled false, envelope emission → JWS v2, posture-built enrollments →
-pq key exchange, argless retrofits → ML-DSA). The at_auth-side hard defaults
-(`AtEnrollmentRequest.keyExchangeMode = legacy`, mechanism-level
-`signingAlgo`) are at_auth's own major to flip, separately.
+pq key exchange, argless retrofits → ML-DSA). The at_auth-side hard defaults (the
+default `AtEnrollmentRequest` constructor is legacy mode — pq is the separate
+`AtEnrollmentRequest.pq(...)` — and mechanism-level `signingAlgo`) are
+at_auth's own major to flip, separately.
 The legacy provider itself **stays** (reads forever).
 
 ⚠️ The "TWO coupled edits" hazard (established 2026-08-08 — flipping
