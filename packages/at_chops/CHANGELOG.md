@@ -2,6 +2,10 @@
 - feat: add `RsaSignatureAlgo`, a stateless `AtSignatureAlgorithm` implementation for RSA-2048 and RSA-4096 signing, with key material passed per call. `verifyBytes` returns `false` for unparseable, wrong-sized, or malformed key and signature bytes rather than throwing — they arrive off the wire, so "did not verify" is the answer for every shape of bad input. `signBytes` still throws `AtSigningException` on bad secret key material, which is local to the caller
 - deprecate: `RsaSigningAlgo`, which implements the deprecated `AtSigningAlgorithm` interface — use `RsaSignatureAlgo` instead. The two produce byte-identical signatures, so the swap is transparent on the wire
 - deprecate: redirect the `DefaultSigningAlgo` and `PkamSigningAlgo` deprecation notices at `RsaSignatureAlgo`; they previously pointed at `RsaSigningAlgo`, which is now itself deprecated
+- breaking: `MlDsa65FfiAlgo.verifyBytes` throws `StateError` when the pinned libcrypto cannot perform ML-DSA-65. Signature mismatches still return `false`. Gate on `libCryptoSupportsMlDsa65`, or use `AtPqc.mlDsa65`, which already does.
+- fix: ML-KEM-768 and ML-DSA-65 (FFI and pure-Dart) validate key, ciphertext, and signature lengths themselves, throwing `ArgumentError` for a wrong-length argument and `StateError` for a wrong-length backend output. Both ML-DSA-65 backends also check the lengths of the key pair they generate, so a wrong-size public or secret key fails at the point it is minted rather than at first use.
+- fix: `MlDsa65KeyPair.create` throws `AtSigningException` for non-base64 `publicKey`/`privateKey`.
+- fix: `MlKem768FfiAlgo.encapsulate`/`decapsulate` throw `ArgumentError` for a wrong-length public key/ciphertext.
 
 ## 3.4.1
 - fix: export `Argon2idHashingAlgo` and `Md5HashingAlgo` from the main `at_chops.dart` barrel so callers can use all supported hashing algorithms through the public package import.

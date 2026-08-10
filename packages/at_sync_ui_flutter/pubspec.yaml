@@ -12,12 +12,12 @@ environment:
 
 dependencies:
   at_client: ^3.7.0
+  at_client_mobile: ^3.3.0
   flutter:
     sdk: flutter
 
 dev_dependencies:
   at_common_flutter: ^2.1.0
-  at_client_mobile: ^3.3.0
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter

@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
+import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
 
@@ -24,7 +26,12 @@ import 'package:ffi/ffi.dart';
 /// Prefer [AtPqc.mlDsa65], which auto-resolves to this backend when libcrypto
 /// supports ML-DSA-65 and falls back to pure-Dart otherwise. Construct via
 /// [MlDsa65FfiAlgo.fromLib] only to pin a specific [DynamicLibrary]
-/// (e.g. loaded via [tryLoadLibCrypto]).
+/// (e.g. loaded via `tryLoadLibCrypto`).
+///
+/// [fromLib] does not probe the library — pinning one that lacks ML-DSA-65
+/// (OpenSSL < 3.5) fails lazily, as a [StateError] from the first
+/// [generateKeyPair]/[signBytes]/[verifyBytes] call. Gate on
+/// `libCryptoSupportsMlDsa65` if you pin the library yourself.
 final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   final DynamicLibrary _lib;
 
@@ -106,10 +113,13 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
         }
         final Pointer<EVP_PKEY> pkey = pkeyPtr.value;
         try {
-          return (
-            publicKey: _extractRawPublicKey(pkey),
-            secretKey: _extractRawPrivateKey(pkey),
-          );
+          final Uint8List pk = _extractRawPublicKey(pkey);
+          final Uint8List sk = _extractRawPrivateKey(pkey);
+          checkOutputLength(pk.length, MlDsa65Sizes.publicKeyBytes,
+              operation: 'EVP_PKEY_keygen', label: 'public key');
+          checkOutputLength(sk.length, MlDsa65Sizes.secretKeyBytes,
+              operation: 'EVP_PKEY_keygen', label: 'secret key');
+          return (publicKey: pk, secretKey: sk);
         } finally {
           _pkeyFree(pkey);
         }
@@ -130,18 +140,36 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
+    MlDsa65Sizes.validateSecretKey(secretKey);
     final Pointer<EVP_PKEY> pkey = _loadPrivateKey(secretKey);
     try {
-      return _sign(pkey, message);
+      final Uint8List sig = _sign(pkey, message);
+      checkOutputLength(sig.length, MlDsa65Sizes.signatureBytes,
+          operation: 'EVP_DigestSign', label: 'signature');
+      return sig;
     } finally {
       _pkeyFree(pkey);
     }
   }
 
   /// Verify [signature] over [message] against the raw 1952-byte [publicKey].
+  ///
+  /// Returns `false` for malformed or attacker-controlled input (wrong-length
+  /// or garbage key/signature), matching the pure-Dart backend's contract —
+  /// OpenSSL reports a signature mismatch as a return code, not an error.
+  ///
+  /// Throws [StateError] when OpenSSL itself cannot perform the operation —
+  /// most commonly a libcrypto build without ML-DSA-65 (added to the default
+  /// provider in OpenSSL 3.5). That is a misconfiguration, not a forged
+  /// signature, and swallowing it as `false` would make the two
+  /// indistinguishable. Gate on `libCryptoSupportsMlDsa65` before
+  /// [MlDsa65FfiAlgo.fromLib], or use `AtPqc.mlDsa65`, which already does.
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
+    if (!MlDsa65Sizes.hasValidVerifyLengths(publicKey, signature)) {
+      return false;
+    }
     final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
     try {
       return _verify(pkey, message, signature);
@@ -223,7 +251,9 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
     try {
       final Pointer<EVP_PKEY> pkey =
           _newRawPrivateKeyEx(nullptr, algName, nullptr, buf, keyBytes.length);
-      if (pkey == nullptr) throw StateError('EVP_PKEY_new_raw_private_key_ex failed');
+      if (pkey == nullptr) {
+        throw StateError('EVP_PKEY_new_raw_private_key_ex failed');
+      }
       return pkey;
     } finally {
       calloc.free(buf);
@@ -238,7 +268,9 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
     try {
       final Pointer<EVP_PKEY> pkey =
           _newRawPublicKeyEx(nullptr, algName, nullptr, buf, keyBytes.length);
-      if (pkey == nullptr) throw StateError('EVP_PKEY_new_raw_public_key_ex failed');
+      if (pkey == nullptr) {
+        throw StateError('EVP_PKEY_new_raw_public_key_ex failed');
+      }
       return pkey;
     } finally {
       calloc.free(buf);
@@ -279,8 +311,7 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
     }
   }
 
-  bool _verify(
-      Pointer<EVP_PKEY> pkey, Uint8List data, Uint8List signature) {
+  bool _verify(Pointer<EVP_PKEY> pkey, Uint8List data, Uint8List signature) {
     final Pointer<EVP_MD_CTX> ctx = _mdCtxNew();
     if (ctx == nullptr) throw StateError('EVP_MD_CTX_new failed');
     try {
@@ -295,6 +326,12 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
       try {
         final int result =
             _digestVerify(ctx, sigBuf, signature.length, dataBuf, data.length);
+        // 1 = valid, 0 = signature mismatch, < 0 = the operation itself
+        // failed. Only the middle case is a verification result; folding the
+        // last one into `false` would make a backend failure indistinguishable
+        // from a forged signature, which is what dropping verifyBytes'
+        // catch-all set out to prevent.
+        if (result < 0) throw StateError('EVP_DigestVerify failed');
         return result == 1;
       } finally {
         calloc.free(dataBuf);

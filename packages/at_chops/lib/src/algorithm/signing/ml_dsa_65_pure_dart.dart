@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
+import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
+import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:pqcrypto/pqcrypto.dart';
 
@@ -34,6 +36,10 @@ final class MlDsa65PureDartAlgo
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async {
     final (Uint8List pk, Uint8List sk) =
         MlDsa.generateKeyPair(DilithiumParams.mlDsa65);
+    checkOutputLength(pk.length, MlDsa65Sizes.publicKeyBytes,
+        operation: 'ML-DSA-65 generateKeyPair', label: 'public key');
+    checkOutputLength(sk.length, MlDsa65Sizes.secretKeyBytes,
+        operation: 'ML-DSA-65 generateKeyPair', label: 'secret key');
     return (publicKey: pk, secretKey: sk);
   }
 
@@ -46,13 +52,23 @@ final class MlDsa65PureDartAlgo
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
-    return MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
+    MlDsa65Sizes.validateSecretKey(secretKey);
+    final Uint8List sig = MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
+    checkOutputLength(sig.length, MlDsa65Sizes.signatureBytes,
+        operation: 'ML-DSA-65 sign', label: 'signature');
+    return sig;
   }
 
   /// Verify [signature] over [message] against [publicKey] (raw 1952 bytes).
+  ///
+  /// Never throws — returns `false` for malformed or attacker-controlled
+  /// input, matching [MlDsa.verify]'s own contract.
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
+    if (!MlDsa65Sizes.hasValidVerifyLengths(publicKey, signature)) {
+      return false;
+    }
     return MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65);
   }
 
