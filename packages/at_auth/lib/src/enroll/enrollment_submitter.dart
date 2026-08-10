@@ -165,21 +165,15 @@ class EnrollmentSubmitter {
     final bool isPq = atEnrollmentRequest.keyExchangeMode ==
         EnrollmentKeyExchangeMode.pq;
 
-    if (isPq) {
-      if (metadata?['keyPackage'] == null) {
-        throw AtEnrollmentException(
-            'A pq enrollment request must advertise a key package, because '
-            'that is the public half the approver encapsulates the symmetric '
-            'key to. Supply a metadataBuilder that returns one, or use '
-            'EnrollmentKeyExchangeMode.legacy.');
-      }
-      if (atEnrollmentRequest.apkamSymmetricKeyResolver == null) {
-        throw AtEnrollmentException(
-            'A pq enrollment request must supply an '
-            'apkamSymmetricKeyResolver, or nothing would ever collect the '
-            'symmetric key the approver encapsulates to it. The enrollment '
-            'would authenticate and then be unable to decrypt anything.');
-      }
+    // AtEnrollmentRequest.pq requires the builder and the resolver, so the
+    // only pq mistake still reachable here is a builder that returned no key
+    // package — a property of its output, which no constructor can promise.
+    if (isPq && metadata?['keyPackage'] == null) {
+      throw AtEnrollmentException(
+          'A pq enrollment request must advertise a key package, because '
+          'that is the public half the approver encapsulates the symmetric '
+          'key to. Supply a metadataBuilder that returns one, or use the '
+          'default (legacy) constructor.');
     }
 
     // A pq request generates no symmetric key and wraps nothing: the approver
@@ -227,9 +221,10 @@ class EnrollmentSubmitter {
         // session is only fully valid (keys persisted) after waitForApproval.
         session: atEnrollmentRequest.session,
         // Only a pq request has a symmetric key waiting to be collected; a
-        // legacy one already holds its own.
+        // legacy one already holds its own, and its resolver is null by
+        // construction.
         apkamSymmetricKeyResolver:
-            isPq ? atEnrollmentRequest.apkamSymmetricKeyResolver : null);
+            atEnrollmentRequest.apkamSymmetricKeyResolver);
   }
 
   /// Handles an APKAM-authenticated self-enrollment (the PQ retrofit).

@@ -125,7 +125,7 @@ void main() {
     final build = enrollmentKeyPackageBuilder(atSign);
 
     final response = await AtEnrollment.create().submit(
-      AtEnrollmentRequest(
+      AtEnrollmentRequest.pq(
         atSign: atSign,
         appName: namespace,
         deviceName: 'priv-${Uuid().v4().hashCode}',
@@ -134,7 +134,6 @@ void main() {
         // pq mode so the approver mints the symmetric key. On the legacy path
         // it would RSA-decrypt whatever the decision carries, and this test has
         // no enrollee running to have produced one.
-        keyExchangeMode: EnrollmentKeyExchangeMode.pq,
         metadataBuilder: (keysIo) async => built = await build(keysIo),
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
       ),
@@ -186,13 +185,12 @@ void main() {
     Map<String, dynamic>? built;
     final build = enrollmentKeyPackageBuilder(atSign);
 
-    final request = AtEnrollmentRequest(
+    final request = AtEnrollmentRequest.pq(
       atSign: atSign,
       appName: namespace,
       deviceName: 'chain-${Uuid().v4().hashCode}',
       namespaces: {namespace: 'rw'},
       otp: otp,
-      keyExchangeMode: EnrollmentKeyExchangeMode.pq,
       metadataBuilder: (keysIo) async => built = await build(keysIo),
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
     );

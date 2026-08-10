@@ -115,7 +115,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
   final build = enrollmentKeyPackageBuilder(atSign);
 
   final response = await AtEnrollment.create().submit(
-    AtEnrollmentRequest(
+    AtEnrollmentRequest.pq(
       session: session,
       appName: namespace,
       deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
@@ -124,7 +124,6 @@ Future<EnrolledClient> enrolAndAuthenticate({
       // pq mode, so the approver mints the symmetric key and seals it to the
       // advertised key package. On the legacy path it would RSA-wrap it, which
       // is the thing this branch exists to remove.
-      keyExchangeMode: EnrollmentKeyExchangeMode.pq,
       metadataBuilder: (keysIo) async => built = await build(keysIo),
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
     ),

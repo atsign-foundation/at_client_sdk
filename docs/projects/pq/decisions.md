@@ -6686,3 +6686,42 @@ Two consequences worth recording:
   a fresh activation starts from is an onboarding step, and its only caller
   is the onboard path that sits beside `AtOnboardingRequest` in
   `auth/models/`.
+
+## 75. Phase 5: the enrolment request's mode is a constructor, not a field (2026-08-10)
+
+**Status:** accepted and landed (Gary's call, 2026-08-10: named constructors,
+not sealed subtypes). `AtEnrollmentRequest` carried `keyExchangeMode`,
+`metadataBuilder` and `apkamSymmetricKeyResolver` as three independently
+settable fields, of which only some combinations are a real request — so
+`EnrollmentSubmitter` refused two of them at submission time, after the
+caller had already built the thing. `AtEnrollmentRequest.pq(...)` requires
+the builder and the resolver; the default constructor takes no resolver and
+is legacy mode. All three fields are branch-added (trunk is at_auth 3.3.0),
+so nothing published moved.
+
+One refusal survives and should: a `metadataBuilder` that returns no
+`keyPackage` is a property of the builder's *output*, which no constructor
+can promise. The other — a pq request with no resolver — is no longer a
+reachable state, and its test is now a constructor-semantics pin rather than
+a submit-time expectation.
+
+**A claim I wrote and the code refuted:** the first cut of `.pq` required a
+`session`, on the reasoning that nothing predating the session hand-off can
+speak pq. Four functional tests submit a pq request with the deprecated loose
+`atSign` and never wait for approval — they inspect what was advertised and
+the record it produced, so they have nothing to persist and need no session.
+The constructor sources the atSign exactly as the legacy one does now, and
+the shared rule lives in one private helper.
+
+**Not reshaped, deliberately:**
+
+- `AtEnrollmentResponse` — its newer field (`apkamSymmetricKeyResolver`) is
+  carried over from the request by at_auth itself, not chosen by a caller, so
+  a variant would encode an invariant nobody can violate.
+- `EnrollmentRequestDecision` already has the named factories this ruling
+  asks for (`approved` / `approvedWithMintedKey` / `denied` / `revoked`).
+  Its remaining defect needs the sealed subtypes Gary declined for now:
+  `_encryptedAPKAMSymmetricKey` is `late final` and never assigned on the
+  deny and revoke paths, so reading `decision.encryptedAPKAMSymmetricKey` on
+  one of those throws `LateInitializationError`. Nothing reads it there
+  today. A 4.0 job, recorded here so it is not rediscovered as a surprise.

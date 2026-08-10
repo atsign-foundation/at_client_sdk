@@ -1,4 +1,18 @@
 ## 3.4.0
+- feat: `AtEnrollmentRequest.pq(...)` is the pq-mode constructor and the
+  default constructor is the legacy-mode one; `keyExchangeMode` is no longer
+  a parameter. The mode and the two callbacks a pq request cannot work
+  without — `metadataBuilder`, which advertises the public half the approver
+  encapsulates to, and `apkamSymmetricKeyResolver`, which collects what was
+  encapsulated — used to be chosen independently, so at_auth refused the
+  mismatched combinations at submission time. `.pq` requires both and reports
+  `EnrollmentKeyExchangeMode.pq`; the default constructor takes no resolver
+  and reports `legacy`. Both source the atSign identically (a `session`, else
+  the deprecated loose `atSign`), so a request that only inspects what it
+  advertised still needs no session. The submit-time refusal for a missing
+  resolver is gone along with the state it guarded; the refusal for a builder
+  that returned no key package stays, since that is a property of the
+  builder's output that no constructor can promise.
 - feat: `AtKeys.fileApkamMaterial` and `AtKeys.adoptMaterials` — the two
   operations by which an enrollment's key material enters a keyfile. Filing
   an APKAM keypair (both halves under `apkam:<enrollmentId>`, sharing one

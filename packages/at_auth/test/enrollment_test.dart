@@ -328,27 +328,35 @@ void main() {
       return (mockAtLookUp, sent);
     }
 
+    AtAuthSession freshSession() => AtAuthSession(
+        atSign: atSign,
+        rootDomain: AtRootDomain.atsignDomain,
+        atKeysIo: InMemoryAtKeysIo());
+
     AtEnrollmentRequest requestWith(
-            FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? builder,
-            {FutureOr<String> Function(AtKeys, AtLookUp)? resolver =
-                _unusedResolver,
-            EnrollmentKeyExchangeMode mode =
-                EnrollmentKeyExchangeMode.legacy}) =>
+            FutureOr<Map<String, dynamic>?> Function(AtKeysIo)? builder) =>
         AtEnrollmentRequest(
-          session: AtAuthSession(
-              atSign: atSign,
-              rootDomain: AtRootDomain.atsignDomain,
-              atKeysIo: InMemoryAtKeysIo()),
+          session: freshSession(),
+          appName: 'wavi',
+          deviceName: 'pixel',
+          namespaces: {'wavi': 'rw'},
+          otp: 'A123FE',
+          metadataBuilder: builder,
+        );
+
+    AtEnrollmentRequest pqRequestWith(
+            FutureOr<Map<String, dynamic>?> Function(AtKeysIo) builder) =>
+        AtEnrollmentRequest.pq(
+          session: freshSession(),
           appName: 'wavi',
           deviceName: 'pixel',
           namespaces: {'wavi': 'rw'},
           otp: 'A123FE',
           metadataBuilder: builder,
           // These tests stop at submit, so the resolver is never called; it is
-          // here to satisfy pq mode's precondition, and the conveyance it
-          // stands for is covered separately.
-          apkamSymmetricKeyResolver: resolver,
-          keyExchangeMode: mode,
+          // here because pq mode requires one, and the conveyance it stands
+          // for is covered separately.
+          apkamSymmetricKeyResolver: _unusedResolver,
         );
 
     test(
@@ -420,8 +428,7 @@ void main() {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
       await AtEnrollmentImpl().submit(
-          requestWith((_) async => {'keyPackage': 'advertised'},
-              mode: EnrollmentKeyExchangeMode.pq),
+          pqRequestWith((_) async => {'keyPackage': 'advertised'}),
           mockAtLookUp);
 
       expect(sent.single, isNot(contains('encryptedAPKAMSymmetricKey')),
@@ -457,29 +464,26 @@ void main() {
               'for byte until the default flips in the next major version');
     });
 
-    test('pq mode without a resolver is refused, not silently enrolled',
-        () async {
-      final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
+    test('the constructor decides the mode, and carries what it requires', () {
+      // A pq request without a resolver used to be a submit-time refusal.
+      // It is not a state any more: `.pq` requires one, and the default
+      // constructor takes none and reports legacy.
+      final pq = pqRequestWith((_) async => {'keyPackage': 'advertised'});
+      expect(pq.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
+      expect(pq.apkamSymmetricKeyResolver, isNotNull);
 
-      await expectLater(
-          AtEnrollmentImpl().submit(
-              requestWith((_) async => {'keyPackage': 'advertised'},
-                  resolver: null, mode: EnrollmentKeyExchangeMode.pq),
-              mockAtLookUp),
-          throwsA(isA<AtEnrollmentException>()));
-
-      expect(sent, isEmpty,
-          reason: 'the request must not reach the atServer at all: it would '
-              'be approved, authenticate, and then be unable to decrypt '
-              'anything, with nothing saying why');
+      final legacy = requestWith(null);
+      expect(legacy.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
+      expect(legacy.apkamSymmetricKeyResolver, isNull,
+          reason: 'a legacy request carries its own symmetric key in; there '
+              'is nothing waiting to be collected');
     });
 
     test('pq mode without a key package is refused', () async {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
       await expectLater(
-          AtEnrollmentImpl().submit(
-              requestWith(null, mode: EnrollmentKeyExchangeMode.pq),
+          AtEnrollmentImpl().submit(pqRequestWith((_) async => null),
               mockAtLookUp),
           throwsA(isA<AtEnrollmentException>()));
 

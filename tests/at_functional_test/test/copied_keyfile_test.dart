@@ -58,13 +58,12 @@ void main() {
     final build = enrollmentKeyPackageBuilder(atSign);
 
     final response = await AtEnrollment.create().submit(
-      AtEnrollmentRequest(
+      AtEnrollmentRequest.pq(
         atSign: atSign,
         appName: namespace,
         deviceName: 'copied-${Uuid().v4().hashCode}',
         namespaces: {namespace: 'rw'},
         otp: otp,
-        keyExchangeMode: EnrollmentKeyExchangeMode.pq,
         metadataBuilder: (keysIo) async {
           built = await build(keysIo);
           originalKeys = await keysIo.read(atSign);

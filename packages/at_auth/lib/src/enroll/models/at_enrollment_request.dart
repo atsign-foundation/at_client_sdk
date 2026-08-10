@@ -100,7 +100,8 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// The keys it receives carry **no `enrollmentId`**: the atServer assigns
   /// that in its response to this request. Anything the callback builds must
   /// therefore be valid without one.
-  FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder;
+  final FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)?
+      metadataBuilder;
 
   /// Obtains this enrollment's `apkamSymmetricKey` once the approver has
   /// delivered it, for a request whose [metadataBuilder] advertised a key
@@ -114,19 +115,29 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   /// the authenticated [AtLookUp] plus the [AtKeys] holding the key package's
   /// private half.
   ///
-  /// Required by [EnrollmentKeyExchangeMode.pq]; ignored otherwise. Without
-  /// one, a pq request would authenticate and then be unable to decrypt
-  /// anything, so at_auth refuses it rather than sending it.
-  FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)?
+  /// Supplied by — and only by — [AtEnrollmentRequest.pq], which requires it:
+  /// without one a pq request would authenticate and then be unable to decrypt
+  /// anything. Null on a legacy request, which carries its own symmetric key
+  /// in and has nothing to collect.
+  final FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)?
       apkamSymmetricKeyResolver;
 
   /// How this request conveys the enrollment's symmetric key.
   ///
-  /// Defaults to [EnrollmentKeyExchangeMode.legacy] so existing callers keep
-  /// their present behaviour byte for byte. The default becomes
-  /// [EnrollmentKeyExchangeMode.pq] in the next major version of at_auth.
-  EnrollmentKeyExchangeMode keyExchangeMode;
+  /// Not a parameter — the constructor decides it, because the mode and the
+  /// callbacks it needs cannot be chosen separately without producing requests
+  /// at_auth has to refuse at runtime. The default constructor is
+  /// [EnrollmentKeyExchangeMode.legacy], the mode every published approver and
+  /// atServer understands; [AtEnrollmentRequest.pq] is the other.
+  final EnrollmentKeyExchangeMode keyExchangeMode;
 
+  /// A legacy-mode enrollment request: this app mints the symmetric key and
+  /// RSA-wraps it to the atSign's encryption public key for the approver to
+  /// unwrap.
+  ///
+  /// A [metadataBuilder] is still welcome here — a key package on the record
+  /// is also how an approver seals this atSign's existing secrets to the new
+  /// device, which is a separate question from how the symmetric key travels.
   AtEnrollmentRequest({
     this.session,
     @Deprecated('Provide `session` instead; its atSign is used.')
@@ -143,16 +154,61 @@ class AtEnrollmentRequest extends EnrollmentRequest {
     this.encryptedAPKAMSymmetricKey,
     this.apkamKeysExpiryDuration,
     this.metadataBuilder,
-    this.apkamSymmetricKeyResolver,
-    this.keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
-  }) : super(
-          atSign: session?.atSign ??
-              atSign ??
-              (throw ArgumentError(
-                  'AtEnrollmentRequest requires a `session` (or the deprecated `atSign`)')),
+  })  : keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
+        apkamSymmetricKeyResolver = null,
+        super(
+          atSign: _atSignOf(session, atSign),
           rootDomain:
               session?.rootDomain ?? rootDomain ?? AtRootDomain.atsignDomain,
         );
+
+  /// A pq-mode enrollment request: nothing RSA-wrapped rides it. The approver
+  /// mints the symmetric key and encapsulates it to the key package this
+  /// request advertises, and [apkamSymmetricKeyResolver] collects it after
+  /// approval.
+  ///
+  /// Both callbacks are required because a pq request is unusable without
+  /// either: no [metadataBuilder] means no public half to encapsulate to, and
+  /// no resolver means nothing ever collects what was encapsulated. They were
+  /// optional parameters checked at submission time, and are constructor
+  /// requirements instead, so the two ways of getting this wrong stopped being
+  /// reachable states.
+  ///
+  /// The atSign is sourced exactly as it is for a legacy request: a [session]
+  /// if there is one, else the deprecated loose `atSign`. A request that only
+  /// wants the key exchange — one that inspects what it advertised and never
+  /// waits for approval — has nowhere to persist keys and needs no session.
+  AtEnrollmentRequest.pq({
+    this.session,
+    @Deprecated('Provide `session` instead; its atSign is used.')
+    String? atSign,
+    @Deprecated('Provide `session` instead; its rootDomain is used.')
+    AtRootDomain? rootDomain,
+    required super.appName,
+    required super.deviceName,
+    required this.otp,
+    required this.namespaces,
+    required FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)
+        this.metadataBuilder,
+    required FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)
+        this.apkamSymmetricKeyResolver,
+    this.apkamKeysExpiryDuration,
+  })  : keyExchangeMode = EnrollmentKeyExchangeMode.pq,
+        encryptedAPKAMSymmetricKey = null,
+        super(
+          atSign: _atSignOf(session, atSign),
+          rootDomain:
+              session?.rootDomain ?? rootDomain ?? AtRootDomain.atsignDomain,
+        );
+
+  /// The one rule for where a request's atSign comes from, shared by both
+  /// constructors: the session if there is one, else the deprecated parameter,
+  /// else a refusal — a request with no atSign has no atServer to reach.
+  static String _atSignOf(AtAuthSession? session, String? atSign) =>
+      session?.atSign ??
+      atSign ??
+      (throw ArgumentError(
+          'AtEnrollmentRequest requires a `session` (or the deprecated `atSign`)'));
 }
 
 /// An APKAM-authenticated self-enrollment: the request an already-enrolled

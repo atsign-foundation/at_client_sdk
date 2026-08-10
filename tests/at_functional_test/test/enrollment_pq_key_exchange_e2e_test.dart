@@ -55,13 +55,12 @@ void main() {
     AtKeys? enrolleeKeys;
     final build = enrollmentKeyPackageBuilder(atSign);
 
-    final request = AtEnrollmentRequest(
+    final request = AtEnrollmentRequest.pq(
       atSign: atSign,
       appName: namespace,
       deviceName: 'pq-${Uuid().v4().hashCode}',
       namespaces: {namespace: 'rw'},
       otp: otp,
-      keyExchangeMode: EnrollmentKeyExchangeMode.pq,
       metadataBuilder: (keysIo) async {
         built = await build(keysIo);
         enrolleeKeys = await keysIo.read(atSign);
