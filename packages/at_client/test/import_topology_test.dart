@@ -66,6 +66,24 @@ void main() {
     // A positive control: the closure walk must actually walk.
     expect(closure, contains(p.canonicalize('lib/src/crypto/crypto.dart')));
   });
+
+  test('the secret-sharing substrate cannot reach the enrollment service', () {
+    // The service layer composes the substrate (the conveyance seals through
+    // it); the substrate reaching back up — the old self-wired privilege
+    // gate constructing EnrollmentServiceImpl — was the cycle the injected
+    // privilege resolver cut.
+    final closure =
+        _importClosure('lib/src/secret_sharing/at_client_secret_sharing.dart');
+    expect(
+        closure,
+        isNot(
+            contains(p.canonicalize('lib/src/service/enrollment_service_impl.dart'))),
+        reason: 'privilege resolution reaches the substrate by injection, '
+            'never by the substrate importing the service layer');
+    // A positive control: the closure walk must actually walk.
+    expect(closure,
+        contains(p.canonicalize('lib/src/secret_sharing/pairwise_secret_sharing.dart')));
+  });
 }
 
 /// Canonicalized transitive at_client-internal import closure of [root].

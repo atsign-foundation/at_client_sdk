@@ -9,6 +9,13 @@
   package's `KeyPackageStatus`, so a caller can tell "approved but the
   device cannot decrypt; consider revoking" from "the approval failed"
   instead of losing the response inside a generic throw.
+- refactor: `EnrollmentPrivilegeResolver` gains
+  `isEnrollmentFullyPrivileged(enrollmentId)`, and the secret-sharing
+  substrate's per-enrollment request gate is wired to that seam by the
+  client's startup composition instead of the substrate resolving
+  privilege itself. A directly constructed `AtClientSecretSharing` no
+  longer self-installs the production gate: its gate starts null, which
+  fails closed, until a composition wires one.
 - fix: an envelope whose payload handler fails after delivery is no
   longer re-emitted on `receivedEnvelopes` by the next sweep. The claim
   is kept and the envelope left in place for a fresh process to retry,

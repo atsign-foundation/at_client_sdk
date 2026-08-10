@@ -25,10 +25,15 @@ class EnrollmentRecordPrivilegeResolver implements EnrollmentPrivilegeResolver {
   Future<bool> isFullyPrivileged() async {
     final id = _atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
     if (id == null) return true;
-    final mine = (await EnrollmentServiceImpl(_atClient, AtEnrollment.create())
+    return isEnrollmentFullyPrivileged(id);
+  }
+
+  @override
+  Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async {
+    final theirs = (await EnrollmentServiceImpl(_atClient, AtEnrollment.create())
             .fetchEnrollmentRequests())
-        .where((e) => e.enrollmentId == id)
+        .where((e) => e.enrollmentId == enrollmentId)
         .firstOrNull;
-    return EnrollmentServiceImpl.isFullyPrivileged(mine?.namespace);
+    return EnrollmentServiceImpl.isFullyPrivileged(theirs?.namespace);
   }
 }

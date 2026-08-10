@@ -27,9 +27,16 @@ class _FakePrivilege implements EnrollmentPrivilegeResolver {
   _FakePrivilege(this.answer);
   final bool answer;
   int calls = 0;
+  final List<String> byIdCalls = [];
   @override
   Future<bool> isFullyPrivileged() async {
     calls++;
+    return answer;
+  }
+
+  @override
+  Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async {
+    byIdCalls.add(enrollmentId);
     return answer;
   }
 }
@@ -71,6 +78,27 @@ void main() {
         expect(identical(provider.keyRing, bootstrap.ring), isTrue,
             reason: 'reads must see what the startup steps minted and filed');
       }
+    });
+
+    test(
+        'construction wires the per-enrollment request gate to the '
+        'privilege seam', () async {
+      final privilege = _FakePrivilege(true);
+      final bootstrap = build(privilege: privilege);
+
+      final gate = bootstrap.sharing.perEnrollmentSecretRequestGate;
+      expect(gate, isNotNull,
+          reason: 'a null gate fails closed for every requester; the '
+              'production composition must install the resolver at '
+              'construction, because a request can arrive as soon as the '
+              'client listens — not only after the startup steps run');
+      expect(await gate!('enroll-x'), isTrue);
+      expect(privilege.byIdCalls, ['enroll-x'],
+          reason: 'the gate consults the ONE injected seam, with the '
+              'requester\'s id');
+      expect(privilege.calls, 0,
+          reason: 'the requester\'s privilege is the question, not this '
+              'client\'s own');
     });
 
     test('seeding, sharing and ring are single shared instances', () {

@@ -125,6 +125,14 @@ class PqClientBootstrap {
         ? null
         : NskeyPrivateFiling(keysIo: keysIo, atSign: _atSign);
     sharing = AtClientSecretSharing.forClient(_atClient);
+    // The substrate's per-enrollment secret request gate consults the same
+    // injected privilege seam as the startup steps — wired here, in the
+    // ctor, because a request can arrive as soon as the client listens,
+    // not only after the startup steps have run. Without it the gate is
+    // null and the substrate fails closed.
+    sharing.perEnrollmentSecretRequestGate =
+        (requesterEnrollmentId) =>
+            _privilege.isEnrollmentFullyPrivileged(requesterEnrollmentId);
     ring = PublishedNskeyKeyRing(
       _atClient,
       privateFiling: filing,

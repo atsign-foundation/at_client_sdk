@@ -6091,3 +6091,29 @@ for a fresh process — whose stream has no listeners yet — to retry
 whole. Test-first with the gate as the injection point (it runs inside
 the request handler, strictly after emission): red showed exactly two
 emissions of one envelope, green shows one emission and one gate call.
+
+### 65.2 The substrate answers privilege through the one seam
+
+The last genuine cycle the audit named: `at_client_secret_sharing`'s
+ctor self-wired the per-enrollment request gate by constructing
+`EnrollmentServiceImpl` — substrate reaching up into the service layer
+that composes it. Cut by widening the 4d seam rather than growing a
+second one: `EnrollmentPrivilegeResolver` gains
+`isEnrollmentFullyPrivileged(enrollmentId)` — the requester-flavoured
+question the gate actually asks, where `isFullyPrivileged()` asks it
+about this client — and the record-backed implementation carries the
+substrate's old fetch-and-classify body verbatim (the self flavour now
+delegates to it). The production wiring lives in `PqClientBootstrap`'s
+constructor, beside the rest of the per-client composition, and
+deliberately NOT in a startup step: a request can arrive as soon as
+the client listens, so the gate must exist the moment the client does,
+and it is composition, not a gateable action. A directly constructed
+sharing instance now has a null gate — fail closed, exactly what the
+pairwise suite already pins for the unwired case. Pinned three ways:
+the topology test's new closure exclusion (red before the cut, green
+after), the bootstrap composition test (gate non-null, consults the
+seam with the requester's id, never the self flavour), and a
+record-backed resolver test including the no-record-is-no-privilege
+arm. The interface widening swept the one `implements` fake in the
+same edit, per the Mock-implements rule. The PairwiseSecretSharing
+mixin split stays elective, not taken — nothing here needed it.

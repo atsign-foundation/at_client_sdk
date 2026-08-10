@@ -1,12 +1,9 @@
-import 'package:at_auth/at_auth.dart' show AtEnrollment;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart';
 import 'package:at_client/src/mixins/envelope_signing.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
-import 'package:at_client/src/service/enrollment_service_impl.dart'
-    show EnrollmentServiceImpl;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
@@ -87,25 +84,17 @@ class AtClientSecretSharing
   /// Direct construction creates an independent instance with its own
   /// enc keypair. Use [forClient] unless that is what you want (tests,
   /// custom compositions).
+  /// The gate starts null — fail closed — and the production composition
+  /// installs the record-backed resolver: `PqClientBootstrap` wires
+  /// [PairwiseSecretSharing.perEnrollmentSecretRequestGate] to the client's
+  /// injected `EnrollmentPrivilegeResolver` when the client is built, so the
+  /// substrate answers privilege questions through the one seam instead of
+  /// reaching up into the service layer itself.
   AtClientSecretSharing(
     this.atClient, {
     this.publicKeyCacheSettings = const (
       cacheExpiry: Duration(minutes: 5),
       resetOnLookup: true,
     ),
-  }) {
-    perEnrollmentSecretRequestGate = _requesterIsFullyPrivileged;
-  }
-
-  /// The production gate for per-enrollment secret requests: the requester's
-  /// enrollment record — the server's word, not the requester's — must grant
-  /// write (`w`) on both `*` and `__manage`.
-  Future<bool> _requesterIsFullyPrivileged(String requesterEnrollmentId) async {
-    final theirs = (await EnrollmentServiceImpl(atClient, AtEnrollment.create())
-            .fetchEnrollmentRequests())
-        .where((e) => e.enrollmentId == requesterEnrollmentId)
-        .firstOrNull
-        ?.namespace;
-    return EnrollmentServiceImpl.isFullyPrivileged(theirs);
-  }
+  });
 }

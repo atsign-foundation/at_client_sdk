@@ -12,6 +12,14 @@ abstract interface class EnrollmentPrivilegeResolver {
   /// Whether this client's enrollment holds `rw` on both `*` and
   /// `__manage`. May cost a round trip; callers treat it as such.
   Future<bool> isFullyPrivileged();
+
+  /// Whether the enrollment named [enrollmentId] holds `rw` on both `*`
+  /// and `__manage` — the question the per-enrollment secret request gate
+  /// asks about a *requester*, where [isFullyPrivileged] asks it about
+  /// this client itself. An enrollment the implementation cannot find
+  /// answers `false`: privilege is granted by the record, so no record is
+  /// no privilege. May cost a round trip; callers treat it as such.
+  Future<bool> isEnrollmentFullyPrivileged(String enrollmentId);
 }
 
 /// Whether [namespaces] grant `rw` on both `*` and `__manage` — the class
