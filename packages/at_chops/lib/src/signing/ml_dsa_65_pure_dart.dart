@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:pqcrypto/pqcrypto.dart';
 
 /// ML-DSA-65 (FIPS 204) digital signature backed by pure-Dart
@@ -41,9 +42,14 @@ final class MlDsa65PureDartAlgo implements AtSignatureAlgorithm {
   }
 
   /// Verify [signature] over [message] against [publicKey] (raw 1952 bytes).
+  ///
+  /// Throws [AtSigningVerificationException] if the signature does not verify.
   @override
-  Future<bool> verifyBytes(Uint8List message,
+  Future<void> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
-    return MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65);
+    if (!MlDsa.verify(publicKey, message, signature, DilithiumParams.mlDsa65)) {
+      throw AtSigningVerificationException(
+          '$name signature verification failed');
+    }
   }
 }

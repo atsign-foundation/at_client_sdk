@@ -65,9 +65,10 @@ void main() {
       final Uint8List msg = Uint8List.fromList('hello pqc'.codeUnits);
       final Uint8List sig =
           await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.secretKey);
-      final bool ok = await AtPqc.mlDsa65
-          .verifyBytes(msg, signature: sig, publicKey: kp.publicKey);
-      expect(ok, isTrue);
+      await expectLater(
+          AtPqc.mlDsa65
+              .verifyBytes(msg, signature: sig, publicKey: kp.publicKey),
+          completes);
     });
 
     test('AtPqc.xWing.generateKeyPair() round-trips directly', () async {
@@ -89,10 +90,10 @@ void main() {
           Uint8List.fromList('direct facade keygen'.codeUnits);
       final Uint8List sig =
           await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.secretKey);
-      expect(
-          await AtPqc.mlDsa65
+      await expectLater(
+          AtPqc.mlDsa65
               .verifyBytes(msg, signature: sig, publicKey: kp.publicKey),
-          isTrue);
+          completes);
     });
 
     test(
@@ -115,10 +116,10 @@ void main() {
           Uint8List.fromList('cross-backend key reuse'.codeUnits);
       final Uint8List sig =
           await AtPqc.mlDsa65.signBytes(msg, secretKey: kp.secretKey);
-      expect(
-          await AtPqc.mlDsa65
+      await expectLater(
+          AtPqc.mlDsa65
               .verifyBytes(msg, signature: sig, publicKey: kp.publicKey),
-          isTrue);
+          completes);
     });
   });
 
@@ -164,9 +165,10 @@ void main() {
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
       final Uint8List sig =
           await ffiAlgo.signBytes(msg, secretKey: kp.secretKey);
-      final bool ok = await MlDsa65PureDartAlgo()
-          .verifyBytes(msg, signature: sig, publicKey: kp.publicKey);
-      expect(ok, isTrue);
+      await expectLater(
+          MlDsa65PureDartAlgo()
+              .verifyBytes(msg, signature: sig, publicKey: kp.publicKey),
+          completes);
     }, tags: ['ffi']);
 
     test('ML-DSA-65: pure-Dart sign, FFI verify', () async {
@@ -181,9 +183,9 @@ void main() {
       final Uint8List sig =
           await MlDsa65PureDartAlgo().signBytes(msg, secretKey: kp.secretKey);
       final ffiAlgo = MlDsa65FfiAlgo.fromLib(lib);
-      final bool ok = await ffiAlgo.verifyBytes(msg,
-          signature: sig, publicKey: kp.publicKey);
-      expect(ok, isTrue);
+      await expectLater(
+          ffiAlgo.verifyBytes(msg, signature: sig, publicKey: kp.publicKey),
+          completes);
     }, tags: ['ffi']);
   });
 }

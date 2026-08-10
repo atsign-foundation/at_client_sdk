@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -21,23 +22,22 @@ void main() {
       final Uint8List message = Uint8List.fromList('instance keygen'.codeUnits);
       final Uint8List sig =
           await algo.signBytes(message, secretKey: kp.secretKey);
-      expect(
-          await algo.verifyBytes(message,
-              signature: sig, publicKey: kp.publicKey),
-          isTrue);
+      await expectLater(
+          algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey),
+          completes);
     });
 
-    test('sign/verify round-trip yields true', () async {
+    test('sign/verify round-trip completes without throwing', () async {
       final algo = MlDsa65PureDartAlgo();
       final kp = await algo.generateKeyPair();
 
       final Uint8List message = Uint8List.fromList('Hello ML-DSA-65'.codeUnits);
       final Uint8List sig =
           await algo.signBytes(message, secretKey: kp.secretKey);
-      final bool ok = await algo.verifyBytes(message,
-          signature: sig, publicKey: kp.publicKey);
 
-      expect(ok, isTrue);
+      await expectLater(
+          algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey),
+          completes);
     });
 
     test('Signature has expected FIPS 204 length (3309 bytes)', () async {
@@ -51,7 +51,7 @@ void main() {
       expect(sig.length, equals(3309));
     });
 
-    test('Verifying with wrong public key returns false', () async {
+    test('Verifying with wrong public key throws', () async {
       final algo = MlDsa65PureDartAlgo();
       final kp1 = await algo.generateKeyPair();
       final kp2 = await algo.generateKeyPair();
@@ -59,13 +59,13 @@ void main() {
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
       final Uint8List sig =
           await algo.signBytes(message, secretKey: kp1.secretKey);
-      final bool ok = await algo.verifyBytes(message,
-          signature: sig, publicKey: kp2.publicKey);
 
-      expect(ok, isFalse);
+      await expectLater(
+          algo.verifyBytes(message, signature: sig, publicKey: kp2.publicKey),
+          throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('Verifying tampered message returns false', () async {
+    test('Verifying tampered message throws', () async {
       final algo = MlDsa65PureDartAlgo();
       final kp = await algo.generateKeyPair();
 
@@ -74,10 +74,9 @@ void main() {
           await algo.signBytes(message, secretKey: kp.secretKey);
 
       final Uint8List tampered = Uint8List.fromList('tampered'.codeUnits);
-      final bool ok = await algo.verifyBytes(tampered,
-          signature: sig, publicKey: kp.publicKey);
-
-      expect(ok, isFalse);
+      await expectLater(
+          algo.verifyBytes(tampered, signature: sig, publicKey: kp.publicKey),
+          throwsA(isA<AtSigningVerificationException>()));
     });
   });
 }

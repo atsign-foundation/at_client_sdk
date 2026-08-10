@@ -7,7 +7,8 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops_ffi.dart';
 // `show`: at_commons exports its own StringBuffer, which would shadow
 // dart:core's and break the loadedPath argument below.
-import 'package:at_commons/at_commons.dart' show AtSigningException;
+import 'package:at_commons/at_commons.dart'
+    show AtSigningException, AtSigningVerificationException;
 import 'package:test/test.dart';
 
 void main() {
@@ -46,9 +47,9 @@ void main() {
           await algo.signBytes(message, secretKey: kp.secretKey);
       expect(sig.length, equals(3309));
 
-      final bool ok = await algo.verifyBytes(message,
-          signature: sig, publicKey: kp.publicKey);
-      expect(ok, isTrue);
+      await expectLater(
+          algo.verifyBytes(message, signature: sig, publicKey: kp.publicKey),
+          completes);
     });
 
     test('Interop A: pure-Dart keygen → FFI sign → pure-Dart verify', () async {
@@ -67,9 +68,10 @@ void main() {
       final Uint8List sig =
           await ffiAlgo.signBytes(message, secretKey: kp.secretKey);
 
-      final bool ok = await MlDsa65PureDartAlgo()
-          .verifyBytes(message, signature: sig, publicKey: kp.publicKey);
-      expect(ok, isTrue);
+      await expectLater(
+          MlDsa65PureDartAlgo()
+              .verifyBytes(message, signature: sig, publicKey: kp.publicKey),
+          completes);
     });
 
     test('Interop B: FFI keygen → pure-Dart sign → FFI verify', () async {
@@ -88,12 +90,12 @@ void main() {
       final Uint8List sig = await MlDsa65PureDartAlgo()
           .signBytes(message, secretKey: kp.secretKey);
 
-      final bool ok = await ffiAlgo.verifyBytes(message,
-          signature: sig, publicKey: kp.publicKey);
-      expect(ok, isTrue);
+      await expectLater(
+          ffiAlgo.verifyBytes(message, signature: sig, publicKey: kp.publicKey),
+          completes);
     });
 
-    test('FFI verify returns false for tampered message', () async {
+    test('FFI verify throws for tampered message', () async {
       if (lib == null) {
         fail('libcrypto not available on this host');
       }
@@ -109,9 +111,9 @@ void main() {
           await algo.signBytes(message, secretKey: kp.secretKey);
 
       final Uint8List tampered = Uint8List.fromList('tampered'.codeUnits);
-      final bool ok = await algo.verifyBytes(tampered,
-          signature: sig, publicKey: kp.publicKey);
-      expect(ok, isFalse);
+      await expectLater(
+          algo.verifyBytes(tampered, signature: sig, publicKey: kp.publicKey),
+          throwsA(isA<AtSigningVerificationException>()));
     });
 
     test(

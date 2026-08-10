@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -11,20 +12,22 @@ void main() {
       final (:publicKey, :secretKey) = await eccAlgo.generateKeyPair();
       final message = Uint8List.fromList('Hello World'.codeUnits);
       final signature = await eccAlgo.signBytes(message, secretKey: secretKey);
-      final verifyResult = await eccAlgo.verifyBytes(message,
-          signature: signature, publicKey: publicKey);
-      expect(verifyResult, true);
+      await expectLater(
+          eccAlgo.verifyBytes(message,
+              signature: signature, publicKey: publicKey),
+          completes);
     });
     test('Test invalid ecc verification - verify with a different public key',
         () async {
       final eccAlgo = EccSigningAlgo();
-      final (:publicKey, :secretKey) = await eccAlgo.generateKeyPair();
+      final (publicKey: _, :secretKey) = await eccAlgo.generateKeyPair();
       final other = await eccAlgo.generateKeyPair();
       final message = Uint8List.fromList('Hello World'.codeUnits);
       final signature = await eccAlgo.signBytes(message, secretKey: secretKey);
-      final verifyResult = await eccAlgo.verifyBytes(message,
-          signature: signature, publicKey: other.publicKey);
-      expect(verifyResult, false);
+      await expectLater(
+          eccAlgo.verifyBytes(message,
+              signature: signature, publicKey: other.publicKey),
+          throwsA(isA<AtSigningVerificationException>()));
     });
   });
 }

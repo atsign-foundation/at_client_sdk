@@ -142,17 +142,17 @@ void main() {
     });
 
     test('the pinned signatures still verify', () async {
-      expect(
-          await RsaSigningAlgo().verifyBytes(plainText,
+      await expectLater(
+          RsaSigningAlgo().verifyBytes(plainText,
               signature: base64Decode(_rsaSignatureSha256Base64),
               publicKey: publicKey),
-          isTrue);
-      expect(
-          await RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha512)
-              .verifyBytes(plainText,
-                  signature: base64Decode(_rsaSignatureSha512Base64),
-                  publicKey: publicKey),
-          isTrue);
+          completes);
+      await expectLater(
+          RsaSigningAlgo(hashingAlgoType: HashingAlgoType.sha512).verifyBytes(
+              plainText,
+              signature: base64Decode(_rsaSignatureSha512Base64),
+              publicKey: publicKey),
+          completes);
     });
 
     test('a ciphertext written by 3.x still decrypts', () {
@@ -226,10 +226,10 @@ void main() {
         'pLAMMNgGM4okXqZBPsHwMw980E5MZA==';
 
     test('a signature written by 3.x still verifies', () async {
-      expect(
-          await EccSigningAlgo().verifyBytes(plainText,
+      await expectLater(
+          EccSigningAlgo().verifyBytes(plainText,
               signature: base64Decode(signature), publicKey: publicKey),
-          isTrue);
+          completes);
     });
 
     test('a freshly written signature verifies against the pinned public key',
@@ -240,10 +240,10 @@ void main() {
       // across the two exercises.
       final fresh =
           await EccSigningAlgo().signBytes(plainText, secretKey: privateKey);
-      expect(
-          await EccSigningAlgo()
+      await expectLater(
+          EccSigningAlgo()
               .verifyBytes(plainText, signature: fresh, publicKey: publicKey),
-          isTrue);
+          completes);
       expect(fresh, hasLength(64));
     });
 
@@ -271,18 +271,18 @@ void main() {
     });
 
     test('verifying the RFC signature succeeds', () async {
-      expect(
-          await Ed25519SigningAlgo()
+      await expectLater(
+          Ed25519SigningAlgo()
               .verifyBytes(message, signature: signature, publicKey: publicKey),
-          isTrue);
+          completes);
     });
 
     test('a flipped signature bit is rejected', () async {
       final tampered = Uint8List.fromList(signature)..first ^= 0x01;
-      expect(
-          await Ed25519SigningAlgo()
+      await expectLater(
+          Ed25519SigningAlgo()
               .verifyBytes(message, signature: tampered, publicKey: publicKey),
-          isFalse);
+          throwsA(isA<AtSigningVerificationException>()));
     });
   });
 

@@ -148,12 +148,14 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
   }
 
   /// Verify [signature] over [message] against the raw 1952-byte [publicKey].
+  ///
+  /// Throws [AtSigningVerificationException] if the signature does not verify.
   @override
-  Future<bool> verifyBytes(Uint8List message,
+  Future<void> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
     final Pointer<EVP_PKEY> pkey = _loadPublicKey(publicKey);
     try {
-      return _verify(pkey, message, signature);
+      _verify(pkey, message, signature);
     } finally {
       _pkeyFree(pkey);
     }
@@ -268,7 +270,10 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
     }
   }
 
-  bool _verify(Pointer<EVP_PKEY> pkey, Uint8List data, Uint8List signature) {
+  /// Throws [AtSigningVerificationException] if [signature] does not verify,
+  /// and [StateError] if libcrypto itself failed — `EVP_DigestVerify`
+  /// distinguishes the two (0 vs a negative return) and so do we.
+  void _verify(Pointer<EVP_PKEY> pkey, Uint8List data, Uint8List signature) {
     final Pointer<EVP_MD_CTX> ctx = _mdCtxNew();
     if (ctx == nullptr) throw StateError('EVP_MD_CTX_new failed');
     try {
@@ -283,7 +288,11 @@ final class MlDsa65FfiAlgo implements AtSignatureAlgorithm {
       try {
         final int result =
             _digestVerify(ctx, sigBuf, signature.length, dataBuf, data.length);
-        return result == 1;
+        if (result == 0) {
+          throw AtSigningVerificationException(
+              '$name signature verification failed');
+        }
+        if (result < 0) throw StateError('EVP_DigestVerify failed');
       } finally {
         calloc.free(dataBuf);
         calloc.free(sigBuf);

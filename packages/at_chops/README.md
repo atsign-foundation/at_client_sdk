@@ -123,14 +123,19 @@ The classical signing algorithms (`RsaSigningAlgo`, `EccSigningAlgo`,
 interface as the post-quantum backends — `generateKeyPair()`, `signBytes()`,
 and `verifyBytes()`, with all key material passed per call as raw bytes.
 
+`verifyBytes()` returns normally iff the signature is good. A wrong key, a
+tampered message or a forged signature throws `AtSigningVerificationException`
+rather than returning `false` — a failed verification is an error, and a
+boolean is too easy to drop on the floor.
+
 ```dart
 final signing = RsaSigningAlgo(); // SHA-256, 2048-bit by default
 final kp = await signing.generateKeyPair();
 final message = Uint8List.fromList(utf8.encode('data to sign'));
 
 final signature = await signing.signBytes(message, secretKey: kp.secretKey);
-final valid = await signing.verifyBytes(message,
-    signature: signature, publicKey: kp.publicKey);
+await signing.verifyBytes(message,
+    signature: signature, publicKey: kp.publicKey); // throws if invalid
 ```
 
 ### ML-DSA-65 (post-quantum signing, pure-Dart)
@@ -141,8 +146,8 @@ final kp = await mlDsa65.generateKeyPair();
 // kp.publicKey — 1952 bytes; kp.secretKey — 4032 bytes
 
 final signature = await mlDsa65.signBytes(message, secretKey: kp.secretKey);
-final valid =
-    await mlDsa65.verifyBytes(message, signature: signature, publicKey: kp.publicKey);
+await mlDsa65.verifyBytes(message,
+    signature: signature, publicKey: kp.publicKey); // throws if invalid
 ```
 
 ### ML-KEM-768 (post-quantum KEM, pure-Dart)
@@ -189,8 +194,8 @@ import 'package:at_chops/at_chops_ffi.dart';
 final kp = await AtPqc.mlDsa65.generateKeyPair();
 final signature =
     await AtPqc.mlDsa65.signBytes(message, secretKey: kp.secretKey);
-final valid = await AtPqc.mlDsa65.verifyBytes(message,
-    signature: signature, publicKey: kp.publicKey);
+await AtPqc.mlDsa65.verifyBytes(message,
+    signature: signature, publicKey: kp.publicKey); // throws if invalid
 
 // KEM — AtPqc.xWing is typed as AtKemAlgorithm
 final xwKp = await AtPqc.xWing.generateKeyPair();

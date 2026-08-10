@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/secure_random.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:pointycastle/api.dart'
     show
         AsymmetricKeyPair,
@@ -77,8 +78,10 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
 
   /// Verify the 64-byte compact [signature] over [message] against the
   /// uncompressed [publicKey].
+  ///
+  /// Throws [AtSigningVerificationException] if the signature does not verify.
   @override
-  Future<bool> verifyBytes(Uint8List message,
+  Future<void> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
     final signer = ECDSASigner(SHA256Digest())
       ..init(
@@ -86,10 +89,14 @@ class EccSigningAlgo implements AtSignatureAlgorithm {
           PublicKeyParameter<ECPublicKey>(
               ECPublicKey(_domain.curve.decodePoint(publicKey), _domain)));
 
-    return signer.verifySignature(
+    final verified = signer.verifySignature(
         message,
         ECSignature(_decodeScalar(signature.sublist(0, _scalarLength)),
             _decodeScalar(signature.sublist(_scalarLength))));
+    if (!verified) {
+      throw AtSigningVerificationException(
+          '$name signature verification failed');
+    }
   }
 
   /// [value] as [_scalarLength] big-endian bytes, zero-padded on the left.

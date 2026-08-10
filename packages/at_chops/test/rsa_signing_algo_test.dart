@@ -16,9 +16,10 @@ void main() {
       final (:publicKey, :secretKey) = await rsaSigningAlgo.generateKeyPair();
       final signature =
           await rsaSigningAlgo.signBytes(message, secretKey: secretKey);
-      final verifyResult = await rsaSigningAlgo.verifyBytes(message,
-          signature: signature, publicKey: publicKey);
-      expect(verifyResult, true);
+      await expectLater(
+          rsaSigningAlgo.verifyBytes(message,
+              signature: signature, publicKey: publicKey),
+          completes);
     });
     test('Test rsa signing and verification using generated rsa 4096 key pair',
         () async {
@@ -26,9 +27,10 @@ void main() {
       final (:publicKey, :secretKey) = await rsaSigningAlgo.generateKeyPair();
       final signature =
           await rsaSigningAlgo.signBytes(message, secretKey: secretKey);
-      final verifyResult = await rsaSigningAlgo.verifyBytes(message,
-          signature: signature, publicKey: publicKey);
-      expect(verifyResult, true);
+      await expectLater(
+          rsaSigningAlgo.verifyBytes(message,
+              signature: signature, publicKey: publicKey),
+          completes);
     });
     test('Test rsa signing and verification - sha512 hashing algo', () async {
       final rsaSigningAlgo =
@@ -36,9 +38,10 @@ void main() {
       final (:publicKey, :secretKey) = await rsaSigningAlgo.generateKeyPair();
       final signature =
           await rsaSigningAlgo.signBytes(message, secretKey: secretKey);
-      final verifyResult = await rsaSigningAlgo.verifyBytes(message,
-          signature: signature, publicKey: publicKey);
-      expect(verifyResult, true);
+      await expectLater(
+          rsaSigningAlgo.verifyBytes(message,
+              signature: signature, publicKey: publicKey),
+          completes);
     });
     test(
         'Test invalid rsa verification - sign with sha256 and verify with sha512',
@@ -50,9 +53,10 @@ void main() {
       final (:publicKey, :secretKey) = await sha256Algo.generateKeyPair();
       final signature =
           await sha256Algo.signBytes(message, secretKey: secretKey);
-      final verifyResult = await sha512Algo.verifyBytes(message,
-          signature: signature, publicKey: publicKey);
-      expect(verifyResult, false);
+      await expectLater(
+          sha512Algo.verifyBytes(message,
+              signature: signature, publicKey: publicKey),
+          throwsA(isA<AtSigningVerificationException>()));
     });
     test('Test rsa signing - md5 hashing algo not supported', () async {
       final rsaSigningAlgo =
@@ -81,13 +85,14 @@ void main() {
     test('Test invalid rsa verification - verify with a different public key',
         () async {
       final rsaSigningAlgo = RsaSigningAlgo();
-      final (:publicKey, :secretKey) = await rsaSigningAlgo.generateKeyPair();
+      final (publicKey: _, :secretKey) = await rsaSigningAlgo.generateKeyPair();
       final other = await rsaSigningAlgo.generateKeyPair();
       final signature =
           await rsaSigningAlgo.signBytes(message, secretKey: secretKey);
-      final verifyResult = await rsaSigningAlgo.verifyBytes(message,
-          signature: signature, publicKey: other.publicKey);
-      expect(verifyResult, false);
+      await expectLater(
+          rsaSigningAlgo.verifyBytes(message,
+              signature: signature, publicKey: other.publicKey),
+          throwsA(isA<AtSigningVerificationException>()));
     });
   });
 }

@@ -83,8 +83,10 @@ class RsaSigningAlgo implements AtSignatureAlgorithm {
   }
 
   /// Verify [signature] over [message] against the DER-encoded [publicKey].
+  ///
+  /// Throws [AtSigningVerificationException] if the signature does not verify.
   @override
-  Future<bool> verifyBytes(Uint8List message,
+  Future<void> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
     final signer = _signer(() => AtSigningVerificationException(
         'Invalid hashing algo $_hashingAlgoType provided'))
@@ -92,7 +94,10 @@ class RsaSigningAlgo implements AtSignatureAlgorithm {
           false,
           PublicKeyParameter<RSAPublicKey>(
               RsaKeyCodec.decodePublicKey(publicKey)));
-    return signer.verifySignature(message, RSASignature(signature));
+    if (!signer.verifySignature(message, RSASignature(signature))) {
+      throw AtSigningVerificationException(
+          '$name signature verification failed');
+    }
   }
 
   /// A signer for [_hashingAlgoType], which must be SHA-256 or SHA-512 — the

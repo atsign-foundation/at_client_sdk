@@ -4,6 +4,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/at_iv.dart';
 import 'package:at_chops/src/hashing/types.dart';
+import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 
 /// The umbrella every at_chops algorithm sits under.
 ///
@@ -77,9 +78,21 @@ abstract class AtSignatureAlgorithm implements AtAlgorithm {
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey});
 
-  /// Returns `true` if [signature] was produced over [message] with the
-  /// private key corresponding to [publicKey].
-  Future<bool> verifyBytes(Uint8List message,
+  /// Verifies that [signature] was produced over [message] with the private
+  /// key corresponding to [publicKey]. Returns normally iff it was.
+  ///
+  /// Throws [AtSigningVerificationException] if it was not — a wrong key, a
+  /// tampered message, a forged signature, or a digest this implementation
+  /// cannot use. A failed verification is an error, not a result: returning
+  /// `false` invites call sites to ignore it, and one in the SDK did exactly
+  /// that. Implementations must not return normally on any outcome other than
+  /// a good signature.
+  ///
+  /// Malformed key or signature *bytes* — a short scalar, an invalid curve
+  /// point — are caller errors rather than verification failures, and surface
+  /// as whatever the backend raises, typically [ArgumentError] or
+  /// [RangeError].
+  Future<void> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey});
 }
 

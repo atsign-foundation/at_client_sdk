@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
@@ -12,21 +13,23 @@ void main() {
       final message = Uint8List.fromList('Hello World@123!'.codeUnits);
       final signature =
           await signingAlgo.signBytes(message, secretKey: secretKey);
-      final verifyResult = await signingAlgo.verifyBytes(message,
-          signature: signature, publicKey: publicKey);
-      expect(verifyResult, true);
+      await expectLater(
+          signingAlgo.verifyBytes(message,
+              signature: signature, publicKey: publicKey),
+          completes);
     });
     test('Test data signing and verification - verify with a different key',
         () async {
       final signingAlgo = Ed25519SigningAlgo();
-      final (:publicKey, :secretKey) = await signingAlgo.generateKeyPair();
+      final (publicKey: _, :secretKey) = await signingAlgo.generateKeyPair();
       final other = await signingAlgo.generateKeyPair();
       final message = Uint8List.fromList('Hello World@123!'.codeUnits);
       final signature =
           await signingAlgo.signBytes(message, secretKey: secretKey);
-      final verifyResult = await signingAlgo.verifyBytes(message,
-          signature: signature, publicKey: other.publicKey);
-      expect(verifyResult, false);
+      await expectLater(
+          signingAlgo.verifyBytes(message,
+              signature: signature, publicKey: other.publicKey),
+          throwsA(isA<AtSigningVerificationException>()));
     });
   });
 }

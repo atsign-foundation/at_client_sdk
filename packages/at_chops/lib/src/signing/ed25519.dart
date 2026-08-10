@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:cryptography/cryptography.dart';
 
 /// Ed25519 (RFC 8032) digital signatures.
@@ -42,15 +43,21 @@ class Ed25519SigningAlgo implements AtSignatureAlgorithm {
   }
 
   /// Verify [signature] over [message] against the 32-byte [publicKey].
+  ///
+  /// Throws [AtSigningVerificationException] if the signature does not verify.
   @override
-  Future<bool> verifyBytes(Uint8List message,
+  Future<void> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
-    return _algorithm.verify(
+    final verified = await _algorithm.verify(
       message,
       signature: Signature(
         signature,
         publicKey: SimplePublicKey(publicKey, type: KeyPairType.ed25519),
       ),
     );
+    if (!verified) {
+      throw AtSigningVerificationException(
+          '$name signature verification failed');
+    }
   }
 }

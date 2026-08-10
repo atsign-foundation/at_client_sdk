@@ -34,8 +34,10 @@ Future<void> _mlDsa65RoundTrip() async {
   final Uint8List message = Uint8List.fromList(utf8.encode('hello pqc'));
   final Uint8List signature =
       await AtPqc.mlDsa65.signBytes(message, secretKey: kp.secretKey);
-  final bool ok = await AtPqc.mlDsa65
+  // verifyBytes returns normally iff the signature is good — a bad one throws
+  // AtSigningVerificationException rather than returning false.
+  await AtPqc.mlDsa65
       .verifyBytes(message, signature: signature, publicKey: kp.publicKey);
 
-  print('ML-DSA-65 signature verified: $ok');
+  print('ML-DSA-65 signature verified');
 }
