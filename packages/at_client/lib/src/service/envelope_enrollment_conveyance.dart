@@ -175,19 +175,40 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     return status;
   }
 
-  /// The chain sweep of `decisions.md` 38, decision 3 — see
+  /// The anchoring sweep — see
   /// [EnrollmentConveyance.sweepUnanchoredEnrollments] for why it exists and
   /// who may run it.
+  ///
+  /// The sweeper's privilege is the caller's gate, and that class signs
+  /// **root** links: the private is read from this client's keys, and a
+  /// fully privileged client that has not received it yet conveys nothing —
+  /// possession heals by pulling at the next start, and a chain link from
+  /// the entitled class would demote the design, not bridge it.
   @override
   Future<int> sweepUnanchoredEnrollments() async {
     final sharing = AtClientSecretSharing.forClient(_atClient);
     if (!sharing.isRegistered) {
       // Sealing a conveyance stamps this client's own key package id, so an
       // unregistered sweeper cannot convey anything it signs.
-      _logger.info('Not sweeping chain links: this client has no registered '
+      _logger.info('Not sweeping root links: this client has no registered '
           'key package to seal conveyances from');
       return 0;
     }
+
+    // Possession is checked before the roster fetch because it is a local
+    // AtKeys read where the fetch costs a round trip — and without the
+    // private there is nothing this sweep may sign.
+    final atSign = _atClient.getCurrentAtSign()!;
+    final rootPrivate =
+        await PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo)
+            .privateHalf(atSign);
+    if (rootPrivate == null) {
+      _logger.warning('Not sweeping root links: this client holds no '
+          'signing-root private yet; the pull at its next start heals '
+          'possession first');
+      return 0;
+    }
+
     final ownEnrollmentId =
         _atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
 
@@ -201,9 +222,9 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
       final id = enrollment.enrollmentId;
       if (id == null || id == ownEnrollmentId) continue;
       try {
-        // Already vouched for, either way: a chain link, or a direct root
-        // anchor (a privileged enrollment that holds the root needs no hop).
-        if (await chain.readLink(id) != null) continue;
+        // Root-anchored is the terminal state. A chain link alone does NOT
+        // skip: it is provisional, and upgrading it to a root anchor is as
+        // much this sweep's job as anchoring the unsigned.
         if (await chain.readRootLink(id) != null) continue;
 
         // No key package, no conveyance channel: a legacy enrollment cannot
@@ -213,31 +234,31 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
         final (keyPackage, status) = await verifyAdvertisedKeyPackage(
           advertised,
           signer: AtClientEnvelopeSigner(_atClient),
-          signerAtSign: _atClient.getCurrentAtSign()!,
+          signerAtSign: atSign,
           enrollmentId: id,
         );
         if (keyPackage == null || status == KeyPackageStatus.rejected) {
           continue;
         }
 
-        final link = await chain.signLinkFor(sharing, id);
+        final link = await chain.signRootLinkFor(id, rootPrivate: rootPrivate);
         if (link == null) continue;
         await sharing.shareSecretWith(
             keyPackage,
             Secret(
               namespace: _conveyanceNamespaceFor(enrollment),
-              name: PqSigningChain.linkSecretName,
+              name: PqSigningChain.rootLinkSecretName,
               value: PqSigningChain.encodeLink(link),
             ));
         conveyed++;
       } catch (e) {
         // One enrollment failing must not stop the sweep; it is retried at
         // every privileged start.
-        _logger.warning('Could not sweep a chain link for enrollment $id: $e');
+        _logger.warning('Could not sweep a root link for enrollment $id: $e');
       }
     }
     if (conveyed > 0) {
-      _logger.info('Swept chain links to $conveyed unanchored enrollment(s); '
+      _logger.info('Swept root links to $conveyed unanchored enrollment(s); '
           'each stamps its own _apsk at its next start');
     }
     return conveyed;

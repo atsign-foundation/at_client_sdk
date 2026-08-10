@@ -139,6 +139,7 @@ void main() {
       expect(enrollmentApkamSymmetricKeySecretName, '__en.apkamSymmetricKey');
       expect(PqSigningRoot.secretName, '__en.pqSigningRoot');
       expect(PqSigningChain.linkSecretName, '__en.apskChainLink');
+      expect(PqSigningChain.rootLinkSecretName, '__en.apskRootLink');
       expect(NskeyPrivateFiling.secretNamePrefix, '__nskey.');
     });
 

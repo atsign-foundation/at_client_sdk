@@ -223,8 +223,12 @@ void main() {
     });
 
     final keysIo = _RecordingAtKeysIo(inner, events);
-    await startClient(keysIo);
-    await untilEvent('cmd:enroll:list');
+    final client = await startClient(keysIo);
+    // Not untilEvent('cmd:enroll:list'): with the orphaned private retired,
+    // the sweep has nothing to sign root links with and correctly never
+    // fetches the roster — so the completion signal must not depend on
+    // which way the last step went.
+    await (client as AtClientImpl).pqBootstrap!.startupComplete;
 
     // Retired: the active private is gone from the keyfile...
     final keysAfter = await inner.read(atSign);

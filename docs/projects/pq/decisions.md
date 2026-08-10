@@ -6140,3 +6140,49 @@ red-proofed with a single-token flip of the null-bang, which sends
 both arms through the old path; restored by inverse edit, not
 `git checkout`, because the file was uncommitted — the lesson of this
 morning's self-inflicted rewrite applied.
+
+## 67. Workstream B(i): the sweep anchors to the root (2026-08-10)
+
+**Status:** accepted; design change, ruled during the 2026-08-09 plan
+grilling and sharpened by Gary 2026-08-10: **the class that signs root
+links is ANY fully privileged enrollment** — `rw` on `*` and `__manage`,
+the class entitled to hold the signing root — **and that class signs
+root links INSTEAD OF chain links.** Privilege decides; possession is
+the signer's responsibility: a fully privileged sweeper that has not
+yet received the root private conveys *nothing* (the every-start pull
+heals possession), because a chain link from the entitled class would
+demote the design rather than bridge it. Chain links remain what a
+non-fully-privileged approver produces — a provisional fast-path — and
+the sweep now UPGRADES them: only a published *root* link skips an
+enrollment, where the old sweep skipped chain-linked ones and made
+chained-but-unanchored a terminal state.
+
+Mechanics: `PqSigningChain.signRootLinkFor(child, rootPrivate:)` signs
+the same link payload with the root ML-DSA key in the same shape
+`publishOwnRootLink` publishes and `_checkRootLink` verifies — one
+codec (`_rootLinkOver`), shared by all three. The conveyance rides a
+new reserved secret name `__en.apskRootLink` (raw-literal pinned),
+distinct from the chain flavour for the same reason `rootLinkField` is
+its own field: the name settles which validation runs before anything
+is decoded. `publishPendingLink` now stamps both flavours; a conveyed
+root link is stamped ONLY after verifying against the published
+signing root — the substrate authenticates the sender, and the sender
+is not the root — plus the names-this-enrollment and
+covers-the-published-key checks every link gets.
+
+Differential proof: the three sweep arms (anchor, upgrade, no-private)
+went red against the old code for exactly the ruled reasons — no root
+link stamped, upgrade skipped, a chain link conveyed by a keyless
+sweeper — and the receiver refuses a forged root link with a genuine
+root published, so the refusal is attributable to the signature. The
+anchor arm asserts `ChainVerdict.anchored` through real ML-DSA
+verification, not link presence. Two startup rigs were re-sentineled
+in the same commit: the inertness rig grepped the renamed skip line,
+and the call-order rig's orphaned-private arm awaited the roster fetch
+that a possession-gated sweep correctly never issues — it now awaits
+`startupComplete`, the completion future built in 4d (the rig's "no
+completion future" comment predated it). The unit fixture builds the
+entitled state directly rather than through `mintIfAbsent`, whose
+publish rides `executeVerb` — a verb the remote-backed mock does not
+model; its lost-create reconciliation silently retires the pair there,
+which the probe test established before the fixture was redesigned.

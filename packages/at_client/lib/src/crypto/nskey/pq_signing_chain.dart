@@ -115,6 +115,14 @@ class PqSigningChain {
   /// before it reads anything else.
   static const String rootLinkField = 'apskRootLink';
 
+  /// Reserved [Secret] name for a conveyed **root** link.
+  ///
+  /// Its own name for the same reason [rootLinkField] is its own field: which
+  /// flavour arrived decides which validation runs and which field is
+  /// stamped, and the name settles that before anything is decoded.
+  static const String rootLinkSecretName =
+      '${PairwiseSecretSharing.perEnrollmentSecretPrefix}apskRootLink';
+
   /// Signature algorithm marker on a root link: the compact
   /// pkam/enrollment/keyfile spelling, not the hyphenated `ml-dsa-65` the
   /// immutable root *record* carries ([PqSigningRoot.rootKeyAlgo]).
@@ -178,6 +186,66 @@ class PqSigningChain {
       childEnrollmentId: childEnrollmentId,
       childApkamPublicKey: childKey,
     ));
+  }
+
+  /// Signs a **root** link vouching for [childEnrollmentId], for a fully
+  /// privileged client to convey.
+  ///
+  /// The class that signs root links is decided by *privilege*, not by
+  /// possession: any fully privileged enrollment (`rw` on `*` and
+  /// `__manage`) anchors the enrollments it vouches for directly to the
+  /// signing root — one hop, verified against the published root — rather
+  /// than signing chain links attributed to itself. The caller supplies
+  /// [rootPrivate] because privilege is its gate and possession is its
+  /// responsibility; a privileged client that has not yet received the
+  /// private heals that by pulling, not by demoting to a chain link.
+  ///
+  /// Reads the child's key from the record the **atServer** published,
+  /// exactly as [signLinkFor] does and for the same reason. Returns null
+  /// when the child's `_apsk` is not readable.
+  Future<Map<String, Object?>?> signRootLinkFor(
+    String childEnrollmentId, {
+    required Uint8List rootPrivate,
+  }) async {
+    final atSign = _atClient.getCurrentAtSign()!;
+    final String childKey;
+    try {
+      final value = await _atClient.get(
+        AtKey.fromString(apskUri(atSign, childEnrollmentId)),
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+      childKey = value.value as String;
+    } catch (e) {
+      _logger.warning('No readable _apsk for enrollment $childEnrollmentId, '
+          'so no root link was signed for it; it stays unsigned: $e');
+      return null;
+    }
+
+    return _rootLinkOver(
+      linkPayload(
+        childEnrollmentId: childEnrollmentId,
+        childApkamPublicKey: childKey,
+      ),
+      rootPrivate,
+    );
+  }
+
+  /// The published root-link shape over [payload]: the one codec
+  /// [publishOwnRootLink], [signRootLinkFor] and [_checkRootLink] agree on.
+  static Future<Map<String, Object?>> _rootLinkOver(
+    Map<String, Object?> payload,
+    Uint8List rootPrivate,
+  ) async {
+    final signature = await MlDsa65PureDartAlgo().signBytes(
+      Uint8List.fromList(utf8.encode(signableTextOf(payload))),
+      secretKey: rootPrivate,
+    );
+    return {
+      'v': 1,
+      'alg': rootLinkAlgo,
+      'payload': payload,
+      'signature': base64Encode(signature),
+    };
   }
 
   /// Stamps a conveyed [link] onto this enrollment's own `_apsk`.
@@ -338,25 +406,15 @@ class PqSigningChain {
 
     if (_fieldFrom(current, rootLinkField) != null) return false;
 
-    final payload = linkPayload(
-      childEnrollmentId: enrollmentId,
-      childApkamPublicKey: current.value as String,
-    );
-    final signature = await MlDsa65PureDartAlgo().signBytes(
-      Uint8List.fromList(utf8.encode(signableTextOf(payload))),
-      secretKey: private,
+    final link = await _rootLinkOver(
+      linkPayload(
+        childEnrollmentId: enrollmentId,
+        childApkamPublicKey: current.value as String,
+      ),
+      private,
     );
 
-    await _publishInto(
-        enrollmentId,
-        rootLinkField,
-        {
-          'v': 1,
-          'alg': rootLinkAlgo,
-          'payload': payload,
-          'signature': base64Encode(signature),
-        },
-        current: current);
+    await _publishInto(enrollmentId, rootLinkField, link, current: current);
     _logger.info('Anchored $enrollmentId to the signing root');
     return true;
   }
@@ -367,8 +425,9 @@ class PqSigningChain {
   ) async =>
       _readField(enrollmentId, rootLinkField);
 
-  /// Publishes the chain link this enrollment was conveyed, if one is waiting
-  /// and its key does not already carry it. Returns whether it published.
+  /// Publishes the links this enrollment was conveyed — a root link, a chain
+  /// link, or both — if any is waiting and its key does not already carry it.
+  /// Returns whether anything was published.
   ///
   /// Self-gating: an enrollment nobody vouched for has no link in its store and
   /// this writes nothing, so it costs a client that will never have one an
@@ -378,6 +437,109 @@ class PqSigningChain {
   /// rather than immediately — the same trade the namespace-key seeding makes,
   /// and acceptable for the same reason: until it lands the enrollment is
   /// simply unsigned, which verifiers tolerate during the changeover.
+  ///
+  /// The two flavours coexist on the record ([linkField], [rootLinkField]) and
+  /// a verifier prefers the root one, so stamping both loses nothing.
+  Future<bool> publishPendingLink() async {
+    final rootPublished = await _publishPendingRootLink();
+    final chainPublished = await _publishPendingChainLink();
+    return rootPublished || chainPublished;
+  }
+
+  /// Stamps a conveyed **root** link, after verifying it the way a downstream
+  /// verifier will.
+  ///
+  /// The conveyance channel authenticates the *sender*, and the sender is not
+  /// the root — so the link is verified against the published signing root
+  /// before it is stamped, plus the same two checks every link gets: it names
+  /// **this** enrollment, and it vouches for the key actually published. A
+  /// link that fails any of them is refused rather than published as
+  /// something no verifier could follow.
+  Future<bool> _publishPendingRootLink() async {
+    final sharing = AtClientSecretSharing.forClient(_atClient);
+    final atSign = _atClient.getCurrentAtSign()!;
+    final enrollmentId = sharing.enrollmentId;
+
+    final secret = sharing.secretStore
+        .listSecrets()
+        .where((s) => s.name == rootLinkSecretName)
+        .firstOrNull;
+    if (secret == null) return false;
+
+    final Map<String, Object?> link;
+    final Map payload;
+    try {
+      link = decodeConveyedLink(secret.value);
+      payload = link['payload'] as Map;
+    } catch (e) {
+      _logger.warning('Conveyed root link is malformed; not publishing: $e');
+      return false;
+    }
+
+    if (payload['childEnrollmentId'] != enrollmentId) {
+      _logger.warning('Conveyed root link vouches for enrollment '
+          '${payload['childEnrollmentId']}, not for $enrollmentId; not '
+          'publishing it here');
+      return false;
+    }
+
+    final rootKey = await _rootPublicKey(atSign);
+    if (rootKey == null) {
+      _logger.warning('A root link was conveyed but $atSign publishes no '
+          'signing root to verify it against; not publishing an unverifiable '
+          'link');
+      return false;
+    }
+    final bool verifies;
+    try {
+      verifies = await MlDsa65PureDartAlgo().verifyBytes(
+        Uint8List.fromList(
+            utf8.encode(signableTextOf(payload.cast<String, Object?>()))),
+        signature: base64Decode(link['signature'] as String),
+        publicKey: rootKey,
+      );
+    } catch (e) {
+      _logger.warning('Conveyed root link could not be checked; not '
+          'publishing: $e');
+      return false;
+    }
+    if (!verifies) {
+      _logger.warning('Conveyed root link does not verify against the '
+          "atSign's signing root, so publishing it would advertise a link no "
+          'verifier can follow');
+      return false;
+    }
+
+    final AtValue current;
+    try {
+      current = await _atClient.get(
+        AtKey.fromString(apskUri(atSign, enrollmentId)),
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+    } catch (e) {
+      _logger.warning('This enrollment has no readable _apsk to publish a '
+          'root link onto: $e');
+      return false;
+    }
+
+    if (payload['apkamPublicKey'] != current.value) {
+      _logger.warning('Conveyed root link vouches for a key that is not the '
+          'one published for $enrollmentId; not publishing it');
+      return false;
+    }
+
+    final existing = _fieldFrom(current, rootLinkField);
+    if (existing != null && existing['signature'] == link['signature']) {
+      return false;
+    }
+
+    await _publishInto(enrollmentId, rootLinkField, link, current: current);
+    _logger.info('Anchored $enrollmentId to the signing root via a conveyed '
+        'root link');
+    return true;
+  }
+
+  /// Stamps a conveyed chain link.
   ///
   /// Three things are checked before anything is written, because this record
   /// is the enrollment's published identity and a bad link on it is worse than
@@ -389,7 +551,7 @@ class PqSigningChain {
   ///   verified downstream is not published as though it could;
   /// - the key it vouches for is the key actually published, so a link that
   ///   silently covers something else is refused.
-  Future<bool> publishPendingLink() async {
+  Future<bool> _publishPendingChainLink() async {
     final sharing = AtClientSecretSharing.forClient(_atClient);
     final atSign = _atClient.getCurrentAtSign()!;
     final enrollmentId = sharing.enrollmentId;

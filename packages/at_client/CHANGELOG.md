@@ -1,4 +1,13 @@
 ## 3.14.1
+- feat: the unanchored-enrollment sweep signs **root** links instead of
+  chain links, and upgrades enrollments carrying only a provisional chain
+  link. Any fully privileged enrollment (`rw` on `*` and `__manage`) —
+  the class entitled to hold the signing root — anchors the enrollments
+  it vouches for directly to the root, one ML-DSA-verified hop, rather
+  than adding a chain hop attributed to itself; a privileged sweeper
+  that has not yet received the root private conveys nothing and heals
+  by pulling. A conveyed root link is verified against the published
+  signing root before the receiving enrollment stamps it.
 - fix: a conveyance refusal no longer discards the approval it follows.
   When a server-side approval succeeds but the secret conveyance to the
   new device refuses — a key package that does not verify, an approver

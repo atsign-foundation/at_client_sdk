@@ -37,24 +37,28 @@ abstract interface class EnrollmentConveyance {
   Future<KeyPackageStatus> conveySecretsTo(Enrollment enrollment,
       {String? mintedApkamSymmetricKey});
 
-  /// Signs and conveys approval-chain links for approved enrollments that
-  /// lack one.
+  /// Signs and conveys **root** links for approved enrollments that are not
+  /// yet root-anchored.
   ///
   /// A scoped enrollment can never anchor itself (not fully privileged —
-  /// correctly), and its approver is often the legacy parent enrollment,
-  /// which can sign nothing. Left alone, *chained-but-unanchored is its
-  /// permanent state*, costing the defence-in-depth the chain exists for. A
-  /// fully privileged client is the one party that can repair that, so it
-  /// sweeps: every approved enrollment with a discoverable key package and
-  /// no published link gets one signed and conveyed. The enrollment stamps
-  /// it onto its own `_apsk` at its next start — this client cannot stamp
-  /// it directly, because `_apsk` accepts writes only from its own
-  /// enrollment's connection, and that restriction is the very guarantee
-  /// the chain hangs off.
+  /// correctly), and its approver may have been the legacy parent
+  /// enrollment, which can sign nothing, or a non-privileged approver, which
+  /// signs only a provisional chain link. Left alone, unanchored — or
+  /// chained-but-unanchored — is its permanent state, costing the
+  /// defence-in-depth the anchoring exists for. A fully privileged client
+  /// (`rw` on `*` and `__manage` — the class entitled to hold the signing
+  /// root) is the one party that can repair that, so it sweeps: every
+  /// approved enrollment with a discoverable key package and no published
+  /// *root* link gets one signed with the root private and conveyed, an
+  /// upgrade for the chain-linked and a first anchor for the unsigned
+  /// alike. The enrollment verifies it against the published signing root
+  /// and stamps it onto its own `_apsk` at its next start — this client
+  /// cannot stamp it directly, because `_apsk` accepts writes only from its
+  /// own enrollment's connection, and that restriction is the very
+  /// guarantee the anchoring hangs off.
   ///
-  /// The caller is responsible for privilege: a link signed by an
-  /// unanchored enrollment adds a hop without reaching the root. Returns
-  /// how many links were conveyed.
+  /// The caller is responsible for privilege. Returns how many links were
+  /// conveyed.
   Future<int> sweepUnanchoredEnrollments();
 }
 

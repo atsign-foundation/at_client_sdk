@@ -80,14 +80,15 @@ void main() {
   });
 
   /// Waits until the startup chain's LAST step has spoken: the privileged
-  /// chain sweep either skips (its keyless log line) or proceeds (its
-  /// enroll:list wire command — the regression path, whose writes the
-  /// assertions then catch). Fails at [timeout] with everything observed.
+  /// anchoring sweep either skips (one of its "Not sweeping" log lines) or
+  /// proceeds (its enroll:list wire command — the regression path, whose
+  /// writes the assertions then catch). Fails at [timeout] with everything
+  /// observed.
   Future<void> untilStartupChainDone(
       {Duration timeout = const Duration(seconds: 15)}) async {
     final deadline = DateTime.now().add(timeout);
     bool done() =>
-        log.messages.any((m) => m.contains('Not sweeping chain links')) ||
+        log.messages.any((m) => m.contains('Not sweeping')) ||
         log.messages.any((m) => m.contains('The chain sweep failed')) ||
         events.any((e) => e.startsWith('cmd:enroll:list'));
     while (!done()) {
