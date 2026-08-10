@@ -304,6 +304,26 @@ reaches the other privileged enrollments over the substrate. Immutability is wha
 two of them minting two roots — unrecoverable, since the root never rotates. Lifecycle
 in [§2.5](#25-the-authenticated-self-retrofit-flow-fresh-auto-approved-enrollment).
 
+**One key per advertisement, and the assumption that rests on.** The record
+carries a single `publicKey` with a single `alg`. A sender gets no choice: if the
+advertised algorithm is not the KEM its provider handles, it refuses rather than
+falling back, since encapsulating under the wrong KEM produces a conveyance the
+owner could never open. That restricts nobody *while every build carries every
+KEM*, which is true today because both shipped in one codebase
+([decisions.md §50.2](decisions.md#502-the-sender-follows-the-recipient-so-configuring-a-kem-restricts-nobody)).
+
+It stops being true the moment a **third** KEM is added, or a consumer pins an
+older `at_client` than its peer. From then on, a recipient who rotates to the
+newer algorithm stops every sender that has not shipped it, and those senders
+recover only when *they* upgrade — a flag day imposed on senders by a recipient,
+which is the failure
+[§1.8](#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d)
+exists to prevent. `suites` gives agility over the *construction*; nothing gives
+it over the KEM. The direction of travel is a set-valued `keys[]` on the
+advertisement, mirroring the key package, added while no advertisement has been
+published anywhere and the change is still a shape rather than a migration:
+[decisions.md §76](decisions.md#76-the-nskey-advertises-one-kem-key-and-50s-premise-is-a-release-property-2026-08-10).
+
 ### 1.5 The CK model, cache, ckKid & appMetadata encoding
 
 **`appMetadata` encoding — carries `ns`, and on a data value `ckNs` too**

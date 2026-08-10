@@ -6725,3 +6725,155 @@ the shared rule lives in one private helper.
   deny and revoke paths, so reading `decision.encryptedAPKAMSymmetricKey` on
   one of those throws `LateInitializationError`. Nothing reads it there
   today. A 4.0 job, recorded here so it is not rediscovered as a surprise.
+
+## 76. The nskey advertises one KEM key, and §50's premise is a release property (2026-08-10)
+
+**Status:** open, tracked as
+[#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135) under
+the [#1889](https://github.com/atsign-foundation/at_client_sdk/issues/1889)
+tree. Recorded as a defect and an intent, not as a mechanism. Nothing is
+built, and the shape below is where the reasoning points rather than a ruling
+on how it lands.
+
+**What [§50](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
+settled, and why it held.** An nskey advertisement carries exactly one key:
+`publicKey` and `alg` are both singular, and a sender gets no choice about
+either — `NskeyProvider.encrypt` throws when the advertised `alg` is not the
+KEM its provider handles, because encapsulating under the wrong KEM produces
+a conveyance the owner could never open. §50.2 says that restricts nobody,
+and gives the reason: *"every build produces and opens both, and the
+recipient's advertised `alg` is what decides"*. That is exactly right, and
+the single-key record is the simplest thing that works under it.
+
+**The premise is a property of this release, not an invariant.** Both KEMs
+shipped in one codebase, so today every sender does carry both. Two things
+break that, and neither is exotic: a **third** KEM added later, which no
+build predating it can seal to; and a consumer **pinning** an older
+`at_client` than the recipient's. From that moment a recipient who rotates
+to the newer algorithm stops every sender that has not shipped it, and those
+senders recover only when *they* upgrade. That is worse than cold start,
+which heals when the recipient acts. It is a flag day imposed on senders by
+a recipient, and it is the one failure the rollout model in
+[§1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d)
+exists to prevent. `suites` gives agility over the construction; nothing
+gives it over the KEM.
+
+So §50 is not being overturned. What is being removed is its precondition:
+that the KEM set is frozen and every client carries all of it.
+
+**Why now.** No atSign has published an nskey advertisement, since PQ is
+unreleased. Widening the record today is a shape change; later it is a
+migration of live records, and the cost only grows.
+
+**Where the reasoning points.** Mirror the key package, which faced the same
+question and is the precedent worth copying:
+
+- `keys: [{kid, alg, pub}]` on the advertisement payload, **additive at
+  `v: 1`**. `publicKey` and `alg` stay populated with the entry the oldest
+  readers can use, so a reader predating the field ignores `keys` and still
+  works. An absent `keys` means the singleton those two fields describe, and
+  that default must never grow, for the same reason `legacyNskeySuites`
+  must not.
+- Sender selection copies `pairwise_secret_sharing.dart` exactly: choose the
+  key first by the *sender's* own preference order, then narrow the candidate
+  suites to `openableSuitesFor(chosenKey.alg)` before intersecting with what
+  the recipient advertised. Choosing a suite from the union across keys would
+  let a sender pick the X-Wing key and an ML-KEM construction.
+- `keys` is derived from what the holder **actually minted and can
+  decapsulate**, never from the build's supported list. Widening a supported
+  list is what made every key package claim a construction its key could not
+  open, and this is the same field shape, so it is the same trap.
+- Mint becomes a **union under `_nskeylock`**: add this enrollment's
+  algorithm if absent, never replace the record. That also fixes an existing
+  wart, since today's mint is a race whose loser silently inherits the
+  winner's algorithm.
+
+**This does not soften [§50.3](#503-the-kem-is-configured-the-construction-is-negotiated).**
+The KEM stays configured and the construction stays negotiated. A recipient
+still declares what it is a recipient *for*; it may now declare more than one
+thing. The sender chooses among keys the recipient actually holds, by its own
+fixed preference order, which is the opposite of the peer dictating the
+sender's algorithm downward.
+
+**What a set does not buy.** It does not remove the cutover. Senders choose
+by their own preference order, so an atSign advertising both algorithms keeps
+being sealed to under the old one until it **drops** the old entry. The set
+separates "can seal with the new" from "must seal with the new", which is the
+same asymmetry the provider seam gives on the data path: add, wait, drop.
+
+**Who operates it.** The nskey belongs to the `(atSign, namespace)`, not to
+an app, and several enrollments share one. An app chooses what it *adds* and
+what it *prefers as a sender*. **Dropping** an algorithm is an atSign-level
+decision, because dropping is the step that breaks senders, and no single app
+is entitled to take it on the atSign's behalf.
+
+**Blast radius, if built.** Everything beneath the advertisement is already
+keyed by `nskeyKid` — `privateHalf(owner, ns, kid)`, the keyfile id
+`nskey.<ns>.<kid>`, the secret name `__nskey.<kid>`, the conveyance's
+`appMetadata.nskeyKid`, `__ckcur`, and the ring's retention of superseded
+generations. Five places assume singularity: the record shape,
+`NskeyKeyRing.currentPublic`, `NskeyProvider.encrypt`'s algorithm guard,
+`CkManager`'s routing by `advertised.alg`, and mint/rotate. The conveyance
+cost scales by the size of the set on push, pull and approve-time sharing, so
+a set is a migration window rather than a permanent posture.
+
+## 77. Phase 5: the CLI stops hand-building its keyfile (2026-08-10)
+
+**Status:** accepted, ruled before the change (Gary, 2026-08-10). The ruling
+is written first because this one moves an at-rest shape that real users
+already hold.
+
+`AtOnboardingServiceImpl` reads its keyfile through `FileAtKeysIo` — that is
+what `authenticate()` has always done — and writes it by hand, assembling a
+flat map, self-encrypting four values and encoding a passphrase envelope of
+its own. So the CLI is the second writer of a format at_auth owns, and the
+one that cannot file typed PQ material at all.
+
+**The diff was captured, not reasoned about.** A throwaway probe wrote one
+`AtKeys` both ways and compared the documents:
+
+- The four self-encrypted legacy values (`aesPkamPublicKey`,
+  `aesPkamPrivateKey`, `aesEncryptPublicKey`, `aesEncryptPrivateKey`) are
+  **byte-identical** — same AES-256 under the self-encryption key, same
+  legacy IV. `selfEncryptionKey`, `apkamSymmetricKey` and `enrollmentId`
+  match too.
+- The store adds three top-level fields: `version`, `atsign`, `keys` (an
+  empty array when there is no typed material). Additive; `AtKeys.fromJson`
+  accepts documents with and without them.
+- The store drops one: the **atSign-keyed duplicate of the self-encryption
+  key** (`"@alice": "<selfEncryptionKey>"`). It survives a read — the store
+  parks unknown top-level keys in `AtKeys.metadata` and re-emits them — but
+  a freshly built `AtKeys` has no metadata to emit it from. The CLI puts it
+  there explicitly before writing. Nothing in this repo reads it; it is in
+  every `.atKeys` file in existence, which is reason enough.
+- The store reads a CLI-written file correctly, with the atSign-keyed entry
+  landing in `metadata`.
+
+**The passphrase envelope is a one-way door, and Gary took it knowingly.**
+The store's v1 envelope decodes the CLI's current one (that is the
+documented no-`v` legacy path), but at_chops' `AtKeysCrypto` **cannot**
+decode a v1 envelope — the probe fails with `Invalid or corrupted pad
+block`. So a passphrase-protected keyfile written after this change needs
+at_auth 3.4.0 or newer to open, and `AtOnboardingPreference.hashingAlgoType`
+becomes inert, v1 being argon2id-only. What is bought is the reason v1
+exists: v1 salts per file, where the legacy derivation used the passphrase
+itself as the salt, so two users who chose the same passphrase derived the
+same AES key and one precomputation served both. `AtKeysCrypto` is already
+`@Deprecated('This will be moved to at_auth')` — this is the move.
+Passphrase files are opt-in, so the blast radius is the users who set one.
+
+**Two mechanics worth recording:**
+
+- `write` is create-only by contract and `flush` is never-lose, so neither
+  means "replace". `allowOverwrite: true` is exactly a replace, so the CLI
+  deletes the old file first — deliberately, at the caller's request, rather
+  than by weakening a store verb. `allowOverwrite: false` keeps refusing.
+- The APKAM private key stays out of the file in any auth mode other than
+  `PkamAuthMode.keysFile`, as before: in a SIM or another secure element the
+  private half is not the file's to hold.
+
+This also retires a latent fault. The hand-built map dereferences
+`apkamPublicKey!` and `defaultSelfEncryptionKey!` unconditionally, and a
+PQ-native enrollment leaves the flat APKAM fields empty by design — the same
+shape that already broke `_persistKeysLocalSecondary` with a null-check
+error after a *successful* authentication.
