@@ -69,10 +69,14 @@ void main() {
 }
 
 /// Canonicalized transitive at_client-internal import closure of [root].
+///
+/// Follows relative directives as well as `package:at_client/` ones — a
+/// forbidden edge spelled `import '../client/at_client_impl.dart'` is the
+/// same edge, and a walker blind to it would guard only one spelling.
 Set<String> _importClosure(String root) {
-  final directive =
-      RegExp(r'''^\s*(?:import|export)\s+['"]package:at_client/([^'"]+)['"]''',
-          multiLine: true);
+  final directive = RegExp(
+      r'''^\s*(?:import|export)\s+['"](package:at_client/|(?!package:|dart:))([^'"]+)['"]''',
+      multiLine: true);
   final seen = <String>{};
   final stack = [p.canonicalize(root)];
   while (stack.isNotEmpty) {
@@ -81,7 +85,10 @@ Set<String> _importClosure(String root) {
     final f = File(file);
     if (!f.existsSync()) continue;
     for (final m in directive.allMatches(f.readAsStringSync())) {
-      stack.add(p.canonicalize(p.join('lib', m.group(1)!)));
+      final target = m.group(1) == 'package:at_client/'
+          ? p.join('lib', m.group(2)!)
+          : p.join(p.dirname(file), m.group(2)!);
+      stack.add(p.canonicalize(target));
     }
   }
   return seen;
