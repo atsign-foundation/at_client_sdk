@@ -115,26 +115,23 @@ void main() {
           equals(DilithiumParams.mlDsa65.signatureBytes));
     });
 
-    test('signBytes throws AtSigningException for a short secret key',
-        () async {
+    test('signBytes throws ArgumentError for a short secret key', () async {
       final algo = MlDsa65PureDartAlgo();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
       final Uint8List shortSk = Uint8List(MlDsa65Sizes.secretKeyBytes - 1);
 
-      expect(
-          () => algo.signBytes(message, secretKey: shortSk),
-          throwsA(isA<AtSigningException>()));
+      expect(() => algo.signBytes(message, secretKey: shortSk),
+          throwsA(isA<ArgumentError>()));
     });
 
-    test('signBytes throws AtSigningException for an over-long secret key',
+    test('signBytes throws ArgumentError for an over-long secret key',
         () async {
       final algo = MlDsa65PureDartAlgo();
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
       final Uint8List longSk = Uint8List(MlDsa65Sizes.secretKeyBytes + 1);
 
-      expect(
-          () => algo.signBytes(message, secretKey: longSk),
-          throwsA(isA<AtSigningException>()));
+      expect(() => algo.signBytes(message, secretKey: longSk),
+          throwsA(isA<ArgumentError>()));
     });
 
     test('verifyBytes returns false (never throws) for a wrong-length public key',

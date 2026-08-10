@@ -7,7 +7,6 @@ import 'dart:typed_data';
 
 import 'package:at_chops/at_chops_ffi.dart';
 import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
-import 'package:at_commons/at_commons.dart' show AtSigningException;
 import 'package:test/test.dart';
 
 void main() {
@@ -93,25 +92,24 @@ void main() {
       expect(ok, isFalse);
     });
 
-    test('signBytes throws AtSigningException for a short secret key',
-        () async {
+    test('signBytes throws ArgumentError for a short secret key', () async {
       final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
       final Uint8List shortSk = Uint8List(MlDsa65Sizes.secretKeyBytes - 1);
 
       expect(() => algo.signBytes(message, secretKey: shortSk),
-          throwsA(isA<AtSigningException>()));
+          throwsA(isA<ArgumentError>()));
     });
 
     test(
-        'signBytes throws AtSigningException for an over-long secret key '
+        'signBytes throws ArgumentError for an over-long secret key '
         '(same contract as the pure-Dart backend)', () async {
       final algo = MlDsa65FfiAlgo.fromLib(lib!);
       final Uint8List message = Uint8List.fromList('data'.codeUnits);
       final Uint8List longSk = Uint8List(MlDsa65Sizes.secretKeyBytes + 1);
 
       expect(() => algo.signBytes(message, secretKey: longSk),
-          throwsA(isA<AtSigningException>()));
+          throwsA(isA<ArgumentError>()));
     });
 
     test('verifyBytes returns false for a wrong-length public key', () async {
