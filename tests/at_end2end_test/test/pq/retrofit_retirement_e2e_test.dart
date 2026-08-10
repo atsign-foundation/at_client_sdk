@@ -121,6 +121,9 @@ void main() {
 
     final session = (await authenticateLegacy('l1')).session!;
     final manager = await selfRetrofit(
+      // Mode B, explicitly: these rows test the PQ retrofit, and the
+      // parameter default is the rollout-window RSA mode.
+      signingAlgo: SigningAlgoType.mldsa65,
       session: session,
       preference: TestPreferences.getInstance().getPreference(atSign),
       appName: 'rt-l1',

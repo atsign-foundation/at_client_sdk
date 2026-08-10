@@ -263,17 +263,34 @@ class AtEnrollmentImpl implements AtEnrollment {
           'the session must carry a writable AtKeysIo');
     }
 
+    // The material tokens equal the SigningAlgoType member names (both are
+    // the wire spelling), so the request's algo maps by name.
+    final String materialAlgo;
+    switch (request.signingAlgo) {
+      case SigningAlgoType.mldsa65:
+        materialAlgo = KeyAlgorithmType.mlDsa65;
+      case SigningAlgoType.rsa2048:
+        materialAlgo = KeyAlgorithmType.rsa2048;
+      default:
+        throw AtEnrollmentException(
+            'a self-enrollment mints rsa2048 or mldsa65; '
+            '"${request.signingAlgo.name}" is not a retrofit algorithm');
+    }
+
     return await _serializedPerKeyfile(keysIo, request.atSign, () async {
       final existing = await keysIo.read(request.atSign);
+      // Per requested algorithm, so re-running is idempotent for THIS mode
+      // while a keyfile that holds a different algorithm's enrollment can
+      // still retrofit into this one.
       final alreadyRetrofitted = existing.keys
           .where((m) =>
-              m.keyAlgorithmType == KeyAlgorithmType.mlDsa65 &&
+              m.keyAlgorithmType == materialAlgo &&
               m.keyPartType == CryptographicKeyType.privateSigning &&
               m.status == KeyPartStatus.active &&
               m.enrollmentId != null)
           .firstOrNull;
       if (alreadyRetrofitted != null) {
-        _logger.info('keyfile already holds a PQ enrollment '
+        _logger.info('keyfile already holds a $materialAlgo enrollment '
             '(${alreadyRetrofitted.enrollmentId}); not minting another');
         return AtEnrollmentResponse(
             alreadyRetrofitted.enrollmentId!, EnrollmentStatus.approved,
@@ -283,16 +300,27 @@ class AtEnrollmentImpl implements AtEnrollment {
             session: request.session);
       }
 
-      final mlDsaKeyPair = await MlDsa65KeyPair.generate();
+      // Fresh either way: a new enrollment never reuses the legacy key
+      // object, which is what keeps one-enrollment-one-keypair and the PKAM
+      // binding unambiguous.
+      final String apkamPublic;
+      final String apkamPrivate;
+      if (request.signingAlgo == SigningAlgoType.mldsa65) {
+        final pair = await MlDsa65KeyPair.generate();
+        apkamPublic = pair.atPublicKey.publicKey;
+        apkamPrivate = pair.atPrivateKey.privateKey;
+      } else {
+        final pair = AtChopsUtil.generateAtPkamKeyPair();
+        apkamPublic = pair.atPublicKey.publicKey;
+        apkamPrivate = pair.atPrivateKey.privateKey;
+      }
 
       // Built before the request so a metadataBuilder can be handed the
       // APKAM keypair it must sign with; only enrollmentId is missing, and
       // only the atServer can supply it.
       final constructionKeys = AtKeys()
-        ..apkamPublicKey =
-            AtBytes.fromString(mlDsaKeyPair.atPublicKey.publicKey)
-        ..apkamPrivateKey =
-            AtBytes.fromString(mlDsaKeyPair.atPrivateKey.privateKey)
+        ..apkamPublicKey = AtBytes.fromString(apkamPublic)
+        ..apkamPrivateKey = AtBytes.fromString(apkamPrivate)
         ..defaultEncryptionPublicKey = existing.defaultEncryptionPublicKey;
 
       final metadata = await _buildMetadata(
@@ -304,8 +332,8 @@ class AtEnrollmentImpl implements AtEnrollment {
       final enrollVerbBuilder = EnrollVerbBuilder()
         ..appName = request.appName
         ..deviceName = request.deviceName
-        ..apkamPublicKey = mlDsaKeyPair.atPublicKey.publicKey
-        ..signingAlgo = SigningAlgoType.mldsa65.name
+        ..apkamPublicKey = apkamPublic
+        ..signingAlgo = request.signingAlgo.name
         ..namespaces = request.namespaces
         ..apkamKeysExpiryDuration = request.apkamKeysExpiryDuration
         ..metadata = metadata;
@@ -357,15 +385,15 @@ class AtEnrollmentImpl implements AtEnrollment {
           keyId: 'apkam:$newEnrollmentId',
           enrollmentId: newEnrollmentId,
           keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-          bytes: AtBytes.fromString(mlDsaKeyPair.atPrivateKey.privateKey),
+          keyAlgorithmType: materialAlgo,
+          bytes: AtBytes.fromString(apkamPrivate),
           createdAt: now));
       existing.addKey(AtKeysMaterial(
           keyId: 'apkam:$newEnrollmentId',
           enrollmentId: newEnrollmentId,
           keyPartType: CryptographicKeyType.publicVerification,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-          bytes: AtBytes.fromString(mlDsaKeyPair.atPublicKey.publicKey),
+          keyAlgorithmType: materialAlgo,
+          bytes: AtBytes.fromString(apkamPublic),
           createdAt: now));
       // Whatever the metadataBuilder filed (the X-Wing key package's two
       // halves), re-tagged with the enrollment id it now belongs to.

@@ -89,6 +89,41 @@ void main() {
   }
 
   test(
+      'the rollout-window retrofit: an rsa2048 self-enrollment auto-approves '
+      'and RSA PKAM succeeds under the new id', () async {
+    final session = await legacySession();
+
+    final response = await AtEnrollment.create().submit(
+        AtSelfEnrollmentRequest(
+            session: session,
+            appName: 'rf2b-t1-app',
+            deviceName: 'rf2b-t1-${Uuid().v4().hashCode}',
+            namespaces: {'buzz': 'rw'},
+            signingAlgo: SigningAlgoType.rsa2048,
+            metadataBuilder: enrollmentKeyPackageBuilder(atSign,
+                signingAlgo: SigningAlgoType.rsa2048)),
+        session.atLookUp!);
+
+    expect(response.enrollStatus, EnrollmentStatus.approved);
+    final newId = response.enrollmentId;
+    expect(newId, isNot(session.enrollmentId));
+
+    final keys = await FileAtKeysIo(filePath: keysFilePath).read(atSign);
+    expect(keys.signingAlgorithmForEnrollment(newId), SigningAlgoType.rsa2048,
+        reason: 'the rollout-window mode mints a FRESH RSA keypair — the '
+            'same algorithm as legacy, a new key object, its own enrollment '
+            'id — and needs no ML-DSA anywhere');
+
+    final rsaAuth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
+        atKeysIo: FileAtKeysIo(filePath: keysFilePath))
+      ..enrollmentId = newId
+      ..rootDomain = rootDomain);
+    expect(rsaAuth.isSuccessful, true,
+        reason: 'the retrofit that carries the rollout window must be usable '
+            'immediately, exactly as the PQ one is');
+  });
+
+  test(
       'the full retrofit: no-OTP submit auto-approves, the keyfile holds '
       'both enrollments, and ML-DSA PKAM succeeds under the new id',
       () async {

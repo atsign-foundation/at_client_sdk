@@ -6,6 +6,15 @@
   key in this build's preference order — so an instance whose enrollment
   changed under it, or any package advertising more than one key, could fail
   to recognise itself and address an envelope to a kpid it is not listening on.
+- feat: `selfRetrofit` gains the retrofit signing-algo selector — one of
+  the rollout axes, a per-operation parameter defaulting to `rsa2048`
+  (the rollout-window mode: a fresh RSA keypair under a new enrollment
+  id, no ML-DSA anywhere; the 4.0 posture flips the default to
+  `mldsa65`). And it now threads
+  `AtClientPreference.keyEstablishmentAlgo` into the key package it
+  advertises: the enrollment's KEM previously silently defaulted to
+  X-Wing whatever the preference said, and the package is frozen at
+  `enroll:request`, so the wrong KEM was permanent for that enrollment.
 - feat: a fully privileged approver conveys a **root** link at approval,
   so the enrollments it approves are born anchored rather than healed
   later by the sweep; an approver outside that class keeps signing the

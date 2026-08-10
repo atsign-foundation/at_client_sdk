@@ -186,11 +186,19 @@ class AtSelfEnrollmentRequest extends EnrollmentRequest {
   /// the parent enrollment's.
   Duration? apkamKeysExpiryDuration;
 
-  /// See [AtEnrollmentRequest.metadataBuilder]. For a self-enrollment the
-  /// handed keys carry the freshly minted ML-DSA-65 APKAM keypair, so a
-  /// builder that signs with it must sign mldsa65 — e.g.
-  /// `enrollmentKeyPackageBuilder(atSign, signingAlgo: SigningAlgoType.mldsa65)`.
+  /// See [AtEnrollmentRequest.metadataBuilder]. The handed keys carry the
+  /// freshly minted APKAM keypair of [signingAlgo]'s algorithm, so a builder
+  /// that signs with it must sign the same one — e.g.
+  /// `enrollmentKeyPackageBuilder(atSign, signingAlgo: request.signingAlgo)`.
   FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder;
+
+  /// The algorithm of the APKAM keypair this self-enrollment mints —
+  /// `mldsa65` (the default: today's PQ retrofit) or `rsa2048` for a
+  /// rollout-window retrofit that needs no ML-DSA anywhere. Either way the
+  /// keypair is FRESH: a new enrollment never reuses the legacy key object,
+  /// which is what keeps one-enrollment-one-keypair and the PKAM binding
+  /// unambiguous.
+  final SigningAlgoType signingAlgo;
 
   AtSelfEnrollmentRequest({
     required this.session,
@@ -199,6 +207,7 @@ class AtSelfEnrollmentRequest extends EnrollmentRequest {
     required this.namespaces,
     this.apkamKeysExpiryDuration,
     this.metadataBuilder,
+    this.signingAlgo = SigningAlgoType.mldsa65,
   }) : super(atSign: session.atSign, rootDomain: session.rootDomain);
 }
 

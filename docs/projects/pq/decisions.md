@@ -6377,3 +6377,31 @@ commit carries one red owned by the PARALLEL agent on this branch
 their scenarios, so `catalogue_test`'s completeness pin is red on
 their in-flight state, verified by input mtimes and their edit set —
 not by this change).
+
+## 69. Workstream B(iii): the retrofit selector, and the KEM the retrofit froze wrong (2026-08-10)
+
+**Status:** accepted. The retrofit signing algorithm is a per-operation
+PARAMETER (never a preference), the last of the five rollout axes to
+gain its flag. `AtSelfEnrollmentRequest.signingAlgo` (at_auth 3.4.0,
+additive, default `mldsa65` — the mechanism keeps its old behaviour)
+selects what the self-enrollment mints: `rsa2048` is type-1, the
+rollout-window mode — a FRESH RSA keypair under a new enrollment id,
+'same RSA' meaning same ALGORITHM never same key object, so
+one-enrollment-one-keypair and the PKAM binding stay unambiguous — and
+anything outside the two retrofit algorithms is refused before minting.
+The keyfile idempotence check became per-requested-algorithm: the old
+all-ML-DSA filter would have handed a type-1 caller the PQ enrollment
+(red-proofed by restoring it), while per-algo lets one keyfile hold
+both modes and makes reruns of each reuse its own.
+`selfRetrofit` carries the POLICY default: `rsa2048` in 3.x per the
+rollout-posture table, flipped by the 4.0 posture; the seven e2e mode-B
+call sites pass `mldsa65` explicitly now. And the audit's HIGH finding
+is fixed in the same motion: `selfRetrofit` now threads
+`preference.keyEstablishmentAlgo` into `enrollmentKeyPackageBuilder`,
+where it previously ignored the knob and every retrofitted enrollment
+froze X-Wing into its write-once key package whatever the deployment
+had configured. Live proof: a new functional arm drives the rsa2048
+self-enroll against the real atServer — auto-approve, fresh-RSA
+keyfile material, and RSA PKAM under the new id — beside the existing
+ML-DSA row, which also exercises per-algo idempotence live since both
+rows share one keyfile.

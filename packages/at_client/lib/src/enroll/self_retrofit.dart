@@ -20,10 +20,10 @@ final _logger = AtSignLogger('selfRetrofit');
 /// The sequence, each half already proven on its own: submit an
 /// [AtSelfEnrollmentRequest] on the legacy [session]'s authenticated
 /// connection (auto-approved, no OTP; idempotent — a keyfile that already
-/// carries a PQ enrollment reuses it, nothing is minted); re-authenticate
-/// under the new enrollment id, which resolves the ML-DSA AtChops and
-/// signing algorithm from the keyfile; then build the client for the new id
-/// via [AtClientManager.fromAuthSession].
+/// carries an enrollment of the requested algorithm reuses it, nothing is
+/// minted); re-authenticate under the new enrollment id, which resolves the
+/// AtChops and signing algorithm from the keyfile; then build the client for
+/// the new id via [AtClientManager.fromAuthSession].
 ///
 /// **The enrollment never changes under a live client.** The switched-to
 /// client is a NEW instance under the `(atSign, enrollmentId)` cache key, so
@@ -51,6 +51,17 @@ final _logger = AtSignLogger('selfRetrofit');
 /// the step entirely. A root-step failure does not fail the retrofit — the
 /// enrollment is live and usable without it, and re-running [selfRetrofit]
 /// (idempotent per keyfile) retries the step.
+///
+/// [signingAlgo] selects the retrofit mode — one of the rollout axes, a
+/// per-operation parameter rather than a preference. `rsa2048` (the default
+/// while classical is the ecosystem's norm) is the rollout-window mode: a
+/// fresh RSA keypair under a new enrollment id, no ML-DSA anywhere.
+/// `mldsa65` is the PQ retrofit. The 4.0 posture flips the default.
+///
+/// The new enrollment's KEM comes from
+/// [AtClientPreference.keyEstablishmentAlgo] and is **frozen at this call**:
+/// the key package rides the `enroll:request` and is never rewritten, so
+/// this decides the enrollment's KEM for its whole life.
 @experimental
 Future<AtClientManager> selfRetrofit({
   required AtAuthSession session,
@@ -60,6 +71,7 @@ Future<AtClientManager> selfRetrofit({
   required Map<String, String> namespaces,
   Duration? apkamKeysExpiryDuration,
   AtClientManager? manager,
+  SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
 }) async {
   final atLookUp = session.atLookUp;
   if (atLookUp == null) {
@@ -74,8 +86,10 @@ Future<AtClientManager> selfRetrofit({
           deviceName: deviceName,
           namespaces: namespaces,
           apkamKeysExpiryDuration: apkamKeysExpiryDuration,
+          signingAlgo: signingAlgo,
           metadataBuilder: enrollmentKeyPackageBuilder(session.atSign,
-              signingAlgo: SigningAlgoType.mldsa65)),
+              signingAlgo: signingAlgo,
+              keyEstablishmentAlgo: preference.keyEstablishmentAlgo)),
       atLookUp);
 
   // Authenticate under the new enrollment: the retrofit response's session

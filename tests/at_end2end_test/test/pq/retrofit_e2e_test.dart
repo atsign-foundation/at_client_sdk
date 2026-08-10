@@ -160,6 +160,9 @@ void main() {
     File(pathFor('e1')).copySync(pathFor('e1c'));
 
     final manager = await selfRetrofit(
+      // Mode B, explicitly: these rows test the PQ retrofit, and the
+      // parameter default is the rollout-window RSA mode.
+      signingAlgo: SigningAlgoType.mldsa65,
       session: session,
       preference: TestPreferences.getInstance().getPreference(atSign),
       appName: 'rf-e1',
@@ -228,6 +231,9 @@ void main() {
     // original — that is what makes it a clone rather than another device.
     final cloneSession = await legacySession('e1c');
     final manager = await selfRetrofit(
+      // Mode B, explicitly: these rows test the PQ retrofit, and the
+      // parameter default is the rollout-window RSA mode.
+      signingAlgo: SigningAlgoType.mldsa65,
       session: cloneSession,
       preference: TestPreferences.getInstance().getPreference(atSign),
       // Deliberately the same (appName, deviceName) as B1.1: sibling clones
@@ -358,6 +364,9 @@ void main() {
     // itself the grants that would let it mint or hold the root.
     await expectLater(
         selfRetrofit(
+          // Mode B, explicitly: these rows test the PQ retrofit, and the
+          // parameter default is the rollout-window RSA mode.
+          signingAlgo: SigningAlgoType.mldsa65,
           session: await legacySession('e2'),
           preference: TestPreferences.getInstance().getPreference(atSign),
           appName: 'rf-e2',
@@ -373,6 +382,9 @@ void main() {
     // The scoped retrofit itself succeeds.
     final session = await legacySession('e2');
     final manager = await selfRetrofit(
+      // Mode B, explicitly: these rows test the PQ retrofit, and the
+      // parameter default is the rollout-window RSA mode.
+      signingAlgo: SigningAlgoType.mldsa65,
       session: session,
       preference: TestPreferences.getInstance().getPreference(atSign),
       appName: 'rf-e2',

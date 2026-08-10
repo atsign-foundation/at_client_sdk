@@ -1,4 +1,11 @@
 ## 3.4.0
+- feat: `AtSelfEnrollmentRequest.signingAlgo` selects the algorithm of the
+  APKAM keypair a self-enrollment mints — `mldsa65` (the default, today's
+  PQ retrofit) or `rsa2048` for a rollout-window retrofit that needs no
+  ML-DSA anywhere; either way the keypair is fresh, never the legacy key
+  object. The keyfile idempotence check is per requested algorithm, so a
+  keyfile holding a PQ enrollment can still take the RSA retrofit and a
+  rerun of either mode reuses its own.
 - fix: a refused onboarding enrollment's `AtAuthenticationException` carries
   the server's reason; it previously interpolated a `toString` tear-off, so
   the message read `Closure: () => String...` instead of the cause.

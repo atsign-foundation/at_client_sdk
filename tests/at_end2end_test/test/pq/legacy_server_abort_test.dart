@@ -7,6 +7,7 @@ library;
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
@@ -125,6 +126,9 @@ void main() {
     Object? thrown;
     try {
       await selfRetrofit(
+        // Mode B, explicitly: these rows test the PQ retrofit, and the
+        // parameter default is the rollout-window RSA mode.
+        signingAlgo: SigningAlgoType.mldsa65,
         session: session,
         preference: TestPreferences.getInstance().getPreference(atSign),
         appName: 'b01-priv',
@@ -186,6 +190,9 @@ void main() {
     Object? thrown;
     try {
       await selfRetrofit(
+        // Mode B, explicitly: these rows test the PQ retrofit, and the
+        // parameter default is the rollout-window RSA mode.
+        signingAlgo: SigningAlgoType.mldsa65,
         session: session,
         preference: TestPreferences.getInstance().getPreference(atSign),
         appName: 'b01-scoped',

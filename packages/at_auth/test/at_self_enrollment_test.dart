@@ -122,6 +122,83 @@ void main() {
     expect(after.defaultSelfEncryptionKey.toString(), selfKey);
   });
 
+  group('the retrofit signing-algo selector', () {
+    AtSelfEnrollmentRequest requestWithAlgo(
+            AtAuthSession session, SigningAlgoType algo) =>
+        AtSelfEnrollmentRequest(
+            session: session,
+            appName: 'selfapp',
+            deviceName: 'selfdevice',
+            namespaces: {'app_1': 'rw'},
+            signingAlgo: algo);
+
+    test('rsa2048 mints a FRESH RSA keypair and submits signingAlgo rsa2048',
+        () async {
+      final (keysIo, session) = await sessionWithLegacyKeyfile();
+      final mock = approvingLookUp();
+
+      final response = await AtEnrollmentImpl()
+          .submit(requestWithAlgo(session, SigningAlgoType.rsa2048), mock);
+      expect(response.enrollmentId, 'new-123');
+
+      final command = verify(() =>
+              mock.executeCommand(captureAny(), auth: any(named: 'auth')))
+          .captured
+          .single as String;
+      final params = jsonDecode(command.substring('enroll:request:'.length))
+          as Map<String, dynamic>;
+      expect(params['signingAlgo'], 'rsa2048');
+      expect(params['apkamPublicKey'], isNot(legacyApkamPub),
+          reason: 'a rollout-window retrofit means the same ALGORITHM, never '
+              'the same key object — reuse would break '
+              'one-enrollment-one-keypair and the PKAM binding');
+
+      final after = await keysIo.read(atSign);
+      final signing =
+          after.getKey('apkam:new-123', CryptographicKeyType.privateSigning);
+      expect(signing!.keyAlgorithmType, KeyAlgorithmType.rsa2048);
+      expect(signing.enrollmentId, 'new-123');
+    });
+
+    test('idempotence is per algorithm', () async {
+      final (_, session) = await sessionWithLegacyKeyfile();
+      final mock = MockAtLookUp();
+      var calls = 0;
+      when(() => mock.executeCommand(any(that: startsWith('enroll:')),
+              auth: any(named: 'auth')))
+          .thenAnswer((_) async =>
+              'data:{"enrollmentId":"id-${++calls}","status":"approved"}');
+
+      await AtEnrollmentImpl()
+          .submit(requestWithAlgo(session, SigningAlgoType.mldsa65), mock);
+      final rsa = await AtEnrollmentImpl()
+          .submit(requestWithAlgo(session, SigningAlgoType.rsa2048), mock);
+      expect(rsa.enrollmentId, 'id-2',
+          reason: 'a keyfile already holding a PQ enrollment can still take '
+              'the rollout-window RSA retrofit — an all-algorithms '
+              'idempotence check would silently hand back the wrong mode');
+
+      final rerun = await AtEnrollmentImpl()
+          .submit(requestWithAlgo(session, SigningAlgoType.rsa2048), mock);
+      expect(rerun.enrollmentId, 'id-2',
+          reason: 'while a rerun of the SAME mode reuses, not re-mints');
+      expect(calls, 2);
+    });
+
+    test('an algorithm outside the retrofit set is refused before anything '
+        'is minted or sent', () async {
+      final (_, session) = await sessionWithLegacyKeyfile();
+      final mock = approvingLookUp();
+
+      await expectLater(
+          () => AtEnrollmentImpl()
+              .submit(requestWithAlgo(session, SigningAlgoType.ed25519), mock),
+          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
+              'message', contains('not a retrofit algorithm'))));
+      verifyNever(() => mock.executeCommand(any(), auth: any(named: 'auth')));
+    });
+  });
+
   test('mint-once per keyfile: a second submit reuses, no second request',
       () async {
     final (_, session) = await sessionWithLegacyKeyfile();
