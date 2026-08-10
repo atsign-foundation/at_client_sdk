@@ -46,6 +46,24 @@ void main() {
     });
   });
 
+  group('KeyAgreementAlgoType', () {
+    test('names are the wire identifiers', () {
+      expect(
+          KeyAgreementAlgoType.values.map((a) => a.name), equals(['x25519']));
+    });
+
+    test('fromString round-trips every value', () {
+      for (final KeyAgreementAlgoType algo in KeyAgreementAlgoType.values) {
+        expect(KeyAgreementAlgoType.fromString(algo.name), equals(algo));
+      }
+    });
+
+    test('fromString throws on an unknown name', () {
+      expect(() => KeyAgreementAlgoType.fromString('x448'),
+          throwsA(isA<AtException>()));
+    });
+  });
+
   group('SigningAlgoType', () {
     test('fromString round-trips every value', () {
       for (final SigningAlgoType algo in SigningAlgoType.values) {
@@ -85,6 +103,10 @@ void main() {
 
     test('X-Wing', () {
       expect(XWingPureDartAlgo.instance.name, equals('xwing'));
+    });
+
+    test('X25519', () {
+      expect(X25519PureDartAlgo.instance.name, equals('x25519'));
     });
   });
 }

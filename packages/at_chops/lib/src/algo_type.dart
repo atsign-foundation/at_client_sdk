@@ -61,3 +61,16 @@ enum KemAlgoType {
         orElse: () => throw AtException('Invalid KEM algo type: $name'));
   }
 }
+
+/// Diffie–Hellman key agreement primitives — they derive a shared secret from
+/// two key pairs, encrypting nothing themselves.
+enum KeyAgreementAlgoType {
+  x25519;
+
+  static KeyAgreementAlgoType fromString(String name) {
+    return KeyAgreementAlgoType.values.firstWhere(
+        (algo) => algo.name.toLowerCase() == name.toLowerCase(),
+        orElse: () =>
+            throw AtException('Invalid key agreement algo type: $name'));
+  }
+}

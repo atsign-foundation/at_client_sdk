@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:cryptography/cryptography.dart';
 
@@ -15,6 +16,9 @@ final class X25519PureDartAlgo implements AtKeyAgreementAlgorithm {
   const X25519PureDartAlgo._();
 
   static final X25519 _x25519 = X25519();
+
+  @override
+  String get name => KeyAgreementAlgoType.x25519.name;
 
   /// Generate a fresh X25519 key pair.
   ///

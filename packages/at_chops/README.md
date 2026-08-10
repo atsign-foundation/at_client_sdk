@@ -14,6 +14,7 @@ data signing, key agreement, and hashing that can be leveraged by client applica
 - Key generation on every algorithm: `generateKey()` on the symmetric ones, `generateKeyPair()` on the asymmetric ones (both return raw bytes)
 - Hashing: SHA-256, SHA-512, MD5, Argon2id
 - HKDF key derivation
+- One sealed supertype, `AtAlgorithm`, over every algorithm family — hold any algorithm in one variable, read its `name`, or switch over the families exhaustively
 
 ## Getting started
 
@@ -22,6 +23,42 @@ Developers should have a basic understanding of asymmetric and symmetric encrypt
 Use the algorithm classes directly. Generate or load key material first, then
 pass it to the relevant encryption, signing, key agreement, KEM, or hashing
 class.
+
+### Algorithm interfaces
+
+Every algorithm implements one of six family interfaces, and all six implement
+the sealed `AtAlgorithm`. Use `AtAlgorithm` when you need one type that holds
+any algorithm — its only member is `name`, the stable identifier a downstream
+protocol keys on (`'aesgcm256'`, `'mldsa65'`, `'x25519'`, …), which is always
+the corresponding enum constant's `name`.
+
+| Family interface | Enum | Implementations |
+| --- | --- | --- |
+| `SymmetricEncryptionAlgorithm`  | `EncryptionAlgoType`   | `AesCtrEncryptionAlgo`, `AesGcm256EncryptionAlgo`, `AesGcm256FfiAlgo` |
+| `ASymmetricEncryptionAlgorithm` | `EncryptionAlgoType`   | `RsaEncryptionAlgo` |
+| `AtSignatureAlgorithm`          | `SigningAlgoType`      | `RsaSigningAlgo`, `EccSigningAlgo`, `Ed25519SigningAlgo`, `MlDsa65PureDartAlgo`, `MlDsa65FfiAlgo` |
+| `AtKemAlgorithm`                | `KemAlgoType`          | `MlKem768PureDartAlgo`, `MlKem768FfiAlgo`, `XWingPureDartAlgo`, `XWingFfiAlgo` |
+| `AtHashingAlgorithm<K, V>`      | `HashingAlgoType`      | `SHA256HashingAlgo`, `SHA512HashingAlgo`, `Md5HashingAlgo`, `Argon2idHashingAlgo` |
+| `AtKeyAgreementAlgorithm`       | `KeyAgreementAlgoType` | `X25519PureDartAlgo`, `X25519FfiAlgo` |
+
+Because `AtAlgorithm` is sealed, a switch over the families needs no default
+arm — adding a seventh family to at_chops becomes a compile error you have to
+handle rather than a silent fallthrough:
+
+```dart
+String familyOf(AtAlgorithm algo) => switch (algo) {
+      AtSignatureAlgorithm() => 'signature',
+      SymmetricEncryptionAlgorithm() => 'symmetric',
+      ASymmetricEncryptionAlgorithm() => 'asymmetric',
+      AtKemAlgorithm() => 'kem',
+      AtHashingAlgorithm() => 'hashing',
+      AtKeyAgreementAlgorithm() => 'keyAgreement',
+    };
+```
+
+Sealing is not transitive: the six family interfaces themselves stay open, so
+you can still implement `AtSignatureAlgorithm` (or any other) in your own
+package. Import `package:at_chops/types.dart` to do so.
 
 ## Usage
 
@@ -163,6 +200,9 @@ final ss2 = await AtPqc.xWing.decapsulate(xwKp.secretKey, ct);
 ```
 
 ### X25519 (Diffie–Hellman, pure-Dart)
+
+`X25519PureDartAlgo` and `X25519FfiAlgo` implement `AtKeyAgreementAlgorithm`
+and both report `name == 'x25519'`.
 
 ```dart
 final x25519 = X25519PureDartAlgo.instance;

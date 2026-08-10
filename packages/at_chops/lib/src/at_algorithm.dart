@@ -5,6 +5,26 @@ import 'dart:typed_data';
 import 'package:at_chops/src/at_iv.dart';
 import 'package:at_chops/src/hashing/types.dart';
 
+/// The umbrella every at_chops algorithm sits under.
+///
+/// Sealed, so a switch over the algorithm families below is exhaustive without
+/// a default arm. Sealing is not transitive, so the families themselves stay
+/// freely implementable outside this library — only adding a *seventh* family
+/// is closed off, and that is a deliberate breaking change for anyone
+/// switching over [AtAlgorithm].
+sealed class AtAlgorithm {
+  /// Stable identifier for this algorithm — a downstream protocol's wire,
+  /// record, or keystore identifier for it (e.g. at_server's FROM/POL
+  /// handshake tags its cookie and published-key record with this).
+  ///
+  /// This *is* the corresponding enum constant's `name` — [SigningAlgoType],
+  /// [EncryptionAlgoType], [KemAlgoType], [HashingAlgoType] or
+  /// [KeyAgreementAlgoType]. Those constants are spelled to be the identifier,
+  /// so there is no second vocabulary to translate between. Implementations
+  /// return `<Enum>.<value>.name`.
+  String get name;
+}
+
 /// Interface for symmetric encryption algorithms. Key material is passed per
 /// call. Check [AesCtrEncryptionAlgo] for sample implementation.
 ///
@@ -14,9 +34,7 @@ import 'package:at_chops/src/hashing/types.dart';
 /// generated one, and reusing a (key, iv) pair is a security bug — so the
 /// caller must own it. For data written before IVs were set, pass
 /// [InitialisationVector.legacy].
-abstract class SymmetricEncryptionAlgorithm {
-  String get name;
-
+abstract class SymmetricEncryptionAlgorithm implements AtAlgorithm {
   /// Generate a fresh key of the length this algorithm requires.
   ///
   /// The length is the implementation's own — AES-256-GCM always returns 32
@@ -35,9 +53,7 @@ abstract class SymmetricEncryptionAlgorithm {
 
 /// Interface for asymmetric encryption algorithms. Key material is passed per
 /// call. Check [RsaEncryptionAlgo] for sample implementation.
-abstract class ASymmetricEncryptionAlgorithm {
-  String get name;
-
+abstract class ASymmetricEncryptionAlgorithm implements AtAlgorithm {
   /// Encrypt [plainData] with [publicKey]
   Uint8List encrypt(Uint8List plainData, Uint8List publicKey);
 
@@ -53,16 +69,7 @@ abstract class ASymmetricEncryptionAlgorithm {
 /// silently transpose same-typed byte arguments (the published 3.3.0 FFI
 /// backend took `(secretKey, data)`; a positional reorder would keep
 /// compiling while binding arguments to the wrong slots).
-abstract class AtSignatureAlgorithm {
-  /// Stable identifier for this algorithm — a downstream protocol's wire,
-  /// record, or keystore identifier for this signature type (e.g. at_server's
-  /// FROM/POL handshake tags its cookie and published-key record with this).
-  ///
-  /// This *is* [SigningAlgoType.name] — the enum's constants are spelled to
-  /// be the identifier, so there is no second vocabulary to translate
-  /// between. Implementations return `SigningAlgoType.<value>.name`.
-  String get name;
-
+abstract class AtSignatureAlgorithm implements AtAlgorithm {
   /// Generate a fresh signing key pair.
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair();
 
@@ -77,9 +84,7 @@ abstract class AtSignatureAlgorithm {
 }
 
 /// Interface for hashing data. Refer [Md5HashingAlgo] for sample implementation.
-abstract class AtHashingAlgorithm<K, V> {
-  String get name;
-
+abstract class AtHashingAlgorithm<K, V> implements AtAlgorithm {
   /// Hashes the passed data
   FutureOr<V> hash(K data, {covariant HashParams? hashParams});
 }
@@ -90,9 +95,7 @@ abstract class AtHashingAlgorithm<K, V> {
 /// both parties can derive — the sender via [encapsulate] against the
 /// recipient's public key, the recipient via [decapsulate] using their
 /// secret key and the ciphertext sent by the sender.
-abstract class AtKemAlgorithm {
-  String get name;
-
+abstract class AtKemAlgorithm implements AtAlgorithm {
   /// Generate a fresh key pair from a secure random source.
   ///
   /// Deterministic (seeded) generation is deliberately not part of this
@@ -116,7 +119,7 @@ abstract class AtKemAlgorithm {
 }
 
 /// Interface for a Diffie–Hellman key agreement primitive such as X25519.
-abstract class AtKeyAgreementAlgorithm {
+abstract class AtKeyAgreementAlgorithm implements AtAlgorithm {
   /// Compute the shared secret from [privateKey] and [peerPublicKey].
   FutureOr<Uint8List> dh(Uint8List privateKey, Uint8List peerPublicKey);
 }

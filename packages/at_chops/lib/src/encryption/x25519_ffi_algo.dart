@@ -1,6 +1,7 @@
 import 'dart:ffi';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algo_type.dart';
 import 'package:at_chops/src/at_algorithm.dart';
 import 'package:at_chops/src/ffi/openssl_ffi_bindings.dart';
 import 'package:ffi/ffi.dart';
@@ -26,6 +27,9 @@ final class X25519FfiAlgo implements AtKeyAgreementAlgorithm {
   late final EvpPkeyDeriveInitDart _deriveInit;
   late final EvpPkeyDeriveSetPeerDart _deriveSetPeer;
   late final EvpPkeyDeriveDart _derive;
+
+  @override
+  String get name => KeyAgreementAlgoType.x25519.name;
 
   X25519FfiAlgo.fromLib(this._lib) {
     _ctxNewFromName = _lib.lookupFunction<EvpPkeyCtxNewFromNameNative,
