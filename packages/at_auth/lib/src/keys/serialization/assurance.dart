@@ -163,15 +163,29 @@ class AtKeysAssurance {
     final existingMaterials = _decode(existing);
     final candidateMaterials = _decode(candidate);
 
+    final existingLegacy = _legacyJsonOf(existing);
+
     // A legacy -> typed-keys upgrade legitimately introduces the atsign and
     // version, so only pin them when the existing file is already a
     // typed-keys document.
     if (existing.containsKey('version')) {
       _assertSame(existing['atsign'], candidate['atsign'], 'map.atsign');
       _assertSame(existing['version'], candidate['version'], 'map.version');
+    } else if (candidate.containsKey('version') &&
+        existingLegacy.containsKey('atsign')) {
+      // A legacy document may already name its owner under `atsign` — the
+      // keychain has always recorded it there, so every entry a published
+      // release wrote has one — and the typed shape reserves that same name.
+      // The upgrade re-homes the value rather than dropping it, so it is
+      // checked here against the reserved field and taken out of the legacy
+      // comparison below; leaving it in would refuse the first flush onto
+      // every keyset already in the field. Compared normalized, because
+      // `AtKeys.fromJson` has already normalized the reserved side.
+      _assertSame(_asAtsign(existingLegacy.remove('atsign')),
+          _asAtsign(candidate['atsign']), 'map.atsign');
     }
     _assertLegacyPreserved(
-      _legacyJsonOf(existing),
+      existingLegacy,
       _legacyJsonOf(candidate),
       'map.legacy',
     );
@@ -188,15 +202,28 @@ class AtKeysAssurance {
   }
 
   /// Legacy fields are just "everything except the reserved typed-keys
-  /// top-level keys" — no separate nested blob to unwrap.
+  /// top-level keys" — no separate nested blob to unwrap. Always a copy: the
+  /// caller takes the owner out of it before comparing the rest.
   Map<String, dynamic> _legacyJsonOf(Map<String, dynamic> json) {
     if (!json.containsKey('version')) {
-      return json;
+      return Map<String, dynamic>.of(json);
     }
     return {
       for (final entry in json.entries)
         if (!_reservedTopLevelKeys.contains(entry.key)) entry.key: entry.value,
     };
+  }
+
+  /// An atSign in the one spelling both sides can be compared in. A value that
+  /// is not an atSign at all is returned unchanged, so it fails the comparison
+  /// rather than the parse.
+  Object? _asAtsign(Object? value) {
+    if (value is! String) return value;
+    try {
+      return value.toAtsign().toString();
+    } on InvalidAtSignException {
+      return value;
+    }
   }
 
   /// Every existing `(keyId, keyPartType)` must survive in the candidate with

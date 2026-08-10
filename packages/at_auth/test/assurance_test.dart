@@ -65,6 +65,61 @@ void main() {
       );
     });
 
+    test('accepts the upgrade of a legacy document that names its own atSign',
+        () {
+      // The keychain records the owner under a top-level `atsign` key, which
+      // predates the typed shape reserving that name — so every entry a
+      // published at_client_flutter wrote has one. Upgrading re-homes the
+      // value into the reserved field rather than dropping it; treating it as
+      // a lost legacy entry would make the FIRST flush onto any pre-existing
+      // entry impossible, which is every device already in the field.
+      final existing = {..._fixtureLegacyJson(), 'atsign': '@alice🛠'};
+      final candidate = _documentMap(
+        atsign: '@alice🛠',
+        legacyJson: _fixtureLegacyJson(),
+        keys: [_symmetricMaterial()],
+      );
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('accepts the upgrade when the legacy spelling normalizes to the '
+        'candidate atSign', () {
+      // `AtKeys.fromJson` normalizes the reserved field through `toAtsign()`,
+      // so the two sides are only comparable in that form: a legacy entry
+      // stored as the user typed it names the same atSign.
+      final existing = {..._fixtureLegacyJson(), 'atsign': '@Colin.Constable'};
+      final candidate = _documentMap(
+        atsign: '@colinconstable',
+        legacyJson: _fixtureLegacyJson(),
+        keys: [_symmetricMaterial()],
+      );
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
+    test('rejects the upgrade when the candidate claims a different atSign',
+        () {
+      final existing = {..._fixtureLegacyJson(), 'atsign': '@alice🛠'};
+      final candidate = _documentMap(
+        atsign: '@bob🛠',
+        legacyJson: _fixtureLegacyJson(),
+        keys: [_symmetricMaterial()],
+      );
+
+      expect(
+        () => assurance.validateMapUpdate(
+          existing: existing,
+          candidate: candidate,
+        ),
+        throwsA(isA<AtKeysAssuranceException>().having(
+            (e) => e.message, 'message', contains('map.atsign'))),
+        reason: 'writing one atSign\'s keys over another\'s is the loss this '
+            'check exists to refuse — and it must be the owner check that '
+            'catches it, not the legacy comparison it was taken out of',
+      );
+    });
+
     test('rejects map update when candidate drops all legacy fields', () {
       final existing = _fixtureLegacyJson();
       final candidate = {

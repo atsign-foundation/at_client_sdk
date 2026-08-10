@@ -1,4 +1,18 @@
 ## 3.4.0
+- fix: a legacy atKeys document that names its own atSign can be upgraded to
+  the typed-keys shape. `AtKeysAssurance.validateMapUpdate` strips the
+  reserved top-level keys (`version`/`atsign`/`keys`) from a typed document
+  but not from a legacy one, which has no reserved names — so an existing
+  document carrying a top-level `atsign` offered it as a legacy value the
+  candidate had already stripped, and the first flush onto it was refused
+  with `map.legacy.atsign is not preserved`. The upgrade re-homes that value
+  into the reserved field rather than dropping it, so it is now checked
+  against the candidate's `atsign` (normalized on both sides, since
+  `AtKeys.fromJson` normalizes the reserved one) and taken out of the legacy
+  comparison; a candidate naming a different atSign is still refused. That is
+  what every keychain entry a published `at_client_flutter` wrote looks like,
+  so the first flush of an nskey private, a key package or the signing root
+  threw on every device already in the field.
 - feat: `AtEnrollmentRequest.pq(...)` is the pq-mode constructor and the
   default constructor is the legacy-mode one; `keyExchangeMode` is no longer
   a parameter. The mode and the two callbacks a pq request cannot work
