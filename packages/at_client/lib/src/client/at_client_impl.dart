@@ -555,7 +555,9 @@ class AtClientImpl implements AtClient {
     _pqBootstrap = PqClientBootstrap(
       this,
       keysIo: _atKeysIo,
-      privilege: EnrollmentRecordPrivilegeResolver(this),
+      privilege: EnrollmentRecordPrivilegeResolver(this,
+          listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
+              .fetchEnrollmentRequests),
       sweepUnanchoredEnrollments: () =>
           EnrollmentServiceImpl(this, AtEnrollment.create())
               .sweepUnanchoredEnrollments(),

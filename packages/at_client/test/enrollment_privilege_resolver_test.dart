@@ -6,6 +6,8 @@ import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
+import 'package:at_client/src/service/enrollment_service_impl.dart';
+import 'package:at_auth/at_auth.dart' show AtEnrollment;
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -47,7 +49,10 @@ void main() {
   }
 
   test('classifies a requester from its granted namespaces', () async {
-    final resolver = EnrollmentRecordPrivilegeResolver(clientWithRoster());
+    final client = clientWithRoster();
+    final resolver = EnrollmentRecordPrivilegeResolver(client,
+        listEnrollments: EnrollmentServiceImpl(client, AtEnrollment.create())
+            .fetchEnrollmentRequests);
 
     expect(await resolver.isEnrollmentFullyPrivileged('privileged-1'), isTrue);
     expect(await resolver.isEnrollmentFullyPrivileged('scoped-1'), isFalse,
@@ -56,7 +61,10 @@ void main() {
   });
 
   test('an enrollment the roster does not know is not privileged', () async {
-    final resolver = EnrollmentRecordPrivilegeResolver(clientWithRoster());
+    final client = clientWithRoster();
+    final resolver = EnrollmentRecordPrivilegeResolver(client,
+        listEnrollments: EnrollmentServiceImpl(client, AtEnrollment.create())
+            .fetchEnrollmentRequests);
 
     expect(await resolver.isEnrollmentFullyPrivileged('unknown-9'), isFalse,
         reason: 'privilege is granted by the record; no record is no '

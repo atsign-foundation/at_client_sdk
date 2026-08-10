@@ -1,4 +1,11 @@
 ## 3.14.1
+- feat: a fully privileged approver conveys a **root** link at approval,
+  so the enrollments it approves are born anchored rather than healed
+  later by the sweep; an approver outside that class keeps signing the
+  provisional chain link, and a privileged approver that has not yet
+  received the root private conveys no link (the sweep anchors once
+  possession heals). The symmetric key and every other conveyance are
+  unaffected by which way the link goes.
 - feat: the unanchored-enrollment sweep signs **root** links instead of
   chain links, and upgrades enrollments carrying only a provisional chain
   link. Any fully privileged enrollment (`rw` on `*` and `__manage`) —

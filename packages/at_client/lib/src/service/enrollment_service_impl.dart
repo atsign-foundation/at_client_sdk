@@ -8,6 +8,7 @@ import 'package:at_client/src/enroll/privilege_resolver.dart' as privilege;
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart'
     show KeyPackageStatus;
+import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:at_client/src/service/enrollment_service.dart';
 import 'package:at_client/src/service/envelope_enrollment_conveyance.dart';
 import 'package:at_client/src/util/enroll_list_request_param.dart';
@@ -20,11 +21,13 @@ class EnrollmentServiceImpl implements EnrollmentService {
   final EnrollmentConveyance? _injectedConveyance;
 
   /// What approval seals to the newly approved device. Defaults to the
-  /// envelope-sealing conveyance, listing enrollments through this service's
-  /// own verb wrapper.
+  /// envelope-sealing conveyance, listing enrollments and resolving
+  /// privilege through this service's own verb wrapper.
   late final EnrollmentConveyance _conveyance = _injectedConveyance ??
       EnvelopeEnrollmentConveyance(_atClient,
-          listEnrollments: fetchEnrollmentRequests);
+          listEnrollments: fetchEnrollmentRequests,
+          privilege: EnrollmentRecordPrivilegeResolver(_atClient,
+              listEnrollments: fetchEnrollmentRequests));
 
   EnrollmentServiceImpl(this._atClient, this._atEnrollmentImpl,
       {EnrollmentConveyance? conveyance})

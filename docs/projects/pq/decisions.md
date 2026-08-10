@@ -6338,3 +6338,42 @@ actually means and what `NamespaceMember` already carries.
   `key_package_registration.dart`, `envelope_signing.dart` and
   `response/enrollment.dart`. They stay accurate until the verb ships and are the
   sweep list for the commit that lands it.
+
+## 68. Workstream B(ii): approvals anchor to the root (2026-08-10)
+
+**Status:** accepted; Option-B of backlog 14.14, under the same class
+ruling as [67](#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10):
+any fully privileged enrollment signs root links instead of chain
+links. The approve-path conveyance now decides the link flavour by the
+APPROVER's own privilege, resolved through the one injected seam: fully
+privileged and holding the root private → `signRootLinkFor`, conveyed
+under `__en.apskRootLink`, so the enrollment is *born anchored*; not
+fully privileged (approval takes `__manage`, not necessarily `*`) →
+today's provisional chain link, which the sweep later upgrades; fully
+privileged without the private → no link at all, with the sweep as the
+heal — the same no-demotion rule as the sweep's. The root private is
+read once and shared with the root-private conveyance block that
+follows it.
+
+Wiring: `EnvelopeEnrollmentConveyance` takes an
+`EnrollmentPrivilegeResolver` — the 4d seam, its third consumer — and
+`EnrollmentRecordPrivilegeResolver` now takes its enrollment lister
+injected instead of constructing `EnrollmentServiceImpl`, which both
+removes the resolver↔service edge and lets the service compose the
+default conveyance without opening a cycle. The self-privilege check
+costs one roster fetch per approval, beside the two reads approval
+already makes. Differential proof: the privileged and
+privileged-without-possession arms went red against the old code (a
+chain link conveyed in both), the non-privileged arm stayed green, and
+the privileged arm asserts `ChainVerdict.anchored` through real ML-DSA
+verification plus root-INSTEAD-OF-chain (no chain-flavoured secret
+arrives). The functional pack's approve-row prose was swept in the
+same commit — its live approver authenticates with the atSign's own
+keys and is fully privileged by construction (14.14's posture), so its
+conveyed link is root-flavoured now; the row's count assertions were
+already flavour-agnostic. Boundary note: the full-suite run at this
+commit carries one red owned by the PARALLEL agent on this branch
+(their `6cfca51d4` added the UC-A2.5/UC-A2.6 catalogue rows ahead of
+their scenarios, so `catalogue_test`'s completeness pin is red on
+their in-flight state, verified by input mtimes and their edit set —
+not by this change).

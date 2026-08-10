@@ -201,7 +201,9 @@ void main() {
       when(() => remote.atLookUp).thenReturn(lookUp);
       when(() => lookUp.enrollmentId).thenReturn(null);
       expect(
-          await EnrollmentRecordPrivilegeResolver(client).isFullyPrivileged(),
+          await EnrollmentRecordPrivilegeResolver(client,
+                  listEnrollments: ({enrollmentListParams}) async => [])
+              .isFullyPrivileged(),
           isTrue);
     });
   });

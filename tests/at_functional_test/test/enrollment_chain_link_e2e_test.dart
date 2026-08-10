@@ -180,7 +180,7 @@ void main() {
             'rather than there having been nothing to send');
   });
 
-  test('approving conveys a chain link alongside the symmetric key', () async {
+  test('approving conveys a link alongside the symmetric key', () async {
     final otp = (await atClient.getOTP()).response;
 
     Map<String, dynamic>? built;
@@ -212,15 +212,17 @@ void main() {
     ));
 
     // Two envelopes are addressed to this key package: the symmetric key it
-    // cannot start without, and the chain link vouching for it. Counted rather
-    // than read, because both are sealed to a private half only the enrolling
-    // device holds — the count is what an approver-side test can honestly see.
+    // cannot start without, and the link vouching for it — root-flavoured
+    // here, because this approver authenticates with the atSign's own keys
+    // and is fully privileged. Counted rather than read, because both are
+    // sealed to a private half only the enrolling device holds — the count
+    // is what an approver-side test can honestly see.
     final envelopes = await atClient.getAtKeys(
         regex: '.*\\.$kpid\\.__ssenv\\..*', useRemoteAtServer: true);
 
     expect(envelopes.length, greaterThanOrEqualTo(2),
-        reason: 'approval conveys the symmetric key and the chain link; only '
-            'one of them arriving would leave the new device either unable to '
+        reason: 'approval conveys the symmetric key and the link; only one '
+            'of them arriving would leave the new device either unable to '
             'decrypt or permanently unsigned');
   });
 }

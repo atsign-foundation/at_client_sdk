@@ -6,7 +6,7 @@ import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/enroll/enrollment_conveyance.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart'
-    show isFullyPrivileged;
+    show EnrollmentPrivilegeResolver, isFullyPrivileged;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/secret_sharing/secret_sharing.dart';
@@ -24,8 +24,10 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
       {required
       Future<List<Enrollment>> Function(
               {EnrollmentListRequestParam? enrollmentListParams})
-          listEnrollments})
-      : _listEnrollments = listEnrollments;
+          listEnrollments,
+      required EnrollmentPrivilegeResolver privilege})
+      : _listEnrollments = listEnrollments,
+        _privilege = privilege;
 
   final AtClient _atClient;
 
@@ -33,6 +35,12 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   /// class stays independent of the verb wrapper that owns `enroll:list`.
   final Future<List<Enrollment>> Function(
       {EnrollmentListRequestParam? enrollmentListParams}) _listEnrollments;
+
+  /// This client's own privilege — the same injected seam the startup steps
+  /// consult. It decides which link flavour an approval conveys: the fully
+  /// privileged class signs root links, everyone else the provisional chain
+  /// link.
+  final EnrollmentPrivilegeResolver _privilege;
 
   /// Seals every secret [enrollment]'s namespaces authorise to the key package
   /// it advertised on its `enroll:request`, so the newly approved device can
@@ -96,25 +104,57 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     }
 
     // Vouch for the enrollment this approver has just approved, so a verifier
-    // can walk from its key up to the atSign's signing root. Conveyed rather
+    // can walk from its key to the atSign's signing root. Conveyed rather
     // than published, because `_apsk` accepts writes only from its own
     // enrollment's connection — this approver is the signer and the child is
     // the only permitted writer, so the child stamps it on first run.
+    //
+    // The flavour is decided by THIS approver's privilege: the fully
+    // privileged class (`rw` on `*` and `__manage`) signs root links — one
+    // hop, verified against the published signing root, so the enrollment is
+    // born anchored — and only an approver outside that class leaves the
+    // provisional chain link the sweep later upgrades. A privileged approver
+    // that has not yet received the root private conveys no link at all:
+    // possession heals by pulling, and its sweep anchors this enrollment
+    // then — a chain link from the entitled class would demote the design.
     //
     // Best-effort by design: an enrollment whose link never lands is simply
     // unsigned, which verifiers already tolerate during the changeover, and
     // that is a far better outcome than failing an approval that has already
     // happened on the atServer.
-    final link = await PqSigningChain(_atClient)
-        .signLinkFor(sharing, enrollment.enrollmentId!);
-    if (link != null) {
-      await sharing.shareSecretWith(
-          keyPackage,
-          Secret(
-            namespace: _conveyanceNamespaceFor(enrollment),
-            name: PqSigningChain.linkSecretName,
-            value: PqSigningChain.encodeLink(link),
-          ));
+    final root = PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo);
+    final rootPrivate = await root.privateHalf(atSign);
+    if (await _privilege.isFullyPrivileged()) {
+      if (rootPrivate != null) {
+        final link = await PqSigningChain(_atClient)
+            .signRootLinkFor(enrollment.enrollmentId!,
+                rootPrivate: rootPrivate);
+        if (link != null) {
+          await sharing.shareSecretWith(
+              keyPackage,
+              Secret(
+                namespace: _conveyanceNamespaceFor(enrollment),
+                name: PqSigningChain.rootLinkSecretName,
+                value: PqSigningChain.encodeLink(link),
+              ));
+        }
+      } else {
+        _logger.info('Not conveying a link for ${enrollment.enrollmentId}: '
+            'this fully privileged approver holds no signing-root private '
+            'yet; the sweep anchors it once possession heals');
+      }
+    } else {
+      final link = await PqSigningChain(_atClient)
+          .signLinkFor(sharing, enrollment.enrollmentId!);
+      if (link != null) {
+        await sharing.shareSecretWith(
+            keyPackage,
+            Secret(
+              namespace: _conveyanceNamespaceFor(enrollment),
+              name: PqSigningChain.linkSecretName,
+              value: PqSigningChain.encodeLink(link),
+            ));
+      }
     }
 
     // A fully privileged enrollment gets the signing root's private half, so
@@ -127,8 +167,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     // any other secret and reach the next enrollment that shared its
     // namespace, privileged or not.
     if (isFullyPrivileged(enrollment.namespace)) {
-      final root = PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo);
-      final private = await root.privateHalf(atSign);
+      final private = rootPrivate;
       if (private != null) {
         await sharing.shareSecretWith(
             keyPackage,
