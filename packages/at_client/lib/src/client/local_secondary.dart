@@ -2,7 +2,13 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/response/enrollment.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';

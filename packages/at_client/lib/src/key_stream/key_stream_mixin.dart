@@ -1,7 +1,10 @@
 import 'dart:async';
 
-import 'package:at_client/at_client.dart'
-    show AtClient, AtClientManager, AtNotification;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/manager/at_client_manager.dart'
+    show AtClientManager;
+import 'package:at_client/src/response/at_notification.dart'
+    show AtNotification;
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 // ignore: unused_shown_name

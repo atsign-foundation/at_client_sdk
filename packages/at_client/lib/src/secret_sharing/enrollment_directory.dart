@@ -1,6 +1,6 @@
 import 'dart:convert' show jsonDecode;
 
-import 'package:at_client/at_client.dart' show AtClient;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'

@@ -2,7 +2,12 @@ import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/service/enrollment_service.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';

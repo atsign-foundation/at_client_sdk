@@ -1,6 +1,6 @@
 import 'dart:convert';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_commons.dart';
 
 class AtNotification {
   late String id;

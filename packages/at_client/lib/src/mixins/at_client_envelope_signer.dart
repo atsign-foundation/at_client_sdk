@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart' show AtClient;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/mixins/envelope_signing.dart'
     show EnvelopeSigning;

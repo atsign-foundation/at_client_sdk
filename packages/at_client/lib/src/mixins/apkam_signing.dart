@@ -1,10 +1,7 @@
-import 'package:at_client/at_client.dart'
-    show
-        AtClient,
-        AtKeyNotFoundException,
-        AtKey,
-        GetRequestOptions,
-        PutRequestOptions;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/client/request_options.dart'
+    show GetRequestOptions, PutRequestOptions;
+import 'package:at_commons/at_commons.dart' show AtKey, AtKeyNotFoundException;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, apskUri;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;

@@ -1,7 +1,9 @@
 import 'dart:convert' show jsonDecode, jsonEncode;
 
-import 'package:at_client/at_client.dart'
-    show AtClient, AtKey, GetRequestOptions;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/client/request_options.dart'
+    show GetRequestOptions;
+import 'package:at_commons/at_commons.dart' show AtKey;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;

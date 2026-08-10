@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/converters/encoder/at_encoder.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';

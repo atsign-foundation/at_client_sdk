@@ -5716,3 +5716,56 @@ Reconciled in the same commit: implementation-plan 14.3 marked DONE
 implemented" header replaced with a pointer to this section and the two
 re-grep corrections, and the three future-tense "the JWS migration will…"
 comments in at_client's tests rewritten in present tense.
+
+## 61. The barrel cycle is cut: no src file imports a public barrel (2026-08-10)
+
+Phase 4a of the refactor plan. The named cycle was
+`pq_signing_root.dart` importing `package:at_client/at_client.dart` while
+the barrel exports the impl layer that imports the nskey subsystem — but
+the survey showed the minimal set of files that would make the PQ
+subsystem's import closure barrel-free pulled in nearly the whole package
+(the spec needs `RemoteSecondary`, which reaches `AtClientManager`, which
+constructs `AtClientImpl`, which imports everything). So the cut landed as
+the package-wide invariant instead of a patchwork clean-list:
+
+**No file under `lib/src` imports `at_client.dart` or
+`at_client_mixins.dart` — the public barrels are export surface only.**
+49 files moved from a barrel import to concrete
+`package:at_client/src/...` imports of what each actually uses; all 126
+`lib/src` files now have barrel-free transitive import closures (verified
+by walking every file's import graph, not by the edit list).
+`test/import_topology_test.dart` pins the invariant — red-proofed by
+injecting a barrel import and watching it name the file.
+
+### 61.1 The resolved-signing-algo record moved below the impl layer first
+
+`EnvelopeSigning.wrapAndSign` resolved its algorithm through
+`AtClientImpl.signingAlgoOf` — the one dependency that dragged the impl
+layer (and through it the barrel) into the signing mixins' closure. The
+resolution state (section 58's key-material-authoritative record) now
+lives in `src/signing/resolved_signing_algo.dart` as an Expando keyed by
+the client — the same client-associated-state pattern the crypto config
+uses (section 27.2) — with `recordResolvedSigningAlgo` /
+`resolvedSigningAlgoFor` / `signingAlgoOf`.
+`AtClientImpl.signingAlgoType` and the static `signingAlgoOf` delegate to
+it, so the section-58 public surface is byte-identical; the mixin and the
+sync/notification service impls consume the low-level function directly.
+For a non-`AtClientImpl` client the answer is unchanged too: nothing
+records into the Expando, so the preference fallback answers, exactly as
+the old `is AtClientImpl` branch did.
+
+### 61.2 What 4a deliberately did not cut
+
+Structural cycles among concrete src files remain and are later phases'
+work, now visible instead of hidden behind the barrel:
+
+- `at_client_secret_sharing.dart` imports `enrollment_service_impl.dart`
+  (and the service impl imports the secret-sharing machinery for
+  approve-time conveyance) — the secret_sharing↔service cycle, cut in 4g
+  by consuming the 4d privilege-resolver seam.
+- `AtClientImpl` ↔ `EnrollmentServiceImpl` — subsumed by 4d's bootstrap.
+
+The plan's optional `src/signing/` file move (relocating the chain/root
+files with re-export shims) was skipped: the cycle cut needed import
+narrowing, not motion, and the nskey files' home is not what any later
+phase depends on.

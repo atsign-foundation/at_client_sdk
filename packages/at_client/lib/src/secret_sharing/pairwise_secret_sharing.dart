@@ -6,18 +6,15 @@ import 'dart:typed_data' show Uint8List;
 
 import 'package:at_chops/at_chops.dart'
     show AtKemAlgorithm, PqOpenException, pqOpen, pqSeal;
-import 'package:at_client/at_client.dart'
-    show
-        AtKey,
-        AtNotification,
-        AtValue,
-        DeleteRequestOptions,
-        GetRequestOptions,
-        NotificationParams,
-        PutRequestOptions,
-        SyncDirection,
-        SyncProgress,
-        SyncProgressListener;
+import 'package:at_client/src/client/request_options.dart'
+    show DeleteRequestOptions, GetRequestOptions, PutRequestOptions;
+import 'package:at_client/src/response/at_notification.dart'
+    show AtNotification;
+import 'package:at_client/src/service/notification_service.dart'
+    show NotificationParams;
+import 'package:at_client/src/service/sync_service.dart'
+    show SyncDirection, SyncProgress, SyncProgressListener;
+import 'package:at_commons/at_commons.dart' show AtKey, AtValue;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';

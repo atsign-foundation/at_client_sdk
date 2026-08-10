@@ -1,4 +1,5 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_commons/at_commons.dart';
 
 class SwitchAtSignEvent {
   AtClient? previousAtClient;

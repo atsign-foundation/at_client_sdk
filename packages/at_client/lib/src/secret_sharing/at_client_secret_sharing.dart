@@ -1,5 +1,5 @@
 import 'package:at_auth/at_auth.dart' show AtEnrollment;
-import 'package:at_client/at_client.dart' show AtClient;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart';
 import 'package:at_client/src/mixins/envelope_signing.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';

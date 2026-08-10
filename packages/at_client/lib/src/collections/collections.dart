@@ -11,7 +11,11 @@ import 'dart:typed_data';
 // at_commons re-exports a `StringBuffer` class that would otherwise shadow
 // `dart:core`'s. Hide it so this file (and any consumer of the collections
 // API) can use `StringBuffer` with its standard Dart semantics.
-import 'package:at_client/at_client.dart' hide StringBuffer;
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/response/at_notification.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_commons/at_commons.dart' hide StringBuffer;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show AtData, AtMetaData;

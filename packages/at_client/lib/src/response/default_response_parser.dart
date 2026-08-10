@@ -1,4 +1,4 @@
-import 'package:at_client/at_client.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/response/response_parser.dart';
 

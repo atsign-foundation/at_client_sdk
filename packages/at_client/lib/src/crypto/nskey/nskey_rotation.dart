@@ -1,7 +1,7 @@
 import 'dart:convert' show base64Encode;
 
 import 'package:at_auth/at_auth.dart' show EnrollmentRequestDecision;
-import 'package:at_client/at_client.dart' show AtClient;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
     show NskeyAdvertisement;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';

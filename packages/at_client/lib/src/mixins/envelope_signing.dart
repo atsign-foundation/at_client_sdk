@@ -1,8 +1,8 @@
 import 'dart:async' show FutureOr, Timer;
 import 'dart:convert' show jsonEncode;
 
-import 'package:at_client/at_client.dart'
-    show AtKey, AtValue, GetRequestOptions, IllegalStateException;
+import 'package:at_client/src/client/request_options.dart'
+    show GetRequestOptions;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show signingAlgoOf;
@@ -13,7 +13,8 @@ import 'package:at_client/src/signing/envelope_signature.dart'
         signEnvelope,
         signedEnvelopeVersion,
         verifyEnvelope;
-import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
+import 'package:at_commons/at_commons.dart'
+    show AtKey, AtSigningVerificationException, AtValue, IllegalStateException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 

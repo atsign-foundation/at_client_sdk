@@ -2,8 +2,14 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show AtChopsUtil, EncryptionKeyType;
-import 'package:at_client/at_client.dart';
-import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/response/enrollment.dart';
+import 'package:at_client/src/service/enrollment_service.dart';
+import 'package:at_client/src/util/enroll_list_request_param.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
+import 'package:at_client/src/secret_sharing/secret_sharing.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_commons/at_builders.dart';

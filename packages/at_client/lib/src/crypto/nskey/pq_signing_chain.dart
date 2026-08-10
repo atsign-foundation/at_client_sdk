@@ -1,10 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
-import 'package:at_client/at_client_mixins.dart' show EnvelopeSigning;
+import 'package:at_client/src/mixins/envelope_signing.dart'
+    show EnvelopeSigning;
 import 'package:at_client/src/signing/envelope_signature.dart'
     as envelope_signature show apskUri;
 import 'package:at_client/src/signing/envelope_signature.dart'

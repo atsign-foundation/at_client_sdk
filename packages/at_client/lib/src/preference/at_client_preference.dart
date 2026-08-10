@@ -1,5 +1,12 @@
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/at_client_impl.dart';
+import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_commons/at_commons.dart';
 import 'package:at_client/src/preference/at_client_particulars.dart';
 import 'package:version/version.dart';
 

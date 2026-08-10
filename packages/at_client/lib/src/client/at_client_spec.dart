@@ -2,7 +2,17 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart' show AtKeysIo;
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart';
+import 'package:at_client/src/client/data_event.dart';
+import 'package:at_client/src/client/local_secondary.dart';
+import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/manager/at_client_manager.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
+import 'package:at_client/src/service/enrollment_service.dart';
+import 'package:at_client/src/service/notification_service.dart';
+import 'package:at_client/src/service/sync_service.dart';
+import 'package:at_commons/at_commons.dart';
+import 'package:at_client/src/collections/collections.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/stream/at_stream_response.dart';

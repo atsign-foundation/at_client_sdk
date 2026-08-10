@@ -12,8 +12,9 @@ import 'package:at_auth/at_auth.dart'
         KeyPartStatus,
         WrittenAtKeysIo;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
-import 'package:at_client/at_client.dart'
-    show AtClient, AtKey, AtValue, GetRequestOptions;
+import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/client/request_options.dart'
+    show GetRequestOptions;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show pqSigningRootKey, pqSigningRootRecordName;
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
@@ -23,7 +24,7 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_commons/at_commons.dart'
-    show AtBytes, AtKeyNotFoundException, KeyNotFoundException;
+    show AtBytes, AtKey, AtKeyNotFoundException, AtValue, KeyNotFoundException;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
