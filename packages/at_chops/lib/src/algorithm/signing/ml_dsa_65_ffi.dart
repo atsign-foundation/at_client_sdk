@@ -61,37 +61,32 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
         EvpPkeyCtxNewFromNameDart>('EVP_PKEY_CTX_new_from_name');
     _ctxFree = _lib.lookupFunction<EvpPkeyCtxFreeNative, EvpPkeyCtxFreeDart>(
         'EVP_PKEY_CTX_free');
-    _pkeyFree = _lib
-        .lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>('EVP_PKEY_free');
-    _keygenInit =
-        _lib.lookupFunction<EvpPkeyKeygenInitNative, EvpPkeyKeygenInitDart>(
-            'EVP_PKEY_keygen_init');
+    _pkeyFree = _lib.lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>(
+        'EVP_PKEY_free');
+    _keygenInit = _lib.lookupFunction<EvpPkeyKeygenInitNative,
+        EvpPkeyKeygenInitDart>('EVP_PKEY_keygen_init');
     _keygen = _lib.lookupFunction<EvpPkeyKeygenNative, EvpPkeyKeygenDart>(
         'EVP_PKEY_keygen');
-    _getRawPublicKey =
-        _lib.lookupFunction<EvpPkeyGetRawKeyNative, EvpPkeyGetRawKeyDart>(
-            'EVP_PKEY_get_raw_public_key');
-    _getRawPrivateKey =
-        _lib.lookupFunction<EvpPkeyGetRawKeyNative, EvpPkeyGetRawKeyDart>(
-            'EVP_PKEY_get_raw_private_key');
+    _getRawPublicKey = _lib.lookupFunction<EvpPkeyGetRawKeyNative,
+        EvpPkeyGetRawKeyDart>('EVP_PKEY_get_raw_public_key');
+    _getRawPrivateKey = _lib.lookupFunction<EvpPkeyGetRawKeyNative,
+        EvpPkeyGetRawKeyDart>('EVP_PKEY_get_raw_private_key');
     _newRawPrivateKeyEx = _lib.lookupFunction<EvpPkeyNewRawPrivateKeyExNative,
         EvpPkeyNewRawPrivateKeyExDart>('EVP_PKEY_new_raw_private_key_ex');
     _newRawPublicKeyEx = _lib.lookupFunction<EvpPkeyNewRawPublicKeyExNative,
         EvpPkeyNewRawPublicKeyExDart>('EVP_PKEY_new_raw_public_key_ex');
-    _mdCtxNew = _lib
-        .lookupFunction<EvpMdCtxNewNative, EvpMdCtxNewDart>('EVP_MD_CTX_new');
+    _mdCtxNew = _lib.lookupFunction<EvpMdCtxNewNative, EvpMdCtxNewDart>(
+        'EVP_MD_CTX_new');
     _mdCtxFree = _lib.lookupFunction<EvpMdCtxFreeNative, EvpMdCtxFreeDart>(
         'EVP_MD_CTX_free');
-    _digestSignInit =
-        _lib.lookupFunction<EvpDigestSignInitNative, EvpDigestSignInitDart>(
-            'EVP_DigestSignInit');
+    _digestSignInit = _lib.lookupFunction<EvpDigestSignInitNative,
+        EvpDigestSignInitDart>('EVP_DigestSignInit');
     _digestSign = _lib.lookupFunction<EvpDigestSignNative, EvpDigestSignDart>(
         'EVP_DigestSign');
-    _digestVerifyInit =
-        _lib.lookupFunction<EvpDigestVerifyInitNative, EvpDigestVerifyInitDart>(
-            'EVP_DigestVerifyInit');
-    _digestVerify =
-        _lib.lookupFunction<EvpDigestVerifyNative, EvpDigestVerifyDart>(
+    _digestVerifyInit = _lib.lookupFunction<EvpDigestVerifyInitNative,
+        EvpDigestVerifyInitDart>('EVP_DigestVerifyInit');
+    _digestVerify = _lib
+        .lookupFunction<EvpDigestVerifyNative, EvpDigestVerifyDart>(
             'EVP_DigestVerify');
   }
 
