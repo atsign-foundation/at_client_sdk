@@ -32,6 +32,25 @@ class MockEnrollmentRequest extends Mock implements EnrollmentRequest {}
 
 class FakeEnrollmentRequest extends Fake implements EnrollmentRequest {}
 
+/// The approval handshake is at_auth's (`waitForApproval`); tests whose
+/// subject is the CLI's own behaviour stub it at that seam. [body] runs in
+/// place of the handshake — a test that needs "during approval" side effects
+/// (or a denial) expresses them there.
+void stubHandshake(MockEnrollmentBase mock, {Future<void> Function()? body}) {
+  registerFallbackValue(
+      AtEnrollmentResponse('fallback', EnrollmentStatus.pending));
+  registerFallbackValue(MockAtLookupImpl());
+  registerFallbackValue(Duration.zero);
+  when(() => mock.progressStream).thenAnswer((_) => Stream.empty());
+  when(() => mock.waitForApproval(any(),
+      atLookup: any(named: 'atLookup'),
+      retryInterval: any(named: 'retryInterval'),
+      logProgress: any(named: 'logProgress'),
+      maxRetries: any(named: 'maxRetries'))).thenAnswer((_) async {
+    if (body != null) await body();
+  });
+}
+
 void main() {
   AtSignLogger.root_level = 'INFO';
   AtLookupImpl mockAtLookup = MockAtLookupImpl();
@@ -143,6 +162,9 @@ void main() {
       // setup mock behaviour
       when(() => mockEnrollmentBase.submit(any(), any()))
           .thenAnswer((_) => Future.value(enrollmentResponse));
+      // The handshake would decrypt the keys the wire stubs below serve;
+      // this response's atAuthKeys already hold them, so a no-op stands in.
+      stubHandshake(mockEnrollmentBase);
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookup.atChops).thenReturn(AtChopsImpl(atChopsKeys));
@@ -408,6 +430,9 @@ void main() {
       // setup mock behaviour
       when(() => mockEnrollmentBase.submit(any(), any()))
           .thenAnswer((_) => Future.value(enrollmentResponse));
+      // The checkpoint's atAuthKeys already hold the decrypted keys the
+      // handshake would produce, so a no-op stands in for it.
+      stubHandshake(mockEnrollmentBase);
       when(() => mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId))
           .thenAnswer((_) => Future.value(true));
       when(() => mockAtLookup.atChops).thenReturn(AtChopsImpl(atChopsKeys));
@@ -519,6 +544,17 @@ void main() {
         checkpointExistedDuringApproval = svc.enrollCheckpoint
             .getFile('myApp', 'myDevice', {'test': 'rw'}).existsSync();
         throw UnAuthenticatedException('error:AT0025');
+      });
+      // The stubbed handshake still authenticates on the lookup, so the
+      // probe above observes the checkpoint mid-approval; the denial keeps
+      // the real handshake's contract of throwing AtEnrollmentException.
+      stubHandshake(mockEnrollmentBase, body: () async {
+        try {
+          await mockAtLookup.pkamAuthenticate(enrollmentId: dummyEnrollmentId);
+        } on UnAuthenticatedException {
+          throw AtEnrollmentException(
+              'The enrollment: $dummyEnrollmentId is denied');
+        }
       });
 
       await expectLater(

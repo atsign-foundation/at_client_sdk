@@ -1,4 +1,11 @@
 ## 1.17.0
+- refactor: `awaitApproval` delegates the approval handshake —
+  PKAM-until-approved, then fetching and decrypting the encryption private
+  key and self-encryption key — to at_auth's `waitForApproval`, deleting
+  this package's ~170-line copy of it. The checkpoint-resumed response gets
+  its atSign and root domain restored before the handshake runs (the
+  checkpoint file deliberately strips the atSign), and at_auth's progress
+  events are forwarded to this service's subscribers for the duration.
 - feat: `onboard` can activate an atSign **post-quantum**. Pass
   `--signingAlgoType mldsa65` (or set `AtOnboardingPreference.signingAlgoType`)
   and the activation mints an ML-DSA-65 APKAM, advertises the first

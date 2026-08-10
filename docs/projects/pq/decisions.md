@@ -6511,3 +6511,44 @@ caller-composed design working as intended. What changed:
   at_client (it makes the value readable and comparable; composition still
   goes through at_auth), and the design/plan section refs became clickable
   links per the docs convention.
+
+## 71. Phase 5 begins: the CLI's handshake copy is deleted (2026-08-10)
+
+**Status:** accepted and landed. `AtOnboardingServiceImpl.awaitApproval` now
+delegates the approval handshake to at_auth's `waitForApproval` — the
+~170-line copy (the PKAM-until-approved loop, the two `keys:get` fetches,
+the AES decryption) is deleted. What the extraction surfaced, fixed on the
+canonical side first:
+
+- **at_auth could not open a legacy key record.** Its decrypt passed
+  `keyResponse['iv']` into a non-nullable `generateIVFromBase64String`,
+  so a record written by a legacy approver — no `iv` field, zero-IV
+  encryption, exactly the case the CLI copy's own comment preserved —
+  crashed with a Null type error. Red-proofed by a two-arm unit
+  differential (no-iv / with-iv) before the fix; the absent field now
+  selects `generateIVLegacy()`.
+- **`atLookup` was an implementation-only parameter.** The `AtEnrollment`
+  interface did not declare it, so a caller holding the interface type —
+  the CLI does — could not pass the connection the handshake must run on.
+  Hoisted to the interface, typed `AtLookUp` (the impl had over-typed it
+  `AtLookupImpl`; the handshake uses only `AtLookUp` members). The
+  interface/impl DEFAULT mismatch (48×1min vs 15×2s) is pre-existing and
+  deliberately untouched.
+- **The checkpoint strips the atSign; the delegate validates it.** The
+  enrollment checkpoint deliberately omits the atSign from the persisted
+  response, and `waitForApproval` refuses a response with none — so
+  `awaitApproval` restores atSign and root domain from the service's own
+  state before delegating, or every resumed enrollment would throw. The
+  CLI's denied-resume test now runs through at_auth's REAL handshake and
+  proves both the fill and the denial contract.
+
+The CLI keeps what is genuinely its own: the proxy `from:` pre-step,
+stamping `enrollmentId` on its lookup for the later re-auths, and
+forwarding at_auth's progress events to its subscribers for the duration
+of the call. Its unit tests that merely rode the copy now stub the
+handshake at the seam; the handshake itself is live-proven where it lives
+(the functional pack drives at_auth's `waitForApproval` on the real wire —
+the CLI layer had no live tier before this change either).
+`at_onboarding_cli`'s at_auth floor rises to `^3.4.0` in the same commit:
+the delegation depends on this at_auth's null-IV fix and interface
+parameter, and workspace resolution would mask a stale floor.

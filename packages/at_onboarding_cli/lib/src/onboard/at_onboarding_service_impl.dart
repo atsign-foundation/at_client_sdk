@@ -436,223 +436,38 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       await _sendFromCommandIfUsingProxy(_atLookUp!, context: 'awaitApproval');
     }
 
-    AtChopsKeys atChopsKeys = AtChopsKeys.create(
-        AtEncryptionKeyPair.create(
-            enrollmentResponse.atAuthKeys!.defaultEncryptionPublicKey!
-                .toString(),
-            ''),
-        AtPkamKeyPair.create(
-            enrollmentResponse.atAuthKeys!.apkamPublicKey!.toString(),
-            enrollmentResponse.atAuthKeys!.apkamPrivateKey!.toString()));
-    atChopsKeys.apkamSymmetricKey =
-        AESKey(enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString());
-
-    // Create AtChops instance and assign it to the lookup for PKAM authentication
-    AtChopsImpl atChops = AtChopsImpl(atChopsKeys);
-    _atLookUp!.atChops = atChops;
+    // Later steps re-authenticate on this connection (a reconnect PKAMs
+    // again), so the lookup must know which enrollment it authenticates as;
+    // the delegate passes the id per call and never stamps it.
     _atLookUp!.enrollmentId = enrollmentResponse.enrollmentId;
 
-    // Pkam auth will be attempted asynchronously until enrollment is approved
-    // or denied or times out. If denied or timed out, an exception will be
-    // thrown
-    await _waitForPkamAuthSuccess(
-      _atLookUp!,
-      enrollmentResponse.enrollmentId,
-      retryInterval,
-      logProgress: logProgress,
-      maxRetries: maxRetries,
-    );
+    // The enrollment checkpoint deliberately strips the atSign from the
+    // persisted response (the file must not reveal whose it is), and the
+    // delegate validates and addresses by both fields — so a resumed
+    // response gets them restored from what this service already knows.
+    // ignore: deprecated_member_use
+    enrollmentResponse.atSign ??= _atSign;
+    // ignore: deprecated_member_use
+    enrollmentResponse.rootDomain ??= AtRootDomain(
+        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
 
-    // Fetches encrypted "defaultEncryptionPrivateKey" from server. The first
-    // argument holds the "defaultEncryptionPrivateKey" and the second argument
-    // hold the Initialization Vector(IV) to decrypt the data.
-    // Defaults to null to support legacy IV for backward compatibility.
-    (String, String?) encryptedPrivateKey =
-        await _getEncryptionPrivateKeyFromServer(
-            enrollmentResponse.enrollmentId, _atLookUp!);
-
-    var decryptedEncryptionPrivateKey = EncryptionUtil.decryptValue(
-        encryptedPrivateKey.$1,
-        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString(),
-        ivBase64: encryptedPrivateKey.$2);
-
-    // Fetches encrypted "selfEncryptionKey" from server. The first
-    // argument holds the "selfEncryptionKey" and the second argument
-    // hold the Initialization Vector(IV) to decrypt the data.
-    // Defaults to null to support legacy IV for backward compatibility.
-    (String, String?) selfEncryptionKey = await _getSelfEncryptionKeyFromServer(
-        enrollmentResponse.enrollmentId, _atLookUp!);
-    var decryptedSelfEncryptionKey = EncryptionUtil.decryptValue(
-        selfEncryptionKey.$1,
-        enrollmentResponse.atAuthKeys!.apkamSymmetricKey!.toString(),
-        ivBase64: selfEncryptionKey.$2);
-
-    enrollmentResponse.atAuthKeys!.defaultEncryptionPrivateKey =
-        AtBytes.fromString(decryptedEncryptionPrivateKey);
-    enrollmentResponse.atAuthKeys!.defaultSelfEncryptionKey =
-        AtBytes.fromString(decryptedSelfEncryptionKey);
-  }
-
-  /// Retrieves the encryption private key and its associated initialization vector (IV)
-  /// from the server for a given enrollment.
-  ///
-  /// The `privateKeyCommand` is constructed using the `enrollmentIdFromServer` and
-  /// `AtConstants.defaultEncryptionPrivateKey` with the format:
-  /// `'keys:get:keyName:<enrollmentId>.<defaultPrivateKey>.__manage$_atSign'`.
-  ///
-  /// This method sends a command to the `atLookUp` service to retrieve the private key data
-  /// from the server, then parses the JSON result to extract the private key (`value`) and
-  /// the IV (`iv`).
-  ///
-  /// Throws an [AtEnrollmentException] if:
-  /// - The private key returned from the server is `null` or empty.
-  /// - There is an exception during command execution.
-  ///
-  /// Returns:
-  /// - A tuple containing:
-  ///   - `encryptionPrivateKeyFromServer` - The encrypted private key string from the server.
-  ///   - `encryptionPrivateKeyIV` - The associated IV string, if present.
-  Future<(String, String?)> _getEncryptionPrivateKeyFromServer(
-      String enrollmentIdFromServer, AtLookUp atLookUp) async {
-    var privateKeyCommand =
-        'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultEncryptionPrivateKey}.__manage$_atSign\n';
-    String encryptionPrivateKeyFromServer;
-    String? encryptionPrivateKeyIV;
+    _atEnrollment ??= AtEnrollment.create();
+    // The whole approval handshake — PKAM-until-approved, then fetching and
+    // decrypting the encryption private key and self-encryption key — is
+    // at_auth's canonical implementation; this class used to carry a copy of
+    // it. Its progress events are forwarded for the duration so this
+    // service's subscribers see the same stream the copy used to emit.
+    final forward = _atEnrollment!.progressStream.listen(_psc.add);
     try {
-      var getPrivateKeyResult =
-          await atLookUp.executeCommand(privateKeyCommand, auth: true);
-      getPrivateKeyResult =
-          getPrivateKeyResult?.replaceFirst(RegExp(r'^data:'), '');
-      var privateKeyResultJson = jsonDecode(getPrivateKeyResult!);
-      encryptionPrivateKeyFromServer = privateKeyResultJson['value'];
-      encryptionPrivateKeyIV = privateKeyResultJson['iv'];
-      if (encryptionPrivateKeyFromServer == null ||
-          encryptionPrivateKeyFromServer.isEmpty) {
-        throw AtEnrollmentException('$privateKeyCommand returned null/empty');
-      }
-    } on Exception catch (e) {
-      throw AtEnrollmentException(
-          'Exception while getting encrypted private key/self key from server: $e');
-    }
-    return (encryptionPrivateKeyFromServer, encryptionPrivateKeyIV);
-  }
-
-  /// Retrieves the self-encryption key and its associated initialization vector (IV)
-  /// from the server for a given enrollment.
-  ///
-  /// The `selfEncryptionKeyCommand` is constructed using the `enrollmentIdFromServer`
-  /// and `AtConstants.defaultSelfEncryptionKey` in the format:
-  /// `'keys:get:keyName:<enrollmentId>.<defaultSelfEncryptionKey>.__manage$_atSign'`.
-  ///
-  /// This method sends a command to the `atLookUp` service to retrieve the self-encryption key data
-  /// from the server, then parses the JSON result to extract the key (`value`) and
-  /// the IV (`iv`).
-  ///
-  /// Throws an [AtEnrollmentException] if:
-  /// - The self-encryption key returned from the server is `null` or empty.
-  /// - There is an exception during the command execution.
-  ///
-  /// Parameters:
-  /// - `enrollmentIdFromServer` - The enrollment ID used to request the self-encryption key.
-  /// - `atLookUp` - The [AtLookUp] instance to execute the server command.
-  ///
-  /// Returns:
-  /// - A tuple containing:
-  ///   - `selfEncryptionKeyFromServer` - The self-encryption key string retrieved from the server.
-  ///   - `selfEncryptionKeyIV` - The associated IV string, if present.
-  Future<(String, String?)> _getSelfEncryptionKeyFromServer(
-      String enrollmentIdFromServer, AtLookUp atLookUp) async {
-    var selfEncryptionKeyCommand =
-        'keys:get:keyName:$enrollmentIdFromServer.${AtConstants.defaultSelfEncryptionKey}.__manage$_atSign\n';
-    String selfEncryptionKeyFromServer;
-    String? selfEncryptionKeyIV;
-    try {
-      var getSelfEncryptionKeyResult =
-          await atLookUp.executeCommand(selfEncryptionKeyCommand, auth: true);
-      getSelfEncryptionKeyResult =
-          getSelfEncryptionKeyResult?.replaceFirst(RegExp(r'^data:'), '');
-      var selfEncryptionKeyResultJson = jsonDecode(getSelfEncryptionKeyResult!);
-      selfEncryptionKeyFromServer = selfEncryptionKeyResultJson['value'];
-      selfEncryptionKeyIV = selfEncryptionKeyResultJson['iv'];
-      if (selfEncryptionKeyFromServer == null ||
-          selfEncryptionKeyFromServer.isEmpty) {
-        throw AtEnrollmentException(
-            '$selfEncryptionKeyCommand returned null/empty');
-      }
-    } on Exception catch (e) {
-      throw AtEnrollmentException(
-          'Exception while getting encrypted private key/self key from server: $e');
-    }
-    return (selfEncryptionKeyFromServer, selfEncryptionKeyIV);
-  }
-
-  /// Retries PKAM auth until an enrollment is approved/denied/expired
-  Future<void> _waitForPkamAuthSuccess(
-    AtLookUp atLookUp,
-    String enrollmentIdFromServer,
-    Duration retryInterval, {
-    bool logProgress = true,
-    required int maxRetries,
-  }) async {
-    int retryAttempt = 0;
-    while (true) {
-      retryAttempt++;
-      logger.info('Attempting pkam auth');
-      if (logProgress) {
-        _addProgress('PKAM', 'attempting PKAM auth', ProgressEventType.info);
-        await waitBriefly();
-      }
-      bool pkamAuthSucceeded = false;
-      try {
-        // _attemptPkamAuth returns boolean value true when authentication is successful.
-        // Returns UnAuthenticatedException when authentication fails.
-        pkamAuthSucceeded = await atLookUp.pkamAuthenticate(
-            enrollmentId: enrollmentIdFromServer);
-      } on UnAuthenticatedException catch (e) {
-        // Error codes AT0401 and AT0026 indicate authentication failure due to unapproved enrollment. Retry until the enrollment is approved.
-        // The variable _pkamAuthSucceeded is false, allowing for PKAM authentication retries.
-        // Avoid checking "retryAttempt > _maxActivationRetries" here, as we want to continue retrying until enrollment is approved.
-        // The check for "retryAttempt > _maxActivationRetries" should only occur when the secondary server is unreachable due to network issues.
-        if (e.message.contains('error:AT0401') ||
-            e.message.contains('error:AT0026')) {
-          logger.info('Pkam auth failed: ${e.message}');
-        }
-        // Error code AT0025 represents Enrollment denied. Therefore, no need to retry; throw exception.
-        else if (e.message.contains('error:AT0025')) {
-          throw AtEnrollmentException(
-              'The enrollment: $enrollmentIdFromServer is denied');
-        }
-      } catch (e) {
-        String message =
-            'Exception occurred when authenticating the atSign: $_atSign caused by ${e.toString()}';
-        if (retryAttempt > maxRetries) {
-          message += ' Activation failed after $maxRetries attempts';
-          logger.severe(message);
-          rethrow;
-        }
-        logger.severe(message);
-      }
-      if (pkamAuthSucceeded) {
-        if (logProgress) {
-          _addProgress(
-              'PKAM',
-              'Enrollment has been approved'
-                  ' (PKAM auth success)',
-              ProgressEventType.success);
-        }
-        logger.info('Authentication succeeded - request was approved');
-        return;
-      } else {
-        if (logProgress) {
-          _addProgress(
-              'PKAM',
-              'Auth failed, not yet approved.'
-                  ' Will retry in ${retryInterval.inSeconds} seconds',
-              ProgressEventType.info);
-        }
-        logger.info('Will retry pkam in ${retryInterval.inSeconds} seconds');
-        await Future.delayed(retryInterval); // Delay and retry
-      }
+      await _atEnrollment!.waitForApproval(
+        enrollmentResponse,
+        atLookup: _atLookUp,
+        retryInterval: retryInterval,
+        logProgress: logProgress,
+        maxRetries: maxRetries,
+      );
+    } finally {
+      await forward.cancel();
     }
   }
 
