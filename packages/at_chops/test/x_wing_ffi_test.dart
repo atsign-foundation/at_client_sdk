@@ -96,10 +96,5 @@ void main() {
       expect(ss.length, 32);
       expect(ss, isNot(equals(enc.sharedSecret)));
     });
-
-    // combineSharedSecret/assemblePublicKey/assembleCiphertext length-guard
-    // and offset coverage lives once in x_wing_algo_test.dart — XWingSizes
-    // is shared verbatim by both backends, so testing it here too would just
-    // duplicate those assertions without exercising anything FFI-specific.
   });
 }

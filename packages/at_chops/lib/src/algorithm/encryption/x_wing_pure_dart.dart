@@ -1,13 +1,13 @@
 import 'dart:async';
+import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
-import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
-import 'package:at_chops/src/algorithm/spec/x_wing_spec.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:meta/meta.dart';
+import 'package:pointycastle/digests/sha3.dart';
 import 'package:pointycastle/digests/shake.dart';
 
 /// X-Wing: general-purpose hybrid post-quantum/traditional KEM combining
@@ -33,13 +33,17 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
 
   const XWingPureDartAlgo._();
 
-  static const int seedLength = XWingSizes.seedLength;
-  static const int publicKeyLength = XWingSizes.publicKeyLength;
-  static const int ciphertextLength = XWingSizes.ciphertextLength;
-  static const int sharedSecretLength = XWingSizes.sharedSecretLength;
+  static const int seedLength = 32;
+  static const int publicKeyLength = 1216;
+  static const int ciphertextLength = 1120;
+  static const int sharedSecretLength = 32;
 
-  static const int _mlKemPublicKeyLength = MlKem768Sizes.publicKeyBytes;
-  static const int _mlKemCiphertextLength = MlKem768Sizes.ciphertextBytes;
+  static const int _mlKemPublicKeyLength = 1184;
+  static const int _mlKemCiphertextLength = 1088;
+
+  /// `XWingLabel`: the ASCII bytes of `\.//^\`.
+  static final Uint8List _label =
+      Uint8List.fromList([0x5c, 0x2e, 0x2f, 0x2f, 0x5e, 0x5c]);
 
   static final crypto.X25519 _x25519 = crypto.X25519();
 
@@ -52,10 +56,11 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
       [Uint8List? seed]) async {
-    seed ??= XWingSizes.randomSeed();
+    seed ??= _randomSeed();
     final _Expanded expanded = await _expand(seed);
-    final Uint8List publicKey = XWingSizes.assemblePublicKey(
-        expanded.mlKemPublicKey, expanded.x25519Public);
+    final Uint8List publicKey = Uint8List(publicKeyLength)
+      ..setRange(0, _mlKemPublicKeyLength, expanded.mlKemPublicKey)
+      ..setRange(_mlKemPublicKeyLength, publicKeyLength, expanded.x25519Public);
     return (publicKey: publicKey, secretKey: Uint8List.fromList(seed));
   }
 
@@ -105,10 +110,12 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
     final Uint8List ssX = await X25519PureDartAlgo.instance
         .dh(ephemeralX25519Secret, x25519Public);
 
-    final Uint8List ciphertext = XWingSizes.assembleCiphertext(ctM, ctX);
+    final Uint8List ciphertext = Uint8List(ciphertextLength)
+      ..setRange(0, _mlKemCiphertextLength, ctM)
+      ..setRange(_mlKemCiphertextLength, ciphertextLength, ctX);
     return (
       ciphertext: ciphertext,
-      sharedSecret: XWingSizes.combineSharedSecret(ssM, ssX, ctX, x25519Public),
+      sharedSecret: _combine(ssM, ssX, ctX, x25519Public),
     );
   }
 
@@ -132,7 +139,7 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
     final Uint8List ssX =
         await X25519PureDartAlgo.instance.dh(expanded.x25519Secret, ctX);
 
-    return XWingSizes.combineSharedSecret(ssM, ssX, ctX, expanded.x25519Public);
+    return _combine(ssM, ssX, ctX, expanded.x25519Public);
   }
 
   /// `expandDecapsulationKey(sk)`: SHAKE-256(sk, 96 bytes); bytes [0:64]
@@ -160,6 +167,25 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
       x25519Secret: skX,
       x25519Public: pkX,
     );
+  }
+
+  /// `SHA3-256(ss_M || ss_X || ct_X || pk_X || XWingLabel)`.
+  Uint8List _combine(
+      Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
+    final Uint8List input =
+        Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
+          ..setRange(0, 32, ssM)
+          ..setRange(32, 64, ssX)
+          ..setRange(64, 96, ctX)
+          ..setRange(96, 128, pkX)
+          ..setRange(128, 134, _label);
+    return SHA3Digest(256).process(input);
+  }
+
+  Uint8List _randomSeed() {
+    final Random random = Random.secure();
+    return Uint8List.fromList(
+        List<int>.generate(seedLength, (_) => random.nextInt(256)));
   }
 }
 

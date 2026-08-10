@@ -61,37 +61,32 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
         EvpPkeyCtxNewFromNameDart>('EVP_PKEY_CTX_new_from_name');
     _ctxFree = _lib.lookupFunction<EvpPkeyCtxFreeNative, EvpPkeyCtxFreeDart>(
         'EVP_PKEY_CTX_free');
-    _pkeyFree = _lib
-        .lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>('EVP_PKEY_free');
-    _keygenInit =
-        _lib.lookupFunction<EvpPkeyKeygenInitNative, EvpPkeyKeygenInitDart>(
-            'EVP_PKEY_keygen_init');
+    _pkeyFree = _lib.lookupFunction<EvpPkeyFreeNative, EvpPkeyFreeDart>(
+        'EVP_PKEY_free');
+    _keygenInit = _lib.lookupFunction<EvpPkeyKeygenInitNative,
+        EvpPkeyKeygenInitDart>('EVP_PKEY_keygen_init');
     _keygen = _lib.lookupFunction<EvpPkeyKeygenNative, EvpPkeyKeygenDart>(
         'EVP_PKEY_keygen');
-    _getRawPublicKey =
-        _lib.lookupFunction<EvpPkeyGetRawKeyNative, EvpPkeyGetRawKeyDart>(
-            'EVP_PKEY_get_raw_public_key');
-    _getRawPrivateKey =
-        _lib.lookupFunction<EvpPkeyGetRawKeyNative, EvpPkeyGetRawKeyDart>(
-            'EVP_PKEY_get_raw_private_key');
+    _getRawPublicKey = _lib.lookupFunction<EvpPkeyGetRawKeyNative,
+        EvpPkeyGetRawKeyDart>('EVP_PKEY_get_raw_public_key');
+    _getRawPrivateKey = _lib.lookupFunction<EvpPkeyGetRawKeyNative,
+        EvpPkeyGetRawKeyDart>('EVP_PKEY_get_raw_private_key');
     _newRawPrivateKeyEx = _lib.lookupFunction<EvpPkeyNewRawPrivateKeyExNative,
         EvpPkeyNewRawPrivateKeyExDart>('EVP_PKEY_new_raw_private_key_ex');
     _newRawPublicKeyEx = _lib.lookupFunction<EvpPkeyNewRawPublicKeyExNative,
         EvpPkeyNewRawPublicKeyExDart>('EVP_PKEY_new_raw_public_key_ex');
-    _mdCtxNew = _lib
-        .lookupFunction<EvpMdCtxNewNative, EvpMdCtxNewDart>('EVP_MD_CTX_new');
+    _mdCtxNew = _lib.lookupFunction<EvpMdCtxNewNative, EvpMdCtxNewDart>(
+        'EVP_MD_CTX_new');
     _mdCtxFree = _lib.lookupFunction<EvpMdCtxFreeNative, EvpMdCtxFreeDart>(
         'EVP_MD_CTX_free');
-    _digestSignInit =
-        _lib.lookupFunction<EvpDigestSignInitNative, EvpDigestSignInitDart>(
-            'EVP_DigestSignInit');
+    _digestSignInit = _lib.lookupFunction<EvpDigestSignInitNative,
+        EvpDigestSignInitDart>('EVP_DigestSignInit');
     _digestSign = _lib.lookupFunction<EvpDigestSignNative, EvpDigestSignDart>(
         'EVP_DigestSign');
-    _digestVerifyInit =
-        _lib.lookupFunction<EvpDigestVerifyInitNative, EvpDigestVerifyInitDart>(
-            'EVP_DigestVerifyInit');
-    _digestVerify =
-        _lib.lookupFunction<EvpDigestVerifyNative, EvpDigestVerifyDart>(
+    _digestVerifyInit = _lib.lookupFunction<EvpDigestVerifyInitNative,
+        EvpDigestVerifyInitDart>('EVP_DigestVerifyInit');
+    _digestVerify = _lib
+        .lookupFunction<EvpDigestVerifyNative, EvpDigestVerifyDart>(
             'EVP_DigestVerify');
   }
 
@@ -118,10 +113,13 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
         }
         final Pointer<EVP_PKEY> pkey = pkeyPtr.value;
         try {
-          return (
-            publicKey: _extractRawPublicKey(pkey),
-            secretKey: _extractRawPrivateKey(pkey),
-          );
+          final Uint8List pk = _extractRawPublicKey(pkey);
+          final Uint8List sk = _extractRawPrivateKey(pkey);
+          checkOutputLength(pk.length, MlDsa65Sizes.publicKeyBytes,
+              operation: 'EVP_PKEY_keygen', label: 'public key');
+          checkOutputLength(sk.length, MlDsa65Sizes.secretKeyBytes,
+              operation: 'EVP_PKEY_keygen', label: 'secret key');
+          return (publicKey: pk, secretKey: sk);
         } finally {
           _pkeyFree(pkey);
         }
@@ -328,6 +326,12 @@ final class MlDsa65FfiAlgo implements AtSigningAlgorithm, AtSignatureAlgorithm {
       try {
         final int result =
             _digestVerify(ctx, sigBuf, signature.length, dataBuf, data.length);
+        // 1 = valid, 0 = signature mismatch, < 0 = the operation itself
+        // failed. Only the middle case is a verification result; folding the
+        // last one into `false` would make a backend failure indistinguishable
+        // from a forged signature, which is what dropping verifyBytes'
+        // catch-all set out to prevent.
+        if (result < 0) throw StateError('EVP_DigestVerify failed');
         return result == 1;
       } finally {
         calloc.free(dataBuf);

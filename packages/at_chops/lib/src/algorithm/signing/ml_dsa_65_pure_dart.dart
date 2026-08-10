@@ -36,6 +36,10 @@ final class MlDsa65PureDartAlgo
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair() async {
     final (Uint8List pk, Uint8List sk) =
         MlDsa.generateKeyPair(DilithiumParams.mlDsa65);
+    checkOutputLength(pk.length, MlDsa65Sizes.publicKeyBytes,
+        operation: 'ML-DSA-65 generateKeyPair', label: 'public key');
+    checkOutputLength(sk.length, MlDsa65Sizes.secretKeyBytes,
+        operation: 'ML-DSA-65 generateKeyPair', label: 'secret key');
     return (publicKey: pk, secretKey: sk);
   }
 
