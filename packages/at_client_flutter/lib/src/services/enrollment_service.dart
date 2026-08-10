@@ -20,6 +20,7 @@ class FlutterEnrollmentService {
 
   final AtSignLogger _logger = AtSignLogger('FlutterEnrollmentService');
   final AtEnrollment _atEnrollment = AtEnrollment.create();
+
   /// Injectable for tests, like [KeychainStorage.biometricStorage];
   /// production uses the platform keychain.
   @visibleForTesting

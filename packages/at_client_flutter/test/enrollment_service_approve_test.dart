@@ -60,15 +60,19 @@ void main() {
     mockKeychainAtKeysIo = MockKeychainAtKeysIo();
     mockAtLookUp = MockAtLookUp();
 
-    when(() => mockKeychainStorage.validateEnrollment(atSign))
-        .thenAnswer((_) async => true);
-    when(() => mockKeychainStorage.deleteEnrollmentData(atSign))
-        .thenAnswer((_) async {});
-    when(() => mockAtClient.enrollmentService)
-        .thenReturn(mockEnrollmentService);
+    when(
+      () => mockKeychainStorage.validateEnrollment(atSign),
+    ).thenAnswer((_) async => true);
+    when(
+      () => mockKeychainStorage.deleteEnrollmentData(atSign),
+    ).thenAnswer((_) async {});
+    when(
+      () => mockAtClient.enrollmentService,
+    ).thenReturn(mockEnrollmentService);
     when(() => mockAtLookUp.close()).thenAnswer((_) async {});
-    when(() => mockKeychainAtKeysIo.write(any(), any()))
-        .thenAnswer((_) async {});
+    when(
+      () => mockKeychainAtKeysIo.write(any(), any()),
+    ).thenAnswer((_) async {});
 
     service = FlutterEnrollmentService()
       ..atClientOverride = mockAtClient
@@ -76,54 +80,66 @@ void main() {
       ..keychainAtKeysIo = mockKeychainAtKeysIo;
   });
 
-  test('an approval with no returned key material is reported approved',
-      () async {
-    // What at_client's approve() actually returns: id and status, no keys.
-    when(() => mockEnrollmentService.approve(any())).thenAnswer(
-        (_) async => AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved));
+  test(
+    'an approval with no returned key material is reported approved',
+    () async {
+      // What at_client's approve() actually returns: id and status, no keys.
+      when(() => mockEnrollmentService.approve(any())).thenAnswer(
+        (_) async =>
+            AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved),
+      );
 
-    final decision = EnrollmentRequestDecision.approved(
+      final decision = EnrollmentRequestDecision.approved(
         enrollmentId: enrollmentId,
         apkamSymmetricKey: AtBytes.fromString('QUJD'),
-        atSign: atSign);
+        atSign: atSign,
+      );
 
-    final response = await service.approve(decision, mockAtLookUp);
+      final response = await service.approve(decision, mockAtLookUp);
 
-    expect(response.enrollStatus, EnrollmentStatus.approved);
-    expect(response.enrollmentId, enrollmentId);
-    // Nothing to write: the approver holds no enrollee key material.
-    verifyNever(() => mockKeychainAtKeysIo.write(any(), any()));
-    verify(() => mockKeychainStorage.deleteEnrollmentData(atSign)).called(1);
-    verify(() => mockAtLookUp.close()).called(1);
-  });
+      expect(response.enrollStatus, EnrollmentStatus.approved);
+      expect(response.enrollmentId, enrollmentId);
+      // Nothing to write: the approver holds no enrollee key material.
+      verifyNever(() => mockKeychainAtKeysIo.write(any(), any()));
+      verify(() => mockKeychainStorage.deleteEnrollmentData(atSign)).called(1);
+      verify(() => mockAtLookUp.close()).called(1);
+    },
+  );
 
-  test('a conveyance refusal is not re-reported as a failed approval',
-      () async {
-    // What at_client's approve() throws when the server-side approval
-    // succeeded but the enrollee's advertised key package was refused: the
-    // enrollment is live and cannot decrypt, and the response rides along.
-    final refusal = EnrollmentConveyanceException(
+  test(
+    'a conveyance refusal is not re-reported as a failed approval',
+    () async {
+      // What at_client's approve() throws when the server-side approval
+      // succeeded but the enrollee's advertised key package was refused: the
+      // enrollment is live and cannot decrypt, and the response rides along.
+      final refusal = EnrollmentConveyanceException(
         'Enrollment $enrollmentId is approved, but the key package it '
         'advertised does not verify against its _apsk, so no secrets were '
         'shared with it and it will be unable to decrypt anything. Revoke it '
         'unless this is understood.',
         response: AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved),
-        keyPackageStatus: KeyPackageStatus.rejected);
-    when(() => mockEnrollmentService.approve(any())).thenThrow(refusal);
+        keyPackageStatus: KeyPackageStatus.rejected,
+      );
+      when(() => mockEnrollmentService.approve(any())).thenThrow(refusal);
 
-    final decision = EnrollmentRequestDecision.approved(
+      final decision = EnrollmentRequestDecision.approved(
         enrollmentId: enrollmentId,
         apkamSymmetricKey: AtBytes.fromString('QUJD'),
-        atSign: atSign);
+        atSign: atSign,
+      );
 
-    await expectLater(service.approve(decision, mockAtLookUp),
+      await expectLater(
+        service.approve(decision, mockAtLookUp),
         throwsA(same(refusal)),
-        reason: 'wrapping this in "Enrollment failed" would report a '
+        reason:
+            'wrapping this in "Enrollment failed" would report a '
             'server-side success as a failure — the caller must see the true '
-            'state: approved, cannot decrypt, consider revoking');
+            'state: approved, cannot decrypt, consider revoking',
+      );
 
-    // The approval itself succeeded, so the approval bookkeeping still runs.
-    verify(() => mockKeychainStorage.deleteEnrollmentData(atSign)).called(1);
-    verify(() => mockAtLookUp.close()).called(1);
-  });
+      // The approval itself succeeded, so the approval bookkeeping still runs.
+      verify(() => mockKeychainStorage.deleteEnrollmentData(atSign)).called(1);
+      verify(() => mockAtLookUp.close()).called(1);
+    },
+  );
 }
