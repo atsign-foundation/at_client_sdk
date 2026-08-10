@@ -19,9 +19,10 @@ import 'package:at_commons/at_commons.dart';
 /// the wire across the Atsign Protocol ecosystem (this client, other at_client
 /// implementations, atServer). Renaming or re-casing one — even to fix a
 /// typo — orphans every key material that was already written with the old
-/// value: readers keyed on the old string stop recognizing it, and it fails
-/// [known]'s membership check used by warn-level tooling. New algorithms get
-/// a new token appended; existing tokens are permanent once shipped. See
+/// value: readers keyed on the old string stop recognizing it, and it drops
+/// out of [known], whose membership `test/atkey_material_test.dart` pins
+/// exactly. New algorithms get a new token appended; existing tokens are
+/// permanent once shipped. See
 /// `test/atkey_material_test.dart` for the tripwire test that pins these.
 abstract final class KeyAlgorithmType {
   static const String aes256 = 'aes256';
