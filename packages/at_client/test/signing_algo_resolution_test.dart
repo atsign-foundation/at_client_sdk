@@ -18,23 +18,29 @@ import 'test_utils/mocks.dart';
 void main() {
   final mockAtChopsKeys = MockAtChopsKeys();
 
-  /// A keyfile whose [enrollmentId] has active typed ML-DSA signing material.
+  /// A keyfile whose [enrollmentId] has active typed ML-DSA **authentication**
+  /// material.
+  ///
+  /// Authentication rather than signing because PKAM proves possession of the
+  /// APKAM keypair, and that keypair is no longer the same thing as the
+  /// enrollment's attestation signing keys — `signingAlgorithmForEnrollment`
+  /// reads the authentication role for exactly that reason.
   Future<InMemoryAtKeysIo> mlDsaKeyfile(
       String atSign, String enrollmentId) async {
     final now = DateTime.now().toUtc();
     final keys = AtKeys()
       ..addKey(AtKeysMaterial(
-        keyId: 'apkam-$enrollmentId',
+        keyId: 'apkam:$enrollmentId:1',
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.privateSigning,
+        keyPartType: CryptographicKeyType.privateAuthentication,
         keyAlgorithmType: KeyAlgorithmType.mlDsa65,
         bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 3))),
         createdAt: now,
       ))
       ..addKey(AtKeysMaterial(
-        keyId: 'apkam-$enrollmentId',
+        keyId: 'apkam:$enrollmentId:1',
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.publicVerification,
+        keyPartType: CryptographicKeyType.publicAuthentication,
         keyAlgorithmType: KeyAlgorithmType.mlDsa65,
         bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 4))),
         createdAt: now,
