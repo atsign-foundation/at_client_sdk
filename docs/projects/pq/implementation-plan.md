@@ -2152,16 +2152,20 @@ This entry is the owed half; the rulings are the contract.
 
 | Piece | Where | Rails |
 |-------|-------|-------|
-| `EnrollParams.apsk`, `.apkamPublicKeySignature`, `EnrollOperationEnum.update` + grammar | at_commons 5.14.0, `gkc-apsk-auto-publish`, [#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137) | 17/17, analyze 0 |
+| `EnrollParams.apsk`, `.apkamPublicKeySignature`, `EnrollOperationEnum.update` + grammar | **at_commons 5.14.0, published 2026-08-11**; [#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137) merged to trunk and merged into the spike | at_commons 512/512, analyze 0 |
 | `enroll:update` handler, PoP verification, client-composed `_apsk` | at_server `gkc-apsk-auto-publish` `ab38b884` | 919/919 unit, **210/210 functional** |
 | Auth/signing key types, generation keyIds, status-aware invariants, `replaceKey`, `activeEnrollmentId`, pure-legacy `toJson` | at_client_sdk `gkc-pq-d1-spike` | at_auth 237/237, analyze 0 |
 
 **Owed, in dependency order.**
 
-1. **Publish at_commons 5.14.0.** Everything downstream waits on it. Then
-   remove the `at_commons` override from `at_secondary_server`'s `pubspec.yaml`
-   *and* `pubspec_overrides.yaml`, and **delete the `at_commons-apsk-1` tag** —
-   it exists only so the VE image can build before publication.
+1. **Drop at_server's at_commons override.** at_commons 5.14.0 published on
+   2026-08-11, so the scaffolding it needed is now removable: take the
+   `at_commons` override out of `at_secondary_server`'s `pubspec.yaml` *and*
+   `pubspec_overrides.yaml`, and **delete the `at_commons-apsk-1` tag** — it
+   existed only so the VE image could build before publication. at_server
+   resolves the published 5.14.0, which carries `apsk`, the PoP field and the
+   `enroll:update` grammar. Re-run the at_server functional pack afterwards:
+   the override swap changes what the image actually compiles against.
 2. **Ruling 7's remaining half: flat → typed.** The flat `apkamPublicKey` /
    `apkamPrivateKey` must become a write-only projection that nothing reads as
    the source of truth. Readers to move: `AtKeys.toAtChops()`,
@@ -2189,8 +2193,44 @@ This entry is the owed half; the rulings are the contract.
 functional files were edited for the new keyId shape and have only been
 analyzed, never run — `tests/at_functional_test/test/pq_native_onboard_live_test.dart`
 and `tests/at_onboarding_cli_functional_tests/test/pq_native_onboard_test.dart`.
-They need at_client_sdk's own recycled VE. [#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137)'s
-CI has not been looked at either.
+They need at_client_sdk's own recycled VE.
+
+**The spike carries trunk as of 2026-08-11** (merge `95584f818`, trunk
+`2e98fdd9d`, 87 commits). What that merge settled, because a stale version
+number here would misroute a release:
+
+- **at_chops is 3.6.0 and at_commons is 5.15.0 on the spike.** trunk published
+  at_chops 3.5.0 and at_commons 5.14.0 the same day, and the spike had been
+  claiming both numbers for entirely different, unreleased content. Both sides
+  writing the same string meant `pubspec.yaml` auto-merged with no conflict at
+  all — the collision was silent, and the published CHANGELOG headings now hold
+  trunk's content with the spike's moved up a minor. at_client's floors follow.
+- **trunk's PQ length validation now lives where the spike's refactor put the
+  work.** trunk added checks to `MlKem768PureDartAlgo` and
+  `MlDsa65PureDartAlgo` bodies that the spike had already refactored away, so
+  taking either side alone silently dropped something. The ML-KEM checks moved
+  into `MlKemPureDart` against per-level size getters — 768's constants in a
+  base that also serves ML-KEM-1024 would reject every well-formed 1024 key —
+  and the ML-DSA checks into `signBytesSync`/`verifyBytesSync`, which the PKAM
+  dispatch and envelope signing reach directly and would otherwise bypass.
+- **Widening an enum broke a pin in a file no one had touched.** trunk's new
+  `at_auth/test/atkey_material_test.dart` pins both `known` sets exactly; the
+  spike had added `mlkem1024`, `privateAuthentication` and
+  `publicAuthentication`. Git merged that file cleanly and it went red only on
+  a test run.
+
+**Two red unit tests predated the merge and were fixed after it** (`b9f94ab05`,
+`e752d5529`), both stale tests rather than product defects, and both proven
+pre-existing by running the same files at the pre-merge head in a worktree.
+`signing_algo_resolution_test.dart` built its fixture from `privateSigning`,
+which predates the auth/signing split, so `signingAlgorithmForEnrollment`
+correctly found no authentication material and fell back to `rsa2048`.
+`at_onboarding_cli`'s `keyfile_literal_pins_test.dart` still expected
+`version`/`atsign`/`keys` from a keyset with no typed material — the guard for
+an at_auth change living one package away, which is why nothing went red where
+the change landed. Neither was covered by the previous entry's rails line,
+because that line reported at_onboarding_cli as *analyze* clean and at_client's
+unit suite had not been run.
 
 **A latent defect the tests chose not to find, 2026-08-11.** The `enroll:update`
 proof-of-possession check read `AtChopsImpl.verify(...).result` directly, but
