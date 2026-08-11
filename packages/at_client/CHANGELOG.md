@@ -1,4 +1,16 @@
 ## 3.14.1
+- docs (known limitation): `AtClient.uploadFile` and `AtClient.shareFiles`
+  cannot go post-quantum, and throw under `disallowLegacyEncryption`. Both
+  build their atKey as `file_transfer_<uuid>` with no namespace, and every
+  post-quantum provider is `(owner, namespace)`-scoped — `NskeyCryptoProvider`
+  and `SymmetricAesGcmProvider` each decline a namespace-less key — so the
+  resolved provider falls back to legacy and the AES file key inside the
+  `FileTransferObject` travels RSA-wrapped. A client that set
+  `disallowLegacyEncryption` (including via `ReleasePosture.postQuantum()`)
+  gets `LegacyEncryptionRefusedException` from the notify instead. The file
+  bytes themselves are AES-encrypted and unaffected; it is the key conveyance
+  that stays classical. Giving the SDK's own namespace-less writes a reserved
+  namespace is a 4.0 change, because the atKey is what the receiver matches on.
 - docs: `PublishedNskeyKeyRing.mintAndPublish` no longer describes itself as a
   rotation. Its dartdoc said calling it again for the same namespace "is a
   **rotation**", which `rotate` exists to deny: on a lost mint lock
