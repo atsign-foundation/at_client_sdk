@@ -2174,9 +2174,26 @@ This entry is the owed half; the rulings are the contract.
 | Piece | Where | Rails |
 |-------|-------|-------|
 | `EnrollParams.apsk`, `.apkamPublicKeySignature`, `EnrollOperationEnum.update` + grammar | **at_commons 5.14.0, published 2026-08-11**; [#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137) merged to trunk and merged into the spike | at_commons 512/512, analyze 0 |
-| `enroll:update` handler, PoP verification, client-composed `_apsk` | at_server `gkc-apsk-auto-publish` `ab38b884` | 919/919 unit, **210/210 functional** — ⚠️ measured with at_commons resolved through the `at_commons-apsk-1` tag, so it does **not** carry over the override swap in owed item 1 |
+| `enroll:update` handler, PoP verification, and storing a client-composed `_apsk` verbatim | at_server `gkc-apsk-auto-publish` `ab38b884` | 919/919 unit, **210/210 functional** — ⚠️ two caveats below |
 | Auth/signing key types, generation keyIds, status-aware invariants, `replaceKey`, `activeEnrollmentId`, pure-legacy `toJson` | at_client_sdk `gkc-pq-d1-spike` | at_auth 241/241, analyze 0 |
 | The above **plus trunk**, after merge `95584f818` | at_client_sdk `gkc-pq-d1-spike` | at_chops 527/527, at_commons 512/512, at_auth 241/241, at_client 1186/1186, at_onboarding_cli 38/38, at_lookup + at_policy green; analyze **0 errors and 0 warnings** across seven packages |
+
+⚠️ **Two caveats on the at_server row, because "built" is doing less work there
+than it looks** (both re-verified against the source 2026-08-11):
+
+- **The capability is dormant.** *Nothing* in `at_client`, `at_auth` or
+  `at_onboarding_cli` assigns `EnrollParams.apsk` — grep for `.apsk =` returns
+  nothing. The atServer will store a client-composed array and no client
+  composes one, so today's clients still publish the legacy bare key through
+  `publishPublicSigningKey` (`apkam_signing.dart:38`). That is the intended
+  sequencing, not a defect, but it means **no end-to-end exercise exists** and
+  will not until owed item 3 lands.
+- **The 210/210 drove `enroll:update` with hand-built payloads**, not the output
+  of a real client. The rows prove the handler, the PoP check and the storage;
+  they prove nothing about a composer that does not exist yet.
+
+- ⚠️ Also measured with at_commons resolved through the `at_commons-apsk-1`
+  tag, so the number does **not** carry over the override swap in owed item 1.
 
 **Owed, in dependency order.**
 
@@ -2194,13 +2211,50 @@ This entry is the owed half; the rulings are the contract.
    `at_auth_impl.dart` (several), `onboarding_mint.dart`, `file_io.dart`. This
    is the authentication path — it is the largest remaining client piece and
    deliberately was not started at the end of a long session.
-3. **The wire half, client side.** The `_apsk` array composer and reader; the
-   multi-signature envelope; the `enroll:update` caller and its PoP signature
-   (`AtSigningMode.pkam`, SHA-256 — see ruling 14, and note that
-   `AtSigningMode.data` cannot work); the strength order beside
-   `SigningAlgoType` in at_chops with its raw-literal tripwire; the in-use
-   signing set on `AtClientPreference` defaulted from `ReleasePosture`;
-   mint-on-demand when the in-use set names an algorithm the enrollment lacks.
+3. **The wire half, client side — none of it exists.** Verified against the
+   source 2026-08-11, with the sites named so the next session does not have to
+   re-find them:
+
+   - **The `_apsk` array composer and reader.** Today `publishPublicSigningKey`
+     (`apkam_signing.dart:38`) `put`s a **single bare key**, and does so only
+     when the record is absent — a get-then-put-if-missing. Nothing composes
+     `{v:1, keys:[{use, alg, pub, status}]}` and nothing reads it. The
+     `use`/`alg`/`pub` vocabulary exists in the tree, but in `key_package.dart`
+     (the **KEM** package, a different record) and as `[{alg, pub}]` in
+     `pq_signing_root.dart` (the signing root, no `use`, no `status`). ⚠️ **Open
+     question when the composer lands:** does `publishPublicSigningKey` retire,
+     or does it stay and become a second writer to a record the approval path
+     also writes? Its skip-if-present means an enrollment that already published
+     a bare string never rewrites it.
+   - **The multi-signature envelope. This is an inversion, not an addition.**
+     `signEnvelope` emits exactly one `signature` and one `signingAlgo` from a
+     `switch` on a single `SigningAlgoType`, on both the v1 and JWS paths. The
+     verifier does not merely lack multi-signature support — it **actively
+     refuses** a mismatch, via `requireAlg` at `envelope_signature.dart:577`,
+     whose message reads *"the published `_apsk` is a `<algo>` key"*. The
+     singular is baked into the behaviour and the diagnostic, so this work
+     changes an existing refusal rather than extending a permissive path.
+   - **The strength order** beside `SigningAlgoType` in at_chops, with its
+     raw-literal tripwire. No ordering exists anywhere in at_chops or at_client
+     today, so [UC-G1.7](acceptance.md#16-g1--signature-agility-and-the-rollout-matrix)
+     ("the verifier takes the strongest and does not fall back") has nothing to
+     run against.
+   - **The `enroll:update` caller** and its PoP signature (`AtSigningMode.pkam`,
+     SHA-256 — see ruling 14, and note that `AtSigningMode.data` cannot work).
+     No client caller exists; the `'update'` hits in at_client are AtCollection
+     notification operations and unrelated.
+   - **The in-use signing set** on `AtClientPreference`, defaulted from
+     `ReleasePosture`. The preference carries only the single
+     `signingAlgoType = SigningAlgoType.rsa2048` today.
+   - **Mint-on-demand** when the in-use set names an algorithm the enrollment
+     lacks.
+
+   ⚠️ **Neither side of rollout 1 exists yet.** The staging in
+   [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
+   has rollout 1 ship *reader* capability ungated, before any writer emits the
+   array — but the client has neither reader nor writer, so the first
+   deliverable here is the reader, not the composer, however tempting it is to
+   build the thing that produces output you can look at.
 4. **The rollout axis.** One `ReleasePosture` flag switching all three writer
    behaviours together (mint signing keys, publish the array, emit
    multi-signature envelopes). **The axis has no name yet** — see
