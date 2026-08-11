@@ -70,6 +70,21 @@ abstract final class CryptographicKeyType {
   static const String publicKeyAgreement = 'publicKeyAgreement';
   static const String privateKeyAgreement = 'privateKeyAgreement';
 
+  /// The APKAM keypair an enrollment **authenticates** with, and nothing
+  /// else — the key PKAM proves possession of.
+  ///
+  /// Distinct from [privateSigning] / [publicVerification], which are the
+  /// keys an enrollment makes durable attestations with: signed envelopes,
+  /// key packages, chain links. One key served both jobs until the two were
+  /// separated, and reusing an authentication key to sign attestations is a
+  /// cross-protocol surface with no reason to exist.
+  ///
+  /// An enrollment holds at most one ACTIVE pair of these; several active
+  /// signing keys are normal, because signature agility means holding one per
+  /// algorithm.
+  static const String privateAuthentication = 'privateAuthentication';
+  static const String publicAuthentication = 'publicAuthentication';
+
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set.
   static const Set<String> known = {
@@ -83,6 +98,8 @@ abstract final class CryptographicKeyType {
     privateDecapsulation,
     publicKeyAgreement,
     privateKeyAgreement,
+    privateAuthentication,
+    publicAuthentication,
   };
 }
 

@@ -243,6 +243,8 @@ void main() {
         'privateDecapsulation',
         'publicKeyAgreement',
         'privateKeyAgreement',
+        'privateAuthentication',
+        'publicAuthentication',
       });
       expect(KeyPartStatus.values.map((s) => s.name).toList(),
           ['active', 'retired', 'dead']);
