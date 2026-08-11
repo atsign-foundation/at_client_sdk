@@ -1,4 +1,13 @@
 ## 3.14.1
+- docs: `PublishedNskeyKeyRing.mintAndPublish` no longer describes itself as a
+  rotation. Its dartdoc said calling it again for the same namespace "is a
+  **rotation**", which `rotate` exists to deny: on a lost mint lock
+  `mintAndPublish` adopts the winner's advertisement and returns success, so a
+  second call can rotate nothing and report that it did. Correct for a cold
+  start; for a rotation it leaves the enrollment being rotated away from
+  holding the live generation, and rotation is the revocation lever. No
+  behaviour change — `mintAndPublish` is the cold-start mint, `rotate` is the
+  rotation lever, and the doc now says so.
 - feat: `ReleasePosture` — the five post-quantum rollout flags as one value,
   set on `AtClientPreference(posture:)`. `ReleasePosture.migration()` (the
   default) is the 3.x column of the rollout table; `postQuantum()` runs the
