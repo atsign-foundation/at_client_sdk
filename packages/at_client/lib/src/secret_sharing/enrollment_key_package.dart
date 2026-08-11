@@ -49,16 +49,18 @@ import 'package:meta/meta.dart' show experimental;
 /// minted under — pass `AtClientPreference.keyEstablishmentAlgo`. It is an
 /// explicit parameter rather than something read from a preference because
 /// this function has no client and cannot have one: it runs before the
-/// enrollment exists. **It is also frozen at this call.** The key package
-/// rides `enroll:request` and `metadata.keyPackage` is never rewritten, so
-/// this decides the enrollment's KEM for its whole life; changing it later
-/// takes effect only on a new enrollment.
+/// enrollment exists. **Treat it as decided at this call.** The key package
+/// rides `enroll:request`, and the only later route into `metadata.keyPackage`
+/// is the enrollment's own self-only `enroll:update`, which no client sends
+/// yet — so in practice this decides the enrollment's KEM, and changing the
+/// preference later takes effect on a new enrollment.
 ///
 /// [envelopeVersion] is the wrapper shape the package's signed envelope is
 /// emitted in — pass `preference.posture.envelopeVersion` to follow the
 /// client's rollout posture. An explicit parameter for the same reason as
-/// the KEM: no client exists yet, and the value is frozen in the write-once
-/// `metadata.keyPackage`. The readers for both shapes ship in the same
+/// the KEM: no client exists yet, and repairing the value afterwards needs an
+/// `enroll:update` this enrollment must send for itself. The readers for both
+/// shapes ship in the same
 /// release line as this parameter, so emit v2 only where the fleet that
 /// must read this package is on that line or later — not merely "any 3.x".
 @experimental
@@ -86,9 +88,10 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
     if (kem == null || materialAlgo == null) {
       throw StateError(
           'enrollmentKeyPackageBuilder: no implementation for '
-          '"$keyEstablishmentAlgo". This is the one moment an enrollment\'s '
-          'encapsulation target can be set — there is no post-enrollment write '
-          '— so it fails rather than quietly minting something else. '
+          '"$keyEstablishmentAlgo". This is the only moment an enrollment\'s '
+          'encapsulation target can be set without the enrollment itself later '
+          'sending enroll:update, so it fails rather than quietly minting '
+          'something else. '
           'Supported: ${SecretSharingAlgos.keyAlgos}');
     }
 

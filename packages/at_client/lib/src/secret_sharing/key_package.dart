@@ -194,10 +194,12 @@ class KeyPackage {
   /// assigned an enrollment id, so there is no [KeyPackage] to build it from.
   /// Nothing is lost by that: the id was never part of the payload — the
   /// enrollment record carries it, and [fromPayload] injects it back on read.
-  /// [suites] defaults to what [keys] can actually open. It is the payload the
-  /// enrollment record freezes — `metadata.keyPackage` is written by
-  /// `enroll:request` and never again — so an overstated claim here cannot be
-  /// corrected for the life of that enrollment.
+  /// [suites] defaults to what [keys] can actually open. An overstated claim
+  /// here is correctable, but only by the enrollment itself: `enroll:update`
+  /// reaches `metadata` and is self-only, so nobody else can repair a package
+  /// that advertises a construction its holder cannot open. No client sends
+  /// that operation yet, so in practice the value written at `enroll:request`
+  /// is the one peers seal to.
   static Map<String, Object?> payloadFor({
     required DateTime createdAt,
     required List<PackageKey> keys,

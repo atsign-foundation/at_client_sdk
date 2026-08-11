@@ -205,9 +205,10 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     // A post-quantum activation is all-or-nothing, which is why it goes
     // through one call rather than a few assignments here: an ML-DSA APKAM
-    // without a key package produces an atSign that can never be repaired,
-    // because `metadata.keyPackage` is written by the `enroll:request` that
-    // creates the enrollment record and never again.
+    // without a key package produces an atSign no sender can address until
+    // that enrollment sends an `enroll:update` for itself, since
+    // `metadata.keyPackage` is otherwise written only by the `enroll:request`
+    // that creates the enrollment record.
     // Matched on mldsa65 exactly, not on "anything but rsa2048": ecc_secp256r1
     // is a third, classical option this package already supports, and treating
     // it as post-quantum would silently mint an ML-DSA APKAM for a caller who

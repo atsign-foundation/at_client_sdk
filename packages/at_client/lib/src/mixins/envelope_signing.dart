@@ -44,11 +44,12 @@ mixin EnvelopeSigning on ApkamSigning {
   /// (`docs/projects/pq/decisions.md` 56.4). Defaults to the client's
   /// `ReleasePosture` — `signedEnvelopeVersion` (1) under the 3.x posture;
   /// flipping the fleet default to the JWS shape is a 4.0 deployment
-  /// decision, made only once every reader in the fleet accepts it, because
-  /// the enrollment record's `keyPackage` is write-once — an envelope frozen
-  /// there in a shape the fleet cannot read is unreadable for that
-  /// enrollment's life. Verification accepts both shapes regardless of this
-  /// setting.
+  /// decision, made only once every reader in the fleet accepts it: an
+  /// envelope written into the enrollment record's `keyPackage` in a shape the
+  /// fleet cannot read is unreadable until that enrollment republishes it, and
+  /// `enroll:update` is self-only — so no operator, and no other enrollment,
+  /// can repair it on the holder's behalf. Verification accepts both shapes
+  /// regardless of this setting.
   ///
   /// Assigning the field overrides the posture for this signer instance only.
   /// The posture consult is what lets one preference flip *every* signer the

@@ -27,15 +27,16 @@ final _logger = AtSignLogger('pqNativeOnboard');
 /// completion step — becomes PQ-native by one call rather than by copying three
 /// assignments. Copying them is the failure mode this prevents: setting only
 /// `signingAlgoType` mints an ML-DSA APKAM with **no key package**, and
-/// `metadata.keyPackage` is written by the `enroll:request` that creates the
-/// enrollment record and never again — so that atSign could never be repaired,
-/// only abandoned.
+/// `metadata.keyPackage` is otherwise written only by the `enroll:request`
+/// that creates the enrollment record — so repairing that atSign would take an
+/// `enroll:update` it must send for itself, and no client sends one yet.
 ///
 /// [keyEstablishmentAlgo] is read from the caller's preference rather than
 /// resolved here, because the builder runs before any client exists. It is
-/// frozen at this call for the life of the enrollment. [envelopeVersion] —
-/// the wrapper shape of the key package's signed envelope, frozen the same
-/// way — is explicit for the same reason; pass
+/// decided at this call, and changing it afterwards needs an `enroll:update`
+/// the enrollment must send for itself. [envelopeVersion] — the wrapper shape
+/// of the key package's signed envelope, decided the same way — is explicit
+/// for the same reason; pass
 /// `preference.posture.envelopeVersion` to follow the rollout posture.
 ///
 /// Deliberately says nothing about [AtOnboardingRequest.mintLegacyMaterial]:
@@ -99,9 +100,9 @@ Future<void> mintSigningRootAfterActivation(
 ///   reader that cannot handle a PQ enrollment fails loudly rather than
 ///   signing an ML-DSA key with the RSA routine;
 /// - the first enrollment's **key package**, advertised on the `enroll:request`
-///   that creates the record. `metadata.keyPackage` is never rewritten, so
-///   this is the only moment it can be set — and its KEM is therefore frozen
-///   for the life of the enrollment at whatever
+///   that creates the record. Nothing but the enrollment's own `enroll:update`
+///   reaches `metadata.keyPackage` afterwards, so this is effectively the
+///   moment its KEM is set, at whatever
 ///   [AtClientPreference.keyEstablishmentAlgo] says now;
 /// - the atSign-level **ML-DSA-65 signing root**, immutable-created at
 ///   `public:pq_signing_root@<atSign>`. A first enrollment is fully privileged

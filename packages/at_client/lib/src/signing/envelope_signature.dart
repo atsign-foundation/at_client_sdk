@@ -84,10 +84,10 @@ const int signedEnvelopeVersion = 1;
 /// never exercises. Every decode here goes through `base64.normalize` first.
 ///
 /// Readers accept this shape always; producers emit it only when asked
-/// (`signEnvelope`'s `version` parameter), because the enrollment record's
-/// `metadata.keyPackage` is written once at `enroll:request` and never
-/// again — an envelope emitted in a shape the fleet cannot read yet is
-/// frozen unreadable for that enrollment's life.
+/// (`signEnvelope`'s `version` parameter), because an envelope written into
+/// the enrollment record's `metadata.keyPackage` in a shape the fleet cannot
+/// read yet stays unreadable until that enrollment republishes it — and
+/// `enroll:update` is self-only, so nothing else can repair it.
 const int jwsEnvelopeVersion = 2;
 
 /// The JOSE `alg` names the JWS shape signs under, keyed by the signing

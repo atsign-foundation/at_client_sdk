@@ -48,8 +48,9 @@ class PersistedApkamKeys {
 /// (its [kpid] is the SHA-256 prefix of the public key) and publishes its APKAM
 /// signing key so peers can verify the envelopes it sends. Its key package is
 /// conveyed into the enrollment record by riding `enroll:request` as opaque
-/// `EnrollParams.metadata` at enrollment time (there is no post-enrollment
-/// write); peers discover it via the gated `enroll:listns` verb.
+/// `EnrollParams.metadata` at enrollment time, and amendable afterwards only
+/// by the enrollment itself via the self-only `enroll:update`; peers discover
+/// it via the gated `enroll:listns` verb.
 ///
 /// By default the enc keypair is generated fresh and held in memory; apps that
 /// want it stable across restarts supply [loadApkamKeys] / [saveApkamKeys]
@@ -165,9 +166,10 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// envelopes), then returns this client's [KeyPackage]. Idempotent.
   ///
   /// The returned key package is conveyed into the enrollment record by riding
-  /// `enroll:request` as opaque `EnrollParams.metadata` at enrollment time — it
-  /// is never written by a post-enrollment directory call. Peers then discover
-  /// it via the gated `enroll:listns` verb.
+  /// `enroll:request` as opaque `EnrollParams.metadata` at enrollment time — no
+  /// directory call writes it, and the only later route into the record is the
+  /// enrollment's own `enroll:update`. Peers then discover it via the gated
+  /// `enroll:listns` verb.
   Future<KeyPackage> register() async {
     if (_encSeed == null) {
       final loaded = await loadApkamKeys?.call();

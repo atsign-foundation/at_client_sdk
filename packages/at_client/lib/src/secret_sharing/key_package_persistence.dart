@@ -31,9 +31,10 @@ final _logger = AtSignLogger('KeyPackagePersistence');
 ///
 /// Adoption only — nothing is written back. A keyfile with no key package
 /// belongs to a client no sender can address anyway: a package is discovered
-/// from the enrollment record, it rides `enroll:request`, and there is no
-/// post-enrollment write path. Generating one and filing it would mutate the
-/// user's keyfile at startup to produce an address nobody can learn.
+/// from the enrollment record, it rides `enroll:request`, and reaching the
+/// record afterwards takes a deliberate `enroll:update`. Generating one and
+/// filing it would mutate the user's keyfile at startup to produce an address
+/// nobody can learn.
 /// [enrollmentId] scopes the adoption to this client's own enrollment: a
 /// retrofitted keyfile serves two principals, and each must adopt its OWN
 /// package, never its co-tenant's — see [keyPackageMaterial].

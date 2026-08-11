@@ -110,10 +110,10 @@ void main() {
     await boundRegistrant(io);
 
     expect((await io.read(atSign)).keys, isEmpty,
-        reason: 'a package is discovered from the enrollment record and there '
-            'is no post-enrollment write path, so one generated here would be '
-            'an address nobody can learn — not worth mutating the keyfile at '
-            'startup to produce');
+        reason: 'a package is discovered from the enrollment record, which is '
+            'reached afterwards only by a deliberate enroll:update, so one '
+            'generated here would be an address nobody can learn — not worth '
+            'mutating the keyfile at startup to produce');
   });
 
   test('a filed nskey private is never adopted as the key package', () async {

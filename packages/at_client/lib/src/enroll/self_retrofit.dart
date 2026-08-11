@@ -60,9 +60,9 @@ final _logger = AtSignLogger('selfRetrofit');
 /// `ReleasePosture.postQuantum` (the PQ retrofit).
 ///
 /// The new enrollment's KEM comes from
-/// [AtClientPreference.keyEstablishmentAlgo] and is **frozen at this call**:
-/// the key package rides the `enroll:request` and is never rewritten, so
-/// this decides the enrollment's KEM for its whole life.
+/// [AtClientPreference.keyEstablishmentAlgo] and is **decided at this call**:
+/// the key package rides the `enroll:request`, and changing it afterwards
+/// needs an `enroll:update` the new enrollment must send for itself.
 @experimental
 Future<AtClientManager> selfRetrofit({
   required AtAuthSession session,
