@@ -107,20 +107,57 @@ class AtKeysAssurance {
 
   // ---- cross-record structural invariants ----
 
-  /// An enrollment may not contribute more than one material of the same
-  /// `CryptographicKeyType` across all of its materials. (Duplicate `keyId`s
-  /// across document entries are rejected earlier, by [parseAtKeysDocument].)
+  /// An enrollment may not contribute more than one **active** material of
+  /// the same `(CryptographicKeyType, KeyAlgorithmType)`, and the whole
+  /// document may hold only one active
+  /// [CryptographicKeyType.privateAuthentication].
+  /// (Duplicate `keyId`s across document entries are rejected earlier, by
+  /// [parseAtKeysDocument].)
+  ///
+  /// Only active material counts, so retiring a key frees its slot for a
+  /// replacement. Counting every status instead would make a same-enrollment
+  /// rotation impossible: the superseded key is retained forever — the bytes
+  /// are still needed to verify what they signed — so its slot would never
+  /// come free and every new generation would need a new enrollment.
+  ///
+  /// Uniqueness is per algorithm, not per role, because signature agility
+  /// means an enrollment holds one active SIGNING key for each algorithm it
+  /// still signs with — several active `privateSigning` materials at once is
+  /// the normal state, and only a second one of the same algorithm is a
+  /// duplicate.
+  ///
+  /// The document-wide authentication rule is what makes "which enrollment
+  /// does this keyfile authenticate as" answerable without storing a pointer
+  /// to it. It is deliberately NOT per-algorithm: one live enrollment per
+  /// install is the model, so a second active authentication key is a corrupt
+  /// keyfile whatever algorithm it names.
   void validateKeyMaterials(List<AtKeysMaterial> materials) {
     final typesByEnrollment = <String, Set<String>>{};
+    String? activeAuthEnrollment;
     for (final material in materials) {
+      if (material.status != KeyPartStatus.active) {
+        continue;
+      }
+      if (material.keyPartType == CryptographicKeyType.privateAuthentication) {
+        if (activeAuthEnrollment != null) {
+          throw AtKeysEnrollmentException(
+              'AtKeys holds an active authentication key for both '
+              '"$activeAuthEnrollment" and "${material.enrollmentId}"; only '
+              'one enrollment may be live in a keyfile');
+        }
+        activeAuthEnrollment = material.enrollmentId;
+      }
       final enrollmentId = material.enrollmentId;
       if (enrollmentId == null) {
         continue;
       }
       final types = typesByEnrollment.putIfAbsent(enrollmentId, () => {});
-      if (!types.add(material.keyPartType)) {
+      if (!types.add(
+          '${material.keyPartType}/${material.keyAlgorithmType}')) {
         throw AtKeysEnrollmentException(
-            'Enrollment "$enrollmentId" has more than one ${material.keyPartType} key material');
+            'Enrollment "$enrollmentId" has more than one active '
+            '${material.keyPartType} key material for '
+            '${material.keyAlgorithmType}');
       }
     }
   }
@@ -147,11 +184,27 @@ class AtKeysAssurance {
           throw ArgumentError.value(candidate.keyId, 'material',
               'enrollmentId "${candidate.enrollmentId}" does not match "${material.enrollmentId}" already on this keyId');
         }
-      } else if (candidate.enrollmentId != null &&
+      } else if (candidate.status == KeyPartStatus.active &&
+          material.status == KeyPartStatus.active &&
+          candidate.enrollmentId != null &&
           material.enrollmentId == candidate.enrollmentId &&
-          material.keyPartType == candidate.keyPartType) {
+          material.keyPartType == candidate.keyPartType &&
+          material.keyAlgorithmType == candidate.keyAlgorithmType) {
         throw ArgumentError.value(candidate.enrollmentId, 'material',
-            'Enrollment "${candidate.enrollmentId}" already has a ${candidate.keyPartType} key material');
+            'Enrollment "${candidate.enrollmentId}" already has an active '
+            '${candidate.keyPartType} key material for '
+            '${candidate.keyAlgorithmType}');
+      } else if (candidate.status == KeyPartStatus.active &&
+          material.status == KeyPartStatus.active &&
+          candidate.keyPartType ==
+              CryptographicKeyType.privateAuthentication &&
+          material.keyPartType == CryptographicKeyType.privateAuthentication) {
+        // Document-wide, unlike the rule above: two enrollments may each hold
+        // signing keys, but only one may be the enrollment this keyfile
+        // authenticates as.
+        throw ArgumentError.value(candidate.enrollmentId, 'material',
+            'AtKeys already holds an active authentication key, for '
+            '"${material.enrollmentId}"; retire it before filing another');
       }
     }
   }

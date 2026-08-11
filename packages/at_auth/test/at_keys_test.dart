@@ -540,4 +540,157 @@ void main() {
       );
     });
   });
+
+  group('AtKeys authentication material and rotation', () {
+    AtKeysMaterial authKey(String keyId,
+            {required String enrollmentId,
+            String value = 'YXV0aA==',
+            KeyPartStatus status = KeyPartStatus.active}) =>
+        AtKeysMaterial(
+            keyId: keyId,
+            enrollmentId: enrollmentId,
+            keyPartType: CryptographicKeyType.privateAuthentication,
+            keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+            bytes: AtBytes.fromString(value),
+            createdAt: DateTime.utc(2026, 1, 1),
+            status: status);
+
+    test('retiring a key frees its slot for a replacement', () {
+      // The whole point of making the invariants status-aware. The control is
+      // the second half: WITHOUT retiring, the same add must still throw, or
+      // this test would pass against an invariant that checks nothing.
+      final atKeys = AtKeys(
+          atsign: '@alice'.toAtsign(),
+          keysList: [authKey('apkam:E1:1', enrollmentId: 'E1')]);
+
+      expect(
+          () => atKeys.addKey(authKey('apkam:E1:2', enrollmentId: 'E1')),
+          throwsArgumentError,
+          reason: 'two ACTIVE authentication keys for one enrollment must be '
+              'refused');
+
+      atKeys.retireKey('apkam:E1:1');
+      atKeys.addKey(authKey('apkam:E1:2', enrollmentId: 'E1'));
+
+      expect(atKeys.getKey('apkam:E1:1', CryptographicKeyType.privateAuthentication)!.status,
+          KeyPartStatus.retired);
+      expect(atKeys.activeEnrollmentId, 'E1');
+    });
+
+    test('only one enrollment may hold an active authentication key', () {
+      final atKeys = AtKeys(
+          atsign: '@alice'.toAtsign(),
+          keysList: [authKey('apkam:E1:1', enrollmentId: 'E1')]);
+
+      expect(() => atKeys.addKey(authKey('apkam:E2:1', enrollmentId: 'E2')),
+          throwsArgumentError,
+          reason: 'a keyfile has one live enrollment; a second active '
+              'authentication key is corruption, not a supported state');
+
+      // Retiring E1's makes room for E2's — which is exactly what a retrofit
+      // does, and it must be allowed.
+      atKeys.retireKey('apkam:E1:1');
+      atKeys.addKey(authKey('apkam:E2:1', enrollmentId: 'E2'));
+      expect(atKeys.activeEnrollmentId, 'E2');
+    });
+
+    test('several active SIGNING keys for one enrollment are fine', () {
+      // The asymmetry that motivates the split: one authentication key, many
+      // signing keys, because signature agility means one per algorithm.
+      final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+        AtKeysMaterial(
+            keyId: 'sign:E1:mldsa65:1',
+            enrollmentId: 'E1',
+            keyPartType: CryptographicKeyType.privateSigning,
+            keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+            bytes: AtBytes.fromString('YQ=='),
+            createdAt: DateTime.utc(2026, 1, 1)),
+      ]);
+
+      atKeys.addKey(AtKeysMaterial(
+          keyId: 'sign:E1:rsa2048:1',
+          enrollmentId: 'E1',
+          keyPartType: CryptographicKeyType.privateSigning,
+          keyAlgorithmType: KeyAlgorithmType.rsa2048,
+          bytes: AtBytes.fromString('Yg=='),
+          createdAt: DateTime.utc(2026, 1, 1)));
+
+      expect(atKeys.keysForEnrollment('E1').length, 2);
+
+      // The control for the widening: per-algorithm uniqueness still bites.
+      // A second ACTIVE mldsa65 signing key for the same enrollment is a
+      // duplicate, and permitting it would make "which key signs mldsa65"
+      // ambiguous.
+      expect(
+          () => atKeys.addKey(AtKeysMaterial(
+              keyId: 'sign:E1:mldsa65:2',
+              enrollmentId: 'E1',
+              keyPartType: CryptographicKeyType.privateSigning,
+              keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+              bytes: AtBytes.fromString('Yw=='),
+              createdAt: DateTime.utc(2026, 1, 1))),
+          throwsArgumentError);
+
+      // ...and retiring the first frees that algorithm's slot, which is what
+      // a signing-key rotation within one algorithm needs.
+      atKeys.retireKey('sign:E1:mldsa65:1');
+      atKeys.addKey(AtKeysMaterial(
+          keyId: 'sign:E1:mldsa65:2',
+          enrollmentId: 'E1',
+          keyPartType: CryptographicKeyType.privateSigning,
+          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          bytes: AtBytes.fromString('Yw=='),
+          createdAt: DateTime.utc(2026, 1, 1)));
+    });
+
+    test('replaceKey retires and files in one call', () {
+      final atKeys = AtKeys(
+          atsign: '@alice'.toAtsign(),
+          keysList: [authKey('apkam:E1:1', enrollmentId: 'E1')]);
+
+      atKeys.replaceKey(
+          'apkam:E1:1', [authKey('apkam:E1:2', enrollmentId: 'E1', value: 'bmV3')]);
+
+      expect(atKeys.getKey('apkam:E1:1', CryptographicKeyType.privateAuthentication)!.status,
+          KeyPartStatus.retired);
+      expect(
+          atKeys
+              .getKey('apkam:E1:2', CryptographicKeyType.privateAuthentication)!
+              .bytes
+              .toString(),
+          'bmV3');
+      expect(atKeys.activeEnrollmentId, 'E1');
+    });
+
+    test('a refused replacement leaves the outgoing key active', () {
+      // Rolling back matters more than the happy path: a rotation that
+      // retired the old key and then failed to install the new one would
+      // leave the enrollment unable to authenticate at all.
+      final atKeys = AtKeys(
+          atsign: '@alice'.toAtsign(),
+          keysList: [authKey('apkam:E1:1', enrollmentId: 'E1')]);
+
+      expect(
+          () => atKeys.replaceKey('apkam:E1:1', [
+                authKey('apkam:E1:2', enrollmentId: 'E1'),
+                // Second one collides with the first: same (keyId, type).
+                authKey('apkam:E1:2', enrollmentId: 'E1'),
+              ]),
+          throwsArgumentError);
+
+      expect(atKeys.getKey('apkam:E1:1', CryptographicKeyType.privateAuthentication)!.status,
+          KeyPartStatus.active,
+          reason: 'the outgoing key must still be active after a rollback');
+      expect(atKeys.getKey('apkam:E1:2', CryptographicKeyType.privateAuthentication),
+          isNull,
+          reason: 'nothing from the failed rotation may survive');
+      expect(atKeys.activeEnrollmentId, 'E1');
+    });
+
+    test('activeEnrollmentId is null when there is no typed auth material', () {
+      // A legacy keyfile: its APKAM keypair is in the flat fields.
+      expect(legacyAtKeys(atsign: '@alice'.toAtsign()).activeEnrollmentId,
+          isNull);
+    });
+  });
 }

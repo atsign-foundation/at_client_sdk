@@ -135,6 +135,69 @@ class AtKeys {
     byType.updateAll((_, material) => material.withStatus(to));
   }
 
+  /// Retires [keyId] and files [replacements] in one call — a key rotation,
+  /// as a single operation rather than two the caller has to sequence.
+  ///
+  /// The order is forced and it is the only order that works. The invariants
+  /// permit one ACTIVE material per (enrollment, role), so the outgoing key
+  /// must be retired before the incoming one can be filed; add-then-retire is
+  /// rejected by [addKey] before the retire ever runs. Leaving callers to
+  /// sequence that themselves means a keyfile flush can land between the two
+  /// steps, and a crash there leaves an enrollment with no active key of that
+  /// role at all.
+  ///
+  /// Rolls back if any replacement is refused, so a rejected rotation leaves
+  /// the outgoing key active rather than retiring it and then failing to
+  /// install its successor — which would be worse than not rotating.
+  ///
+  /// [to] is how far the outgoing material moves: `retired` by default,
+  /// `dead` when it should no longer be used even to verify history.
+  void replaceKey(String keyId, Iterable<AtKeysMaterial> replacements,
+      {KeyPartStatus to = KeyPartStatus.retired}) {
+    final outgoing = keysForKeyId(keyId).toList();
+    if (outgoing.isEmpty) {
+      throw ArgumentError.value(keyId, 'keyId', 'AtKeys has no such keyId');
+    }
+    retireKey(keyId, to: to);
+    final filed = <AtKeysMaterial>[];
+    try {
+      for (final replacement in replacements) {
+        addKey(replacement);
+        filed.add(replacement);
+      }
+    } on Object {
+      // Undo, so a refused rotation is a no-op rather than a keyfile with the
+      // old key retired and no new one in its place.
+      for (final material in filed) {
+        _materialsByKeyId[material.keyId]?.remove(material.keyPartType);
+        if (_materialsByKeyId[material.keyId]?.isEmpty ?? false) {
+          _materialsByKeyId.remove(material.keyId);
+        }
+      }
+      for (final material in outgoing) {
+        _materialsByKeyId[material.keyId]![material.keyPartType] = material;
+      }
+      rethrow;
+    }
+  }
+
+  /// The enrollment this keyfile authenticates as, or null when it holds no
+  /// typed authentication material (a legacy keyfile, whose APKAM keypair
+  /// lives in the flat fields).
+  ///
+  /// Derived rather than stored. A pointer field duplicating this would be a
+  /// second writer able to disagree with the material itself, and after a
+  /// retrofit — when the file legitimately holds a capped enrollment's keys
+  /// alongside the live one's — disagreeing means authenticating as the
+  /// wrong enrollment. The document-wide single-active-authentication
+  /// invariant is what makes the answer unique.
+  String? get activeEnrollmentId => keys
+      .where((m) =>
+          m.keyPartType == CryptographicKeyType.privateAuthentication &&
+          m.status == KeyPartStatus.active)
+      .map((m) => m.enrollmentId)
+      .firstOrNull;
+
   /// Decodes the typed-keys document shape (`version`, `atsign`, `keys`,
   /// plus legacy fields flat at the top level). Json without a `version`
   /// field is accepted as the legacy flat shape (delegates to
