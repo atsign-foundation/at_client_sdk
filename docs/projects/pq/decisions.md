@@ -104,6 +104,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [87. Phase 7: the revocation row stops tolerating what it exists to forbid (2026-08-11)](#87-phase-7-the-revocation-row-stops-tolerating-what-it-exists-to-forbid-2026-08-11)
 - [88. Phase 7: mintAndPublish is the cold-start mint, and stops calling itself the rotation (2026-08-11)](#88-phase-7-mintandpublish-is-the-cold-start-mint-and-stops-calling-itself-the-rotation-2026-08-11)
 - [89. Phase 7: the section symbol keeps the two jobs it is good at (2026-08-11)](#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
+- [90. Phase 7: a refusal the approval wait cannot resolve stops being silent (2026-08-11)](#90-phase-7-a-refusal-the-approval-wait-cannot-resolve-stops-being-silent-2026-08-11)
 
 ---
 
@@ -7634,3 +7635,56 @@ printed nothing, which briefly looked like confirmation. The conversion also ran
 with a 90-character look-back that was shorter than some anchors, so one outline
 label was converted into a duplicate link; a check for a converted label
 adjacent to a link with the same anchor found it, and it was reverted.
+
+## 90. Phase 7: a refusal the approval wait cannot resolve stops being silent (2026-08-11)
+
+**Status:** accepted (2026-08-11). This was the last genuinely open item on the
+refactor plan; it had been recorded as "Phase 7 / 4.0" and the choice between
+the two was never made. Ruled Phase 7, because the defect is a missing branch
+rather than the sealed-subtype machinery 4.0 carries.
+
+### The missing else
+
+`EnrollmentHandshake`'s approval poll handles a refusal by matching codes:
+
+- `AT0401` / `AT0026` — not yet decided. Keep waiting, indefinitely and by
+  design, because the decision is a person's.
+- `AT0025` — denied. Throw.
+
+There was no third branch. An `UnAuthenticatedException` matching none of the
+three left the `catch` having done **nothing at all**: not logged, not thrown,
+and not counted, since the atServer had been reached so the unreachable budget
+reset. The loop then polled every `retryInterval` for the life of the process,
+in silence.
+
+The case that makes this concrete is an enrollment **revoked while its own
+approval wait is running**, which answers `error:AT0027 … is revoked`. Nothing
+about that resolves by waiting. A key the atServer will not verify lands here
+too.
+
+### What it does now
+
+Such a refusal is logged at `warning` naming the atServer's message, tolerated
+for a short unbroken run in case it is transient, and once that run exceeds
+`maxRetries` it ends the wait with an `AtEnrollmentException` carrying the
+message. It gets its own counter rather than sharing the unreachable one:
+reaching the atServer and understanding what it said are different questions,
+and section 79 defined that budget as being for the first only. A pending answer
+resets it, so an isolated oddity between ordinary polls costs nothing.
+
+Two arms, both proven. The failing one is red without the fix for the reason
+that matters: the wait **completes normally** after nine `AT0027` refusals,
+`emitted <null>` where an exception was expected — the defect exactly. The
+control arm, a refusal surrounded by pending answers still reaching approval,
+is green on both sides.
+
+### Why it was still open
+
+Worth recording, because the mechanism that lost it is ordinary. The item was
+written down accurately, tagged with two possible homes, and then quoted in
+every later summary in its tagged form — including by me, hours before this,
+while listing what Phase 7 contained. A label naming two options reads as
+decided to everyone who passes it, because the decision looks like it happened
+somewhere else. Nothing catches that except re-reading the source list, which is
+how this surfaced: Gary asked whether the plan was complete, and the answer from
+memory was wrong.

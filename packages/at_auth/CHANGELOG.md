@@ -1,4 +1,13 @@
 ## 3.4.0
+- fix: `waitForApproval` no longer polls forever on a refusal it cannot
+  resolve. The handler matched `AT0401`/`AT0026` (not yet decided, keep
+  waiting) and `AT0025` (denied, throw) and had no other branch, so any other
+  refusal — an enrollment revoked while the wait was running answers
+  `AT0027` — was neither logged nor thrown, and the poll ran every
+  `retryInterval` for the life of the process saying nothing. Such a refusal
+  is now logged at `warning`, tolerated for a short run in case it is
+  transient, and ends the wait with an `AtEnrollmentException` carrying the
+  atServer's own message once an unbroken run exceeds `maxRetries`.
 - fix: the two `keys:get` commands the enrollment handshake sends after an
   approval are logged at `finer` rather than `shout`. They are routine
   protocol traces, not emergencies, and at `shout` they printed the

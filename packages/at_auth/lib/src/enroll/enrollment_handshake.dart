@@ -225,6 +225,10 @@ class EnrollmentHandshake {
     // the budget buys is an exit from an atServer that is genuinely gone,
     // which is why only an unbroken run of failures can exhaust it.
     int consecutiveUnreachable = 0;
+    // The same budget, spent by a different thing: a refusal that is neither
+    // "not yet decided" nor "denied". Its own counter, because reaching the
+    // atServer and understanding what it said are separate questions.
+    int consecutiveUnresolvableRefusals = 0;
     while (true) {
       _logger.info('Attempting pkam auth');
       if (logProgress) {
@@ -245,12 +249,33 @@ class EnrollmentHandshake {
         // The variable _pkamAuthSucceeded is false, allowing for PKAM authentication retries.
         if (e.message.contains('error:AT0401') ||
             e.message.contains('error:AT0026')) {
+          consecutiveUnresolvableRefusals = 0;
           _logger.info('Pkam auth failed: ${e.message}');
         }
         // Error code AT0025 represents Enrollment denied. Therefore, no need to retry; throw exception.
         else if (e.message.contains('error:AT0025')) {
           throw AtEnrollmentException(
               'The enrollment: $enrollmentIdFromServer is denied');
+        } else {
+          // Neither "not yet decided" nor "denied", so waiting cannot turn it
+          // into an approval — an enrollment revoked mid-wait answers here,
+          // as does a key the atServer will not verify. There was no else at
+          // all: such a refusal left the catch unlogged and unthrown, and the
+          // poll then ran every retryInterval for the life of the process
+          // saying nothing. A short run is tolerated in case it is transient;
+          // an unbroken one ends the wait carrying the atServer's own
+          // sentence, which is the only thing that makes the next occurrence
+          // diagnosable.
+          consecutiveUnresolvableRefusals++;
+          final refusal =
+              'Enrollment $enrollmentIdFromServer was refused for a reason '
+              'this wait cannot resolve: ${e.message}';
+          if (consecutiveUnresolvableRefusals > maxRetries) {
+            _logger.severe(refusal);
+            _progress.add('PKAM', refusal, ProgressEventType.error);
+            throw AtEnrollmentException(refusal);
+          }
+          _logger.warning(refusal);
         }
       } catch (e) {
         reachedAtServer = false;

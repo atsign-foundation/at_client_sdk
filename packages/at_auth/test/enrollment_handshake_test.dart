@@ -19,6 +19,11 @@ enum Poll {
   /// The atServer could not be reached at all.
   unreachable,
 
+  /// The atServer refused for a reason that is neither "not yet decided" nor
+  /// "denied" — here, the enrollment was revoked while the wait was running.
+  /// No amount of waiting turns this into an approval.
+  refused,
+
   /// The atServer answered: PKAM succeeded, so the enrollment was approved.
   approved,
 }
@@ -64,6 +69,9 @@ void main() {
           throw UnAuthenticatedException('error:AT0401 enrollment is pending');
         case Poll.unreachable:
           throw AtLookUpException('AT0021', 'the atServer is unreachable');
+        case Poll.refused:
+          throw UnAuthenticatedException(
+              'error:AT0027:enrollment_id: 123 is revoked');
         case Poll.approved:
           return true;
       }
@@ -153,6 +161,45 @@ void main() {
 
       expect(polled.length, 3,
           reason: 'two failures tolerated, the third fatal');
+    });
+
+    test('is exhausted by a refusal the wait cannot resolve', () async {
+      // Neither pending nor denied: an enrollment revoked while the wait was
+      // running answers `AT0027`, and no amount of waiting turns that into an
+      // approval. Before this branch existed the refusal matched none of the
+      // three handled codes and fell out of the catch unlogged and unthrown,
+      // so the poll ran every retryInterval for the life of the process
+      // saying nothing.
+      final (response, lookup, polled) = await rig(List.filled(9, Poll.refused));
+
+      await expectLater(
+          waitFor(response, lookup, 2),
+          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
+              'message', contains('AT0027'))),
+          reason: 'the atServer said why; the exception must carry it');
+
+      expect(polled.length, 3,
+          reason: 'two tolerated in case it is transient, the third fatal');
+    });
+
+    test('a refusal between pending answers does not end the wait', () async {
+      // Bounded, not hair-trigger: one odd refusal surrounded by ordinary
+      // pending answers is transient, and an approval still lands.
+      final (response, lookup, polled) = await rig([
+        Poll.pending,
+        Poll.refused,
+        Poll.pending,
+        Poll.refused,
+        Poll.pending,
+        Poll.approved,
+      ]);
+
+      await waitFor(response, lookup, 2);
+
+      expect(polled.length, 6);
+      expect(response.atAuthKeys!.defaultEncryptionPrivateKey!.toString(),
+          encryptionPrivateKeyMap[atSign]!,
+          reason: 'the wait completed and unwrapped the keys');
     });
   });
 
