@@ -304,6 +304,42 @@ void main() {
       );
       expect(reparsed, atKeys);
     });
+
+    test(
+        'an unknown top-level field survives an older client read-modify-flush',
+        () {
+      // The typed document reserves only version/atsign/keys; every other
+      // top-level entry is held in `metadata` and re-emitted on flush. That
+      // is what lets a NEWER client add a top-level pointer — the retrofit
+      // naming the enrollment an install should now authenticate as, since
+      // after a retrofit the file holds material for both the capped
+      // enrollment and the fresh one — without an OLDER client dropping it
+      // the first time it reads the file, changes something and writes back.
+      final written = (AtKeys(
+        atsign: '@alice'.toAtsign(),
+        keysList: [symmetricKey('familiar')],
+      )..enrollmentId = 'old-capped-enrollment')
+          .toJson()
+        ..['activeEnrollmentId'] = 'new-pq-enrollment';
+
+      // An older reader, which knows nothing of activeEnrollmentId.
+      final reread = AtKeys.fromJson(written);
+      expect(reread.metadata['activeEnrollmentId'], 'new-pq-enrollment',
+          reason: 'an unrecognised top-level field must be held, not dropped');
+
+      // It changes something unrelated and flushes.
+      reread.addKey(symmetricKey('added-by-the-old-client'));
+      final reflushed = reread.toJson();
+
+      expect(reflushed['activeEnrollmentId'], 'new-pq-enrollment',
+          reason: 'an older client must re-emit a top-level field it does '
+              'not recognise, or the pointer is lost on its first write');
+      // The deprecated flat field is carried through untouched alongside it.
+      expect(reflushed['enrollmentId'], 'old-capped-enrollment');
+      expect(
+          reread.getKey('familiar', CryptographicKeyType.symmetricEncryption),
+          isNotNull);
+    });
   });
 
   group('AtKeys retireKey', () {
