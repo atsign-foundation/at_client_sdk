@@ -194,8 +194,11 @@ void main() {
     final ns = 'rot${DateTime.now().microsecondsSinceEpoch}.$namespace';
     final ring = PublishedNskeyKeyRing(atClient);
 
+    // Seed, then rotate: the second write goes through the rotation lever
+    // rather than a second mint, so what proves the record mutable is the
+    // operation that actually depends on it being mutable.
     final first = await ring.mintAndPublish(ns);
-    final second = await ring.mintAndPublish(ns);
+    final second = await ring.rotate(ns);
 
     expect(second.nskeyKid, isNot(first.nskeyKid),
         reason: 'a rotation mints a NEW generation; if these match, the second '

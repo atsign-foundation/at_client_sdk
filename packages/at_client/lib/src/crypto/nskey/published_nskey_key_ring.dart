@@ -260,9 +260,14 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   /// Mint a generation for `(currentAtSign, namespace)` and publish its public
   /// half immediately.
   ///
-  /// Called again for the same namespace this is a **rotation**: the new
-  /// generation becomes current and the previous private is retained, so
-  /// conveyances sealed to it still open.
+  /// This is the cold-start mint. Called again for the same namespace it
+  /// usually does produce a new current generation, retaining the previous
+  /// private so conveyances sealed to it still open — but **it is not the
+  /// rotation lever, and must not be used as one**. Losing the mint lock here
+  /// is resolved by adopting the winner's advertisement and returning it, so a
+  /// second call can succeed having rotated nothing. [rotate] exists for that
+  /// reason and treats the same race as a failure; see its doc for why the
+  /// difference is the one that matters.
   Future<NskeyAdvertisement> mintAndPublish(String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
     final minted = await mintLock.withLock(

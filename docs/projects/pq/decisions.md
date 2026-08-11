@@ -102,6 +102,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [85. Phase 7: the ledger's own index, and what the citation audit measured (2026-08-11)](#85-phase-7-the-ledgers-own-index-and-what-the-citation-audit-measured-2026-08-11)
 - [86. Phase 7: the acceptance ledger reads a declaration instead of inferring one (2026-08-11)](#86-phase-7-the-acceptance-ledger-reads-a-declaration-instead-of-inferring-one-2026-08-11)
 - [87. Phase 7: the revocation row stops tolerating what it exists to forbid (2026-08-11)](#87-phase-7-the-revocation-row-stops-tolerating-what-it-exists-to-forbid-2026-08-11)
+- [88. Phase 7: mintAndPublish is the cold-start mint, and stops calling itself the rotation (2026-08-11)](#88-phase-7-mintandpublish-is-the-cold-start-mint-and-stops-calling-itself-the-rotation-2026-08-11)
 
 ---
 
@@ -7532,3 +7533,57 @@ instrumentation in place, and no mechanism is named here. The strictness is what
 will produce one: if a revoked credential is ever accepted again, the test now
 fails on the first attempt and prints the atServer's own sentence, instead of
 spinning for ten seconds and reporting a boolean.
+
+## 88. Phase 7: mintAndPublish is the cold-start mint, and stops calling itself the rotation (2026-08-11)
+
+**Status:** accepted (2026-08-11). Closes the last open question carried out of
+the refactor's decision list.
+
+### The question, and where it actually came from
+
+The open question was whether the live tests reaching a second nskey generation
+by calling `mintAndPublish` twice should be re-expressed through the real
+rotation lever, or kept as a test convenience. Reading the code first turned up
+a cause neither option named: **the two dartdocs in
+`published_nskey_key_ring.dart` contradicted each other.**
+
+`mintAndPublish` said: *"Called again for the same namespace this is a
+**rotation**."* Forty lines below, `rotate` said it "differs from
+[mintAndPublish] in one way, and it is the way that matters" — because on a lost
+mint lock `mintAndPublish` **adopts the winner's advertisement and returns
+success**, so a second call can rotate nothing and report that it did. For a
+cold start that is correct: the atSign has a key, which is all that was wanted.
+For a rotation it is the one failure that costs exactly what the operation was
+for, since rotation is the revocation lever and adopting silently leaves the
+enrollment being rotated away from holding the live generation.
+
+So the tests were not freelancing. They were following the sentence above them.
+That sentence is now corrected, and `mintAndPublish` says plainly that it is the
+cold-start mint and must not be used as the rotation lever.
+
+### The scope was two sites, not the suite
+
+`mintAndPublish` appears in sixteen test files, but almost all of them are
+seeding a namespace, which is exactly what it is for. The rotation live test
+already drives the real lever (`rotateNamespaceKey` → `ring.rotate`) and uses
+`mintAndPublish` only to seed. Only two live sites called it twice:
+
+- `nskey_published_ring_test.dart` — a test named *"a rotation publishes a new
+  generation and keeps the old private"*, asserting rotation's whole contract
+  without ever calling `rotate`.
+- `pq_signing_root_create_once_test.dart` — the deliberate control for the
+  create-once row, proving the published nskey record is mutable.
+
+Both now seed with `mintAndPublish` and take the second generation from
+`ring.rotate`, which is the sequence production runs.
+
+### What this does and does not buy
+
+Honestly stated, because the distinction matters for anyone reading the tests
+later: **this adds no assertion that fails today.** On the happy path the two
+methods are indistinguishable, and both files passed before and after (7/7).
+What changes is *which contract is under test* — a regression in `rotate` now
+turns red a test that claims to be about rotation, where before it could not.
+`rotate`'s distinguishing failure semantics — a lost lock and an unpublished
+namespace both throwing — stay covered by unit tests, which can drive the race
+that a live test cannot.

@@ -75,8 +75,14 @@ void main() {
       () async {
     final ns = uniqueNs();
     final ring = PublishedNskeyKeyRing(atClient);
+    // Seed with the cold-start mint, then rotate with the rotation lever —
+    // the sequence production runs. Minting twice also reaches a second
+    // generation, but it is not what rotation does: on a lost mint lock it
+    // adopts the winner and reports success, so a test driving it that way
+    // asserts rotation's contract against a method that cannot fail the way
+    // rotation fails.
     final first = await ring.mintAndPublish(ns);
-    final second = await ring.mintAndPublish(ns);
+    final second = await ring.rotate(ns);
 
     expect(second.nskeyKid, isNot(first.nskeyKid),
         reason: 'a rotation is a new generation, not an edit of the old one');
