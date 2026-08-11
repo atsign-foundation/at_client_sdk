@@ -108,6 +108,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [91. Signature agility: the APKAM auth key stops being the enrollment's signing key (2026-08-11)](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
 - [92. The spike takes trunk, and two published version numbers move underneath it (2026-08-11)](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11)
 - [93. The D1 remaining-work sequence, and the rollout axis becomes real (2026-08-11)](#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
+- [94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)
 
 ---
 
@@ -7945,3 +7946,91 @@ and 14.16's four residuals are all in scope, as are S-3's completion, B-3
 
 The ordered sequence these rulings produce is
 [14.18](implementation-plan.md#1418-the-remaining-d1-initial-development-sequence).
+
+## 94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)
+
+From a question about whether the enrollment key package and the nskey
+advertisement publish the same structure. They do not, and the difference is
+not principled — it is two designs that grew a month apart and never met.
+
+**1. There are three of these, not two.** All three are an APKAM-signed
+envelope wrapping a list of keys with algorithms:
+
+| Record | Entries today |
+|--------|---------------|
+| `public:_apsk.<enrollmentId>.a.__e@<atSign>` | `{use, alg, pub, status}` |
+| `metadata.keyPackage` (a field *inside* the enrollment record) | `{kid, use, alg, pub}` |
+| `public:__nskey.<ns>@<owner>` | flat `{nskeyKid, publicKey, alg}` — no list |
+
+`EnrollParams.apsk`'s own dartdoc says its entries are "spelled as
+`KeyPackage`'s keys are so that one vocabulary covers every 'list of keys with
+algorithms' in the protocol". That ruling already exists and already has two
+adopters. **The nskey advertisement is the sole outlier**, which makes this a
+question about why one record opted out rather than whether two can converge.
+
+**2. One key-entry vocabulary — `{use, alg, pub, kid, status?}` inside
+`{v, keys:[…], suites}`.** The nskey advertisement converges onto it:
+`nskeyKid` becomes the entry's `kid`, `publicKey` becomes `pub`, `alg` stays,
+and the advertisement gains a `keys` list. The list is a capability rather
+than ceremony — an atSign cannot advertise both X-Wing and ML-KEM for a
+namespace today, because the advertisement holds exactly one key by
+construction.
+
+**3. One kid function, over the raw key bytes.** `nskeyKidOf` is right;
+`PackageKey.computeKid` hashes the base64 **text** of the key rather than the
+key, which was an accident and not a decision. Two ids that both mean "SHA-256
+prefix of a public key" are either the same function or one of them is a trap
+for whoever assumes they are.
+
+**4. Nothing is released, so this is an edit and not a migration.** No
+both-spellings reader, no kid-preimage migration, no keyfile re-key, no
+TTL-drain window for in-flight envelopes. The absent-field hatches go with it:
+`published_nskey_key_ring.dart`'s three (`v`, `alg` and `suites` each treated
+as "the pre-<date> shape") and `KeyPackage.fromPayload`'s one, along with the
+two constants that name what those absences meant — `KeyPackage.legacySuites`
+and `legacyNskeySuites`, identical values in different files. Every one of them
+defends against a predecessor that never shipped. `v`, `alg` and `suites`
+become required.
+
+The exception, and it is a real one: the **bare-string** `_apsk` spelling *is*
+released. It predates this work and keeps its compatibility path.
+
+**5. The suite-negotiation loop is written twice and becomes one function.**
+`KeyPackage.bestSuiteFor` plus `sendEnvelope`'s narrowing, versus
+`NskeyCryptoProvider._sealVersionFor`: the same walk of the sender's
+KEM-narrowed openable list against the recipient's declared `suites`, picking
+the first in common.
+
+**6. The seal/open helper takes `info` as a parameter, and the two values stay
+different.** `at_client/secret_sharing/v1` versus
+`at/nskey/…:<owner>:<namespace>`. Domain separation is what stops an envelope
+from one substrate being replayed into the other, so a *shared* `info` would be
+the one bug this consolidation could plausibly introduce. Shared code, distinct
+binding.
+
+**7. The carriers stay different, and that is correct.** `SecretEnvelope`'s
+JSON carries `from.kpid` because the recipient must be able to seal a reply
+back to the sender; an nskey conveyance carries its routing in `appMetadata`
+and its sender is the record's own owner. What converges is the
+**advertisement**, not the transport.
+
+**8. It lands before the `_apsk` array parser, or it is rework.**
+[14.18](implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)'s
+stage 1 opens with that parser; written bespoke it becomes the third
+hand-rolled codec for one shape, and the consolidation then has to unpick
+freshly written code. It becomes the new step 3 and the sequence renumbers to
+32 steps.
+
+**9. Three dartdocs still assert the write-once premise `enroll:update`
+removed, and one of them is holding a rollout decision.**
+`key_package.dart:198`, `enrollment_key_package.dart:53` and `:60`, and
+`envelope_signing.dart:48`. The last is the stated reason the JWS envelope
+shape is a 4.0 default: "the enrollment record's `keyPackage` is write-once —
+an envelope frozen there in a shape the fleet cannot read is unreadable for
+that enrollment's life." With
+[91](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)'s
+`enroll:update` reaching `metadata`, that reads "unreadable until the
+enrollment republishes". The fleet-readiness argument survives on its own
+merits — a reader that cannot parse still cannot parse — but its **severity**
+drops from unrecoverable to recoverable, and that is an input to when the
+default flips. Re-decided on the facts rather than inherited.
