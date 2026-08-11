@@ -270,19 +270,40 @@ class EnrollmentSubmitter {
 
     return await _serializedPerKeyfile(keysIo, request.atSign, () async {
       final existing = await keysIo.read(request.atSign);
-      // Per requested algorithm, so re-running is idempotent for THIS mode
-      // while a keyfile that holds a different algorithm's enrollment can
-      // still retrofit into this one.
+      // A keyfile is retrofitted ONCE. Any active authentication material is
+      // that retrofit, whatever algorithm it names — two live enrollments in
+      // one keyfile leave no unique answer to which one it authenticates as,
+      // which the assurance invariants now refuse outright.
+      //
+      // Two cases, and the difference matters:
+      //
+      //  - the SAME algorithm is a re-run, and returns the existing
+      //    enrollment. `selfRetrofit` documents itself as idempotent and
+      //    relies on it: a failed signing-root step is recovered by running
+      //    the whole thing again, so throwing here would make that retry
+      //    impossible;
+      //  - a DIFFERENT algorithm is a second retrofit, and throws. Quietly
+      //    handing back an mldsa65 enrollment to a caller that asked for
+      //    rsa2048 would have it believe it holds a mode it does not.
       final alreadyRetrofitted = existing.keys
           .where((m) =>
-              m.keyAlgorithmType == materialAlgo &&
-              m.keyPartType == CryptographicKeyType.privateSigning &&
+              m.keyPartType == CryptographicKeyType.privateAuthentication &&
               m.status == KeyPartStatus.active &&
               m.enrollmentId != null)
           .firstOrNull;
+      if (alreadyRetrofitted != null &&
+          alreadyRetrofitted.keyAlgorithmType != materialAlgo) {
+        throw AtEnrollmentException(
+            'this keyfile already holds enrollment '
+            '${alreadyRetrofitted.enrollmentId} '
+            '(${alreadyRetrofitted.keyAlgorithmType}); a keyfile is '
+            'retrofitted once, so it cannot also take a $materialAlgo '
+            'retrofit');
+      }
       if (alreadyRetrofitted != null) {
-        _logger.info('keyfile already holds a $materialAlgo enrollment '
-            '(${alreadyRetrofitted.enrollmentId}); not minting another');
+        _logger.info('keyfile already holds enrollment '
+            '${alreadyRetrofitted.enrollmentId} ($materialAlgo); this is a '
+            're-run, not a second retrofit — not minting another');
         return AtEnrollmentResponse(
             alreadyRetrofitted.enrollmentId!, EnrollmentStatus.approved,
             atSign: request.atSign,

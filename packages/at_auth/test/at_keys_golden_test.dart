@@ -19,6 +19,13 @@ import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
+  // The keyIds and keyPartTypes below are arbitrary PAYLOAD: these pins hold
+  // the document's STRUCTURE — field names, nesting, encoding — and the ids
+  // are just strings passing through it. Do not read them as the canonical
+  // shapes; those are pinned against their writers in wire_literal_pins_test
+  // ('apkam:<enrollmentId>:<generation>' and
+  // 'sign:<enrollmentId>:<algorithm>:<generation>'). Changing them here would
+  // churn a frozen golden string for no gain.
   group('the typed keyfile document (at rest, frozen)', () {
     test('a fully populated AtKeys emits the golden document byte-for-byte',
         () {

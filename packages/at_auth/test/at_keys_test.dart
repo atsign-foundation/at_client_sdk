@@ -412,7 +412,8 @@ void main() {
   });
 
   group('AtKeys fileApkamMaterial', () {
-    test('files both halves under one apkam:<enrollmentId> keyId', () {
+    test('files both halves under one apkam:<enrollmentId>:<generation> keyId',
+        () {
       final atKeys = AtKeys();
 
       atKeys.fileApkamMaterial(
@@ -421,18 +422,22 @@ void main() {
           publicKey: 'cHVibGljLWhhbGY=',
           privateKey: 'cHJpdmF0ZS1oYWxm');
 
-      final filed = atKeys.keysForKeyId('apkam:enroll-9').toList();
+      // Raw literal: the generation-suffixed id is the at-rest shape, and a
+      // keyfile written with it has to stay readable by every later build.
+      final filed = atKeys.keysForKeyId('apkam:enroll-9:1').toList();
       expect(filed, hasLength(2));
       expect(
         atKeys
-            .getKey('apkam:enroll-9', CryptographicKeyType.privateSigning)!
+            .getKey('apkam:enroll-9:1',
+                CryptographicKeyType.privateAuthentication)!
             .bytes
             .toString(),
         'cHJpdmF0ZS1oYWxm',
       );
       expect(
         atKeys
-            .getKey('apkam:enroll-9', CryptographicKeyType.publicVerification)!
+            .getKey('apkam:enroll-9:1',
+                CryptographicKeyType.publicAuthentication)!
             .bytes
             .toString(),
         'cHVibGljLWhhbGY=',

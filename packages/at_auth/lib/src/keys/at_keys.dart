@@ -58,15 +58,27 @@ class AtKeys {
         material.keyId, () => {})[material.keyPartType] = material;
   }
 
-  /// Files a freshly minted APKAM keypair as an enrollment's signing
-  /// material, under the keyId `apkam:<enrollmentId>`.
+  /// Files a freshly minted APKAM keypair as an enrollment's
+  /// **authentication** material, under the keyId
+  /// `apkam:<enrollmentId>:<generation>`.
   ///
-  /// This is the one place that id shape is written. [algorithm] is a
-  /// [KeyAlgorithmType] token, which is also the enrollment `signingAlgo`
-  /// spelling — the keyfile and the wire use the same strings. Both halves
-  /// are filed and share one creation timestamp: the private one is what
-  /// PKAM signs with, and the public one is what a reader checks this
+  /// This is the one place that id shape is written. The generation suffix is
+  /// what lets one enrollment hold more than one APKAM keypair over its life:
+  /// a rotation retires the previous generation and files the next under the
+  /// same enrollment id, and the retired bytes stay in the file because they
+  /// are still needed to verify what they signed. Without the suffix the map
+  /// key `(keyId, keyPartType)` collides and a second generation cannot be
+  /// filed at all.
+  ///
+  /// [algorithm] is a [KeyAlgorithmType] token, which is also the enrollment
+  /// `signingAlgo` spelling — the keyfile and the wire use the same strings.
+  /// Both halves are filed and share one creation timestamp: the private one
+  /// is what PKAM signs with, and the public one is what a reader checks this
   /// enrollment's server-side record against.
+  ///
+  /// Filed as `privateAuthentication` / `publicAuthentication`, NOT as
+  /// signing material: this keypair authenticates, and an enrollment's
+  /// signing keys are separate material with their own lifecycle.
   void fileApkamMaterial({
     required String enrollmentId,
     required String algorithm,
@@ -74,20 +86,88 @@ class AtKeys {
     required String privateKey,
   }) {
     final now = DateTime.now().toUtc();
+    final keyId = 'apkam:$enrollmentId:${nextApkamGeneration(enrollmentId)}';
     addKey(AtKeysMaterial(
-        keyId: 'apkam:$enrollmentId',
+        keyId: keyId,
+        enrollmentId: enrollmentId,
+        keyPartType: CryptographicKeyType.privateAuthentication,
+        keyAlgorithmType: algorithm,
+        bytes: AtBytes.fromString(privateKey),
+        createdAt: now));
+    addKey(AtKeysMaterial(
+        keyId: keyId,
+        enrollmentId: enrollmentId,
+        keyPartType: CryptographicKeyType.publicAuthentication,
+        keyAlgorithmType: algorithm,
+        bytes: AtBytes.fromString(publicKey),
+        createdAt: now));
+  }
+
+  /// The generation number [fileApkamMaterial] will use next for
+  /// [enrollmentId] — one past the highest already filed, or 1.
+  ///
+  /// Derived from the keyIds present rather than counted separately, so it
+  /// cannot drift from what the file actually holds. An id whose suffix is
+  /// not a number is ignored rather than rejected: a keyfile written by a
+  /// build that spells generations differently must still be readable.
+  int nextApkamGeneration(String enrollmentId) {
+    final prefix = 'apkam:$enrollmentId:';
+    var highest = 0;
+    for (final keyId in _materialsByKeyId.keys) {
+      if (!keyId.startsWith(prefix)) continue;
+      final generation = int.tryParse(keyId.substring(prefix.length));
+      if (generation != null && generation > highest) {
+        highest = generation;
+      }
+    }
+    return highest + 1;
+  }
+
+  /// Files a signing keypair for [enrollmentId] under
+  /// `sign:<enrollmentId>:<algorithm>:<generation>`.
+  ///
+  /// Algorithm leads the id because algorithm is what a verifier selects on:
+  /// an enrollment holds one active signing key per algorithm, and an
+  /// envelope's signature names which one produced it. The generation suffix
+  /// allows rotating a signing key within its algorithm.
+  void fileSigningMaterial({
+    required String enrollmentId,
+    required String algorithm,
+    required String publicKey,
+    required String privateKey,
+  }) {
+    final now = DateTime.now().toUtc();
+    final keyId = 'sign:$enrollmentId:$algorithm:'
+        '${nextSigningGeneration(enrollmentId, algorithm)}';
+    addKey(AtKeysMaterial(
+        keyId: keyId,
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.privateSigning,
         keyAlgorithmType: algorithm,
         bytes: AtBytes.fromString(privateKey),
         createdAt: now));
     addKey(AtKeysMaterial(
-        keyId: 'apkam:$enrollmentId',
+        keyId: keyId,
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.publicVerification,
         keyAlgorithmType: algorithm,
         bytes: AtBytes.fromString(publicKey),
         createdAt: now));
+  }
+
+  /// The generation [fileSigningMaterial] will use next for [enrollmentId]'s
+  /// [algorithm] — one past the highest already filed, or 1.
+  int nextSigningGeneration(String enrollmentId, String algorithm) {
+    final prefix = 'sign:$enrollmentId:$algorithm:';
+    var highest = 0;
+    for (final keyId in _materialsByKeyId.keys) {
+      if (!keyId.startsWith(prefix)) continue;
+      final generation = int.tryParse(keyId.substring(prefix.length));
+      if (generation != null && generation > highest) {
+        highest = generation;
+      }
+    }
+    return highest + 1;
   }
 
   /// Adopts [materials] — what an enrollment request's metadataBuilder filed
@@ -409,17 +489,17 @@ class AtKeys {
     final materials = keysForEnrollment(enrollmentId);
     final privateSigning = materials
         .where((m) =>
-            m.keyPartType == CryptographicKeyType.privateSigning &&
+            m.keyPartType == CryptographicKeyType.privateAuthentication &&
             m.status == KeyPartStatus.active)
         .firstOrNull;
     final publicVerification = materials
         .where((m) =>
-            m.keyPartType == CryptographicKeyType.publicVerification &&
+            m.keyPartType == CryptographicKeyType.publicAuthentication &&
             m.status == KeyPartStatus.active)
         .firstOrNull;
     if (privateSigning == null || publicVerification == null) {
       throw AtKeyNotFoundException(
-          'AtKeys holds no active signing keypair for enrollment '
+          'AtKeys holds no active authentication keypair for enrollment '
           '$enrollmentId');
     }
 
@@ -437,14 +517,19 @@ class AtKeys {
     return AtChopsImpl(atChopsKeys);
   }
 
-  /// The signing algorithm of [enrollmentId]'s active privateSigning
-  /// material, or null when the enrollment has no typed signing material
-  /// this build recognises (a legacy flat-fields enrollment reports null:
-  /// its RSA keypair lives in the flat fields, not the typed section).
+  /// The algorithm of [enrollmentId]'s active **authentication** material —
+  /// what PKAM must sign with — or null when the enrollment has no typed
+  /// authentication material this build recognises (a legacy flat-fields
+  /// enrollment reports null: its RSA keypair lives in the flat fields, not
+  /// the typed section).
+  ///
+  /// Named for signing because that is what `SigningAlgoType` calls it and
+  /// what the wire's `signingAlgo` field carries; the key it describes is the
+  /// authentication keypair, not the enrollment's attestation signing keys.
   SigningAlgoType? signingAlgorithmForEnrollment(String enrollmentId) {
     final material = keysForEnrollment(enrollmentId)
         .where((m) =>
-            m.keyPartType == CryptographicKeyType.privateSigning &&
+            m.keyPartType == CryptographicKeyType.privateAuthentication &&
             m.status == KeyPartStatus.active)
         .firstOrNull;
     if (material == null) return null;

@@ -103,9 +103,9 @@ void main() {
 
     final after = await keysIo.read(atSign);
     final signing = after.getKey(
-        'apkam:new-123', CryptographicKeyType.privateSigning);
+        'apkam:new-123:1', CryptographicKeyType.privateAuthentication);
     final verification = after.getKey(
-        'apkam:new-123', CryptographicKeyType.publicVerification);
+        'apkam:new-123:1', CryptographicKeyType.publicAuthentication);
     expect(signing, isNotNull);
     expect(verification, isNotNull);
     expect(signing!.enrollmentId, 'new-123');
@@ -155,12 +155,13 @@ void main() {
 
       final after = await keysIo.read(atSign);
       final signing =
-          after.getKey('apkam:new-123', CryptographicKeyType.privateSigning);
+          after.getKey('apkam:new-123:1', CryptographicKeyType.privateAuthentication);
       expect(signing!.keyAlgorithmType, KeyAlgorithmType.rsa2048);
       expect(signing.enrollmentId, 'new-123');
     });
 
-    test('idempotence is per algorithm', () async {
+    test('a second retrofit is refused; a re-run of the same mode reuses',
+        () async {
       final (_, session) = await sessionWithLegacyKeyfile();
       final mock = MockAtLookUp();
       var calls = 0;
@@ -171,18 +172,25 @@ void main() {
 
       await AtEnrollmentImpl()
           .submit(requestWithAlgo(session, SigningAlgoType.mldsa65), mock);
-      final rsa = await AtEnrollmentImpl()
-          .submit(requestWithAlgo(session, SigningAlgoType.rsa2048), mock);
-      expect(rsa.enrollmentId, 'id-2',
-          reason: 'a keyfile already holding a PQ enrollment can still take '
-              'the rollout-window RSA retrofit — an all-algorithms '
-              'idempotence check would silently hand back the wrong mode');
+      // A DIFFERENT algorithm is a second retrofit, and there is never a
+      // second retrofit: two live enrollments in one keyfile leave no unique
+      // answer to which one it authenticates as. Refused loudly rather than
+      // quietly handed the mldsa65 enrollment, which would have the caller
+      // believe it holds a mode it does not.
+      await expectLater(
+          () => AtEnrollmentImpl()
+              .submit(requestWithAlgo(session, SigningAlgoType.rsa2048), mock),
+          throwsA(isA<AtEnrollmentException>()));
 
+      // The SAME algorithm is a re-run, and still reuses. selfRetrofit
+      // documents itself as idempotent and depends on it — a failed
+      // signing-root step is recovered by running the whole thing again — so
+      // this arm must NOT throw.
       final rerun = await AtEnrollmentImpl()
-          .submit(requestWithAlgo(session, SigningAlgoType.rsa2048), mock);
-      expect(rerun.enrollmentId, 'id-2',
-          reason: 'while a rerun of the SAME mode reuses, not re-mints');
-      expect(calls, 2);
+          .submit(requestWithAlgo(session, SigningAlgoType.mldsa65), mock);
+      expect(rerun.enrollmentId, 'id-1',
+          reason: 're-running the original mode reuses, not re-mints');
+      expect(calls, 1, reason: 'exactly one enrollment was ever minted');
     });
 
     test('an algorithm outside the retrofit set is refused before anything '
@@ -347,7 +355,7 @@ void main() {
       ..signingAlgoType = SigningAlgoType.mldsa65
       ..signingMode = AtSigningMode.pkam);
     final publicKey = after
-        .getKey('apkam:new-123', CryptographicKeyType.publicVerification)!
+        .getKey('apkam:new-123:1', CryptographicKeyType.publicAuthentication)!
         .bytes
         .toString();
     final ok = await MlDsa65PureDartAlgo().verifyBytes(

@@ -92,8 +92,8 @@ void main() {
     expect(
         mine['apkamPubKey'],
         keys
-            .getKey('apkam:$enrollmentId',
-                CryptographicKeyType.publicVerification)!
+            .getKey('apkam:$enrollmentId:1',
+                CryptographicKeyType.publicAuthentication)!
             .bytes
             .toString(),
         reason: 'the APKAM the atServer holds is the ML-DSA one, byte for '

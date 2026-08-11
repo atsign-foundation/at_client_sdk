@@ -79,8 +79,8 @@ void main() {
         SigningAlgoType.mldsa65);
     expect(
         base64Decode(keys
-                .getKey('apkam:$enrollmentId',
-                    CryptographicKeyType.publicVerification)!
+                .getKey('apkam:$enrollmentId:1',
+                    CryptographicKeyType.publicAuthentication)!
                 .bytes
                 .toString())
             .length,
@@ -141,8 +141,8 @@ void main() {
             'it there nothing ever can');
     // The APKAM the atServer holds is the ML-DSA one, byte for byte.
     expect(mine['apkamPubKey'],
-        keys.getKey('apkam:$enrollmentId',
-                CryptographicKeyType.publicVerification)!.bytes.toString());
+        keys.getKey('apkam:$enrollmentId:1',
+                CryptographicKeyType.publicAuthentication)!.bytes.toString());
 
     // --- legacy material is cut and published, BY DEFAULT ------------------
     expect(keys.defaultEncryptionPublicKey, isNotNull);

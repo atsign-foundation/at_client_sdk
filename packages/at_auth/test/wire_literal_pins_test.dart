@@ -250,18 +250,36 @@ void main() {
           ['active', 'retired', 'dead']);
     });
 
-    test('the typed keyfile ids APKAM material files under', () {
-      // 'apkam:<enrollmentId>' — AtKeys.fileApkamMaterial is the only writer
-      // of this shape now, but the shape itself is frozen independently of
-      // it: every PQ keyfile already written carries these ids.
-      final material = AtKeysMaterial(
-          keyId: 'apkam:enroll-1',
-          keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-          bytes: AtBytes.fromString('QUJD'),
-          createdAt: DateTime.utc(2026, 6, 11));
-      expect(material.keyId, 'apkam:enroll-1');
-      expect(material.toJson()['keyAlgorithmType'], 'mldsa65');
+    test('the typed keyfile ids APKAM and signing material file under', () {
+      // Pinned against the WRITERS, not against hand-built materials: a pin
+      // that constructs the id it then asserts pins nothing, and the shape is
+      // only frozen if the code that emits it is what produced the string.
+      final atKeys = AtKeys(atsign: '@alice'.toAtsign());
+
+      atKeys.fileApkamMaterial(
+          enrollmentId: 'enroll-1',
+          algorithm: KeyAlgorithmType.mlDsa65,
+          publicKey: 'QUJD',
+          privateKey: 'REVG');
+      expect(atKeys.keysForKeyId('apkam:enroll-1:1'), hasLength(2),
+          reason: 'apkam:<enrollmentId>:<generation> is the at-rest id for an '
+              'enrollment authentication keypair');
+
+      atKeys.fileSigningMaterial(
+          enrollmentId: 'enroll-1',
+          algorithm: KeyAlgorithmType.mlDsa65,
+          publicKey: 'R0hJ',
+          privateKey: 'SktM');
+      expect(atKeys.keysForKeyId('sign:enroll-1:mldsa65:1'), hasLength(2),
+          reason: 'sign:<enrollmentId>:<algorithm>:<generation> is the '
+              'at-rest id for an enrollment signing keypair');
+
+      expect(
+          atKeys
+              .getKey('apkam:enroll-1:1',
+                  CryptographicKeyType.privateAuthentication)!
+              .toJson()['keyAlgorithmType'],
+          'mldsa65');
     });
   });
 }
