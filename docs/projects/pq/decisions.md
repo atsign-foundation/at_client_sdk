@@ -106,6 +106,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [89. Phase 7: the section symbol keeps the two jobs it is good at (2026-08-11)](#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
 - [90. Phase 7: a refusal the approval wait cannot resolve stops being silent (2026-08-11)](#90-phase-7-a-refusal-the-approval-wait-cannot-resolve-stops-being-silent-2026-08-11)
 - [91. Signature agility: the APKAM auth key stops being the enrollment's signing key (2026-08-11)](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
+- [92. The spike takes trunk, and two published version numbers move underneath it (2026-08-11)](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11)
 
 ---
 
@@ -7815,3 +7816,66 @@ locally. **The spike never merges**; it is broken into stacked PRs afterwards.
 
 The Dart atServer carries the verb now; every other atServer implementation is
 a tracked parity follow-up with its own issue, so it cannot silently diverge.
+
+## 92. The spike takes trunk, and two published version numbers move underneath it (2026-08-11)
+
+`gkc-pq-d1-spike` merged `origin/trunk` (87 commits, merge `95584f818`) once
+at_commons 5.14.0 published. Four rulings came out of doing it.
+
+**1. The version collision is silent, so it is checked first.** trunk published
+`at_chops 3.5.0` and `at_commons 5.14.0` the same day. The spike had been
+claiming *both of those numbers* for entirely different, unreleased content —
+KE-1's seed API and `Metadata.copy()`. Because both sides wrote the same
+`version:` string, `pubspec.yaml` **auto-merged with no conflict at all**;
+only the CHANGELOGs raised a marker. Nothing in git's output says a published
+number has been attached to unreleased work.
+
+The spike's content moved to **at_chops 3.6.0** and **at_commons 5.15.0**, with
+at_client's floors following, and each published heading kept what actually
+shipped. The standing rule this adds: **before merging trunk here, diff every
+touched package's `version:` line against pub.dev.** A merge that reports no
+conflict has not told you the version line is right.
+
+The sharpest consequence is for anyone reading the plan: "at_chops 3.5.0 is
+unpublished" was true for weeks and is now false in the most misleading
+possible way — 3.5.0 is live, and it does not contain KE-1.
+
+**2. Validation follows the work, not the file.** Both semantic conflicts had
+one shape: trunk added length checks to method bodies the spike had already
+refactored out from under it. Taking either side alone loses something real,
+and neither loss shows up as a conflict.
+
+- **ML-KEM** — trunk validated inside `MlKem768PureDartAlgo`; the spike had
+  moved the implementation to a level-parameterised `MlKemPureDart` base. The
+  checks went into the base, expressed against abstract per-level size getters.
+  Pasting 768's constants into a base that also serves ML-KEM-1024 would have
+  rejected every well-formed 1024 key — the enum-widening trap in size form.
+- **ML-DSA-65** — trunk validated inside the async `signBytes`/`verifyBytes`;
+  the spike had made those thin wrappers over sync statics that the PKAM
+  dispatch and envelope signing call directly. The checks went into the
+  **sync** statics, because validating the wrapper would have guarded only the
+  callers that were never the risk.
+
+**3. Widening an enum reddens pins in files the change never touched.** trunk
+arrived with a new `at_auth/test/atkey_material_test.dart` pinning both
+`KeyAlgorithmType.known` and `CryptographicKeyType.known` *exactly*, and the
+spike had widened both (`mlkem1024`, `privateAuthentication`,
+`publicAuthentication`). Git merged that file cleanly and it failed only on a
+test run. The pin now carries the three tokens; that edit is the review.
+
+**4. Two red tests predated the merge, and saying so required running both
+arms.** `at_client`'s `signing_algo_resolution_test.dart` and
+`at_onboarding_cli`'s `keyfile_literal_pins_test.dart` were red after the
+merge. Both were re-run at the pre-merge head in a throwaway worktree and
+failed **identically**, so neither was merge-caused. Both were stale tests
+rather than product defects: the first built its fixture from `privateSigning`,
+which predates [91](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)'s
+auth/signing split, so `signingAlgorithmForEnrollment` correctly found no
+authentication material; the second still expected `version`/`atsign`/`keys`
+from a keyset with no typed material, guarding an at_auth behaviour from one
+package away — which is why nothing went red where that change landed.
+
+They were also invisible in the previous status line, which reported
+`at_onboarding_cli` as *analyze* clean and said nothing about `at_client`'s unit
+suite. **A rails claim names its rail**: analyze and test are different
+assertions, and the shorter one reads as the stronger.

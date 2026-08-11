@@ -129,7 +129,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
                                           │
                             B-2 nskey rotation + revocation (B5/B6)  ◀── RF-1 + SS-3 (fan-out only)
                                           │
-                            KE-1 selectable KEM + negotiated construction  ◀── at_chops 3.5.0 (UNPUBLISHED)
+                            KE-1 selectable KEM + negotiated construction  ◀── at_chops 3.6.0 (UNPUBLISHED)
                                   (moves the wire 0x01→0x02; ML-KEM-1024 at 0x03)
                                           ▼
                          ▶ at_client 3.14.x = D1 GA (rebuild = reader; the app's 4.x release = PQ writer)
@@ -877,12 +877,12 @@ taken now because nothing written under the old form exists outside the spike.
 | **A PQ-capable client cannot tell a legacy atServer from an old peer.** Against an atServer that drops `EnrollParams.metadata`, the key package vanishes silently and the approver reads absence — which [decisions.md 20](decisions.md#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) ruling 2 treats as *ordinary*, because it also means "an older client". So conveyance no-ops fleet-wide with nothing saying why. UC-B0.1 requires aborting cleanly and logging the reason; `info` returns only a version string, with no feature list to check | **RF-SRV** / UC-B0.1 |
 | **Parity across every atServer implementation for the `mldsa65` verify branch.** At least one rejects `signingAlgo:mldsa65` while *parsing* the command, so a PQ client meets an invalid-syntax error rather than an authentication failure. It already stores `signingAlgo` but never reads it, and carries no ML-DSA support — a dependency decision, not an edit | **SS-3** |
 | **D1 GA critical path, re-derived 2026-08-05 after the three-scenario re-examination** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)–[41](decisions.md#41-the-to-define-list-2026-08-05)). **R-1 is DELIVERED, shrunk to D1-D**: `disallowLegacyEncryption` landed 2026-08-05; the marker/negotiation half was built, proven at three layers, and removed the same day; C3 deferred unbuilt. **Newly ON the GA path:** **SH-1** (M, key-material self-heal — the conveyance hole meant an enrollment created after a mint was stranded; in progress 2026-08-05) and **RF-SRV** (L, server self-enroll — every scenario's "upgrade the enrollment", was mis-filed off-path). **Re-timed:** ON-1 mints/publishes legacy material by default (decisions 37); R-2 keeps the flag flip but loses phase-4 stop-existing to a later ecosystem-gated release; B-3 phase 3's client-side stop likewise. Remaining on the GA path: **SH-1**, **RF-SRV**, **B-2** (L), **ON-1** (M), **R-2** (M), **S-3** (L). The to-define list ([decisions 41](decisions.md#41-the-to-define-list-2026-08-05)) is the authoritative open-questions ledger — 12 items with owners; **all 12 ruled 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)), so the definitions now land in their owner projects as implementation | plan |
-| **D1 GA critical path, re-derived 2026-08-04 against pub.dev and the skip counts.** Complete: P-*, S-1/S-2, SS-1a/1b/1c, **SS-2**, **SS-3**, **SS-4** (bar key transparency, parked), **B-1** incl. all chunks. Remaining on the GA path: **R-1** (L, migration machinery + `disallowLegacyEncryption` + strict mode), **B-2** (L, nskey rotation + revocation), **ON-1** (M, PQ-native greenfield onboarding), **R-2** (M, the 4.0.0 flag flip), and **S-3** (L, updatable `.atKeys`/keychain). Off the GA path: the **RF-\*** retrofit trio. Referenced only: D2-1. Separate track: IS-1. Publish gates verified against pub.dev the same day — at_client 3.14.1/3.14.0, at_commons 5.14.0/5.13.0, at_chops 3.4.2/3.4.1, at_auth 3.4.0/3.3.0 (so the old at_auth `3.3.0-rc1`→stable gate is **closed**) | plan |
+| **D1 GA critical path, re-derived 2026-08-04 against pub.dev and the skip counts.** Complete: P-*, S-1/S-2, SS-1a/1b/1c, **SS-2**, **SS-3**, **SS-4** (bar key transparency, parked), **B-1** incl. all chunks. Remaining on the GA path: **R-1** (L, migration machinery + `disallowLegacyEncryption` + strict mode), **B-2** (L, nskey rotation + revocation), **ON-1** (M, PQ-native greenfield onboarding), **R-2** (M, the 4.0.0 flag flip), and **S-3** (L, updatable `.atKeys`/keychain). Off the GA path: the **RF-\*** retrofit trio. Referenced only: D2-1. Separate track: IS-1. Publish gates verified against pub.dev the same day — at_client 3.14.1/3.14.0, at_commons 5.14.0/5.13.0, at_chops 3.4.2/3.4.1, at_auth 3.4.0/3.3.0 (so the old at_auth `3.3.0-rc1`→stable gate is **closed**). ⚠️ **Re-verified 2026-08-11, and two of these moved:** in-tree/published is now at_chops **3.6.0**/3.5.0 and at_commons **5.15.0**/5.14.0 | plan |
 | **`at_auth` 3.4.0 is open and unpublished**, and at_client now depends on `AtEnrollmentRequest.metadataBuilder`. Same masking as the at_commons row below: workspace resolution hides it, so a green build says nothing | `at_auth` |
 | ~~`at_end2end_test` has not been run since at_auth's surface changed~~ — **run 2026-08-04, green at 41 with no skips**, the same count as 2026-08-03. So neither at_auth's added surface (`EnrollmentKeyExchangeMode`, `apkamSymmetricKeyResolver`, `approvedWithMintedKey`, the grown `AtEnrollmentResponse`/`EnrollmentRequestDecision`) nor the arrival-path work regressed it — the latter mattering because that commit added work to `AtClientImpl`'s init, which every e2e test drives. All four rails now verified together: `at_client` 825/39 skipped, functional 113, e2e 43, `at_client_flutter` analyze clean | `at_end2end_test` |
 | ~~`NskeyPrivateFiling.start` is an arrival hook nothing calls~~ — **fixed 2026-08-04, and it was three defects rather than one.** The prescription recorded here — give the nskey path `PqSigningRoot.filePendingPrivate`'s store-check treatment — would have produced a second method that looks right and files nothing, because the model it was told to copy had the same defect one layer down. `SecretStore` is an in-memory map whose only populator is `PairwiseSecretSharing.sweepOnce`, and **no production code in `at_client` ever called `sweepOnce` or `startListening`** — so at client start that store is empty and the root private was never filed either. One layer lower again: `KeyPackageRegistration.register()` mints a fresh X-Wing keypair per process (`loadApkamKeys` was wired only in tests), so the running client's `kpid` was never the one its enrollment advertised and a sweep would have scanned an address nobody writes to. `collectConveyedKeyMaterial` closes all three in order — bind the key package to `AtKeys`, sweep remote, then file — and `NskeyPrivateFiling.filePending` replaces `start`/`stop`. Live-covered in `conveyed_key_collection_test.dart`, with both defects reinstated as negative controls: disabling the binding fails the kpid assertion, disabling the sweep fails both tests | `at_client` |
 | **The substrate's unit fixture cannot see routing** — one map backs local storage and the atServer, so a local-first write and a remote-first one are indistinguishable by results. Routing is asserted directly instead (`putOptions`, `scanRoutedRemote`). Closing it properly means modelling sync in the fixture | `at_client` tests |
-| **`at_client` cannot publish until `at_commons` 5.14.0 does.** Its floor was raised to `^5.14.0` in the same commit as the first use of `Metadata.copy()`, and 5.14.0 is open but unpublished — workspace resolution masks this exactly as the publish-ordering caution warns, so a green build says nothing. `at_chops` 3.4.2 is in the same state and IS pinned now — at_client and at_auth both moved their floor to `^3.4.2` (2026-08-05, the ML-DSA PKAM dispatch), and at_server's spike resolves it by path override | `at_commons` / `at_chops` |
+| **`at_client` cannot publish until `at_commons` 5.15.0 and `at_chops` 3.6.0 do.** ⚠️ **Restated 2026-08-11:** the floors this row used to name — `^5.14.0` and `^3.5.0` — are now *published* numbers holding *other* content, because trunk released both while the spike claimed them. at_client's floors are `^5.15.0` and `^3.6.0`, and neither is on pub.dev. Checking pub.dev for 5.14.0/3.5.0 and finding them live is the trap this row now exists to prevent. Workspace resolution masks the gap exactly as the publish-ordering caution warns, so a green build says nothing | `at_commons` / `at_chops` |
 | ~~The secret-sharing substrate has no live coverage in either pack~~ — **opened, not closed.** `secret_sharing_delivery_test.dart` now drives it live: the envelope is on the atServer by the time `sendEnvelope` returns, and a client that has never synced fetches and decrypts it from there. Both fail against the pre-fix build and nothing else does, so they detect the defect rather than merely passing. **Still owed:** everything beyond envelope delivery — `pushSecretToNamespaceMembers`, the `requestSecret`/`waitForSecret` pull flow, and anything needing two real enrollments, which waits on SS-2 | `at_functional_test` |
 | **The substrate's unit fixture backs local storage and the atServer with one map**, so it cannot see a local-first-vs-remote-first defect on the read side at all — which is how the `__ssenv` wake-up ordering bug survived. Fixed for the write side by asserting the put's routing directly and for the sweep by asserting the scan's, but the blind spot itself remains: any future substrate read that depends on routing is untested unless someone remembers to assert the routing rather than the result. Closing it properly means modelling sync in the fixture, so local and remote diverge and a wrong route fails on its results. The live pack now covers the two paths that matter today | `at_client` tests |
 | ~~Real nskey minting + per-APKAM conveyance~~ — **done.** `mintAndPublish` takes a remote-first immutable `_nskeylock`, files the private into `AtKeys` **before** publishing, and publishes nothing at all if it cannot. `NskeySeeding` mints at client init across a client's authorised namespaces and conveys every held generation, reading from `AtKeys` rather than the in-memory store. `InMemoryNskeyKeyRing` remains for tests only | **SS-4** |
@@ -899,8 +899,8 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~Rename the atSign-level key in code, delete the `root-pqpublickey` variant~~ — **done.** `NskeyRecipientKind` has one member; no Dart source says `pqpublickey`; the cold-start throw now states why there is no PQ target rather than promising a fallback | **B-1c** |
 | ~~Enrollment approval reverses direction~~ — **done.** It needed the atServer after all, though far less of it than "multi-repo seam" implied: the *return* leg rides the existing substrate with no verb change, but the atServer made `encryptedAPKAMSymmetricKey` mandatory on `enroll:request`, so an enrollee that wraps nothing could not send a valid request. That check now yields to an advertised key package and stays mandatory otherwise | **SS-2** |
 | ~~`_apsk`'s published value becomes a root-signed envelope rather than a bare key~~ — **re-ruled 2026-08-05 by [decisions 39](decisions.md#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05):** the final 3.x publishes the bare value EXACTLY as today (apps parse it), while verify learns the tagged self-describing form 4.x enrollments will publish — built (`parseApskValue`/`verifyEnvelope`) | **RF-2b** |
-| ~~Open an in-progress version in `at_chops` and `at_commons`~~ — **done.** at_chops **3.4.2** and at_commons **5.14.0** are open and unpublished; fold further entries under those headings | `at_chops` / `at_commons` |
-| ~~`_addMetadataToBuilder` is a hand-rolled copier~~ — **done.** `Metadata.copy()` (at_commons 5.14.0) is the canonical converter; the notify path copies wholesale and then clears the few fields a sender must not assert, so a field added upstream travels by default. at_client's floor is `^5.14.0` | `at_commons` |
+| ~~Open an in-progress version in `at_chops` and `at_commons`~~ — **done, and renumbered 2026-08-11.** The open headings are now at_chops **3.6.0** and at_commons **5.15.0**; 3.5.0 and 5.14.0 both published from trunk that day. Fold further entries under the new headings | `at_chops` / `at_commons` |
+| ~~`_addMetadataToBuilder` is a hand-rolled copier~~ — **done.** `Metadata.copy()` (at_commons 5.14.0) is the canonical converter; the notify path copies wholesale and then clears the few fields a sender must not assert, so a field added upstream travels by default. Now at_commons **5.15.0**, at_client's floor `^5.15.0` | `at_commons` |
 
 **Open, not yet grilled.** Two threads the 2026-08-03 session raised and did not
 settle: what the signing root signs beyond `_apsk`; and the key-transparency publication
@@ -1243,7 +1243,7 @@ mixed-scheme / cold-start / revoke+rotate-exclude; e2e at_talk chat scenario. **
 **Landed** on `gkc-pq-d1-spike`, `6a85fad05`…`f3e5b3686`
 ([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)):
 `AtKemAlgorithm.newSeed`/`keyPairFromSeed` + `MlKem1024PureDartAlgo` + `pqSeal ver 0x03`
-(**at_chops 3.5.0**, unpublished); `SecretSharingAlgos` gains `ml-kem-1024`, both RFC 9180 suites,
+(**at_chops 3.6.0**, unpublished); `SecretSharingAlgos` gains `ml-kem-1024`, both RFC 9180 suites,
 `sealVersionFor`/`suiteForKeyAlgo`/`openableSuitesFor`/`kemFor`/`kemForSuite`, and joins the **main
 barrel**; `AtClientPreference.keyEstablishmentAlgo` is read by `KeyPackageRegistration` and
 `enrollmentKeyPackageBuilder`; `sendEnvelope` seals under the **recipient's** `alg` at the strongest
@@ -1270,9 +1270,11 @@ what it can open), UC-A4.5 (the sender follows the recipient, not its own prefer
 is a refusal). The live wire assertion — that the negotiated version is the version on the atServer — is
 `tests/at_functional_test/test/secret_sharing_delivery_test.dart`.
 **Effort:** L.
-**Watch-outs:** **at_chops 3.5.0 is unpublished and is a MINOR, not a patch** — `newSeed`/`keyPairFromSeed`
+**Watch-outs:** **at_chops 3.6.0 is unpublished and is a MINOR, not a patch** — `newSeed`/`keyPairFromSeed`
 are abstract members on the exported `AtKemAlgorithm`, so any external `implements` breaks; at_client's
-floor is already `^3.5.0` and workspace resolution masks that from every local build. A published
+floor is `^3.6.0` and workspace resolution masks that from every local build. KE-1's content moved off
+3.5.0 when trunk published that number on 2026-08-11 with unrelated content, so a pub.dev check showing
+3.5.0 live is **not** this gate. A published
 `suites`/`legacy…Suites` constant **must never grow** — an advertisement is fetched by senders who act on
 the claim immediately. And an enrollment's KEM is frozen at `enroll:request`
 ([14.6](#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)): changing the preference takes
@@ -1291,12 +1293,22 @@ a key, an envelope shape can be rolled forward, and an unparseable package stops
 passthrough it complements).
 **Ruled → [decisions 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)**
 (eight rulings, the verb's shape, and the site-by-site receiver change list).
-**Deliverables — server half:** one alternation entry on `syntax.dart`'s `enroll` pattern (verified not to
-disturb `force`/`listNamespace` or the `request`/`listns` captures); a `case 'updateMetadata'` handler that
-is **self-only** (the connection's `enrollmentId` must equal the target — an explicit exception to
+**Deliverables — server half: BUILT** on at_server `gkc-apsk-auto-publish` (`ab38b884`), 919/919 unit and
+210/210 functional. One alternation entry on `syntax.dart`'s `enroll` pattern (verified not to disturb
+`force`/`listNamespace` or the `request`/`listns` captures); a `case 'update'` handler that is
+**self-only** (the connection's `enrollmentId` must equal the target — an explicit exception to
 `isAuthorized`'s "no enrollmentId ⇒ full permissions" default, so an owner or legacy-PKAM connection is
 refused), **approved-state-only**, and **per-key set** rather than whole-map replace; the server keeps no
-opinion on the contents. No new `EnrollParams` fields.
+opinion on the contents.
+
+⚠️ **Two things this entry used to say are no longer true**, both from
+[91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
+ruling 13. The verb is **`enroll:update`**, not `enroll:updateMetadata`, and it reaches
+`apkamPublicKey`, `signingAlgo`, `apsk` and `metadata` rather than metadata alone —
+`namespaces` and the approval state stay permanently out of reach, because a self-only
+operation must not be able to widen its own grant. And it **does** take new `EnrollParams`
+fields: `apsk` and `apkamPublicKeySignature`, both shipped in at_commons 5.14.0.
+Parity for every other atServer implementation is a tracked follow-up so it cannot silently diverge.
 **Deliverables — client half (the larger one):** the receiver holds a **set** of KEM keypairs and answers at
 every held kpid. `PersistedApkamKeys` becomes a list, `keyPackageMaterial` returns every material for the
 enrollment, `EnvelopeAddressing` gains an any-of form, the sweep/subscribe/marker paths watch every address,
@@ -1469,7 +1481,7 @@ downstream re-publishes against it:
 
 | Package | Published | Pins `at_client` | What has to happen first |
 |---|---|---|---|
-| `at_chops` | 3.4.1 | — | publish 3.5.0 (KE-1's seed API), row 3 of the publish table |
+| `at_chops` | **3.5.0** (2026-08-11) | — | publish **3.6.0** (KE-1's seed API), row 3 of the publish table. 3.5.0 published from trunk and carries `RsaSignatureAlgo` and the PQ length validation — **not** KE-1 |
 | `at_auth` | 3.3.0 | — | publish 3.4.0 (in-tree, unpublished) |
 | `at_client` | **3.14.0** | — | publish the D1 GA minor — 3.14.0 carries none of the nskey path |
 | `at_onboarding_cli` | 1.16.0 | `^3.10.0` | re-publish against the GA minor |
@@ -1510,12 +1522,18 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 
 ### (a) Publish gates
 - `at_chops` (P-1, P-2, **KE-1**) and `at_commons` (SS-1a) publish **before** `at_server`/consumers bump pins.
-- ⚠️ **`at_chops` is at 3.5.0 in-tree and unpublished** (KE-1). It is a **MINOR, not a patch**:
+- ⚠️ **`at_chops` is at 3.6.0 in-tree and unpublished** (KE-1). **3.5.0 published on 2026-08-11 from
+  trunk and does NOT contain KE-1** — it carries `RsaSignatureAlgo` and the PQ length validation. The
+  spike had been claiming 3.5.0 for KE-1's content and moved to 3.6.0 on the trunk merge (`95584f818`);
+  do not read a published 3.5.0 as this gate being discharged. It is a **MINOR, not a patch**:
   `newSeed`/`keyPairFromSeed` are **abstract members added to the exported `AtKemAlgorithm`**, so any
   external `implements AtKemAlgorithm` stops compiling. Every implementation in this repository is a
   `final class … implements` and was caught at compile time; nothing outside gets that. at_client's floor
-  is already `^3.5.0`, which workspace resolution satisfies from source — so this gate is invisible to
+  is `^3.6.0`, which workspace resolution satisfies from source — so this gate is invisible to
   every local and CI build and must be discharged explicitly before the at_client D1 GA publish.
+- ⚠️ **`at_commons` is at 5.15.0 in-tree and unpublished.** 5.14.0 published 2026-08-11 carrying the
+  `enroll:update` grammar, `EnrollParams.apsk` and `.apkamPublicKeySignature` ([#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137));
+  the spike's `Metadata.copy()` moved to 5.15.0 in the same merge, and at_client's floor is `^5.15.0`.
 - `at_auth` is split **additive-3.3.0** (S-1; 3.2.0 was consumed by the network-timeout release) then **breaking-4.0.0** (S-5) so the `AtKeys`/`AtKeysIo`
   extend-in-place bakes before the barrel cut.
 - `at_client` stays **minor 3.14.x** through D1 GA; the v4 flip (R-2) is the final gated cutover.
@@ -1527,12 +1545,13 @@ out of scope here** — see [roadmap.md](roadmap.md) for the D2 trajectory.
 |----|---------------------|-------------------------------|------------|-----|
 | 1  | `at_chops`          | minor `3.2.1 → 3.3.0` **(published 2026-06-23, done)** | P-1    | stateless functional core + HPKE `pqSeal`/`pqOpen`; `@Deprecated AtChopsImpl` shim |
 | 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(published 2026-07-17, done)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046); P-2's `mldsa65` verify branch (#2056, 07-06) and #2039 (AES-GCM FFI, 07-09) folded into the same slot, which then published. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
-| 3  | `at_chops`          | minor `3.4.2 → 3.5.0` **(in-tree, UNPUBLISHED)** | KE-1 | `AtKemAlgorithm.newSeed` + `keyPairFromSeed`; `MlKem1024PureDartAlgo`; `pqSeal ver 0x03` (RFC 9180 at KEM `0x0042` / HKDF-SHA384 / AES-256-GCM). ⚠️ **MINOR because the two seed methods are abstract members on the exported `AtKemAlgorithm`** — an external `implements` must add them. at_client already pins `^3.5.0`, and workspace resolution hides the gap |
+| 2b | `at_chops`          | minor `3.4.1 → 3.5.0` **(published 2026-08-11, done)** | — (trunk) | `RsaSignatureAlgo`; PQ key/ciphertext/signature length validation across both backends; `MlDsa65FfiAlgo.verifyBytes` throws `StateError` on an incapable libcrypto. **Not a PQ-program release** — it took the version number the spike had been claiming, which is why row 3 moved up |
+| 3  | `at_chops`          | minor `3.5.0 → 3.6.0` **(in-tree, UNPUBLISHED)** | KE-1 | `AtKemAlgorithm.newSeed` + `keyPairFromSeed`; `MlKem1024PureDartAlgo`; `pqSeal ver 0x03` (RFC 9180 at KEM `0x0042` / HKDF-SHA384 / AES-256-GCM); RFC 9180 Base mode as `ver 0x02`; `HkdfSha384`; `ChaCha20Poly1305Algo`. ⚠️ **MINOR because the two seed methods are abstract members on the exported `AtKemAlgorithm`** — an external `implements` must add them. at_client pins `^3.6.0`, and workspace resolution hides the gap |
 | 4  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal. *(at_commons has since published 5.13.0, 2026-07-17, outside this program.)* |
 | 5  | `at_auth`           | minor `3.2.0 → 3.3.0` **(published stable 2026-07-17, done)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. The rc1 → stable promotion is **closed** (re-verified against pub.dev 2026-08-08), so S-6 and SS-2's at_auth work have the stable version they pin against |
 | 5b | `at_auth`           | minor `3.3.0 → 3.4.0` **(in-tree, UNPUBLISHED)** | KE-1, ON-1 | opened 2026-08-03 (`936241d8f`): `KeyAlgorithmType.mlKem1024`; the `.atKeys` passphrase envelope derives from a random per-file salt (was salted with the passphrase itself). **This is the open at_auth slot** — ON-1's `mintLegacyMaterial` folds in here rather than opening a new version |
 | 6  | `at_auth`           | **major `3.4.x → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
-| 7  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2, KE-1 | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation; the selectable KEM. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it. ⚠️ **gated on row 3** — this release cannot go out against an unpublished `at_chops 3.5.0` |
+| 7  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2, KE-1 | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation; the selectable KEM. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** (3.14.0 carries the SS-0 substrate as an experimental surface), so the GA slot has moved off 3.14.x — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it. ⚠️ **gated on row 3** — this release cannot go out against an unpublished `at_chops 3.6.0`, and a published 3.5.0 does not discharge that gate |
 | 8  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | default posture → `ReleasePosture.postQuantum()` (all five axes, [decisions 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)); plus the normal major-version deprecation cleanup (orthogonal to the rollout, [decisions 56.4](decisions.md#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults)). *(selfEncryptionKey stop-existing moved to a later ecosystem-gated release, [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05))* |
 | 9  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection. 1.16.0 published 2026-07-17, so 1.17.0 is a clean next slot |
 | 10 | `at_client_flutter` | minor `1.1.4 → 1.2.0`         | S-6        | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
@@ -1546,6 +1565,8 @@ and `at_commons ^5.9.0`; both floors rise during D1:
 | `at_chops`    | `^3.0.0 → ^3.3.0`   | SS-0     | the substrate baseline needs the published `pqSeal`/`pqOpen` (3.3.0) — landed with #2037 |
 | `at_commons`  | `^5.9.0 → ^5.12.0`  | SS-1c    | the flat `listns` grammar + `EnrollParams.metadata` (5.12.0) |
 | `at_chops`    | `^3.3.0 → ^3.5.0`   | KE-1     | the first at_client call to `newSeed`/`keyPairFromSeed` — **raised in the same commit as the first use** (`042fea1d9`), because workspace resolution would otherwise let a consumer resolve an older sibling and get a package that does not compile |
+| `at_chops`    | `^3.5.0 → ^3.6.0`   | trunk merge `95584f818` | trunk published 3.5.0 with unrelated content, so KE-1's surface moved to 3.6.0 and the floor followed |
+| `at_commons`  | `^5.14.0 → ^5.15.0` | trunk merge `95584f818` | same collision on the `Metadata.copy()` slot: 5.14.0 published carrying `enroll:update`, so the copier moved to 5.15.0 |
 
 ⚠️ Workspace resolution wires `at_chops`/`at_commons` as path deps, so a too-low floor still resolves green
 locally **and** in CI — these floor bumps must be made **explicitly**, not inferred from a passing workspace
@@ -1557,7 +1578,7 @@ build.
 **KE-1 sits on the path rather than beside it** for one reason only: it moved the wire. Two modern peers
 now exchange `ver 0x02` where they exchanged `0x01`, and an enrollment's KEM is frozen at
 `enroll:request`, so every enrollment created after KE-1 and before GA carries the shape GA ships. It also
-put an **unpublished `at_chops 3.5.0`** in front of the at_client GA publish (row 3 of the table above).
+put an **unpublished `at_chops 3.6.0`** in front of the at_client GA publish (row 3 of the table above).
 **Branch state (2026-08-08):** `gkc-pq-d1-spike` is **pushed**, and is 168 commits ahead of
 `origin/trunk` and **17 behind**. The behind-count is no longer trivially docs-only, so the merge back
 is worth costing before ON-1 rather than after. It has **no PR**, so nothing runs CI on it.
@@ -2153,8 +2174,9 @@ This entry is the owed half; the rulings are the contract.
 | Piece | Where | Rails |
 |-------|-------|-------|
 | `EnrollParams.apsk`, `.apkamPublicKeySignature`, `EnrollOperationEnum.update` + grammar | **at_commons 5.14.0, published 2026-08-11**; [#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137) merged to trunk and merged into the spike | at_commons 512/512, analyze 0 |
-| `enroll:update` handler, PoP verification, client-composed `_apsk` | at_server `gkc-apsk-auto-publish` `ab38b884` | 919/919 unit, **210/210 functional** |
-| Auth/signing key types, generation keyIds, status-aware invariants, `replaceKey`, `activeEnrollmentId`, pure-legacy `toJson` | at_client_sdk `gkc-pq-d1-spike` | at_auth 237/237, analyze 0 |
+| `enroll:update` handler, PoP verification, client-composed `_apsk` | at_server `gkc-apsk-auto-publish` `ab38b884` | 919/919 unit, **210/210 functional** — ⚠️ measured with at_commons resolved through the `at_commons-apsk-1` tag, so it does **not** carry over the override swap in owed item 1 |
+| Auth/signing key types, generation keyIds, status-aware invariants, `replaceKey`, `activeEnrollmentId`, pure-legacy `toJson` | at_client_sdk `gkc-pq-d1-spike` | at_auth 241/241, analyze 0 |
+| The above **plus trunk**, after merge `95584f818` | at_client_sdk `gkc-pq-d1-spike` | at_chops 527/527, at_commons 512/512, at_auth 241/241, at_client 1186/1186, at_onboarding_cli 38/38, at_lookup + at_policy green; analyze **0 errors and 0 warnings** across seven packages |
 
 **Owed, in dependency order.**
 
