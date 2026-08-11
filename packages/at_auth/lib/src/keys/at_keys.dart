@@ -497,17 +497,21 @@ class AtKeys {
   /// the signature is produced by the wrong routine.
   AtChops toAtChopsForEnrollment(String enrollmentId) {
     final materials = keysForEnrollment(enrollmentId);
-    final privateSigning = materials
+    // Named for the authentication role they hold, not for the pkam slot they
+    // ride in: this method reaches the APKAM keypair only. An enrollment's
+    // attestation signing keys are a different, per-algorithm set that nothing
+    // here enumerates.
+    final privateAuthentication = materials
         .where((m) =>
             m.keyPartType == CryptographicKeyType.privateAuthentication &&
             m.status == KeyPartStatus.active)
         .firstOrNull;
-    final publicVerification = materials
+    final publicAuthentication = materials
         .where((m) =>
             m.keyPartType == CryptographicKeyType.publicAuthentication &&
             m.status == KeyPartStatus.active)
         .firstOrNull;
-    if (privateSigning == null || publicVerification == null) {
+    if (privateAuthentication == null || publicAuthentication == null) {
       throw AtKeyNotFoundException(
           'AtKeys holds no active authentication keypair for enrollment '
           '$enrollmentId');
@@ -518,8 +522,8 @@ class AtKeys {
           defaultEncryptionPublicKey?.toString() ?? '',
           defaultEncryptionPrivateKey?.toString() ?? '',
         ),
-        AtPkamKeyPair.create(publicVerification.bytes.toString(),
-            privateSigning.bytes.toString()));
+        AtPkamKeyPair.create(publicAuthentication.bytes.toString(),
+            privateAuthentication.bytes.toString()));
     if (defaultSelfEncryptionKey != null) {
       atChopsKeys.selfEncryptionKey =
           AESKey(defaultSelfEncryptionKey!.toString());
