@@ -354,13 +354,13 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   [`implementation-plan.md` 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
   (the one-way door this freezes against).
 
-### 3.5 UC-A2.5 — An enrollment amends its own key package (`enroll:updateMetadata`)
+### 3.5 UC-A2.5 — An enrollment amends its own key package (`enroll:update`)
 
 - **Given:** `@alice` pq-native; `alice4` enrolled (E4) with a key package advertising a
   **single** X-Wing key, and secrets already sealed to that kpid sitting unread at
   `<msgId>.<kpidOld>.__ssenv.app_1.my_apps@alice`.
 - **When:** `alice4` mints a second KEM keypair (ML-KEM-1024), rebuilds and re-signs its key
-  package with **both** keys, and sends `enroll:updateMetadata` on its own
+  package with **both** keys, and sends `enroll:update` on its own
   APKAM-authenticated connection.
 - **Then:**
   - `enroll:listns` returns the amended package: `keys[]` has two entries and `suites`
@@ -384,7 +384,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Given:** `@alice` pq-native; `alice1` (E1, fully privileged, `*`) and `alice4` (E4,
   namespace-scoped) both enrolled and online.
-- **When:** E1 sends `enroll:updateMetadata` naming **E4**; separately, a legacy-PKAM /
+- **When:** E1 sends `enroll:update` naming **E4**; separately, a legacy-PKAM /
   owner connection (no enrollmentId) sends the same request.
 - **Then:** both are refused — the second one **despite** carrying full permissions
   everywhere else. `isAuthorized` short-circuits a connection with no enrollment id to

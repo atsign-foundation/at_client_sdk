@@ -896,7 +896,7 @@ property — a reader trusts a key package because its APKAM signature verifies
 against that enrollment's `_apsk`, which is indifferent to whether the record can
 be rewritten — and it costs a package that can never gain a key, an envelope-shape
 ratchet that cannot be turned, and an unparseable package that ends an
-enrollment's ability to receive a conveyance for good. `enroll:updateMetadata` is
+enrollment's ability to receive a conveyance for good. `enroll:update` is
 ruled in [decisions.md 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10):
 self-only, approved-state-only, per-key set rather than whole-map replace, with
 the server keeping no opinion on the contents. Nothing of it is built; until it
