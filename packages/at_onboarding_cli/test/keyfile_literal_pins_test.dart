@@ -4,8 +4,15 @@
 /// writes through `FileAtKeysIo`, the same store `authenticate` reads back
 /// through. These pins hold what that produces — the legacy fields under
 /// their historical names, the `<@atSign>` entry the CLI still contributes,
-/// and the typed-keys document's `version`/`atsign`/`keys`. A change to any
-/// of it changes files users already hold, so it edits this list first.
+/// and the typed-keys document's `version`/`atsign`/`keys` when there is
+/// typed material to describe. A change to any of it changes files users
+/// already hold, so it edits this list first.
+///
+/// The two arms below are a pair on purpose. A legacy onboard emits a
+/// byte-for-byte legacy file with no typed scaffolding, so the absence of
+/// `version`/`atsign`/`keys` is the contract, not an omission — and an
+/// absence alone would pass just as well if the writer had lost the ability
+/// to emit them at all. The typed arm is what rules that out.
 library;
 
 import 'dart:convert';
@@ -66,9 +73,6 @@ void main() {
         'apkamSymmetricKey',
         'enrollmentId',
         atsign,
-        'version',
-        'atsign',
-        'keys',
       ]);
       // Plaintext where plaintext, encrypted where encrypted.
       expect(json['selfEncryptionKey'], selfEncryptionKey);
@@ -81,13 +85,60 @@ void main() {
               'selfEncryptionKey, never plaintext');
       expect(json['aesEncryptPrivateKey'],
           isNot(encryptionPair.atPrivateKey.privateKey));
-      // The typed-keys document the store adds. `keys` is empty for a keyset
-      // with no typed material — a legacy onboard — and is where a PQ-native
-      // enrollment's APKAM lands, which the hand-built writer had nowhere to
-      // put.
+      // No typed-keys document at all. A `version: 1` document with an empty
+      // `keys` array says nothing a legacy file does not, so emitting one
+      // would stamp every file a new build merely opened — a diff on files
+      // nobody meant to change. The marker appears with the material it
+      // marks, which the next test pins.
+      expect(json.containsKey('version'), isFalse);
+      expect(json.containsKey('atsign'), isFalse);
+      expect(json.containsKey('keys'), isFalse);
+    });
+
+    test('typed material brings the version/atsign/keys document with it',
+        () async {
+      const atsign = '@alice_typed_pins';
+      final preference = AtOnboardingPreference()
+        ..hiveStoragePath = 'test/storage/hive/client'
+        ..commitLogPath = 'test/storage/hive/client/commit'
+        ..atKeysFilePath = '${Directory.current.path}/test/$atsign';
+      final service = AtOnboardingServiceImpl(atsign, preference);
+
+      final encryptionPair = service.generateRsaKeypair();
+      final pkamPair = service.generateRsaKeypair();
+      final selfEncryptionKey = service.generateAESKey();
+      final keys = AtKeys()
+        ..enrollmentId = '456'
+        ..atsign = atsign.toAtsign()
+        ..defaultSelfEncryptionKey = AtBytes.fromString(selfEncryptionKey)
+        ..defaultEncryptionPublicKey =
+            AtBytes.fromString(encryptionPair.atPublicKey.publicKey)
+        ..defaultEncryptionPrivateKey =
+            AtBytes.fromString(encryptionPair.atPrivateKey.privateKey)
+        ..apkamPublicKey = AtBytes.fromString(pkamPair.atPublicKey.publicKey)
+        ..apkamPrivateKey = AtBytes.fromString(pkamPair.atPrivateKey.privateKey)
+        ..apkamSymmetricKey = AtBytes.fromString(service.generateAESKey())
+        ..addKey(AtKeysMaterial(
+          keyId: 'apkam:456:1',
+          enrollmentId: '456',
+          keyPartType: CryptographicKeyType.privateAuthentication,
+          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          // Shape, not substance — this pin is about the document the store
+          // emits, so any well-formed base64 stands in for key material.
+          bytes: AtBytes.fromString(base64Encode(utf8.encode('stand-in'))),
+          createdAt: DateTime.now().toUtc(),
+        ));
+      final response = AtEnrollmentResponse('456', EnrollmentStatus.approved)
+        ..atAuthKeys = keys;
+
+      final file = await service.createAtKeysFile(response);
+      addTearDown(() => File(file.path).deleteSync());
+
+      final json = jsonDecode(File(file.path).readAsStringSync())
+          as Map<String, dynamic>;
       expect(json['version'], 1);
       expect(json['atsign'], atsign);
-      expect(json['keys'], isEmpty);
+      expect(json['keys'], isNotEmpty);
     });
 
     test('the store reads back exactly what the CLI wrote', () async {
