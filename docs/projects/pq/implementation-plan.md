@@ -1283,7 +1283,7 @@ negotiate their construction); discharges plan backlog
 [14.4](#144-a-suites-list-on-the-key-package--done) and
 [14.5](#145-a-write-side-envelope-version-selector-in-at_chops--done).
 
-### KE-2 — `enroll:updateMetadata` + a multi-kpid receiver · at_commons, **every atServer implementation**, at_client · L — [#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133)
+### KE-2 — `enroll:update` + a multi-kpid receiver · at_commons, **every atServer implementation**, at_client · L — [#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133)
 **Goal:** KE-1 made the KEM selectable and the construction negotiable; this makes the choice
 **revisable**. An enrollment can amend its own `metadata.keyPackage` after approval, so a package can gain
 a key, an envelope shape can be rolled forward, and an unparseable package stops being terminal.
@@ -1844,6 +1844,16 @@ which landed at `f3cfda4d4` as `ver = 0x02`
 
 ### 14.6 The enrollment record's `metadata.keyPackage` is a one-way door
 
+**Status: RESOLVED in design, PARTLY BUILT 2026-08-11. The door opens.** `enroll:update` ([`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
+ruling 13, superseding `enroll:updateMetadata` in
+[`decisions.md` 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10))
+reaches `metadata` — along with `apkamPublicKey`, `signingAlgo` and `apsk` —
+and is **built and functionally verified on the atServer** (at_server
+`gkc-apsk-auto-publish`, 210/210). The client caller is owed; see
+[14.17](#1417-signature-agility--what-is-built-and-what-is-owed). The original
+statement of the defect follows.
+
+
 It is a signed envelope, and it is written only by `enroll:request` and never
 afterwards — `enroll_verb_handler.dart` persists `enrollParams.metadata` in the
 new-enrollment branch alone. A reader that cannot parse a frozen wrapper
@@ -1859,7 +1869,7 @@ does not list it.
 
 **Ruled 2026-08-10 — the door gets a handle, and the deadline goes with it**
 ([decisions 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)).
-`enroll:updateMetadata` makes the record rewritable by the enrollment that owns
+`enroll:update` makes the record rewritable by the enrollment that owns
 it, so 14.3's wrapper shape stops being an irreversible bet and the remedy for an
 unparseable package stops being delete-and-re-enrol. It is unbuilt — the item
 above stands until **KE-2** ships — but it is a scheduling problem now rather than
@@ -2130,3 +2140,75 @@ the plan alone, because the plan records what a project set out to do and the
 issue records what someone thought it had done. Reading a project's own
 deliverable list against the code is a different check from reading the plan,
 and it found things the plan's own owed-tables had lost.
+
+### 14.17 Signature agility — what is built, and what is owed
+
+The design landed 2026-08-11 as [`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11),
+[`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
+and [`acceptance.md` 16](acceptance.md#16-g1--signature-agility-and-the-rollout-matrix).
+This entry is the owed half; the rulings are the contract.
+
+**Built and verified.**
+
+| Piece | Where | Rails |
+|-------|-------|-------|
+| `EnrollParams.apsk`, `.apkamPublicKeySignature`, `EnrollOperationEnum.update` + grammar | at_commons 5.14.0, `gkc-apsk-auto-publish`, [#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137) | 17/17, analyze 0 |
+| `enroll:update` handler, PoP verification, client-composed `_apsk` | at_server `gkc-apsk-auto-publish` `ab38b884` | 919/919 unit, **210/210 functional** |
+| Auth/signing key types, generation keyIds, status-aware invariants, `replaceKey`, `activeEnrollmentId`, pure-legacy `toJson` | at_client_sdk `gkc-pq-d1-spike` | at_auth 237/237, analyze 0 |
+
+**Owed, in dependency order.**
+
+1. **Publish at_commons 5.14.0.** Everything downstream waits on it. Then
+   remove the `at_commons` override from `at_secondary_server`'s `pubspec.yaml`
+   *and* `pubspec_overrides.yaml`, and **delete the `at_commons-apsk-1` tag** —
+   it exists only so the VE image can build before publication.
+2. **Ruling 7's remaining half: flat → typed.** The flat `apkamPublicKey` /
+   `apkamPrivateKey` must become a write-only projection that nothing reads as
+   the source of truth. Readers to move: `AtKeys.toAtChops()`,
+   `at_auth_impl.dart` (several), `onboarding_mint.dart`, `file_io.dart`. This
+   is the authentication path — it is the largest remaining client piece and
+   deliberately was not started at the end of a long session.
+3. **The wire half, client side.** The `_apsk` array composer and reader; the
+   multi-signature envelope; the `enroll:update` caller and its PoP signature
+   (`AtSigningMode.pkam`, SHA-256 — see ruling 14, and note that
+   `AtSigningMode.data` cannot work); the strength order beside
+   `SigningAlgoType` in at_chops with its raw-literal tripwire; the in-use
+   signing set on `AtClientPreference` defaulted from `ReleasePosture`;
+   mint-on-demand when the in-use set names an algorithm the enrollment lacks.
+4. **The rollout axis.** One `ReleasePosture` flag switching all three writer
+   behaviours together (mint signing keys, publish the array, emit
+   multi-signature envelopes). **The axis has no name yet** — see
+   [`design.md` 9.7](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
+5. **The rollout harness.** Two stage-parameterised executables plus the 3×3
+   matrix in [`acceptance.md` 16.5](acceptance.md#16-g1--signature-agility-and-the-rollout-matrix),
+   with the failing cell asserted by its specific error.
+6. **`enroll:update` parity for every other atServer implementation** — needs
+   its own tracking issue so it cannot silently diverge.
+
+**Unverified, and not to be reported as verified.** Two at_client_sdk
+functional files were edited for the new keyId shape and have only been
+analyzed, never run — `tests/at_functional_test/test/pq_native_onboard_live_test.dart`
+and `tests/at_onboarding_cli_functional_tests/test/pq_native_onboard_test.dart`.
+They need at_client_sdk's own recycled VE. [#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137)'s
+CI has not been looked at either.
+
+**A latent defect the tests chose not to find, 2026-08-11.** The `enroll:update`
+proof-of-possession check read `AtChopsImpl.verify(...).result` directly, but
+that is a `FutureOr<bool>` and published at_chops 3.5.0 verifies `mldsa65`
+**asynchronously** — so a rotation to an ML-DSA key died on
+`type 'Future<bool>' is not a subtype of type 'bool'`. Both the unit and the
+functional tests exercised `rsa2048`, which verifies synchronously, so the whole
+suite passed over it. Fixed by awaiting the result (at_server 3.16.0 CHANGELOG).
+**Still owed: an `mldsa65` arm on the rotation tests** — the algorithm the
+feature exists for is the one arm nothing covers, and picking `rsa2048` for a
+fixture is exactly the choice that makes a wrong answer invisible.
+
+**Three rulings were wrong until execution proved it,** each caught by a test
+rather than by review, and each amended in place with what it used to say:
+ruling 14's signing mode (`AtSigningMode.data` signs with the *encryption*
+keypair, so proof of possession was structurally impossible as specified),
+ruling 4's uniqueness (scoped per role it permitted exactly one signing
+algorithm, defeating the agility the work exists for), and ruling 3 (a second
+retrofit now throws, replacing a deliberate per-algorithm idempotency). Three
+of sixteen rulings is the argument for proving the whole sequence on the spike
+before chunking it into PRs.
