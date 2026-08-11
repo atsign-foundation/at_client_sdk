@@ -69,6 +69,37 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [53. UC-B4.2, and what asking for no legacy material actually costs (2026-08-08)](#53-uc-b42-and-what-asking-for-no-legacy-material-actually-costs-2026-08-08) — *the row was labelled for a layer that cannot CRAM-activate; the opt-out is honoured and unusable; a pre-seeded harness key was letting two assertions pass for the wrong reason*
 - [54. S-3: the two things an updatable key store turned out to be (2026-08-08)](#54-s-3-the-two-things-an-updatable-key-store-turned-out-to-be-2026-08-08) — *read-mutate-flush loses material at every client start; the keychain could not be written to at all; the self-enc-key re-wrap has no operator and is KF-1's*
 - [55. ON-1's consumer half: what "the CLI can do it too" actually cost (2026-08-08)](#55-on-1s-consumer-half-what-the-cli-can-do-it-too-actually-cost-2026-08-08) — *export the steps rather than describing them; "not rsa2048" is not "mldsa65"; the live run found what unit tests structurally could not*
+- [56. The "make it right" quality pass, and the design goals it settled (2026-08-09)](#56-the-make-it-right-quality-pass-and-the-design-goals-it-settled-2026-08-09)
+- [57. The wire vocabulary gets one home per family (2026-08-09)](#57-the-wire-vocabulary-gets-one-home-per-family-2026-08-09)
+- [58. The two published-API breaks are repaired in place (2026-08-09)](#58-the-two-published-api-breaks-are-repaired-in-place-2026-08-09)
+- [59. Phase-3 at_chops surface rulings (2026-08-09)](#59-phase-3-at_chops-surface-rulings-2026-08-09)
+- [60. JWS stage one lands: readers always-on, producer behind the version flag (2026-08-09)](#60-jws-stage-one-lands-readers-always-on-producer-behind-the-version-flag-2026-08-09)
+- [61. The barrel cycle is cut: no src file imports a public barrel (2026-08-10)](#61-the-barrel-cycle-is-cut-no-src-file-imports-a-public-barrel-2026-08-10)
+- [62. PqClientBootstrap: one owner for the PQ startup (2026-08-10)](#62-pqclientbootstrap-one-owner-for-the-pq-startup-2026-08-10)
+- [63. Phase 4e: EnrollmentConveyance out of EnrollmentServiceImpl (2026-08-10)](#63-phase-4e-enrollmentconveyance-out-of-enrollmentserviceimpl-2026-08-10)
+- [64. Phase 4f: one CryptoRuntime.prepareWrite() (2026-08-10)](#64-phase-4f-one-cryptoruntimepreparewrite-2026-08-10)
+- [65. Phase 4g: the secret-sharing seam work (2026-08-10)](#65-phase-4g-the-secret-sharing-seam-work-2026-08-10)
+- [66. The approval list's last hop tells the truth (2026-08-10)](#66-the-approval-lists-last-hop-tells-the-truth-2026-08-10)
+- [67. Workstream B(i): the sweep anchors to the root (2026-08-10)](#67-workstream-bi-the-sweep-anchors-to-the-root-2026-08-10)
+- [68. The enrollment record stops being a one-way door: `enroll:updateMetadata` (2026-08-10)](#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
+- [68. Workstream B(ii): approvals anchor to the root (2026-08-10)](#68-workstream-bii-approvals-anchor-to-the-root-2026-08-10)
+- [69. Workstream B(iii): the retrofit selector, and the KEM the retrofit froze wrong (2026-08-10)](#69-workstream-biii-the-retrofit-selector-and-the-kem-the-retrofit-froze-wrong-2026-08-10)
+- [70. Workstream A capstone: ReleasePosture, the five flags as one value (2026-08-10)](#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)
+- [71. Phase 5 begins: the CLI's handshake copy is deleted (2026-08-10)](#71-phase-5-begins-the-clis-handshake-copy-is-deleted-2026-08-10)
+- [72. Phase 5: the keyfile store's double stops lying, and the lock's three races close (2026-08-10)](#72-phase-5-the-keyfile-stores-double-stops-lying-and-the-locks-three-races-close-2026-08-10)
+- [73. Phase 5: `AtEnrollmentImpl` splits into submitter, approver, handshake (2026-08-10)](#73-phase-5-atenrollmentimpl-splits-into-submitter-approver-handshake-2026-08-10)
+- [74. Phase 5: enrollment material gets one filing path (2026-08-10)](#74-phase-5-enrollment-material-gets-one-filing-path-2026-08-10)
+- [75. Phase 5: the enrolment request's mode is a constructor, not a field (2026-08-10)](#75-phase-5-the-enrolment-requests-mode-is-a-constructor-not-a-field-2026-08-10)
+- [76. The nskey advertises one KEM key, and §50's premise is a release property (2026-08-10)](#76-the-nskey-advertises-one-kem-key-and-50s-premise-is-a-release-property-2026-08-10)
+- [77. Phase 5: the CLI stops hand-building its keyfile (2026-08-10)](#77-phase-5-the-cli-stops-hand-building-its-keyfile-2026-08-10)
+- [78. Phase 5: the keychain is reachable, flushable, and no longer closes someone else's service (2026-08-10)](#78-phase-5-the-keychain-is-reachable-flushable-and-no-longer-closes-someone-elses-service-2026-08-10)
+- [79. Phase 6: `maxRetries` becomes a budget for the thing it is named after (2026-08-10)](#79-phase-6-maxretries-becomes-a-budget-for-the-thing-it-is-named-after-2026-08-10)
+- [80. Phase 6: one set of enrollment defaults, and the divergence that never was (2026-08-10)](#80-phase-6-one-set-of-enrollment-defaults-and-the-divergence-that-never-was-2026-08-10)
+- [81. Phase 6: the key-exchange mode is wired, and there is nothing left to wire it to (2026-08-10)](#81-phase-6-the-key-exchange-mode-is-wired-and-there-is-nothing-left-to-wire-it-to-2026-08-10)
+- [82. Phase 7: an approval finishes its own bookkeeping, and every decision closes its connection (2026-08-11)](#82-phase-7-an-approval-finishes-its-own-bookkeeping-and-every-decision-closes-its-connection-2026-08-11)
+- [83. Phase 7: one home for the shared mocks, and the four families that could not move (2026-08-11)](#83-phase-7-one-home-for-the-shared-mocks-and-the-four-families-that-could-not-move-2026-08-11)
+- [84. Phase 7: the functional pack's live tests stop claiming to be the e2e pack (2026-08-11)](#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
+- [85. Phase 7: the ledger's own index, and what the citation audit measured (2026-08-11)](#85-phase-7-the-ledgers-own-index-and-what-the-citation-audit-measured-2026-08-11)
 
 ---
 
@@ -7319,3 +7350,54 @@ mapping a reader needs.
 
 The runner globs (`dart test --concurrency=1 -r expanded`), so nothing
 enumerates these files by name and no harness config changed.
+
+## 85. Phase 7: the ledger's own index, and what the citation audit measured (2026-08-11)
+
+**Status:** accepted (2026-08-11).
+
+### Two protocol traces stop shouting
+
+`EnrollmentHandshake` fetched the encryption private key and the self-encryption
+key after an approval, and logged each command at `shout` — the highest level
+the logging package has, above `severe`. So every approval, in every
+deployment, printed
+
+```
+SHOUT|...|EnrollmentHandshake|cmd: keys:get:keyName:<enrollmentId>.default_enc_private_key.__manage@<atSign>
+```
+
+unconditionally. That is a routine protocol trace wearing an emergency's
+severity, and it names the enrollment id, the atSign and which private-key
+record is being fetched. Both are `finer` now, which is what the rest of the
+file uses for detail of this kind. The remaining `shout` calls in at_auth are
+all in `registrar_service.dart` failure paths, where the level is right.
+
+No key material was ever in these lines — only record names — so this is
+noise and disclosure of structure, not a leak.
+
+### The index caught up
+
+The table of contents stopped at 55 while the ledger had reached 84. Thirty
+rows were added, covering 56 through 84, including both sections numbered 68
+(their titles differ, so their anchors differ and the duplicate number is
+harmless). The numbering itself is still not renumbered: inbound anchors point
+at it.
+
+### What the audit actually measured
+
+The audit that rides with this is worth stating as a number rather than a
+claim. Across all six documents in `docs/projects/pq/`:
+
+- **352 relative markdown links** — every one resolves, both the file and, where
+  present, the heading anchor.
+- **86 table-of-contents anchors** — every one resolves.
+- **54 backticked repository paths** — 50 resolve; the four that do not are
+  correct as written: `adr/0001-…` and `adr/0002-…` were folded into this
+  document on 2026-06-30 and are cited here as history, and two
+  `noports_core` paths live in another repository.
+
+The checker was wrong twice before it was right — first assuming every path was
+repo-relative, then missing `lib/src/`, each time reporting citations as broken
+that were not. Both were caught by opening the "missing" files and finding them.
+A citation audit whose failures are its own path assumptions measures the
+checker, so the count above is the one taken after the instrument was corrected.

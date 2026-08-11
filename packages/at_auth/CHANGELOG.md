@@ -1,4 +1,9 @@
 ## 3.4.0
+- fix: the two `keys:get` commands the enrollment handshake sends after an
+  approval are logged at `finer` rather than `shout`. They are routine
+  protocol traces, not emergencies, and at `shout` they printed the
+  enrollment id, the atSign and which private-key record was being fetched
+  into every deployment's log output unconditionally.
 - docs: `AtEnrollment` publishes its defaults as constants —
   `defaultRetryInterval` (2 seconds), `defaultMaxRetries` (15),
   `defaultLogProgress` (true) and `defaultOtpExpiry` (5 minutes) — and both

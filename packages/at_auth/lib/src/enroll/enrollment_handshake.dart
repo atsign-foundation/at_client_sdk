@@ -165,7 +165,7 @@ class EnrollmentHandshake {
       AtLookUp atLookUp, String atSign, String enrollmentId) async {
     String cmd =
         "keys:get:keyName:$enrollmentId.default_enc_private_key.__manage$atSign\n";
-    _logger.shout('cmd: $cmd');
+    _logger.finer('cmd: $cmd');
     String? lookupResult = await atLookUp.executeCommand(cmd);
     if (lookupResult == null || lookupResult.isEmpty) {
       throw AtEnrollmentException(
@@ -180,7 +180,7 @@ class EnrollmentHandshake {
       AtLookUp atLookUp, String atSign, String enrollmentId) async {
     String cmd =
         "keys:get:keyName:$enrollmentId.default_self_enc_key.__manage$atSign\n";
-    _logger.shout('cmd: $cmd');
+    _logger.finer('cmd: $cmd');
     String? lookupResult = await atLookUp.executeCommand(cmd);
     if (lookupResult == null || lookupResult.isEmpty) {
       throw AtEnrollmentException(
