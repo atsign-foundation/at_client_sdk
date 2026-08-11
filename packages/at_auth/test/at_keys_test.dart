@@ -67,6 +67,37 @@ void main() {
       expect(AtKeys.fromJson(encryptedAtKeysMap), equals(createKeys()));
     });
 
+    test('an atsign alone does not stamp a legacy file with a version', () {
+      // The behaviour: file_io sets atsign on every write, so before this a
+      // legacy keyfile gained `version: 1` and an empty `keys` array the
+      // first time any new build touched it — a diff on a file nobody meant
+      // to change.
+      final untyped = createKeys()..atsign = '@alice🛠'.toAtsign();
+
+      final json = untyped.toJson();
+      expect(json.containsKey('version'), false);
+      expect(json.containsKey('keys'), false);
+      expect(json['enrollmentId'], encryptedAtKeysMap['enrollmentId']);
+
+      // The control: the marker DOES appear as soon as there is typed
+      // material to mark, or this test would pass against a toJson that never
+      // emits a version at all.
+      untyped.addKey(symmetricKey('now-typed'));
+      final typed = untyped.toJson();
+      expect(typed['version'], AtKeys.supportedVersion);
+      expect(typed['keys'], hasLength(1));
+    });
+
+    test('a legacy document round-trips byte-identically through a new build',
+        () {
+      // Read, change nothing, write. The bytes must match, because a build
+      // that rewrites files it only opened makes every upgrade look like a
+      // migration.
+      final reread = AtKeys.fromJson(Map<String, dynamic>.from(encryptedAtKeysMap))
+        ..atsign = '@alice🛠'.toAtsign();
+      expect(reread.toJson(), equals(encryptedAtKeysMap));
+    });
+
     test('fromJson throws on an unsupported version', () {
       expect(
         () => AtKeys.fromJson({'version': 2, 'atsign': '@alice', 'keys': []}),

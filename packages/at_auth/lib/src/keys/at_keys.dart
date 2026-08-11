@@ -335,6 +335,16 @@ class AtKeys {
       }
       return _toLegacyJson();
     }
+    if (keys.isEmpty) {
+      // A keyfile holding no typed material comes back exactly as it went in,
+      // byte for byte. The version marker describes what the document
+      // CONTAINS, and a `version: 1` document with an empty `keys` array says
+      // nothing a legacy file does not — so emitting one would stamp every
+      // file a new build merely opened, producing a diff on files nobody
+      // meant to change. The marker appears the moment there is typed
+      // material to mark.
+      return _toLegacyJson();
+    }
     return {
       ..._toLegacyJson(),
       'version': supportedVersion,
