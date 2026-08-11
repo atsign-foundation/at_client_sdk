@@ -57,16 +57,16 @@ case, this doc links `acceptance.md` and does not re-narrate the Given/When/Then
 
 ### Subsystem map
 
-- **[Subsystem A — D1 nskey data path](#1-subsystem-a--d1-nskey-data-path)** (§1) — the three layers, three providers, key shapes, CK model, cold-start, FS/rotation levers, and migration/rollout + the `disallowLegacyEncryption` flag (§1.8).
+- **[Subsystem A — D1 nskey data path](#1-subsystem-a--d1-nskey-data-path)** (§1) — the three layers, three providers, key shapes, CK model, cold-start, FS/rotation levers, and migration/rollout + the `disallowLegacyEncryption` flag ([section 1.8](#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d)).
 - **[Subsystem B — the secret-sharing substrate (WP-SS)](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)** (§2) — kpid addressing, `__ssenv`, push/pull, the discovery verb, the enrollment record, the self-retrofit flow.
 - **[Subsystem C — at_chops PQ primitives](#3-subsystem-c--at_chops-pq-primitives)** (§3) — X-Wing, `pqSeal`/`pqOpen`, ML-DSA verify.
 - **[Subsystem D — structural design](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel)** (§4) — the CryptoProvider seam, `AtKeys`/`AtKeysIo` & key stores, the WASM barrel split.
 - **[Subsystem E — worked design walkthroughs](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk)** (§5) — NoPorts, at_talk.
 - **[Implementation notes & file-level pointers](#6-implementation-notes--file-level-pointers-consolidated)** (§6) — the consolidated `file:line` build map.
 
-Within this doc: §1 (nskey data path) forward-refs §2 for its Layer-1 plumbing;
-§2 references §3 for the seal/sign primitives; §4 (the structural seam) underpins
-both §1 providers and §2 substrate; §5 walkthroughs reference §1/§2 for mechanics.
+Within this doc: [section 1](#1-subsystem-a--d1-nskey-data-path) (nskey data path) forward-refs [section 2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss) for its Layer-1 plumbing;
+[section 2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss) references [section 3](#3-subsystem-c--at_chops-pq-primitives) for the seal/sign primitives; [section 4](#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel) (the structural seam) underpins
+both [section 1](#1-subsystem-a--d1-nskey-data-path) providers and [section 2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss) substrate; [section 5](#5-subsystem-e--worked-design-walkthroughs-noports-at_talk) walkthroughs reference [section 1](#1-subsystem-a--d1-nskey-data-path)/[section 2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss) for mechanics.
 
 ---
 
@@ -176,7 +176,7 @@ under one key) and the **nskey owner** (`sharedWith ?? sharedBy` — whose nskey
 or opens it, and the CK cache's scope). On an inbound record these differ: the record
 is the sender's, the nskey is the recipient's. Conflating them is why a reader must
 never look the key ring up by `sharedBy`
-([`decisions.md`](decisions.md) §15).
+([`decisions.md`](decisions.md) [section 15](decisions.md#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)).
 
 **The nskey private** for a namespace lives in an authorised client's keystore. It
 is one KEM private that decapsulates both the owner's own CKs and the CKs external
@@ -201,14 +201,14 @@ is **one** nskey keypair, under the KEM this deployment configured
 (`AtClientPreference.keyEstablishmentAlgo` — X-Wing by default, ML-KEM-1024 the
 no-hybrid option). Its private is **minted as a fresh random keypair
 and distributed per-APKAM over the substrate** (sealed to each authorised
-enrollment's key package) — it is **never derived from a shared seed** ([`decisions.md`](decisions.md) §11).
+enrollment's key package) — it is **never derived from a shared seed** ([`decisions.md`](decisions.md) [section 11](decisions.md#11-single-nskey-per-namespace-lazily-published-2026-06-30)).
 The public half is published **eagerly** — written at mint, always, to
 `public:__nskey.<ns>@<atSign>` as an **APKAM-signed envelope** carrying
 `{v, nskeyKid, publicKey, alg, suites}`, verified against the publishing enrollment's
 `_apsk` exactly
 as a key package is (see *Advertised-key authenticity*,
 [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify)). There is no owner-only stage
-and no promotion step ([`decisions.md`](decisions.md) §13).
+and no promotion step ([`decisions.md`](decisions.md) [section 13](decisions.md#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)).
 
 **`alg` and `suites` on the advertisement, and why both are needed.** `alg` names the
 key-establishment algorithm the published key **is a key for**: a sender cannot tell an
@@ -256,7 +256,7 @@ the device is not an advertisement. The second underscore is therefore a require
 not a preference. For the same reason the advertisement is written **straight to the
 atServer** rather than through the local-first put path — it is only useful once a
 *peer* can fetch it. Both facts are measured against a live atServer, not inferred
-([`decisions.md`](decisions.md) §13).
+([`decisions.md`](decisions.md) [section 13](decisions.md#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)).
 
 **The advertisement is mutable, and writes take a lock.** The record holds the
 *current* generation and is **overwritten** on rotation — it has to be, or B5b could
@@ -327,7 +327,7 @@ published anywhere and the change is still a shape rather than a migration:
 ### 1.5 The CK model, cache, ckKid & appMetadata encoding
 
 **`appMetadata` encoding — carries `ns`, and on a data value `ckNs` too**
-([`decisions.md`](decisions.md) §19, which supersedes this section's former
+([`decisions.md`](decisions.md) [section 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03), which supersedes this section's former
 "carries no `ns` field"). The namespace cannot come from the at-key name:
 `AtKey.fromString` splits at the **last** dot, so `someid.d.c.b.a@alice` parses back
 as `key = someid.d.c.b`, `namespace = a`, and a multi-segment namespace is
@@ -354,7 +354,7 @@ disclosure — the namespace is already plaintext in the key name.
   different sub-collections cannot have their ciphertexts swapped. `ckNs` is the
   namespace the CK and its conveyance live at, which differs from `ns` whenever
   resolution walked up: every AtCollection sub-collection item, and the stale-sender
-  window of [`decisions.md`](decisions.md) §19.4. Neither is derivable from the other.
+  window of [`decisions.md`](decisions.md) [section 19.4](decisions.md#194-cost-and-the-three-lifetimes). Neither is derivable from the other.
 
 **`ckKid`** is the content key's id — a SHA-256 prefix of the CK (deterministic;
 dedupes identical keys) or a random id. It must be unique within `(owner, ckNs)`
@@ -371,11 +371,11 @@ levels it has found **empty**, so a repeated write re-probes nothing; a namespac
 before still probes its own levels once, which is the irreducible cost. Remembering *hits*
 instead is unsafe and was rejected: it lets a resolution skip the deeper probes entirely, so
 a key at `medical.notes` goes unseen because some earlier write warmed `notes`. Full ruling,
-its cost floor and its accepted exposure: [`decisions.md`](decisions.md) §19.
+its cost floor and its accepted exposure: [`decisions.md`](decisions.md) [section 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03).
 
 **CK cache.** Keyed by `(owner, ckNs, ckKid)` where `owner` is the **nskey
 owner** — so a CK is scoped to the recipient it was cut for, not to the sender
-([`decisions.md`](decisions.md) §14). Populated by the `at/nskey` provider when a
+([`decisions.md`](decisions.md) [section 14](decisions.md#14-content-keys-are-scoped-per-recipient-2026-08-02)). Populated by the `at/nskey` provider when a
 `<ckKid>.__ck` record syncs (decapsulate-then-cache); read by the
 `at/symmetric/AES/GCM` provider on each data value. Only the client that *cut* a CK
 marks it **current**: an arriving conveyance is cached but never promoted, because
@@ -411,7 +411,7 @@ crypto:
    and if there is no current CK for that destination, or the advertised `nskeyKid`
    has moved, cut a fresh **CK** (cadence is otherwise the sender's policy). A CK is
    **per recipient**, so writing to Bob and writing the self-copy use different keys
-   ([`decisions.md`](decisions.md) §14).
+   ([`decisions.md`](decisions.md) [section 14](decisions.md#14-content-keys-are-scoped-per-recipient-2026-08-02)).
 2. **Convey the CK once** (`at/nskey`): `X-Wing-seal(CK)` to that destination's
    nskey — the owner's **own** nskey for self data; the recipient's published nskey
    for shared — written as a `<ckKid>.__ck.<ns>@<owner>` record stamping `nskeyKid`.
@@ -698,7 +698,7 @@ it: discovery/sealing mistakes cannot leak. Gate = defence in depth; seal = boun
 **verifies before decrypt** (`_consume`), proving a genuine owner-client wrote it.
 Per-enrollment `_apsk` signing-key resolution drives the verify.
 
-**Advertised-key authenticity (decision 2026-07-02, [`decisions.md`](decisions.md) §6).**
+**Advertised-key authenticity (decision 2026-07-02, [`decisions.md`](decisions.md) [section 6](decisions.md#6-resolved--open-execution-decisions-af)).**
 Every *advertised recipient key* — the per-enrollment **key package** (Layer 1) and the
 published **`nskey`** public half — is itself
 wrapped in an **APKAM-signed envelope** by the enrollment that generates it (the same
@@ -1446,7 +1446,7 @@ and no epoch key.** Alice→Bob data is encrypted under a CK, conveyed once via
 `at/nskey` sealed to **Bob's published nskey**; Bob→Alice
 symmetrically. Alice's own clients read her sent CKs via a **second** CK in her own
 scope, conveyed to the same `@alice` nskey — CKs are per recipient
-([`decisions.md`](decisions.md) §14). CKs are minted lazily.
+([`decisions.md`](decisions.md) [section 14](decisions.md#14-content-keys-are-scoped-per-recipient-2026-08-02)). CKs are minted lazily.
 
 **Whose nskey the CK is sealed to** is per recipient, not a group:
 
@@ -1673,7 +1673,7 @@ trust is circular for any party whose sole path to @alice's keys is @alice's atS
 - **Can — modify (a strictly harder bar):** read and integrity are **asymmetric**. Pure
   read is a pass-through re-seal, so any *sender* signature inside the payload survives
   unchanged and still verifies. To silently **modify**, the operator must also defeat that
-  sender signature — which for a §2.1-signed payload means substituting the *sender's*
+  sender signature — which for a [section 2.1](#21-kpid-addressing-__ssenv-envelope-signverify)-signed payload means substituting the *sender's*
   signing key **as the recipient's client sees it**. It can (it mediates that client's
   lookups too), so modify is achievable — but it needs a **second** substitution and is
   defeated the moment the recipient anchors the sender's key independently (out-of-band
@@ -1798,7 +1798,7 @@ the TCB: it converts an *undetectable* confidentiality adversary into one that i
 which deters sustained abuse — but a one-shot attacker can still read a single epoch's
 traffic before the rogue binding is exposed, so the operator is **not** removed from the
 confidentiality TCB (do not claim otherwise — that is the same detection-as-prevention
-overclaim §7 exists to avoid). The residual is "Atsign *and* a witness quorum collude, *or*
+overclaim [section 7](#7-trust-boundary--residual-threats) exists to avoid). The residual is "Atsign *and* a witness quorum collude, *or*
 @alice is not (or does not delegate) monitoring, for one epoch." Self-hosting the atDirectory
 + witnesses (split-horizon, already supported) removes Atsign entirely for a closed
 ecosystem; pairing KT with out-of-band fingerprints ([§7.5](#75-mitigation-ladder) item 3)

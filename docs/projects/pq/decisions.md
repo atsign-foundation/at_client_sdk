@@ -103,6 +103,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [86. Phase 7: the acceptance ledger reads a declaration instead of inferring one (2026-08-11)](#86-phase-7-the-acceptance-ledger-reads-a-declaration-instead-of-inferring-one-2026-08-11)
 - [87. Phase 7: the revocation row stops tolerating what it exists to forbid (2026-08-11)](#87-phase-7-the-revocation-row-stops-tolerating-what-it-exists-to-forbid-2026-08-11)
 - [88. Phase 7: mintAndPublish is the cold-start mint, and stops calling itself the rotation (2026-08-11)](#88-phase-7-mintandpublish-is-the-cold-start-mint-and-stops-calling-itself-the-rotation-2026-08-11)
+- [89. Phase 7: the section symbol keeps the two jobs it is good at (2026-08-11)](#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
 
 ---
 
@@ -7587,3 +7588,49 @@ turns red a test that claims to be about rotation, where before it could not.
 `rotate`'s distinguishing failure semantics — a lost lock and an unpublished
 namespace both throwing — stay covered by unit tests, which can drive the race
 that a live test cannot.
+
+## 89. Phase 7: the section symbol keeps the two jobs it is good at (2026-08-11)
+
+**Status:** accepted (2026-08-11).
+
+Gary's standing preference is that a section reference reads "section N" and is
+a clickable link to the heading. The pq docs used `§` 187 times, which looked
+like a wholesale conflict. Counting them first showed it is not one symbol doing
+one job, and the ruling follows the split rather than the total.
+
+### What the 187 actually were
+
+- **74 in `decisions.md`.** Rulings are append-only; their text is a record of
+  what was written when it was written. Left alone.
+- **68 outline labels.** `design.md`'s table of contents reads
+  `**[Subsystem A — …](#1-subsystem-a-…)** (§1) — the three layers`. The `(§1)`
+  is a label beside a link to that exact heading. Converting it produces a
+  second, identical link touching the first. Left alone.
+- **7 citations of external standards** — `SP 800-227 §4.6.2`, `§4.3`,
+  `§4.6.3`, and RFC 9180 `§5.1`. That is those documents' own notation and
+  there is nothing in this repository to link to. Left alone, and this is the
+  class the preference was never about.
+- **38 genuine internal cross-references.** These are the ones a reader wants
+  to follow and could not. Converted to `[section N](target#anchor)`.
+
+### The audit gap this turned up
+
+Section 85 reported "352 relative markdown links — every one resolves". True,
+and narrower than it sounded: that checker's pattern required a `.md` before the
+`#`, so **every same-document anchor link was outside the set it examined** —
+416 of them, more than the number it did check. They were verified afterwards
+and all 416 resolved, so nothing was broken, but the number in section 85
+described the search rather than the docs.
+
+The check now covers both forms: **806 links, 0 broken**, after the conversion.
+
+### Two instrument errors on the way
+
+Recorded because the pattern is becoming familiar. A classifier reported 30 of
+39 references as unresolvable — its heading-number regex did not allow the
+trailing dot in `## 1. Subsystem A`, so it saw no numbered headings at all. And
+the "positive control" grep written to check that claim was itself broken and
+printed nothing, which briefly looked like confirmation. The conversion also ran
+with a 90-character look-back that was shorter than some anchors, so one outline
+label was converted into a duplicate link; a check for a converted label
+adjacent to a link with the same anchor found it, and it was reverted.

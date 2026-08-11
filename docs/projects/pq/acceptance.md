@@ -456,7 +456,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      `at/symmetric/AES/GCM`.
   3. **Push** the nskey private per-enrollment to every ≥`r` member: call
      `enroll:listns:app_1.my_apps`, verify each member's advertised key package's
-     APKAM signature against its `_apsk` (§13), `pqSeal` the private to each member's
+     APKAM signature against its `_apsk` ([section 13](#13-cross-cutting-acceptance-applies-to-all-flows)), `pqSeal` the private to each member's
      key package (addressed by `kpid`), put on
      `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies the envelope
      signature, then correspondence against the published
@@ -982,7 +982,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   (the two-release model) and
   [27](decisions.md#27-the-era-default-read-the-new-scheme-everywhere-write-it-once-2026-08-04)
   (the era default that *is* the capability stage);
-  `design.md` §1.8.
+  `design.md` [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d).
 - **Impl/verify:** the era default + data path (**built**; unit
   `crypto_era_default_test`, e2e `era_default_read_test`) + **RF-2c**.
 
@@ -1071,7 +1071,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   opted-in) ends for bob **without any action from alice**: the recipient's key
   appearing is the whole trigger.
 
-- **Cross-ref:** `design.md` §1.6 (cold start), §1.8 (the two-release model);
+- **Cross-ref:** `design.md` [section 1.6](design.md#16-the-uniform-data-flow--cold-start--resolutionordering) (cold start), [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d) (the two-release model);
   `roadmap.md` (migration philosophy).
 - **Impl/verify:** cold start + fallback (**built**; unit `cold_start_test`, e2e
   `nskey_recipient_not_ready_test`, `nskey_cross_atsign_test`) + **RF-2c** for

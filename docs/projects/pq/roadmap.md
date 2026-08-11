@@ -208,7 +208,7 @@ plus **each app's own two releases** — capability, then active use. (There is 
 rollout *machinery*: the readiness-marker/negotiation layer was built and removed
 2026-08-05 —
 [`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05);
-the two-release model + the flag semantics live in [`design.md`](design.md) §1.8.)
+the two-release model + the flag semantics live in [`design.md`](design.md) [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d).)
 
 **The seam lets schemes coexist per value, so the sender encrypts in the scheme
 the recipient can decrypt** — discovered from what the recipient publishes:
@@ -246,7 +246,7 @@ read-capability; the risk is writing too *new*, never reading too *old*.
 high-level 3.x-off / 4.x-on trajectory belongs here.)
 
 **The rollout trajectory at a glance** (one line per step; the two-release
-model's detail lives in [`design.md`](design.md) §1.8, the sequencing in
+model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d), the sequencing in
 [`implementation-plan.md`](implementation-plan.md)):
 
 0. **Baseline** — all legacy.

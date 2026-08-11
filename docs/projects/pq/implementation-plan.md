@@ -423,7 +423,7 @@ later pulled into this lane, slot it after B-1.
 ## 5. Phase SS — Secret-sharing substrate (SS-1a, SS-1b, SS-1c, SS-2, SS-3, SS-4)
 
 The `SS-*` projects define the secret-sharing substrate work; the substrate design lives in
-[design.md](design.md) §2. **SS-0 landed the substrate baseline** (PR #2037, merged 2026-07-17) — SS-1c /
+[design.md](design.md) [section 2](design.md#2-subsystem-b--the-secret-sharing-substrate-wp-ss). **SS-0 landed the substrate baseline** (PR #2037, merged 2026-07-17) — SS-1c /
 SS-2 / RF-1 all presuppose that code, and it is now on trunk.
 
 **Shared substrate fact (stated once).** **pull** (`requestSecret`) and **push**
@@ -515,7 +515,7 @@ discovery (a new `_isAtLeastReadOnNamespace` gate) emitting the **flat**
 Also **keep `_apsk` present**: the atServer populates `public:_apsk.<eid>.<perEnrollmentApproved>@<atSign>`
 from the record's `apkamPublicKey` (on approval / first authenticated use) rather than relying on the
 client-side `publishPublicSigningKey`, and keeps its write-restriction — the presence + write-restriction
-cross-tier property (design.md §2.4) that both envelope and advertised-key verification depend on.
+cross-tier property (design.md [section 2.4](design.md#24-the-atserver-enrollment-record--ml-dsa-apkam-auth)) that both envelope and advertised-key verification depend on.
 **Acceptance → [acceptance.md](acceptance.md):** metadata stored verbatim + returned by `listns`;
 **schema-migration test** (pre-`metadata`/`signingAlgo` record opens null, write round-trips); flat records,
 ≥r gate, approved-only, `*` wildcard; UC-A2.3 server discovery gate; an approved enrollment's `_apsk` is
@@ -543,7 +543,7 @@ map, `KeyPackage.apkamId` from `apkamPubKey`). The key package rides `enroll:req
 `registerKeyPackage` / `enroll:metadata` write path, interface decl, `register()` call site, or
 `FakeEnrollmentDirectory.registerKeyPackage`. The `listForNamespace` dartdocs state the **1:1:1 single-key**
 model. **Verify the advertised key package's APKAM signature** against the enrolling atSign's `_apsk`
-(design.md §2.1 *Advertised-key authenticity*) before trusting it — the same verify path same-atSign and
+(design.md [section 2.1](design.md#21-kpid-addressing-__ssenv-envelope-signverify) *Advertised-key authenticity*) before trusting it — the same verify path same-atSign and
 cross-atSign; reject an unsigned / wrong-signer package.
 **Acceptance → [acceptance.md](acceptance.md):** flat parse → `NamespaceMember` + decoded `KeyPackage`; a
 signed key package verifies against `_apsk`, a tampered / wrong-signer one is rejected; **no
@@ -585,7 +585,7 @@ ruling 10).
 **Deliverables → [design.md](design.md)** (substrate production wiring + server wake-up): DEP4 `__ssenv`
 update-put auto-notify (drop the rethrow; update-path only) + flip client self-wake-up off. **Production
 wiring:** re-key the facade Expando to `(AtClient, enrollmentId)` (+ `enrollmentId`
-on `forClient`); the X-Wing key package — **APKAM-signed via `wrapAndSign`** (design.md §2.1
+on `forClient`); the X-Wing key package — **APKAM-signed via `wrapAndSign`** (design.md [section 2.1](design.md#21-kpid-addressing-__ssenv-envelope-signverify)
 *Advertised-key authenticity*) and placed at the singular `metadata.keyPackage` — rides into `enroll:request`
 as the opaque `EnrollParams.metadata` (built by an at_client orchestrator *above* at_auth; at_auth ferries,
 never interprets). **Conveyance is the
@@ -720,7 +720,7 @@ keypair per `(atSign, namespace)` and publish its public half **eagerly at mint*
 `public:__nskey.<ns>@alice`, taking the short-ttl immutable `_nskeylock.<ns>@alice` first so two of the
 owner's enrollments cannot race; the record is **mutable** so B-2 can overwrite it on rotation. Both the
 `nskey` public half and
-`public:pqpublickey@alice` are **advertised as APKAM-signed envelopes** (design.md §2.1 *Advertised-key
+`public:pqpublickey@alice` are **advertised as APKAM-signed envelopes** (design.md [section 2.1](design.md#21-kpid-addressing-__ssenv-envelope-signverify) *Advertised-key
 authenticity*), so a fetching client verifies them against the publishing enrollment's `_apsk` — same path
 same-atSign and cross-atSign. `pqpublickey` create/seed/serve/pull under
 `pqid:<kid>` + root no-namespace serve exception; public/private correspondence check in `_consume` (the
@@ -1652,7 +1652,7 @@ knows where the sequencing assumptions come from:
 - **#C** — keep D1 GA off the auth retrofit: B-2 depends on **RF-1 + SS-3**, not full RF-2.
 - **#D** — publish-sequencing decisions: fold the pkam ML-DSA literal into SS-1a's publish; ML-DSA verify
   algo-level (P-2); re-confirm the at_commons floor at SS-1a; at_auth 3.1.1-vs-fold at S-1.
-- **#E** — S-2 scope / the §3-S5-vs-§7-WP3 SoT conflict: this plan takes additive-field-only.
+- **#E** — S-2 scope / the [section 3](#3-phase-a--pq-primitives--enrollment-key-p-1-p-2-p-3)-S5-vs-[section 7](#7-phase-rf--existing-client-retrofit-rf-1-rf-srv-rf-2b-rf-2c)-WP3 SoT conflict: this plan takes additive-field-only.
 - **#F** — enrollment cardinality + retrofit shape: **RESOLVED 2026-06-30** — **1:1:1** + fresh-enrollment
   retrofit. (Drives SS-3 single-key, RF-SRV, and RF-2b/c.)
 
@@ -1665,7 +1665,7 @@ knows where the sequencing assumptions come from:
 ## 13. Phase IS — inter-server PQ authentication (IS-1)
 
 *Off the D1 GA critical path (server-to-server, `at_server`), but in D1 scope (ruled 2026-07-06). This is
-the atServer↔atServer handshake, orthogonal to the client-side `nskey` data path (§6) — a compromised
+the atServer↔atServer handshake, orthogonal to the client-side `nskey` data path ([section 6](#6-phase-b--the-nskey-data-path-b-1-the-d1-centrepiece)) — a compromised
 inter-server channel and a compromised client channel are different threats, so this track ships on its own
 schedule and does **not** gate D1 GA.*
 
