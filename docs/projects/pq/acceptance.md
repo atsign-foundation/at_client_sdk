@@ -498,7 +498,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     `CryptoRuntime.isReadyFor(atSign, namespace)`; the opt-in is
     `AtClientPreference.allowLegacyCryptoFallback`, applied per write, which is what
     makes the fallback forward-only. Driven by the cold-start group in
-    `tests/at_functional_test/test/nskey_data_path_e2e_test.dart`.
+    `tests/at_functional_test/test/nskey_data_path_live_test.dart`.
 
 | enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|

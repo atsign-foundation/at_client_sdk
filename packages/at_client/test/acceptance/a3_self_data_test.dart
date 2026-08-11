@@ -134,7 +134,7 @@ void main() {
       //       a client mints for its preference namespace and its rw namespaces
       //       at init.
       provenIn(
-        'tests/at_functional_test/test/nskey_data_path_e2e_test.dart',
+        'tests/at_functional_test/test/nskey_data_path_live_test.dart',
         'a write to a namespace with no nskey fails, saying which',
         proves:
             'cold start throws NamespaceKeyUnavailableException naming the atSign and namespace, with the readiness query and the opt-in legacy fallback covered alongside it',

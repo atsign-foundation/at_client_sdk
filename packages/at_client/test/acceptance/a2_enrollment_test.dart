@@ -20,7 +20,7 @@ void main() {
       //       app_1.my_apps self data; an app_2 key request is refused; E2's
       //       APKAM key is a distinct, individually-revocable record.
       provenIn(
-        'tests/at_functional_test/test/enrollment_pq_key_exchange_e2e_test.dart',
+        'tests/at_functional_test/test/enrollment_pq_key_exchange_live_test.dart',
         'a pq enrollment reaches the atServer with no RSA-wrapped key',
         proves:
             'the enrol request carries no RSA-wrapped apkamSymmetricKey, and the companion test has the approver mint it and the enrollee recover it',
@@ -72,7 +72,7 @@ void main() {
             'so the refusal is a gate rather than an absent record',
       );
       provenIn(
-        'tests/at_functional_test/test/enrollment_chain_link_e2e_test.dart',
+        'tests/at_functional_test/test/enrollment_chain_link_live_test.dart',
         'the root private reaches a privileged enrollment and no other',
         proves: 'the signing-root private is conveyed to a fully privileged '
             'enrollment and withheld from a scoped one, with the grant '

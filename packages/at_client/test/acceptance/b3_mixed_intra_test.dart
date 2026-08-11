@@ -102,7 +102,7 @@ void main() {
 
       // And the round trip a capability-stage sibling performs on this data is
       // the data-path suites' business, proven live:
-      // `nskey_data_path_e2e_test.dart` (functional) and
+      // `nskey_data_path_live_test.dart` (functional) and
       // `era_default_read_test.dart` (e2e) — a client with no config at all
       // opens what an active client sealed.
     });

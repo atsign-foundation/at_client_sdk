@@ -28,7 +28,7 @@ void main() {
               'the namespace is refused with an exception naming @bob and the '
               'namespace — cross-atSign, against two live atServers, on a '
               'run-unique namespace so the absence is genuine');
-      provenIn('tests/at_functional_test/test/nskey_data_path_e2e_test.dart',
+      provenIn('tests/at_functional_test/test/nskey_data_path_live_test.dart',
           'with the escape hatch opened, the write goes out under legacy',
           proves: 'the explicit opt-in arm: with allowLegacyCryptoFallback set '
               'the same cold-start write proceeds under legacy and the record '

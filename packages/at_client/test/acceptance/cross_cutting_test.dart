@@ -298,7 +298,7 @@ void main() {
       // proven live rather than asserted here, since a unit test cannot see
       // which providers a real write actually reached.
       provenIn(
-        'tests/at_functional_test/test/nskey_data_path_e2e_test.dart',
+        'tests/at_functional_test/test/nskey_data_path_live_test.dart',
         'a self value round-trips through the nskey data path',
         proves: 'self data is sealed and opened through X-Wing + AES-GCM on a '
             'live atServer, with no legacy provider involved',
@@ -317,7 +317,7 @@ void main() {
       // The enrollment conveyance — the one place a secret really is
       // transported during onboarding — carries no RSA wrap in pq mode.
       provenIn(
-        'tests/at_functional_test/test/enrollment_pq_key_exchange_e2e_test.dart',
+        'tests/at_functional_test/test/enrollment_pq_key_exchange_live_test.dart',
         'a pq enrollment reaches the atServer with no RSA-wrapped key',
         proves: 'the enrol request carries no RSA-wrapped apkamSymmetricKey; '
             'the approver mints it and seals it to the advertised X-Wing key '

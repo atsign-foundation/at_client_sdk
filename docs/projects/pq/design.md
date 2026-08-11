@@ -752,7 +752,7 @@ for `metadata.keyPackage`, and `VerbEnrollmentDirectory` verifies it against the
 advertising enrollment's `_apsk` before sealing, rejecting a package that is unsigned,
 tampered, signed by a different enrollment, or merely claiming to be that enrollment's.
 Remaining gaps, updated 2026-08-05: none of the two that stood here — SS-2 wired
-`enroll:request` (live coverage: `enrollment_key_package_e2e_test.dart` and the
+`enroll:request` (live coverage: `enrollment_key_package_live_test.dart` and the
 signing-root pull pair), and the correspondence check is built
 (`NskeyPrivateFiling._corresponds`, refusing a private that does not derive the
 published public half).)*
@@ -1544,7 +1544,7 @@ proven cross-atSign live) and the key package
 (`KeyPackageRegistration.signedKeyPackagePayload` / `VerbEnrollmentDirectory`), so the
 authenticity decision of [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) holds —
 and as of 2026-08-05 the key-package half is driven live too (SS-2 wired
-`enroll:request`; `enrollment_key_package_e2e_test.dart` and the signing-root
+`enroll:request`; `enrollment_key_package_live_test.dart` and the signing-root
 pull pair exercise `enroll:listns` against a live atServer). Discharged since
 this inventory was written: the public/private correspondence check
 (`NskeyPrivateFiling._corresponds`), the signing root's no-namespace serve +

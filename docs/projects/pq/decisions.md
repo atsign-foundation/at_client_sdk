@@ -7280,3 +7280,42 @@ things:
 The reasoning is recorded in `mocks.dart`'s own library dartdoc, not only here,
 because that is where someone will be standing when they consider finishing the
 job.
+
+## 84. Phase 7: the functional pack's live tests stop claiming to be the e2e pack (2026-08-11)
+
+**Status:** accepted (2026-08-11).
+
+Four files in `tests/at_functional_test/test/` were named `*_e2e_test.dart`:
+`enrollment_chain_link`, `enrollment_key_package`, `enrollment_pq_key_exchange`
+and `nskey_data_path`. They are not in the e2e pack and never were. The suffix
+named a *different package* — one with its own CI job, its own long-lived cicd
+atSigns and its own initializer — so anyone reading a citation had to open the
+path to find out which harness the proof actually ran in. That confusion has
+already cost this project once, when a row was labelled for the e2e pack for a
+month before anyone checked that the pack could not CRAM-activate anything.
+
+The pack's other seven live tests were already `*_live_test.dart`, so this was
+four outliers against an established local convention rather than a new one
+being invented. They are now `enrollment_chain_link_live_test.dart`,
+`enrollment_key_package_live_test.dart`,
+`enrollment_pq_key_exchange_live_test.dart` and
+`nskey_data_path_live_test.dart`.
+
+### The citations rode with it
+
+`provenIn` asserts the cited file exists and still contains the cited test
+name, precisely so a rename cannot quietly strand a row's evidence. Fourteen
+citations moved in the same commit: seven in the acceptance suite's `provenIn`
+calls and prose, and seven across `implementation-plan.md`, `design.md` and
+`acceptance.md`. The guard was confirmed to work rather than assumed — reverting
+one citation turned `a3_self_data_test` red with "that file is gone", and it was
+restored.
+
+**`decisions.md` was deliberately left alone.** Two earlier rulings cite the old
+filenames. Rulings are append-only: they record what was true when they were
+made, and rewriting one to match a later tree turns the ledger into a moving
+account of the present rather than a record of decisions. This section is the
+mapping a reader needs.
+
+The runner globs (`dart test --concurrency=1 -r expanded`), so nothing
+enumerates these files by name and no harness config changed.
