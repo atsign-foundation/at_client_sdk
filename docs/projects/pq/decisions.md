@@ -105,6 +105,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [88. Phase 7: mintAndPublish is the cold-start mint, and stops calling itself the rotation (2026-08-11)](#88-phase-7-mintandpublish-is-the-cold-start-mint-and-stops-calling-itself-the-rotation-2026-08-11)
 - [89. Phase 7: the section symbol keeps the two jobs it is good at (2026-08-11)](#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
 - [90. Phase 7: a refusal the approval wait cannot resolve stops being silent (2026-08-11)](#90-phase-7-a-refusal-the-approval-wait-cannot-resolve-stops-being-silent-2026-08-11)
+- [91. Signature agility: the APKAM auth key stops being the enrollment's signing key (2026-08-11)](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
 
 ---
 
@@ -7688,3 +7689,129 @@ decided to everyone who passes it, because the decision looks like it happened
 somewhere else. Nothing catches that except re-reading the source list, which is
 how this surfaced: Gary asked whether the plan was complete, and the answer from
 memory was wrong.
+
+## 91. Signature agility: the APKAM auth key stops being the enrollment's signing key (2026-08-11)
+
+**Status:** accepted as a design ruling. Nothing is built; this section is the
+specification the work is written against, and the mechanism is named here
+because no defect is being fixed — this reverses a scope decision, the same way
+[section 68](#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
+did.
+
+Settled by interview on 2026-08-11 against `gkc-pq-d1-spike` at `ee7f85b7a`.
+
+### 91.1 What is wrong today
+
+The APKAM keypair does two jobs. It authenticates a connection (PKAM), and it
+signs everything an enrollment attests to — signed envelopes, key packages,
+chain links. `ApkamSigning.signingKeys` (`apkam_signing.dart:56`) reads the one
+PKAM keypair out of `atChops` and hands it to both.
+
+Three costs follow, and all three are present in the tree:
+
+1. **No agility.** `_apsk` is published as a bare public-key string with no
+   algorithm beside it, so a verifier infers the algorithm from the envelope
+   rather than from what the enrollment advertised. Adding a second algorithm
+   has nowhere to go.
+2. **It is written once, ever.** `publishPublicSigningKey`
+   (`apkam_signing.dart:29`) reads the record first and logs "have already
+   published" if it exists. A rotated key would never reach the atServer.
+3. **Key reuse across protocols.** An authentication signature proves liveness
+   on a connection; an envelope signature is a durable attestation. One key
+   serving both is a cross-protocol surface with no reason to exist.
+
+### 91.2 What is not changing
+
+The 1:1:1 cardinality and singular `metadata.keyPackage` from
+[section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)
+stand, as does everything in section 68 other than its ruling 1. Rulings 2
+through 7 of section 68 carry into `enroll:update` unchanged, and ruling 6 (a
+superseded kpid is not retired) is the same shape as ruling 9 below.
+
+### 91.3 The rulings
+
+| #  | Ruling |
+|----|--------|
+| 1  | **The APKAM authentication key authenticates and nothing else.** An enrollment's signing keys are separate material from the start, with their own lifecycle |
+| 2  | **`AtKeys` gains `privateAuthentication` / `publicAuthentication`** as `CryptographicKeyType` tokens. Role is what that enum is for, and it is what `validateAddKey` and `validateKeyMaterials` group on, so the uniqueness rules come from machinery that already exists |
+| 3  | **keyIds are `apkam:<enrollmentId>:<n>` for authentication and `sign:<enrollmentId>:<algo>:<n>` for signing.** The auth counter keeps retired generations distinguishable; algorithm leads the signing shape because that is what a verifier selects on. The generation-less `apkam:<enrollmentId>` needs no read compatibility — `fileApkamMaterial` is not on trunk, so no released build has ever written one |
+| 4  | **The assurance invariants count only `active` material.** At most one active `privateAuthentication` per enrollment and **exactly one file-wide**; any number of active `privateSigning`, which is the array. Today they are status-blind, so retiring a key does not free its slot — confirmed by probe: retire `gen1`, add `gen2` under the same enrollment, and `addKey` throws while the same add under a different enrollment is allowed |
+| 5  | **"Which enrollment do I authenticate as" is derived, never stored.** It is the enrollment id of the unique active `privateAuthentication` material. No `activeEnrollmentId` field is added: a pointer duplicating a fact already in the file is a second writer waiting to disagree with the first |
+| 6  | **`AtKeys.replaceKey(keyId, newMaterial)`** performs retire-and-add in one call. Leaving callers to sequence two mutations across a keyfile flush is how one generation goes missing |
+| 7  | **All key material becomes typed.** The flat `apkamPublicKey`/`apkamPrivateKey` stay as a write-only compatibility projection, never read as the source of truth. `rsa2048` exists only as a retrofit's legacy APKAM keypair |
+| 8  | **`_apsk` becomes `{"v":1,"keys":[{"use","alg","pub","status"}]}`,** reusing `PackageKey`'s vocabulary so the design has one spelling for "a list of keys with algorithms". `status` is `active` or `verifyOnly`; absent reads as `active`. Written by the atServer verbatim from `EnrollParams.apsk`, at approval and on `enroll:update` — one writer for the record's whole life, which makes a rotation atomic from the client's view |
+| 9  | **The array is append-mostly.** An algorithm leaving the in-use set stops signing; its key and its published entry are retained indefinitely as `verifyOnly`. Key packages and chain links are stored durably, so withdrawing an entry retroactively unverifies everything ever signed with it |
+| 10 | **The APKAM auth key is in the array permanently, as `verifyOnly`.** Everything signed before rollout 2 was signed by it; the array replacing the bare-string record would otherwise unverify all of it. This is ruling 9 applied at the rollout boundary rather than at an algorithm retirement |
+| 11 | **A signer emits one signature per active signing key it holds.** A verifier picks the strongest algorithm it understands from those present, verifies that one, and **refuses outright** on failure — never falling back to a weaker signature, which would be a downgrade attack with an attacker-chosen algorithm |
+| 12 | **The envelope collapses to one versioned shape,** `{"v":1,"signatures":[{"alg","sig"}],"enrollmentId":…}`. The entries use `alg` to match the `_apsk` array's spelling, so one vocabulary covers both halves of a verification — the algorithm named in the signature against the algorithm named in the published entry. `signedEnvelopeVersion = 1` (tagged) and `jwsEnvelopeVersion = 2` (JWS) are both unreleased and are removed rather than carried |
+| 13 | **Section 68's `enroll:updateMetadata` is renamed `enroll:update`** and widened to reach `apkamPublicKey`, `signingAlgo`, `apsk` and `metadata`. Nothing is built, so the wire token is still free and never will be again; a name saying "metadata" while reaching `apkamPublicKey` generates wrong assumptions for years. **`namespaces` and the approval state stay out of reach permanently** — the operation is self-only, so reaching namespaces would let an enrollment grant itself scope |
+| 14 | **`EnrollParams.apkamPublicKeySignature`** carries a signature by the **new** private key over `enrollmentId\|apkamPublicKey\|signingAlgo`, verified against the new public key in the same request. Without it a compromised-but-authenticated client can install a public key whose private half it does not hold, locking out the legitimate holder while the record looks valid. No nonce: the operation is self-only and the old key stops authenticating after the rotation, so a replay can only be sent by the current holder — section 68 ruling 2's own argument that rollback is self-harm rather than an attack |
+| 15 | **The strength order is an explicit ordered list beside `SigningAlgoType` in at_chops** — `mldsa65` > `ecc_secp256r1` > `rsa2048` — pinned by a raw-literal tripwire test in the style of `KeyAlgorithmType`'s. It is a protocol fact every implementation must agree on. The **verifiable** set is derived from what the at_chops build implements, so a build cannot claim an algorithm it cannot run |
+| 16 | **The in-use-for-signing set is app-settable on `AtClientPreference`, defaulted by `ReleasePosture`,** and SDK releases move that default. When the in-use set names an algorithm the enrollment holds no key for, the client mints one locally at start, files it and publishes it — which a signing keypair can do precisely because it needs no server approval, unlike the auth key |
+
+### 91.4 What is released, and therefore what must still be read
+
+Checked against pub.dev rather than in-tree precedent, because the answer
+changed two rulings:
+
+| Surface | Released | Consequence |
+|---------|----------|-------------|
+| Bare-string `_apsk`, unversioned envelope | **Yes** — at_client **3.14.0**, 25 days ago (`mixins/apkam_signing.dart` and `mixins/envelope_signing.dart` are both on trunk and both named in the 3.14.0 entry) | Both are read as legacy, and neither is ever emitted again |
+| Versioned typed-keys document; `flush` upgrading a legacy file in place | **Yes** — at_auth **3.3.0**, 10 days ago | `version: 1` keyfiles with an empty `keys` array exist in the wild and must be read |
+| `apkam:<enrollmentId>` keyIds | **No** — `fileApkamMaterial` is not on trunk | No read compatibility (ruling 3) |
+| Tagged single-key `_apsk`, `signedEnvelopeVersion`, `jwsEnvelopeVersion` | **No** — all D1-only | Removed, not versioned (rulings 8, 12) |
+
+Both released surfaces are `@experimental`, and 3.14.0's own entry says the
+wire shape is subject to change. Honouring them on read is therefore a choice
+rather than an obligation, and it is the choice taken: the licence does not
+have to be spent, and anything a 3.14.0 client has already published or signed
+keeps working.
+
+`toJson()` stops emitting `version: 1` for a keyfile holding no typed material,
+so a legacy file round-trips byte-identically through a new build. A
+v1-with-empty-keys file carries nothing a legacy file does not, so writing it
+back as legacy loses nothing and stops the marker spreading to files nobody
+meant to change.
+
+### 91.5 Rollout
+
+**Rollout 1 is capability only.** Readers accept the new `_apsk` array and the
+new envelope; key packages are published. Nothing is minted, signed or
+published differently — envelopes keep being signed by the auth key and
+verified against the bare-string record, and no separate signing keys are
+minted yet. Every verifier in the fleet gains the ability to read what rollout
+2 will emit, before anything emits it.
+
+**Rollout 2 is active,** gated by a single new `ReleasePosture` axis switching
+all three writer behaviours together: mint separate signing keys, publish the
+array, emit multi-signature envelopes. One flag rather than three, because a
+build doing any one without the others emits something the fleet cannot
+handle.
+
+Auth-key rotation lands in this work as a coordinated sweep across at_commons,
+the atServer and the client, and becomes usable once the atServer carries
+`enroll:update`.
+
+The decision surface is `--posture` on `at_activate`, alongside the existing
+`--signingAlgoType`, with the specific flag winning — the resolution rule
+`at_client_preference.dart:52` already documents. There is no "app" in the CLI
+case: the carriers that tell at_auth what to do are at_onboarding_cli /
+at_cli_commons and at_client_flutter.
+
+### 91.6 Delivery
+
+Everything is built on `gkc-pq-d1-spike` so it can be proven end to end
+locally. **The spike never merges**; it is broken into stacked PRs afterwards.
+
+1. at_commons `EnrollParams` extension, on `gkc-apsk-auto-publish`. PR to
+   trunk, published.
+2. The spike merges the **published** at_commons rather than the branch, which
+   is also what proves the spike builds against what consumers will resolve.
+3. at_server's own `gkc-apsk-auto-publish` resumes against that published
+   at_commons.
+4. `at_virtual_env:local` is rebuilt from it, giving the harness something to
+   run against.
+5. The atServer PR goes for publication in parallel.
+
+The Dart atServer carries the verb now; every other atServer implementation is
+a tracked parity follow-up with its own issue, so it cannot silently diverge.

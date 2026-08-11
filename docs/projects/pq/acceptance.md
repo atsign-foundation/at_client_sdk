@@ -31,6 +31,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 - [13. Cross-cutting acceptance (applies to all flows)](#13-cross-cutting-acceptance-applies-to-all-flows)
 - [14. Test harness & impl/verify mapping](#14-test-harness--implverify-mapping)
 - [15. C1 · The rollout posture (capstone of `decisions.md` 56.4)](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564)
+- [16. G1 · Signature agility and the rollout matrix](#16-g1--signature-agility-and-the-rollout-matrix)
 
 ---
 
@@ -1322,3 +1323,134 @@ and B already own.
   `decisions.md` 56.4 table — and each remains individually overridable
   (UC-C1.1–C1.5 prove the arms). A bare preference runs the migration
   posture, byte-identical to the pre-posture SDK.
+
+## 16. G1 · Signature agility and the rollout matrix
+
+Acceptance for [`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11);
+design in [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
+
+The rows below run in `tests/at_functional_test` against the locally built
+`at_virtual_env:local`, using dedicated atSigns and run-unique
+`appName`/`deviceName` — rekey and rotation mutate one-shot server state, so a
+fixed identifier passes once and collides on the next run.
+
+### 16.1 The harness
+
+Two stage-parameterised executables, a sender and a receiver, each taking
+`--stage now|rollout1|rollout2`, plus a driver that runs the matrix.
+
+**Known limit, recorded rather than mitigated.** One build simulating `now`
+exercises the stage logic, not cross-version compatibility: both arms run the
+same code, so a bug in what a build predating this work does with a v1 envelope
+is invisible to it. Running the `now` arm on the last published at_client is
+the version of this that would test that, and it is not what is built here.
+
+### 16.2 The keyfile rows
+
+- **UC-G1.1 · the enrollment id is derived, not stored.**
+  *Given* a keyfile holding one active `privateAuthentication` material.
+  *When* a client reads it with no enrollment id supplied.
+  *Then* it authenticates as that material's enrollment, and no
+  `activeEnrollmentId` field exists anywhere in the document.
+
+- **UC-G1.2 · a retrofit leaves exactly one active authentication key.**
+  *Given* a legacy keyfile that then retrofits.
+  *When* the retrofit completes.
+  *Then* the legacy APKAM material is `retired`, the new one is `active`, the
+  file-wide invariant holds, and UC-G1.1's derivation returns the **new**
+  enrollment id.
+
+- **UC-G1.3 · retirement frees the slot.**
+  *Given* an active `privateAuthentication` for enrollment E.
+  *When* it is retired and a replacement filed under the same enrollment.
+  *Then* `addKey` accepts it — the arm that throws today. The contrast arm (two
+  active for one enrollment) must still throw.
+
+- **UC-G1.4 · a legacy keyfile round-trips byte-identically.**
+  *Given* a `.atKeys` file in the pure legacy shape.
+  *When* a new build reads it, changes nothing, and flushes.
+  *Then* the file is byte-identical, with no `version` key added. A
+  `version: 1` file holding `keys: []` comes back as pure legacy.
+
+### 16.3 The wire rows
+
+- **UC-G1.5 · a bare-string `_apsk` still verifies.**
+  *Given* an `_apsk` published by at_client 3.14.0 — a bare public-key string.
+  *When* a current build verifies an envelope from that enrollment.
+  *Then* it succeeds, reading the record as a single `rsa2048` entry. The
+  writer arm must show the current build never emits that shape.
+
+- **UC-G1.6 · an unversioned envelope still verifies.**
+  *Given* an envelope with a bare `signature` and no `v`.
+  *When* a current build verifies it.
+  *Then* it succeeds.
+
+- **UC-G1.7 · the verifier takes the strongest and does not fall back.**
+  *Given* an envelope carrying valid `rsa2048` and **corrupted** `mldsa65`
+  signatures, against an `_apsk` advertising both.
+  *When* a build that implements ML-DSA verifies it.
+  *Then* it **refuses**, naming the ML-DSA failure — it must not fall through
+  to the valid RSA signature. The control arm, both signatures valid, passes.
+
+- **UC-G1.8 · the auth key stays verifiable after rollout 2.**
+  *Given* an envelope signed at rollout 1 by the APKAM auth key.
+  *When* the enrollment moves to rollout 2 and republishes `_apsk` as an array.
+  *Then* the stored envelope still verifies, against the auth key's
+  `verifyOnly` entry.
+
+- **UC-G1.9 · a retired algorithm still verifies history.**
+  *Given* an algorithm dropped from the in-use set.
+  *Then* new envelopes carry no signature of it, its `_apsk` entry remains with
+  `status: verifyOnly`, and an envelope signed with it before the drop still
+  verifies.
+
+### 16.4 `enroll:update` rows
+
+- **UC-G1.10 · rekey keeps the enrollment id.**
+  *Given* an approved enrollment authenticated on its own connection.
+  *When* it sends `enroll:update` with a new `apkamPublicKey`, `signingAlgo`
+  and a valid `apkamPublicKeySignature`.
+  *Then* the record's key is replaced, the id, appName, deviceName, namespaces
+  and approval state are untouched, `_apsk` is rewritten from the request's
+  `apsk`, and the **new** key authenticates while the old one no longer does.
+
+- **UC-G1.11 · proof of possession is required.**
+  *Given* the same request with `apkamPublicKeySignature` absent, or signed by
+  a key other than the one being installed.
+  *Then* the atServer refuses and the record is unchanged. Both arms run: a
+  missing signature and a wrong one must each be refused, and the valid arm
+  must succeed, or the test is comparing a case with itself.
+
+- **UC-G1.12 · namespaces and approval state stay out of reach.**
+  *Given* an `enroll:update` naming `namespaces` or an approval state.
+  *Then* it is refused. This is the privilege-escalation guard, so the refusal
+  is asserted by its own error rather than by "it failed".
+
+- **UC-G1.13 · self-only and approved-only.**
+  *Given* an `enroll:update` for enrollment E sent on a connection
+  authenticated as a different enrollment, as the owner, or over legacy PKAM.
+  *Then* each is refused. Repeated for pending, denied, revoked and expired
+  targets.
+
+### 16.5 The rollout matrix
+
+Sender stage × receiver stage. Every cell runs; the failing cells are asserted
+**by their specific error**, since asserting only "it failed" lets a cell start
+failing for a different reason unnoticed.
+
+| Sender ↓ / Receiver → | now | rollout 1 | rollout 2 |
+|-----------------------|-----|-----------|-----------|
+| **now**       | pass | pass | pass |
+| **rollout 1** | pass | pass | pass |
+| **rollout 2** | **fail** — `IllegalStateException`, `_apsk` value is not a String | pass | pass |
+
+The single failing cell is the whole argument for capability-before-active: a
+rollout-2 sender publishes a JSON `_apsk` that a "now" receiver's
+`getApkamPublicKey` refuses to read. Rollout 1 exists to empty that cell before
+anything can land in it.
+
+- **UC-G1.14 · rollout 1 changes nothing on the wire.**
+  *Given* two clients both at rollout 1.
+  *Then* the envelopes exchanged and the `_apsk` published are byte-identical
+  to the `now`/`now` cell. Rollout 1 is reader capability only, and this is
+  what proves it.

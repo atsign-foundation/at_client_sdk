@@ -18,6 +18,7 @@ companion to four sibling docs (see the orientation table in [section 0](#0-scop
 - [6. Implementation notes & file-level pointers (consolidated)](#6-implementation-notes--file-level-pointers-consolidated)
 - [7. Trust boundary & residual threats](#7-trust-boundary--residual-threats)
 - [8. Subsystem F — inter-server PQ authentication (IS-1)](#8-subsystem-f--inter-server-pq-authentication-is-1)
+- [9. Subsystem G — signature agility (the auth/signing key split)](#9-subsystem-g--signature-agility-the-authsigning-key-split)
 
 ---
 
@@ -1907,3 +1908,172 @@ path (Subsystem A) — a compromised server-to-server link and a compromised cli
 are different threats with different anchors. The pure-Dart fallback (ML-DSA resolves without
 libcrypto when `AT_CHOPS_LIBCRYPTO_PATH` is unset) keeps the track deployable on hosts without an
 OpenSSL build.
+
+## 9. Subsystem G — signature agility (the auth/signing key split)
+
+Ruled in [`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11).
+This section is the detail that ruling is written against; the acceptance rows
+are [`acceptance.md` 16](acceptance.md#16-g1--signature-agility-and-the-rollout-matrix).
+
+### 9.1 The two roles
+
+| Role | Key | Where the private lives | Where the public is advertised | Lifecycle |
+|------|-----|--------------------------|--------------------------------|-----------|
+| Authentication | APKAM keypair | `apkam:<enrollmentId>:<n>`, `privateAuthentication` | the enrollment record's `apkamPublicKey` | one active ever; rotated in place by `enroll:update` |
+| Signing | one keypair per algorithm | `sign:<enrollmentId>:<algo>:<n>`, `privateSigning` | `_apsk`'s `keys` array | several active at once; grows and retires by policy |
+
+PKAM verification is record-authoritative, so the atServer reads
+`apkamPublicKey` off the enrollment record and has no use for `_apsk` at all.
+`_apsk` is a client-side artefact that the server merely stores and writes,
+which is why its format can change without a server release.
+
+### 9.2 The keyfile
+
+`CryptographicKeyType` gains `privateAuthentication` and
+`publicAuthentication`. `KeyAlgorithmType` is unchanged — the algorithm tokens
+already cover what is needed.
+
+`AtKeys.fileApkamMaterial` files under the generation-suffixed id and tags the
+pair `privateAuthentication` / `publicAuthentication`. A new sibling files a
+signing keypair under `sign:<enrollmentId>:<algo>:<n>` as
+`privateSigning` / `publicVerification`.
+
+`AtKeysAssurance.validateKeyMaterials` and `.validateAddKey` gain a status
+filter, and the file-wide single-active-authentication rule. The file-wide rule
+is what makes the enrollment id derivable, and it is a throw rather than a
+warning: with one live enrollment per install, a second active authentication
+key is a corrupt keyfile, not a supported state.
+
+`AtKeys.replaceKey(keyId, newMaterial)` retires the named keyId's materials and
+files the replacement in one call. Rotation is never two caller-sequenced
+mutations across a flush.
+
+Reading, in order of what a file can contain:
+
+1. no `version` — the legacy flat shape;
+2. `version: 1` with `keys: []` — written by at_auth ≥ 3.3.0 on any flush,
+   carrying nothing a legacy file does not;
+3. `version: 1` with materials.
+
+Writing emits (1) when there is no typed material and (3) otherwise. Shape (2)
+is never written again.
+
+### 9.3 `_apsk`
+
+```json
+{
+  "v": 1,
+  "keys": [
+    {"use": "sign", "alg": "mldsa65", "pub": "…", "status": "active"},
+    {"use": "sign", "alg": "rsa2048", "pub": "…", "status": "verifyOnly"}
+  ]
+}
+```
+
+`use`, `alg` and `pub` are `PackageKey`'s spellings
+(`key_package.dart:36`), deliberately, so the design has one vocabulary for a
+list of keys with algorithms. `status` absent reads as `active`.
+
+A reader accepts this and the released bare string (an `rsa2048` key published
+by at_client 3.14.0 or earlier). A writer emits only this.
+
+The value is composed client-side and travels on `EnrollParams.apsk`. The
+atServer stores it verbatim on the enrollment record, writes its JSON encoding
+unaltered at approval, and rewrites it when `enroll:update` carries a new one.
+Absent means no `_apsk` is published at all. Capped by the atServer at 20KB
+encoded; a longer value is refused rather than truncated.
+
+### 9.4 The envelope
+
+```json
+{
+  "v": 1,
+  "signatures": [
+    {"alg": "mldsa65", "sig": "…"},
+    {"alg": "rsa2048", "sig": "…"}
+  ],
+  "enrollmentId": "…"
+}
+```
+
+`alg` is the same spelling the `_apsk` array uses, so one vocabulary covers
+both halves of a verification: the algorithm named in the signature is matched
+against the algorithm named in the published entry. `sig` rather than
+`signature` for the same reason — the entry shape mirrors `_apsk`'s, and the
+released envelope's `signature` field keeps its old name in the legacy branch
+where it belongs.
+
+A reader also accepts the released unversioned shape — a bare `signature` with
+no `v`, as at_client 3.14.0 emits.
+
+Signing: one signature per active signing key the enrollment holds, so the
+envelope carries exactly what `_apsk` advertises as `active`.
+
+Verifying: resolve the signer's `_apsk`, intersect its entries with the
+algorithms this at_chops build implements, take the strongest by the at_chops
+order, and verify that one signature. If it fails, **refuse** — do not try a
+weaker one. Falling through to whichever signature happens to verify hands the
+choice of algorithm to whoever tampered with the envelope, and it would read as
+success in every log.
+
+An envelope naming an algorithm with no matching `_apsk` entry is refused for
+that reason specifically, which is the failure a rollout-2 sender produces
+against a fleet that has not reached rollout 1.
+
+### 9.5 `enroll:update`
+
+Renamed from section 68's `enroll:updateMetadata` and widened. One alternation
+entry in `syntax.dart`'s `enroll` pattern, as section 68.4 established for the
+original name.
+
+Reaches `apkamPublicKey`, `signingAlgo`, `apsk` and `metadata`. Never
+`namespaces` or the approval state.
+
+`EnrollParams` gains `apkamPublicKeySignature`: base64 of a signature by the
+**new** private key over `enrollmentId|apkamPublicKey|signingAlgo`, verified by
+the handler against the `apkamPublicKey` in the same request before anything is
+written. A request changing `apkamPublicKey` without it is refused.
+
+Section 68's rulings 2 through 7 apply unchanged: self-only, approved-state
+only, per-key set rather than whole-map replace, the server keeps no opinion of
+metadata contents, superseded material is not retired, and an old atServer
+fails loudly because an unknown operation does not match the verb regex.
+
+An enrollment whose authentication private is **lost** cannot rekey — self-only
+means the proof of the current key is the authority. That case remains "a new
+enrollment", as it is today.
+
+### 9.6 Algorithm policy
+
+Three separate things, deliberately in three places:
+
+| Thing | Where | Why there |
+|-------|-------|-----------|
+| Strength order | at_chops, beside `SigningAlgoType` | A protocol fact every implementation must agree on, including the atServer |
+| Verifiable set | derived from what the at_chops build implements | A build cannot claim an algorithm it cannot run |
+| In-use-for-signing set | `AtClientPreference`, defaulted by `ReleasePosture` | A rollout decision, which is what posture carries |
+
+Order: `mldsa65` > `ecc_secp256r1` > `rsa2048`, pinned by a raw-literal
+tripwire test in the style of `KeyAlgorithmType`'s.
+
+When the in-use set names an algorithm the enrollment holds no key for, the
+client mints one at start, files it, and publishes the updated array. A signing
+keypair can be minted unilaterally because it needs no server approval and no
+enrollment-record change — which is the practical payoff of the split.
+
+When an algorithm leaves the in-use set, signing with it stops; the key and its
+`_apsk` entry are retained indefinitely as `verifyOnly`.
+
+### 9.7 Rollout gate
+
+One `ReleasePosture` axis switches all three writer behaviours together: mint
+separate signing keys, publish the array, emit multi-signature envelopes. A
+build doing any one without the others emits something the fleet cannot handle,
+so they do not get independent flags.
+
+Rollout 1 is the reader half only, and is not gated — a reader that understands
+more shapes is always safe.
+
+The axis's name is not yet chosen. It should read as a rollout position rather
+than as the mechanism it switches, so that a build's stance is legible from the
+posture value alone.
