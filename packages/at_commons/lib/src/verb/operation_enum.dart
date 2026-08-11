@@ -29,7 +29,14 @@ enum EnrollOperationEnum {
   list,
   fetch,
   unrevoke,
-  delete
+  delete,
+
+  /// An approved enrollment amending its own record: `apkamPublicKey`,
+  /// `signingAlgo`, `apsk` and `metadata`. Self-only — the connection's
+  /// enrollment id must equal the target's — and it never reaches
+  /// `namespaces` or the approval state, because an operation an enrollment
+  /// can invoke on itself must not be able to widen its own grant.
+  update
 }
 
 String getEnrollOperation(EnrollOperationEnum? enrollOperationEnum) =>

@@ -161,4 +161,129 @@ void main() {
           [EnrollmentStatus.approved, EnrollmentStatus.pending]);
     });
   });
+
+  group('A group of tests to verify EnrollParams.apsk', () {
+    // Raw-literal pins: `apsk` is the wire spelling the atServer reads off
+    // enroll:request, and the map is written to the enrollment's published
+    // `_apsk` record as-is. A rename on either side is a protocol break, so
+    // the name and the contents are pinned rather than asserted through the
+    // constants that produce them.
+    test('an apsk map survives a wire round trip under the name "apsk"', () {
+      // The array form, spelled as KeyPackage's keys are (use/alg/pub) so one
+      // vocabulary covers every "list of keys with algorithms" in the
+      // protocol. `status: verifyOnly` marks an entry that no longer signs but
+      // is retained so historic envelopes still verify.
+      final apsk = {
+        'v': 1,
+        'keys': [
+          {
+            'use': 'sign',
+            'alg': 'mldsa65',
+            'pub': 'ZmFrZS1tbC1kc2EtcHVibGlj',
+            'status': 'active',
+          },
+          {
+            'use': 'sign',
+            'alg': 'rsa2048',
+            'pub': 'ZmFrZS1yc2EtcHVibGlj',
+            'status': 'verifyOnly',
+          },
+        ],
+      };
+
+      final json = (EnrollParams()..apsk = apsk).toJson();
+      expect(json['apsk'], apsk);
+
+      final command = 'enroll:request:${jsonEncode(json)}';
+      expect(RegExp(VerbSyntax.enroll).hasMatch(command), true,
+          reason: 'the enroll grammar takes enrollParams as one opaque blob, '
+              'so a nested object needs no syntax change');
+
+      final parsed = EnrollParams.fromJson(
+          jsonDecode(jsonEncode(json)) as Map<String, dynamic>);
+      expect(parsed.apsk, apsk);
+    });
+
+    test('an absent apsk stays absent rather than becoming an empty map', () {
+      // The atServer publishes no `_apsk` at all for an enrollment that sends
+      // none, so null and {} must not collapse into each other: an empty map
+      // would have it publish "{}" as somebody's signing key.
+      final parsed = EnrollParams.fromJson(<String, dynamic>{
+        'appName': 'wavi',
+        'deviceName': 'pixel',
+      });
+      expect(parsed.apsk, isNull);
+      expect(parsed.toJson()['apsk'], isNull);
+    });
+  });
+
+  group('A group of tests to verify enroll:update', () {
+    // Raw-literal pins. The operation token and the field name are what the
+    // atServer matches and reads; a rename on either side is a protocol break,
+    // so both are pinned as literals rather than through the enum and the
+    // getter that produce them.
+    test('the operation token is "update"', () {
+      expect(getEnrollOperation(EnrollOperationEnum.update), 'update');
+    });
+
+    test('the enroll grammar matches an enroll:update command', () {
+      final json = (EnrollParams()
+            ..enrollmentId = 'abc-123'
+            ..apkamPublicKey = 'ZmFrZS1uZXctcHVibGlj'
+            ..signingAlgo = 'mldsa65'
+            ..apkamPublicKeySignature = 'ZmFrZS1zaWduYXR1cmU=')
+          .toJson();
+
+      final match = RegExp(VerbSyntax.enroll)
+          .firstMatch('enroll:update:${jsonEncode(json)}');
+      expect(match, isNotNull);
+      expect(match!.namedGroup('operation'), 'update');
+      expect(match.namedGroup('enrollParams'), jsonEncode(json));
+    });
+
+    test('adding "update" leaves the existing operations matching as before',
+        () {
+      // Widening an alternation can change what an earlier token matches —
+      // `listns` precedes `list` for exactly that reason — so every existing
+      // operation is re-checked rather than assumed unaffected.
+      for (final op in [
+        'request',
+        'approve',
+        'deny',
+        'revoke',
+        'listns',
+        'list',
+        'fetch',
+        'unrevoke',
+        'delete',
+      ]) {
+        final match = RegExp(VerbSyntax.enroll).firstMatch('enroll:$op:{}');
+        expect(match?.namedGroup('operation'), op,
+            reason: 'operation "$op" must still capture as itself');
+      }
+    });
+
+    test('apkamPublicKeySignature survives a wire round trip under that name',
+        () {
+      const signature = 'ZmFrZS1uZXcta2V5LXNpZ25hdHVyZQ==';
+
+      final json =
+          (EnrollParams()..apkamPublicKeySignature = signature).toJson();
+      expect(json['apkamPublicKeySignature'], signature);
+
+      final parsed = EnrollParams.fromJson(
+          jsonDecode(jsonEncode(json)) as Map<String, dynamic>);
+      expect(parsed.apkamPublicKeySignature, signature);
+    });
+
+    test('an absent apkamPublicKeySignature stays null', () {
+      // The atServer refuses an enroll:update that changes apkamPublicKey
+      // without one, so absent must be distinguishable from empty.
+      final parsed = EnrollParams.fromJson(<String, dynamic>{
+        'enrollmentId': 'abc-123',
+      });
+      expect(parsed.apkamPublicKeySignature, isNull);
+      expect(parsed.toJson()['apkamPublicKeySignature'], isNull);
+    });
+  });
 }
