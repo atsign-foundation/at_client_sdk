@@ -1,7 +1,9 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_chops/src/algorithm/spec/ml_dsa_65_spec.dart';
 import 'package:at_chops/src/key/keys.dart';
+import 'package:at_commons/at_commons.dart';
 
 import '../../algorithm/signing/ml_dsa_65_pure_dart.dart';
 
@@ -11,7 +13,33 @@ import '../../algorithm/signing/ml_dsa_65_pure_dart.dart';
 /// - Public key: 1952 bytes
 /// - Secret key: 4032 bytes
 class MlDsa65KeyPair extends AsymmetricKeyPair with RawKeyPairBytes {
-  MlDsa65KeyPair.create(super.publicKey, super.privateKey) : super.create();
+  /// Throws [AtSigningException] if [publicKey] or [privateKey] is not valid
+  /// base64, or does not base64-decode to the expected ML-DSA-65 length —
+  /// catching corrupted or truncated key material as soon as the key pair is
+  /// built, rather than at first sign/verify use.
+  MlDsa65KeyPair.create(String publicKey, String privateKey)
+      : super.create(publicKey, privateKey) {
+    final int pubLen = _decodeOrThrow(publicKey, label: 'public key').length;
+    if (pubLen != MlDsa65Sizes.publicKeyBytes) {
+      throw AtSigningException(
+          'ML-DSA-65 public key must be ${MlDsa65Sizes.publicKeyBytes} bytes '
+          '(got $pubLen)');
+    }
+    final int skLen = _decodeOrThrow(privateKey, label: 'secret key').length;
+    if (skLen != MlDsa65Sizes.secretKeyBytes) {
+      throw AtSigningException(
+          'ML-DSA-65 secret key must be ${MlDsa65Sizes.secretKeyBytes} bytes '
+          '(got $skLen)');
+    }
+  }
+
+  static Uint8List _decodeOrThrow(String value, {required String label}) {
+    try {
+      return base64Decode(value);
+    } on FormatException {
+      throw AtSigningException('ML-DSA-65 $label is not valid base64');
+    }
+  }
 
   /// Generates an ML-DSA-65 key pair for post-quantum digital signatures.
   ///

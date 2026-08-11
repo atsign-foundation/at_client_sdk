@@ -50,4 +50,19 @@ final class MlKem1024PureDartAlgo extends MlKemPureDart {
 
   @override
   String get kemSeedDescription => 'an ML-KEM-1024 seed (d || z)';
+
+  @override
+  String get algorithmName => 'ML-KEM-1024';
+
+  @override
+  int get publicKeyBytes => publicKeyLength;
+
+  @override
+  int get secretKeyBytes => secretKeyLength;
+
+  @override
+  int get ciphertextBytes => ciphertextLength;
+
+  @override
+  int get sharedSecretBytes => sharedSecretLength;
 }

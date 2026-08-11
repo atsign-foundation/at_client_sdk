@@ -64,7 +64,7 @@ DynamicLibrary? tryLoadLibCrypto({StringBuffer? loadedPath}) {
 
 /// Returns `true` when [lib] supports the ML-KEM-768 algorithm.
 ///
-/// ML-KEM-768 was added to the OpenSSL default provider in OpenSSL 3.3.
+/// ML-KEM-768 was added to the OpenSSL default provider in OpenSSL 3.5.
 /// Older 3.x builds (e.g. the 3.0.x shipped with Ubuntu 22.04/24.04) load
 /// fine but reject `EVP_PKEY_CTX_new_from_name("ML-KEM-768", ...)`.
 /// Call this before constructing [MlKem768FfiAlgo] to gate FFI tests or
@@ -75,7 +75,7 @@ bool libCryptoSupportsMlKem768(DynamicLibrary lib) {
 
 /// Returns `true` when [lib] supports the ML-DSA-65 algorithm.
 ///
-/// ML-DSA-65 was added to the OpenSSL default provider in OpenSSL 3.3.
+/// ML-DSA-65 was added to the OpenSSL default provider in OpenSSL 3.5.
 /// Call this before constructing [MlDsa65FfiAlgo] to gate FFI tests or
 /// runtime fallback decisions.
 bool libCryptoSupportsMlDsa65(DynamicLibrary lib) {

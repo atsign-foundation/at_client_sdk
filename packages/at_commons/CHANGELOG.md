@@ -1,4 +1,5 @@
-## 5.14.0
+## 5.15.0
+
 - feat: add `Metadata.copy()` — a field-for-field copy, so callers handing
   metadata from one object to another stop hand-rolling the field list. A
   hand-rolled copier silently drops any field added to `Metadata` later: the
@@ -6,6 +7,51 @@
   which is how `immutable` and `appMetadata` went astray on several paths in
   `at_client`. A caller that must not carry a field clears it after copying, so
   the exception is written where it applies rather than being the default.
+
+## 5.14.0
+
+- feat: add `EnrollParams.apsk` — the value a client composes for its own
+  `public:_apsk.<enrollmentId>.a.__e@<atSign>` signing key, carried on
+  `enroll:request` and stored verbatim on the enrollment record. A
+  `Map<String, dynamic>` like `metadata`, opaque to the atServer, capped there
+  at 20KB encoded.
+
+  It exists so the atServer can stop composing that value from
+  `(apkamPublicKey, signingAlgo)`. PKAM verification is record-authoritative
+  and reads the enrollment record, so `_apsk` is a client-side artefact the
+  server has no use for and no business knowing the format of — it was
+  publishing one only because the record's rightful writer, the enrollee, does
+  not exist yet at approval. Sending the value moves the format back to the
+  side that owns it, and a new signing-key shape stops needing a server
+  release. Absent means no `_apsk` is published at all.
+
+  The form the client composes is a versioned array of signing keys —
+  `{"v":1,"keys":[{"use","alg","pub","status"}]}` — spelled as `KeyPackage`'s
+  keys are, so one vocabulary covers every "list of keys with algorithms" in
+  the protocol. An entry whose `status` is `verifyOnly` has stopped signing but
+  is retained: envelopes are stored durably and re-verified later, so removing
+  a key would retroactively unverify everything ever signed with it.
+
+- feat: add `EnrollOperationEnum.update` and the matching `enroll:update`
+  alternation in the `enroll` grammar — an approved enrollment amending its own
+  record's `apkamPublicKey`, `signingAlgo`, `apsk` and `metadata`. Self-only:
+  the connection's enrollment id must equal the target's. It never reaches
+  `namespaces` or the approval state, because an operation an enrollment can
+  invoke on itself must not be able to widen its own grant.
+
+  This is what lets an enrollment replace its APKAM authentication keypair
+  while keeping its id, rather than the replacement being a new enrollment.
+
+- feat: add `EnrollParams.apkamPublicKeySignature` — base64 of a signature by
+  the **new** APKAM private key over
+  `<enrollmentId>|<apkamPublicKey>|<signingAlgo>`, required on an
+  `enroll:update` that changes `apkamPublicKey`.
+
+  The connection proves possession of the enrollment's *current* key and
+  nothing else proves possession of the new one, so without this a
+  compromised-but-authenticated client can install a public key whose private
+  half is held by someone else — locking out the legitimate holder while the
+  record still looks valid.
 
 ## 5.13.0
 

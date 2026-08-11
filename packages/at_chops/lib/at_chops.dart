@@ -13,7 +13,7 @@ export 'src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 // The seal surface only. The RFC 9180 key-schedule internals
 // (rfc9180_hpke.dart) and the schedule probe [pqSealDeriveKeyAndNonce] are
 // deliberately not exported: nothing outside this package consumes them, and
-// an exported name is frozen API the moment 3.5.0 publishes.
+// an exported name is frozen API the moment 3.6.0 publishes.
 export 'src/algorithm/encryption/pq_hpke.dart' hide pqSealDeriveKeyAndNonce;
 export 'src/algorithm/encryption/rsa.dart';
 export 'src/algorithm/encryption/x25519_pure_dart_algo.dart';

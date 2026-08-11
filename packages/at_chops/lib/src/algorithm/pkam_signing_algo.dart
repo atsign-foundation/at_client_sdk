@@ -8,7 +8,7 @@ import 'package:crypton/crypton.dart';
 
 /// Data signing and verification for Public Key Authentication Mechanism - Pkam
 @Deprecated(
-    'Use RsaSigningAlgo with the appropriate key material instead. This '
+    'Use RsaSignatureAlgo with the appropriate key material instead. This '
     'compatibility API will be removed in the next major release.')
 class PkamSigningAlgo implements AtSigningAlgorithm {
   final AtPkamKeyPair? _pkamKeyPair;

@@ -4,6 +4,8 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
+import 'package:at_chops/src/algorithm/spec/ml_kem_768_spec.dart';
+import 'package:at_chops/src/algorithm/spec/output_length.dart';
 import 'package:ffi/ffi.dart';
 
 /// ML-KEM-768 (FIPS 203) KEM backed by OpenSSL 3 via Dart FFI.
@@ -26,6 +28,11 @@ import 'package:ffi/ffi.dart';
 final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   final DynamicLibrary _lib;
   final Random _rng = Random.secure();
+
+  /// Byte length of the opaque handle [_encodeHandle]/[_decodeHandle]
+  /// produce/consume — not part of [MlKem768Sizes], since it describes this
+  /// backend's handle encoding, not an ML-KEM-768 key size.
+  static const int _handleLength = 8;
 
   // Registry of live EVP_PKEY* objects, keyed by a random 64-bit handle.
   final Map<int, Pointer<EVP_PKEY>> _keys = {};
@@ -206,6 +213,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
       Uint8List publicKey) async {
+    MlKem768Sizes.validatePublicKey(publicKey);
     final Pointer<EVP_PKEY> pubKeyPtr = _importPublicKey(publicKey);
     try {
       final Pointer<EVP_PKEY_CTX> ctx = _ctxNew(pubKeyPtr, nullptr);
@@ -227,6 +235,10 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
             if (_encapsulate(ctx, ctBuf, ctLen, ssBuf, ssLen) <= 0) {
               throw StateError('EVP_PKEY_encapsulate failed');
             }
+            checkOutputLength(ctLen.value, MlKem768Sizes.ciphertextBytes,
+                operation: 'EVP_PKEY_encapsulate', label: 'ciphertext');
+            checkOutputLength(ssLen.value, MlKem768Sizes.sharedSecretBytes,
+                operation: 'EVP_PKEY_encapsulate', label: 'shared secret');
             return (
               ciphertext: Uint8List.fromList(ctBuf.asTypedList(ctLen.value)),
               sharedSecret: Uint8List.fromList(ssBuf.asTypedList(ssLen.value)),
@@ -254,6 +266,7 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   @override
   Future<Uint8List> decapsulate(
       Uint8List secretKey, Uint8List ciphertext) async {
+    MlKem768Sizes.validateCiphertext(ciphertext);
     final int handle = _decodeHandle(secretKey);
     final Pointer<EVP_PKEY>? pkey = _keys[handle];
     if (pkey == null) throw StateError('Unknown ML-KEM-768 key handle');
@@ -277,6 +290,8 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
           if (_decapsulate(ctx, ssBuf, ssLen, ctBuf, ciphertext.length) <= 0) {
             throw StateError('EVP_PKEY_decapsulate failed');
           }
+          checkOutputLength(ssLen.value, MlKem768Sizes.sharedSecretBytes,
+              operation: 'EVP_PKEY_decapsulate', label: 'shared secret');
           return Uint8List.fromList(ssBuf.asTypedList(ssLen.value));
         } finally {
           calloc.free(ssBuf);
@@ -308,6 +323,8 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
       }
       final Uint8List bytes = Uint8List.fromList(ppub.value.asTypedList(len));
       _cryptoFree(ppub.value.cast(), nullptr, 0);
+      checkOutputLength(bytes.length, MlKem768Sizes.publicKeyBytes,
+          operation: 'ML-KEM-768 generateKeyPair', label: 'public key');
       return bytes;
     } finally {
       calloc.free(ppub);
@@ -368,16 +385,30 @@ final class MlKem768FfiAlgo with KemSeedMixin implements AtKemAlgorithm {
   }
 
   static Uint8List _encodeHandle(int handle) {
-    final Uint8List out = Uint8List(8);
-    for (int i = 0; i < 8; i++) {
+    final Uint8List out = Uint8List(_handleLength);
+    for (int i = 0; i < _handleLength; i++) {
       out[i] = (handle >> (8 * i)) & 0xff;
     }
     return out;
   }
 
+  /// Decodes a handle previously produced by [_encodeHandle].
+  ///
+  /// Guards every caller of this helper ([decapsulate], [releaseKeyPair])
+  /// against a wrong-length `secretKey` — without this check, a `secretKey`
+  /// shorter than [_handleLength] throws an uncontrolled `RangeError` from
+  /// the unguarded index read below (the same class of bug the pure-Dart
+  /// ML-DSA-65 backend had for its secret key before it was fixed).
   static int _decodeHandle(Uint8List bytes) {
+    if (bytes.length != _handleLength) {
+      throw ArgumentError.value(
+          bytes.length,
+          'secretKey',
+          'ML-KEM-768 (FFI) secret key must be the $_handleLength-byte '
+              'handle returned by generateKeyPair');
+    }
     int h = 0;
-    for (int i = 0; i < 8; i++) {
+    for (int i = 0; i < _handleLength; i++) {
       h |= bytes[i] << (8 * i);
     }
     return h;
