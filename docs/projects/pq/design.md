@@ -2034,6 +2034,13 @@ Reaches `apkamPublicKey`, `signingAlgo`, `apsk` and `metadata`. Never
 the handler against the `apkamPublicKey` in the same request before anything is
 written. A request changing `apkamPublicKey` without it is refused.
 
+The signature is produced and verified with **`AtSigningMode.pkam`** and
+`HashingAlgoType.sha256`. Not `AtSigningMode.data`, which signs with the
+*encryption* keypair and therefore cannot express possession of an APKAM
+signing key — the first implementation chose it and failed with "Encryption
+keypair required for signing". `pkam` is also the mode PKAM verification uses,
+so the two paths frame the bytes the same way.
+
 Section 68's rulings 2 through 7 apply unchanged: self-only, approved-state
 only, per-key set rather than whole-map replace, the server keeps no opinion of
 metadata contents, superseded material is not retired, and an old atServer
