@@ -2255,6 +2255,32 @@ than it looks** (both re-verified against the source 2026-08-11):
    array — but the client has neither reader nor writer, so the first
    deliverable here is the reader, not the composer, however tempting it is to
    build the thing that produces output you can look at.
+
+   ⚠️ **The writer half is blocked on owed item 2, and the reader half is not.**
+   Found 2026-08-11 by reading the source, and it changes the order this entry
+   should be worked in:
+
+   - A **reader** needs the published `_apsk` array and the envelope, both
+     fetched over the wire. It touches no local key material, so nothing gates
+     it. Start here.
+   - A **writer** emitting multi-signature envelopes needs one signing keypair
+     **per algorithm**, and nothing can supply that today.
+     `ApkamSigningKeys` (`envelope_signature.dart:197`) holds exactly one pair
+     of `String`s; `signingKeys` (`apkam_signing.dart:56`) reads it out of
+     `atChops`, which carries only the APKAM *authentication* keypair; and
+     `AtKeys.toAtChopsForEnrollment` (`at_keys.dart:498`) builds that same
+     single authentication pair. **Nothing anywhere enumerates an enrollment's
+     signing keys per algorithm** — the accessor that would front the array
+     does not exist. Sourcing per-algorithm material
+     means sourcing from `AtKeys`, and `apkam_signing.dart`'s own dartdoc
+     records why that cannot land yet: *"it cannot land until every client has
+     an `AtKeysIo` — today it is nullable and most apps supply none, so reading
+     through it would break them."* `_atKeysIo` is indeed `AtKeysIo?`
+     (`at_client_impl.dart:80`) and honoured only on first construction.
+
+   So **owed item 2 is not merely the largest remaining piece, it is the gate on
+   this one** — which is the argument for doing it before the composer, and the
+   reason a session that starts with "compose the array" will not finish it.
 4. **The rollout axis.** One `ReleasePosture` flag switching all three writer
    behaviours together (mint signing keys, publish the array, emit
    multi-signature envelopes). **The axis has no name yet** — see
