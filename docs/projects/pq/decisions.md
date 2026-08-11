@@ -107,6 +107,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [90. Phase 7: a refusal the approval wait cannot resolve stops being silent (2026-08-11)](#90-phase-7-a-refusal-the-approval-wait-cannot-resolve-stops-being-silent-2026-08-11)
 - [91. Signature agility: the APKAM auth key stops being the enrollment's signing key (2026-08-11)](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
 - [92. The spike takes trunk, and two published version numbers move underneath it (2026-08-11)](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11)
+- [93. The D1 remaining-work sequence, and the rollout axis becomes real (2026-08-11)](#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
 
 ---
 
@@ -7879,3 +7880,68 @@ They were also invisible in the previous status line, which reported
 `at_onboarding_cli` as *analyze* clean and said nothing about `at_client`'s unit
 suite. **A rails claim names its rail**: analyze and test are different
 assertions, and the shorter one reads as the stronger.
+
+## 93. The D1 remaining-work sequence, and the rollout axis becomes real (2026-08-11)
+
+A walk through every remaining D1 item, ruling each. Recorded because the
+sequence itself is a decision — several of these were ordered wrongly, and one
+was carried as an open server defect it had already been proven not to be.
+
+**1. `now|rollout1|rollout2` is ONE NEW AXIS on `ReleasePosture`,** alongside
+the five [70](#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)
+established. Not a harness-only construct and not a fourth dimension.
+
+The consequence worth stating separately: **[14.13](implementation-plan.md#1413-a-passive-by-default-flag-surveyed-not-built)'s
+passive-by-default IS what `now` means.** That entry stops being a separate
+item and becomes the definition of the axis's first position — a client at
+`now` reads and routes post-quantum records and never writes one on its own
+initiative, which is exactly the passive default 14.13 asked for. One axis
+position, not two flags that have to agree.
+
+**2. A reader that understands no entry in an `_apsk` array refuses outright.**
+No downgrade, no fallback to a derivable legacy key. Consistent with
+[91](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)'s
+refusal rule: the point of publishing an array is that a reader picks the
+strongest it understands, and a reader that understands none of them has no
+business guessing.
+
+**3. The sender/receiver pair exercises the whole story, not the shapes.** Its
+scope is: the signed-envelope exchange; a real notification and data path;
+**multiple puts and gets**, not a single notification; and enrollment followed
+by an `enroll:update` APKAM rotation mid-run, so the record-authoritative path
+is proven to survive a rotation in every posture.
+
+**4. A fourth arm runs the last PUBLISHED at_client, and it closes the known
+limit.** [`acceptance.md` 16.1](acceptance.md#161-the-harness) recorded that one
+build simulating `now` exercises the stage logic rather than cross-version
+compatibility, and that running the published client is "the version of this
+that would test that, and it is not what is built here." It is now in scope, so
+**the matrix is 4×4, not 3×3.**
+
+The reason this matters more than an extra row: without it, "`now` behaves
+identically to current legacy" is a claim about code we wrote, checked against
+other code we wrote. The published arm is the only thing that measures it. It
+is the same lesson as a differential test having to prove its two arms differ —
+here the two arms are two *builds*, and simulating both in one build proves
+nothing about the one we did not write.
+
+**5. [14.9](implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly)
+is CLOSED — a test-instrument failure, proven, not an atServer defect.** The
+record had softened only as far as "the attribution was never established,
+OPEN, not a known server defect." That understates it: the instrument was the
+cause. The test discarded the revoke ACK and left the revoked client running
+through the poll; both were fixed and the suite went green. Carrying it as an
+open unknown invited someone to go looking for a server bug that is not there.
+
+**6. D1 initial development ends when the PRs are carved and merged** — not at
+a green matrix, and not at R-2. Publishing (at_chops 3.6.0 → at_commons 5.15.0
+→ at_auth 3.4.0 → at_client) and the 4.0.0 posture flip are the release
+programme that follows it. **The spike branch still never merges**; everything
+in it reaches trunk as stacked PRs.
+
+**7. Everything open is in D1.** No deferrals: 14.7, 14.8, 14.11, 14.12, 14.14
+and 14.16's four residuals are all in scope, as are S-3's completion, B-3
+(#2128), KF-1 (#2129), IS-1, and merging at_lookup 3.6.1 (PR #2127).
+
+The ordered sequence these rulings produce is
+[14.18](implementation-plan.md#1418-the-remaining-d1-initial-development-sequence).

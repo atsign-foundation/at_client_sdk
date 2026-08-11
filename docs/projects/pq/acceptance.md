@@ -1337,13 +1337,26 @@ fixed identifier passes once and collides on the next run.
 ### 16.1 The harness
 
 Two stage-parameterised executables, a sender and a receiver, each taking
-`--stage now|rollout1|rollout2`, plus a driver that runs the matrix.
+`--stage published|now|rollout1|rollout2`, plus a driver that runs the matrix.
 
-**Known limit, recorded rather than mitigated.** One build simulating `now`
-exercises the stage logic, not cross-version compatibility: both arms run the
-same code, so a bug in what a build predating this work does with a v1 envelope
-is invisible to it. Running the `now` arm on the last published at_client is
-the version of this that would test that, and it is not what is built here.
+**What the pair exercises** (ruled [`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
+ruling 3) — the whole story, not the shapes:
+
+- the signed-envelope exchange;
+- a real notification and data path;
+- **multiple puts and gets**, not a single notification — a shape that survives
+  one exchange and breaks on the second is the failure this catches;
+- enrollment followed by an **`enroll:update` APKAM rotation mid-run**, so the
+  record-authoritative path is proven to survive a rotation in every posture.
+
+**The `published` arm runs the last released at_client**, not a `--stage now`
+build of this tree. This closes what was previously recorded here as an
+un-mitigated known limit. One build simulating `now` exercises the stage logic
+and nothing else: both arms run the same code, so a bug in what a build
+predating this work does with a v1 envelope stays invisible to it. Simulating
+both sides of a compatibility claim inside one build proves nothing about the
+side nobody wrote — the published arm is the only thing that measures
+"`now` behaves identically to current legacy" rather than asserting it.
 
 ### 16.2 The keyfile rows
 
@@ -1438,16 +1451,25 @@ Sender stage × receiver stage. Every cell runs; the failing cells are asserted
 **by their specific error**, since asserting only "it failed" lets a cell start
 failing for a different reason unnoticed.
 
-| Sender ↓ / Receiver → | now | rollout 1 | rollout 2 |
-|-----------------------|-----|-----------|-----------|
-| **now**       | pass | pass | pass |
-| **rollout 1** | pass | pass | pass |
-| **rollout 2** | **fail** — `IllegalStateException`, `_apsk` value is not a String | pass | pass |
+| Sender ↓ / Receiver → | published | now | rollout 1 | rollout 2 |
+|-----------------------|-----------|-----|-----------|-----------|
+| **published** | pass | pass | pass | pass |
+| **now**       | pass | pass | pass | pass |
+| **rollout 1** | pass | pass | pass | pass |
+| **rollout 2** | **fail** — `IllegalStateException`, `_apsk` value is not a String | **fail** — same error | pass | pass |
 
-The single failing cell is the whole argument for capability-before-active: a
-rollout-2 sender publishes a JSON `_apsk` that a "now" receiver's
-`getApkamPublicKey` refuses to read. Rollout 1 exists to empty that cell before
-anything can land in it.
+The two failing cells are the whole argument for capability-before-active: a
+rollout-2 sender publishes a JSON `_apsk` that a pre-rollout-1 receiver's
+`getApkamPublicKey` refuses to read. Rollout 1 exists to empty that column
+before anything can land in it.
+
+**The `published` row and column are the control.** They must behave
+identically to the `now` row and column in every cell — and the
+`rollout 2 → published` cell must fail with the *same* error as
+`rollout 2 → now`. If `published` and `now` ever diverge, the `now` stage is
+not the faithful legacy simulation it claims to be, and every other result in
+the matrix is measured against the wrong baseline. That divergence is the
+finding, not a harness bug to work around.
 
 - **UC-G1.14 · rollout 1 changes nothing on the wire.**
   *Given* two clients both at rollout 1.

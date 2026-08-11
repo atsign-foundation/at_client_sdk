@@ -1922,6 +1922,18 @@ break verification of envelopes written by published at_client 3.14.0.
 
 ### 14.9 A revoked enrollment can still authenticate, briefly
 
+> **CLOSED 2026-08-11 — a test-instrument failure, proven. Not an atServer
+> defect, and nobody should go looking for one.**
+> ([`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
+> ruling 5.) The test discarded the revoke ACK and left the revoked client
+> running through the poll; both faults were fixed and the suite went green.
+> The record had previously softened only as far as "the attribution was never
+> established, OPEN" — which understated it and left an open unknown pointing
+> at the server. The text below is the original observation, kept as the
+> history of how a rig produced three consecutive red runs against innocent
+> code; [14.9a](#149a-the-attribution-above-was-never-established--the-test-was)
+> is the correction.
+
 Observed 2026-08-07: a fresh connection PKAM-authenticated with a revoked
 enrollment's own keypair after `enrollmentService.revoke()` had returned, once
 in three consecutive full-suite runs. atServer-side — the PKAM path appears to
@@ -2047,6 +2059,15 @@ public write to fail with that exact reason, so whichever project fixes this
 gets a red test naming the row that was waiting for it.
 
 ### 14.13 A passive-by-default flag: surveyed, not built
+
+> **FOLDED AWAY 2026-08-11 — this is no longer a separate item.**
+> [`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
+> ruling 1 makes `now|rollout1|rollout2` a new axis on `ReleasePosture`, and
+> **passive-by-default is precisely what the `now` position means**. Build the
+> axis ([14.18](#1418-the-remaining-d1-initial-development-sequence) step 16)
+> and this is delivered with it. Kept for the survey below, which is the list
+> of what today writes on its own initiative — that list is what the `now`
+> position has to switch off, so it is still the working material.
 
 The branch's default behaviour should be **passive** — a client built with a
 default `AtClientPreference` should read and route post-quantum records but
@@ -2197,14 +2218,18 @@ than it looks** (both re-verified against the source 2026-08-11):
 
 **Owed, in dependency order.**
 
-1. **Drop at_server's at_commons override.** at_commons 5.14.0 published on
-   2026-08-11, so the scaffolding it needed is now removable: take the
-   `at_commons` override out of `at_secondary_server`'s `pubspec.yaml` *and*
-   `pubspec_overrides.yaml`, and **delete the `at_commons-apsk-1` tag** — it
-   existed only so the VE image could build before publication. at_server
-   resolves the published 5.14.0, which carries `apsk`, the PoP field and the
-   `enroll:update` grammar. Re-run the at_server functional pack afterwards:
-   the override swap changes what the image actually compiles against.
+1. ~~**Drop at_server's at_commons override.**~~ **DONE 2026-08-11.** The
+   override is out of both `pubspec.yaml` and `pubspec_overrides.yaml`,
+   `pubspec.lock` resolves at_commons from hosted 5.14.0, the
+   `at_commons-apsk-1` tag is deleted local and origin (its commit `54ccffdd0`
+   is an ancestor of trunk, so nothing was orphaned), and
+   [at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744)
+   is open for review. ⚠️ **What this leaves owed:** at_server's head is
+   `5bc3618a`, three commits past the `ab38b884` the 210/210 was measured at —
+   including the async-verify fix, a typed verification boundary and
+   fail-closed handling of a malformed APKAM key or signature. **The functional
+   number is stale twice over** (different code, different at_commons source)
+   and has to be re-earned before it is cited again.
 2. **Ruling 7's remaining half: flat → typed.** The flat `apkamPublicKey` /
    `apkamPrivateKey` must become a write-only projection that nothing reads as
    the source of truth. Readers to move: `AtKeys.toAtChops()`,
@@ -2354,3 +2379,94 @@ algorithm, defeating the agility the work exists for), and ruling 3 (a second
 retrofit now throws, replacing a deliberate per-algorithm idempotency). Three
 of sixteen rulings is the argument for proving the whole sequence on the spike
 before chunking it into PRs.
+
+### 14.18 The remaining D1 initial-development sequence
+
+Ruled 2026-08-11 by a walk through every open item
+([`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)).
+This is the **order**, not the inventory — each row points at the entry that
+holds the detail. **D1 initial development ends at step 31**, when the stacked
+PRs are merged; publishing and R-2 follow it.
+
+**Stage 0 — scaffolding.**
+
+| # | Work | Where | State |
+|---|------|-------|-------|
+| 1 | Drop at_server's `at_commons` override; delete the `at_commons-apsk-1` tag | at_server | **DONE 2026-08-11.** Override gone from both files, `pubspec.lock` resolves hosted 5.14.0, tag deleted local+origin, [at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744) open. ⚠️ at_server head is now `5bc3618a`, three commits past the `ab38b884` the 210/210 was measured at — **that number is stale twice over** (different code, different at_commons source) and must be re-earned |
+| 2 | Run at_client_sdk's functional pack for the two never-run keyId-shape files | at_client_sdk | owed — [14.17](#1417-signature-agility--what-is-built-and-what-is-owed) |
+
+**Stage 1 — the `_apsk` reader half. Nothing blocks it; start here.**
+
+| # | Work | Detail |
+|---|------|--------|
+| 3 | `_apsk` array parser — the array **and** the released bare string | [`design.md` 9.3](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
+| 4 | Strength order beside `SigningAlgoType` in at_chops, with a raw-literal tripwire | [14.17](#1417-signature-agility--what-is-built-and-what-is-owed) |
+| 5 | Invert `requireAlg` (`envelope_signature.dart:573`) from refuse-on-mismatch to verify-the-strongest-understood | ⚠️ an inversion, not an addition |
+| 6 | Multi-signature envelope **reader** | [`design.md` 9.4](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
+
+**A reader understanding no entry refuses outright** — no downgrade, no fallback
+to a derivable legacy key ([`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11) ruling 2).
+
+**Stage 2 — the unblocker. The writer half cannot start before this.**
+
+| # | Work |
+|---|------|
+| 7 | Ruling 7's remaining half — flat `apkamPublicKey`/`apkamPrivateKey` becomes a write-only projection; move `AtKeys.toAtChops()`, `at_auth_impl.dart`, `onboarding_mint.dart`, `file_io.dart` |
+| 8 | Resolve `atKeysIo` nullability — entangled with **S-3** (partly landed) |
+| 9 | A per-algorithm signing-key accessor on `AtKeys`; widen or replace `ApkamSigningKeys`, which holds one pair today |
+
+**Stage 3 — the `_apsk` writer half (rollout 2).**
+
+| # | Work |
+|---|------|
+| 10 | `_apsk` array composer — and settle `publishPublicSigningKey`'s fate (its skip-if-present never rewrites a bare string) |
+| 11 | Populate `EnrollParams.apsk` on `enroll:request` — nothing does today, so the atServer capability is dormant |
+| 12 | Multi-signature envelope **writer** |
+| 13 | The `enroll:update` client caller + its PoP signature (`AtSigningMode.pkam`, SHA-256) |
+| 14 | The in-use signing set on `AtClientPreference` |
+| 15 | Mint-on-demand when the in-use set names an algorithm the enrollment lacks |
+| 16 | **The rollout axis** — one new `ReleasePosture` axis, `now\|rollout1\|rollout2`, switching all three writer behaviours together. ⚠️ **still unnamed** |
+
+**Stage 4 — the programme pair. This is the validation gate before any PR is carved.**
+
+| # | Work |
+|---|------|
+| 17 | Sender + receiver executables, each `--stage published\|now\|rollout1\|rollout2` |
+| 18 | The driver running the **4×4** matrix, every failing cell asserted by its specific error |
+| 19 | UC-G1.14 — rollout1/rollout1 byte-identical to now/now |
+
+Scope of the pair, ruled: the signed-envelope exchange; a real notification and
+data path; **multiple puts and gets**; and enrollment followed by an
+`enroll:update` APKAM rotation mid-run. The **published** arm runs the last
+released at_client and is what makes "`now` is faithful to legacy" a
+measurement rather than a claim — see [`acceptance.md` 16.1](acceptance.md#161-the-harness).
+
+**Stage 5 — the rest of D1. All in scope; none deferred.**
+
+| # | Work | Entry |
+|---|------|-------|
+| 20 | *(folded away)* passive-by-default **is** the axis's `now` position | [14.13](#1413-a-passive-by-default-flag-surveyed-not-built) |
+| 21 | A client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) |
+| 22 | A `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) |
+| 23 | *(closed)* revocation visibility — a proven test-instrument failure | [14.9](#149-a-revoked-enrollment-can-still-authenticate-briefly) |
+| 24 | Domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) |
+| 25 | NoPorts' own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) |
+| 26 | The four audit residuals — perf ceiling on a real low-end device, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
+| 27 | 299 `deprecated_member_use` findings in at_client | [14.11](#1411-299-deprecated_member_use-findings-in-at_client) |
+| 28 | Pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) |
+
+Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128)),
+**KF-1** ([#2129](https://github.com/atsign-foundation/at_client_sdk/issues/2129)),
+**IS-1**, and merging at_lookup 3.6.1 ([#2127](https://github.com/atsign-foundation/at_client_sdk/pull/2127)).
+
+**Stage 6 — the carve-up, which is where D1 initial development ends.**
+
+| # | Work |
+|---|------|
+| 29 | Carve the spike into stacked PRs |
+| 30 | Merge them to trunk. **The spike branch itself never merges** |
+| 31 | ← D1 initial development complete here |
+
+Then, as the release programme rather than development: publish at_chops 3.6.0
+→ at_commons 5.15.0 → at_auth 3.4.0 → at_client's GA minor, and finally
+**R-2**, the 4.0.0 posture flip.
