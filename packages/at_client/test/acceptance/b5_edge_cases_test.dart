@@ -131,7 +131,11 @@ void main() {
 
 /// Names itself in its output, so a routing assertion cannot pass by reaching
 /// the wrong provider and getting a plausible-looking string back.
-class _RecordingProvider implements CryptoProvider {
+///
+/// Extends rather than implements: a member added to [CryptoProvider] with a
+/// body reaches a subclass, while an implementer silently loses it and fails
+/// at runtime with nothing the analyzer can say.
+class _RecordingProvider extends CryptoProvider {
   @override
   final String id;
 

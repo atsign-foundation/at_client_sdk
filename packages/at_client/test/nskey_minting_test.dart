@@ -8,15 +8,10 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {
 }
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookUp {}
-
-class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 
 /// Minting a namespace key: the interlock between an atSign's own
 /// enrollments, and the ordering that stops a key being published before
@@ -37,7 +32,7 @@ void main() {
       client({bool lockAlreadyHeld = false}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
-    final lookUp = MockAtLookupImpl();
+    final lookUp = MockAtLookUp();
     final verbs = <AtKey>[];
     final values = <String, String?>{};
 

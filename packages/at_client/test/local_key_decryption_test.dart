@@ -7,13 +7,9 @@ import 'package:at_client/at_client.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'test_utils/mocks.dart';
 
-class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
-
-class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
-
 void main() {
   AtClient mockAtClient = MockAtClientImpl();
-  AtLookUp mockAtLookUp = MockAtLookUpImpl();
+  AtLookUp mockAtLookUp = MockAtLookupImpl();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();
   RemoteSecondary mockRemoteSecondary = MockRemoteSecondary();
   setUp(() {

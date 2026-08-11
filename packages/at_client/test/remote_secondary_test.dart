@@ -6,7 +6,7 @@ import 'package:mocktail/mocktail.dart';
 import 'test_utils/mocks.dart';
 
 void main() {
-  AtLookupImpl mockAtLookUp = MockAtLookUpImpl();
+  AtLookupImpl mockAtLookUp = MockAtLookupImpl();
   SecondaryAddressFinder mockSecondaryAddressFinder =
       MockSecondaryAddressFinder();
   SecondaryAddress fakeSecondaryAddress =

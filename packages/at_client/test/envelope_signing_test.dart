@@ -5,17 +5,13 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, jwsEnvelopeVersion, signEnvelope;
-import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {
 }
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookUp {}
 
 class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   @override
@@ -44,7 +40,7 @@ void main() {
   /// [enrollmentId], which is where [ApkamSigning.enrollmentId] reads from.
   void stubEnrollment(MockAtClient atClient, String enrollmentId) {
     final remoteSecondary = MockRemoteSecondary();
-    final atLookUp = MockAtLookupImpl();
+    final atLookUp = MockAtLookUp();
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
     when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
     when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);

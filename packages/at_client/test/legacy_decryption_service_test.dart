@@ -13,12 +13,10 @@ class MockGetRequestTransformer extends Mock implements GetRequestTransformer {}
 
 class MockSecondaryManager extends Mock implements SecondaryManager {}
 
-class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
-
 void main() {
   Atsign theseTestsMyAtsign = '@charlie'.toAtsign();
   Atsign theseTestsOtherAtsign = '@delta'.toAtsign();
-  AtLookupImpl mockAtLookup = MockAtLookUpImpl();
+  AtLookupImpl mockAtLookup = MockAtLookupImpl();
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   AtChops mockAtChops = MockAtChops();
   LocalSecondary mockLocalSecondary = MockLocalSecondary();

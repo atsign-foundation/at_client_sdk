@@ -1,3 +1,24 @@
+/// The shared mocks and fakes. A test file declaring its own copy of one of
+/// these shadows the shared version silently — a local declaration wins over
+/// an import with no analyzer complaint — so the two drift apart unnoticed.
+///
+/// Four families are deliberately NOT here, because their per-file versions
+/// carry behaviour rather than duplicating it, and moving them would change
+/// what their tests exercise:
+///
+/// - `MockAtClient` in most files is bare, while the version below bakes in a
+///   preference. A concrete override cannot be intercepted by `when(...)`, so
+///   adopting it would silently disable the `getPreferences` stubs that a
+///   dozen files rely on.
+/// - `MockAtClientImpl` and `MockLocalSecondary` in `notification_service_test`
+///   carry a keystore and several overrides the shared versions do not.
+/// - `MockSecondaryKeyStore` in `local_secondary_test` carries its own fixture
+///   keys.
+///
+/// Before adding a family here, check that every copy is genuinely identical:
+/// a copy that grew a method is an intentional difference, not a duplicate.
+library;
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -5,9 +26,9 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 
-class MockAtLookup extends Mock implements AtLookUp {}
+class MockAtLookUp extends Mock implements AtLookUp {}
 
-class MockAtLookUpImpl extends Mock implements AtLookupImpl {}
+class MockAtLookupImpl extends Mock implements AtLookupImpl {}
 
 class MockAtChops extends Mock implements AtChops {}
 
@@ -73,4 +94,20 @@ class StubAtKeysIo extends WrittenAtKeysIo {
       throw UnimplementedError();
 }
 
+class MockSyncService extends Mock implements SyncService {}
+
+class MockNotificationService extends Mock implements NotificationService {}
+
+class MockEnrollmentService extends Mock implements EnrollmentService {}
+
 class FakeLookupVerbBuilder extends Fake implements LookupVerbBuilder {}
+
+class FakeLocalLookUpVerbBuilder extends Fake implements LLookupVerbBuilder {}
+
+class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
+
+class FakeDeleteVerbBuilder extends Fake implements DeleteVerbBuilder {}
+
+class FakeAtKey extends Fake implements AtKey {}
+
+class FakeAtSigningInput extends Fake implements AtSigningInput {}

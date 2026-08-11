@@ -7,8 +7,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-class MockAtLookUp extends Mock implements AtLookUp {}
+import 'test_utils/mocks.dart';
 
 /// Collecting the `apkamSymmetricKey` an approver sealed to a new enrollment.
 ///

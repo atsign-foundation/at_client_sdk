@@ -11,17 +11,10 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {
 }
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookUp extends Mock implements AtLookUp {}
-
-class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
-
-class FakeAtKey extends Fake implements AtKey {}
 
 /// The atSign's root of trust.
 ///

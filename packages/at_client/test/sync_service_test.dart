@@ -6,6 +6,7 @@ import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/mocks.dart';
 
 // NOTE: this file previously also held four mock-driven tests for the
 // server→client pull path, server-timeout error chaining, invalid-batch
@@ -16,8 +17,6 @@ import 'package:test/test.dart';
 // `atclient_sync_conflict_test.dart`. The queue-based push path has unit
 // coverage in `local_secondary_sync_queue_test.dart`.
 
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
 class MockAtClient extends Mock implements AtClient {
 
   @override
@@ -26,8 +25,6 @@ class MockAtClient extends Mock implements AtClient {
   @override
   AtClientPreference getPreferences() => AtClientPreference();
 }
-
-class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockNotificationServiceImpl extends Mock
     implements NotificationServiceImpl {

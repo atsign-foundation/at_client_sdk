@@ -13,8 +13,6 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
 void main() {
   group('A group of at client impl create tests', () {
     final String atSign = '@alice';

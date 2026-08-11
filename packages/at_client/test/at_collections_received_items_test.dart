@@ -25,8 +25,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class FakeAtKey extends Fake implements AtKey {}
-
 void main() {
   setUpAll(() {
     registerFallbackValue(FakeAtKey());

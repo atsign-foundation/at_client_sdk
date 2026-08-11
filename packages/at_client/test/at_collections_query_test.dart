@@ -20,8 +20,6 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class FakeAtKey extends Fake implements AtKey {}
-
 /// Domain object used across the query suite. Three fields chosen so
 /// we can exercise filter + sort on different types.
 class Task {

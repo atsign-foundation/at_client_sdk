@@ -72,19 +72,10 @@ class FakeMonitor extends Fake implements Monitor {
   }
 }
 
-class MockAtClientManager extends Mock implements AtClientManager {}
-
-class MockSecondaryAddressFinder extends Mock
-    implements SecondaryAddressFinder {}
-
-class MockAtLookupImpl extends Mock implements AtLookupImpl {}
-
 class FakeNotifyVerbBuilder extends Fake implements NotifyVerbBuilder {}
 
 class FakeNotifyFetchVerbBuilder extends Fake
     implements NotifyFetchVerbBuilder {}
-
-class FakeAtKey extends Fake implements AtKey {}
 
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();

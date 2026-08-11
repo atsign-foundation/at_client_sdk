@@ -1,14 +1,9 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/manager/monitor.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-class MockAtLookUp extends Mock implements AtLookUp {}
-
-class MockSecondaryAddressFinder extends Mock
-    implements SecondaryAddressFinder {}
+import 'test_utils/mocks.dart';
 
 /// The per-enrollment signing algorithm must reach every connection the
 /// client owns. A self-retrofit's ML-DSA enrollment re-authenticates on

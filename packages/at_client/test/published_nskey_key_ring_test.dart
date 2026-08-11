@@ -9,15 +9,10 @@ import 'package:at_client/src/signing/envelope_signature.dart'
         jwsEnvelopeVersion,
         signEnvelope,
         signedEnvelopeVersion;
-import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookUp {}
 
 /// Discovery of another atSign's advertised nskey.
 ///
@@ -47,7 +42,7 @@ void main() {
       String atSign, String enrollmentId, AtChops atChops) {
     final atClient = MockAtClient();
     final remoteSecondary = MockRemoteSecondary();
-    final atLookUp = MockAtLookupImpl();
+    final atLookUp = MockAtLookUp();
     when(() => atClient.atChops).thenReturn(atChops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);

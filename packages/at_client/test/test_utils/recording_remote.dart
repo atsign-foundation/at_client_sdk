@@ -25,7 +25,7 @@ MockRemoteSecondary buildRecordingRemote({
   required Map<String, Metadata> remoteMeta,
 }) {
   final remote = MockRemoteSecondary();
-  final lookUp = MockAtLookUpImpl();
+  final lookUp = MockAtLookupImpl();
   when(() => remote.atLookUp).thenReturn(lookUp);
   when(() => lookUp.enrollmentId).thenReturn(null);
   when(() => remote.sync(any(), regex: any(named: 'regex')))

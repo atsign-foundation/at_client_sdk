@@ -5,19 +5,13 @@ import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart';
-import 'package:at_client/src/client/remote_secondary.dart'
-    show RemoteSecondary;
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
 import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookupImpl;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {}
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookupImpl {}
 
 // AtKeysIo itself is sealed; its abstract written flavour is the mockable
 // face.

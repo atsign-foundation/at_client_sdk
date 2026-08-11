@@ -22,8 +22,6 @@ class MockOutboundConnection extends Mock implements OutboundConnection {}
 class MockMonitorOutboundConnectionFactory extends Mock
     implements MonitorOutboundConnectionFactory {}
 
-class FakeAtSigningInput extends Fake implements AtSigningInput {}
-
 /// Note: The test code here prioritizes brevity over isolation
 /// So while, right now, the tests are all passing despite sharing their mock objects, at some point
 /// we will add a test where that assumption doesn't hold any more, and the tests will start failing

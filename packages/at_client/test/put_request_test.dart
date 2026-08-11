@@ -12,8 +12,6 @@ class MockPutRequestTransformer extends Mock implements PutRequestTransformer {}
 
 class FakeTuple extends Fake implements Tuple<AtKey, dynamic> {}
 
-class FakeAtSigningInput extends Fake implements AtSigningInput {}
-
 void main() {
   AtClient mockAtClient = MockAtClient();
   AtChops mockAtChops = MockAtChops();

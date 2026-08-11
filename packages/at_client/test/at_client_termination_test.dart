@@ -83,7 +83,7 @@ void main() {
       );
 
       test('close() should close RemoteSecondary connection', () async {
-        final mockAtLookup = MockAtLookup();
+        final mockAtLookup = MockAtLookUp();
         bool calledFlag = false;
         when(() => mockAtLookup.close()).thenAnswer((_) async {
           calledFlag = true;
@@ -102,12 +102,12 @@ void main() {
 
     group('Monitor lifecycle tests', () {
       late Monitor monitor;
-      late MockAtLookup mockAtLookup;
+      late MockAtLookUp mockAtLookup;
       late MockAtChops mockAtChops;
       late MockSecondaryAddressFinder mockAddressFinder;
 
       setUp(() {
-        mockAtLookup = MockAtLookup();
+        mockAtLookup = MockAtLookUp();
         mockAtChops = MockAtChops();
         mockAddressFinder = MockSecondaryAddressFinder();
         when(() => mockAtLookup.close()).thenAnswer((_) async => {});

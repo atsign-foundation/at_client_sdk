@@ -13,8 +13,6 @@ import 'package:test/test.dart';
 import 'test_utils/test_utils.dart';
 import 'test_utils/mocks.dart';
 
-class MockSyncService extends Mock implements SyncService {}
-
 /// Records the decision at_client hands down to at_auth, which is where the
 /// choice between minting a symmetric key and passing the enrollee's own one
 /// through becomes observable.
@@ -227,7 +225,7 @@ void main() {
             ..operation = EnrollOperationEnum.list)
           .buildCommand();
       final secondary = MockRemoteSecondary();
-      when(() => secondary.atLookUp).thenReturn(MockAtLookup());
+      when(() => secondary.atLookUp).thenReturn(MockAtLookUp());
       var calls = 0;
       when(() => secondary.executeCommand(listCommand, auth: true))
           .thenAnswer((_) async => calls++ == 0

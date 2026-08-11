@@ -36,7 +36,7 @@ MockAtClient buildRemoteBackedMockClient({
   when(() => atClient.enrollmentId).thenReturn(enrollmentId);
 
   final remoteSecondary = MockRemoteSecondary();
-  final atLookUp = MockAtLookUpImpl();
+  final atLookUp = MockAtLookupImpl();
   when(() => atClient.getRemoteSecondary()).thenReturn(remoteSecondary);
   when(() => remoteSecondary.atLookUp).thenReturn(atLookUp);
   when(() => atLookUp.enrollmentId).thenReturn(enrollmentId);

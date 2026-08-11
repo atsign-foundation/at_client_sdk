@@ -7222,3 +7222,61 @@ double close is the obvious way to get this wrong.
 The sweep matters more than the fix here: the audit recorded `approve`
 because it was reading `approve`. Two siblings three lines away had the same
 defect and nothing had looked.
+
+## 83. Phase 7: one home for the shared mocks, and the four families that could not move (2026-08-11)
+
+**Status:** accepted (2026-08-11). Relocation only: every collapse below was
+verified byte-identical before the local copy was deleted, and the suite
+returned the same 1183 pass / 2 skip on either side of it.
+
+### What was actually duplicated
+
+`test/test_utils/mocks.dart` already existed and 48 files already imported it,
+which is what made the duplication invisible: **a locally declared class wins
+over an imported one of the same name, silently, with nothing for the analyzer
+to say.** So a file could import the shared mocks, declare its own
+`MockRemoteSecondary`, and use the local one forever while reading as though it
+used the shared one.
+
+Twelve families were collapsed. Three already had a canonical version and
+twelve copies between them (`MockRemoteSecondary`, `MockSecondaryAddressFinder`,
+`MockAtClientManager`); eight were identical in every copy but had no canonical
+home and were promoted (`FakeAtKey`, `FakeLocalLookUpVerbBuilder`,
+`FakeDeleteVerbBuilder`, `FakeUpdateVerbBuilder`, `FakeAtSigningInput`,
+`MockSyncService`, `MockNotificationService`, `MockEnrollmentService`). 47
+declarations went; the two shared files gained none.
+
+### The one that was not duplication at all
+
+`MockAtLookupImpl` was declared in ten files. In **eight** of them it was
+`extends Mock implements AtLookUp` — the interface, not the impl. The name had
+been wrong for so long that it had been copied into every new file that needed
+an `AtLookUp` mock. Meanwhile `mocks.dart` carried `MockAtLookup` for the
+interface and `MockAtLookUpImpl` for the impl, so between the two spellings and
+the two supertypes there were four names for two things.
+
+There is now one name per mocked type, each matching that type's own casing:
+`MockAtLookUp` for `AtLookUp`, `MockAtLookupImpl` for `AtLookupImpl`. This is a
+rename rather than a pure relocation, taken deliberately — a name that says
+"Impl" while mocking the interface will keep being copied, and the analyzer
+verifies every site of a rename.
+
+### The four that must stay local, and why
+
+This is the part worth keeping, because the obvious next tidy-up would break
+things:
+
+- **`MockAtClient`** — 16 sites. The canonical one bakes in a mutable
+  `AtClientPreference` via a **concrete** `getPreferences()` override. Mocktail
+  cannot intercept a concrete method, so adopting it would silently disable the
+  `when(() => ...getPreferences())` stubs in the thirteen files that set them.
+  Collapsing it is a behaviour change wearing a relocation's clothes.
+- **`MockAtClientImpl`** and **`MockLocalSecondary`** in
+  `notification_service_test` — carry a keystore and several overrides the
+  shared versions do not.
+- **`MockSecondaryKeyStore`** in `local_secondary_test` — carries its own
+  fixture keys.
+
+The reasoning is recorded in `mocks.dart`'s own library dartdoc, not only here,
+because that is where someone will be standing when they consider finishing the
+job.

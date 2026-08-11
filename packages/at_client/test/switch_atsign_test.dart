@@ -1,10 +1,7 @@
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
-import 'package:at_lookup/at_lookup.dart';
-import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
-
-class MockAtLookUp extends Mock implements AtLookUp {}
+import 'test_utils/mocks.dart';
 
 void main() {
   group('A group of switch atsign tests', () {

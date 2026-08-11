@@ -7,16 +7,12 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
-import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {
 }
-
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookUp {}
 
 class MockPairwiseSecretSharing extends Mock implements PairwiseSecretSharing {}
 
@@ -47,7 +43,7 @@ void main() {
   MockAtClient client() {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
-    final lookUp = MockAtLookupImpl();
+    final lookUp = MockAtLookUp();
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
@@ -224,7 +220,7 @@ void main() {
     MockAtClient enrolledClientMidConstruction() {
       final atClient = MockAtClient();
       final secondary = MockRemoteSecondary();
-      final lookUp = MockAtLookupImpl();
+      final lookUp = MockAtLookUp();
       when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
       when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
       when(() => secondary.atLookUp).thenReturn(lookUp);

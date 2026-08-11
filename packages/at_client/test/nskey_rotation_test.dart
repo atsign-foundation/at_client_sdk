@@ -14,19 +14,12 @@ import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {
 }
 
-class MockRemoteSecondary extends Mock implements RemoteSecondary {}
-
-class MockAtLookupImpl extends Mock implements AtLookUp {}
-
-class MockEnrollmentService extends Mock implements EnrollmentService {}
-
 class MockSharing extends Mock implements PairwiseSecretSharing {}
-
-class FakeUpdateVerbBuilder extends Fake implements UpdateVerbBuilder {}
 
 class FakeSecret extends Fake implements Secret {}
 
@@ -54,7 +47,7 @@ void main() {
       {bool lockAlreadyHeld = false}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
-    final lookUp = MockAtLookupImpl();
+    final lookUp = MockAtLookUp();
     final trace = <String>[];
     final published = <String>[];
 

@@ -21,8 +21,6 @@ import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 
-class FakeAtKey extends Fake implements AtKey {}
-
 class Post {
   final String title;
   Post(this.title);
