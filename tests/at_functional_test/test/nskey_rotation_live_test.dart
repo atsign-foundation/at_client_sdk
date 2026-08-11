@@ -206,9 +206,27 @@ void main() {
     final keeper = await holder('rev-keeper');
     final doomed = await holder('rev-doomed');
 
-    // A fresh connection authenticating with the enrollment's own APKAM
-    // keypair — what an attacker holding the lost keyfile would attempt.
-    Future<bool> authenticatesAs(EnrolledClient enrolled) async {
+    expect({
+      operator.enrolled.enrollmentId,
+      keeper.enrolled.enrollmentId,
+      doomed.enrolled.enrollmentId
+    }, hasLength(3),
+        reason: 'three distinct enrollments, or the credential this revokes '
+            'is the same one it then expects to keep working');
+
+    /// What a fresh connection presenting [enrolled]'s own APKAM keypair gets
+    /// back — the atServer's answer, not a boolean.
+    ///
+    /// Returning `true`/`false` is what made this row uninterpretable. A
+    /// refusal FOR THE REVOKE and a refusal for anything else — a dropped
+    /// socket, a signature the server would not verify, a connect timeout —
+    /// all collapsed into the same `false` the revoke produces, so the
+    /// assertion passed for the ABSENCE of the mechanism as readily as for
+    /// its presence, and told nobody which had happened when it did not.
+    /// This row has been diagnosed three times and the diagnosis has moved
+    /// every time, because the sentence that settles it was being discarded
+    /// here.
+    Future<String> authOutcome(EnrolledClient enrolled) async {
       final lookup =
           AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
             ..enrollmentId = enrolled.enrollmentId
@@ -219,16 +237,22 @@ void main() {
                   enrolled.keys.apkamPrivateKey!.toString()),
             ));
       try {
-        return await lookup.pkamAuthenticate(
-            enrollmentId: enrolled.enrollmentId);
-      } catch (_) {
-        return false;
+        final accepted =
+            await lookup.pkamAuthenticate(enrollmentId: enrolled.enrollmentId);
+        return accepted ? 'accepted' : 'refused without a reason';
+      } catch (e) {
+        return '$e';
       } finally {
         await lookup.close();
       }
     }
 
-    expect(await authenticatesAs(doomed.enrolled), isTrue,
+    /// Whether an outcome is the atServer refusing BECAUSE the enrollment is
+    /// revoked, which is the only refusal this row may pass on.
+    bool refusedAsRevoked(String outcome) =>
+        outcome.contains('AT0027') && outcome.contains('is revoked');
+
+    expect(await authOutcome(doomed.enrolled), 'accepted',
         reason: 'the control arm for the credential: the keypair genuinely '
             'authenticates before the revoke, so its refusal afterwards is '
             'the revoke and not a broken fixture');
@@ -274,35 +298,42 @@ void main() {
     // hands, not a session still running.
     await doomed.enrolled.client.stop();
 
-    // The credential first, because it is the primary claim — but polled with
-    // a bound, and not merely to settle a flaky test.
+    // The credential first, because it is the primary claim.
     //
-    // This was written asserting the refusal was immediate. On 2026-08-07 it
-    // failed once in three consecutive full-suite runs: a FRESH connection
-    // PKAM-authenticating with the revoked enrollment's own keypair was
-    // ACCEPTED after `revoke()` had already returned, while the runs either
-    // side of it refused it. So the atServer resolves an enrollment's state
-    // for PKAM through the same cache `enroll:listns` is served from, and
-    // revocation reaches both on the same eventual schedule — the control arm
-    // above, which deliberately authenticates this enrollment beforehand, is
-    // what populates that cache.
+    // The refusal is IMMEDIATE, and this asserts that rather than polling for
+    // it. The atServer's own functional suite proves the same property from
+    // the other side — enrol, approve, authenticate, revoke without force,
+    // then two fresh connections both refused with `error:AT0027` — so a
+    // client that keeps authenticating is not a visibility lag to be waited
+    // out. There is nothing to wait for.
     //
-    // Worth stating plainly rather than burying inside a poll: for a short
-    // window after a revoke, a holder of the revoked keyfile can still
-    // authenticate. The bound is what keeps this an assertion — if the
-    // credential never stops working, this stays red and names the defect
-    // that matters most in this file.
-    var doomedAuthenticates = true;
-    for (var i = 0; i < 20; i++) {
-      doomedAuthenticates = await authenticatesAs(doomed.enrolled);
-      if (!doomedAuthenticates) break;
+    // What was here before polled twenty times over ten seconds and passed as
+    // soon as any attempt stopped succeeding. That tolerates a revoked
+    // credential authenticating for ten seconds after the atServer has
+    // acknowledged the revoke, which is the lost-laptop window this row exists
+    // to deny. It also passed on ANY refusal, so a dropped socket read as
+    // proof of revocation.
+    //
+    // Retries here cover the transport and nothing else: an outcome that is
+    // neither acceptance nor an AT0027 refusal gets a few more chances, an
+    // acceptance fails immediately, and whatever it kept getting is named in
+    // the failure rather than reduced to a boolean.
+    var outcome = await authOutcome(doomed.enrolled);
+    for (var i = 0; i < 4 && !refusedAsRevoked(outcome); i++) {
+      expect(outcome, isNot('accepted'),
+          reason: 'a revoked enrollment authenticated on a fresh connection '
+              'after the atServer acknowledged the revoke. Revocation cuts '
+              'the one APKAM keypair this enrollment has — under 1:1:1 there '
+              'is no per-pubkey delete, so revoking the enrollment IS '
+              'revoking its key, and the atServer refuses it immediately');
       await Future<void>.delayed(const Duration(milliseconds: 500));
+      outcome = await authOutcome(doomed.enrolled);
     }
-    expect(doomedAuthenticates, isFalse,
-        reason: 'revocation cuts the one APKAM keypair this enrollment has — '
-            'under 1:1:1 there is no per-pubkey delete, so revoking the '
-            'enrollment IS revoking its key');
-    expect(await authenticatesAs(keeper.enrolled), isTrue,
+    expect(refusedAsRevoked(outcome), isTrue,
+        reason: 'the refusal must be the revoke and not something else that '
+            'also fails. The atServer got: $outcome');
+
+    expect(await authOutcome(keeper.enrolled), 'accepted',
         reason: 'and the sibling enrollment is untouched');
 
     // Then the roster. Polled rather than read once: the atServer serves

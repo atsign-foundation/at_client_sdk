@@ -101,6 +101,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [84. Phase 7: the functional pack's live tests stop claiming to be the e2e pack (2026-08-11)](#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
 - [85. Phase 7: the ledger's own index, and what the citation audit measured (2026-08-11)](#85-phase-7-the-ledgers-own-index-and-what-the-citation-audit-measured-2026-08-11)
 - [86. Phase 7: the acceptance ledger reads a declaration instead of inferring one (2026-08-11)](#86-phase-7-the-acceptance-ledger-reads-a-declaration-instead-of-inferring-one-2026-08-11)
+- [87. Phase 7: the revocation row stops tolerating what it exists to forbid (2026-08-11)](#87-phase-7-the-revocation-row-stops-tolerating-what-it-exists-to-forbid-2026-08-11)
 
 ---
 
@@ -7465,3 +7466,69 @@ scenario that happens to read files, not a guard that wandered into a scenario.
 `repoRoot()` existed twice, in `catalogue_test.dart` and `proven_elsewhere.dart`,
 the second carrying a comment explaining that it matched the first so the two
 would behave the same. One copy now.
+
+## 87. Phase 7: the revocation row stops tolerating what it exists to forbid (2026-08-11)
+
+**Status:** accepted (2026-08-11). The root cause of the intermittency is NOT
+established — see the end of this section. What is fixed is a test that could
+not say what it had seen, and that passed on the very thing it was written to
+deny.
+
+### The atServer settles the question this row was guessing at
+
+`nskey_rotation_live_test.dart`'s UC-A5.2/A5.3 carried a recorded explanation:
+that the atServer resolves an enrollment's PKAM state through the same cache
+`enroll:listns` is served from, so revocation reaches both on an eventual
+schedule and a revoked keyfile authenticates for a short window afterwards.
+That was inferred from this test, never confirmed on the atServer.
+
+at_server commit `244bb6f0` (2026-08-08), "test: assert a normally-revoked
+enrollment cannot APKAM authenticate", tests the same property from the other
+side: enrol via OTP, approve, assert APKAM returns `data:success` **before** the
+revoke, revoke **without** the force flag, then assert two attempts **on fresh
+connections** both return `error:AT0027 … is revoked`. The refusal is immediate.
+
+Two probe runs here agree — one standalone, one inside the full suite. In both,
+the first poll after the revoke ACK returned
+`error:AT0027:enrollment_id: … is revoked`. There is no window and nothing to
+wait for.
+
+### What the test was actually asserting
+
+Two defects, and they compound:
+
+- **`authenticatesAs` collapsed every failure into `false`.** A refusal for the
+  revoke, a dropped socket, a signature the atServer would not verify and a
+  connect timeout were the same value. The assertion therefore passed for the
+  ABSENCE of the mechanism as readily as for its presence, and on the runs where
+  it failed it reported a bare `true` — no atServer sentence, nothing to
+  diagnose. This row's diagnosis has moved three times, and each time the
+  evidence that would have settled it had been discarded here.
+- **The poll tolerated ten seconds of acceptance.** It looped twenty times at
+  500ms and passed as soon as any attempt stopped succeeding, so a build where
+  revocation took nine seconds to bind passed silently — while nine seconds is
+  precisely the lost-laptop window the row exists to deny.
+
+### What it asserts now
+
+The outcome is the atServer's answer rather than a boolean. An acceptance fails
+**immediately**, naming it. A refusal passes only when it is `AT0027 … is
+revoked`; any other refusal is retried a few times for transport noise and then
+fails quoting what it kept getting. The three enrollments are asserted distinct,
+a control UC-A5.1(b) already had and this row lacked.
+
+Proven by mutation: pointing the poll at the unrevoked sibling fails on the
+first attempt with `Actual: 'accepted'`.
+
+The roster half of the test keeps its bounded poll. `enroll:listns` visibility
+is a different claim from PKAM refusal, with its own recorded observation that
+a read taken before the revoke populates a cache.
+
+### What is NOT established
+
+**The intermittency was not reproduced.** Four observations today were clean
+(two ordinary runs, two probe runs), so no failing run was captured with the
+instrumentation in place, and no mechanism is named here. The strictness is what
+will produce one: if a revoked credential is ever accepted again, the test now
+fails on the first attempt and prints the atServer's own sentence, instead of
+spinning for ten seconds and reporting a boolean.
