@@ -26,9 +26,10 @@ is how far we've got.
 > activation created. **UC-B4.2 and UC-B0.1 followed the same day**, taking the
 > suite to **45 of 45** — every row green, up from 1 before the repair and 5
 > after it. (The runner's own count
-> is higher — it includes `catalogue_test.dart`'s three guards, which are not
-> scenarios. That gap is why the old "4 of 43" figure was itself wrong in the
-> optimistic direction while everything else under-counted.)
+> is higher — it includes the guard files' checks, which are not scenarios.
+> That gap is why the old "4 of 43" figure was itself wrong in the
+> optimistic direction while everything else under-counted, and it is why the
+> guard files are now declared rather than inferred: see `manifest.dart`.)
 >
 > 1. **A row proven in another package can now be claimed.** `provenIn`
 >    (`proven_elsewhere.dart`) cites the live test that establishes a row and
@@ -92,10 +93,20 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 - Some scenarios finally belong in `tests/at_functional_test` or
   `tests/at_end2end_test` (separate packages). Keep the placeholder here until
   the real assertion exists somewhere, so the count stays honest.
-- `catalogue_test.dart` is the one test here that is never skipped. It fails if a
-  use case loses its scenario, if a `skip:` and the blocker declaring it fall out
-  of step, or if the counts below drift from the tests. Fix the count in the
-  same PR.
+- **Two files here are guards rather than scenarios, and neither is ever
+  skipped.** `catalogue_test.dart` fails if a use case loses its scenario, if
+  `acceptance.md` refers to a use case it never defines with a heading, if a
+  `skip:` and the blocker declaring it fall out of step, or if the counts below
+  drift from the tests — fix the count in the same PR.
+  `architecture_guard_test.dart` holds the checks asserted against the source
+  tree rather than against behaviour, so a rename that breaks a grep reports a
+  broken guard instead of a failed scenario.
+- **Adding a file here means declaring it.** `manifest.dart` lists the scenario
+  files and the guard files, and the row counts below are computed from the
+  scenario list alone. A `*_test.dart` that is in neither list turns
+  `architecture_guard_test.dart` red rather than silently joining — or dodging —
+  the burn-down. The catalogue's use cases likewise come from `acceptance.md`'s
+  headings, not from every `UC-`-shaped string in its prose.
 
 ## The catalogue
 

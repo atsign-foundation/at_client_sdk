@@ -16,6 +16,7 @@ import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
 import '../test_utils/mocks.dart';
+import 'manifest.dart';
 import 'proven_elsewhere.dart';
 
 void main() {
@@ -238,20 +239,11 @@ void main() {
       }
 
       // "and frames" is the other half: one serializer serves both the stored
-      // key and the notification frame. The regression was a SECOND,
-      // hand-rolled serializer that fell behind this one, so the guard worth
-      // having is that neither call site has grown its own again.
-      final lib = Directory('${repoRoot().path}/packages/at_client/lib/src');
-      for (final path in const [
-        'service/sync_service_impl.dart',
-        'service/notification_service_impl.dart',
-      ]) {
-        expect(File('${lib.path}/$path').readAsStringSync(),
-            contains('toAtProtocolFragment'),
-            reason: '$path must serialize metadata through the shared '
-                'fragment builder; a private one beside it is how appMetadata '
-                'silently stopped reaching the atServer once already');
-      }
+      // key and the notification frame. That neither call site has grown a
+      // private serializer again is a property of the source rather than of a
+      // run, so it is asserted by `architecture_guard_test.dart` — where a
+      // rename breaking the grep reports a broken guard rather than a failed
+      // scenario.
     });
 
     test('no RSA in any confidentiality path for a fully-PQ interaction',

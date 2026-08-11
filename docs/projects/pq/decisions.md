@@ -100,6 +100,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [83. Phase 7: one home for the shared mocks, and the four families that could not move (2026-08-11)](#83-phase-7-one-home-for-the-shared-mocks-and-the-four-families-that-could-not-move-2026-08-11)
 - [84. Phase 7: the functional pack's live tests stop claiming to be the e2e pack (2026-08-11)](#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
 - [85. Phase 7: the ledger's own index, and what the citation audit measured (2026-08-11)](#85-phase-7-the-ledgers-own-index-and-what-the-citation-audit-measured-2026-08-11)
+- [86. Phase 7: the acceptance ledger reads a declaration instead of inferring one (2026-08-11)](#86-phase-7-the-acceptance-ledger-reads-a-declaration-instead-of-inferring-one-2026-08-11)
 
 ---
 
@@ -7401,3 +7402,66 @@ repo-relative, then missing `lib/src/`, each time reporting citations as broken
 that were not. Both were caught by opening the "missing" files and finding them.
 A citation audit whose failures are its own path assumptions measures the
 checker, so the count above is the one taken after the instrument was corrected.
+
+## 86. Phase 7: the acceptance ledger reads a declaration instead of inferring one (2026-08-11)
+
+**Status:** accepted (2026-08-11).
+
+The burn-down's guards worked by regex over prose and over a directory
+listing. Both inferences could be fooled with nothing going red, and one of
+them made the directory unable to grow a guard.
+
+### What the row count was actually counting
+
+A row was any `test(` in any `*_test.dart` in
+`packages/at_client/test/acceptance/` except `catalogue_test.dart`. So the set
+of burn-down rows was "whatever files happen to be here", and **adding any
+non-scenario file to the directory silently inflated the count the README is
+pinned to.** The only way to add a guard without breaking the README was not to
+add one — which is a fair description of why the source-text greps had ended up
+inside acceptance rows in the first place.
+
+`manifest.dart` now declares `scenarioFiles` and `guardFiles`, the counts come
+from the scenario list alone, and a `*_test.dart` in neither list fails a guard
+that names both lists in its message. Proven by adding a stray file and watching
+it go red.
+
+### What "the catalogue's use cases" was actually matching
+
+Every `UC-…`-shaped string anywhere in `acceptance.md` — definitions and
+cross-references alike. Today that gives the right answer: 43 defined by a
+heading, 43 mentioned, 43 with a scenario. That is luck, not construction. One
+typo'd cross-reference invents a use case that can never have a scenario, and
+the guard would demand one forever.
+
+Use cases now come from headings (`### … UC-x.y — Title`, all 43 matching one
+shape), and a new guard asserts every id the catalogue *mentions* is one it
+*defines*. Proven by appending a reference to `UC-A9.9` and watching the guard
+name it.
+
+### The source-text greps have their own home
+
+`architecture_guard_test.dart` holds the checks asserted against the source tree
+rather than against behaviour — currently that neither `sync_service_impl` nor
+`notification_service_impl` has grown a private metadata serializer again, which
+is the regression that once stopped `appMetadata` reaching the atServer with no
+error anywhere. It cannot be a runtime assertion: no run can observe the absence
+of a rival serializer.
+
+The reason to separate it is that it fails for a different reason from
+everything around it. A rename breaks the grep while the behaviour is intact,
+and when the grep lives inside an acceptance row, the suite reports that the
+*scenario* failed. It did not.
+
+**One source-text check deliberately stayed put.** `performance is measured, not
+assumed` is itself a catalogue row, and its subject genuinely is the instrument
+and the record — that a bench harness exists, still reports a distribution, and
+that the measured budget is written down with its basis. Moving it would have
+taken a real row out of the burn-down to satisfy a tidiness rule. It is a
+scenario that happens to read files, not a guard that wandered into a scenario.
+
+### Also folded
+
+`repoRoot()` existed twice, in `catalogue_test.dart` and `proven_elsewhere.dart`,
+the second carrying a comment explaining that it matched the first so the two
+would behave the same. One copy now.

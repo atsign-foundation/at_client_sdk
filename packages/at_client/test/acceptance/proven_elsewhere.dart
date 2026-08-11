@@ -23,6 +23,8 @@ import 'dart:io';
 
 import 'package:test/test.dart';
 
+import 'manifest.dart';
+
 /// Asserts the live proof for a scenario exists.
 ///
 /// [path] is repo-relative. [testName] must match the start of a `test('…')`
@@ -40,18 +42,4 @@ void provenIn(String path, String testName, {required String proves}) {
           'with that name. A renamed test is the same loss of evidence as a '
           'deleted one — re-point the citation or re-open the row. '
           '(What it was cited for: $proves)');
-}
-
-/// Walk up until the repo root is in reach, matching `catalogue_test.dart` so
-/// both behave the same from a package root, the workspace root, or an IDE.
-Directory repoRoot() {
-  for (var dir = Directory.current;; dir = dir.parent) {
-    if (File('${dir.path}/docs/projects/pq/acceptance.md').existsSync()) {
-      return dir;
-    }
-    if (dir.path == dir.parent.path) {
-      throw StateError(
-          'could not locate the repo root from ${Directory.current}');
-    }
-  }
 }
