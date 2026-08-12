@@ -1,4 +1,4 @@
-import 'package:at_auth/at_auth.dart' show apskKid;
+import 'package:at_auth/at_auth.dart' show publicKeyKidOfBase64;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:meta/meta.dart' show experimental;
 
@@ -23,14 +23,16 @@ class PackageKey {
     String? kid,
   }) : kid = kid ?? computeKid(pub);
 
-  /// First 8 bytes, hex-encoded, of the SHA-256 of the public key material.
+  /// First 8 bytes, hex-encoded, of the SHA-256 of the public key material,
+  /// for a [pub] held as base64 — which is how a key package carries one.
   ///
-  /// Delegates to at_auth's `apskKid` rather than repeating it: the `_apsk`
-  /// advertisement and a key package spell an entry the same way, and a kid
-  /// computed two ways is a verification failure with nothing to say for
-  /// itself — both sides compile, and the mismatch surfaces only as an
-  /// envelope that will not verify.
-  static String computeKid(String pub) => apskKid(pub);
+  /// Delegates to at_auth's [publicKeyKidOfBase64], the one derivation in the
+  /// tree: the `_apsk` advertisement, a key package and an nskey
+  /// advertisement all spell an entry the same way, and a kid computed two
+  /// ways is a verification failure with nothing to say for itself — both
+  /// sides compile, and the mismatch surfaces only as an envelope that will
+  /// not verify, or a sender sealing to a kid nobody listens on.
+  static String computeKid(String pub) => publicKeyKidOfBase64(pub);
 
   Map<String, Object?> toJson() => {
         'kid': kid,

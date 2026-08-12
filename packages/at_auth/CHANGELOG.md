@@ -1,6 +1,14 @@
 ## 3.4.0
+- **breaking (unreleased): `apskKid` becomes `publicKeyKid(Uint8List)`, and it
+  hashes the key's raw BYTES.** It hashed the base64 text as published, while
+  at_client's `nskeyKidOf` hashed the decoded bytes — two derivations, both
+  documented as "the SHA-256 of the public key", agreeing for nothing but a key
+  whose published form IS its material. One function now, for every record that
+  advertises keys; `publicKeyKidOfBase64` is the convenience for a key held as
+  base64, over the same preimage. Every kid on an `_apsk` array and a key
+  package changes value; nothing published reads them.
 - feat: add `apskAdvertisement`, `apskSigningKeys`, `ApskSigningKey` and
-  `apskKid` — the one definition of the `_apsk` signing-key advertisement,
+  `publicKeyKid` — the one definition of the `_apsk` signing-key advertisement,
   composed and parsed in one place. The atServer stopped composing `_apsk`
   (at_server#2744): it publishes what a request sends and nothing when a
   request sends none, so an enrollment that advertised a key package and sent

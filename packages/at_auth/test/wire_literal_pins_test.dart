@@ -12,6 +12,7 @@
 library;
 
 import 'dart:convert';
+import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
@@ -208,24 +209,32 @@ void main() {
     // nothing — so a change here changes the published record with no server
     // release to review it.
     test('the composed advertisement, as a raw literal', () {
-      final json =
-          jsonEncode(apskAdvertisement(
-              apkamPublicKey: 'PUBKEY', signingAlgo: SigningAlgoType.rsa2048));
+      // The key is valid base64 because the kid's preimage is the DECODED
+      // material now; a placeholder that is not base64 no longer has a kid.
+      final json = jsonEncode(apskAdvertisement(
+          apkamPublicKey: 'AAEC', signingAlgo: SigningAlgoType.rsa2048));
 
       expect(
           json,
-          '{"v":1,"keys":[{"kid":"cff3d220cf61dd4a","use":"sign",'
-          '"alg":"rsa2048","pub":"PUBKEY"}]}',
+          '{"v":1,"keys":[{"kid":"ae4b3280e56e2faf","use":"sign",'
+          '"alg":"rsa2048","pub":"AAEC"}]}',
           reason: 'field names, field ORDER and the kid derivation are all '
               'wire contract; the kid is the first 16 hex chars of the '
-              'SHA-256 of the key string, so a changed prefix length or a '
-              'switch to hashing decoded bytes shows up here');
+              'SHA-256 of the key BYTES, so a changed prefix length or a '
+              'switch back to hashing the base64 text shows up here');
     });
 
-    test('the kid is the SHA-256 prefix, and one function computes it', () {
+    test('the kid is the SHA-256 prefix of the key BYTES, one function', () {
       // Pinned against a digest computed outside this tree, so the assertion
-      // cannot follow the implementation it is checking.
-      expect(apskKid('PUBKEY'), 'cff3d220cf61dd4a');
+      // cannot follow the implementation it is checking:
+      //   python3 -c "import hashlib,base64;
+      //     print(hashlib.sha256(base64.b64decode('AAEC')).hexdigest()[:16])"
+      // 'AAEC' decodes to the three bytes 00 01 02.
+      expect(publicKeyKidOfBase64('AAEC'), 'ae4b3280e56e2faf');
+      expect(publicKeyKid(Uint8List.fromList([0x00, 0x01, 0x02])),
+          'ae4b3280e56e2faf',
+          reason: 'the base64 form is a convenience over the same preimage, '
+              'not a second derivation');
     });
 
     test('mldsa65 spells its algorithm the same as the pkam verb', () {
@@ -245,7 +254,7 @@ void main() {
       final read = apskSigningKeys(advertisement).single;
       expect(read.alg, SigningAlgoType.mldsa65);
       expect(read.pub, 'AAEC');
-      expect(read.kid, apskKid('AAEC'));
+      expect(read.kid, publicKeyKidOfBase64('AAEC'));
     });
 
     test('an entry this build cannot use is skipped, not guessed at', () {

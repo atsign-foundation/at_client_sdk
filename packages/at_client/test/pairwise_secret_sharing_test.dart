@@ -293,7 +293,7 @@ void main() {
         enrollmentId: 'enroll-x',
         createdAt: DateTime.now().toUtc(),
         keys: [
-          PackageKey(use: 'enc', alg: 'x-wing-99', pub: 'future-pub'),
+          PackageKey(use: 'enc', alg: 'x-wing-99', pub: 'ZnV0dXJlLXB1Yg=='),
         ],
       );
       await expectLater(sharerA.sendEnvelope(futureOnly, 'myapp', {'a': 1}),
@@ -687,7 +687,7 @@ void main() {
       final futurePeer = KeyPackage(
         enrollmentId: 'enroll-future',
         createdAt: DateTime.utc(2026, 6, 11),
-        keys: [PackageKey(use: 'enc', alg: 'x-wing-99', pub: 'future-pub')],
+        keys: [PackageKey(use: 'enc', alg: 'x-wing-99', pub: 'ZnV0dXJlLXB1Yg==')],
       );
       expect(futurePeer.kpid, isNull); // no key in SecretSharingAlgos.keyAlgos
       directory.seed('enroll-future', futurePeer);

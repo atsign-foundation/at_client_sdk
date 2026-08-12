@@ -377,14 +377,23 @@ void main() {
       expect(
           jsonEncode(
               PackageKey(use: 'enc', alg: 'x-wing', pub: 'QUJD').toJson()),
-          '{"kid":"d9cae0dbdbf078b2","use":"enc","alg":"x-wing","pub":"QUJD"}');
+          '{"kid":"b5d4045c3f466fa9","use":"enc","alg":"x-wing","pub":"QUJD"}');
     });
 
-    test('computeKid hashes the base64 TEXT, not the decoded bytes', () {
-      // Accident-shaped and frozen: the kpid is the first 16 hex chars of
-      // SHA-256 over the UTF-8 of the base64 STRING. sha256('QUJD') — not
-      // sha256(base64Decode('QUJD')), whose prefix would be 'b5d4045c3f466f'.
-      expect(PackageKey.computeKid('QUJD'), 'd9cae0dbdbf078b2');
+    test('computeKid hashes the decoded key BYTES, not the base64 text', () {
+      // It used to be the other way round, and this pin is what recorded it:
+      // the kid was SHA-256 over the UTF-8 of the base64 STRING, which was an
+      // accident rather than a decision, and the nskey side hashed the bytes.
+      // Two derivations both described as "SHA-256 of the public key" agreed
+      // for nothing. One function now, over the material.
+      //
+      // Pinned against a digest computed outside this tree:
+      //   python3 -c "import hashlib,base64;
+      //     print(hashlib.sha256(base64.b64decode('QUJD')).hexdigest()[:16])"
+      expect(PackageKey.computeKid('QUJD'), 'b5d4045c3f466fa9');
+      expect(nskeyKidOf(base64Decode('QUJD')), 'b5d4045c3f466fa9',
+          reason: 'the nskey name and the key-package name are the same '
+              'derivation now — that is the whole point of the change');
     });
 
     test('a key package payload emits its exact JSON shape', () {
@@ -395,7 +404,7 @@ void main() {
       expect(
           jsonEncode(payload),
           '{"v":1,"createdAt":"2026-06-11T00:00:00.000Z",'
-          '"keys":[{"kid":"d9cae0dbdbf078b2","use":"enc","alg":"x-wing",'
+          '"keys":[{"kid":"b5d4045c3f466fa9","use":"enc","alg":"x-wing",'
           '"pub":"QUJD"}],'
           '"suites":["x-wing-rfc9180-v1","x-wing-hpke-v1"]}');
     });

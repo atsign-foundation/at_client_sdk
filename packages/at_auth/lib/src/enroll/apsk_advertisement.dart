@@ -1,4 +1,5 @@
-import 'dart:convert' show utf8;
+import 'dart:convert' show base64Decode;
+import 'dart:typed_data' show Uint8List;
 
 import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo, SigningAlgoType;
 
@@ -35,7 +36,7 @@ Map<String, dynamic> apskAdvertisement({
       'v': 1,
       'keys': [
         {
-          'kid': apskKid(apkamPublicKey),
+          'kid': publicKeyKidOfBase64(apkamPublicKey),
           'use': 'sign',
           'alg': signingAlgo.name,
           'pub': apkamPublicKey,
@@ -84,14 +85,24 @@ List<ApskSigningKey> apskSigningKeys(Map<String, dynamic> advertisement) {
 }
 
 /// A short identifier for a public key: the first 8 bytes, hex-encoded, of the
-/// SHA-256 of [pub].
+/// SHA-256 of the key's **raw bytes**.
 ///
-/// The one definition in the tree — `PackageKey.computeKid` calls it — because
-/// a kid computed two ways is a verification failure with nothing to say for
-/// itself: both sides compile, and the mismatch surfaces only as an envelope
-/// that will not verify.
+/// The one definition in the tree, for every record that advertises keys —
+/// `_apsk`, a key package, an nskey advertisement. A kid computed two ways is
+/// a verification failure with nothing to say for itself: both sides compile,
+/// and the mismatch surfaces only as an envelope that will not verify, or as a
+/// sender addressing a kid nobody is listening on.
 ///
-/// Hashes the key **string** as published, not decoded key bytes. Those are
-/// the same thing only for keys whose published form is their material.
-String apskKid(String pub) =>
-    SHA256HashingAlgo().hash(utf8.encode(pub)).substring(0, 16);
+/// Over the key material, not over its encoding. There were two of these and
+/// they disagreed about exactly that: this one hashed the base64 **text** as
+/// published while the nskey side hashed the decoded bytes, and both dartdocs
+/// described themselves as "SHA-256 of the public key". The text and the
+/// material are the same thing only for a key whose published form IS its
+/// material, so the two agreed for nothing.
+String publicKeyKid(Uint8List publicKey) =>
+    SHA256HashingAlgo().hash(publicKey).substring(0, 16);
+
+/// [publicKeyKid] for a key held as base64, which is how every advertisement
+/// carries one. Decoding here rather than at each call site is what keeps the
+/// preimage the material rather than the encoding.
+String publicKeyKidOfBase64(String pub) => publicKeyKid(base64Decode(pub));

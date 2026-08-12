@@ -2,7 +2,7 @@ import 'dart:typed_data';
 
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
-import 'package:crypto/crypto.dart' show sha256;
+import 'package:at_auth/at_auth.dart' show publicKeyKid;
 
 /// A published nskey generation: the public half, the kid naming it, and the
 /// key-establishment algorithm it is a key for.
@@ -27,10 +27,16 @@ typedef NskeyAdvertisement = ({
 /// immediately.
 const List<String> legacyNskeySuites = [SecretSharingAlgos.xWingHpke];
 
-/// The id of an nskey generation — a SHA-256 prefix of its public half, so it is
-/// derivable by anyone holding the key and identical for every party that uses it.
-String nskeyKidOf(Uint8List publicKey) =>
-    sha256.convert(publicKey).toString().substring(0, 16);
+/// The id of an nskey generation — a SHA-256 prefix of its public half, so it
+/// is derivable by anyone holding the key and identical for every party that
+/// uses it.
+///
+/// An alias for at_auth's [publicKeyKid], which is the ONE derivation for
+/// every record that advertises keys. Kept as a name because "the kid of this
+/// nskey generation" is what the call sites mean, not because it is a second
+/// function: there were two, they disagreed about the preimage, and that is
+/// exactly the kind of near-duplicate this is not allowed to become again.
+String nskeyKidOf(Uint8List publicKey) => publicKeyKid(publicKey);
 
 /// An nskey generation's **seed**: the compact form the whole keypair
 /// re-derives from — the ONLY form that may be filed durably or conveyed

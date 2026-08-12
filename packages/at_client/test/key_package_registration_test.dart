@@ -300,7 +300,7 @@ void main() {
           PackageKey(
               use: SecretSharingAlgos.useEnc,
               alg: SecretSharingAlgos.xWing,
-              pub: 'p'),
+              pub: 'cA=='),
         ],
       );
       expect(xWingPayload['suites'],
@@ -318,7 +318,7 @@ void main() {
           PackageKey(
               use: SecretSharingAlgos.useEnc,
               alg: SecretSharingAlgos.mlKem1024,
-              pub: 'p'),
+              pub: 'cA=='),
         ],
       );
       expect(mlKemPayload['suites'], [SecretSharingAlgos.mlKem1024Rfc9180]);
@@ -343,7 +343,7 @@ void main() {
         createdAt: DateTime.utc(2026),
         keys: [
           PackageKey(
-              use: SecretSharingAlgos.useEnc, alg: 'kyber-1024-v9', pub: 'p'),
+              use: SecretSharingAlgos.useEnc, alg: 'kyber-1024-v9', pub: 'cA=='),
         ],
       );
       expect(payload['suites'], isEmpty);
@@ -361,7 +361,7 @@ void main() {
           enrollmentId: 'e',
           apkamId: 'a',
           createdAt: DateTime.utc(2026, 6, 11),
-          keys: [PackageKey(use: 'enc', alg: 'x-wing', pub: 'p')]);
+          keys: [PackageKey(use: 'enc', alg: 'x-wing', pub: 'cA==')]);
       final json = pkg.toJson();
       expect(json.containsKey('enrollmentId'), isFalse);
       expect(json.containsKey('apkamId'), isFalse);

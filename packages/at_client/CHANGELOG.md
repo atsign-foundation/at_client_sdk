@@ -1,4 +1,14 @@
 ## 3.14.1
+- **breaking (unreleased surface): a key id is the SHA-256 prefix of the key's
+  raw bytes, everywhere.** `PackageKey.computeKid` and `nskeyKidOf` were two
+  derivations that disagreed about the preimage — the first hashed the base64
+  text, the second the decoded material — and both called themselves "the
+  SHA-256 of the public key". They are one function now (at_auth's
+  `publicKeyKid`), so a kid means the same thing on an `_apsk` entry, a key
+  package and an nskey advertisement. Every kpid changes value; nothing
+  published reads one. A `pub` that is not valid base64 now fails loudly at
+  construction, which only a writer can do — the read path requires an explicit
+  `kid` and never derives one.
 - **breaking (unreleased surface): the signed envelope is a `SignedEnvelope`,
   not a `Map`.** `signEnvelope` returns one; `verifyEnvelope`, `wrapAndSign`
   and `verifyEnvelopeSignature` take one; `envelopePayloadOf` and
