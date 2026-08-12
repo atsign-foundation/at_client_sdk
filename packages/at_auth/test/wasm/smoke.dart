@@ -1,10 +1,18 @@
-// The entry point for the `dart compile wasm` gate in
-// ../wasm_compile_test.dart. It is not a test and is never executed — the only
-// thing that matters is that compiling it reaches at_auth's whole main barrel.
+// The entry point for the `dart compile wasm` step of the `wasm_compile` job in
+// .github/workflows/at_libraries.yaml. It is compiled, never run — the only
+// thing that matters is that compiling it reaches all of at_auth_web.dart, the
+// barrel a web build imports.
 //
 // Everything here is deliberately *used*, so no part of the barrel can be
 // tree-shaken away before the compiler resolves its imports.
-import 'package:at_auth/at_auth.dart';
+//
+// What this catches that dep_tree_test.dart cannot: `dart:ffi`, the one library
+// dart2wasm rejects outright. `dart:io` it will NOT catch — dart2wasm accepts
+// that and throws at runtime instead, which is the shakedown's job.
+//
+// Run it by hand with:
+//   dart compile wasm test/wasm/smoke.dart -o /tmp/smoke.wasm
+import 'package:at_auth/at_auth_web.dart';
 import 'package:at_commons/at_commons.dart';
 
 Future<void> main() async {

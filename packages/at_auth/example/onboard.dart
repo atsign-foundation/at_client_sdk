@@ -1,6 +1,6 @@
 import 'dart:io';
 import 'package:args/args.dart';
-import 'package:at_auth/at_auth_io.dart';
+import 'package:at_auth/at_auth.dart';
 
 /// Perform initial onboarding for an atsign
 /// 1. CRAM authentication
@@ -22,12 +22,11 @@ void main(List<String> args) async {
           defaultsTo: 'root.atsign.org');
     final argResults = parser.parse(args);
 
-    // secureSocketProbe (from at_auth_io.dart) polls the atServer until it is
-    // listening — a freshly-registered atSign can take minutes to provision.
-    final atAuth = AtAuth.create(probeSocket: secureSocketProbe);
+    final atAuth = AtAuth.create();
     final atSign = argResults['atsign'];
     // onboard() generates the keypairs, so it needs somewhere to persist them.
-    // There is no default — say where explicitly.
+    // FileAtKeysIo at ~/.atsign/keys/ is the default, but this example takes a
+    // path, so say where explicitly.
     final atOnboardingRequest = AtOnboardingRequest(atSign)
       ..rootDomain = argResults['rootDomain']
       ..atKeysIo = FileAtKeysIo(filePath: (_) => argResults['keysFilePath']);

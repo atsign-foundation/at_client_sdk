@@ -22,39 +22,43 @@ See [`example/onboard.dart`](example/onboard.dart),
 [`example/enrollment_request.dart`](example/enrollment_request.dart) for
 end-to-end usage.
 
-## Two barrels: `at_auth.dart` and `at_auth_io.dart`
+## Two barrels: `at_auth.dart` and `at_auth_web.dart`
 
-| Barrel                | Contains                                                                                     |
-| --------------------- | -------------------------------------------------------------------------------------------- |
-| `at_auth.dart`        | Everything that names no `dart:io` type — `AtAuth`, `AtEnrollment`, `AtKeys`, the `AtKeysIo` interfaces, `InMemoryAtKeysIo`, serialization, the session models, `RegistrarService` |
-| `at_auth_io.dart`     | The above (it re-exports `at_auth.dart`) **plus** `FileAtKeysIo` and `secureSocketProbe` |
+| Barrel              | Contains                                                                                     |
+| ------------------- | -------------------------------------------------------------------------------------------- |
+| `at_auth.dart`      | **Import this.** The whole package: everything below **plus** `FileAtKeysIo` and `secureSocketProbe`, both wired up as defaults |
+| `at_auth_web.dart`  | The platform-neutral subset, naming no `dart:io` type — `AtAuth`, `AtEnrollment`, `AtKeys`, the `AtKeysIo` interfaces, `InMemoryAtKeysIo`, serialization, the session models, `RegistrarService` |
 
-The running client — including a browser client — authenticates through
-at_auth, while writing a `.atKeys` file to disk is inherently desktop/CLI. So
-the `dart:io` surface is opt-in, the same way
-[`at_chops`](../at_chops) splits `at_chops.dart` from `at_chops_ffi.dart`.
-
-On a `dart:io` host, import `at_auth_io.dart` and name the two `dart:io` pieces
-explicitly:
+Ordinary use needs nothing extra — `at_auth.dart` behaves as it always has:
 
 ```dart
-import 'package:at_auth/at_auth_io.dart';
+import 'package:at_auth/at_auth.dart';
 
-final atAuth = AtAuth.create(probeSocket: secureSocketProbe);
+final atAuth = AtAuth.create();
 final request = AtOnboardingRequest('@alice')
   ..atKeysIo = FileAtKeysIo(filePath: (_) => '/path/to/@alice_key.atKeys');
 ```
 
-Both arguments are things at_auth 3.x defaulted for you, and neither can be
-defaulted from the WASM-safe barrel. `onboard()` throws if the request supplies
-neither `atKeys` nor an `atKeysIo`; omitting `probeSocket` means
-`validateAtServer` polls the atDirectory but does not wait for the atServer
-itself to start listening (it logs a warning saying so).
+**Building for the web** (dart2wasm or dart2js)? Import `at_auth_web.dart`
+instead. It is a *narrowing*, not a different API: code written against it runs
+unchanged on native. Two things it cannot give you, because a browser has neither
+a filesystem nor a raw socket:
 
-at_auth's own sources are `dart:io`-free outside `at_auth_io.dart`, and
-`test/wasm_seam_test.dart` enforces it. That is not yet the same as at_auth
-running under `dart compile wasm`: `at_lookup`'s socket transport and
-`at_utils`' logging handlers still reach `dart:io` transitively. See
+| Omitted             | Consequence on web                                                                 |
+| ------------------- | ----------------------------------------------------------------------------------- |
+| `FileAtKeysIo`      | `onboard()` has no default key store, so set `AtOnboardingRequest.atKeysIo` yourself — `InMemoryAtKeysIo` is exported from both barrels |
+| `secureSocketProbe` | `validateAtServer` still polls the atDirectory but does not wait for the atServer to start listening; it logs a warning saying so |
+
+Both have platform-conditional defaults inside `AtAuthImpl`
+(`src/io/defaults_io.dart` / `defaults_stub.dart`, selected with
+`if (dart.library.io)`), so native callers get them without asking.
+
+Two caveats worth knowing. The split is held by **barrel discipline, not by the
+compiler**: `dart compile wasm` accepts `dart:io` and defers the failure to a
+runtime `UnsupportedError`, so importing `at_auth.dart` in a browser build
+compiles clean and then throws the first time a file or socket is touched. And
+this does not yet make at_auth *run* on the web — `at_lookup`'s socket transport
+still needs porting. See
 [`docs/projects/wasm/plan.md`](../../docs/projects/wasm/plan.md).
 
 ## The atSign lifecycle
@@ -153,7 +157,7 @@ for the submitting side; the approve/deny side is demonstrated in
 
 ## The `.atKeys` file format
 
-`FileAtKeysIo` (from `at_auth_io.dart`) reads and writes `.atKeys` files
+`FileAtKeysIo` (from `at_auth.dart`) reads and writes `.atKeys` files
 (default path `~/.atsign/keys/<atsign>_key.atKeys`). A file has up to
 three layers, outermost first:
 

@@ -13,6 +13,11 @@ import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+// Platform-conditional defaults: FileAtKeysIo and the TLS readiness probe on a
+// dart:io host, null on web/WASM. This is the seam that lets at_auth_web.dart
+// name no dart:io type while native callers keep at_auth 3.3.0's behaviour.
+import 'package:at_auth/src/io/defaults_stub.dart'
+    if (dart.library.io) 'package:at_auth/src/io/defaults_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -49,10 +54,12 @@ class AtAuthImpl implements AtAuth {
   @visibleForTesting
   SecondaryAddressFinder? secondaryAddressFinder;
 
-  /// Probes atServer readiness inside [validateAtServer]'s retry loop. When
-  /// null the probe step is skipped and only the atDirectory lookup is polled —
-  /// see [validateAtServer]. `package:at_auth/at_auth_io.dart` supplies
-  /// `secureSocketProbe`, the TLS probe this package defaulted to before 4.0.0.
+  /// Probes atServer readiness inside [validateAtServer]'s retry loop.
+  ///
+  /// Defaults to `secureSocketProbe` (a TLS connect-and-drop) on a `dart:io`
+  /// host and to null on web/WASM, where no raw socket exists. When null the
+  /// probe step is skipped and only the atDirectory lookup is polled — see
+  /// [validateAtServer]. Pass one explicitly to override, including on web.
   AtServerProbe? probeSocket;
 
   @override
@@ -64,9 +71,10 @@ class AtAuthImpl implements AtAuth {
       this.cramAuthenticator,
       this.pkamAuthenticator,
       this.atServerStatus,
-      this.probeSocket,
+      AtServerProbe? probeSocket,
       AtEnrollment? atEnrollment})
-      : atEnrollment = atEnrollment ?? AtEnrollment.create();
+      : probeSocket = probeSocket ?? defaultProbeSocket(),
+        atEnrollment = atEnrollment ?? AtEnrollment.create();
 
   @override
 
@@ -226,18 +234,19 @@ class AtAuthImpl implements AtAuth {
       _atAuthKeys = atOnboardingRequest.atKeys!;
     } else {
       //2a. the keys have to be generated, so we need somewhere to put them.
-      // There is no default: a store that writes to the filesystem cannot be
-      // named from the WASM-safe barrel, and silently picking a path under the
-      // user's home directory was a footgun regardless.
+      // Defaults to FileAtKeysIo at the standard path on a dart:io host; on
+      // web/WASM there is no filesystem, so the caller must supply one.
+      atOnboardingRequest.atKeysIo ??= defaultAtKeysIo();
       switch (atOnboardingRequest.atKeysIo) {
         case WrittenAtKeysIo writtenKeys:
           _atAuthKeys = writtenKeys.generateKeyPairs();
         case null:
           throw AtAuthenticationException(
               'onboard() needs either AtOnboardingRequest.atKeys, or an'
-              ' atKeysIo to generate and persist them into. Set'
-              ' AtOnboardingRequest.atKeysIo (e.g. FileAtKeysIo from'
-              ' package:at_auth/at_auth_io.dart).');
+              ' atKeysIo to generate and persist them into. This platform has'
+              ' no default key store (there is no filesystem), so set'
+              ' AtOnboardingRequest.atKeysIo explicitly — InMemoryAtKeysIo is'
+              ' exported from package:at_auth/at_auth_web.dart.');
         default:
           throw AtAuthenticationException(
               'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
@@ -447,9 +456,10 @@ class AtAuthImpl implements AtAuth {
       _logger.warning(
           'No probeSocket configured: skipping the atServer readiness probe.'
           ' The poll below still retries the atDirectory lookup, but it will'
-          ' not wait for the atServer itself to start listening. On a dart:io'
-          ' host, pass probeSocket: secureSocketProbe'
-          ' (package:at_auth/at_auth_io.dart) to restore the TLS probe.');
+          ' not wait for the atServer itself to start listening. This platform'
+          ' has no default probe (there is no raw socket); pass one to'
+          ' AtAuth.create(probeSocket: ...) if you can reach the atServer'
+          ' another way.');
     }
 
     while (DateTime.now().isBefore(deadline)) {

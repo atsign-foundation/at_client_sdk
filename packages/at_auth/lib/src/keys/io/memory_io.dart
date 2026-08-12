@@ -1,6 +1,11 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart';
+// Narrow src imports, not the public barrel: `at_auth.dart` carries the
+// `dart:io` half of the package, so importing it here would drag `FileAtKeysIo`
+// and the TLS probe into everything reachable from `at_auth_web.dart`.
+import 'package:at_auth/src/exception/at_auth_exceptions.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_commons/atsign.dart';
 
 /// Stores [AtKeys] in process memory.
