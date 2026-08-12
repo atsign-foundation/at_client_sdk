@@ -49,15 +49,3 @@ class StdErrLoggingHandler implements LoggingHandler {
     print(logRecordLine(record));
   }
 }
-
-/// Console-backed stand-in for the `dart:io` `CLILoggingHandler`.
-///
-/// Emits the same `[LEVEL] message` shape, minus the chalk colouring — ANSI
-/// escapes are noise in a browser console.
-class CLILoggingHandler implements LoggingHandler {
-  @override
-  void call(LogRecord record) {
-    _warnOnce('CLILoggingHandler', 'stderr');
-    print('[${cliLevelLabel(record.level)}] ${record.message}');
-  }
-}

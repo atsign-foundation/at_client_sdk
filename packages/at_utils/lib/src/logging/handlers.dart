@@ -3,8 +3,8 @@ import 'package:logging/logging.dart';
 /// The platform-neutral half of at_utils' logging handlers: the
 /// [LoggingHandler] interface and [ConsoleLoggingHandler], the default.
 ///
-/// The handlers that need `dart:io` — `FileLoggingHandler`,
-/// `StdErrLoggingHandler` and `CLILoggingHandler` — live in `handlers_io.dart`,
+/// The handlers that need `dart:io` — `FileLoggingHandler` and
+/// `StdErrLoggingHandler` — live in `handlers_io.dart`,
 /// with console-backed equivalents in `handlers_stub.dart`. `at_logger.dart`
 /// picks between those two with an `if (dart.library.io)` conditional export, so
 /// all three names remain importable from `package:at_utils/at_logger.dart` on
@@ -38,25 +38,5 @@ class ConsoleLoggingHandler implements LoggingHandler {
   @override
   void call(LogRecord record) {
     print(logRecordLine(record));
-  }
-}
-
-/// The label [CLILoggingHandler] prints for [level], without colour.
-///
-/// Shared with the web stub so both platforms agree on the wording; the
-/// `dart:io` handler wraps the result in chalk colours.
-String cliLevelLabel(Level level) {
-  switch (level) {
-    case Level.WARNING:
-      return 'WARN';
-    case Level.SEVERE:
-    case Level.SHOUT:
-      return 'ERROR';
-    case Level.INFO:
-      return 'INFO';
-    case Level.FINER:
-    case Level.FINEST:
-    default:
-      return 'FINER';
   }
 }

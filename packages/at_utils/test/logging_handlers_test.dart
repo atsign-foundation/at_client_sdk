@@ -1,10 +1,13 @@
 import 'package:at_utils/at_logger.dart';
+import 'package:at_utils/at_progress.dart';
+import 'package:at_utils/at_utils_cli.dart';
 import 'package:logging/logging.dart';
 import 'package:test/test.dart';
 
-/// Guards the conditional-export split in `at_logger.dart`.
+/// Guards the conditional-export split in `at_logger.dart`, and the CLI barrel
+/// that keeps chalkdart out of it.
 ///
-/// `handlers_io.dart` and `handlers_stub.dart` declare the same three classes,
+/// `handlers_io.dart` and `handlers_stub.dart` declare the same two classes,
 /// chosen by `if (dart.library.io)`. Nothing in the language keeps them in step,
 /// so these tests pin the contract that matters to callers: the names resolve,
 /// they satisfy [LoggingHandler], the constructors take the same arguments, and
@@ -24,8 +27,9 @@ void main() {
       // consumer.
       expect(ConsoleLoggingHandler(), isA<LoggingHandler>());
       expect(StdErrLoggingHandler(), isA<LoggingHandler>());
-      expect(CLILoggingHandler(), isA<LoggingHandler>());
       expect(FileLoggingHandler('unused.log'), isA<LoggingHandler>());
+      // From the CLI barrel, not the platform-split pair.
+      expect(CLILoggingHandler(), isA<LoggingHandler>());
     });
 
     test('AtSignLogger exposes its handler statics', () {
@@ -53,13 +57,24 @@ void main() {
       expect(line, endsWith(' \n'));
     });
 
-    test('cliLevelLabel maps levels the same way on both platforms', () {
-      expect(cliLevelLabel(Level.WARNING), 'WARN');
-      expect(cliLevelLabel(Level.SEVERE), 'ERROR');
-      expect(cliLevelLabel(Level.SHOUT), 'ERROR');
-      expect(cliLevelLabel(Level.INFO), 'INFO');
-      expect(cliLevelLabel(Level.FINER), 'FINER');
-      expect(cliLevelLabel(Level.FINEST), 'FINER');
+    test('every ProgressEventType has a colour function', () {
+      // chalkFn now lives in at_utils_cli.dart. It stays exercised here so a
+      // barrel move cannot silently drop it.
+      for (final type in ProgressEventType.values) {
+        expect(type.chalkFn, isA<Function>(), reason: '$type has no chalkFn');
+      }
+    });
+
+    test('ProgressEvent.toString() is plain text', () {
+      // A model must not embed ANSI escapes: they are literal noise in a log
+      // file, a Flutter widget and a browser console. Colour is the CLI's job.
+      final rendered =
+          ProgressEvent(group: 'g', msg: 'm', type: ProgressEventType.error)
+              .toString();
+      expect(rendered.codeUnits, isNot(contains(27)),
+          reason: 'ESC found in: $rendered');
+      expect(rendered, contains('| g'));
+      expect(rendered, contains('| m'));
     });
   });
 }
