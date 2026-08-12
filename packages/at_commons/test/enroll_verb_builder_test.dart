@@ -22,6 +22,49 @@ void main() {
           'enroll:request:{"enrollmentId":"1234","appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw","__manage":"r"},"encryptedDefaultEncryptionPrivateKey":"dummy_encrypted_private_key","encryptedDefaultSelfEncryptionKey":"dummy_self_encryption_key","encryptedAPKAMSymmetricKey":"dummy_pkam_sym_key","apkamPublicKey":"abcd1234","apkamKeysExpiryInMillis":60000}\n');
     });
 
+    // Both of these assert against a RAW LITERAL rather than against the
+    // builder's own fields, because the point of the pin is the wire: `apsk`
+    // existed on EnrollParams with no route to the built command, so a test
+    // that read the field back would have passed the whole time the value
+    // could not be sent.
+    test('a request carries its apsk array to the wire', () {
+      var enrollVerbBuilder = EnrollVerbBuilder()
+        ..operation = EnrollOperationEnum.request
+        ..appName = 'wavi'
+        ..deviceName = 'pixel'
+        ..namespaces = {'wavi': 'rw'}
+        ..apkamPublicKey = 'abcd1234'
+        ..signingAlgo = 'mldsa65'
+        ..apsk = {
+          'v': 1,
+          'keys': [
+            {
+              'kid': '0123456789abcdef',
+              'use': 'sign',
+              'alg': 'mldsa65',
+              'pub': 'PUBKEY'
+            }
+          ]
+        };
+      var command = enrollVerbBuilder.buildCommand();
+      expect(command,
+          'enroll:request:{"appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"apkamPublicKey":"abcd1234","signingAlgo":"mldsa65","apsk":{"v":1,"keys":[{"kid":"0123456789abcdef","use":"sign","alg":"mldsa65","pub":"PUBKEY"}]}}\n');
+    });
+
+    test('a request carries its bare apskLegacy to the wire, unquoted-as-JSON',
+        () {
+      var enrollVerbBuilder = EnrollVerbBuilder()
+        ..operation = EnrollOperationEnum.request
+        ..appName = 'wavi'
+        ..deviceName = 'pixel'
+        ..namespaces = {'wavi': 'rw'}
+        ..apkamPublicKey = 'abcd1234'
+        ..apskLegacy = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A';
+      var command = enrollVerbBuilder.buildCommand();
+      expect(command,
+          'enroll:request:{"appName":"wavi","deviceName":"pixel","namespaces":{"wavi":"rw"},"apkamPublicKey":"abcd1234","apskLegacy":"MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A"}\n');
+    });
+
     test('A test to verify enroll approve operation', () {
       var enrollVerbBuilder = EnrollVerbBuilder()
         ..operation = EnrollOperationEnum.approve
