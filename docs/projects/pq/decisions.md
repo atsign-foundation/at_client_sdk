@@ -8044,6 +8044,41 @@ from one substrate being replayed into the other, so a *shared* `info` would be
 the one bug this consolidation could plausibly introduce. Shared code, distinct
 binding.
 
+**LANDED 2026-08-12, and the ruling's premise was half wrong in two ways worth
+recording.**
+
+*First, the exposure predated the consolidation.* This ruling reads as "be
+careful not to introduce a shared binding". The pairwise substrate had **no
+test that could fail on one already**: `wire_literal_pins_test.dart`'s
+`expect(utf8.decode(sealInfo), 'at_client/secret_sharing/v1')` compares a
+constant against its own expected text and never touches a ciphertext, and
+every other pairwise test seals and opens through the same production path —
+symmetric in `info` by construction, so green under *any* shared value.
+Measured: dropping the label from the pairwise seal, the pairwise open and the
+enrollment open, leaving the constant itself untouched, left the whole suite
+green at **1180/1180**. The nskey substrate was covered; pairwise and
+enrollment were not. So the differential came **first**, as its own commit, and
+that same symmetric mutation now turns exactly one test red. A mutation that
+moves only the seal is not the proof — it goes red through every ordinary
+round-trip test and so discriminates nothing.
+
+*Second, `required` at the at_client layer would not have been enough.*
+at_chops declared `Uint8List? info` and coalesced `info ?? Uint8List(0)`, so
+omitting the argument derived the **same key schedule as passing an empty
+one** — two callers that each said nothing shared a binding, silently. A
+helper requiring `info` from its callers still passed it on across that
+boundary, where dropping one argument compiled clean. Closed by making
+at_chops' `pqSeal`/`pqOpen` require `info` as well (at_chops 3.6.0,
+`breaking:`), which turns a shared binding into a **compile error** rather
+than a convention. Every in-tree caller already supplied one, so no behaviour
+and no wire byte changed. The pins also exercise **0x02**, the version
+production negotiates, rather than 0x01 — the two take structurally different
+key-schedule paths, so a differential written at 0x01 pins the branch nothing
+emits.
+
+Landed as `a8db79bcc` (the differential), `26705b6a0` (at_chops) and
+`7b1488a48` (`pq_envelope.dart`, five call sites routed through it).
+
 **7. The carriers stay different, and that is correct.** `SecretEnvelope`'s
 JSON carries `from.kpid` because the recipient must be able to seal a reply
 back to the sender; an nskey conveyance carries its routing in `appMetadata`
