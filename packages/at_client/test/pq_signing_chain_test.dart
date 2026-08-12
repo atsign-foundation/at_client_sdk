@@ -419,6 +419,78 @@ void main() {
     });
   });
 
+  group('the child consuming a conveyed ROOT link', () {
+    // This path had no test at all. It is the flavour a scoped enrollment
+    // gets — it cannot hold the root private, so a privileged holder signs
+    // and conveys, exactly as with a chain link — and it shares the
+    // already-published check with that one.
+
+    Future<void> conveyRoot(
+        AtClientSecretSharing child, Map<String, Object?> link) async {
+      await child.secretStore.putSecret(
+          Secret(
+              namespace: 'buzz',
+              name: PqSigningChain.rootLinkSecretName,
+              value: PqSigningChain.encodeLink(link)),
+          allowReservedName: true);
+    }
+
+    Future<({Uint8List publicKey, Uint8List secretKey})> publishRoot() async {
+      final pair = await MlDsa65PureDartAlgo().generateKeyPair();
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] = jsonEncode({
+        'v': 1,
+        'keys': [base64Encode(pair.publicKey)],
+        'successor': null
+      });
+      return pair;
+    }
+
+    test('publishes a conveyed root link, and not the same one twice',
+        () async {
+      final pair = await publishRoot();
+      final holder = client('priv-1');
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link = await PqSigningChain(holder)
+          .signRootLinkFor('child-1', rootPrivate: pair.secretKey);
+      await conveyRoot(child, link!);
+
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
+      expect(await PqSigningChain(childClient).readRootLink('child-1'), link);
+
+      await conveyRoot(child, link);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
+          reason: 'this runs at every start, so republishing an unchanged '
+              'link would rewrite the record for nothing');
+    });
+
+    test('replaces an existing root link with a different one', () async {
+      final pair = await publishRoot();
+      final holder = client('priv-1');
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final first = await PqSigningChain(holder)
+          .signRootLinkFor('child-1', rootPrivate: pair.secretKey);
+      await conveyRoot(child, first!);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
+
+      // ML-DSA signing is hedged, so re-signing the same payload yields a
+      // genuinely different link — which is the differential this needs, and
+      // the reason it does not have to manufacture one.
+      final second = await PqSigningChain(holder)
+          .signRootLinkFor('child-1', rootPrivate: pair.secretKey);
+      expect(second, isNot(first),
+          reason: 'differential guard: two identical links would compare a '
+              'case with itself and pass either way');
+      await conveyRoot(child, second!);
+
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
+      expect(await PqSigningChain(childClient).readRootLink('child-1'), second);
+    });
+  });
+
   group('walking the chain', () {
     late MockAtClient verifierClient;
     late AtClientSecretSharing verifier;

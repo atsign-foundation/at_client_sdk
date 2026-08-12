@@ -530,7 +530,7 @@ class PqSigningChain {
     }
 
     final existing = _fieldFrom(current, rootLinkField);
-    if (existing != null && existing['signature'] == link['signature']) {
+    if (existing != null && _sameLink(existing, link)) {
       return false;
     }
 
@@ -618,12 +618,18 @@ class PqSigningChain {
 
   /// Whether [a] and [b] are the same link, compared whole.
   ///
-  /// Deliberately not a single-member comparison. A chain link is a signed
-  /// envelope, whose signature lives inside its `signatures` array — so a
-  /// top-level `['signature']` read is null for BOTH sides, `null == null`
-  /// holds, and every existing link matches every new one. The conveyed link
-  /// would then never be published, silently, with nothing to log: the
-  /// already-published case and the never-published case are the same branch.
+  /// Used for BOTH link flavours, which is the point. A single-member
+  /// comparison of `['signature']` is right for a root link and wrong for a
+  /// chain link — the chain link is a signed envelope, whose signature lives
+  /// inside its `signatures` array, so the read is null on both sides,
+  /// `null == null` holds, and every existing link matches every new one. The
+  /// conveyed link is then never published, silently and with nothing to log,
+  /// because "already published" and "never published" are the same branch.
+  ///
+  /// The root-link version of that comparison was correct only because that
+  /// format happens to carry a top-level signature. Comparing whole is right
+  /// for both without depending on either shape, so the next shape change
+  /// cannot reintroduce this by moving a member.
   static bool _sameLink(Map<String, Object?> a, Map<String, Object?> b) =>
       const DeepCollectionEquality().equals(a, b);
 
