@@ -414,6 +414,83 @@ void main() {
     });
   });
 
+  /// FROZEN FOREVER: the domain-separation binding this substrate seals under.
+  ///
+  /// The sibling pins for the `at/nskey` substrate live in
+  /// `wire_literal_pins_test.dart`; this one has to live here because it is fed
+  /// by real [PairwiseSecretSharing.sendEnvelope] output and the harness that
+  /// produces it is file-local.
+  ///
+  /// Why production-fed rather than a constant comparison: every other test in
+  /// this file seals and opens through the same production path, so it is
+  /// symmetric in `info` by construction and stays green under **any** shared
+  /// value — including the wrong one. `wire_literal_pins_test.dart`'s
+  /// `expect(utf8.decode(sealInfo), 'at_client/secret_sharing/v1')` pins the
+  /// constant but never touches a ciphertext, so it cannot see a call site that
+  /// stopped passing it. Deleting `info:` from every production seal and open
+  /// at once leaves both of those green. These arms are what go red.
+  ///
+  /// [enrollment_symmetric_key.dart] opens with this same constant, so its
+  /// substrate is covered here too: a convergence has to move the SEAL binding,
+  /// and the seal binding is what these arms read.
+  group('FROZEN FOREVER: the pairwise seal binding, read from real output', () {
+    /// The exact bytes the two substrates bind, built as raw literals rather
+    /// than read from `PairwiseSecretSharing.sealInfo` or `NskeyProvider._info`
+    /// — reading the constants would follow them if one were changed to the
+    /// other, which is the bug these arms exist to catch.
+    final pairwiseInfo =
+        Uint8List.fromList(utf8.encode('at_client/secret_sharing/v1'));
+    final nskeyInfo = Uint8List.fromList(
+        utf8.encode('at/nskey/XWING/AES/GCM:@alice:myapp'));
+
+    /// The `sealed` bytes off the envelope A actually wrote to B.
+    Uint8List sentSealed(String kpid) {
+      final key =
+          remoteData.keys.singleWhere((k) => k.contains('.$kpid.__ssenv.'));
+      final payload =
+          (SignedEnvelope.fromJson(jsonDecode(remoteData[key]!) as Map).payload
+                  as Map)
+              .cast<String, dynamic>();
+      return base64Decode(payload['sealed'] as String);
+    }
+
+    test('the two substrates bind different bytes', () {
+      // The arm that fails at the level the bug would occur. Without it, "both
+      // directions threw" is equally consistent with the two values having
+      // collapsed into one AND something else being broken.
+      expect(pairwiseInfo, isNot(nskeyInfo));
+    });
+
+    test('a real envelope opens under this substrate\'s info and not the other',
+        () async {
+      await sharerA.sendEnvelope(sharerB.myKeyPackage, 'myapp', {'hello': 'b'});
+      final sealed = sentSealed(sharerB.kpid);
+
+      // Production negotiates 0x02 here, which derives through RFC 9180's
+      // key schedule — a structurally different function from 0x01's. Pinning
+      // the binding at 0x01 would pin the branch nothing emits.
+      expect(sealed.first, 0x02);
+
+      final kem = XWingPureDartAlgo.instance;
+      final recipient = await kem.keyPairFromSeed(seedB);
+
+      // POSITIVE CONTROL, and it carries the argument: without a green arm
+      // here, the refusal below is equally explained by a wrong key, the wrong
+      // KEM or an unsupported version, and would pass for the absence of
+      // domain separation rather than its presence.
+      final opened =
+          await pqOpen(kem, recipient.secretKey, sealed, info: pairwiseInfo);
+      expect(jsonDecode(utf8.decode(opened))['hello'], 'b');
+
+      await expectLater(
+          pqOpen(kem, recipient.secretKey, sealed, info: nskeyInfo),
+          throwsA(isA<PqOpenException>()),
+          reason: 'the cross-substrate replay control: an envelope sealed by '
+              'this substrate must not open under the at/nskey binding, or an '
+              'envelope from one could be replayed into the other');
+    });
+  });
+
   group('sweepOnce', () {
     test(
         'A to B round trip: B receives, envelope is deleted, second sweep '
