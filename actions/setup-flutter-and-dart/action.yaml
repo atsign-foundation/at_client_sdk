@@ -36,9 +36,14 @@ runs:
         cache: ${{ steps.flutter-ref.outputs.sha }}
         cache-key: ${{ steps.flutter-ref.outputs.sha }}
 
+    # TEMPORARY: hardcoded to 3.13.0 (instead of ${{ inputs.dart-channel }}) to
+    # prove the Dart 3.13 analyzer-compat fix in this branch on CI. Revert
+    # before merge — some matrix jobs pass dart-channel: '' explicitly, which
+    # overrides this composite action's own default, so pinning via the
+    # input default wouldn't reach every job.
     - uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
       with:
-        sdk: ${{ inputs.dart-channel}}
+        sdk: "3.13.0"
 
     - name: Ensure dart on path is not from Flutter SDK
       shell: bash
