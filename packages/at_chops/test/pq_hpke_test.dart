@@ -6,6 +6,12 @@ import 'package:test/test.dart';
 
 import 'x_wing_test_vectors.dart';
 
+/// The empty binding, for tests whose subject is something other than `info`
+/// (tampering, malformed envelopes, wrong-length keys). `pqSeal`/`pqOpen`
+/// require `info` so that no caller can share a binding by saying nothing;
+/// these say `_noInfo` explicitly instead.
+final Uint8List _noInfo = Uint8List(0);
+
 /// Fixed-output KEM double — makes [pqSeal] deterministic so the seal
 /// construction can be pinned byte-exact, independent of the (randomised) real
 /// X-Wing KEM.
@@ -59,8 +65,8 @@ void main() {
       final kp = await xwing.generateKeyPair();
       final pt = _utf8('no-context payload');
 
-      final envelope = await pqSeal(xwing, kp.publicKey, pt);
-      final opened = await pqOpen(xwing, kp.secretKey, envelope);
+      final envelope = await pqSeal(xwing, kp.publicKey, pt, info: _noInfo);
+      final opened = await pqOpen(xwing, kp.secretKey, envelope, info: _noInfo);
 
       expect(opened, equals(pt));
     });
@@ -78,8 +84,10 @@ void main() {
 
     test('empty plaintext round-trips', () async {
       final kp = await xwing.generateKeyPair();
-      final envelope = await pqSeal(xwing, kp.publicKey, Uint8List(0));
-      expect(await pqOpen(xwing, kp.secretKey, envelope), isEmpty);
+      final envelope =
+          await pqSeal(xwing, kp.publicKey, Uint8List(0), info: _noInfo);
+      expect(
+          await pqOpen(xwing, kp.secretKey, envelope, info: _noInfo), isEmpty);
     });
   });
 
@@ -90,28 +98,28 @@ void main() {
 
     setUp(() async {
       kp = await xwing.generateKeyPair();
-      goodEnvelope = await pqSeal(xwing, kp.publicKey, pt);
+      goodEnvelope = await pqSeal(xwing, kp.publicKey, pt, info: _noInfo);
     });
 
     test('flipped AEAD ciphertext byte → authFailure', () async {
       final bad = Uint8List.fromList(goodEnvelope);
       // 3 = header (ver + ctLen), then skip KEM ciphertext to reach the GCM body.
       bad[3 + XWingPureDartAlgo.ciphertextLength] ^= 0x01;
-      expect(() => pqOpen(xwing, kp.secretKey, bad),
+      expect(() => pqOpen(xwing, kp.secretKey, bad, info: _noInfo),
           _opensWith(PqOpenFailure.authFailure));
     });
 
     test('flipped tag byte → authFailure', () async {
       final bad = Uint8List.fromList(goodEnvelope);
       bad[bad.length - 1] ^= 0x01; // last byte of the 16-byte tag
-      expect(() => pqOpen(xwing, kp.secretKey, bad),
+      expect(() => pqOpen(xwing, kp.secretKey, bad, info: _noInfo),
           _opensWith(PqOpenFailure.authFailure));
     });
 
     test('flipped KEM ciphertext byte → authFailure', () async {
       final bad = Uint8List.fromList(goodEnvelope);
       bad[3] ^= 0x01; // implicit-rejection KEM → different ss → AEAD fails
-      expect(() => pqOpen(xwing, kp.secretKey, bad),
+      expect(() => pqOpen(xwing, kp.secretKey, bad, info: _noInfo),
           _opensWith(PqOpenFailure.authFailure));
     });
   });
@@ -128,8 +136,9 @@ void main() {
     test('aad mismatch → authFailure', () async {
       final kp = await xwing.generateKeyPair();
       final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'),
-          aad: _utf8('aad-seal'));
-      expect(() => pqOpen(xwing, kp.secretKey, envelope, aad: _utf8('aad-open')),
+          info: _noInfo, aad: _utf8('aad-seal'));
+      expect(() => pqOpen(xwing, kp.secretKey, envelope,
+              info: _noInfo, aad: _utf8('aad-open')),
           _opensWith(PqOpenFailure.authFailure));
     });
   });
@@ -137,23 +146,25 @@ void main() {
   group('pqOpen rejects malformed envelopes', () {
     test('unsupported version → versionMismatch', () async {
       final kp = await xwing.generateKeyPair();
-      final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'));
+      final envelope = await pqSeal(
+          xwing, kp.publicKey, _utf8('payload'), info: _noInfo);
       // 0xff rather than 0x02: 0x02 is RFC 9180 and is now supported, so using
       // it here would test the AEAD rather than the version check.
       final bad = Uint8List.fromList(envelope)..[0] = 0xff;
-      expect(() => pqOpen(xwing, kp.secretKey, bad),
+      expect(() => pqOpen(xwing, kp.secretKey, bad, info: _noInfo),
           _opensWith(PqOpenFailure.versionMismatch));
     });
 
     test('shorter than header → malformedEnvelope', () async {
-      expect(() => pqOpen(xwing, XWingVector1.seed, Uint8List(2)),
+      expect(
+          () => pqOpen(xwing, XWingVector1.seed, Uint8List(2), info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
     });
 
     test('declared ctLen overruns envelope → malformedEnvelope', () async {
       // ver=0x01, ctLen=0xffff, but only a few bytes follow.
       final bad = Uint8List.fromList([0x01, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 7]);
-      expect(() => pqOpen(xwing, XWingVector1.seed, bad),
+      expect(() => pqOpen(xwing, XWingVector1.seed, bad, info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
     });
 
@@ -165,15 +176,30 @@ void main() {
       final ctLen = 8;
       final bad = Uint8List.fromList(
           [0x01, 0x00, ctLen, ...List.filled(ctLen + 16 + 4, 0)]);
-      expect(() => pqOpen(xwing, XWingVector1.seed, bad),
+      expect(() => pqOpen(xwing, XWingVector1.seed, bad, info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
     });
 
     test('a secret key of the wrong length → malformedEnvelope', () async {
       final kp = await xwing.generateKeyPair();
-      final envelope = await pqSeal(xwing, kp.publicKey, _utf8('payload'));
-      expect(() => pqOpen(xwing, Uint8List(7), envelope),
+      final envelope = await pqSeal(
+          xwing, kp.publicKey, _utf8('payload'), info: _noInfo);
+      expect(() => pqOpen(xwing, Uint8List(7), envelope, info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
+    });
+  });
+
+  group('pqSeal rejects caller misuse', () {
+    test('a public key of the wrong length → PqSealException', () async {
+      // The mirror of pqOpen's wrong-length secret key above. PqSealException's
+      // own dartdoc gives this as its example, and for a while it was the one
+      // case that escaped raw: pqSeal called encapsulate unwrapped, so callers
+      // catching the documented type got an ArgumentError instead. Recipient
+      // public keys arrive from a peer's advertisement on every path that
+      // reaches pqSeal, so this is reachable input rather than a typo.
+      await expectLater(
+          pqSeal(xwing, Uint8List(7), _utf8('payload'), info: _noInfo),
+          throwsA(isA<PqSealException>()));
     });
   });
 

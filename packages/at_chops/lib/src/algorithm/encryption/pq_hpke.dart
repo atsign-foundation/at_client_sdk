@@ -134,6 +134,17 @@ class PqOpenException implements Exception {
 /// [aad] is authenticated-but-not-encrypted associated data. Both must be
 /// supplied identically to [pqOpen] or opening fails.
 ///
+/// [info] is **required**, and deliberately has no default. It used to be
+/// optional, and omitting it derived the same key schedule as passing an empty
+/// one — so two protocols that both forgot it shared a binding, and each could
+/// open the other's envelopes. That is the failure this parameter exists to
+/// prevent, and a default is what made it reachable by saying nothing. A caller
+/// that genuinely wants no binding passes `Uint8List(0)` and says so.
+/// Contrast [version], which keeps its default: a version mismatch surfaces as
+/// a named [PqOpenFailure.versionMismatch], while an `info` mismatch is
+/// indistinguishable from a tampered envelope — and a *shared* wrong `info`
+/// raises no error at all.
+///
 /// [version] selects the construction to emit, and must be one of
 /// [pqSealSupportedVersions]. It exists so a sealer that knows what its
 /// recipient can open — from the suites its key package advertises — can choose
@@ -147,7 +158,7 @@ Future<Uint8List> pqSeal(
   AtKemAlgorithm kem,
   Uint8List recipientPublicKey,
   Uint8List plaintext, {
-  Uint8List? info,
+  required Uint8List info,
   Uint8List? aad,
   int version = pqSealDefaultVersion,
 }) async {
@@ -160,7 +171,24 @@ Future<Uint8List> pqSeal(
         'supports ${pqSealSupportedVersions.map((v) => '0x${v.toRadixString(16)}').join(', ')}');
   }
 
-  final enc = await kem.encapsulate(recipientPublicKey);
+  // Encapsulation rejects a wrong-length public key with an ArgumentError.
+  // Mapped here for the same reason pqOpen maps decapsulate's: the documented
+  // contract is that caller misuse arrives as PqSealException, and a raw
+  // ArgumentError escaping leaves a caller who catches the documented type
+  // with an uncaught error. A recipient's advertised key is peer-supplied on
+  // every path that reaches here, so this is reachable input, not a typo.
+  // Encapsulation rejects a wrong-length public key with an ArgumentError.
+  // Mapped here for the same reason pqOpen maps decapsulate's: the documented
+  // contract is that caller misuse arrives as PqSealException, and a raw
+  // ArgumentError escaping leaves a caller who catches the documented type
+  // with an uncaught error. A recipient's advertised key is peer-supplied on
+  // every path that reaches here, so this is reachable input, not a typo.
+  final ({Uint8List ciphertext, Uint8List sharedSecret}) enc;
+  try {
+    enc = await kem.encapsulate(recipientPublicKey);
+  } on ArgumentError catch (e) {
+    throw PqSealException('encapsulation rejected the recipient key: $e');
+  }
   final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, version, info);
 
   // body = ciphertext || tag in every version.
@@ -180,14 +208,16 @@ Future<Uint8List> pqSeal(
 /// Open an envelope produced by [pqSeal] using [recipientSecretKey].
 ///
 /// [kem] must be the same KEM type used by the sender. [info]/[aad] must
-/// match what the sender supplied.
+/// match what the sender supplied — [info] is required for the reason given on
+/// [pqSeal], and passing the wrong one is indistinguishable from a tampered
+/// envelope.
 ///
 /// Throws [PqOpenException] on any failure (see [PqOpenFailure]).
 Future<Uint8List> pqOpen(
   AtKemAlgorithm kem,
   Uint8List recipientSecretKey,
   Uint8List envelope, {
-  Uint8List? info,
+  required Uint8List info,
   Uint8List? aad,
 }) async {
   if (envelope.length < 3) {

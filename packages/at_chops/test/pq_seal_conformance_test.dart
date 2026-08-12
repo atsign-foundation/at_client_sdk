@@ -71,16 +71,24 @@ void main() {
           'ss ${(v['sharedSecret'] as String).substring(0, 8)}… / '
           'info ${v['infoLabel']}', () {
         final d = pqSealDeriveKeyAndNonce(_hex(v['sharedSecret'] as String),
-            info: _optHex(v['info']));
+            info: _optHex(v['info']) ?? Uint8List(0));
         expect(_toHex(d.key), v['key']);
         expect(_toHex(d.nonce), v['nonce']);
       });
     }
 
     test('a null info and a zero-length info derive the same key', () {
-      // Worth pinning rather than leaving implicit: a port that distinguishes
-      // "absent" from "empty" would diverge on the nskey path, where callers
-      // pass no info at all.
+      // A property of the key SCHEDULE, which is what a second implementation
+      // ports, and it stays pinned here because `pqSealDeriveKeyAndNonce` is
+      // the schedule's own entry point and still accepts an absent info.
+      //
+      // It is no longer reachable through `pqSeal`/`pqOpen`, whose `info` is
+      // required — the old justification said this mattered "on the nskey
+      // path, where callers pass no info at all", and that was never true:
+      // NskeyProvider passes one at both its seal and its open. That the two
+      // coalesce is exactly why omitting `info` was dangerous rather than
+      // merely sloppy, since two callers that both omitted it shared a
+      // binding silently.
       final a = schedule.firstWhere((v) => v['infoLabel'] == 'empty');
       final b = schedule.firstWhere((v) =>
           v['infoLabel'] == 'zeroLength' &&
@@ -107,7 +115,7 @@ void main() {
           kem,
           _hex(v['recipientSeed'] as String),
           _hex(v['envelope'] as String),
-          info: _optHex(v['info']),
+          info: _optHex(v['info']) ?? Uint8List(0),
           aad: _optHex(v['aad']),
         );
         expect(_toHex(pt), v['plaintext']);
@@ -147,7 +155,7 @@ void main() {
 
     test('asking for the current version explicitly emits it', () async {
       final e = await pqSeal(kem, pk, Uint8List.fromList([1, 2, 3]),
-          version: pqSealDefaultVersion);
+          info: Uint8List(0), version: pqSealDefaultVersion);
       expect(e[0], pqSealDefaultVersion);
     });
 
@@ -156,7 +164,8 @@ void main() {
       // label exists nowhere — a silent write failure discovered only on the
       // first read attempt, potentially by someone else.
       await expectLater(
-        pqSeal(kem, pk, Uint8List.fromList([1]), version: 0xff),
+        pqSeal(kem, pk, Uint8List.fromList([1]),
+            info: Uint8List(0), version: 0xff),
         throwsA(isA<PqSealException>()),
       );
     });
@@ -297,7 +306,8 @@ void main() {
       expect(
         () => pqOpen(kem, _hex(v['recipientSeed'] as String),
             _hex(v['envelope'] as String),
-            info: _optHex(v['info']), aad: Uint8List.fromList([0])),
+            info: _optHex(v['info']) ?? Uint8List(0),
+            aad: Uint8List.fromList([0])),
         throwsA(isA<PqOpenException>()
             .having((e) => e.reason, 'reason', PqOpenFailure.authFailure)),
       );
@@ -307,7 +317,7 @@ void main() {
       final e = _hex(v['envelope'] as String)..[0] = 0xff;
       expect(
         () => pqOpen(kem, _hex(v['recipientSeed'] as String), e,
-            info: _optHex(v['info']), aad: _optHex(v['aad'])),
+            info: _optHex(v['info']) ?? Uint8List(0), aad: _optHex(v['aad'])),
         throwsA(isA<PqOpenException>()
             .having((e) => e.reason, 'reason', PqOpenFailure.versionMismatch)),
       );

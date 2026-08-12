@@ -1,4 +1,19 @@
 ## 3.6.0
+- breaking: `pqSeal` and `pqOpen` take `info` as a **required** parameter. It
+  was optional, and an omitted `info` derived the same key schedule as an empty
+  one — so two protocols that each said nothing shared a binding, and either
+  could open the other's envelopes. Nothing in the type system distinguished
+  them and no test could see it. A caller that genuinely wants no binding now
+  passes `Uint8List(0)` and says so. Every in-tree caller already supplied one,
+  so no behaviour and no wire byte changes; what goes is a state reachable only
+  by omission. The key schedule is untouched, and `pqSealDeriveKeyAndNonce`
+  still accepts an absent `info`, so the conformance vectors and
+  `seal-spec.md` are unaffected.
+- fix: `pqSeal` maps a wrong-length recipient public key to `PqSealException`
+  rather than letting the KEM's `ArgumentError` escape. `PqSealException`'s own
+  dartdoc gave that case as its example, and `pqOpen` already wrapped
+  `decapsulate` for the same reason — the seal direction was the odd one out,
+  so a caller catching the documented type got an uncaught error instead.
 - fix: the unknown-version and unknown-KDF diagnostics thrown by the HPKE
   paths carry the offending value; an escaped `$` had left the
   interpolation's source text in the message instead.

@@ -74,11 +74,16 @@ void main() {
       expect(xWingPair.publicKey.length, isNot(mlKemPair.publicKey.length),
           reason: '1216 bytes against 1568 — they are not even the same shape');
 
+      // The subject is the KEM mismatch, so the binding is held constant at
+      // empty on both ends — a differing info would give the refusal below a
+      // second possible cause.
       final sealed = await pqSeal(
           mlKem, mlKemPair.publicKey, _bytes('secret'),
+          info: Uint8List(0),
           version: SecretSharingAlgos.sealVersionFor(
               SecretSharingAlgos.mlKem1024Rfc9180)!);
-      expect(() => pqOpen(xWing, xWingPair.secretKey, sealed),
+      expect(() => pqOpen(xWing, xWingPair.secretKey, sealed,
+              info: Uint8List(0)),
           throwsA(isA<PqOpenException>()));
     });
   });

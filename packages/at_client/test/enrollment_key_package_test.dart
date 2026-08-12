@@ -70,10 +70,14 @@ void main() {
     final kpid = advertised['kid'] as String;
 
     // Seal to the advertised public half, exactly as a sender would...
+    // The subject here is whether the filed private half matches the
+    // advertised public one, not the binding, so both ends say Uint8List(0)
+    // rather than borrowing a substrate's info.
     final sealed = await pqSeal(
       XWingPureDartAlgo.instance,
       base64Decode(advertised['pub'] as String),
       Uint8List.fromList(utf8.encode('a secret for the new device')),
+      info: Uint8List(0),
     );
     // ...and open it with the half that was filed away.
     final private =
@@ -82,6 +86,7 @@ void main() {
       XWingPureDartAlgo.instance,
       Uint8List.fromList(private.bytes.bytes),
       sealed,
+      info: Uint8List(0),
     );
 
     expect(utf8.decode(opened), 'a secret for the new device',
