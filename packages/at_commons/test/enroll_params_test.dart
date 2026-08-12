@@ -204,6 +204,24 @@ void main() {
       expect(parsed.apsk, apsk);
     });
 
+    test('the bare form rides apskLegacy, verbatim and unquoted', () {
+      // A plain-legacy enrollment publishes the RSA key string itself, which
+      // is what every deployed consumer base64-decodes. It travels on its own
+      // field rather than sharing `apsk`, so neither the wire type nor the
+      // atServer's handling of `apsk` has to be widened to two types.
+      const bare = 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A';
+
+      final json = (EnrollParams()..apskLegacy = bare).toJson();
+      expect(json['apskLegacy'], bare);
+      expect(json['apsk'], isNull);
+
+      final parsed = EnrollParams.fromJson(
+          jsonDecode(jsonEncode(json)) as Map<String, dynamic>);
+      expect(parsed.apskLegacy, bare,
+          reason: 'the value is published as-is; a JSON-encoded (quoted) '
+              'string is not what a bare-RSA parser reads');
+    });
+
     test('an absent apsk stays absent rather than becoming an empty map', () {
       // The atServer publishes no `_apsk` at all for an enrollment that sends
       // none, so null and {} must not collapse into each other: an empty map
