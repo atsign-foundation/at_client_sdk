@@ -161,6 +161,9 @@ jobs:
   #  - The wasm compile catches what the shakedown cannot: `dart:ffi`, which the
   #    compiler does reject outright. One stray at_chops_ffi.dart import in the
   #    reachable graph and the web build stops building.
+  # Add a package here once it has a test/wasm/ directory containing a
+  # dep_tree_test.dart and a smoke.dart. at_lookup and at_client are the
+  # remaining blockers — see docs/projects/wasm/plan.md.
   wasm_compile:
     runs-on: ubuntu-latest
     strategy:
@@ -168,6 +171,7 @@ jobs:
       matrix:
         package:
           - at_auth
+          - at_utils
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
