@@ -1,6 +1,4 @@
-import 'dart:convert' show utf8;
-
-import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo;
+import 'package:at_auth/at_auth.dart' show apskKid;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:meta/meta.dart' show experimental;
 
@@ -26,11 +24,13 @@ class PackageKey {
   }) : kid = kid ?? computeKid(pub);
 
   /// First 8 bytes, hex-encoded, of the SHA-256 of the public key material.
-  static String computeKid(String pub) {
-    // SHA256HashingAlgo.hash returns the full digest as lowercase hex; the
-    // first 16 hex chars are the first 8 bytes.
-    return SHA256HashingAlgo().hash(utf8.encode(pub)).substring(0, 16);
-  }
+  ///
+  /// Delegates to at_auth's `apskKid` rather than repeating it: the `_apsk`
+  /// advertisement and a key package spell an entry the same way, and a kid
+  /// computed two ways is a verification failure with nothing to say for
+  /// itself — both sides compile, and the mismatch surfaces only as an
+  /// envelope that will not verify.
+  static String computeKid(String pub) => apskKid(pub);
 
   Map<String, Object?> toJson() => {
         'kid': kid,

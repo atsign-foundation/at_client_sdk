@@ -1,4 +1,13 @@
 ## 3.14.1
+- feat: `parseApskValue` reads the `_apsk` array form
+  (`{"v":1,"keys":[{kid,use,alg,pub}]}`) an enrollment publishes, skipping
+  entries whose `use` or `alg` this build does not know and refusing outright
+  when it understands none — no downgrade, and no fallback to a key derived
+  some other way.
+- **breaking (unreleased surface): `encodeTaggedApsk` and the single-key
+  tagged `_apsk` form are removed.** Nothing ever published that shape — the
+  array supersedes it, and it is the only structured form a reader now
+  accepts, alongside the bare RSA string.
 - docs (known limitation): `AtClient.uploadFile` and `AtClient.shareFiles`
   cannot go post-quantum, and throw under `disallowLegacyEncryption`. Both
   build their atKey as `file_transfer_<uuid>` with no namespace, and every

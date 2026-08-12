@@ -27,6 +27,7 @@ import 'dart:convert'
         utf8;
 import 'dart:typed_data' show Uint8List;
 
+import 'package:at_auth/at_auth.dart' show apskSigningKeys;
 import 'package:at_chops/at_chops.dart'
     show
         HashingAlgoType,
@@ -355,17 +356,24 @@ Map<String, Object?> _signJwsEnvelope(
 
 /// A parsed `_apsk` value: which algorithm the key is for, and the key itself.
 ///
-/// The published record comes in two forms, and the migration between them is
-/// the same two-release ladder as everything else
-/// (`docs/projects/pq/decisions.md` 39):
+/// The published record comes in two forms, and which one it holds depends on
+/// what published it:
 ///
-/// - **Bare (today, and everything the final 3.x publishes):** the RSA public
-///   key string exactly as `_apsk` has always carried it. Parsed as
-///   [SigningAlgoType.rsa2048].
-/// - **Tagged (what 4.x's new enrollments publish):** a JSON object
-///   `{"v": 1, "signingAlgo": "mldsa65", "publicKey": "<base64>"}`. The shape
-///   is deliberately unmistakable to an old bare-RSA parser — a consumer that
-///   base64-decodes it as an RSA key fails loudly, never mis-reads it.
+/// - **Bare:** the RSA public key string exactly as `_apsk` has always carried
+///   it. Parsed as [SigningAlgoType.rsa2048]. Published by every released
+///   client, by `ApkamSigning.publishPublicSigningKey` (the only writer for a
+///   connection with no enrollment id, `_apsk.primary`), and by the atServer
+///   from a plain-legacy enrollment's `EnrollParams.apskLegacy`.
+/// - **Array:** `{"v": 1, "keys": [...]}`, composed by the enrolling client
+///   and written verbatim by the atServer when the enrollment is approved. See
+///   `apskAdvertisement` in at_auth, which is also where it is parsed. It is
+///   the only form that can carry a second algorithm's key beside the first,
+///   which is why every non-legacy enrollment uses it.
+///
+/// The array is deliberately unmistakable to an old bare-RSA parser — a
+/// consumer that base64-decodes it as an RSA key fails loudly, never mis-reads
+/// it — which is exactly why a plain-legacy enrollment publishes the bare form
+/// instead of it.
 class ParsedApsk {
   final SigningAlgoType signingAlgo;
 
@@ -376,12 +384,14 @@ class ParsedApsk {
   const ParsedApsk({required this.signingAlgo, required this.publicKey});
 }
 
-/// Parses a fetched `_apsk` value, bare or tagged.
+/// Parses a fetched `_apsk` value, bare or array.
 ///
-/// Throws [AtSigningVerificationException] on a tagged value that names an
-/// algorithm this build has no code for — the reader must fail loudly rather
-/// than guess, because a guessed algorithm turns a key mismatch into silent
-/// acceptance of whatever the server sent.
+/// Throws [AtSigningVerificationException] when the value names no algorithm
+/// this build has code for — the reader must fail loudly rather than guess,
+/// because a guessed algorithm turns a key mismatch into silent acceptance of
+/// whatever the server sent. There is deliberately no fallback to a key
+/// derived some other way: the signature means something only if the verifier
+/// used the key the signer published.
 ParsedApsk parseApskValue(String value) {
   final trimmed = value.trim();
   if (!trimmed.startsWith('{')) {
@@ -389,40 +399,28 @@ ParsedApsk parseApskValue(String value) {
     return ParsedApsk(signingAlgo: SigningAlgoType.rsa2048, publicKey: trimmed);
   }
 
-  final Map<String, dynamic> tagged;
+  final Map<String, dynamic> advertisement;
   try {
-    tagged = jsonDecode(trimmed) as Map<String, dynamic>;
+    advertisement = jsonDecode(trimmed) as Map<String, dynamic>;
   } on FormatException catch (e) {
     throw AtSigningVerificationException(
-        'the _apsk value looks tagged but is not valid JSON: ${e.message}');
+        'the _apsk value looks structured but is not valid JSON: ${e.message}');
   }
-  final algoName = tagged['signingAlgo'];
-  final publicKey = tagged['publicKey'];
-  if (algoName is! String || publicKey is! String) {
-    throw AtSigningVerificationException(
-        'a tagged _apsk must carry signingAlgo and publicKey');
-  }
-  final algo =
-      SigningAlgoType.values.where((a) => a.name == algoName).firstOrNull;
-  if (algo == null) {
-    throw AtSigningVerificationException(
-        'the _apsk names signing algorithm "$algoName", which this build has '
-        'no code for — refusing to verify rather than guessing');
-  }
-  return ParsedApsk(signingAlgo: algo, publicKey: publicKey);
-}
 
-/// Encodes the tagged, self-describing `_apsk` form.
-///
-/// Nothing in 3.x publishes this — the final 3.x keeps the bare form exactly
-/// as it is, because apps sign and verify against `_apsk` today and their
-/// parsers expect it. This exists so the read side can be tested against the
-/// format 4.x's new enrollments will publish, and so the format has exactly
-/// one definition.
-String encodeTaggedApsk(
-        {required SigningAlgoType signingAlgo, required String publicKey}) =>
-    jsonEncode(
-        {'v': 1, 'signingAlgo': signingAlgo.name, 'publicKey': publicKey});
+  // The array form an enrollment publishes. Entries whose `use` or `alg` this
+  // build does not know are skipped by apskSigningKeys, so an advertisement
+  // that is all future algorithms arrives empty rather than half-read.
+  final advertised = apskSigningKeys(advertisement);
+  if (advertised.isEmpty) {
+    throw AtSigningVerificationException(
+        'the _apsk advertises no signing key this build understands — '
+        'refusing to verify rather than guessing');
+  }
+  // One key per enrollment today, so first is unambiguous. Ranking several by
+  // strength arrives with the strength order beside SigningAlgoType.
+  final key = advertised.first;
+  return ParsedApsk(signingAlgo: key.alg, publicKey: key.pub);
+}
 
 /// The hashes an envelope is allowed to name.
 ///

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
+import 'package:at_auth/at_auth.dart' show apskAdvertisement;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
@@ -37,9 +38,9 @@ void main() {
       publicKey: base64Encode(mlDsaPair.publicKey),
       privateKey: base64Encode(mlDsaPair.secretKey));
 
-  String mlDsaApsk() => encodeTaggedApsk(
-      signingAlgo: SigningAlgoType.mldsa65,
-      publicKey: base64Encode(mlDsaPair.publicKey));
+  String mlDsaApsk() => jsonEncode(apskAdvertisement(
+      apkamPublicKey: base64Encode(mlDsaPair.publicKey),
+      signingAlgo: SigningAlgoType.mldsa65));
 
   Map<String, Object?> rsaJws({String? enrollmentId = 'enroll-1'}) =>
       signEnvelope(payload,
@@ -140,7 +141,7 @@ void main() {
   });
 
   group('the JWS shape, ML-DSA arm', () {
-    test('signs and verifies under the tagged _apsk', () async {
+    test('signs and verifies under the array _apsk', () async {
       final envelope = mlDsaJws();
 
       final signature = envelope['signature'] as String;

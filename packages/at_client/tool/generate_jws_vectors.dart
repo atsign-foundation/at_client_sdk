@@ -47,7 +47,8 @@ Future<void> main() async {
     },
     'mlDsa65': {
       'envelope': mlDsaEnvelope,
-      // The raw ML-DSA-65 public key, base64 — what a tagged _apsk carries.
+      // The raw ML-DSA-65 public key, base64 — what an _apsk entry's `pub`
+      // carries.
       'publicKey': base64Encode(mlDsaPair.publicKey),
       'secretKey': base64Encode(mlDsaPair.secretKey),
     },

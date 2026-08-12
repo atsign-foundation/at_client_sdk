@@ -1,7 +1,8 @@
 import 'dart:convert' show base64Encode, jsonEncode;
 
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
+import 'package:at_chops/at_chops.dart'
+    show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/at_client_mixins.dart' show makeActivationPqNative;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show envelopeVersionOf, verifyEnvelope;
@@ -54,11 +55,11 @@ void main() {
         reason: 'pqNativeOnboard passes preference.posture.envelopeVersion '
             'through this parameter — dropping the plumbing leaves every '
             'postured onboard emitting v1');
-    // And the v2 shape still verifies against the same ML-DSA APKAM key —
-    // in the tagged, self-describing form the atServer serves an ML-DSA
-    // _apsk in (a bare value is classified as an RSA key by the verifier).
+    // And the v2 shape still verifies against the same ML-DSA APKAM key — in
+    // the array form this enrollment composed and the atServer published
+    // verbatim (a bare value is classified as an RSA key by the verifier).
     await verifyEnvelope(envelope,
-        signerPublicKey:
-            jsonEncode({'signingAlgo': 'mldsa65', 'publicKey': public}));
+        signerPublicKey: jsonEncode(apskAdvertisement(
+            apkamPublicKey: public, signingAlgo: SigningAlgoType.mldsa65)));
   });
 }

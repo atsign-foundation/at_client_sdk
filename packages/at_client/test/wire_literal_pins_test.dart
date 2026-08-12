@@ -470,13 +470,26 @@ void main() {
       expect(AtClientPreference().keyEstablishmentAlgo, 'x-wing');
     });
 
-    test('the tagged _apsk value emits its exact JSON shape', () {
-      // Nothing in 3.x publishes this, but parseApskValue shipped, so the
-      // format is a cross-release contract — not part of the JWS wrapper.
-      expect(
-          encodeTaggedApsk(
-              signingAlgo: SigningAlgoType.mldsa65, publicKey: 'QUJD'),
-          '{"v":1,"signingAlgo":"mldsa65","publicKey":"QUJD"}');
+    test('the _apsk reader accepts the exact published array shape', () {
+      // The composer is at_auth's (apskAdvertisement) and pinned there; this
+      // is the other half of the same contract — the literal an atServer
+      // actually serves, read by the package that verifies against it. A
+      // rename on either side has to break one of these two pins.
+      final parsed = parseApskValue(
+          '{"v":1,"keys":[{"kid":"cff3d220cf61dd4a","use":"sign",'
+          '"alg":"mldsa65","pub":"QUJD"}]}');
+
+      expect(parsed.signingAlgo, SigningAlgoType.mldsa65);
+      expect(parsed.publicKey, 'QUJD');
+    });
+
+    test('the bare _apsk value round-trips untouched', () {
+      // The released form, and what a plain-legacy enrollment still
+      // publishes. Every deployed consumer base64-decodes it as an RSA key.
+      final parsed = parseApskValue('MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A');
+
+      expect(parsed.signingAlgo, SigningAlgoType.rsa2048);
+      expect(parsed.publicKey, 'MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8A');
     });
 
     test('a chain-link payload emits its exact JSON shape', () {

@@ -30,7 +30,7 @@ import 'package:test/test.dart';
 ///
 /// What the functional pack already proves and this deliberately does not
 /// re-prove: the no-OTP auto-approve, the dual-enrollment keyfile, ML-DSA
-/// PKAM under the new id, the tagged `_apsk`, and that `selfRetrofit` hands
+/// PKAM under the new id, the published `_apsk`, and that `selfRetrofit` hands
 /// back a working client
 /// (`tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart`).
 ///

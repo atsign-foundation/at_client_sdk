@@ -82,7 +82,7 @@ mixin EnvelopeSigning on ApkamSigning {
       // with the atSign-wide encryption keypair would use a key that is NOT
       // the published one.) The algorithm is the client's resolved one: a
       // self-retrofit's ML-DSA enrollment must sign mldsa65, or every
-      // envelope is refused against the tagged _apsk its record published.
+      // envelope is refused against the _apsk its record published.
       return signEnvelope(
         payload,
         keys: signingKeys,
