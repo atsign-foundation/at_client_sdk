@@ -363,6 +363,9 @@ critical-path shape to GA is **seam → primitives → substrate → data path �
 rollout → rotation** (D1 GA), with the v4 default flip as the final gated
 cutover. The GA version slot is re-derived at execution against pub.dev — both
 `at_client` 3.13.0 and 3.14.0 published on 2026-07-17, so it is no longer 3.14.x.
+**3.14.0 is being retracted** (2026-08-12) — which does not return the slot:
+trunk already sits at 3.14.1, and the retraction's effect is on what counts as
+*released* for compatibility purposes, not on the numbering.
 
 **D1 development is complete; a "make it right" quality pass
 follows before GA** — structural refactoring (readability, maintainability,

@@ -342,17 +342,17 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     moment the mistake is made.
 - **Then (an existing key keeps its own algorithm):** a client whose keyfile already
   holds a key package **does not re-mint** under a newly configured KEM. The kpid is the
-  address peers seal to and `metadata.keyPackage` is written by `enroll:request` and
-  never again, so re-minting would move the client to an address nobody writes to — it
-  would scan for envelopes being sent somewhere else. The mismatch is **logged**, not
+  address peers seal to, and moving it takes a deliberate `enroll:update` that no
+  client sends yet, so re-minting would move the client to an address nobody writes
+  to — it would scan for envelopes being sent somewhere else. The mismatch is **logged**, not
   silently resolved, and the new preference takes effect on the next enrollment.
 - **Then (an unimplemented algorithm fails the mint):** it does not quietly mint the
-  other one. This is the single moment an enrollment's encapsulation target can be set,
-  and there is no post-enrollment write to correct it with.
+  other one. This is the only moment an enrollment's encapsulation target can be set
+  without the enrollment later sending `enroll:update` for itself.
 - **Cross-ref:** [`decisions.md` 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
   (why the knob is a preference and not a `CryptoConfig` field);
   [`implementation-plan.md` 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
-  (the one-way door this freezes against).
+  (the door `enroll:update` opened, and which nothing yet walks through).
 
 ### 3.5 UC-A2.5 — An enrollment amends its own key package (`enroll:update`)
 
@@ -1281,15 +1281,24 @@ and B already own.
   posture set the flag; an explicit constructor argument beats the posture in
   both directions.
 
-### 15.3 UC-C1.3 — The envelope axis: postured signers emit the JWS shape
+### 15.3 UC-C1.3 — WITHDRAWN: there is no envelope axis
 
-- **Given:** a client whose preference carries `ReleasePosture.postQuantum()`.
-- **When:** any signer the SDK builds for it wraps a payload, with no
-  per-signer version assigned.
-- **Then:** the envelope goes out in the JWS (v2) shape and verifies exactly
-  as v1 does; a per-signer assignment still wins; a key package built under
-  the posture freezes the threaded version in the write-once
-  `metadata.keyPackage`.
+**Withdrawn 2026-08-12** by [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 1. Do not write this test: it asserts a mechanism that is being deleted.
+
+It read: *given a client whose preference carries
+`ReleasePosture.postQuantum()`, when any signer wraps a payload with no
+per-signer version assigned, then the envelope goes out in the JWS (v2) shape*.
+Every clause of it is void — `envelopeVersion` stops being a `ReleasePosture`
+axis, there is one envelope shape rather than a postured choice between two,
+and the trailing claim that a key package "freezes the threaded version in the
+write-once `metadata.keyPackage`" was already false once `enroll:update`
+reached `metadata` ([91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
+ruling 13).
+
+What replaces it belongs to the multi-signature rows in section 16, not here:
+one shape, one or more signatures, strongest-understood verified and a refusal
+on failure.
 
 ### 15.4 UC-C1.4 — The key-exchange axis: the posture names pq enrollment
 
@@ -1388,7 +1397,9 @@ side nobody wrote — the published arm is the only thing that measures
 ### 16.3 The wire rows
 
 - **UC-G1.5 · a bare-string `_apsk` still verifies.**
-  *Given* an `_apsk` published by at_client 3.14.0 — a bare public-key string.
+  *Given* an `_apsk` published by at_client **3.13.0** — a bare public-key
+  string. (3.13.0, not 3.14.0: `apkam_signing.dart` ships in 3.13.0, and
+  3.14.0 is retracted.)
   *When* a current build verifies an envelope from that enrollment.
   *Then* it succeeds, reading the record as a single `rsa2048` entry. The
   writer arm must show the current build never emits that shape.

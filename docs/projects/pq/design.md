@@ -575,8 +575,12 @@ keypair, its own namespaces. Apps migrate independently and never have to agree.
    `crypto` config — or, since
    [`decisions.md` 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10),
    by building its preference with `ReleasePosture.postQuantum()`, which runs
-   all five 4.0 flag defaults (era config, `disallowLegacyEncryption`, JWS
-   envelopes, pq enrollment key exchange, ML-DSA retrofits) on a 3.x build.
+   the 4.0 flag defaults (era config, `disallowLegacyEncryption`, pq enrollment
+   key exchange, ML-DSA retrofits) on a 3.x build. It carried a fifth, the JWS
+   envelope wrapper, until
+   [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+   ruling 1 made one envelope shape unconditional and removed the axis; the
+   field is still on the class until that lands.
    4.0 itself is that posture becoming the default — final-3.x code,
    different flag defaults
    ([`decisions.md` 56.4](decisions.md#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults)).
@@ -923,10 +927,12 @@ derived from what the build supports made a package advertising one KEM claim it
 open constructions built on the other); an **absent** list means exactly the one suite
 that existed before the field and must never be widened; and on parse, entries this
 build does not recognise are **kept**, because the field is the holder's statement about
-itself. `metadata.keyPackage` is written by `enroll:request` and never again
+itself. `metadata.keyPackage` is written by `enroll:request` and reachable
+afterwards only by the enrollment's own self-only `enroll:update`
 ([plan 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
-so whatever it claims is frozen for the life of the enrollment — which is why an
-overstatement is a defect and not a cosmetic one
+which no client sends yet — so in practice whatever it claims is what peers seal
+to, and nobody else can repair it. That is why an overstatement is a defect and
+not a cosmetic one
 ([`decisions.md` 50.5](decisions.md#505-the-defect-a-widened-list-planted-before-anything-read-it)).
 
 **atServer build points** (verb spec; effort **L** — full DEP1 spec in
@@ -1975,7 +1981,8 @@ is never written again.
 list of keys with algorithms. `status` absent reads as `active`.
 
 A reader accepts this and the released bare string (an `rsa2048` key published
-by at_client 3.14.0 or earlier). A writer emits only this.
+by at_client **3.13.0**'s `mixins/apkam_signing.dart` — the genuinely released
+surface here, 3.14.0 being retracted). A writer emits only this.
 
 The value is composed client-side and travels on `EnrollParams.apsk`. The
 atServer stores it verbatim on the enrollment record, writes its JSON encoding
@@ -1985,26 +1992,40 @@ encoded; a longer value is refused rather than truncated.
 
 ### 9.4 The envelope
 
+**RFC 7515 general JSON serialization** — ruled by
+[`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 1, superseding the bespoke container in
+[`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
+ruling 12.
+
 ```json
 {
-  "v": 1,
+  "payload": "<base64url(JSON)>",
   "signatures": [
-    {"alg": "mldsa65", "sig": "…"},
-    {"alg": "rsa2048", "sig": "…"}
-  ],
-  "enrollmentId": "…"
+    {"protected": "<base64url({\"alg\":\"ML-DSA-65\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
+     "signature": "<base64url>"},
+    {"protected": "<base64url({\"alg\":\"RS256\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
+     "signature": "<base64url>"}
+  ]
 }
 ```
 
-`alg` is the same spelling the `_apsk` array uses, so one vocabulary covers
-both halves of a verification: the algorithm named in the signature is matched
-against the algorithm named in the published entry. `sig` rather than
-`signature` for the same reason — the entry shape mirrors `_apsk`'s, and the
-released envelope's `signature` field keeps its old name in the legacy branch
-where it belongs.
+Signing input per entry is `ASCII(protected || '.' || payload)`, all encodings
+unpadded base64url. `alg` uses the **JOSE** names — `RS256`, and ML-DSA-65 per
+RFC 9964 — not the `_apsk` array's `mldsa65`/`rsa2048` spelling; the two
+vocabularies meet in one mapping function, as at_chops' `SigningAlgoType`
+already meets the keyfile's.
 
-A reader also accepts the released unversioned shape — a bare `signature` with
-no `v`, as at_client 3.14.0 emits.
+There is no top-level `v` or `enrollmentId`: both live **inside** each
+`protected` header, as `v` and `kid`, where the signature covers them. A
+version or signer claim outside the signature is one an attacker can edit.
+
+There is no legacy branch. `envelope_signing.dart` shipped only in at_client
+3.14.0, which is retracted, so **no released build reads or writes an envelope**
+— see [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 3, which splits the released-surface table on exactly this point. The
+bare-string `_apsk` is the released thing in this area, and it is a *record*,
+not an envelope.
 
 Signing: one signature per active signing key the enrollment holds, so the
 envelope carries exactly what `_apsk` advertises as `active`.
