@@ -1,3 +1,13 @@
+## 5.16.0
+
+- feat: add `Metadata.copy()` — a field-for-field copy, so callers handing
+  metadata from one object to another stop hand-rolling the field list. A
+  hand-rolled copier silently drops any field added to `Metadata` later: the
+  value still round-trips and only the missing field is absent at the far end,
+  which is how `immutable` and `appMetadata` went astray on several paths in
+  `at_client`. A caller that must not carry a field clears it after copying, so
+  the exception is written where it applies rather than being the default.
+
 ## 5.15.0
 
 - feat: add `EnrollVerbBuilder.apsk`, threading the existing
@@ -21,16 +31,6 @@
   encapsulation key still opens records already sealed to it. Documentation
   only; the atServer stores the value verbatim, so no record carries either
   spelling.
-
-<!-- SPIKE-ONLY, NOT IN THE PUBLISHED 5.15.0 — needs its own version heading
-     before this reaches trunk. -->
-- feat: add `Metadata.copy()` — a field-for-field copy, so callers handing
-  metadata from one object to another stop hand-rolling the field list. A
-  hand-rolled copier silently drops any field added to `Metadata` later: the
-  value still round-trips and only the missing field is absent at the far end,
-  which is how `immutable` and `appMetadata` went astray on several paths in
-  `at_client`. A caller that must not carry a field clears it after copying, so
-  the exception is written where it applies rather than being the default.
 
 ## 5.14.0
 
