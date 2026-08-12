@@ -106,9 +106,19 @@ nonce = HKDF-SHA256(ikm = ss, salt = <empty>, info = suiteInfo || 0x02, L = 12)
 
 Four details a port gets wrong if they are not stated:
 
-- **An absent `info` and a zero-length `info` are the same thing.** Production
-  callers on the nskey path pass no `info` at all, and the vectors pin both
-  forms to the same output.
+- **An absent `info` and a zero-length `info` are the same thing** at the
+  schedule level, and the vectors pin both forms to the same output. A port
+  must reproduce that, which is why the rows are there.
+
+  This bullet used to justify itself with "production callers on the nskey
+  path pass no `info` at all". That was never true — `NskeyProvider` binds
+  `at/nskey/…:<owner>:<namespace>` at both its seal and its open — and the
+  coalescing is in fact the *hazard*, not a convenience: two callers that each
+  omitted `info` would silently share one binding and could open each other's
+  envelopes. `pqSeal`/`pqOpen` therefore **require** `info` as of at_chops
+  3.6.0, so the absent form is no longer reachable through them. It remains
+  reachable through the schedule's own entry point, which is what these vectors
+  exercise and what a port has to match.
 - **The salt is empty**, not 32 zero bytes. RFC 5869 defines a zero-length
   HMAC key as equivalent to the block-length zero-filled default, so the two
   agree — but only if the implementation follows the RFC rather than
@@ -131,7 +141,9 @@ dispatch were wrong.
 
 ## Seal
 
-Given a recipient public key, a plaintext, and optional `info` and `aad`:
+Given a recipient public key, a plaintext, a required `info` (which may be
+zero-length, but must be stated — see the schedule note above) and an optional
+`aad`:
 
 1. `(kemCt, ss) = KEM.Encapsulate(recipientPublicKey)` — fresh randomness per
    call. There is no derandomised variant in the public API.
