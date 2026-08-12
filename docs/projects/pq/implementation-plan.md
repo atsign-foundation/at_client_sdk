@@ -2502,7 +2502,7 @@ Then, as the release programme rather than development: publish at_chops 3.6.0
 → at_commons 5.15.0 → at_auth 3.4.0 → at_client's GA minor, and finally
 **R-2**, the 4.0.0 posture flip.
 
-### 14.19 Four small items, raised 2026-08-12 and not yet acted on
+### 14.19 Small items, raised 2026-08-12 and not yet acted on
 
 Each is real, verified at the time of writing, and too small to be a step of
 its own. None blocks anything.
@@ -2528,3 +2528,40 @@ its own. None blocks anything.
    minted before that commit derives different kpids than it did**, so recycle
    it before trusting their key packages. A fresh `runLocal.sh` run is
    unaffected — it recycles the container anyway.
+5. **One bad peer aborts a whole secret broadcast.**
+   `PairwiseSecretSharing.requestSecretsFromNamespace` awaits `sendEnvelope`
+   per member with no guard, so `sendEnvelope`'s own documented `StateError`
+   (one member advertising no mutually supported construction) stops the loop
+   and every remaining member is never asked. That undercuts the N-holders
+   design `requestAnswerJitter` exists to manage. Real, unfixed, and
+   deliberately not folded into the ruling-6 commits because it has nothing to
+   do with domain separation — it wants its own subject line and its own test.
+
+#### 14.19.1 Three things that LOOK like defects and are not
+
+Recorded because each was proposed as a fix during ruling 6 and **rejected on
+evidence**. Without this note the next reader re-derives the proposal, "fixes"
+it, and ships a false claim — one of them was already drafted into a CHANGELOG
+line before an adversarial pass killed it.
+
+1. **A corrupt-base64 pairwise envelope is NOT misclassified as transient.**
+   It is tempting to read `sweepOnce`'s broad `catch` arm as the "retry
+   forever" path and the `received == null` arm as the "deterministic skip"
+   path, and to claim routing the decode through `pqOpenFromBase64` changes the
+   outcome. It does not: both arms run the same two statements — release the
+   claim, log a warning — and neither deletes, so the envelope waits for ttl
+   expiry either way. Only the log line and the classification differ. Do not
+   describe this as a behaviour or at-rest change.
+2. **An `on PqSealException` arm at the nskey seal site would be dead code.**
+   `pqSeal` throws it in exactly one place, the unsupported-version refusal,
+   and `NskeyProvider.encrypt`'s own version guard makes that unreachable — the
+   version always comes from `sealVersionFor`. The wrong-length-key case that
+   arm looks like it catches arrives from `encapsulate`, which at_chops now
+   maps itself.
+3. **Do NOT tighten `_openIfSymmetricKey`'s `catch (e)` to a typed catch.**
+   `enrollment_symmetric_key.dart` documents "every rejection is a skip rather
+   than a throw", its caller's poll loop has no `try` at all, and a throw there
+   fails the whole enrollment — recoverable only by re-requesting, since the
+   conveyed `apkamSymmetricKey` is written once. The breadth is the contract.
+   [Section 47.6](decisions.md#476-two-defects-in-the-enrollment-path-both-from-the-same-shape)
+   records the two defects that breadth was introduced to fix.
