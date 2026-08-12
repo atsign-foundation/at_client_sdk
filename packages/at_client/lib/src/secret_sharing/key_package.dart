@@ -103,8 +103,10 @@ class KeyPackage {
   /// second suite can only be introduced by upgrading every reader first —
   /// release-ordering agility rather than negotiated agility.
   ///
-  /// Absent on packages written before this field existed, and
-  /// [legacySuites] is what those meant.
+  /// Required. It was once optional, with an absent field meaning "the one
+  /// suite that existed when this was written" — a hatch for a predecessor
+  /// that never shipped, and one that quietly spoke for holders who had said
+  /// nothing.
   ///
   /// Derived from [keys] when the caller does not state it, never from the
   /// build's own [SecretSharingAlgos.suites]. That list is what this client can
@@ -113,13 +115,6 @@ class KeyPackage {
   /// made a package advertising one KEM claim it could unwrap constructions
   /// built on the other.
   final List<String> suites;
-
-  /// What a key package with no `suites` field is taken to support.
-  ///
-  /// Exactly the one suite that existed when such packages were written. It
-  /// must never grow: adding to it would claim, on behalf of holders that
-  /// never said so, that they can open something they cannot.
-  static const List<String> legacySuites = [SecretSharingAlgos.xWingHpke];
 
   /// [suites] defaults to what [keys] can open — see the field's own doc for
   /// why that is not the same as what this build supports.
@@ -156,12 +151,8 @@ class KeyPackage {
   /// A sender with no overlap must not fall back to stamping its own
   /// preference: the holder would receive an envelope it cannot unwrap, and
   /// the failure would arrive as an opaque AEAD error on the far side.
-  String? bestSuiteFor(List<String> senderSuites) {
-    for (final suite in senderSuites) {
-      if (suites.contains(suite)) return suite;
-    }
-    return null;
-  }
+  String? bestSuiteFor(List<String> senderSuites) =>
+      SecretSharingAlgos.bestSuiteBetween(senderSuites, suites);
 
   /// The addressing token for this key package: the [kid] of its
   /// enc-use key (the KEM public key a sender seals to). Null if the
@@ -238,20 +229,24 @@ class KeyPackage {
     if (v is! int || createdAt is! String || keys is! List) {
       throw FormatException('KeyPackage: malformed payload $payload');
     }
-    // Absent means a package written before the field existed, which supports
-    // exactly what was available then. A non-String entry is dropped rather
-    // than throwing, matching how unknown `keys` entries are handled: a newer
-    // writer may name suites this build has never heard of.
+    // Required: a package that names no suites says nothing about what its
+    // holder can open, and guessing on its behalf is how a sender comes to
+    // seal something the holder cannot unwrap. A non-String ENTRY is still
+    // dropped rather than throwing, matching how unknown `keys` entries are
+    // handled — a newer writer may name suites this build has never heard of.
     final declared = payload['suites'];
+    if (declared is! List) {
+      throw FormatException(
+          'KeyPackage: payload declares no suites, so nothing can be sealed '
+          'to it: $payload');
+    }
     return KeyPackage(
       v: v,
       enrollmentId: enrollmentId,
       apkamId: apkamId,
       createdAt: DateTime.parse(createdAt),
       keys: keys.map(PackageKey.fromJson).whereType<PackageKey>().toList(),
-      suites: declared is List
-          ? declared.whereType<String>().toList()
-          : legacySuites,
+      suites: declared.whereType<String>().toList(),
     );
   }
 }

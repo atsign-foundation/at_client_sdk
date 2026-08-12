@@ -336,9 +336,12 @@ void main() {
         'v': 1,
         'createdAt': DateTime.now().toUtc().toIso8601String(),
         'keys': sharerB.myKeyPackage.keys.map((k) => k.toJson()).toList(),
-        // no `suites` — written before the field existed
+        // Declares only the older construction. It used to say this by
+        // OMITTING the field; a package that names no suites is refused now,
+        // so a narrow peer has to state its narrowness.
+        'suites': [SecretSharingAlgos.xWingHpke],
       }, enrollmentId: sharerB.enrollmentId);
-      expect(legacyPeer.suites, KeyPackage.legacySuites);
+      expect(legacyPeer.suites, [SecretSharingAlgos.xWingHpke]);
 
       await sharerA.sendEnvelope(legacyPeer, 'myapp', {'a': 1});
 

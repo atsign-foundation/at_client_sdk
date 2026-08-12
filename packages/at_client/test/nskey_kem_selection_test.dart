@@ -87,7 +87,7 @@ void main() {
         nskeyKid: nskeyKidOf(pair.publicKey),
         publicKey: pair.publicKey,
         alg: SecretSharingAlgos.xWing,
-        suites: legacyNskeySuites,
+        suites: const [SecretSharingAlgos.xWingHpke],
       ), pair.secretKey);
       final provider = NskeyProvider(
           keyRing: ring,
@@ -194,6 +194,47 @@ void main() {
       expect(providers, hasLength(2));
       expect(providers.first.cache, same(providers.last.cache));
       expect(config.contentKeyCache, same(providers.first.cache));
+    });
+  });
+
+  group('the one suite negotiation', () {
+    // It was written twice — once for key packages, once for nskey — and a
+    // negotiation that disagrees with itself picks different constructions for
+    // the same two parties depending on which substrate is asking.
+
+    test('the SENDER\'s order decides, not the recipient\'s', () {
+      // The property a reimplementation gets wrong. Both lists contain both
+      // suites, in opposite orders, so a walk driven by the wrong side
+      // returns the other answer — the arms cannot collapse into each other.
+      const sender = ['x-wing-rfc9180-v1', 'x-wing-hpke-v1'];
+      const recipient = ['x-wing-hpke-v1', 'x-wing-rfc9180-v1'];
+
+      expect(SecretSharingAlgos.bestSuiteBetween(sender, recipient),
+          'x-wing-rfc9180-v1');
+      expect(SecretSharingAlgos.bestSuiteBetween(recipient, sender),
+          'x-wing-hpke-v1',
+          reason: 'swapping the arguments swaps the answer, which is what '
+              'proves the sender side is the preference order');
+    });
+
+    test('no shared suite is null, never a guess', () {
+      expect(
+          SecretSharingAlgos.bestSuiteBetween(
+              ['x-wing-rfc9180-v1'], ['ml-kem-1024-rfc9180-v1']),
+          isNull,
+          reason: 'sealing under a construction the recipient never claimed '
+              'fails on their side, as an AEAD error naming neither party');
+      expect(SecretSharingAlgos.bestSuiteBetween(['x-wing-hpke-v1'], []),
+          isNull);
+    });
+
+    test('a suite this build has never heard of is still negotiable', () {
+      // The list is the OTHER party's statement about itself, so an entry we
+      // do not recognise is not ours to filter out — only ours to not offer.
+      expect(
+          SecretSharingAlgos.bestSuiteBetween(
+              ['from-2032', 'x-wing-hpke-v1'], ['from-2032']),
+          'from-2032');
     });
   });
 }

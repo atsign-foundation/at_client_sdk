@@ -218,6 +218,9 @@ void main() {
           {'kid': 'k3', 'use': 'enc'}, // malformed: no alg/pub
           'not even a map',
         ],
+        // Named, because a package that names no suites is refused outright —
+        // and what this test is about is the ENTRIES, not the suites.
+        'suites': ['x-wing-hpke-v1'],
       }, enrollmentId: 'enroll-x', apkamId: 'apkam-x');
       expect(pkg.keys, hasLength(2));
       expect(pkg.enrollmentId, 'enroll-x');
@@ -227,28 +230,23 @@ void main() {
       expect(pkg.bestKeyFor(['something-else']), isNull);
     });
 
-    test('a package with no suites means the one that existed before the field',
+    test('a package that names no suites is refused, not read as the oldest',
         () {
-      // Every key package written before 2026-08-06 carries no `suites`, and
-      // enrollment key packages are write-once — they are never rewritten — so
-      // this reading is permanent for those enrollments, not transitional.
-      //
-      // This became discriminating when the second and third suites landed:
-      // `legacySuites` is one value and this build supports three, so a build
-      // that ignored the absent field would now claim, on an old holder's
-      // behalf, that it can open two constructions that did not exist when its
-      // key package was written.
-      final pkg = KeyPackage.fromPayload({
-        'v': 1,
-        'createdAt': '2026-06-11T00:00:00.000Z',
-        'keys': [
-          {'kid': 'k1', 'use': 'enc', 'alg': 'x-wing', 'pub': 'p'},
-        ],
-      }, enrollmentId: 'enroll-x');
-
-      expect(pkg.suites, KeyPackage.legacySuites);
-      expect(pkg.bestSuiteFor(SecretSharingAlgos.suites),
-          SecretSharingAlgos.xWingHpke);
+      // It used to be read as "the one construction that existed before the
+      // field did" — a default that spoke for holders who had said nothing.
+      // An enrollment key package is write-once, so that guess would have been
+      // permanent for the enrollment, and sealing to a holder on a
+      // construction it never claimed is exactly what cannot be recovered
+      // from: the holder simply cannot open what arrives.
+      expect(
+          () => KeyPackage.fromPayload({
+                'v': 1,
+                'createdAt': '2026-06-11T00:00:00.000Z',
+                'keys': [
+                  {'kid': 'k1', 'use': 'enc', 'alg': 'x-wing', 'pub': 'cA=='},
+                ],
+              }, enrollmentId: 'enroll-x'),
+          throwsA(isA<FormatException>()));
     });
 
     test('a declared suites list is what the sender negotiates against', () {

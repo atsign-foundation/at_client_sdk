@@ -110,6 +110,28 @@ class SecretSharingAlgos {
   /// must never claim a suite on the strength of a key this build cannot
   /// identify — the claim would be acted on by a sender, and the failure would
   /// arrive on the holder's side as an AEAD error.
+  /// The construction two parties settle on: the first of [senderSuites] that
+  /// [recipientSuites] also declares, or null when they share none.
+  ///
+  /// The SENDER's list is the preference order, and the recipient's is a
+  /// membership test — which is what makes this negotiated agility rather than
+  /// release-ordered agility. A sender walks its own strongest-first list and
+  /// stops at the first thing the recipient has said it can open, so a new
+  /// construction reaches the wire as soon as both ends know it, in whatever
+  /// order they were upgraded.
+  ///
+  /// One function because it was two: the key-package path and the nskey path
+  /// each walked this, and a negotiation that disagrees with itself picks
+  /// different constructions for the same pair of parties depending on which
+  /// substrate is asking.
+  static String? bestSuiteBetween(
+      List<String> senderSuites, List<String> recipientSuites) {
+    for (final suite in senderSuites) {
+      if (recipientSuites.contains(suite)) return suite;
+    }
+    return null;
+  }
+
   static List<String> openableSuitesFor(String keyAlgo) => switch (keyAlgo) {
         xWing => const [xWingRfc9180, xWingHpke],
         mlKem1024 => const [mlKem1024Rfc9180],

@@ -1,4 +1,19 @@
 ## 3.14.1
+- **breaking (unreleased surface): `v`, `alg` and `suites` are required on an
+  nskey advertisement, and `suites` on a key package.** Each had an
+  absent-means-the-shape-that-predates-it hatch, defending against a
+  predecessor that never shipped. What the hatches did in practice was answer,
+  on the owner's behalf, questions the owner had not answered — which KEM some
+  bytes belong to, and which construction they can unwrap — and a sender acts
+  on both immediately. `KeyPackage.legacySuites` and `legacyNskeySuites` go
+  with them: two constants with identical values in different files, naming
+  what an absence meant.
+- refactor: one suite negotiation, `SecretSharingAlgos.bestSuiteBetween`. The
+  key-package path and the nskey path each walked the same list, and a
+  negotiation that disagrees with itself picks different constructions for the
+  same two parties depending on which substrate is asking. The sender's list
+  is the preference order and the recipient's is a membership test, which is
+  what makes this negotiated agility rather than release-ordered agility.
 - **breaking (unreleased surface): a key id is the SHA-256 prefix of the key's
   raw bytes, everywhere.** `PackageKey.computeKid` and `nskeyKidOf` were two
   derivations that disagreed about the preimage — the first hashed the base64

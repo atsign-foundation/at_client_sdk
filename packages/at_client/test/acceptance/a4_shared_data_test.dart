@@ -173,13 +173,13 @@ void main() {
       );
       provenIn(
         'packages/at_client/test/key_package_registration_test.dart',
-        'a package with no suites means the one that existed before the field',
-        proves: 'the absent-field default is read as exactly the single '
-            'construction that predates it, and "a declared suites list is '
-            'what the sender negotiates against" shows a stated list overrides '
-            'the derivation on parse — the field is the holder\'s statement '
-            'about itself, so a newer holder may name a suite this build has '
-            'never heard of.',
+        'a package that names no suites is refused, not read as the oldest',
+        proves: 'a package that states no suites is refused rather than '
+            'answered for, and "a declared suites list is what the sender '
+            'negotiates against" shows the stated list is what is negotiated '
+            'against on parse — the field is the holder\'s statement about '
+            'itself, so a newer holder may name a suite this build has never '
+            'heard of.',
       );
     });
 

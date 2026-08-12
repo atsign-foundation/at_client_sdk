@@ -123,12 +123,9 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   /// owner would get a conveyance it cannot unwrap, and the failure would
   /// surface on their side as an AEAD error naming nothing.
   int? _sealVersionFor(NskeyAdvertisement advertised) {
-    for (final suite in SecretSharingAlgos.openableSuitesFor(keyAlgo)) {
-      if (advertised.suites.contains(suite)) {
-        return SecretSharingAlgos.sealVersionFor(suite);
-      }
-    }
-    return null;
+    final suite = SecretSharingAlgos.bestSuiteBetween(
+        SecretSharingAlgos.openableSuitesFor(keyAlgo), advertised.suites);
+    return suite == null ? null : SecretSharingAlgos.sealVersionFor(suite);
   }
 
   /// Binds the HPKE key schedule to the conveyance's owner and namespace, so an

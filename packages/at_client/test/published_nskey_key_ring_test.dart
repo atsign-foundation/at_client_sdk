@@ -54,11 +54,22 @@ void main() {
         AtClientEnvelopeSigner(signingClient(bob, 'enroll-bob', bobChops));
   });
 
-  /// The advertisement bob really publishes: a signed envelope, not a bare key.
-  Future<String> signedPayloadFor(XWingKeyPair pair) async =>
+  /// The advertisement bob really publishes: a signed envelope, not a bare
+  /// key, and every field `mintAndPublish` writes.
+  ///
+  /// It carried only `nskeyKid` and `publicKey` while `v`, `alg` and `suites`
+  /// each had an absent-means-the-old-shape hatch to fall through. The
+  /// docstring said "really publishes" the whole time; removing the hatches is
+  /// what made that true.
+  Future<String> signedPayloadFor(XWingKeyPair pair,
+          {List<String>? suites}) async =>
       bobSigner.wrapAndSignAndJsonEncode({
+        'v': nskeyAdvertisementVersion,
         'nskeyKid': nskeyKidOf(pair.publicKeyBytes),
         'publicKey': base64Encode(pair.publicKeyBytes),
+        'alg': SecretSharingAlgos.xWing,
+        'suites': suites ??
+            SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
       });
 
   String bobsApskPublicKey() =>
@@ -226,8 +237,12 @@ void main() {
       final pair = bobChops.atChopsKeys.atPkamKeyPair!;
       final envelope = signEnvelope(
           {
+            'v': nskeyAdvertisementVersion,
             'nskeyKid': nskeyKidOf(bobKey.publicKeyBytes),
             'publicKey': base64Encode(bobKey.publicKeyBytes),
+            'alg': SecretSharingAlgos.xWing,
+            'suites':
+                SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
           },
           keys: ApkamSigningKeys(
               publicKey: pair.atPublicKey.publicKey,
@@ -274,20 +289,39 @@ void main() {
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('an advertisement with no version is still read, as the old shape',
-        () async {
-      // Everything published before 2026-08-06 carries no `v`, and those
-      // records live on peers' atServers until each owner next rotates. A
-      // reader that required the field would stop resolving them.
-      final c = client(
-          payload: await bobSigner.wrapAndSignAndJsonEncode({
+    test('an advertisement missing v, alg or suites is refused', () async {
+      // Each of the three had an absent-means-the-old-shape hatch, defending
+      // against a predecessor that never shipped. What the hatches actually
+      // did was let a reader answer, on the owner's behalf, questions the
+      // owner had not answered — which KEM the bytes belong to and which
+      // construction they can unwrap. A sender acts on both immediately.
+      final full = {
+        'v': nskeyAdvertisementVersion,
         'nskeyKid': nskeyKidOf(bobKey.publicKeyBytes),
         'publicKey': base64Encode(bobKey.publicKeyBytes),
-      }));
+        'alg': SecretSharingAlgos.xWing,
+        'suites': SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
+      };
 
-      final advertised =
-          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
-      expect(advertised?.publicKey, bobKey.publicKeyBytes);
+      for (final missing in ['v', 'alg', 'suites']) {
+        final c = client(
+            payload: await bobSigner
+                .wrapAndSignAndJsonEncode(Map.of(full)..remove(missing)));
+
+        await expectLater(
+            PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+            throwsA(isA<AtSigningVerificationException>()),
+            reason: 'an advertisement with no $missing is not the old shape, '
+                'it is an advertisement that does not say');
+      }
+
+      // The control: the same payload WITH all three resolves, so the loop
+      // above is failing on the removal rather than on the fixture.
+      final c = client(payload: await bobSigner.wrapAndSignAndJsonEncode(full));
+      expect(
+          (await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace))
+              ?.publicKey,
+          bobKey.publicKeyBytes);
     });
 
     test('the envelope versions independently of the payload it wraps',

@@ -409,12 +409,10 @@ void main() {
           '"suites":["x-wing-rfc9180-v1","x-wing-hpke-v1"]}');
     });
 
-    test('the legacy-suites lists must never grow', () {
-      // A widened list changes what absent-`suites` packages are claimed to
-      // open, on behalf of holders that never said so.
-      expect(KeyPackage.legacySuites, ['x-wing-hpke-v1']);
-      expect(legacyNskeySuites, ['x-wing-hpke-v1']);
-    });
+    // Two constants used to be pinned here against ever growing:
+    // `KeyPackage.legacySuites` and `legacyNskeySuites`, the values an absent
+    // `suites` field was read as. Both are gone — `suites` is required now, so
+    // nothing is read on a holder's behalf and there is no list to widen.
   });
 
   group('FROZEN FOREVER: algorithm spellings, wire and keyfile', () {
