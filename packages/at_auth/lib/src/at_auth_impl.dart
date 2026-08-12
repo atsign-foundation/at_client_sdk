@@ -188,7 +188,7 @@ class AtAuthImpl implements AtAuth {
       atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
         atOnboardingRequest.atSign,
       );
-    } catch (e, _) {
+    } catch (e) {
       _logger.info(
         'Failed to read keys for atSign: ${atOnboardingRequest.atSign} | Cause: $e',
       ); //swallow the error, we just want to know if keys exist or not
