@@ -1,0 +1,16 @@
+name: wasm_shakedown
+description: >-
+  Dev-only helper that walks a Dart package's import/export graph and reports
+  every file naming a platform library that will not work on the target
+  platform. Used by the `test/wasm/dep_tree_test.dart` suites to keep the
+  web-safe barrels web-safe.
+version: 1.0.0
+publish_to: none
+
+environment:
+  sdk: ^3.6.0
+resolution: workspace
+
+dev_dependencies:
+  lints: ^6.0.0
+  test: ^1.25.0
