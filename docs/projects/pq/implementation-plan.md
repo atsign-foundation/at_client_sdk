@@ -2064,7 +2064,7 @@ gets a red test naming the row that was waiting for it.
 > [`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
 > ruling 1 makes `now|rollout1|rollout2` a new axis on `ReleasePosture`, and
 > **passive-by-default is precisely what the `now` position means**. Build the
-> axis ([14.18](#1418-the-remaining-d1-initial-development-sequence) step 17)
+> axis ([14.18](#1418-the-remaining-d1-initial-development-sequence) step 19)
 > and this is delivered with it. Kept for the survey below, which is the list
 > of what today writes on its own initiative — that list is what the `now`
 > position has to switch off, so it is still the working material.
@@ -2385,7 +2385,7 @@ before chunking it into PRs.
 Ruled 2026-08-11 by a walk through every open item
 ([`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)).
 This is the **order**, not the inventory — each row points at the entry that
-holds the detail. **D1 initial development ends at step 32**, when the stacked
+holds the detail. **D1 initial development ends at step 34**, when the stacked
 PRs are merged; publishing and R-2 follow it.
 
 **Stage 0 — scaffolding.**
@@ -2395,16 +2395,21 @@ PRs are merged; publishing and R-2 follow it.
 | 1 | Drop at_server's `at_commons` override; delete the `at_commons-apsk-1` tag | at_server | **DONE 2026-08-11.** Override gone from both files, `pubspec.lock` resolves hosted 5.14.0, tag deleted local+origin, [at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744) open. ⚠️ at_server head is now `5bc3618a`, three commits past the `ab38b884` the 210/210 was measured at — **that number is stale twice over** (different code, different at_commons source) and must be re-earned |
 | 2 | Run at_client_sdk's functional pack for the two never-run keyId-shape files | at_client_sdk | owed — [14.17](#1417-signature-agility--what-is-built-and-what-is-owed) |
 
-**Stage 1 — the shared key vocabulary, then the `_apsk` reader half. Nothing
-blocks it; start here.**
+**Stage 1 — one envelope shape, one key vocabulary, then the `_apsk` reader
+half. Nothing blocks it; start here.** Steps 3–5 are ordered so each shrinks
+the next: deleting v1 removes wrapper branches the vocabulary would otherwise
+have to carry, and the vocabulary is where `status` is defined before step 5
+builds on it.
 
 | # | Work | Detail |
 |---|------|--------|
-| 3 | One key-entry vocabulary across all three advertising records — `{use, alg, pub, kid, status?}` inside `{v, keys:[…], suites}`; the nskey advertisement converges onto it, one kid function over raw key bytes, one `bestSuiteFor`, one seal/open helper taking `(kem, pub, info, version)`. Deletes the unshipped-predecessor hatches and both `legacy*Suites` constants | [`decisions.md` 94](decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — ⚠️ **before step 4, or that parser becomes the third hand-rolled codec for one shape** |
-| 4 | `_apsk` array parser — the array **and** the released bare string | [`design.md` 9.3](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
-| 5 | Strength order beside `SigningAlgoType` in at_chops, with a raw-literal tripwire | [14.17](#1417-signature-agility--what-is-built-and-what-is-owed) |
-| 6 | Invert `requireAlg` (`envelope_signature.dart:573`) from refuse-on-mismatch to verify-the-strongest-understood | ⚠️ an inversion, not an addition |
-| 7 | Multi-signature envelope **reader** | [`design.md` 9.4](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
+| 3 | **One envelope shape — RFC 7515 general serialization**, `{payload, signatures:[{protected, signature}]}` with `{alg, kid, v}` in each `protected`. Deletes `signedEnvelopeVersion`, `jwsEnvelopeVersion`'s flattened form, `envelopeVersionOf`'s dispatch, the `wrapperFields` ternary in `ApkamSignedAdvertisedKeys.verify`, and `envelopeVersion` as a `ReleasePosture` axis | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 1, **superseding [91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11) ruling 12**'s bespoke container. Premised on the **3.14.0 retraction** |
+| 4 | One key-entry vocabulary across all three advertising records — `{use, alg, pub, kid, status?}` inside `{v, keys:[…], suites}`; the nskey advertisement converges onto it, one kid function over raw key bytes, one `bestSuiteFor`, one seal/open helper taking `(kem, pub, info, version)`. Deletes the unshipped-predecessor hatches and both `legacy*Suites` constants | [`decisions.md` 94](decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — ⚠️ **before step 6, or that parser becomes the third hand-rolled codec for one shape** |
+| 5 | The **`retired` key path**: `bestKeyFor` skips retired entries, `kpid` becomes the *active* enc key's kid, `_consume`'s two equality checks become "one of the keys I hold", and `KeyPackageRegistration` + `PersistedApkamKeys` go **plural**. ⚠️ app-facing: `PersistedApkamKeys` is what apps build in `loadApkamKeys`/`saveApkamKeys` | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) rulings 4–7 — without the plural holding the field is decorative |
+| 6 | `_apsk` array parser — the array **and** the released bare string | [`design.md` 9.3](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
+| 7 | Strength order beside `SigningAlgoType` in at_chops, with a raw-literal tripwire | [14.17](#1417-signature-agility--what-is-built-and-what-is-owed) |
+| 8 | Invert `requireAlg` (`envelope_signature.dart:573`) from refuse-on-mismatch to verify-the-strongest-understood | ⚠️ an inversion, not an addition |
+| 9 | Multi-signature envelope **reader** | [`design.md` 9.4](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
 
 **A reader understanding no entry refuses outright** — no downgrade, no fallback
 to a derivable legacy key ([`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11) ruling 2).
@@ -2413,29 +2418,29 @@ to a derivable legacy key ([`decisions.md` 93](decisions.md#93-the-d1-remaining-
 
 | # | Work |
 |---|------|
-| 8 | Ruling 7's remaining half — flat `apkamPublicKey`/`apkamPrivateKey` becomes a write-only projection; move `AtKeys.toAtChops()`, `at_auth_impl.dart`, `onboarding_mint.dart`, `file_io.dart` |
-| 9 | Resolve `atKeysIo` nullability — entangled with **S-3** (partly landed) |
-| 10 | A per-algorithm signing-key accessor on `AtKeys`; widen or replace `ApkamSigningKeys`, which holds one pair today |
+| 10 | Ruling 7's remaining half — flat `apkamPublicKey`/`apkamPrivateKey` becomes a write-only projection; move `AtKeys.toAtChops()`, `at_auth_impl.dart`, `onboarding_mint.dart`, `file_io.dart` |
+| 11 | Resolve `atKeysIo` nullability — entangled with **S-3** (partly landed) |
+| 12 | A per-algorithm signing-key accessor on `AtKeys`; widen or replace `ApkamSigningKeys`, which holds one pair today |
 
 **Stage 3 — the `_apsk` writer half (rollout 2).**
 
 | # | Work |
 |---|------|
-| 11 | `_apsk` array composer — and settle `publishPublicSigningKey`'s fate (its skip-if-present never rewrites a bare string) |
-| 12 | Populate `EnrollParams.apsk` on `enroll:request` — nothing does today, so the atServer capability is dormant |
-| 13 | Multi-signature envelope **writer** |
-| 14 | The `enroll:update` client caller + its PoP signature (`AtSigningMode.pkam`, SHA-256) |
-| 15 | The in-use signing set on `AtClientPreference` |
-| 16 | Mint-on-demand when the in-use set names an algorithm the enrollment lacks |
-| 17 | **The rollout axis** — one new `ReleasePosture` axis, `now\|rollout1\|rollout2`, switching all three writer behaviours together. ⚠️ **still unnamed** |
+| 13 | `_apsk` array composer — and settle `publishPublicSigningKey`'s fate (its skip-if-present never rewrites a bare string) |
+| 14 | Populate `EnrollParams.apsk` on `enroll:request` — nothing does today, so the atServer capability is dormant |
+| 15 | Multi-signature envelope **writer** |
+| 16 | The `enroll:update` client caller + its PoP signature (`AtSigningMode.pkam`, SHA-256) |
+| 17 | The in-use signing set on `AtClientPreference` |
+| 18 | Mint-on-demand when the in-use set names an algorithm the enrollment lacks |
+| 19 | **The rollout axis** — one new `ReleasePosture` axis, `now\|rollout1\|rollout2`, switching all three writer behaviours together. ⚠️ **still unnamed** |
 
 **Stage 4 — the programme pair. This is the validation gate before any PR is carved.**
 
 | # | Work |
 |---|------|
-| 18 | Sender + receiver executables, each `--stage published\|now\|rollout1\|rollout2` |
-| 19 | The driver running the **4×4** matrix, every failing cell asserted by its specific error |
-| 20 | UC-G1.14 — rollout1/rollout1 byte-identical to now/now |
+| 20 | Sender + receiver executables, each `--stage published\|now\|rollout1\|rollout2` |
+| 21 | The driver running the **4×4** matrix, every failing cell asserted by its specific error |
+| 22 | UC-G1.14 — rollout1/rollout1 byte-identical to now/now |
 
 Scope of the pair, ruled: the signed-envelope exchange; a real notification and
 data path; **multiple puts and gets**; and enrollment followed by an
@@ -2447,15 +2452,15 @@ measurement rather than a claim — see [`acceptance.md` 16.1](acceptance.md#161
 
 | # | Work | Entry |
 |---|------|-------|
-| 21 | *(folded away)* passive-by-default **is** the axis's `now` position | [14.13](#1413-a-passive-by-default-flag-surveyed-not-built) |
-| 22 | A client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) |
-| 23 | A `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) |
-| 24 | *(closed)* revocation visibility — a proven test-instrument failure | [14.9](#149-a-revoked-enrollment-can-still-authenticate-briefly) |
-| 25 | Domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) |
-| 26 | NoPorts' own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) |
-| 27 | The four audit residuals — perf ceiling on a real low-end device, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
-| 28 | 299 `deprecated_member_use` findings in at_client | [14.11](#1411-299-deprecated_member_use-findings-in-at_client) |
-| 29 | Pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) |
+| 23 | *(folded away)* passive-by-default **is** the axis's `now` position | [14.13](#1413-a-passive-by-default-flag-surveyed-not-built) |
+| 24 | A client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) |
+| 25 | A `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) |
+| 26 | *(closed)* revocation visibility — a proven test-instrument failure | [14.9](#149-a-revoked-enrollment-can-still-authenticate-briefly) |
+| 27 | Domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) |
+| 28 | NoPorts' own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) |
+| 29 | The four audit residuals — perf ceiling on a real low-end device, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
+| 30 | 299 `deprecated_member_use` findings in at_client | [14.11](#1411-299-deprecated_member_use-findings-in-at_client) |
+| 31 | Pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) |
 
 Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128)),
 **KF-1** ([#2129](https://github.com/atsign-foundation/at_client_sdk/issues/2129)),
@@ -2465,9 +2470,9 @@ Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https:/
 
 | # | Work |
 |---|------|
-| 30 | Carve the spike into stacked PRs |
-| 31 | Merge them to trunk. **The spike branch itself never merges** |
-| 32 | ← D1 initial development complete here |
+| 32 | Carve the spike into stacked PRs |
+| 33 | Merge them to trunk. **The spike branch itself never merges** |
+| 34 | ← D1 initial development complete here |
 
 Then, as the release programme rather than development: publish at_chops 3.6.0
 → at_commons 5.15.0 → at_auth 3.4.0 → at_client's GA minor, and finally

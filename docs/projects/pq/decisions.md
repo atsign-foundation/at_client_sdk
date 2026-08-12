@@ -108,7 +108,8 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [91. Signature agility: the APKAM auth key stops being the enrollment's signing key (2026-08-11)](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
 - [92. The spike takes trunk, and two published version numbers move underneath it (2026-08-11)](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11)
 - [93. The D1 remaining-work sequence, and the rollout axis becomes real (2026-08-11)](#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
-- [94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)
+- [94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — *sub-ruling 4 amended 2026-08-12; it rests on the 3.14.0 retraction*
+- [95. The envelope keeps one shape, and a retained key says so (2026-08-12)](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 
 ---
 
@@ -7746,11 +7747,18 @@ superseded kpid is not retired) is the same shape as ruling 9 below.
 | 9  | **The array is append-mostly.** An algorithm leaving the in-use set stops signing; its key and its published entry are retained indefinitely as `verifyOnly`. Key packages and chain links are stored durably, so withdrawing an entry retroactively unverifies everything ever signed with it |
 | 10 | **The APKAM auth key is in the array permanently, as `verifyOnly`.** Everything signed before rollout 2 was signed by it; the array replacing the bare-string record would otherwise unverify all of it. This is ruling 9 applied at the rollout boundary rather than at an algorithm retirement |
 | 11 | **A signer emits one signature per active signing key it holds.** A verifier picks the strongest algorithm it understands from those present, verifies that one, and **refuses outright** on failure — never falling back to a weaker signature, which would be a downgrade attack with an attacker-chosen algorithm |
-| 12 | **The envelope collapses to one versioned shape,** `{"v":1,"signatures":[{"alg","sig"}],"enrollmentId":…}`. The entries use `alg` to match the `_apsk` array's spelling, so one vocabulary covers both halves of a verification — the algorithm named in the signature against the algorithm named in the published entry. `signedEnvelopeVersion = 1` (tagged) and `jwsEnvelopeVersion = 2` (JWS) are both unreleased and are removed rather than carried |
+| 12 | **The envelope collapses to one versioned shape,** `{"v":1,"signatures":[{"alg","sig"}],"enrollmentId":…}`. The entries use `alg` to match the `_apsk` array's spelling, so one vocabulary covers both halves of a verification — the algorithm named in the signature against the algorithm named in the published entry. `signedEnvelopeVersion = 1` (tagged) and `jwsEnvelopeVersion = 2` (JWS) are both unreleased and are removed rather than carried. **Superseded 2026-08-12 by [95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 1** — "removed rather than carried" stands; the replacement is RFC 7515 general serialization rather than this bespoke container, which was chosen when the standards argument had only been weighed against the *flattened* JWS shape |
 | 13 | **Section 68's `enroll:updateMetadata` is renamed `enroll:update`** and widened to reach `apkamPublicKey`, `signingAlgo`, `apsk` and `metadata`. Nothing is built, so the wire token is still free and never will be again; a name saying "metadata" while reaching `apkamPublicKey` generates wrong assumptions for years. **`namespaces` and the approval state stay out of reach permanently** — the operation is self-only, so reaching namespaces would let an enrollment grant itself scope |
 | 14 | **`EnrollParams.apkamPublicKeySignature`** carries a signature by the **new** private key over `enrollmentId\|apkamPublicKey\|signingAlgo`, verified against the new public key in the same request. Without it a compromised-but-authenticated client can install a public key whose private half it does not hold, locking out the legitimate holder while the record looks valid. No nonce: the operation is self-only and the old key stops authenticating after the rotation, so a replay can only be sent by the current holder — section 68 ruling 2's own argument that rollback is self-harm rather than an attack. **The signature is `AtSigningMode.pkam` with `HashingAlgoType.sha256`**, not `AtSigningMode.data`: `data` mode signs with the *encryption* keypair, so it cannot express possession of an APKAM signing key at all, and `pkam` is the mode PKAM verification already uses, so both sides frame the bytes identically. Learned from a red test rather than from reading — the first implementation chose `data` and failed with "Encryption keypair required for signing" |
 | 15 | **The strength order is an explicit ordered list beside `SigningAlgoType` in at_chops** — `mldsa65` > `ecc_secp256r1` > `rsa2048` — pinned by a raw-literal tripwire test in the style of `KeyAlgorithmType`'s. It is a protocol fact every implementation must agree on. The **verifiable** set is derived from what the at_chops build implements, so a build cannot claim an algorithm it cannot run |
 | 16 | **The in-use-for-signing set is app-settable on `AtClientPreference`, defaulted by `ReleasePosture`,** and SDK releases move that default. When the in-use set names an algorithm the enrollment holds no key for, the client mints one locally at start, files it and publishes it — which a signing keypair can do precisely because it needs no server approval, unlike the auth key |
+
+**Renamed 2026-08-12:** the `status` value spelled `verifyOnly` in rulings 8, 9
+and 10 above is **`retired`** — use-neutral, because `use` already names the
+operation and the same value has to serve encapsulation keys
+([95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 6). Nothing composes an `apsk` yet, so no record carries either
+spelling.
 
 ### 91.4 What is released, and therefore what must still be read
 
@@ -7759,7 +7767,8 @@ changed two rulings:
 
 | Surface | Released | Consequence |
 |---------|----------|-------------|
-| Bare-string `_apsk`, unversioned envelope | **Yes** — at_client **3.14.0**, 25 days ago (`mixins/apkam_signing.dart` and `mixins/envelope_signing.dart` are both on trunk and both named in the 3.14.0 entry) | Both are read as legacy, and neither is ever emitted again |
+| Bare-string `_apsk` | **Yes** — `mixins/apkam_signing.dart` ships in at_client **3.13.0** | Read as legacy, never emitted again |
+| Unversioned envelope | **No, as of 2026-08-12** — `mixins/envelope_signing.dart` was **3.14.0**-only, and 3.14.0 is retracted | No released build reads or writes an envelope, so there is nothing to honour on read ([95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 3) |
 | Versioned typed-keys document; `flush` upgrading a legacy file in place | **Yes** — at_auth **3.3.0**, 10 days ago | `version: 1` keyfiles with an empty `keys` array exist in the wild and must be read |
 | `apkam:<enrollmentId>` keyIds | **No** — `fileApkamMaterial` is not on trunk | No read compatibility (ruling 3) |
 | Tagged single-key `_apsk`, `signedEnvelopeVersion`, `jwsEnvelopeVersion` | **No** — all D1-only | Removed, not versioned (rulings 8, 12) |
@@ -7993,7 +8002,18 @@ defends against a predecessor that never shipped. `v`, `alg` and `suites`
 become required.
 
 The exception, and it is a real one: the **bare-string** `_apsk` spelling *is*
-released. It predates this work and keeps its compatibility path.
+released — at_client 3.13.0's `apkam_signing.dart` publishes and fetches one.
+It predates this work and keeps its compatibility path.
+
+**Amended 2026-08-12 — this rests on the 3.14.0 retraction.** at_client
+3.14.0 published `secret_sharing/` entire, so `KeyPackage.legacySuites` was
+guarding a real published writer until 3.14.0 was retracted. On the 3.13.0
+baseline the sub-ruling holds as written, for both records. Recorded because
+the conclusion is downstream of a release decision rather than of the code:
+un-retracting 3.14.0 brings `legacySuites` back with it. The released-surface
+table is [§91.4](#914-what-is-released-and-therefore-what-must-still-be-read),
+whose first row [95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 3 splits.
 
 **5. The suite-negotiation loop is written twice and becomes one function.**
 `KeyPackage.bestSuiteFor` plus `sendEnvelope`'s narrowing, versus
@@ -8034,3 +8054,120 @@ enrollment republishes". The fleet-readiness argument survives on its own
 merits — a reader that cannot parse still cannot parse — but its **severity**
 drops from unrecoverable to recoverable, and that is an input to when the
 default flips. Re-decided on the facts rather than inherited.
+
+## 95. The envelope keeps one shape, and a retained key says so (2026-08-12)
+
+Two items [94](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)
+left open, ruled together because both turn on the same premise: **at_client
+3.14.0 is retracted and the baseline is 3.13.0**, which ships no
+`secret_sharing/` and no envelope code at all.
+
+### The envelope
+
+**1. One envelope shape, and it is RFC 7515 general serialization.**
+`{payload, signatures:[{protected, signature}]}`, one entry per active signing
+key, each `protected` header carrying `{alg, kid, v}` — `kid` being the signing
+enrollment id. Everything else goes: `signedEnvelopeVersion` (the tagged v1
+shape), `jwsEnvelopeVersion` (RFC 7515 **Flattened**), `envelopeVersionOf`'s
+dispatch, the `wrapperFields` ternary in `ApkamSignedAdvertisedKeys.verify`, and
+`envelopeVersion` as a `ReleasePosture` axis.
+
+**This supersedes [91](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
+ruling 12**, which collapsed the envelope to a bespoke
+`{"v":1,"signatures":[{"alg","sig"}],"enrollmentId":…}`. Ruling 12 was right
+that both existing shapes are removed rather than carried; it chose a
+hand-rolled multi-signature container at a moment when the standards argument
+had only ever been weighed against the *flattened* JWS shape, not against the
+multi-signature one. Weighed directly, the bespoke container has no advantage
+left: it is the same structure without the citation.
+
+The move is small because the flattened arm already does the work —
+`_signJwsEnvelope` maps `RS256`/ML-DSA-65 (RFC 9964), emits unpadded base64url,
+and builds a `protected` header with `alg`/`kid`/`v` over the signing input
+`protected || '.' || payload`. General serialization is that entry wrapped in a
+`signatures` array.
+
+Two fields from ruling 12's shape disappear rather than move: top-level `v` and
+`enrollmentId` are already `v` and `kid` **inside** `protected`, where the
+signature covers them. `_verifyJws` already prefers the signed copy — "the
+signed claim is the one that" — so this makes the existing preference the only
+option instead of a tie-break.
+
+**2. Nothing gates it, and each reason that once did was eliminated
+separately.**
+
+| Reason | Killed by |
+|--------|-----------|
+| The enrollment record's `keyPackage` is write-once, so a bad envelope is frozen for that enrollment's life | `enroll:update` reaches `metadata` ([91](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11) ruling 13) |
+| A published reader crashes on a null cast rather than refusing | the 3.14.0 retraction — see ruling 3 |
+| Recovery needs an `enroll:update` no client sends yet | only bites if a bad envelope can exist, and none can when one shape is the only shape |
+
+**3. The retraction splits [§91.4](#914-what-is-released-and-therefore-what-must-still-be-read)'s
+first row, and the envelope half becomes unreleased.** That table treats the
+bare-string `_apsk` and the unversioned envelope as one surface released by
+at_client 3.14.0. They separate: `apkam_signing.dart` ships in **3.13.0**, so
+bare-string `_apsk` stays released and must still be read; `envelope_signing.dart`
+was 3.14.0-only, so with 3.14.0 retracted **no released build reads or writes an
+envelope at all**. This strengthens ruling 12's "removed, not versioned" rather
+than disturbing it — there is no legacy envelope to honour.
+
+**4. The reversibility hatch is spent, not lost.** `nskeyAdvertisementVersion`'s
+doc calls the version field "the hatch that makes moving the envelope to JWS
+reversible". That hatch protected *already-written* records; there are none, so
+reversibility before GA is editing a constant. The payload `v` on the
+advertisement stays — it versions the payload, not the wrapper.
+
+**5. NoPorts is unaffected and stays out of scope.** It produces the same
+`{payload, signature, hashingAlgo, signingAlgo}` shape from its own copy in
+`noports_core`, signs with the encryption keypair and fetches `getRemotePK`
+rather than `_apsk`, so it consumes nothing this deletes — as
+[14.7](implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape)
+already established. The atServer is unaffected for a different reason: it
+stores `metadata` and `apsk` verbatim and has no opinion on either.
+
+### The retained key
+
+**6. `status` is `{active, retired}`, use-neutral, and `retired` replaces the
+documented `verifyOnly`.** `EnrollParams.apsk`'s dartdoc specifies
+`status: "verifyOnly"`, which names the wrong operation for a decapsulation key.
+The `use` field already says which operation a key is for, so one neutral value
+covers both: **retained, not for new operations**. For `use: "sign"` that means
+old signatures still verify; for `use: "enc"`, records already sealed to it
+still open. Absent still reads as `active`. The dartdoc is unbuilt and the
+atServer stores the value verbatim, so nothing on the wire has committed to
+`verifyOnly`.
+
+**7. `retired` is meaningful for KEM entries in the key package, and
+`enroll:update` is what created the need.** Before it, an enrollment's enc key
+never changed and the state could not arise. Now it can, and the gap is
+concrete: `sendEnvelope` puts `<kpid>` in the envelope's key name, `_consume`
+skips any envelope whose `toKpid` or `kid` is not the current `kpid`, and
+`envelopeTtl` is seven days — so rotating an enc key silently strands a week of
+in-flight envelopes. Advertising both keys, new `active` and old `retired`,
+makes that rotation non-lossy.
+
+**8. It is NOT emitted on the nskey advertisement.** Rotation there already
+expresses the same state by overwriting the record while retaining privates
+filed per `nskeyKid`. A sender must never encapsulate to a superseded
+generation, so listing one buys nothing and adds a key that must be trusted to
+be ignored — in the one record whose entire audience is senders acting
+immediately. The writer omits the field; the reader tolerates it.
+
+**9. Building it fully reaches past the codec, and the plural key holding is
+the part that matters.** Four consequences, all owed in the same step:
+
+- `bestKeyFor` returns the first algorithm match regardless of status, so it
+  must skip `retired` entries;
+- `kpid` is `bestKeyFor(...)?.kid`, so it becomes *the active enc key's* kid,
+  with a defined outcome when a package advertises more than one — the
+  ambiguity `PairwiseSecretSharing._isSelf`'s doc already warns about;
+- `_consume`'s two equality checks become "is one of the keys I hold";
+- **`KeyPackageRegistration` holds one `_encSeed`/`_encSecretKey` and
+  `PersistedApkamKeys` persists one `encSeed` + `keyAlgo`; both become plural.**
+  `PersistedApkamKeys` is the shape apps construct in their own
+  `loadApkamKeys`/`saveApkamKeys` callbacks, so this is an app-facing contract
+  change — free on the 3.13.0 baseline, and the reason this is a change to the
+  substrate rather than to a codec.
+
+Without the last one the field is decorative: senders would correctly avoid the
+retired key, and the receiver still could not open anything sealed to it.

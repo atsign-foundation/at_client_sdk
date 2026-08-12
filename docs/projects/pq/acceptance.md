@@ -1409,12 +1409,12 @@ side nobody wrote — the published arm is the only thing that measures
   *Given* an envelope signed at rollout 1 by the APKAM auth key.
   *When* the enrollment moves to rollout 2 and republishes `_apsk` as an array.
   *Then* the stored envelope still verifies, against the auth key's
-  `verifyOnly` entry.
+  `retired` entry.
 
 - **UC-G1.9 · a retired algorithm still verifies history.**
   *Given* an algorithm dropped from the in-use set.
   *Then* new envelopes carry no signature of it, its `_apsk` entry remains with
-  `status: verifyOnly`, and an envelope signed with it before the drop still
+  `status: retired`, and an envelope signed with it before the drop still
   verifies.
 
 ### 16.4 `enroll:update` rows

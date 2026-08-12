@@ -37,13 +37,18 @@ class EnrollParams {
   /// ```json
   /// {"v": 1, "keys": [
   ///   {"use": "sign", "alg": "mldsa65", "pub": "…", "status": "active"},
-  ///   {"use": "sign", "alg": "rsa2048", "pub": "…", "status": "verifyOnly"}
+  ///   {"use": "sign", "alg": "rsa2048", "pub": "…", "status": "retired"}
   /// ]}
   /// ```
   ///
-  /// `status` absent reads as `active`. An entry is retained after it stops
-  /// signing — envelopes are stored durably and re-verified later, so removing
-  /// a key would retroactively unverify everything ever signed with it.
+  /// `status` is `active` or `retired`, and absent reads as `active`.
+  /// `retired` is deliberately use-neutral — "retained, not for new
+  /// operations" — because `use` already says which operation the key serves:
+  /// a retired signing key still verifies old envelopes, and a retired
+  /// encapsulation key still opens records already sealed to it. An entry is
+  /// kept after it stops being used, because envelopes and sealed records are
+  /// stored durably and read later, so removing a key would retroactively
+  /// strand everything ever produced with it.
   ///
   /// A map rather than a string, matching [metadata]: the bare RSA spelling
   /// `_apsk` has always carried is the *legacy* form, and a client old enough

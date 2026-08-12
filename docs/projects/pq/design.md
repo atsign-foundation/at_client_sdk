@@ -1965,7 +1965,7 @@ is never written again.
   "v": 1,
   "keys": [
     {"use": "sign", "alg": "mldsa65", "pub": "…", "status": "active"},
-    {"use": "sign", "alg": "rsa2048", "pub": "…", "status": "verifyOnly"}
+    {"use": "sign", "alg": "rsa2048", "pub": "…", "status": "retired"}
   ]
 }
 ```
@@ -2069,7 +2069,7 @@ keypair can be minted unilaterally because it needs no server approval and no
 enrollment-record change — which is the practical payoff of the split.
 
 When an algorithm leaves the in-use set, signing with it stops; the key and its
-`_apsk` entry are retained indefinitely as `verifyOnly`.
+`_apsk` entry are retained indefinitely as `retired`.
 
 ### 9.7 Rollout gate
 

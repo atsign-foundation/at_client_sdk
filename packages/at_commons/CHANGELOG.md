@@ -7,6 +7,13 @@
   which is how `immutable` and `appMetadata` went astray on several paths in
   `at_client`. A caller that must not carry a field clears it after copying, so
   the exception is written where it applies rather than being the default.
+- fix: `EnrollParams.apsk`'s entry `status` is `active` or **`retired`**, not
+  `verifyOnly` as 5.14.0 documented. The value is use-neutral — "retained, not
+  for new operations" — because `use` already names the operation a key serves:
+  a retired signing key still verifies old envelopes, and a retired
+  encapsulation key still opens records already sealed to it. Documentation
+  only; nothing composes an `apsk` yet, and the atServer stores the value
+  verbatim, so no record carries either spelling.
 
 ## 5.14.0
 
