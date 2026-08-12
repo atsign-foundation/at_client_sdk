@@ -6,9 +6,9 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show
         ApkamSigningKeys,
-        jwsEnvelopeVersion,
-        signEnvelope,
-        signedEnvelopeVersion;
+        envelopePayloadOf,
+        envelopeVersion,
+        signEnvelope;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -236,8 +236,7 @@ void main() {
           keys: ApkamSigningKeys(
               publicKey: pair.atPublicKey.publicKey,
               privateKey: pair.atPrivateKey.privateKey),
-          enrollmentId: 'enroll-bob',
-          version: jwsEnvelopeVersion);
+          enrollmentId: 'enroll-bob');
       final c = client(payload: jsonEncode(envelope));
 
       final advertised =
@@ -295,12 +294,21 @@ void main() {
       expect(advertised?.publicKey, bobKey.publicKeyBytes);
     });
 
-    test('the signed wrapper carries its own version', () async {
-      // Separately from whatever payload it wraps — the two version each
-      // other's shape independently, which is what let the wrapper gain its
-      // JWS shape without touching any payload.
-      final envelope = await bobSigner.wrapAndSign({'anything': 1});
-      expect(envelope['v'], signedEnvelopeVersion);
+    test('the envelope versions independently of the payload it wraps',
+        () async {
+      // The two version each other's shape independently, which is what let
+      // the envelope change shape without touching a single advertisement.
+      // The envelope's own version rides INSIDE the protected header, where
+      // the signature covers it — a version outside the signature is a claim
+      // an attacker can edit.
+      final envelope = await bobSigner.wrapAndSign({'v': 99, 'anything': 1});
+
+      expect(envelope.containsKey('v'), isFalse);
+      final header = jsonDecode(utf8.decode(base64Decode(base64.normalize(
+          ((envelope['signatures'] as List).single as Map)['protected']
+              as String)))) as Map;
+      expect(header['v'], envelopeVersion);
+      expect((envelopePayloadOf(envelope) as Map)['v'], 99);
     });
 
     test('a payload version this build has no code for is refused', () async {

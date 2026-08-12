@@ -1,9 +1,7 @@
 import 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show jwsEnvelopeVersion, signedEnvelopeVersion;
 
-/// The post-quantum rollout's five flags, set as a group.
+/// The post-quantum rollout's four flags, set as a group.
 ///
 /// From the rollout's point of view, at_client 4.0 is the *same code* as
 /// final 3.x with different flag defaults (`docs/projects/pq/decisions.md`
@@ -21,9 +19,6 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 /// - **Whether legacy writes are refused** —
 ///   [AtClientPreference.disallowLegacyEncryption]. An explicit constructor
 ///   argument wins.
-/// - **The signed-envelope wrapper a signer emits** — [envelopeVersion],
-///   consulted by `EnvelopeSigning` when no version was set on the signer
-///   instance. Readers accept both shapes regardless.
 /// - **How an enrollment's `apkamSymmetricKey` travels** — [keyExchangeMode].
 ///   Enrollment submission goes through `package:at_auth`, which cannot see a
 ///   preference, so this value is applied by whoever builds the
@@ -52,10 +47,6 @@ class ReleasePosture {
   /// The default for [AtClientPreference.disallowLegacyEncryption].
   final bool disallowLegacyEncryption;
 
-  /// The signed-envelope wrapper version a signer emits when none was set on
-  /// the instance: `signedEnvelopeVersion` (1) or `jwsEnvelopeVersion` (2).
-  final int envelopeVersion;
-
   /// The key-exchange mode an enrollment submission built under this posture
   /// uses. See `EnrollmentKeyExchangeMode` for what pq mode requires.
   final EnrollmentKeyExchangeMode keyExchangeMode;
@@ -65,21 +56,20 @@ class ReleasePosture {
 
   /// The 3.x defaults — the migration under way.
   ///
-  /// Reads are fully post-quantum-capable; writes, envelopes, enrollments and
-  /// retrofits stay classical, so nothing this client produces outruns what
-  /// the rest of the fleet can read.
+  /// Reads are fully post-quantum-capable; writes, enrollments and retrofits
+  /// stay classical, so nothing this client produces outruns what the rest of
+  /// the fleet can read. The envelope is not an axis here — there is one
+  /// shape, emitted under every posture.
   const ReleasePosture.migration()
       : writesPqByDefault = false,
         disallowLegacyEncryption = false,
-        envelopeVersion = signedEnvelopeVersion,
         keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
         retrofitSigningAlgo = SigningAlgoType.rsa2048;
 
   /// The 4.0 defaults — post-quantum by default.
   ///
   /// New data is written under the nskey data path, legacy writes are
-  /// refused, envelopes go out in the JWS shape, and a retrofit mints
-  /// ML-DSA. [keyExchangeMode] becomes pq, which — unlike the others — this
+  /// refused, and a retrofit mints ML-DSA. [keyExchangeMode] becomes pq, which — unlike the others — this
   /// posture cannot apply on its own: at_client submits no app enrollment,
   /// so that value takes effect when the app builds its request from it
   /// (`AtEnrollmentRequest.pq`).
@@ -100,13 +90,12 @@ class ReleasePosture {
   ///   the 4.0 release owes a decision on those writes before this posture
   ///   can become the default (the R-2 project in `docs/projects/pq/`).
   ///
-  /// The readers for everything this posture emits — nskey records, JWS
-  /// envelopes — ship in the **same release line as the posture itself**, so
-  /// its peers must be on at least that release, not merely "any 3.x".
+  /// The readers for everything this posture emits — the nskey records among
+  /// them — ship in the **same release line as the posture itself**, so its
+  /// peers must be on at least that release, not merely "any 3.x".
   const ReleasePosture.postQuantum()
       : writesPqByDefault = true,
         disallowLegacyEncryption = true,
-        envelopeVersion = jwsEnvelopeVersion,
         keyExchangeMode = EnrollmentKeyExchangeMode.pq,
         retrofitSigningAlgo = SigningAlgoType.mldsa65;
 }

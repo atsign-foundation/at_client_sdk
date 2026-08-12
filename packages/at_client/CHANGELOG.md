@@ -1,4 +1,10 @@
 ## 3.14.1
+- fix: `PqSigningChain.publishPendingLink` compares the conveyed link against
+  the published one **whole**, rather than by a top-level `signature` member
+  the envelope does not have. It read null on both sides, so `null == null`
+  made every existing link match every new one and a genuinely different link
+  conveyed later was silently never published — indistinguishable from
+  "already published", since both are the same early return.
 - feat: `parseApskValue` reads the `_apsk` array form
   (`{"v":1,"keys":[{kid,use,alg,pub}]}`) an enrollment publishes, skipping
   entries whose `use` or `alg` this build does not know and refusing outright
@@ -29,25 +35,25 @@
   holding the live generation, and rotation is the revocation lever. No
   behaviour change — `mintAndPublish` is the cold-start mint, `rotate` is the
   rotation lever, and the doc now says so.
-- feat: `ReleasePosture` — the five post-quantum rollout flags as one value,
+- feat: `ReleasePosture` — the four post-quantum rollout flags as one value,
   set on `AtClientPreference(posture:)`. `ReleasePosture.migration()` (the
   default) is the 3.x column of the rollout table; `postQuantum()` runs the
   4.0 defaults today: the era `CryptoConfig` writes PQ, legacy writes are
-  refused, signers emit the JWS envelope shape, the posture names the pq
-  enrollment key exchange, and an argless `selfRetrofit` mints ML-DSA.
+  refused, the posture names the pq enrollment key exchange, and an argless
+  `selfRetrofit` mints ML-DSA.
   Adopting `postQuantum()` early is a deliberate, eyes-open move — see its
   dartdoc: destinations without seeded namespace keys are refused, and the
   SDK's own namespace-less internal writes are refused until the 4.0
   release settles them.
   Every axis is still individually overridable — an explicit constructor
-  argument, an assigned `crypto`, a per-signer `envelopeVersion`, a
-  per-request `keyExchangeMode` or a per-call `signingAlgo` each beat the
-  posture for that one axis. A bare preference is byte-identical to the
-  pre-posture SDK. `EnrollmentKeyExchangeMode` is re-exported (show-narrowed)
-  on the main barrel so the per-axis override is nameable without importing
-  at_auth. `enrollmentKeyPackageBuilder` and `makeActivationPqNative` gain an
-  `envelopeVersion` parameter (default v1) so the write-once
-  `metadata.keyPackage` envelope can follow the posture.
+  argument, an assigned `crypto`, a per-request `keyExchangeMode` or a
+  per-call `signingAlgo` each beat the posture for that one axis. A bare
+  preference is byte-identical to the pre-posture SDK.
+  `EnrollmentKeyExchangeMode` is re-exported (show-narrowed) on the main
+  barrel so the per-axis override is nameable without importing at_auth.
+  There was a fifth axis, the signed-envelope shape. It is gone with the
+  second shape: one envelope shape means nothing left for a posture to
+  choose.
 - fix: a secret-sharing broadcast identifies itself by **enrollment** rather
   than by kpid. `pushSecretToNamespaceMembers` and
   `requestSecretsFromNamespace` skipped the roster entry for this client by
@@ -130,23 +136,29 @@
   step sits behind a `PqStartupGates` bool, all defaulting on.
   `PqSigningChain` is constructed per client now
   (`PqSigningChain(atClient)`), with the wire vocabulary still static.
-- feat: the signed envelope has a second wrapper shape — RFC 7515 JWS
-  Flattened JSON Serialization (`v: 2`), with `alg` (`RS256` / RFC 9964's
-  `ML-DSA-65`) and the signer's enrollment id (`kid`) inside the signed
-  protected header rather than sitting unauthenticated beside the signature.
-  Readers accept both shapes always; producers emit version 1 unless asked
-  (`signEnvelope`'s `version` parameter, the `EnvelopeSigning.envelopeVersion`
-  rollout flag, or — since `ReleasePosture` landed in this same release — the
-  client's posture, which is what reaches the signers the SDK builds
-  internally), because the
-  enrollment record's `metadata.keyPackage` is write-once — flipping the
-  default is a deployment decision for 4.0, after every reader in the fleet
-  understands version 2. `envelopePayloadOf` and `envelopeSignerOf` are the
-  shape-agnostic reads; every base64url decode normalises padding first
-  (Dart's decoder throws on unpadded input at RSA-signature lengths, so a
-  naive decode fails on every classical envelope and no PQ one). The shape
-  is adjudicated by third-party verifiers over committed vectors
-  (`test/vectors/jws_envelope_v2.json`, `tool/verify_jws_vectors.mjs`).
+- feat: the signed envelope is RFC 7515 JWS **General** JSON Serialization —
+  `{payload, signatures: [{protected, signature}]}` — and that is its only
+  shape. `alg` (`RS256` / RFC 9964's `ML-DSA-65`), the signer's enrollment id
+  (`kid`) and the envelope version (`v: 1`) all sit inside the signed
+  protected header rather than unauthenticated beside the signature, so none
+  of the three can be edited in flight. The document carries no member of our
+  own, which is what lets an off-the-shelf verifier check it whole.
+  There is no version parameter and no rollout flag: two earlier shapes — a
+  bespoke tagged wrapper and RFC 7515 *Flattened* — were deleted rather than
+  carried, because nothing released reads or writes an envelope and there was
+  no reader to stay compatible with. The numbering restarts with the shape,
+  so `signedEnvelopeVersion`, `jwsEnvelopeVersion`, `envelopeVersionOf`,
+  `signEnvelope`'s `version` parameter and `EnvelopeSigning.envelopeVersion`
+  are all gone; `envelopeVersion` is the one constant that remains, and it is
+  the value carried in `protected`.
+  `envelopePayloadOf` and `envelopeSignerOf` are the reads — a direct
+  `envelope['payload']` gets undecoded base64url — and every base64url decode
+  normalises padding first (Dart's decoder throws on unpadded input at
+  RSA-signature lengths, so a naive decode fails on every classical envelope
+  and no PQ one). An envelope carrying no `signatures`, or an empty array, is
+  refused rather than verifying vacuously. The shape is adjudicated by a
+  third-party verifier over committed vectors
+  (`test/vectors/jws_envelope.json`, `tool/verify_jws_vectors.mjs`).
 - fix: a deleted conveyance record now evicts the cached content key under
   the nskey owner the record names (`sharedWith ?? sharedBy` — the same scope
   every cache writer uses) instead of this client's own atSign. Previously an
@@ -351,33 +363,25 @@
   this build does not recognise yields none — a sender acts on the claim, so
   it fails closed rather than open. `SecretSharingAlgos.openableSuitesFor` and
   `openableSuitesForAll` expose the mapping.
-- feat: the signed-envelope wrapper and the nskey advertisement payload each
-  carry a version field. They were the only two signed structures in the PQ
-  design without one, so a reader had nothing to dispatch on if the
-  construction changed — and it is about to, since the envelope is moving to
-  JWS Flattened JSON Serialization. `signedEnvelopeVersion` and
-  `nskeyAdvertisementVersion` are what make that reversible.
-  Adding them is a **one-release** change rather than the usual two-release
-  ladder: no reader in the system rejects unknown or extra fields, confirmed
-  across the whole suite. On the read side an advertisement payload with no
-  `v` is still accepted as the older shape, because records published before
-  this live on peers' atServers until each owner next rotates; a version this
-  build has no code for is refused rather than read as v1, since a later
-  version's fields might mean something else and sealing to a key resolved
-  from a misread payload is not recoverable.
-- fix: `verifyEnvelope` checks the envelope's `hashingAlgo` against an
-  allowlist instead of resolving it straight to a routine. `hashingAlgo` is not
-  covered by the signature, so it is an unsigned field naming a cryptographic
-  routine — the same shape as `signingAlgo`, which was already pinned against
-  the published `_apsk`. Concretely this converts two escapes into the
-  documented `AtSigningVerificationException`: `HashingAlgoType.values.byName`
-  threw `ArgumentError` for a name outside the enum and a type error when the
-  field was absent, neither of which callers are told to catch. It is **not** a
-  hash-downgrade fix — `RsaSigningAlgo` implements sha256 and sha512 only and
-  refuses everything else at both ends, so an MD5-signed envelope was never
-  constructible. `signEnvelope` now refuses to sign under a hash the verifier
-  will not accept, so nobody can mint a well-formed envelope that is
-  permanently uncheckable.
+- feat: the nskey advertisement payload carries a version field
+  (`nskeyAdvertisementVersion`). It and the signed envelope were the only two
+  signed structures in the PQ design without one, so a reader had nothing to
+  dispatch on if the construction changed. On the read side an advertisement
+  payload with no `v` is still accepted as the older shape, because records
+  published before this live on peers' atServers until each owner next
+  rotates; a version this build has no code for is refused rather than read as
+  v1, since a later version's fields might mean something else and sealing to
+  a key resolved from a misread payload is not recoverable. The envelope's own
+  version ended up inside its protected header instead — see the
+  general-serialization entry above.
+- **the envelope no longer names a hash at all.** `signEnvelope` loses its
+  `hashingAlgo` parameter and `verifyEnvelope` loses the allowlist that
+  policed the claim, because `alg` names the hash: `RS256` **is**
+  RSASSA-PKCS1-v1_5 with SHA-256, and ML-DSA signs the message directly. The
+  allowlist existed because `hashingAlgo` was an envelope member sitting
+  outside the signature — an unsigned field naming a cryptographic routine.
+  Nothing unsigned selects a routine in this shape, so there is nothing left
+  to police rather than a check having been relaxed.
 - feat (experimental): **nskey-keypair rotation and the revocation it composes
   with** — the post-compromise-security lever, deliberately not the
   forward-secrecy one. `PublishedNskeyKeyRing.rotate` mints the next

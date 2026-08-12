@@ -4,7 +4,7 @@ import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf, envelopeSignerOf, envelopeVersionOf;
+    show envelopePayloadOf, envelopeSignerOf;
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -225,18 +225,6 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
     _logger.severe('enrollment $enrollmentId advertised a key package that '
         'is not a map; not sealing to it');
     return (null, KeyPackageStatus.rejected);
-  }
-
-  // A wrapper version this build has no code for is a package written by a
-  // newer client, not a hostile one — the same "cannot parse" outcome as an
-  // unreadable payload below, and distinct from the malformed-envelope
-  // refusals that follow.
-  try {
-    envelopeVersionOf(advertised);
-  } on AtSigningVerificationException catch (e) {
-    _logger.info('enrollment $enrollmentId advertised a signed key package '
-        'this version cannot parse: $e');
-    return (null, KeyPackageStatus.unsupported);
   }
 
   // The record names whose enrollment this is, and that is what the _apsk

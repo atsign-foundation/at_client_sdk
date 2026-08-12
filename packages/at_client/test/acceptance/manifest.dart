@@ -55,6 +55,17 @@ class UseCase {
   final String id;
   final String title;
 
+  /// Whether the catalogue has withdrawn this row rather than owing it.
+  ///
+  /// A withdrawn row keeps its heading — the id stays resolvable, and the
+  /// entry says why the row is not coming and what replaced it, which is the
+  /// whole value of writing it down. Deleting the heading instead would leave
+  /// every cross-reference to it dangling and lose the reason.
+  ///
+  /// So it must not be counted as owing a scenario: a burn-down that demands
+  /// a test for a mechanism that was deleted can never reach zero.
+  bool get isWithdrawn => title.startsWith('WITHDRAWN');
+
   @override
   String toString() => '$id — $title';
 }

@@ -91,8 +91,7 @@ Future<AtClientManager> selfRetrofit({
           signingAlgo: algo,
           metadataBuilder: enrollmentKeyPackageBuilder(session.atSign,
               signingAlgo: algo,
-              keyEstablishmentAlgo: preference.keyEstablishmentAlgo,
-              envelopeVersion: preference.posture.envelopeVersion)),
+              keyEstablishmentAlgo: preference.keyEstablishmentAlgo)),
       atLookUp);
 
   // Authenticate under the new enrollment: the retrofit response's session

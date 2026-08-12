@@ -7,7 +7,11 @@ import 'proven_elsewhere.dart';
 /// The capstone of the rollout-posture design (`decisions.md` 56.4): 4.0 is
 /// final-3.x code with different flag defaults, so the entire rollout must be
 /// drivable from this codebase by flag manipulation — each axis in isolation,
-/// and all five as the grouped `ReleasePosture`.
+/// and all four as the grouped `ReleasePosture`.
+///
+/// There were five. The envelope-shape axis (UC-C1.3) is gone because the
+/// envelope stopped having a second shape to roll out to, so there was no
+/// axis left to drive.
 void main() {
   test('UC-C1.1 · the era axis: a postured client writes PQ by default', () {
     // GIVEN a client built with ReleasePosture.postQuantum() and no
@@ -39,32 +43,6 @@ void main() {
     provenIn('packages/at_client/test/disallow_legacy_encryption_test.dart',
         'a client configured to write legacy',
         proves: 'what the flag does once set: the legacy write is refused');
-  });
-
-  test('UC-C1.3 · the envelope axis: postured signers emit the JWS shape', () {
-    // GIVEN a client whose preference carries ReleasePosture.postQuantum().
-    // WHEN  any signer the SDK builds for it wraps a payload, with no
-    //       per-signer version assigned.
-    // THEN  the envelope goes out in the JWS (v2) shape, verifies exactly as
-    //       v1 does, and a per-signer assignment still wins.
-    provenIn('packages/at_client/test/envelope_signing_test.dart',
-        'the client posture decides the shape when the signer was not told',
-        proves: 'emission and verification under the posture');
-    provenIn('packages/at_client/test/release_posture_test.dart',
-        'a per-signer assignment beats the posture, both ways',
-        proves: 'the per-axis override contract');
-    provenIn('packages/at_client/test/enrollment_key_package_test.dart',
-        'the envelope version is a parameter, frozen at the build',
-        proves: 'the write-once keyPackage envelope follows the threaded '
-            'version');
-    provenIn(
-        'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
-        'the postQuantum posture decides an argless retrofit',
-        proves: 'live: the posture\'s version frozen in a real enrollment '
-            'record\'s keyPackage');
-    provenIn('packages/at_client/test/pq_native_onboard_test.dart',
-        'a threaded envelopeVersion reaches the frozen key package',
-        proves: 'the PQ-native activation stamp threads the same parameter');
   });
 
   test('UC-C1.4 · the key-exchange axis: the posture names pq enrollment', () {

@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:collection/collection.dart' show DeepCollectionEquality;
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
@@ -607,13 +608,24 @@ class PqSigningChain {
     }
 
     final existing = _fieldFrom(current, linkField);
-    if (existing != null && existing['signature'] == link['signature']) {
+    if (existing != null && _sameLink(existing, link)) {
       return false;
     }
 
     await publishLink(enrollmentId, link, current: current);
     return true;
   }
+
+  /// Whether [a] and [b] are the same link, compared whole.
+  ///
+  /// Deliberately not a single-member comparison. A chain link is a signed
+  /// envelope, whose signature lives inside its `signatures` array — so a
+  /// top-level `['signature']` read is null for BOTH sides, `null == null`
+  /// holds, and every existing link matches every new one. The conveyed link
+  /// would then never be published, silently, with nothing to log: the
+  /// already-published case and the never-published case are the same branch.
+  static bool _sameLink(Map<String, Object?> a, Map<String, Object?> b) =>
+      const DeepCollectionEquality().equals(a, b);
 
   /// Walks upward from [enrollmentId] and reports how far the chain holds.
   ///

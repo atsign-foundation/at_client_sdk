@@ -5,7 +5,7 @@ import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/at_client_mixins.dart' show makeActivationPqNative;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopeVersionOf, verifyEnvelope;
+    show envelopeSignerOf, verifyEnvelope;
 import 'package:at_commons/at_commons.dart' show AtBytes, AtRootDomain;
 import 'package:test/test.dart';
 
@@ -34,32 +34,23 @@ void main() {
   AtOnboardingRequest request() =>
       AtOnboardingRequest(atSign, rootDomain: AtRootDomain('vip', 64));
 
-  test('the stamp defaults the key package envelope to version 1', () async {
-    final (io, _) = await mlDsaKeys();
+  test('the stamped key package verifies against the ML-DSA APKAM key',
+      () async {
+    final (io, public) = await mlDsaKeys();
     final r = request();
     makeActivationPqNative(r, atSign: atSign);
 
-    final built = await r.metadataBuilder!(io);
-    expect(envelopeVersionOf(built!['keyPackage'] as Map), 1,
-        reason: 'the wrapper frozen in the write-once metadata.keyPackage '
-            'must not move without being asked');
-  });
-
-  test('a threaded envelopeVersion reaches the frozen key package', () async {
-    final (io, public) = await mlDsaKeys();
-    final r = request();
-    makeActivationPqNative(r, atSign: atSign, envelopeVersion: 2);
-
     final envelope = (await r.metadataBuilder!(io))!['keyPackage'] as Map;
-    expect(envelopeVersionOf(envelope), 2,
-        reason: 'pqNativeOnboard passes preference.posture.envelopeVersion '
-            'through this parameter — dropping the plumbing leaves every '
-            'postured onboard emitting v1');
-    // And the v2 shape still verifies against the same ML-DSA APKAM key — in
-    // the array form this enrollment composed and the atServer published
-    // verbatim (a bare value is classified as an RSA key by the verifier).
+
+    // Verified in the array form this enrollment composed and the atServer
+    // publishes verbatim — a bare value is classified as an RSA key by the
+    // verifier, so the array is what proves the ML-DSA path end to end.
     await verifyEnvelope(envelope,
         signerPublicKey: jsonEncode(apskAdvertisement(
             apkamPublicKey: public, signingAlgo: SigningAlgoType.mldsa65)));
+
+    expect(envelopeSignerOf(envelope), isNull,
+        reason: 'an onboard has no enrollment id to stamp: this signs before '
+            'the atServer has assigned one');
   });
 }

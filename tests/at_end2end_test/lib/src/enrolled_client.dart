@@ -5,6 +5,8 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show envelopePayloadOf;
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:uuid/uuid.dart';
@@ -147,7 +149,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
       response.session ?? session, preference,
       reuse: true);
 
-  final payload = (built!['keyPackage'] as Map)['payload'] as Map;
+  final payload = envelopePayloadOf(built!['keyPackage'] as Map) as Map;
   return EnrolledClient(
     client: manager.atClient,
     enrollmentId: response.enrollmentId,

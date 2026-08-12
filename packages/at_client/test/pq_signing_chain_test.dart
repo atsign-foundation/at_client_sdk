@@ -9,13 +9,31 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf, jwsEnvelopeVersion, signEnvelope, signableTextOf;
+    show envelopePayloadOf, envelopeSignerOf, signableTextOf;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
+
+/// [envelope] with its signature replaced by one that cannot verify.
+///
+/// It has to reach INSIDE the `signatures` array. Spreading a top-level
+/// `'signature'` member over the envelope — the obvious way to write this —
+/// leaves the real signature untouched in the entry the verifier reads, so
+/// the forgery verifies and the test passes for the absence of a forgery.
+Map<String, Object?> withForgedSignature(Map<String, Object?> envelope) => {
+      ...envelope,
+      'signatures': [
+        {
+          ...((envelope['signatures'] as List).single as Map)
+              .cast<String, Object?>(),
+          'signature':
+              base64Url.encode(utf8.encode('forged')).replaceAll('=', ''),
+        }
+      ],
+    };
 
 /// The approval chain link: the enrollment that approved a device signs that
 /// device's APKAM public key, so a verifier can walk upward from any key to
@@ -63,14 +81,14 @@ void main() {
         await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
 
     expect(link, isNotNull);
-    final payload = link!['payload'] as Map;
+    final payload = envelopePayloadOf(link!) as Map;
     expect(payload['childEnrollmentId'], 'child-1');
     expect(payload['apkamPublicKey'],
         remoteData[PqSigningChain.apskUri(atSign, 'child-1')],
         reason: 'the key signed has to be the one the atServer published, or '
             'a verifier resolving _apsk would be checking a signature over a '
             'different key than the one it holds');
-    expect(link['enrollmentId'], 'parent-1',
+    expect(envelopeSignerOf(link), 'parent-1',
         reason: 'the envelope names its signer, which is what lets a verifier '
             'walk upward without any approval graph being published');
   });
@@ -109,7 +127,7 @@ void main() {
 
     final read = await PqSigningChain(childClient).readLink('child-1');
     expect(read, isNotNull);
-    expect(read!['enrollmentId'], 'parent-1');
+    expect(envelopeSignerOf(read!), 'parent-1');
   });
 
   test('a published link verifies against the parent it names', () async {
@@ -156,7 +174,8 @@ void main() {
 
       expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
       final published = await PqSigningChain(childClient).readLink('child-1');
-      expect(published?['signature'], link['signature']);
+      expect(published, link,
+          reason: 'the link published is the one conveyed, byte for byte');
     });
 
     test('reads its own record exactly once while publishing', () async {
@@ -177,6 +196,56 @@ void main() {
               'check and the value republished must come from ONE '
               'snapshot — separate reads let the record change between '
               'them');
+    });
+
+    test('replaces an existing link with a DIFFERENT one conveyed later',
+        () async {
+      // The arm that catches an already-published check comparing the wrong
+      // thing. The signature lives inside the envelope's `signatures` array,
+      // so a check reading a top-level `['signature']` gets null from both
+      // sides, matches every time, and skips the write — and the skip is the
+      // same `return false` as "already published", so nothing looks wrong.
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final first =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await convey(child, first!);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
+
+      // A second, genuinely different link for the same child: another
+      // privileged enrollment re-vouches for it.
+      final otherClient = client('parent-2');
+      final other = await registered(otherClient);
+      final second =
+          await PqSigningChain(otherClient).signLinkFor(other, 'child-1');
+      expect(second, isNot(first),
+          reason: 'differential guard: if the two links were equal this test '
+              'would compare a case with itself and pass either way');
+      await convey(child, second!);
+
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue,
+          reason: 'a different link is new work, not a repeat');
+      expect(await PqSigningChain(childClient).readLink('child-1'), second);
+    });
+
+    test('writes nothing when the same link is conveyed twice', () async {
+      final parentClient = client('parent-1');
+      final parent = await registered(parentClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await convey(child, link!);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue);
+
+      await convey(child, link);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
+          reason: 'the other half of the pair above: republishing the same '
+              'link on every start would rewrite the record for nothing');
     });
 
     test('writes nothing when nobody vouched for it', () async {
@@ -216,7 +285,7 @@ void main() {
 
       final link =
           await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
-      await convey(child, {...link!, 'signature': 'not-the-signature'});
+      await convey(child, withForgedSignature(link!));
 
       expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
           reason: 'publishing a link no verifier can follow would advertise '
@@ -442,30 +511,9 @@ void main() {
       expect(result.path, ['child-1', 'parent-1']);
     });
 
-    test('climbs a JWS-wrapped chain link the same way', () async {
-      final parentClient = client('parent-1');
-      final parent = await registered(parentClient);
-      final childClient = client('child-1');
-      await registered(childClient);
-
-      // The same payload the version-1 link carries, re-signed in the JWS
-      // wrapper — what a flipped producer will convey. The walk must read
-      // the signer from the protected header's kid and the payload out of
-      // base64url, or the chain dead-ends at its first version-2 link.
-      final v1 = await PqSigningChain(parentClient).signLinkFor(
-          parent, 'child-1');
-      final link = signEnvelope(envelopePayloadOf(v1!),
-          keys: parent.signingKeys,
-          enrollmentId: 'parent-1',
-          version: jwsEnvelopeVersion);
-      await PqSigningChain(childClient).publishLink('child-1', link);
-
-      final result =
-          await PqSigningChain(verifierClient).verifyChain(verifier, 'child-1');
-
-      expect(result.verdict, ChainVerdict.chained);
-      expect(result.path, ['child-1', 'parent-1']);
-    });
+    // A second copy of the test above used to sit here, re-signing the same
+    // payload in the JWS shape to prove the walk climbed both wrappers. There
+    // is one shape now, so it was the preceding test twice over.
 
     test('reports broken, not chained, for a link that does not verify',
         () async {
@@ -476,8 +524,8 @@ void main() {
 
       final link =
           await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
-      await PqSigningChain(childClient).publishLink('child-1',
-          {...link!, 'signature': base64Encode(utf8.encode('forged'))});
+      await PqSigningChain(childClient)
+          .publishLink('child-1', withForgedSignature(link!));
 
       final result =
           await PqSigningChain(verifierClient).verifyChain(verifier, 'child-1');
@@ -531,20 +579,35 @@ void main() {
     await registered(childClient);
 
     // The impostor signs a perfectly well-formed link for child-1 — anyone
-    // can — but then claims it came from parent-1.
+    // can — but then claims it came from parent-1. The claim lives inside the
+    // protected header, so this is not a relabel: it edits bytes the
+    // signature covers.
     final link =
         await PqSigningChain(impostorClient).signLinkFor(impostor, 'child-1');
     await registered(client('parent-1'));
-    final forged = Map<String, Object?>.from(link!)
-      ..['enrollmentId'] = 'parent-1';
+    final entry =
+        ((link!['signatures'] as List).single as Map).cast<String, Object?>();
+    final header = jsonDecode(utf8.decode(base64Decode(
+        base64.normalize(entry['protected'] as String)))) as Map;
+    final forged = {
+      ...link,
+      'signatures': [
+        {
+          ...entry,
+          'protected': base64Url
+              .encode(utf8.encode(jsonEncode({...header, 'kid': 'parent-1'})))
+              .replaceAll('=', ''),
+        }
+      ],
+    };
 
     final verifier = AtClientSecretSharing.forClient(client('verifier-1'));
     await expectLater(
         verifier.verifyEnvelopeSignature(forged, signerAtSign: atSign),
         throwsA(isA<Exception>()),
-        reason: 'the chain is only self-describing because a claimed parent '
-            'is checked against that parent\'s own published key — otherwise '
-            'any enrollment could name any other as its approver');
+        reason: 'a claimed parent is checked against that parent\'s own '
+            'published key, and the claim is under the signature besides — '
+            'otherwise any enrollment could name any other as its approver');
   });
 }
 

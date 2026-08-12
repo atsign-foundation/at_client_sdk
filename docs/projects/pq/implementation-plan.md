@@ -1322,8 +1322,7 @@ both refused).
 **Watch-outs:** the multi-repo seam is useless landed on one side; the self-only exception is the whole
 security argument, so its differential test must prove a *refused* arm, not only an accepted one; and the
 dozen dartdocs across `at_client` that state the freeze are the sweep list for the landing commit.
-**coversD1:** retires plan backlog [14.6](#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
-and unblocks `jwsEnvelopeVersion`'s producer.
+**coversD1:** retires plan backlog [14.6](#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door).
 
 ### B-3 — selfEncryptionKey + shared_key.* retirement, phases 1-3 · at_client, **at_secondary_server**, at_auth · L — [#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128)
 **Goal:** retire the legacy self-encryption key (a distinct project from B-2's rotation work).
@@ -1804,17 +1803,21 @@ payload both carry a version field. Both records ARE rewritable, so this was
 cheap insurance rather than a deadline — but it is the hatch that makes 14.3
 reversible, which is why it went first of the three.
 
-### 14.3 JWS or JCS for the signed envelope — DONE (producer behind the flag)
+### 14.3 JWS or JCS for the signed envelope — DONE (one shape, no flag)
 
-**RULED 2026-08-06 → JWS Flattened JSON Serialization, `b64=true`**
-([decisions 48.8](decisions.md#488-what-this-entry-does-not-rule)).
-**LANDED 2026-08-09** ([decisions 60](decisions.md#60-jws-stage-one-lands-readers-always-on-producer-behind-the-version-flag-2026-08-09)):
-readers accept both wrapper shapes always; the producer emits version 2 only
-via `signEnvelope`'s `version` parameter / `EnvelopeSigning.envelopeVersion`,
-defaulting v1 for all of 3.x — flipping the default is 4.0's deployment
-decision (the 14.6 freeze). Adjudicated by two third-party verifiers
+**RULED 2026-08-06 → JWS, `b64=true`**
+([decisions 48.8](decisions.md#488-what-this-entry-does-not-rule)); the
+*Flattened* serialization it named became *general* under ruling 95.1 below,
+so the array can gain a signature rather than the shape having to change.
+**LANDED 2026-08-09** ([decisions 60](decisions.md#60-jws-stage-one-lands-readers-always-on-producer-behind-the-version-flag-2026-08-09))
+as a second shape beside the tagged one, behind a version flag —
+**superseded 2026-08-12** by
+[`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 1, which deleted both earlier shapes and the flag: the envelope is RFC
+7515 **general** serialization and nothing else, with `alg`, `kid` and `v` all
+inside the protected header. Adjudicated by two third-party verifiers
 (jose for RS256, OpenSSL 3.6 for ML-DSA-65 — decisions 60.4), with committed
-vectors at `packages/at_client/test/vectors/jws_envelope_v2.json`. Its
+vectors at `packages/at_client/test/vectors/jws_envelope.json`. Its
 prerequisite 14.2 landed in `3c2eddbe6`; the staged plan it was executed from
 is `untracked/2026-08-06-JWS-MIGRATION-PLAN.md`.
 
@@ -1894,8 +1897,7 @@ does not list it.
 it, so 14.3's wrapper shape stops being an irreversible bet and the remedy for an
 unparseable package stops being delete-and-re-enrol. It is unbuilt — the item
 above stands until **KE-2** ships — but it is a scheduling problem now rather than
-a shape-freezing deadline, and it is the same ruling that unblocks
-`jwsEnvelopeVersion`'s producer.
+a shape-freezing deadline.
 
 ### 14.7 NoPorts carries its own copy of the envelope shape
 
@@ -1927,17 +1929,33 @@ this now; it lands with the one-shape work.
 
 ### 14.9 A revoked enrollment can still authenticate, briefly
 
-> **CLOSED 2026-08-11 — a test-instrument failure, proven. Not an atServer
-> defect, and nobody should go looking for one.**
+> **ROOT-CAUSED 2026-08-12 — it WAS an atServer defect.** `EnrollmentManager`
+> invalidated its read-through `atDataCache` **before** writing the record:
+> `put` did `remove(ek)` → `await movePerEnrollmentData(...)` (a whole-keystore
+> walk, many suspension points) → `await keyStore.put(...)`. Any other
+> connection reaching `getEnrollmentByFullKey` inside that window missed, read
+> the **pre-revoke** record, and re-cached `approved` — permanently, because
+> nothing invalidated after the write. That cache is read on every verb
+> command and by `PkamVerbHandler.verifyEnrollmentIsActive`, so the revoked
+> enrollment kept authenticating. `remove()` had the same shape. Fixed in
+> at_server `16dd457f`: both mutate first, invalidate second, with no `await`
+> between the write landing and the eviction. 12 of 12 clean full-suite runs
+> after, against 5 failures in 13 before — a rate, not a proof of kind.
+>
+> **The 2026-08-11 ruling below closed this as "a test-instrument failure,
+> proven. Not an atServer defect, and nobody should go looking for one"
 > ([`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
-> ruling 5.) The test discarded the revoke ACK and left the revoked client
-> running through the poll; both faults were fixed and the suite went green.
-> The record had previously softened only as far as "the attribution was never
-> established, OPEN" — which understated it and left an open unknown pointing
-> at the server. The text below is the original observation, kept as the
-> history of how a rig produced three consecutive red runs against innocent
-> code; [14.9a](#149a-the-attribution-above-was-never-established--the-test-was)
-> is the correction.
+> ruling 5). That conclusion did not follow from its evidence.** The test it
+> cited is serial — one client, no competing reader — so it never opens the
+> window, and a passing serial test cannot exclude a concurrency race. The
+> harness faults it found were real and worth fixing; fixing the instrument
+> does not establish that the instrument was the cause. The tell was in the
+> data and was read as noise: the row failed only inside the **full suite**,
+> never standalone and never paired. "Passes alone, fails in the suite" was
+> attributed to leftover state; it was concurrency, which is the other thing
+> that phrase means.
+>
+> The text below is the original observation, kept as history.
 
 Observed 2026-08-07: a fresh connection PKAM-authenticated with a revoked
 enrollment's own keypair after `enrollmentService.revoke()` had returned, once
@@ -2409,7 +2427,7 @@ builds on it.
 
 | # | Work | Detail |
 |---|------|--------|
-| 3 | **One envelope shape — RFC 7515 general serialization**, `{payload, signatures:[{protected, signature}]}` with `{alg, kid, v}` in each `protected`. Deletes `signedEnvelopeVersion`, `jwsEnvelopeVersion`'s flattened form, `envelopeVersionOf`'s dispatch, the `wrapperFields` ternary in `ApkamSignedAdvertisedKeys.verify`, and `envelopeVersion` as a `ReleasePosture` axis | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 1, **superseding [91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11) ruling 12**'s bespoke container |
+| 3 | **DONE 2026-08-12 — one envelope shape, RFC 7515 general serialization**, `{payload, signatures:[{protected, signature}]}` with `{alg, kid, v}` in each `protected`. Deleted `signedEnvelopeVersion`, `jwsEnvelopeVersion`'s flattened form, `envelopeVersionOf`'s dispatch, the `wrapperFields` ternary in `ApkamSignedAdvertisedKeys.verify`, and `envelopeVersion` as a `ReleasePosture` axis. Also took `hashingAlgo` off `signEnvelope` — `alg` names the hash, so nothing unsigned selects a routine — and retired UC-C1.3, the rollout's envelope axis, which had nothing left to drive. The `.mjs` adjudicator moved `flattenedVerify` → `generalVerify`; vectors regenerated at `test/vectors/jws_envelope.json`. **Found en route:** `publishPendingLink`'s already-published check compared a top-level `['signature']` the envelope does not have, so `null == null` matched every time and a different link conveyed later was silently never published | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 1, **superseding [91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11) ruling 12**'s bespoke container |
 | 4 | One key-entry vocabulary across all three advertising records — `{use, alg, pub, kid, status?}` inside `{v, keys:[…], suites}`; the nskey advertisement converges onto it, one kid function over raw key bytes, one `bestSuiteFor`, one seal/open helper taking `(kem, pub, info, version)`. Deletes the unshipped-predecessor hatches and both `legacy*Suites` constants | [`decisions.md` 94](decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — ⚠️ **before step 6, or that parser becomes the third hand-rolled codec for one shape** |
 | 5 | The **`retired` key path**: `bestKeyFor` skips retired entries, `kpid` becomes the *active* enc key's kid, `_consume`'s two equality checks become "one of the keys I hold", and `KeyPackageRegistration` + `PersistedApkamKeys` go **plural**. ⚠️ app-facing: `PersistedApkamKeys` is what apps build in `loadApkamKeys`/`saveApkamKeys` | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) rulings 6–9 — without the plural holding the field is decorative. Also settle the **name collision**: `KeyPackageStatus` is already a Dart enum for a reader's verdict on a whole package (`present`/`absent`/`rejected`/`unsupported`), and the new `status` is a per-entry wire key. Different namespaces, so it compiles either way — decide whether the Dart type carrying the wire value is named apart from it before two `status`es sit in one file |
 | 6 | `_apsk` array parser — the array **and** the released bare string | [`design.md` 9.3](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |

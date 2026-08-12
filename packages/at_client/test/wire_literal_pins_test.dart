@@ -7,18 +7,15 @@
 /// change what goes on the wire. On an intended wire change — there should be
 /// none — the pin's edit is the review.
 ///
-/// Two classes of pin, annotated per group:
+/// Every pin here is **FROZEN FOREVER** — wire contract: record names, provider
+/// ids, payload field names, algorithm spellings, crypto bindings. Records
+/// already written on live atServers carry these; several are immutable or
+/// write-once. A red pin here means a wire break, full stop.
 ///
-/// - **FROZEN FOREVER** — wire contract: record names, provider ids,
-///   payload field names, algorithm spellings, crypto bindings. Records
-///   already written on live atServers carry these; several are immutable or
-///   write-once. A red pin here means a wire break, full stop.
-/// - **JWS-WILL-MOVE** — the *version-1* signed-envelope wrapper shape
-///   (`v`:1, payload-as-Map, padded base64, `signableTextOf` bytes). The JWS
-///   shape (version 2, `decisions.md` 60) is landed and readers accept both
-///   wrappers; these pins stay binding because the producer still emits
-///   version 1 by default. The 4.0 default flip retires them — not the
-///   migration, which added the version-2 group beside them instead.
+/// There was a second, softer class — `JWS-WILL-MOVE`, the signed-envelope
+/// wrapper that a 4.0 default flip was going to retire. It is gone with the
+/// wrapper: the envelope has one shape now, so its pins are frozen like
+/// everything else here.
 library;
 
 import 'dart:convert';
@@ -510,71 +507,27 @@ void main() {
     });
   });
 
-  group('JWS-WILL-MOVE: the version-1 signed-envelope wrapper', () {
-    // The version-2 (JWS) shape is landed and readers accept both wrappers,
-    // but the producer DEFAULT is still version 1, so this group remains the
-    // emitted shape until the 4.0 flag flip retires it. The version-2 wrapper
-    // has its own FROZEN group below.
+  group('FROZEN FOREVER: the signed-envelope shape', () {
+    // RFC 7515 General JSON Serialization, and nothing beside it — no wrapper
+    // member of our own, so the whole document is somebody else's standard.
+    // The committed vectors are checked by an off-the-shelf verifier
+    // (tool/verify_jws_vectors.mjs), and the protected-header bytes are
+    // covered by the signature, so the member ORDER below is
+    // cryptographically bound rather than a style choice.
 
     test('signableTextOf: a String signs verbatim, a Map as compact JSON', () {
-      // The String arm is the migration lever itself: a JWS signing input
-      // passes through it unchanged.
+      // Not the envelope's codec — the envelope signs base64url text. This is
+      // what the signing-chain ROOT link signs over, which is why it is
+      // pinned: the root link is minted by one client and checked by another.
       expect(signableTextOf('raw'), 'raw');
       expect(signableTextOf({'b': 2, 'a': 1}), '{"b":2,"a":1}');
     });
 
-    test('the wrapper version literal is 1', () {
-      expect(signedEnvelopeVersion, 1);
+    test('the envelope version literal is 1', () {
+      expect(envelopeVersion, 1);
     });
 
-    test('signEnvelope: key order, field values, padded base64', () {
-      final pair = AtChopsUtil.generateAtPkamKeyPair();
-      final envelope = signEnvelope(
-        {'hello': 'world'},
-        keys: ApkamSigningKeys(
-            publicKey: pair.atPublicKey.publicKey,
-            privateKey: pair.atPrivateKey.privateKey),
-        enrollmentId: 'enroll-1',
-      );
-
-      expect(envelope.keys.toList(),
-          ['v', 'payload', 'signature', 'hashingAlgo', 'signingAlgo',
-              'enrollmentId']);
-      expect(envelope['v'], 1);
-      expect(envelope['payload'], {'hello': 'world'},
-          reason: 'payload embeds as a Map, not a string — JWS changes this');
-      expect(envelope['hashingAlgo'], 'sha256');
-      expect(envelope['signingAlgo'], 'rsa2048');
-      expect(envelope['enrollmentId'], 'enroll-1');
-      // Standard base64 WITH padding: RSA-2048 → 256 bytes → 344 chars,
-      // '=='-terminated. JWS flips to base64url-unpadded (342 chars), and
-      // Dart's base64Decode throws on that — the migration's measured trap.
-      final signature = envelope['signature'] as String;
-      expect(signature.length, 344);
-      expect(signature, endsWith('=='));
-    });
-
-    test('signEnvelope omits enrollmentId only when none is supplied', () {
-      final pair = AtChopsUtil.generateAtPkamKeyPair();
-      final envelope = signEnvelope(
-        {'hello': 'world'},
-        keys: ApkamSigningKeys(
-            publicKey: pair.atPublicKey.publicKey,
-            privateKey: pair.atPrivateKey.privateKey),
-      );
-      expect(envelope.containsKey('enrollmentId'), isFalse,
-          reason: 'the key-package path signs before the atServer assigns an '
-              'id; the mixin path never omits it (it stamps "primary")');
-    });
-  });
-
-  group('FROZEN FOREVER: the version-2 (JWS) signed-envelope wrapper', () {
-    // RFC 7515 Flattened JSON Serialization. Frozen from birth: the shape is
-    // somebody else's standard, the committed vectors are checked by an
-    // off-the-shelf verifier, and the protected-header bytes are covered by
-    // the signature — so the member ORDER here is cryptographically bound,
-    // not a style choice.
-    test('the version-2 wrapper: field order, unpadded base64url', () {
+    test('the envelope members, their order, and unpadded base64url', () {
       final pair = AtChopsUtil.generateAtPkamKeyPair();
       final envelope = signEnvelope(
         {'hello': 'world'},
@@ -582,25 +535,40 @@ void main() {
             publicKey: pair.atPublicKey.publicKey,
             privateKey: pair.atPrivateKey.privateKey),
         enrollmentId: 'e1',
-        version: 2,
       );
 
-      expect(envelope.keys.toList(),
-          ['v', 'payload', 'protected', 'signature']);
-      expect(envelope['v'], 2);
-      for (final member in ['payload', 'protected', 'signature']) {
-        expect((envelope[member] as String).contains('='), isFalse,
+      expect(envelope.keys.toList(), ['payload', 'signatures'],
+          reason: 'exactly RFC 7515 general serialization — a member of our '
+              'own here would be the thing that stops it being the standard');
+      final signatures = envelope['signatures'] as List;
+      expect(signatures, hasLength(1));
+      final entry = signatures.single as Map;
+      expect(entry.keys.toList(), ['protected', 'signature']);
+
+      for (final text in [
+        envelope['payload'] as String,
+        entry['protected'] as String,
+        entry['signature'] as String,
+      ]) {
+        expect(text.contains('='), isFalse,
             reason: 'RFC 7515 base64url carries no padding');
       }
       expect(
           utf8.decode(
               base64Decode(base64.normalize(envelope['payload'] as String))),
           '{"hello":"world"}');
+      // RSA-2048 → 256 signature bytes → 342 unpadded base64url chars, a
+      // length Dart's bare base64Decode throws on. Pinned because it is the
+      // one arm that can catch a missing base64 normalisation: ML-DSA-65's
+      // 4412 chars are a multiple of 4 and decode either way.
+      expect((entry['signature'] as String).length, 342);
     });
 
     test('the protected header bytes, both algorithms', () async {
       String headerOf(Map<String, Object?> envelope) => utf8.decode(
-          base64Decode(base64.normalize(envelope['protected'] as String)));
+          base64Decode(base64.normalize(
+              ((envelope['signatures'] as List).single as Map)['protected']
+                  as String)));
 
       final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
       expect(
@@ -608,11 +576,10 @@ void main() {
               keys: ApkamSigningKeys(
                   publicKey: rsaPair.atPublicKey.publicKey,
                   privateKey: rsaPair.atPrivateKey.privateKey),
-              enrollmentId: 'e1',
-              version: 2)),
-          '{"alg":"RS256","kid":"e1","v":2}',
+              enrollmentId: 'e1')),
+          '{"alg":"RS256","kid":"e1","v":1}',
           reason: 'RS256, not rsa2048: the JOSE registered name, and SHA-256 '
-              'by definition — hashingAlgo has no version-2 equivalent');
+              'by definition — which is why the envelope names no hash');
 
       final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
       expect(
@@ -621,10 +588,27 @@ void main() {
                   publicKey: base64Encode(mlDsaPair.publicKey),
                   privateKey: base64Encode(mlDsaPair.secretKey)),
               enrollmentId: 'e1',
-              signingAlgo: SigningAlgoType.mldsa65,
-              version: 2)),
-          '{"alg":"ML-DSA-65","kid":"e1","v":2}',
+              signingAlgo: SigningAlgoType.mldsa65)),
+          '{"alg":"ML-DSA-65","kid":"e1","v":1}',
           reason: 'ML-DSA-65 is the RFC 9964 registered JOSE name');
+    });
+
+    test('the header omits kid entirely when no enrollment is supplied', () {
+      final pair = AtChopsUtil.generateAtPkamKeyPair();
+      final envelope = signEnvelope(
+        {'hello': 'world'},
+        keys: ApkamSigningKeys(
+            publicKey: pair.atPublicKey.publicKey,
+            privateKey: pair.atPrivateKey.privateKey),
+      );
+      expect(
+          utf8.decode(base64Decode(base64.normalize(
+              ((envelope['signatures'] as List).single as Map)['protected']
+                  as String))),
+          '{"alg":"RS256","v":1}',
+          reason: 'the key-package path signs before the atServer assigns an '
+              'id, and a guessed or sentinel value would be frozen inside the '
+              'signature where nobody could correct it');
     });
   });
 }

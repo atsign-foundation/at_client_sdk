@@ -22,14 +22,21 @@ import 'manifest.dart';
 
 void main() {
   test('every use case in the catalogue has a scenario, and vice versa', () {
-    final defined = catalogueUseCases().map((u) => u.id).toSet();
+    final all = catalogueUseCases();
+    final owed = all.where((u) => !u.isWithdrawn).map((u) => u.id).toSet();
+    final withdrawn = all.where((u) => u.isWithdrawn).map((u) => u.id).toSet();
     final claimed = scenarioUseCaseIds();
 
-    expect(defined.difference(claimed), isEmpty,
+    expect(owed.difference(claimed), isEmpty,
         reason: 'catalogue use cases with no scenario in this directory — add '
             'one, or the burn-down under-counts what D1 owes');
-    expect(claimed.difference(defined), isEmpty,
+    expect(claimed.difference(owed), isEmpty,
         reason: 'scenarios naming a use case the catalogue does not define');
+    expect(claimed.intersection(withdrawn), isEmpty,
+        reason: 'a scenario is still proving a row the catalogue withdrew. '
+            'The catalogue is the authority on what is owed, so either the '
+            'withdrawal is wrong or the scenario is testing a mechanism that '
+            'no longer exists');
   });
 
   test('every use case the catalogue mentions is one it defines', () {

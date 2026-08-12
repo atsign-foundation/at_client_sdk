@@ -4,6 +4,8 @@
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show envelopePayloadOf;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -73,7 +75,8 @@ void main() {
         reason: 'this is the property the whole parent-signs/child-publishes '
             'arrangement is built on: appMetadata a client adds to _apsk '
             'has to survive on the atServer');
-    expect(read!['signature'], link['signature']);
+    expect(read, link,
+        reason: 'the link read back is the one published, byte for byte');
   });
 
   test('a live published link verifies against the key it names', () async {
@@ -147,7 +150,7 @@ void main() {
       apkamSymmetricKey: AtBytes.fromString(''),
     ));
 
-    final payload = (built!['keyPackage'] as Map)['payload'] as Map;
+    final payload = envelopePayloadOf(built!['keyPackage'] as Map) as Map;
     final kpid = ((payload['keys'] as List).single as Map)['kid'] as String;
     final granted = (await atClient.enrollmentService!.fetchEnrollmentRequests())
         .where((e) => e.enrollmentId == response.enrollmentId)
@@ -199,7 +202,7 @@ void main() {
       request,
       AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
     );
-    final payload = (built!['keyPackage'] as Map)['payload'] as Map;
+    final payload = envelopePayloadOf(built!['keyPackage'] as Map) as Map;
     final kpid = ((payload['keys'] as List).single as Map)['kid'] as String;
 
     await atClient.enrollmentService!.approve(

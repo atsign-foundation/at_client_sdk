@@ -12,7 +12,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopeVersionOf, jwsEnvelopeVersion, parseApskValue, verifyEnvelope;
+    show parseApskValue, verifyEnvelope;
 import 'package:at_demo_data/at_demo_data.dart' show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -198,10 +198,15 @@ void main() {
 
     // Close the loop: the key package the client signed with its minted
     // ML-DSA key verifies against the _apsk the atServer serves.
+    // Verified against the raw algorithm rather than through verifyEnvelope,
+    // so a bug shared by our writer and our reader cannot hide here. The
+    // signing input is the RECEIVED base64url strings joined by a dot.
     final envelope = built!['keyPackage'] as Map;
+    final entry = (envelope['signatures'] as List).single as Map;
     final ok = await MlDsa65PureDartAlgo().verifyBytes(
-        utf8.encode(jsonEncode(envelope['payload'])),
-        signature: base64Decode(envelope['signature'] as String),
+        utf8.encode('${entry['protected']}.${envelope['payload']}'),
+        signature:
+            base64Decode(base64.normalize(entry['signature'] as String)),
         publicKey: base64Decode(published.publicKey));
     expect(ok, true,
         reason: 'signer and published verify key must be the same keypair on '
@@ -295,20 +300,11 @@ void main() {
             auth: true))!
         .replaceFirst('data:', '');
     await verifyEnvelope(envelope, signerPublicKey: apsk);
-
-    // The same loop under the JWS wrapper: the signer's version flag is the
-    // rollout lever, and this is the flipped world in miniature against a
-    // REAL served key — ML-DSA under `protected.payload`, verified against
-    // the _apsk this enrollment composed and the atServer published verbatim.
-    sharing.envelopeVersion = jwsEnvelopeVersion;
-    final jws = await sharing.wrapAndSign('rf2c-proof-v2');
-    expect(jws['v'], 2);
-    await verifyEnvelope(jws, signerPublicKey: apsk);
   });
 
   test(
       'the postQuantum posture decides an argless retrofit: no signingAlgo '
-      'anywhere, the enrollment is ML-DSA, and its key package is v2',
+      'anywhere, the enrollment is ML-DSA, and so is its key package',
       () async {
     // A keyfile of its own, so the retrofit MINTS under the posture rather
     // than reusing an enrollment an earlier arm minted with different
@@ -340,14 +336,19 @@ void main() {
         reason: 'nothing in this test named an algorithm — the posture is '
             'the only thing that could have chosen ML-DSA');
 
-    // The posture also threads the envelope version into the key package
-    // frozen on the enrollment record — fetched with the fully privileged
-    // owner client, since the scoped retrofit cannot run enroll:list.
+    // The posture's algorithm also reaches the key package frozen on the
+    // enrollment record — fetched with the fully privileged owner client,
+    // since the scoped retrofit cannot run enroll:list.
     final record = (await atClient.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == client.enrollmentId);
-    expect(envelopeVersionOf(record.metadata!['keyPackage'] as Map), 2,
-        reason: 'the write-once metadata.keyPackage must carry the posture\'s '
-            'JWS shape; a v1 here means the threading was dropped');
+    final pkg = record.metadata!['keyPackage'] as Map;
+    final header = jsonDecode(utf8.decode(base64Decode(base64.normalize(
+        ((pkg['signatures'] as List).single as Map)['protected']
+            as String)))) as Map;
+    expect(header['alg'], 'ML-DSA-65',
+        reason: 'the package is signed once and frozen in metadata, so an '
+            'RSA signature here means the posture reached the enrollment but '
+            'not the thing it froze');
   });
 
   test(

@@ -473,8 +473,12 @@ void main() {
       // Every structural check passes; only verifying against enroll-b's real
       // _apsk catches it.
       final d = await registered('enroll-d');
-      final forged = await d.signedKeyPackagePayload()
-        ..['enrollmentId'] = 'enroll-b';
+      // Stamped at signing time, not edited afterwards: the claim is inside
+      // the protected header, so a forger has to sign it that way — which
+      // anyone with their own key can do, and which is exactly why the claim
+      // is worth nothing until it is checked against enroll-b's own _apsk.
+      final forged = signEnvelope(d.myKeyPackage.toJson(),
+          keys: d.signingKeys, enrollmentId: 'enroll-b');
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [record('enroll-b', forged)]);
 
@@ -490,13 +494,15 @@ void main() {
       final envelope = await b.signedKeyPackagePayload();
       // Signature intact over the original body; only the advertised key is
       // swapped, which is the substitution that matters.
-      envelope['payload'] = {
-        'v': 1,
-        'createdAt': '2026-06-11T00:00:00.000Z',
-        'keys': [
-          {'kid': 'evil', 'use': 'enc', 'alg': 'x-wing', 'pub': 'evil-pub'}
-        ],
-      };
+      envelope['payload'] = base64Url
+          .encode(utf8.encode(jsonEncode({
+            'v': 1,
+            'createdAt': '2026-06-11T00:00:00.000Z',
+            'keys': [
+              {'kid': 'evil', 'use': 'enc', 'alg': 'x-wing', 'pub': 'evil-pub'}
+            ],
+          })))
+          .replaceAll('=', '');
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [record('enroll-b', envelope)]);
 
@@ -581,45 +587,31 @@ void main() {
               'lived — the payload never carried it');
     });
 
-    test('a key package in the JWS wrapper is read and sealed to', () async {
-      // The version-2 wrapper a flipped producer will emit: same payload,
-      // signer claim in the protected header's kid.
+    // Two tests here re-ran the pair above in "the JWS wrapper" — a package
+    // read and sealed to, and one claiming another signer in its kid. There
+    // is one shape now, so both were the same tests twice.
+
+    test('an envelope version this build cannot verify is rejected', () async {
+      // The version rides inside the protected header, so an envelope from a
+      // later shape cannot be checked at all — and an unverifiable package is
+      // only as trustworthy as whatever served the record, whatever the
+      // reason. That makes it `rejected`, not the `unsupported` a merely
+      // newer PAYLOAD gets: that one verified first, and this one cannot.
       final b = await registered('enroll-b');
+      final envelope = await b.signedKeyPackagePayload();
+      final entry = ((envelope['signatures'] as List).single as Map)
+          .cast<String, Object?>();
+      envelope['signatures'] = [
+        {
+          ...entry,
+          'protected': base64Url
+              .encode(utf8.encode(jsonEncode(
+                  {'alg': 'RS256', 'kid': 'enroll-b', 'v': 2})))
+              .replaceAll('=', ''),
+        }
+      ];
       final atClient = buildMockClient('enroll-self');
-      stubListns(atClient, [
-        record(
-            'enroll-b',
-            signEnvelope(b.myKeyPackage.toJson(),
-                keys: b.signingKeys,
-                enrollmentId: 'enroll-b',
-                version: jwsEnvelopeVersion)),
-      ]);
-
-      final member =
-          (await VerbEnrollmentDirectory(atClient).listForNamespace('myapp'))
-              .single;
-
-      expect(member.keyPackageStatus, KeyPackageStatus.present);
-      expect(member.keyPackage!.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub,
-          base64Encode(publicKeyA),
-          reason: 'the payload decodes out of base64url to the same package '
-              'the version-1 wrapper carries');
-    });
-
-    test('a JWS package claiming another signer in its kid is not sealed to',
-        () async {
-      // The version-2 form of the claim-mismatch refusal: the claim now lives
-      // in the protected header, and the directory must read it from there.
-      final d = await registered('enroll-d');
-      final atClient = buildMockClient('enroll-self');
-      stubListns(atClient, [
-        record(
-            'enroll-b',
-            signEnvelope(d.myKeyPackage.toJson(),
-                keys: d.signingKeys,
-                enrollmentId: 'enroll-d',
-                version: jwsEnvelopeVersion)),
-      ]);
+      stubListns(atClient, [record('enroll-b', envelope)]);
 
       final member =
           (await VerbEnrollmentDirectory(atClient).listForNamespace('myapp'))
@@ -628,32 +620,18 @@ void main() {
       expect(member.keyPackageStatus, KeyPackageStatus.rejected);
     });
 
-    test('a wrapper version from a future build is unsupported, not rejected',
-        () async {
-      final b = await registered('enroll-b');
-      final envelope = await b.signedKeyPackagePayload()
-        ..['v'] = 3;
-      final atClient = buildMockClient('enroll-self');
-      stubListns(atClient, [record('enroll-b', envelope)]);
-
-      final member =
-          (await VerbEnrollmentDirectory(atClient).listForNamespace('myapp'))
-              .single;
-
-      expect(member.keyPackageStatus, KeyPackageStatus.unsupported,
-          reason: 'a version-3 wrapper is a newer client at work — the same '
-              '"cannot parse" outcome as a payload shape from a later '
-              'version, not a hostile record');
-    });
-
-    test('a JWS package whose protected header cannot be read is rejected',
+    test('a package whose protected header cannot be read is rejected',
         () async {
       final b = await registered('enroll-b');
       final envelope = signEnvelope(b.myKeyPackage.toJson(),
-          keys: b.signingKeys,
-          enrollmentId: 'enroll-b',
-          version: jwsEnvelopeVersion)
-        ..['protected'] = 'not!!!base64url';
+          keys: b.signingKeys, enrollmentId: 'enroll-b');
+      envelope['signatures'] = [
+        {
+          ...((envelope['signatures'] as List).single as Map)
+              .cast<String, Object?>(),
+          'protected': 'not!!!base64url',
+        }
+      ];
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [record('enroll-b', envelope)]);
 

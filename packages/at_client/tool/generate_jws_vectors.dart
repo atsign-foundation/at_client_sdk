@@ -1,4 +1,4 @@
-// Regenerates test/vectors/jws_envelope_v2.json — the committed JWS
+// Regenerates test/vectors/jws_envelope.json — the committed JWS
 // signed-envelope vectors an off-the-shelf verifier checks
 // (tool/verify_jws_vectors.mjs). Run from packages/at_client:
 //
@@ -22,8 +22,7 @@ Future<void> main() async {
       keys: ApkamSigningKeys(
           publicKey: rsaPair.atPublicKey.publicKey,
           privateKey: rsaPair.atPrivateKey.privateKey),
-      enrollmentId: 'vector-1',
-      version: jwsEnvelopeVersion);
+      enrollmentId: 'vector-1');
 
   final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   final mlDsaEnvelope = signEnvelope(payload,
@@ -31,13 +30,12 @@ Future<void> main() async {
           publicKey: base64Encode(mlDsaPair.publicKey),
           privateKey: base64Encode(mlDsaPair.secretKey)),
       enrollmentId: 'vector-1',
-      signingAlgo: SigningAlgoType.mldsa65,
-      version: jwsEnvelopeVersion);
+      signingAlgo: SigningAlgoType.mldsa65);
 
   final out = const JsonEncoder.withIndent('  ').convert({
-    'comment': 'JWS signed-envelope (v2 wrapper) vectors. Test fixtures '
-        'only — the keys exist for this file alone. See '
-        'docs/projects/pq/decisions.md 60.4.',
+    'comment': 'JWS signed-envelope vectors, RFC 7515 general JSON '
+        'serialization. Test fixtures only — the keys exist for this file '
+        'alone. See docs/projects/pq/decisions.md 60.4.',
     'payload': payload,
     'rs256': {
       'envelope': rsaEnvelope,
@@ -54,7 +52,7 @@ Future<void> main() async {
     },
   });
 
-  final file = File('test/vectors/jws_envelope_v2.json');
+  final file = File('test/vectors/jws_envelope.json');
   file.createSync(recursive: true);
   file.writeAsStringSync('$out\n');
   stdout.writeln('wrote ${file.path}');

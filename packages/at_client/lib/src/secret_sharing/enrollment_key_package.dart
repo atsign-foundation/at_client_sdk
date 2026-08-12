@@ -14,7 +14,7 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
 import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyPackage, PackageKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show ApkamSigningKeys, signEnvelope, signedEnvelopeVersion;
+    show ApkamSigningKeys, signEnvelope;
 import 'package:meta/meta.dart' show experimental;
 
 /// Builds the signed key package that rides an `enroll:request`, and records
@@ -55,21 +55,12 @@ import 'package:meta/meta.dart' show experimental;
 /// yet — so in practice this decides the enrollment's KEM, and changing the
 /// preference later takes effect on a new enrollment.
 ///
-/// [envelopeVersion] is the wrapper shape the package's signed envelope is
-/// emitted in — pass `preference.posture.envelopeVersion` to follow the
-/// client's rollout posture. An explicit parameter for the same reason as
-/// the KEM: no client exists yet, and repairing the value afterwards needs an
-/// `enroll:update` this enrollment must send for itself. The readers for both
-/// shapes ship in the same
-/// release line as this parameter, so emit v2 only where the fleet that
-/// must read this package is on that line or later — not merely "any 3.x".
 @experimental
 Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
   String atSign, {
   DateTime? createdAt,
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   String keyEstablishmentAlgo = SecretSharingAlgos.xWing,
-  int envelopeVersion = signedEnvelopeVersion,
 }) {
   return (AtKeysIo keysIo) async {
     final AtKeys keys = await keysIo.read(atSign);
@@ -141,7 +132,6 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
           privateKey: apkamPrivateKey.toString(),
         ),
         signingAlgo: signingAlgo,
-        version: envelopeVersion,
       ),
     };
   };

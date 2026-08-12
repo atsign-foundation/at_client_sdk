@@ -35,7 +35,8 @@ void main() {
 
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
 
-    final payload = (metadata!['keyPackage'] as Map)['payload'] as Map;
+    final payload =
+        envelopePayloadOf(metadata!['keyPackage'] as Map) as Map;
     final advertised = (payload['keys'] as List).single as Map;
     final kpid = advertised['kid'] as String;
 
@@ -61,7 +62,8 @@ void main() {
     final (io, keys, _) = await freshKeys();
 
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
-    final payload = (metadata!['keyPackage'] as Map)['payload'] as Map;
+    final payload =
+        envelopePayloadOf(metadata!['keyPackage'] as Map) as Map;
     final advertised = (payload['keys'] as List).single as Map;
     final kpid = advertised['kid'] as String;
 
@@ -105,7 +107,8 @@ void main() {
 
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
     final envelope = Map<String, Object?>.from(metadata!['keyPackage'] as Map);
-    final payload = Map<String, Object?>.from(envelope['payload'] as Map);
+    final payload =
+        Map<String, Object?>.from(envelopePayloadOf(envelope) as Map);
     // Substitute an encapsulation target — the attack the signature exists to
     // stop, since every structural field still agrees afterwards.
     final other = await XWingPureDartAlgo.instance.generateKeyPair();
@@ -117,7 +120,8 @@ void main() {
         'kid': 'unchanged',
       }
     ];
-    envelope['payload'] = payload;
+    envelope['payload'] =
+        base64Url.encode(utf8.encode(jsonEncode(payload))).replaceAll('=', '');
 
     await expectLater(
       () => verifyEnvelope(envelope,
@@ -126,22 +130,10 @@ void main() {
     );
   });
 
-  test('the envelope version is a parameter, frozen at the build', () async {
-    final (io, _, apkam) = await freshKeys();
-
-    // The default is the 3.x wire shape — the package rides the write-once
-    // metadata.keyPackage, so nothing may emit the new shape by accident.
-    final v1 = (await enrollmentKeyPackageBuilder(atSign)(io))!['keyPackage']
-        as Map;
-    expect(envelopeVersionOf(v1), 1);
-
-    // A posture that says v2 threads through, and the result still verifies
-    // against the same APKAM key.
-    final v2 = (await enrollmentKeyPackageBuilder(atSign,
-        envelopeVersion: jwsEnvelopeVersion)(io))!['keyPackage'] as Map;
-    expect(envelopeVersionOf(v2), 2);
-    await verifyEnvelope(v2, signerPublicKey: apkam.atPublicKey.publicKey);
-  });
+  // The builder used to take an envelopeVersion, so that a posture could
+  // choose the shape a key package froze into. The package rides the
+  // write-once metadata.keyPackage, which made picking the wrong one
+  // unrecoverable; there is one shape now, so there is nothing to pick.
 
   test('carries no enrollmentId claim — the atServer has not assigned one yet',
       () async {

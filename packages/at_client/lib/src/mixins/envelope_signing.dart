@@ -7,12 +7,7 @@ import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show signingAlgoOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show
-        apskUri,
-        envelopeSignerOf,
-        signEnvelope,
-        signedEnvelopeVersion,
-        verifyEnvelope;
+    show apskUri, envelopeSignerOf, signEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart'
     show AtKey, AtSigningVerificationException, AtValue, IllegalStateException;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -40,31 +35,6 @@ mixin EnvelopeSigning on ApkamSigning {
     bool resetOnLookup
   })? publicKeyCacheSettings;
 
-  /// The wrapper shape [wrapAndSign] emits — the signer's rollout flag
-  /// (`docs/projects/pq/decisions.md` 56.4). Defaults to the client's
-  /// `ReleasePosture` — `signedEnvelopeVersion` (1) under the 3.x posture;
-  /// flipping the fleet default to the JWS shape is a 4.0 deployment
-  /// decision, made only once every reader in the fleet accepts it: an
-  /// envelope written into the enrollment record's `keyPackage` in a shape the
-  /// fleet cannot read is unreadable until that enrollment republishes it, and
-  /// `enroll:update` is self-only — so no operator, and no other enrollment,
-  /// can repair it on the holder's behalf. Verification accepts both shapes
-  /// regardless of this setting.
-  ///
-  /// Assigning the field overrides the posture for this signer instance only.
-  /// The posture consult is what lets one preference flip *every* signer the
-  /// SDK builds internally — there are several, constructed out of a caller's
-  /// reach, and each would otherwise be born holding the compile-time
-  /// default.
-  int get envelopeVersion =>
-      _envelopeVersion ??
-      atClient.getPreferences()?.posture.envelopeVersion ??
-      signedEnvelopeVersion;
-
-  set envelopeVersion(int version) => _envelopeVersion = version;
-
-  int? _envelopeVersion;
-
   /// Create a json envelope around [payload] in a format that can be verified
   /// by [verifyEnvelopeSignature].
   ///
@@ -88,7 +58,6 @@ mixin EnvelopeSigning on ApkamSigning {
         keys: signingKeys,
         enrollmentId: enrollmentId,
         signingAlgo: signingAlgoOf(atClient),
-        version: envelopeVersion,
         toEncodable: toEncodable,
       );
     } on Object catch (e, st) {

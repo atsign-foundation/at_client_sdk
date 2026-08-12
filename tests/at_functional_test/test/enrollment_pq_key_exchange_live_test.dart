@@ -13,6 +13,8 @@ import 'package:at_chops/at_chops.dart'
         AtEncryptionKeyPair,
         AtPkamKeyPair;
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show envelopePayloadOf;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -75,7 +77,7 @@ void main() {
     );
     expect(response.enrollStatus, EnrollmentStatus.pending);
 
-    final payload = (built!['keyPackage'] as Map)['payload'] as Map;
+    final payload = envelopePayloadOf(built!['keyPackage'] as Map) as Map;
     return (
       enrollmentId: response.enrollmentId,
       kpid: ((payload['keys'] as List).single as Map)['kid'] as String,

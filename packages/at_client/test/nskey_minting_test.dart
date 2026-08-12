@@ -4,6 +4,8 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show envelopePayloadOf;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -93,8 +95,8 @@ void main() {
 
   test('the published advertisement emits its exact wire shape — raw literals',
       () async {
-    // Emitter pin (frozen forever for the PAYLOAD; the WRAPPER around it is
-    // the version-1 signed envelope, emitted until the 4.0 flip). Raw strings
+    // Emitter pin, frozen forever for both halves — the payload and the
+    // envelope carrying it. Raw strings
     // deliberately: the sibling tests assert through the constants that
     // define these values, which follow a changed value silently. Absent-'v'
     // and absent-'alg'/'suites' reads are tolerated back-compat, so removing
@@ -105,11 +107,11 @@ void main() {
     final advertisement = await ring.mintAndPublish(namespace);
 
     final envelope = jsonDecode(c.values['__nskey']!) as Map<String, dynamic>;
-    expect(envelope.keys.toList(),
-        ['v', 'payload', 'signature', 'hashingAlgo', 'signingAlgo',
-            'enrollmentId'],
-        reason: 'the wrapper — jws-will-move, pinned as shape documentation');
-    final payload = envelope['payload'] as Map<String, dynamic>;
+    expect(envelope.keys.toList(), ['payload', 'signatures'],
+        reason: 'the envelope — RFC 7515 general JSON serialization, pinned '
+            'as shape documentation');
+    final payload =
+        (envelopePayloadOf(envelope) as Map).cast<String, dynamic>();
     expect(payload.keys.toList(),
         ['v', 'nskeyKid', 'publicKey', 'alg', 'suites'],
         reason: 'the payload — frozen forever');

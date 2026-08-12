@@ -7,7 +7,7 @@ import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:test/test.dart';
 
-/// The committed JWS vectors (`test/vectors/jws_envelope_v2.json`) against
+/// The committed JWS vectors (`test/vectors/jws_envelope.json`) against
 /// our own verifier — the other half of the off-the-shelf check
 /// (`tool/verify_jws_vectors.mjs`, which hands the same bytes to an
 /// implementation that is not ours).
@@ -23,7 +23,7 @@ void main() {
 
   setUpAll(() {
     vectors = jsonDecode(
-            File('test/vectors/jws_envelope_v2.json').readAsStringSync())
+            File('test/vectors/jws_envelope.json').readAsStringSync())
         as Map<String, dynamic>;
   });
 
@@ -51,8 +51,7 @@ void main() {
         keys: ApkamSigningKeys(
             publicKey: arm['apskPublicKey'] as String,
             privateKey: arm['privateKey'] as String),
-        enrollmentId: 'vector-1',
-        version: jwsEnvelopeVersion);
+        enrollmentId: 'vector-1');
 
     expect(resigned, arm['envelope'],
         reason: 'PKCS#1 v1.5 is deterministic, so any byte of producer '

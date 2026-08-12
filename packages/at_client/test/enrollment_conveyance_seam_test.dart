@@ -89,10 +89,11 @@ void main() {
     'deviceName': 'pixel',
     'namespace': {'buzz': 'rw'},
     'metadata': {
-      'keyPackage': {
-        'payload': {'v': 1},
-        'signature': 's'
-      }
+      // Opaque on purpose: this seam decides to mint on the package being
+      // PRESENT, never on what it says, and the conveyance below is a fake
+      // that never verifies it. A real envelope here would read as a claim
+      // that the shape matters to this path.
+      'keyPackage': {'opaque-to-this-seam': true}
     },
   };
 
@@ -103,10 +104,11 @@ void main() {
     'namespace': {'buzz': 'rw'},
     'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
     'metadata': {
-      'keyPackage': {
-        'payload': {'v': 1},
-        'signature': 's'
-      }
+      // Opaque on purpose: this seam decides to mint on the package being
+      // PRESENT, never on what it says, and the conveyance below is a fake
+      // that never verifies it. A real envelope here would read as a claim
+      // that the shape matters to this path.
+      'keyPackage': {'opaque-to-this-seam': true}
     },
   };
 

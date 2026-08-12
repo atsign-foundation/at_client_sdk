@@ -1,19 +1,9 @@
 import 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
-import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
-import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class _ClientWith extends Mock implements AtClient {
-  final AtClientPreference preference;
-  _ClientWith(this.preference);
-
-  @override
-  AtClientPreference getPreferences() => preference;
-}
-
-/// The rollout posture: the five flags of `docs/projects/pq/decisions.md`
+/// The rollout posture: the four flags of `docs/projects/pq/decisions.md`
 /// 56.4 as one value, and the contract that an explicitly set flag always
 /// beats it.
 ///
@@ -27,7 +17,6 @@ void main() {
       const p = ReleasePosture.migration();
       expect(p.writesPqByDefault, false);
       expect(p.disallowLegacyEncryption, false);
-      expect(p.envelopeVersion, 1);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
       expect(p.retrofitSigningAlgo, SigningAlgoType.rsa2048);
     });
@@ -36,7 +25,6 @@ void main() {
       const p = ReleasePosture.postQuantum();
       expect(p.writesPqByDefault, true);
       expect(p.disallowLegacyEncryption, true);
-      expect(p.envelopeVersion, 2);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(p.retrofitSigningAlgo, SigningAlgoType.mldsa65);
     });
@@ -74,38 +62,6 @@ void main() {
     });
   });
 
-  group('the envelope version follows the posture unless the signer was told',
-      () {
-    test('a signer on a postQuantum client emits the JWS shape by default', () {
-      final signer = AtClientEnvelopeSigner(_ClientWith(
-          AtClientPreference(posture: const ReleasePosture.postQuantum())));
-      expect(signer.envelopeVersion, 2);
-    });
-
-    test('a signer on a migration client emits version 1 by default', () {
-      final signer = AtClientEnvelopeSigner(_ClientWith(AtClientPreference()));
-      expect(signer.envelopeVersion, 1);
-    });
-
-    test('a per-signer assignment beats the posture, both ways', () {
-      final pqSigner = AtClientEnvelopeSigner(_ClientWith(
-          AtClientPreference(posture: const ReleasePosture.postQuantum())))
-        ..envelopeVersion = 1;
-      expect(pqSigner.envelopeVersion, 1);
-
-      final migrationSigner =
-          AtClientEnvelopeSigner(_ClientWith(AtClientPreference()))
-            ..envelopeVersion = 2;
-      expect(migrationSigner.envelopeVersion, 2);
-    });
-
-    test('a client with no preference at all emits version 1', () {
-      final signer = AtClientEnvelopeSigner(MockAtClient());
-      expect(signer.envelopeVersion, 1,
-          reason: 'the fallback when nothing supplies a posture is the 3.x '
-              'wire default, never the new shape');
-    });
-  });
+  // The envelope shape was a fifth axis here until it stopped being a
+  // choice: there is one shape, so a posture has nothing to say about it.
 }
-
-class MockAtClient extends Mock implements AtClient {}

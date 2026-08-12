@@ -7,9 +7,9 @@ import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:test/test.dart';
 
-/// The JWS wrapper shape (`decisions.md` 48.8, 56.5): RFC 7515 Flattened
-/// JSON, readers always-on, producer behind `signEnvelope`'s `version`
-/// parameter defaulting to 1.
+/// The signed-envelope shape: RFC 7515 **General** JSON Serialization,
+/// `{payload, signatures: [{protected, signature}]}`, with `{alg, kid, v}`
+/// inside each protected header.
 ///
 /// The arms that matter most here are the ones a lazy suite collapses:
 ///
@@ -17,9 +17,12 @@ import 'package:test/test.dart';
 ///   base64url chars — a length Dart's `base64Decode` throws on — while
 ///   ML-DSA-65's 4412 decodes fine. A suite that only exercises ML-DSA goes
 ///   green on code that cannot decode a single RSA signature.
-/// - **The header is signed.** Version 1's `signingAlgo`/`enrollmentId` sit
-///   outside the signature; the whole point of the JWS shape is that `alg`
-///   and `kid` sit inside it. That is asserted by tampering, not claimed.
+/// - **The claims are signed.** `alg` and `kid` live inside the protected
+///   header, so a relabel breaks the signature. That is asserted by tampering,
+///   not claimed.
+/// - **The array is an array.** One entry today, but an envelope carrying no
+///   `signatures` — or an empty one — must be refused rather than verifying
+///   vacuously.
 void main() {
   late AtPkamKeyPair rsaPair;
   late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
@@ -42,38 +45,48 @@ void main() {
       apkamPublicKey: base64Encode(mlDsaPair.publicKey),
       signingAlgo: SigningAlgoType.mldsa65));
 
-  Map<String, Object?> rsaJws({String? enrollmentId = 'enroll-1'}) =>
-      signEnvelope(payload,
-          keys: rsaKeys(),
-          enrollmentId: enrollmentId,
-          version: jwsEnvelopeVersion);
+  Map<String, Object?> rsaEnvelope({String? enrollmentId = 'enroll-1'}) =>
+      signEnvelope(payload, keys: rsaKeys(), enrollmentId: enrollmentId);
 
-  Map<String, Object?> mlDsaJws() => signEnvelope(payload,
+  Map<String, Object?> mlDsaEnvelope() => signEnvelope(payload,
       keys: mlDsaKeys(),
       enrollmentId: 'enroll-pq',
-      signingAlgo: SigningAlgoType.mldsa65,
-      version: jwsEnvelopeVersion);
+      signingAlgo: SigningAlgoType.mldsa65);
 
   String b64u(String text) =>
       base64Url.encode(utf8.encode(text)).replaceAll('=', '');
 
   String decodeB64u(String s) => utf8.decode(base64Decode(base64.normalize(s)));
 
-  group('the JWS shape, RSA arm', () {
-    test('signs, verifies, and survives the base64 padding trap', () async {
-      final envelope = rsaJws();
+  /// The sole signature entry, which every envelope written today carries.
+  Map<String, Object?> entryOf(Map<String, Object?> envelope) =>
+      ((envelope['signatures'] as List).single as Map).cast<String, Object?>();
 
-      expect(envelope.keys.toList(),
-          ['v', 'payload', 'protected', 'signature']);
-      expect(envelope['v'], 2);
-      for (final member in ['payload', 'protected', 'signature']) {
-        expect((envelope[member] as String).contains('='), isFalse,
+  /// Replaces the sole signature entry's [member], leaving the rest intact —
+  /// the tamper lever for everything inside `signatures`.
+  void tamper(Map<String, Object?> envelope, String member, String value) {
+    envelope['signatures'] = [entryOf(envelope)..[member] = value];
+  }
+
+  group('the envelope shape, RSA arm', () {
+    test('signs, verifies, and survives the base64 padding trap', () async {
+      final envelope = rsaEnvelope();
+
+      expect(envelope.keys.toList(), ['payload', 'signatures']);
+      final entry = entryOf(envelope);
+      expect(entry.keys.toList(), ['protected', 'signature']);
+      for (final text in [
+        envelope['payload'] as String,
+        entry['protected'] as String,
+        entry['signature'] as String,
+      ]) {
+        expect(text.contains('='), isFalse,
             reason: 'RFC 7515 base64url is unpadded');
       }
       // The measured trap: 256 signature bytes → 342 unpadded chars, a length
       // the naive decode throws on. Assert the length so this test can never
       // silently stop covering the throwing case.
-      final signature = envelope['signature'] as String;
+      final signature = entry['signature'] as String;
       expect(signature.length, 342);
       expect(() => base64Decode(signature), throwsA(isA<FormatException>()),
           reason: 'if this stops throwing, the padding trap this arm exists '
@@ -84,16 +97,15 @@ void main() {
     });
 
     test('the protected header is exactly the pinned bytes', () {
-      final envelope = rsaJws();
-      final headerJson = decodeB64u(envelope['protected'] as String);
+      final headerJson = decodeB64u(entryOf(rsaEnvelope())['protected'] as String);
 
       // Raw literal, not built from constants: the signature covers these
       // bytes, so the member ORDER is cryptographically bound.
-      expect(headerJson, '{"alg":"RS256","kid":"enroll-1","v":2}');
+      expect(headerJson, '{"alg":"RS256","kid":"enroll-1","v":1}');
     });
 
     test('a tampered payload fails', () async {
-      final envelope = rsaJws();
+      final envelope = rsaEnvelope();
       envelope['payload'] = b64u('{"hello":"universe","n":1}');
 
       await expectLater(
@@ -102,12 +114,12 @@ void main() {
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('a tampered protected header fails: the claims are signed',
-        () async {
-      final envelope = rsaJws();
-      // Same alg, same v, different kid: in version 1 this claim sits outside
-      // the signature and a relabel goes unnoticed; here it must not.
-      envelope['protected'] = b64u('{"alg":"RS256","kid":"enroll-2","v":2}');
+    test('a tampered protected header fails: the claims are signed', () async {
+      final envelope = rsaEnvelope();
+      // Same alg, same v, different kid. The claim is inside the signature,
+      // so a relabel cannot go unnoticed.
+      tamper(envelope, 'protected',
+          b64u('{"alg":"RS256","kid":"enroll-2","v":1}'));
 
       await expectLater(
           () => verifyEnvelope(envelope,
@@ -116,9 +128,9 @@ void main() {
     });
 
     test("alg cannot overrule the published key's declaration", () async {
-      final envelope = rsaJws();
-      envelope['protected'] =
-          b64u('{"alg":"ML-DSA-65","kid":"enroll-1","v":2}');
+      final envelope = rsaEnvelope();
+      tamper(envelope, 'protected',
+          b64u('{"alg":"ML-DSA-65","kid":"enroll-1","v":1}'));
 
       await expectLater(
           () => verifyEnvelope(envelope,
@@ -128,10 +140,10 @@ void main() {
     });
 
     test('a corrupted signature fails', () async {
-      final envelope = rsaJws();
-      final signature = envelope['signature'] as String;
-      envelope['signature'] =
-          signature.replaceRange(0, 1, signature[0] == 'A' ? 'B' : 'A');
+      final envelope = rsaEnvelope();
+      final signature = entryOf(envelope)['signature'] as String;
+      tamper(envelope, 'signature',
+          signature.replaceRange(0, 1, signature[0] == 'A' ? 'B' : 'A'));
 
       await expectLater(
           () => verifyEnvelope(envelope,
@@ -140,25 +152,26 @@ void main() {
     });
   });
 
-  group('the JWS shape, ML-DSA arm', () {
+  group('the envelope shape, ML-DSA arm', () {
     test('signs and verifies under the array _apsk', () async {
-      final envelope = mlDsaJws();
+      final envelope = mlDsaEnvelope();
 
-      final signature = envelope['signature'] as String;
+      final signature = entryOf(envelope)['signature'] as String;
       expect(signature.length, 4412,
           reason: 'ML-DSA-65 is 3309 signature bytes — and 4412 % 4 == 0, so '
               'this arm alone can NEVER catch a missing base64 '
               'normalisation; that is what the RSA arm is for');
       expect(signature.contains('='), isFalse);
 
-      final headerJson = decodeB64u(envelope['protected'] as String);
-      expect(headerJson, '{"alg":"ML-DSA-65","kid":"enroll-pq","v":2}');
+      final headerJson =
+          decodeB64u(entryOf(envelope)['protected'] as String);
+      expect(headerJson, '{"alg":"ML-DSA-65","kid":"enroll-pq","v":1}');
 
       await verifyEnvelope(envelope, signerPublicKey: mlDsaApsk());
     });
 
     test('a tampered payload fails', () async {
-      final envelope = mlDsaJws();
+      final envelope = mlDsaEnvelope();
       envelope['payload'] = b64u('{"hello":"universe","n":1}');
 
       await expectLater(
@@ -167,75 +180,43 @@ void main() {
     });
   });
 
-  group('the two shapes side by side', () {
-    test('the same payload verifies under both, and the arms differ', () async {
-      final v1 = signEnvelope(payload, keys: rsaKeys(), enrollmentId: 'e1');
-      final v2 = rsaJws(enrollmentId: 'e1');
+  group('reading an envelope', () {
+    test('envelopePayloadOf decodes what a direct read cannot', () {
+      final envelope = rsaEnvelope();
 
-      await verifyEnvelope(v1, signerPublicKey: rsaPair.atPublicKey.publicKey);
-      await verifyEnvelope(v2, signerPublicKey: rsaPair.atPublicKey.publicKey);
-
-      // The differential half: if these ever agree, the test is comparing a
-      // case with itself.
-      expect(v1['v'], 1);
-      expect(v2['v'], 2);
-      expect(v1['payload'], isA<Map>());
-      expect(v2['payload'], isA<String>());
-      expect(v1.containsKey('protected'), isFalse);
-      expect(v2.containsKey('signingAlgo'), isFalse);
+      expect(envelope['payload'], isA<String>(),
+          reason: 'the raw member is base64url text, never the payload');
+      expect(envelopePayloadOf(envelope), payload);
     });
 
-    test('envelopePayloadOf reads both shapes', () {
-      final v1 = signEnvelope(payload, keys: rsaKeys());
-      final v2 = rsaJws();
-
-      expect(envelopePayloadOf(v1), same(v1['payload']),
-          reason: 'version 1 embeds the payload; no decode to do');
-      expect(envelopePayloadOf(v2), payload,
-          reason: 'the JWS payload round-trips through base64url JSON');
+    test('envelopeSignerOf reads the kid claim', () {
+      expect(envelopeSignerOf(rsaEnvelope()), 'enroll-1');
     });
 
-    test('envelopeSignerOf reads the claim from either home', () {
-      expect(
-          envelopeSignerOf(signEnvelope(payload,
-              keys: rsaKeys(), enrollmentId: 'enroll-1')),
-          'enroll-1');
-      expect(envelopeSignerOf(rsaJws()), 'enroll-1');
+    test('no enrollment, no claim — and no kid member at all', () {
+      final envelope = rsaEnvelope(enrollmentId: null);
+
+      expect(envelopeSignerOf(envelope), isNull);
+      expect(decodeB64u(entryOf(envelope)['protected'] as String),
+          '{"alg":"RS256","v":1}',
+          reason: 'a guessed or sentinel id would be frozen inside the '
+              'signature where nobody could correct it');
     });
 
-    test('no enrollment, no claim — in either shape', () {
-      final v1 = signEnvelope(payload, keys: rsaKeys());
-      final v2 = rsaJws(enrollmentId: null);
+    test('a String payload becomes JSON, so decoding is unconditional', () {
+      final envelope = signEnvelope('just text', keys: rsaKeys());
 
-      expect(envelopeSignerOf(v1), isNull);
-      expect(envelopeSignerOf(v2), isNull);
-      final headerJson = decodeB64u(v2['protected'] as String);
-      expect(headerJson, '{"alg":"RS256","v":2}',
-          reason: 'no kid member at all — a guessed or sentinel id would be '
-              'frozen inside the signature where nobody could correct it');
-    });
-
-    test('a String payload becomes JSON in the JWS shape', () {
-      final v2 = signEnvelope('just text',
-          keys: rsaKeys(), version: jwsEnvelopeVersion);
-
-      expect(envelopePayloadOf(v2), 'just text',
-          reason: 'version 1 signs a String verbatim; the JWS shape encodes '
-              'it as JSON so decode is unconditional — either way it '
-              'round-trips');
+      expect(envelopePayloadOf(envelope), 'just text',
+          reason: 'what comes out of base64url is JSON, whatever went in');
     });
   });
 
   group('refusals', () {
-    test('an unknown wrapper version is refused everywhere, not guessed at',
+    test('an envelope with no signatures array is refused, not a cast error',
         () async {
-      final envelope = signEnvelope(payload, keys: rsaKeys());
-      envelope['v'] = 3;
+      final envelope = rsaEnvelope();
+      envelope.remove('signatures');
 
-      expect(() => envelopeVersionOf(envelope),
-          throwsA(isA<AtSigningVerificationException>()));
-      expect(() => envelopePayloadOf(envelope),
-          throwsA(isA<AtSigningVerificationException>()));
       expect(() => envelopeSignerOf(envelope),
           throwsA(isA<AtSigningVerificationException>()));
       await expectLater(
@@ -244,30 +225,37 @@ void main() {
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('an absent v is version 1 — the pre-2026-08-06 wrapper', () async {
-      final envelope = signEnvelope(payload, keys: rsaKeys());
-      envelope.remove('v');
+    test('an empty signatures array is refused, not treated as unsigned',
+        () async {
+      // The arm that matters: an envelope nobody signed must not verify
+      // vacuously by having nothing to check.
+      final envelope = rsaEnvelope();
+      envelope['signatures'] = [];
 
-      expect(envelopeVersionOf(envelope), 1);
-      expect(envelopePayloadOf(envelope), payload);
-      await verifyEnvelope(envelope,
-          signerPublicKey: rsaPair.atPublicKey.publicKey);
+      await expectLater(
+          () => verifyEnvelope(envelope,
+              signerPublicKey: rsaPair.atPublicKey.publicKey),
+          throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
+              'message', contains('non-empty signatures array'))));
     });
 
-    test('a version-1 envelope with no signature is refused, not a cast error',
-        () async {
-      final envelope = signEnvelope(payload, keys: rsaKeys());
-      envelope.remove('signature');
+    test('a signatures entry that is not an object is refused', () async {
+      final envelope = rsaEnvelope();
+      envelope['signatures'] = ['not-an-object'];
 
+      expect(() => envelopeSignerOf(envelope),
+          throwsA(isA<AtSigningVerificationException>()));
       await expectLater(
           () => verifyEnvelope(envelope,
               signerPublicKey: rsaPair.atPublicKey.publicKey),
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('a JWS envelope missing its protected header is refused', () async {
-      final envelope = rsaJws();
-      envelope.remove('protected');
+    test('an entry missing its protected header is refused', () async {
+      final envelope = rsaEnvelope();
+      envelope['signatures'] = [
+        {'signature': entryOf(envelope)['signature']}
+      ];
 
       await expectLater(
           () => verifyEnvelope(envelope,
@@ -277,8 +265,8 @@ void main() {
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('a JWS payload that does not decode is refused', () {
-      final envelope = rsaJws();
+    test('a payload that does not decode is refused', () {
+      final envelope = rsaEnvelope();
       envelope['payload'] = 'not!!!base64url';
       expect(() => envelopePayloadOf(envelope),
           throwsA(isA<AtSigningVerificationException>()));
@@ -288,33 +276,36 @@ void main() {
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('a header whose signed version disagrees with the wrapper is refused',
-        () async {
-      final envelope = rsaJws();
-      envelope['protected'] = b64u('{"alg":"RS256","kid":"enroll-1","v":1}');
+    test('a protected header naming another version is refused', () async {
+      // The version is inside the signature, so this is not a tamper defence
+      // — it is what stops a future shape being read as this one by a build
+      // that has no code for it.
+      final envelope = rsaEnvelope();
+      tamper(envelope, 'protected',
+          b64u('{"alg":"RS256","kid":"enroll-1","v":2}'));
 
       await expectLater(
           () => verifyEnvelope(envelope,
               signerPublicKey: rsaPair.atPublicKey.publicKey),
-          throwsA(isA<AtSigningVerificationException>().having(
-              (e) => e.message, 'message', contains('the signed claim'))));
+          throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
+              'message', contains('claims envelope version'))));
     });
 
-    test('the producer refuses what it has no mapping or shape for', () {
+    test('a protected header that is not JSON is refused', () {
+      final envelope = rsaEnvelope();
+      tamper(envelope, 'protected', b64u('{truncated'));
+
+      expect(() => envelopeSignerOf(envelope),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('the producer refuses a signing algorithm it has no mapping for', () {
       expect(
           () => signEnvelope(payload,
-              keys: rsaKeys(),
-              hashingAlgo: HashingAlgoType.sha512,
-              version: jwsEnvelopeVersion),
+              keys: rsaKeys(), signingAlgo: SigningAlgoType.ed25519),
           throwsA(isA<ArgumentError>()),
-          reason: 'nothing produces RSA under any hash but SHA-256, so the '
-              'only RSA mapping is RS256; widen it when a producer exists');
-      expect(() => signEnvelope(payload, keys: rsaKeys(), version: 7),
-          throwsA(isA<ArgumentError>()));
-    });
-
-    test('the producer default is version 1 — nothing on the wire moves', () {
-      expect(signEnvelope(payload, keys: rsaKeys())['v'], 1);
+          reason: 'no envelope signs under Ed25519, and a shape that guessed '
+              'an alg name for it would freeze the guess inside a signature');
     });
   });
 }

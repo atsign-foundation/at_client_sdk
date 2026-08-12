@@ -12,7 +12,7 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf, envelopeVersionOf, jwsEnvelopeVersion;
+    show envelopePayloadOf;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -76,14 +76,18 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner is not JSON: ${e.message}');
     }
-    // Every field the verify reads, checked up front: a missing one otherwise
-    // surfaces as a cast error, which reads like a bug rather than the refusal
-    // it is. Which fields those are depends on the wrapper shape — the JWS
-    // wrapper carries its algorithm and signer claim inside `protected`.
-    final wrapperFields = envelopeVersionOf(envelope) == jwsEnvelopeVersion
-        ? ['signature', 'protected', 'payload']
-        : ['signature', 'enrollmentId', 'signingAlgo', 'hashingAlgo'];
-    if (wrapperFields.any((field) => envelope[field] is! String)) {
+    // Checked up front: a missing member otherwise surfaces as a cast error,
+    // which reads like a bug rather than the refusal it is. The algorithm and
+    // signer claim live inside `protected`, so the shape to check is the
+    // payload plus one signatures entry carrying both of its members.
+    final signatures = envelope['signatures'];
+    final entry = signatures is List && signatures.isNotEmpty
+        ? signatures.first
+        : null;
+    if (envelope['payload'] is! String ||
+        entry is! Map ||
+        entry['protected'] is! String ||
+        entry['signature'] is! String) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner carries no APKAM signature, so the '
           'key sealed to would be only as trustworthy as the server that '

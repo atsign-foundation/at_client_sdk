@@ -1,6 +1,8 @@
-// Verifies test/vectors/jws_envelope_v2.json with panva's `jose` — an
+// Verifies test/vectors/jws_envelope.json with panva's `jose` — an
 // implementation that is not ours, which is the point: it turns "the signed
-// envelope is RFC 7515" from a claim into a runnable check.
+// envelope is RFC 7515 general JSON serialization" from a claim into a
+// runnable check. jose is handed the envelope whole, exactly as written: the
+// shape carries no member of our own for a compliant verifier to ignore.
 //
 //   cd tool && npm install --no-save jose && node verify_jws_vectors.mjs
 //
@@ -14,10 +16,10 @@
 // exact run this was proven with. Exits non-zero on any failure.
 import { readFileSync } from 'node:fs';
 import { createPublicKey } from 'node:crypto';
-import { flattenedVerify } from 'jose';
+import { generalVerify } from 'jose';
 
 const vectors = JSON.parse(
-  readFileSync(new URL('../test/vectors/jws_envelope_v2.json', import.meta.url)),
+  readFileSync(new URL('../test/vectors/jws_envelope.json', import.meta.url)),
 );
 const expectedPayload = JSON.stringify(vectors.payload);
 let failures = 0;
@@ -30,10 +32,10 @@ const fail = (name, err) => {
 };
 
 async function verifyArm(name, envelope, key, expectedAlg) {
-  // The wrapper's extra `v` member must be ignored by a compliant verifier
-  // (RFC 7515: unrecognised members MUST be ignored) — hand jose the whole
-  // envelope, never a cleaned-up copy.
-  const { payload, protectedHeader } = await flattenedVerify(envelope, key);
+  // generalVerify walks the `signatures` array and returns the entry it
+  // verified — the shape's own reader takes the first entry, and one entry is
+  // what a signer writes today.
+  const { payload, protectedHeader } = await generalVerify(envelope, key);
   const decoded = Buffer.from(payload).toString('utf8');
   if (decoded !== expectedPayload) {
     throw new Error(`payload mismatch: ${decoded}`);

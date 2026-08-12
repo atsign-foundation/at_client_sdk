@@ -238,8 +238,18 @@ void main() {
     final approver = buildMockClient('approver-1');
     await AtClientSecretSharing.forClient(approver).register();
     final pkg = (await advertisedKeyPackage()) as Map;
+    // Inside the signatures entry: a top-level `signature` member is not
+    // where the verifier looks, so overwriting one would leave the real
+    // signature intact and the "tampered" package would verify.
     final tampered = Map<String, Object?>.from(pkg)
-      ..['signature'] = base64Encode(List<int>.filled(64, 1));
+      ..['signatures'] = [
+        {
+          ...((pkg['signatures'] as List).single as Map)
+              .cast<String, Object?>(),
+          'signature':
+              base64Url.encode(List<int>.filled(64, 1)).replaceAll('=', ''),
+        }
+      ];
     stubPendingEnrollment(approver, tampered);
 
     await expectLater(

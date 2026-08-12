@@ -21,6 +21,8 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show envelopePayloadOf;
 import 'package:at_commons/at_builders.dart';
 import 'package:hive/hive.dart';
 import 'package:mocktail/mocktail.dart';
@@ -91,7 +93,8 @@ void main() {
     }
 
     final advertised = jsonDecode(remoteData['public:__nskey.buzz$atSign']!);
-    final nskeyKid = advertised['payload']['nskeyKid'] as String;
+    final nskeyKid =
+        (envelopePayloadOf(advertised as Map) as Map)['nskeyKid'] as String;
 
     final material = (await inner.read(atSign)).getKey(
         NskeyPrivateFiling.keyIdFor('buzz', nskeyKid),
