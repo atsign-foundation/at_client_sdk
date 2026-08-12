@@ -1792,10 +1792,10 @@ other one is wrong forever on those atSigns.
 
 Deciding needs no code and takes minutes; **do it before the next long-lived
 atSign runs a privileged PQ client**, not before a release. The bare-base64
-form is what ships and is smaller; the tagged form is what every other key
-structure here uses (`_apsk`, the key package) and is the only one that can
-carry a second algorithm. Whichever wins, the loser's document changes in the
-same commit as the decision.
+form is what ships and is smaller; the structured form is what every other key
+structure here uses (`_apsk`'s array, the key package) and is the only one that
+can carry a second algorithm. Whichever wins, the loser's document changes in
+the same commit as the decision.
 
 ### 14.2 A version on the two signed payloads — DONE
 
@@ -2398,7 +2398,8 @@ PRs are merged; publishing and R-2 follow it.
 | # | Work | Where | State |
 |---|------|-------|-------|
 | 1 | Drop at_server's `at_commons` override; delete the `at_commons-apsk-1` tag | at_server | **DONE 2026-08-11.** Override gone from both files, `pubspec.lock` resolves hosted 5.14.0, tag deleted local+origin, [at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744) open. ⚠️ at_server head is now `5bc3618a`, three commits past the `ab38b884` the 210/210 was measured at — **that number is stale twice over** (different code, different at_commons source) and must be re-earned |
-| 2 | Run at_client_sdk's functional pack for the two never-run keyId-shape files | at_client_sdk | owed — [14.17](#1417-signature-agility--what-is-built-and-what-is-owed) |
+| 2 | Run at_client_sdk's functional pack for the two never-run keyId-shape files | at_client_sdk | **DONE 2026-08-12.** Both pass: `pq_native_onboard_live_test.dart` (UC-A1.1) in the functional pack, and `pq_native_onboard_test.dart` in at_onboarding_cli's pack, both against `at_virtual_env:local`. The run also surfaced the `_apsk` seam break below — 16 of 19 failures, one cause |
+| 2a | **The `_apsk` composer moves client-side** — at_server#2744 merged, so the atServer publishes only what a request sends and composes nothing. The client sent nothing, so no `_apsk` existed at approval and every advertised key package was rejected. `EnrollVerbBuilder`/`EnrollParams` gain `apsk` (the array) and `apskLegacy` (the bare RSA string); at_auth composes one or the other at all three submit sites; `parseApskValue` reads the array; the never-published tagged form is deleted | at_client_sdk | **Client half DONE 2026-08-12**, functional pack 127/19 → 143/3. **atServer half owed:** honour `apskLegacy` (publish verbatim, not JSON-encoded) and refuse a request carrying both fields. Until that lands, a plain-legacy enrollment publishes no `_apsk` through the verb and the legacy arm is unexercised end-to-end |
 
 **Stage 1 — one envelope shape, one key vocabulary, then the `_apsk` reader
 half. Nothing blocks it; start here.** Steps 3–5 are ordered so each shrinks
@@ -2431,8 +2432,8 @@ to a derivable legacy key ([`decisions.md` 93](decisions.md#93-the-d1-remaining-
 
 | # | Work |
 |---|------|
-| 13 | `_apsk` array composer — and settle `publishPublicSigningKey`'s fate (its skip-if-present never rewrites a bare string) |
-| 14 | Populate `EnrollParams.apsk` on `enroll:request` — nothing does today, so the atServer capability is dormant |
+| 13 | *(the single-key half landed as step 2a)* The **multi-key** array composer — an enrollment advertising a second algorithm's key beside the first, which is what genuinely needs stage 2. Also settle `publishPublicSigningKey`'s fate: it stays the only writer for `_apsk.primary`, where there is no enrollment id and so no `enroll:request` to ride |
+| 14 | *(done in step 2a)* `EnrollParams.apsk`/`apskLegacy` are populated at all three submit sites. Only the atServer half of `apskLegacy` remains |
 | 15 | Multi-signature envelope **writer** |
 | 16 | The `enroll:update` client caller + its PoP signature (`AtSigningMode.pkam`, SHA-256) |
 | 17 | The in-use signing set on `AtClientPreference` |

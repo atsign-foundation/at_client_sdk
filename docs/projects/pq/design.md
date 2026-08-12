@@ -731,11 +731,22 @@ branches on `signingAlgo` and `wrapAndSign` passes the client's resolved
 algorithm, while `verifyEnvelope` reads the published key's own declaration,
 which is authoritative over the envelope's claim. And apps (NoPorts) sign and
 verify with `_apsk` today, so the key itself migrates on the same two-release
-ladder as everything else: the **final 3.x** publishes the `_apsk` value exactly as
-now (a bare RSA public key string) while its verify learns to branch on the
-recorded algorithm and to parse a new **self-describing, tagged** `_apsk` form;
-an enrollment publishes that form whenever its RECORDED `signingAlgo` is not `rsa2048` — the discriminator is the enrollment record, not the client's major version, and it is live in 3.x today (at_server composes the tagged value at publish time). The tagged form must be
-unmistakable to an old bare-RSA parser — fail loudly, never mis-read. In-place
+ladder as everything else. There are exactly **two** published forms: the
+**bare** RSA public key string exactly as now, and the **array**
+(`{"v":1,"keys":[{kid,use,alg,pub}]}`) — see `apskAdvertisement` in at_auth,
+which composes it, and `apskSigningKeys`, which reads it. A plain-legacy
+enrollment publishes the bare form, everything else publishes the array; the
+discriminator is the enrollment's own material, not the client's major version.
+Both are composed **by the client** and carried on `EnrollParams.apskLegacy`
+and `EnrollParams.apsk` respectively — since
+[at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744) the
+atServer composes nothing and publishes only what a request sends it, so a new
+signing-key shape needs no server release. (An earlier single-key **tagged**
+form, `{v,signingAlgo,publicKey}`, was designed and built but never published
+by anything; it was deleted 2026-08-12 rather than carried, since nothing
+released emits it and the array supersedes it.) The array must be
+unmistakable to an old bare-RSA parser — fail loudly, never mis-read — which is
+exactly why a plain-legacy enrollment keeps publishing the bare form. In-place
 rsa→mldsa65 upgrade of an existing enrollment's signing key is recommended against
 (the enrollment-upgrade path reaches the same end state with mechanics that exist);
 ratified 2026-08-05: [decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 8 ratifies the "no" on an in-place rsa→mldsa65 upgrade, and item 9 freezes the tagged format.
@@ -2020,8 +2031,9 @@ There is no top-level `v` or `enrollmentId`: both live **inside** each
 `protected` header, as `v` and `kid`, where the signature covers them. A
 version or signer claim outside the signature is one an attacker can edit.
 
-There is no legacy branch: **nothing released reads or writes an envelope**
-(at_client 3.13.0 carries no envelope code at all). The bare-string `_apsk` is
+There is no legacy branch: **nothing released reads or writes an envelope** (no
+release ships `lib/src/signing/`; at_client 3.14.0, the latest, has no such
+directory). The bare-string `_apsk` is
 the released thing in this area, and it is a *record*, not an envelope — see
 [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 ruling 3.

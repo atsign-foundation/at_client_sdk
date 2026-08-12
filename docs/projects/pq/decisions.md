@@ -108,7 +108,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [91. Signature agility: the APKAM auth key stops being the enrollment's signing key (2026-08-11)](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
 - [92. The spike takes trunk, and two published version numbers move underneath it (2026-08-11)](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11)
 - [93. The D1 remaining-work sequence, and the rollout axis becomes real (2026-08-11)](#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
-- [94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — *sub-ruling 4 amended 2026-08-12: the baseline is at_client 3.13.0*
+- [94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — *sub-ruling 4 amended 2026-08-12: the licence is `@experimental`, not a version baseline*
 - [95. The envelope keeps one shape, and a retained key says so (2026-08-12)](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 
 ---
@@ -3362,9 +3362,16 @@ ruling, each with a differential test.
    only on incompatible change), unknown fields tolerated, unknown algorithm
    refused loudly. The old-parser failure mode is fail-closed and proven: every
    pre-PQ verifier base64-decodes the value, which throws FormatException on JSON
-   (asserted in apsk_two_format_test.dart). The atServer composes the tagged form
-   from the enrollment record's (apkamPublicKey, signingAlgo) at publish time,
-   keeping the record PKAM reads the single source. NoPorts, before any of its
+   (asserted in apsk_formats_test.dart). *Amended 2026-08-12: this ruling said
+   "the atServer composes the tagged form from the enrollment record's
+   (apkamPublicKey, signingAlgo) at publish time, keeping the record PKAM reads
+   the single source". The atServer composes nothing since
+   [at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744) —
+   it publishes `EnrollParams.apsk` verbatim and publishes nothing when a
+   request carries none, so the format moved to the side that parses it and a
+   new signing-key shape needs no server release. An enrollment therefore
+   publishes the **array** form (`apskAdvertisement` in at_auth); the tagged
+   single-key form stays readable but is written by nothing.* NoPorts, before any of its
    enrollments publish tagged: srvd's two ESCR verify sites are hardwired to RSA
    and fail loudly on a tagged value — fail-closed but service-breaking, so relays
    adopt the two-format parser first, ecosystem-wide. No other NoPorts path parses
@@ -7768,16 +7775,25 @@ changed two rulings:
 | Surface | Released | Consequence |
 |---------|----------|-------------|
 | Bare-string `_apsk` | **Yes** — `mixins/apkam_signing.dart` ships in at_client **3.13.0** | Read as legacy, never emitted again |
-| Unversioned envelope | **No** — no envelope code ships in at_client 3.13.0 | Nothing to honour on read; the shape is deleted rather than versioned ([95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 3) |
+| Unversioned envelope | **No** — `lib/src/signing/` ships in no release; at_client 3.14.0, the latest on pub.dev, has no such directory and no `parseApskValue` | Nothing to honour on read; the shape is deleted rather than versioned ([95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 3) |
 | Versioned typed-keys document; `flush` upgrading a legacy file in place | **Yes** — at_auth **3.3.0**, 10 days ago | `version: 1` keyfiles with an empty `keys` array exist in the wild and must be read |
 | `apkam:<enrollmentId>` keyIds | **No** — `fileApkamMaterial` is not on trunk | No read compatibility (ruling 3) |
 | Tagged single-key `_apsk`, `signedEnvelopeVersion`, `jwsEnvelopeVersion` | **No** — all D1-only | Removed, not versioned (rulings 8, 12) |
 
-Both released surfaces are `@experimental`, and 3.14.0's own entry says the
-wire shape is subject to change. Honouring them on read is therefore a choice
-rather than an obligation, and it is the choice taken: the licence does not
-have to be spent, and anything a 3.14.0 client has already published or signed
-keeps working.
+**Settled, and not to be re-opened: the secret-sharing substrate is
+`@experimental`, so it is free to change outright.** Yes, at_client **3.14.0 is
+published on pub.dev and is not retracted**, and it ships `lib/src/secret_sharing/`
+and `lib/src/mixins/` — 9 of those 12 files carry the marker, which is precisely
+the mechanism that makes them changeable. Nobody has built on them; they are the
+first early iteration of the design this project has been re-deriving for three
+months. **Publication status is therefore immaterial to what we may change**,
+and a check against pub.dev is not a reason to revisit this. Recorded this
+plainly because the opposite conclusion has been re-derived from pub.dev more
+than once, each time costing a round of re-litigating a settled licence.
+
+The genuinely frozen surfaces are the two below that say **Yes** *and* predate
+the PQ work: the bare-string `_apsk`, and the typed-keys document at_auth 3.3.0
+shipped. Those are honoured on read. Everything else in this table is ours.
 
 `toJson()` stops emitting `version: 1` for a keyfile holding no typed material,
 so a legacy file round-trips byte-identically through a new build. A
@@ -8005,9 +8021,14 @@ The exception, and it is a real one: the **bare-string** `_apsk` spelling *is*
 released — at_client 3.13.0's `apkam_signing.dart` publishes and fetches one.
 It predates this work and keeps its compatibility path.
 
-**Amended 2026-08-12 — the baseline is at_client 3.13.0**, which contains no
-`secret_sharing/` directory. Nothing released writes a key package, so the
-sub-ruling holds for both records. The released-surface table is
+**Amended 2026-08-12 — the licence is `@experimental`, not a version
+baseline.** This amendment first read "the baseline is at_client 3.13.0, which
+contains no `secret_sharing/` directory". That framing is what keeps inviting a
+pub.dev check, and the check keeps coming back the other way: **3.14.0 is
+published, is not retracted, and does ship `secret_sharing/`** — every file of
+it marked `@experimental`, unused by anyone, and therefore free to change. The
+sub-ruling holds for both records on the marker, which is the durable reason.
+The released-surface table is
 [§91.4](#914-what-is-released-and-therefore-what-must-still-be-read).
 
 **5. The suite-negotiation loop is written twice and becomes one function.**
@@ -8097,12 +8118,15 @@ separately.**
 | A published reader crashes on a null cast rather than refusing | nothing released reads an envelope — see ruling 3 |
 | Recovery needs an `enroll:update` no client sends yet | only bites if a bad envelope can exist, and none can when one shape is the only shape |
 
-**3. Nothing released reads or writes an envelope.** The baseline is at_client
-**3.13.0**, which has no envelope code at all — `wrapAndSign` and
-`verifyEnvelope` appear nowhere in it. The released thing in this area is the
-**bare-string `_apsk`**, from 3.13.0's `mixins/apkam_signing.dart`, and that is
-a *record* rather than an envelope. So there is no legacy envelope to honour on
-read, which is why ruling 1 deletes rather than versions.
+**3. Nothing released reads or writes an envelope.** No release ships
+`lib/src/signing/` — at_client **3.14.0**, the latest on pub.dev, has no such
+directory, and `wrapAndSign` / `verifyEnvelope` / `parseApskValue` appear
+nowhere in it. The released thing in this area is the **bare-string `_apsk`**,
+from `mixins/apkam_signing.dart`, and that is a *record* rather than an
+envelope. So there is no legacy envelope to honour on read, which is why ruling
+1 deletes rather than versions. (The rest of what 3.14.0 ships in this area —
+`secret_sharing/`, the signing mixins — is `@experimental` and free to change;
+see [§91.4](#914-what-is-released-and-therefore-what-must-still-be-read).)
 
 **4. The reversibility hatch is spent, not lost.** `nskeyAdvertisementVersion`'s
 doc calls the version field "the hatch that makes moving the envelope to JWS
