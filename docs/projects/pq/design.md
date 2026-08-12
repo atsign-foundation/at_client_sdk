@@ -1981,8 +1981,8 @@ is never written again.
 list of keys with algorithms. `status` absent reads as `active`.
 
 A reader accepts this and the released bare string (an `rsa2048` key published
-by at_client **3.13.0**'s `mixins/apkam_signing.dart` — the genuinely released
-surface here, 3.14.0 being retracted). A writer emits only this.
+by at_client **3.13.0**'s `mixins/apkam_signing.dart`). A writer emits only
+this.
 
 The value is composed client-side and travels on `EnrollParams.apsk`. The
 atServer stores it verbatim on the enrollment record, writes its JSON encoding
@@ -2020,12 +2020,11 @@ There is no top-level `v` or `enrollmentId`: both live **inside** each
 `protected` header, as `v` and `kid`, where the signature covers them. A
 version or signer claim outside the signature is one an attacker can edit.
 
-There is no legacy branch. `envelope_signing.dart` shipped only in at_client
-3.14.0, which is retracted, so **no released build reads or writes an envelope**
-— see [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
-ruling 3, which splits the released-surface table on exactly this point. The
-bare-string `_apsk` is the released thing in this area, and it is a *record*,
-not an envelope.
+There is no legacy branch: **nothing released reads or writes an envelope**
+(at_client 3.13.0 carries no envelope code at all). The bare-string `_apsk` is
+the released thing in this area, and it is a *record*, not an envelope — see
+[`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 3.
 
 Signing: one signature per active signing key the enrollment holds, so the
 envelope carries exactly what `_apsk` advertises as `active`.

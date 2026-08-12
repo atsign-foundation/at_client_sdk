@@ -108,7 +108,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [91. Signature agility: the APKAM auth key stops being the enrollment's signing key (2026-08-11)](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
 - [92. The spike takes trunk, and two published version numbers move underneath it (2026-08-11)](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11)
 - [93. The D1 remaining-work sequence, and the rollout axis becomes real (2026-08-11)](#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
-- [94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — *sub-ruling 4 amended 2026-08-12; it rests on the 3.14.0 retraction*
+- [94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — *sub-ruling 4 amended 2026-08-12: the baseline is at_client 3.13.0*
 - [95. The envelope keeps one shape, and a retained key says so (2026-08-12)](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 
 ---
@@ -7768,7 +7768,7 @@ changed two rulings:
 | Surface | Released | Consequence |
 |---------|----------|-------------|
 | Bare-string `_apsk` | **Yes** — `mixins/apkam_signing.dart` ships in at_client **3.13.0** | Read as legacy, never emitted again |
-| Unversioned envelope | **No, as of 2026-08-12** — `mixins/envelope_signing.dart` was **3.14.0**-only, and 3.14.0 is retracted | No released build reads or writes an envelope, so there is nothing to honour on read ([95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 3) |
+| Unversioned envelope | **No** — no envelope code ships in at_client 3.13.0 | Nothing to honour on read; the shape is deleted rather than versioned ([95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 3) |
 | Versioned typed-keys document; `flush` upgrading a legacy file in place | **Yes** — at_auth **3.3.0**, 10 days ago | `version: 1` keyfiles with an empty `keys` array exist in the wild and must be read |
 | `apkam:<enrollmentId>` keyIds | **No** — `fileApkamMaterial` is not on trunk | No read compatibility (ruling 3) |
 | Tagged single-key `_apsk`, `signedEnvelopeVersion`, `jwsEnvelopeVersion` | **No** — all D1-only | Removed, not versioned (rulings 8, 12) |
@@ -8005,15 +8005,10 @@ The exception, and it is a real one: the **bare-string** `_apsk` spelling *is*
 released — at_client 3.13.0's `apkam_signing.dart` publishes and fetches one.
 It predates this work and keeps its compatibility path.
 
-**Amended 2026-08-12 — this rests on the 3.14.0 retraction.** at_client
-3.14.0 published `secret_sharing/` entire, so `KeyPackage.legacySuites` was
-guarding a real published writer until 3.14.0 was retracted. On the 3.13.0
-baseline the sub-ruling holds as written, for both records. Recorded because
-the conclusion is downstream of a release decision rather than of the code:
-un-retracting 3.14.0 brings `legacySuites` back with it. The released-surface
-table is [§91.4](#914-what-is-released-and-therefore-what-must-still-be-read),
-whose first row [95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
-ruling 3 splits.
+**Amended 2026-08-12 — the baseline is at_client 3.13.0**, which contains no
+`secret_sharing/` directory. Nothing released writes a key package, so the
+sub-ruling holds for both records. The released-surface table is
+[§91.4](#914-what-is-released-and-therefore-what-must-still-be-read).
 
 **5. The suite-negotiation loop is written twice and becomes one function.**
 `KeyPackage.bestSuiteFor` plus `sendEnvelope`'s narrowing, versus
@@ -8058,9 +8053,9 @@ default flips. Re-decided on the facts rather than inherited.
 ## 95. The envelope keeps one shape, and a retained key says so (2026-08-12)
 
 Two items [94](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)
-left open, ruled together because both turn on the same premise: **at_client
-3.14.0 is retracted and the baseline is 3.13.0**, which ships no
-`secret_sharing/` and no envelope code at all.
+left open, ruled together because both turn on the same premise: **the baseline
+is at_client 3.13.0**, which ships no `secret_sharing/` and no envelope code at
+all.
 
 ### The envelope
 
@@ -8099,17 +8094,15 @@ separately.**
 | Reason | Killed by |
 |--------|-----------|
 | The enrollment record's `keyPackage` is write-once, so a bad envelope is frozen for that enrollment's life | `enroll:update` reaches `metadata` ([91](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11) ruling 13) |
-| A published reader crashes on a null cast rather than refusing | the 3.14.0 retraction — see ruling 3 |
+| A published reader crashes on a null cast rather than refusing | nothing released reads an envelope — see ruling 3 |
 | Recovery needs an `enroll:update` no client sends yet | only bites if a bad envelope can exist, and none can when one shape is the only shape |
 
-**3. The retraction splits [§91.4](#914-what-is-released-and-therefore-what-must-still-be-read)'s
-first row, and the envelope half becomes unreleased.** That table treats the
-bare-string `_apsk` and the unversioned envelope as one surface released by
-at_client 3.14.0. They separate: `apkam_signing.dart` ships in **3.13.0**, so
-bare-string `_apsk` stays released and must still be read; `envelope_signing.dart`
-was 3.14.0-only, so with 3.14.0 retracted **no released build reads or writes an
-envelope at all**. This strengthens ruling 12's "removed, not versioned" rather
-than disturbing it — there is no legacy envelope to honour.
+**3. Nothing released reads or writes an envelope.** The baseline is at_client
+**3.13.0**, which has no envelope code at all — `wrapAndSign` and
+`verifyEnvelope` appear nowhere in it. The released thing in this area is the
+**bare-string `_apsk`**, from 3.13.0's `mixins/apkam_signing.dart`, and that is
+a *record* rather than an envelope. So there is no legacy envelope to honour on
+read, which is why ruling 1 deletes rather than versions.
 
 **4. The reversibility hatch is spent, not lost.** `nskeyAdvertisementVersion`'s
 doc calls the version field "the hatch that makes moving the envelope to JWS

@@ -1398,8 +1398,7 @@ side nobody wrote — the published arm is the only thing that measures
 
 - **UC-G1.5 · a bare-string `_apsk` still verifies.**
   *Given* an `_apsk` published by at_client **3.13.0** — a bare public-key
-  string. (3.13.0, not 3.14.0: `apkam_signing.dart` ships in 3.13.0, and
-  3.14.0 is retracted.)
+  string, from that release's `mixins/apkam_signing.dart`.
   *When* a current build verifies an envelope from that enrollment.
   *Then* it succeeds, reading the record as a single `rsa2048` entry. The
   writer arm must show the current build never emits that shape.
