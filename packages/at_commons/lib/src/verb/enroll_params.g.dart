@@ -26,6 +26,7 @@ EnrollParams _$EnrollParamsFromJson(Map<String, dynamic> json) => EnrollParams()
   ..apkamPublicKey = json['apkamPublicKey'] as String?
   ..signingAlgo = json['signingAlgo'] as String?
   ..apsk = json['apsk'] as Map<String, dynamic>?
+  ..apskLegacy = json['apskLegacy'] as String?
   ..apkamPublicKeySignature = json['apkamPublicKeySignature'] as String?
   ..metadata = json['metadata'] as Map<String, dynamic>?
   ..enrollmentStatusFilter = (json['enrollmentStatusFilter'] as List<dynamic>?)
@@ -52,6 +53,7 @@ Map<String, dynamic> _$EnrollParamsToJson(EnrollParams instance) =>
       'apkamPublicKey': instance.apkamPublicKey,
       'signingAlgo': instance.signingAlgo,
       'apsk': instance.apsk,
+      'apskLegacy': instance.apskLegacy,
       'apkamPublicKeySignature': instance.apkamPublicKeySignature,
       'metadata': instance.metadata,
       'enrollmentStatusFilter': instance.enrollmentStatusFilter

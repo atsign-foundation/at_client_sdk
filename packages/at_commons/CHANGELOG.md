@@ -1,5 +1,16 @@
 ## 5.15.0
 
+- feat: add `EnrollParams.apskLegacy` and the matching `EnrollVerbBuilder`
+  field, carrying the **bare** RSA `_apsk` string an enrollment publishes
+  verbatim. Every deployed `_apsk` consumer base64-decodes the value as an RSA
+  key, so a plain-legacy enrollment must be able to publish that shape through
+  the same verb every other enrollment uses. A separate field rather than
+  widening `apsk` to two types, which would have been source-breaking on a
+  published field.
+- feat: add `EnrollVerbBuilder.apsk`, threading the existing
+  `EnrollParams.apsk` through to the built command. The field had no route to
+  the wire, so nothing could send it.
+
 - feat: add `Metadata.copy()` — a field-for-field copy, so callers handing
   metadata from one object to another stop hand-rolling the field list. A
   hand-rolled copier silently drops any field added to `Metadata` later: the

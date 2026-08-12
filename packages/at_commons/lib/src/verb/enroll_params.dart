@@ -30,40 +30,57 @@ class EnrollParams {
   /// and again whenever an `enroll:update` carries a new one. The contents are
   /// the client's alone, so a shape added later needs no server release.
   ///
-  /// The form the client composes today is a versioned array of signing keys,
+  /// The form the client composes is a versioned array of signing keys,
   /// spelled as `KeyPackage`'s keys are so that one vocabulary covers every
-  /// "list of keys with algorithms" in the protocol:
+  /// "list of keys with algorithms" in the protocol. `apskAdvertisement` in
+  /// at_auth composes it and `apskSigningKeys` reads it back:
   ///
   /// ```json
   /// {"v": 1, "keys": [
-  ///   {"use": "sign", "alg": "mldsa65", "pub": "…", "status": "active"},
-  ///   {"use": "sign", "alg": "rsa2048", "pub": "…", "status": "retired"}
+  ///   {"kid": "…", "use": "sign", "alg": "mldsa65", "pub": "…"}
   /// ]}
   /// ```
   ///
-  /// `status` is `active` or `retired`, and absent reads as `active`.
-  /// `retired` is deliberately use-neutral — "retained, not for new
-  /// operations" — because `use` already says which operation the key serves:
-  /// a retired signing key still verifies old envelopes, and a retired
-  /// encapsulation key still opens records already sealed to it. An entry is
-  /// kept after it stops being used, because envelopes and sealed records are
-  /// stored durably and read later, so removing a key would retroactively
-  /// strand everything ever produced with it.
+  /// An array from the outset even though an enrollment holds one signing key
+  /// today: a second algorithm's key is added beside the first rather than
+  /// replacing it, because envelopes are stored durably and verified later, so
+  /// a key that stops being used must still verify what it already signed. A
+  /// reader skips entries whose `use` or `alg` it does not know, which is what
+  /// lets an enrollment advertise a new algorithm without breaking readers
+  /// that predate it.
   ///
-  /// A map rather than a string, matching [metadata]: the bare RSA spelling
-  /// `_apsk` has always carried is the *legacy* form, and a client old enough
-  /// to publish it does not send this field at all.
+  /// A per-entry `status` (`active` | `retired`, absent reading as `active`)
+  /// arrives with the retired-key path; nothing composes or reads it yet.
   ///
-  /// Absent means **no `_apsk` is published**. The atServer never composes one
-  /// from [apkamPublicKey] and [signingAlgo]: PKAM verification reads the
-  /// enrollment record, so the server has no use for this key and no business
-  /// knowing how a signing key is spelled. An enrollment that sends nothing
-  /// here publishes its own signing key from its own connection, or goes
-  /// without.
+  /// A map rather than a string, because this is the structured form. The bare
+  /// RSA spelling `_apsk` has always carried travels on [apskLegacy] instead —
+  /// two fields rather than one field of two types, so neither the wire type
+  /// nor the atServer's handling has to be widened later.
+  ///
+  /// Absent means **no `_apsk` is published** from this field. The atServer
+  /// never composes one from [apkamPublicKey] and [signingAlgo]: PKAM
+  /// verification reads the enrollment record, so the server has no use for
+  /// this key and no business knowing how a signing key is spelled.
   ///
   /// Capped by the atServer at 20KB **encoded**; a longer value is refused
   /// rather than truncated.
   Map<String, dynamic>? apsk;
+
+  /// The **bare** `_apsk` value — an RSA public key string, exactly as the
+  /// record has always carried it — to publish verbatim at
+  /// `public:_apsk.<enrollmentId>.a.__e@<atSign>`.
+  ///
+  /// This exists because every deployed `_apsk` consumer base64-decodes the
+  /// value as an RSA key, so a JSON one fails their parse. That is fail-closed
+  /// but service-breaking for anything already running, which is why a
+  /// plain-legacy enrollment must be able to publish the shape they expect
+  /// through the same verb every other enrollment uses.
+  ///
+  /// Written verbatim, **not** JSON-encoded: a quoted string is not what a
+  /// bare-RSA parser reads. Sending this together with [apsk] is a client
+  /// error and the atServer refuses it — the two would disagree about one
+  /// record, and the server has no basis for choosing between them.
+  String? apskLegacy;
 
   /// Proof that the sender holds the private half of the [apkamPublicKey] it
   /// is asking the atServer to install — base64 of a signature by that **new**
