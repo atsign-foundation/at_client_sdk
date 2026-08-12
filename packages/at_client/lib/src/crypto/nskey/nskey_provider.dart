@@ -5,6 +5,8 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
+import 'package:at_client/src/secret_sharing/pq_envelope.dart'
+    show pqOpenFromBase64, pqSealToBase64;
 import 'package:at_commons/at_commons.dart';
 
 /// The provider id that conveys a content key sealed to a [keyAlgo] nskey, or
@@ -166,7 +168,10 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
           'construction, so nothing is sealed rather than sealing something '
           'they cannot open');
     }
-    final envelope = await pqSeal(
+    // [_info] is this provider's own binding and must stay distinct from the
+    // pairwise substrate's, or an envelope from one could be opened as the
+    // other's.
+    final String envelope = await pqSealToBase64(
       _kem,
       advertised.publicKey,
       ck.bytes,
@@ -197,7 +202,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // conveying forever. The manager promotes it once the write returns.
     cache.put(nskeyOwner, namespace, ck);
 
-    return base64Encode(envelope);
+    return envelope;
   }
 
   @override
@@ -228,22 +233,22 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
 
     final Uint8List ckBytes;
     try {
-      ckBytes = await pqOpen(
+      ckBytes = await pqOpenFromBase64(
         _kem,
         private.bytes,
-        Uint8List.fromList(base64Decode(ciphertext)),
+        ciphertext,
         info: _info(_recordOwnerOf(atKey), namespace),
       );
     } on PqOpenException catch (e) {
+      // Covers a value that is not valid base64 too — the helper folds that in,
+      // because on this wire the base64 string is the envelope.
       throw AtDecryptionException('could not decapsulate the content key: $e');
     } on ArgumentError catch (e) {
-      // `pqOpen`'s contract routes malformed envelopes to PqOpenException, but
-      // the provider's own contract must hold whatever the envelope is: a
-      // stray ArgumentError still surfaces as a decryption failure rather
-      // than escaping as a raw error.
+      // at_chops routes malformed envelopes to PqOpenException, but the
+      // provider's own contract must hold whatever the envelope is: a stray
+      // ArgumentError still surfaces as a decryption failure rather than
+      // escaping as a raw error.
       throw AtDecryptionException('malformed at/nskey envelope: $e');
-    } on FormatException catch (e) {
-      throw AtDecryptionException('at/nskey value is not valid base64: $e');
     }
 
     // Cache, but do not make current: sync is unordered, so this conveyance may

@@ -1,11 +1,12 @@
 import 'dart:async';
 import 'dart:math' show Random;
-import 'dart:convert'
-    show base64Decode, base64Encode, jsonDecode, jsonEncode, utf8;
+import 'dart:convert' show base64Decode, jsonDecode, jsonEncode, utf8;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_chops/at_chops.dart'
-    show AtKemAlgorithm, PqOpenException, pqOpen, pqSeal;
+    show AtKemAlgorithm, PqOpenException;
+import 'package:at_client/src/secret_sharing/pq_envelope.dart'
+    show pqOpenFromBase64, pqSealToBase64;
 import 'package:at_client/src/client/request_options.dart'
     show DeleteRequestOptions, GetRequestOptions, PutRequestOptions;
 import 'package:at_client/src/response/at_notification.dart'
@@ -267,10 +268,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           'produces ${SecretSharingAlgos.suites}');
     }
 
-    // pqSeal encapsulates to the recipient's published key and wraps the
-    // payload (AEAD over the suite's key schedule) into one envelope — nothing
-    // secret travels except that sealed envelope.
-    final Uint8List sealed = await pqSeal(
+    // Encapsulates to the recipient's published key and wraps the payload
+    // (AEAD over the suite's key schedule) into one envelope — nothing secret
+    // travels except that sealed envelope. [sealInfo] is this substrate's own
+    // binding and must stay distinct from the nskey provider's.
+    final String sealed = await pqSealToBase64(
       kem,
       base64Decode(recipientKey.pub),
       Uint8List.fromList(utf8.encode(jsonEncode(payload))),
@@ -284,7 +286,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       toKpid: recipientKey.kid,
       suite: suite,
       kid: recipientKey.kid,
-      sealed: base64Encode(sealed),
+      sealed: sealed,
     );
     // pqSeal's AEAD authenticates the payload; the APKAM signature over the
     // whole envelope additionally authenticates the SENDER (receivers still
@@ -512,21 +514,22 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       return null;
     }
 
-    // pqOpen reads the envelope's version byte itself, but the KEM instance is
-    // this caller's to supply and the two must agree — a hybrid envelope
+    // The open reads the envelope's version byte itself, but the KEM instance
+    // is this caller's to supply and the two must agree — a hybrid envelope
     // decapsulated with ML-KEM fails indistinguishably from a tampered one.
     // The suite is what names it, which is why the envelope carries it.
     //
-    // pqOpen's AEAD authenticates: tampering, a wrong-recipient
-    // decapsulation, or mismatched `info` all surface as a PqOpenException.
-    // It is deterministic — retrying cannot help — so a failure leaves the
-    // envelope for ttl expiry rather than blocking sweeps forever.
+    // The AEAD authenticates: tampering, a wrong-recipient decapsulation, or
+    // mismatched `info` all surface as a PqOpenException, as does a `sealed`
+    // field that is not valid base64. Every one of them is deterministic —
+    // retrying cannot help — so a failure leaves the envelope for ttl expiry
+    // rather than blocking sweeps forever.
     final Uint8List plaintext;
     try {
-      plaintext = await pqOpen(
+      plaintext = await pqOpenFromBase64(
         kem,
         encSecretKey,
-        base64Decode(envelope.sealed),
+        envelope.sealed,
         info: sealInfo,
       );
     } on PqOpenException catch (e) {

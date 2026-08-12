@@ -3,7 +3,9 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
     show AtKeys, AtKeysMaterial, CryptographicKeyType;
-import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, pqOpen;
+import 'package:at_chops/at_chops.dart' show AtKemAlgorithm;
+import 'package:at_client/src/secret_sharing/pq_envelope.dart'
+    show pqOpenFromBase64;
 import 'package:at_commons/at_builders.dart' show ScanVerbBuilder;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -219,10 +221,10 @@ Future<String?> _openIfSymmetricKey(
 
   final Uint8List plaintext;
   try {
-    plaintext = await pqOpen(
+    plaintext = await pqOpenFromBase64(
       kem,
       secretKey,
-      base64Decode(envelope.sealed),
+      envelope.sealed,
       info: PairwiseSecretSharing.sealInfo,
     );
   } catch (e) {
