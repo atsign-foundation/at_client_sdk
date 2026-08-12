@@ -1,3 +1,59 @@
+## 4.0.0-beta1
+This release contains nothing but the WASM split — no model, session or wire
+changes. Migration for a `dart:io` host is one line: import
+`package:at_auth/at_auth_io.dart` instead of `package:at_auth/at_auth.dart`.
+It re-exports the main barrel, so nothing else changes.
+
+- breaking: add a second barrel, `at_auth_io.dart`, and remove `FileAtKeysIo`
+  (with `getHomeDirectory` and `getDefaultAtKeysFilePath`) from `at_auth.dart`.
+  `at_auth.dart` no longer names a `dart:io` type; `at_auth_io.dart` re-exports
+  it plus the `dart:io` surface. This mirrors `at_chops.dart` /
+  `at_chops_ffi.dart`. Everything else — `AtAuth`, `AtAuthImpl`, `AtEnrollment`,
+  `AtKeys`, the `AtKeysIo` interfaces, `InMemoryAtKeysIo`, the serialization
+  layer, the session models and `RegistrarService` — stays in the main barrel.
+- breaking: `onboard()` no longer defaults `AtOnboardingRequest.atKeysIo` to
+  `FileAtKeysIo()`. When the request supplies neither `atKeys` nor an
+  `atKeysIo`, `onboard()` now throws `AtAuthenticationException` instead of
+  silently generating keys and writing them to a path under the user's home
+  directory. Set `atKeysIo` explicitly.
+- breaking: `AtAuthImpl._defaultProbeSocket` is gone. The atServer readiness
+  probe used inside `validateAtServer`'s retry loop is now injected:
+  `probeSocket` is a public constructor parameter (and field) typed as the new
+  exported `AtServerProbe`, and `AtAuth.create` forwards it. **When no probe is
+  supplied the probe step is skipped** — the poll still retries the atDirectory
+  lookup, but it no longer waits for the atServer itself to start listening, and
+  a warning is logged. To keep 3.x behaviour on a `dart:io` host, pass the
+  `secureSocketProbe` exported from `at_auth_io.dart`:
+  `AtAuth.create(probeSocket: secureSocketProbe)`.
+- breaking: `RegistrarService` now validates the registrar's TLS certificate. It
+  built its own `dart:io` `HttpClient` with `badCertificateCallback => true`,
+  which accepted *any* certificate unconditionally; it now defaults to
+  `http.Client()` from `package:http`. Inject a permissive client through the
+  existing `httpClient` constructor parameter if you need the old behaviour.
+  (at_onboarding_cli's `--allow-bad-registrar-certs` is unaffected — it builds
+  its own client and does not go through `RegistrarService`.)
+- fix: `validateAtServer` no longer special-cases `SocketException` when logging
+  a failed attempt (it is a `dart:io` type, and the probe transport is now the
+  caller's choice). Every attempt failure logs at `severe`; previously probe
+  failures logged at `warning`.
+- test: add two WASM gates. `test/wasm_seam_test.dart` walks at_auth's import
+  graph from `at_auth.dart` and fails if any at_auth-owned file reachable from it
+  names `dart:io`/`dart:ffi`/`dart:isolate`/`dart:mirrors`/`dart:html`/`dart:js`.
+  `test/wasm_compile_test.dart` runs a real `dart compile wasm` over the main
+  barrel.
+
+  The seam test, not the compiler, is what enforces the split. Measured on
+  Dart 3.12: **dart2wasm accepts `dart:io`**, shipping a stub whose members throw
+  `UnsupportedError` at runtime, so `at_auth_io.dart` compiles to WASM as
+  happily as `at_auth.dart` does. `dart:ffi` is still rejected outright, which
+  is what the compile gate is actually good for.
+
+  Neither gate is a claim that at_auth *runs* on WASM. The remaining work is
+  outside at_auth: `at_lookup` needs its socket transport abstracted, and
+  `at_utils`' `at_logger.dart` unconditionally exports `handlers.dart`
+  (`FileLoggingHandler`), which reaches `dart:io` from `at_chops` and so from
+  at_auth's key layer. Both are tracked in `docs/projects/wasm/plan.md`.
+
 ## 3.3.0
 - feat: add `AtAuthSession` (exported) — the explicit auth→client hand-off artifact: the confirmed subset of an auth request that client creation actually needs (`atSign`, `rootDomain`, `namespace`, `atKeysIo`, `enrollmentId`), promoted to its own type so "request" no longer doubles as "session". Keys cross the boundary as an `AtKeysIo` *source*, not as live crypto state: the client derives its own `AtKeys` via `atKeysIo.read(atSign)` rather than adopting auth's `AtChops`/`AtLookUp`. The session also carries auth's already-authenticated `atLookUp` so a caller can *opt in* to reusing that connection (`AtClientManager.fromAuthSession(session, reuse: true)`) and skip a second PKAM handshake; the default hand-off rebuilds a fresh connection.
 - feat: `AtAuthImpl.authenticate(...)` and `.onboard(...)` populate the new `AuthResponse.session` on success whenever the request supplied an `atKeysIo` — pass it straight to `AtClientManager.fromAuthSession(...)`. The legacy `atAuthKeys`-only path has no key source to hand across, so it gets no session and keeps behaving exactly as before.

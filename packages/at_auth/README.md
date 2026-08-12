@@ -22,6 +22,41 @@ See [`example/onboard.dart`](example/onboard.dart),
 [`example/enrollment_request.dart`](example/enrollment_request.dart) for
 end-to-end usage.
 
+## Two barrels: `at_auth.dart` and `at_auth_io.dart`
+
+| Barrel                | Contains                                                                                     |
+| --------------------- | -------------------------------------------------------------------------------------------- |
+| `at_auth.dart`        | Everything that names no `dart:io` type — `AtAuth`, `AtEnrollment`, `AtKeys`, the `AtKeysIo` interfaces, `InMemoryAtKeysIo`, serialization, the session models, `RegistrarService` |
+| `at_auth_io.dart`     | The above (it re-exports `at_auth.dart`) **plus** `FileAtKeysIo` and `secureSocketProbe` |
+
+The running client — including a browser client — authenticates through
+at_auth, while writing a `.atKeys` file to disk is inherently desktop/CLI. So
+the `dart:io` surface is opt-in, the same way
+[`at_chops`](../at_chops) splits `at_chops.dart` from `at_chops_ffi.dart`.
+
+On a `dart:io` host, import `at_auth_io.dart` and name the two `dart:io` pieces
+explicitly:
+
+```dart
+import 'package:at_auth/at_auth_io.dart';
+
+final atAuth = AtAuth.create(probeSocket: secureSocketProbe);
+final request = AtOnboardingRequest('@alice')
+  ..atKeysIo = FileAtKeysIo(filePath: (_) => '/path/to/@alice_key.atKeys');
+```
+
+Both arguments are things at_auth 3.x defaulted for you, and neither can be
+defaulted from the WASM-safe barrel. `onboard()` throws if the request supplies
+neither `atKeys` nor an `atKeysIo`; omitting `probeSocket` means
+`validateAtServer` polls the atDirectory but does not wait for the atServer
+itself to start listening (it logs a warning saying so).
+
+at_auth's own sources are `dart:io`-free outside `at_auth_io.dart`, and
+`test/wasm_seam_test.dart` enforces it. That is not yet the same as at_auth
+running under `dart compile wasm`: `at_lookup`'s socket transport and
+`at_utils`' logging handlers still reach `dart:io` transitively. See
+[`docs/projects/wasm/plan.md`](../../docs/projects/wasm/plan.md).
+
 ## The atSign lifecycle
 
 The full journey from "I don't own an atSign yet" to "my app is talking
@@ -41,7 +76,9 @@ you need to claim the atSign itself.
 Registration produces a **CRAM key** — a high-entropy secret, delivered
 to the registered email address, that proves first-time ownership.
 Programmatic registration is available via `RegistrarService` (see
-[`lib/src/registrar/`](lib/src/registrar)).
+[`lib/src/registrar/`](lib/src/registrar)). It talks to the registrar over
+`package:http` and validates the registrar's TLS certificate; pass your own
+`httpClient` if you need to reach a registrar with an untrusted certificate.
 
 At this point the atSign exists on the root directory but its atServer
 has no authenticated user and no encryption keys. The CRAM key is the
@@ -116,7 +153,7 @@ for the submitting side; the approve/deny side is demonstrated in
 
 ## The `.atKeys` file format
 
-`FileAtKeysIo` reads and writes `.atKeys` files
+`FileAtKeysIo` (from `at_auth_io.dart`) reads and writes `.atKeys` files
 (default path `~/.atsign/keys/<atsign>_key.atKeys`). A file has up to
 three layers, outermost first:
 

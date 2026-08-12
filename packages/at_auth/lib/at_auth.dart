@@ -1,4 +1,8 @@
 /// The [AtAuth] package contains common logic for onboarding/authenticating an atSign to a secondary server
+///
+/// This barrel names no `dart:io` type. The file-backed `.atKeys` store and the
+/// TLS atServer readiness probe live in `package:at_auth/at_auth_io.dart`, which
+/// re-exports this one — import that barrel on a `dart:io` host.
 library;
 
 export 'src/at_auth.dart';
@@ -36,7 +40,7 @@ export 'src/keys/serialization/atkey_material.dart';
 export 'src/keys/serialization/assurance.dart';
 export 'src/keys/serialization/passphrase_envelope.dart';
 export 'src/keys/io/at_keys_io.dart';
-export 'src/keys/io/file_io.dart';
+// FileAtKeysIo is `dart:io`-only: see package:at_auth/at_auth_io.dart
 export 'src/keys/io/memory_io.dart';
 
 /// Classes for registrar services

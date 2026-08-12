@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
@@ -14,7 +13,6 @@ import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
-import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -51,8 +49,11 @@ class AtAuthImpl implements AtAuth {
   @visibleForTesting
   SecondaryAddressFinder? secondaryAddressFinder;
 
-  @visibleForTesting
-  Future<void> Function(String host, int port)? probeSocket;
+  /// Probes atServer readiness inside [validateAtServer]'s retry loop. When
+  /// null the probe step is skipped and only the atDirectory lookup is polled —
+  /// see [validateAtServer]. `package:at_auth/at_auth_io.dart` supplies
+  /// `secureSocketProbe`, the TLS probe this package defaulted to before 4.0.0.
+  AtServerProbe? probeSocket;
 
   @override
   AtLookUp? atLookUp;
@@ -63,6 +64,7 @@ class AtAuthImpl implements AtAuth {
       this.cramAuthenticator,
       this.pkamAuthenticator,
       this.atServerStatus,
+      this.probeSocket,
       AtEnrollment? atEnrollment})
       : atEnrollment = atEnrollment ?? AtEnrollment.create();
 
@@ -223,11 +225,19 @@ class AtAuthImpl implements AtAuth {
     if (atOnboardingRequest.atKeys != null) {
       _atAuthKeys = atOnboardingRequest.atKeys!;
     } else {
-      //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
-      atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
+      //2a. the keys have to be generated, so we need somewhere to put them.
+      // There is no default: a store that writes to the filesystem cannot be
+      // named from the WASM-safe barrel, and silently picking a path under the
+      // user's home directory was a footgun regardless.
       switch (atOnboardingRequest.atKeysIo) {
         case WrittenAtKeysIo writtenKeys:
           _atAuthKeys = writtenKeys.generateKeyPairs();
+        case null:
+          throw AtAuthenticationException(
+              'onboard() needs either AtOnboardingRequest.atKeys, or an'
+              ' atKeysIo to generate and persist them into. Set'
+              ' AtOnboardingRequest.atKeysIo (e.g. FileAtKeysIo from'
+              ' package:at_auth/at_auth_io.dart).');
         default:
           throw AtAuthenticationException(
               'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
@@ -321,9 +331,9 @@ class AtAuthImpl implements AtAuth {
       ..atChops = atChops;
 
     // Hand back the same explicit session as authenticate(), so a
-    // freshly-onboarded atSign flows straight into the client. atKeysIo is
-    // guaranteed set here (defaulted to FileAtKeysIo above); the guard mirrors
-    // authenticate() for parity.
+    // freshly-onboarded atSign flows straight into the client. The generate
+    // branch above guarantees an atKeysIo, but the atKeys-supplied branch does
+    // not, and a session needs a key source to hand across.
     if (atOnboardingRequest.atKeysIo != null) {
       atOnboardingResponse.session = AtAuthSession(
         atSign: atOnboardingRequest.atSign,
@@ -391,12 +401,6 @@ class AtAuthImpl implements AtAuth {
     return enrollmentIdFromServer;
   }
 
-  Future<void> _defaultProbeSocket(String host, int port) async {
-    final socket =
-        await SecureSocket.connect(host, port, timeout: Duration(seconds: 5));
-    socket.destroy();
-  }
-
   /// Validates the atSign server status depending on whether it's onboarding or authentication.
   ///
   /// For onboarding, it checks that the root server is found, the secondary server is running,
@@ -438,6 +442,15 @@ class AtAuthImpl implements AtAuth {
       rootUrl: atRequest.rootDomain.rootDomain,
       rootPort: atRequest.rootDomain.rootPort,
     );
+
+    if (probeSocket == null) {
+      _logger.warning(
+          'No probeSocket configured: skipping the atServer readiness probe.'
+          ' The poll below still retries the atDirectory lookup, but it will'
+          ' not wait for the atServer itself to start listening. On a dart:io'
+          ' host, pass probeSocket: secureSocketProbe'
+          ' (package:at_auth/at_auth_io.dart) to restore the TLS probe.');
+    }
 
     while (DateTime.now().isBefore(deadline)) {
       attempt++;
@@ -513,8 +526,8 @@ class AtAuthImpl implements AtAuth {
             .findSecondary(atRequest.atSign, timeout: remaining);
 
         remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
-        await (probeSocket ?? _defaultProbeSocket)(
-                secondaryAddress.host, secondaryAddress.port)
+        await probeSocket
+            ?.call(secondaryAddress.host, secondaryAddress.port)
             .timeout(remaining);
 
         _addProgress(
@@ -526,11 +539,7 @@ class AtAuthImpl implements AtAuth {
         break; // Exit loop if no exception occurs
       } catch (e) {
         lastError = e;
-        if (e is SocketException) {
-          _logger.warning('Attempt #[$attempt] Probe socket failed: $e');
-        } else {
-          _logger.severe('Attempt #[$attempt] failed: $e');
-        }
+        _logger.severe('Attempt #[$attempt] failed: $e');
         _addProgress('Connect', '#[$attempt] : $e', ProgressEventType.error);
         // Don't sleep past the overall deadline before the next attempt.
         if (!DateTime.now().add(retryDelay).isBefore(deadline)) {
