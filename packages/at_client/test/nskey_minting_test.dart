@@ -5,7 +5,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf;
+    show SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -111,7 +111,8 @@ void main() {
         reason: 'the envelope — RFC 7515 general JSON serialization, pinned '
             'as shape documentation');
     final payload =
-        (envelopePayloadOf(envelope) as Map).cast<String, dynamic>();
+        (SignedEnvelope.fromJson(envelope).payload as Map)
+            .cast<String, dynamic>();
     expect(payload.keys.toList(),
         ['v', 'nskeyKid', 'publicKey', 'alg', 'suites'],
         reason: 'the payload — frozen forever');

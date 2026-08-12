@@ -6,7 +6,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf;
+    show SignedEnvelope;
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     show CommitOp;
 import 'package:at_utils/at_utils.dart';
@@ -306,7 +306,8 @@ void main() {
       final key = remoteData.keys
           .singleWhere((k) => k.contains('.$kpid.__ssenv.'));
       final payload =
-          (envelopePayloadOf(jsonDecode(remoteData[key]!) as Map) as Map)
+          (SignedEnvelope.fromJson(jsonDecode(remoteData[key]!) as Map).payload
+                  as Map)
               .cast<String, dynamic>();
       return (
         suite: payload['suite'] as String,
@@ -478,8 +479,8 @@ void main() {
       final envelopeKeyString =
           remoteData.keys.firstWhere((k) => k.contains('.__ssenv.'));
       final signedEnvelope = jsonDecode(remoteData[envelopeKeyString]!) as Map;
-      final inner =
-          Map<String, Object?>.from(envelopePayloadOf(signedEnvelope) as Map);
+      final inner = Map<String, Object?>.from(
+          SignedEnvelope.fromJson(signedEnvelope).payload as Map);
       // flip bytes in the sealed envelope; the APKAM signature over the
       // payload is what rejects this, before decryption is even attempted.
       inner['sealed'] = base64Encode(

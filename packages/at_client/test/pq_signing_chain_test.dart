@@ -9,31 +9,24 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf, envelopeSignerOf, signableTextOf;
+    show SignedEnvelope, signableTextOf;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
+import 'test_utils/envelope_tamper.dart';
 import 'test_utils/remote_backed_client.dart';
 
 /// [envelope] with its signature replaced by one that cannot verify.
 ///
-/// It has to reach INSIDE the `signatures` array. Spreading a top-level
-/// `'signature'` member over the envelope — the obvious way to write this —
-/// leaves the real signature untouched in the entry the verifier reads, so
-/// the forgery verifies and the test passes for the absence of a forgery.
-Map<String, Object?> withForgedSignature(Map<String, Object?> envelope) => {
-      ...envelope,
-      'signatures': [
-        {
-          ...((envelope['signatures'] as List).single as Map)
-              .cast<String, Object?>(),
-          'signature':
-              base64Url.encode(utf8.encode('forged')).replaceAll('=', ''),
-        }
-      ],
-    };
+/// Reaches inside the `signatures` array, which the type now makes the only
+/// way to write it: before [SignedEnvelope] existed, spreading a top-level
+/// `'signature'` member over a Map was the obvious spelling, and it left the
+/// real signature untouched in the entry the verifier reads — so the forgery
+/// verified and the test passed for the absence of a forgery.
+SignedEnvelope withForgedSignature(SignedEnvelope envelope) =>
+    envelope.withEntryMember('signature', b64u('forged'));
 
 /// The approval chain link: the enrollment that approved a device signs that
 /// device's APKAM public key, so a verifier can walk upward from any key to
@@ -81,14 +74,14 @@ void main() {
         await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
 
     expect(link, isNotNull);
-    final payload = envelopePayloadOf(link!) as Map;
+    final payload = link!.payload as Map;
     expect(payload['childEnrollmentId'], 'child-1');
     expect(payload['apkamPublicKey'],
         remoteData[PqSigningChain.apskUri(atSign, 'child-1')],
         reason: 'the key signed has to be the one the atServer published, or '
             'a verifier resolving _apsk would be checking a signature over a '
             'different key than the one it holds');
-    expect(envelopeSignerOf(link), 'parent-1',
+    expect(link.signerEnrollmentId, 'parent-1',
         reason: 'the envelope names its signer, which is what lets a verifier '
             'walk upward without any approval graph being published');
   });
@@ -127,7 +120,7 @@ void main() {
 
     final read = await PqSigningChain(childClient).readLink('child-1');
     expect(read, isNotNull);
-    expect(envelopeSignerOf(read!), 'parent-1');
+    expect(read!.signerEnrollmentId, 'parent-1');
   });
 
   test('a published link verifies against the parent it names', () async {
@@ -153,12 +146,12 @@ void main() {
   group('the child consuming a conveyed link', () {
     /// Puts [link] into [child]'s store the way a substrate sweep would.
     Future<void> convey(
-        AtClientSecretSharing child, Map<String, Object?> link) async {
+        AtClientSecretSharing child, SignedEnvelope link) async {
       await child.secretStore.putSecret(
           Secret(
               namespace: 'buzz',
               name: PqSigningChain.linkSecretName,
-              value: PqSigningChain.encodeLink(link)),
+              value: PqSigningChain.encodeLink(link.toJson())),
           allowReservedName: true);
     }
 
@@ -657,21 +650,8 @@ void main() {
     final link =
         await PqSigningChain(impostorClient).signLinkFor(impostor, 'child-1');
     await registered(client('parent-1'));
-    final entry =
-        ((link!['signatures'] as List).single as Map).cast<String, Object?>();
-    final header = jsonDecode(utf8.decode(base64Decode(
-        base64.normalize(entry['protected'] as String)))) as Map;
-    final forged = {
-      ...link,
-      'signatures': [
-        {
-          ...entry,
-          'protected': base64Url
-              .encode(utf8.encode(jsonEncode({...header, 'kid': 'parent-1'})))
-              .replaceAll('=', ''),
-        }
-      ],
-    };
+    final forged =
+        link!.claiming({...link.signature.header, 'kid': 'parent-1'});
 
     final verifier = AtClientSecretSharing.forClient(client('verifier-1'));
     await expectLater(

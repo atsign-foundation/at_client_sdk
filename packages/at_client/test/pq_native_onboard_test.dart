@@ -5,7 +5,7 @@ import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/at_client_mixins.dart' show makeActivationPqNative;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopeSignerOf, verifyEnvelope;
+    show SignedEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart' show AtBytes, AtRootDomain;
 import 'package:test/test.dart';
 
@@ -40,7 +40,8 @@ void main() {
     final r = request();
     makeActivationPqNative(r, atSign: atSign);
 
-    final envelope = (await r.metadataBuilder!(io))!['keyPackage'] as Map;
+    final envelope = SignedEnvelope.fromJson(
+        (await r.metadataBuilder!(io))!['keyPackage'] as Map);
 
     // Verified in the array form this enrollment composed and the atServer
     // publishes verbatim — a bare value is classified as an RSA key by the
@@ -49,7 +50,7 @@ void main() {
         signerPublicKey: jsonEncode(apskAdvertisement(
             apkamPublicKey: public, signingAlgo: SigningAlgoType.mldsa65)));
 
-    expect(envelopeSignerOf(envelope), isNull,
+    expect(envelope.signerEnrollmentId, isNull,
         reason: 'an onboard has no enrollment id to stamp: this signs before '
             'the atServer has assigned one');
   });

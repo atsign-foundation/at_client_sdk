@@ -4,11 +4,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show
-        ApkamSigningKeys,
-        envelopePayloadOf,
-        envelopeVersion,
-        signEnvelope;
+    show ApkamSigningKeys, envelopeVersion, signEnvelope;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -303,12 +299,9 @@ void main() {
       // an attacker can edit.
       final envelope = await bobSigner.wrapAndSign({'v': 99, 'anything': 1});
 
-      expect(envelope.containsKey('v'), isFalse);
-      final header = jsonDecode(utf8.decode(base64Decode(base64.normalize(
-          ((envelope['signatures'] as List).single as Map)['protected']
-              as String)))) as Map;
-      expect(header['v'], envelopeVersion);
-      expect((envelopePayloadOf(envelope) as Map)['v'], 99);
+      expect(envelope.toJson().containsKey('v'), isFalse);
+      expect(envelope.signature.version, envelopeVersion);
+      expect((envelope.payload as Map)['v'], 99);
     });
 
     test('a payload version this build has no code for is refused', () async {

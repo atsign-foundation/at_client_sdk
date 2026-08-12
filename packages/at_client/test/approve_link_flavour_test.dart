@@ -113,7 +113,7 @@ void main() {
     final enrollment = Enrollment()
       ..enrollmentId = enrolleeId
       ..namespace = {namespace: 'rw'}
-      ..metadata = {'keyPackage': advertised};
+      ..metadata = {'keyPackage': advertised.toJson()};
     return (enrollee, enrollment);
   }
 

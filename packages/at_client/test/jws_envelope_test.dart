@@ -7,9 +7,11 @@ import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:test/test.dart';
 
+import 'test_utils/envelope_tamper.dart';
+
 /// The signed-envelope shape: RFC 7515 **General** JSON Serialization,
 /// `{payload, signatures: [{protected, signature}]}`, with `{alg, kid, v}`
-/// inside each protected header.
+/// inside each protected header, modelled by [SignedEnvelope].
 ///
 /// The arms that matter most here are the ones a lazy suite collapses:
 ///
@@ -45,40 +47,26 @@ void main() {
       apkamPublicKey: base64Encode(mlDsaPair.publicKey),
       signingAlgo: SigningAlgoType.mldsa65));
 
-  Map<String, Object?> rsaEnvelope({String? enrollmentId = 'enroll-1'}) =>
+  SignedEnvelope rsaEnvelope({String? enrollmentId = 'enroll-1'}) =>
       signEnvelope(payload, keys: rsaKeys(), enrollmentId: enrollmentId);
 
-  Map<String, Object?> mlDsaEnvelope() => signEnvelope(payload,
+  SignedEnvelope mlDsaEnvelope() => signEnvelope(payload,
       keys: mlDsaKeys(),
       enrollmentId: 'enroll-pq',
       signingAlgo: SigningAlgoType.mldsa65);
-
-  String b64u(String text) =>
-      base64Url.encode(utf8.encode(text)).replaceAll('=', '');
-
-  String decodeB64u(String s) => utf8.decode(base64Decode(base64.normalize(s)));
-
-  /// The sole signature entry, which every envelope written today carries.
-  Map<String, Object?> entryOf(Map<String, Object?> envelope) =>
-      ((envelope['signatures'] as List).single as Map).cast<String, Object?>();
-
-  /// Replaces the sole signature entry's [member], leaving the rest intact —
-  /// the tamper lever for everything inside `signatures`.
-  void tamper(Map<String, Object?> envelope, String member, String value) {
-    envelope['signatures'] = [entryOf(envelope)..[member] = value];
-  }
 
   group('the envelope shape, RSA arm', () {
     test('signs, verifies, and survives the base64 padding trap', () async {
       final envelope = rsaEnvelope();
 
-      expect(envelope.keys.toList(), ['payload', 'signatures']);
-      final entry = entryOf(envelope);
-      expect(entry.keys.toList(), ['protected', 'signature']);
+      expect(envelope.toJson().keys.toList(), ['payload', 'signatures']);
+      expect(envelope.signatures, hasLength(1));
+      expect(envelope.signature.toJson().keys.toList(),
+          ['protected', 'signature']);
       for (final text in [
-        envelope['payload'] as String,
-        entry['protected'] as String,
-        entry['signature'] as String,
+        envelope.payloadB64,
+        envelope.signature.protected,
+        envelope.signature.signature,
       ]) {
         expect(text.contains('='), isFalse,
             reason: 'RFC 7515 base64url is unpadded');
@@ -86,7 +74,7 @@ void main() {
       // The measured trap: 256 signature bytes → 342 unpadded chars, a length
       // the naive decode throws on. Assert the length so this test can never
       // silently stop covering the throwing case.
-      final signature = entry['signature'] as String;
+      final signature = envelope.signature.signature;
       expect(signature.length, 342);
       expect(() => base64Decode(signature), throwsA(isA<FormatException>()),
           reason: 'if this stops throwing, the padding trap this arm exists '
@@ -97,16 +85,15 @@ void main() {
     });
 
     test('the protected header is exactly the pinned bytes', () {
-      final headerJson = decodeB64u(entryOf(rsaEnvelope())['protected'] as String);
-
       // Raw literal, not built from constants: the signature covers these
       // bytes, so the member ORDER is cryptographically bound.
-      expect(headerJson, '{"alg":"RS256","kid":"enroll-1","v":1}');
+      expect(unb64u(rsaEnvelope().signature.protected),
+          '{"alg":"RS256","kid":"enroll-1","v":1}');
     });
 
     test('a tampered payload fails', () async {
-      final envelope = rsaEnvelope();
-      envelope['payload'] = b64u('{"hello":"universe","n":1}');
+      final envelope =
+          rsaEnvelope().withPayloadJson({'hello': 'universe', 'n': 1});
 
       await expectLater(
           () => verifyEnvelope(envelope,
@@ -115,11 +102,10 @@ void main() {
     });
 
     test('a tampered protected header fails: the claims are signed', () async {
-      final envelope = rsaEnvelope();
       // Same alg, same v, different kid. The claim is inside the signature,
       // so a relabel cannot go unnoticed.
-      tamper(envelope, 'protected',
-          b64u('{"alg":"RS256","kid":"enroll-2","v":1}'));
+      final envelope = rsaEnvelope()
+          .claiming({'alg': 'RS256', 'kid': 'enroll-2', 'v': 1});
 
       await expectLater(
           () => verifyEnvelope(envelope,
@@ -128,9 +114,8 @@ void main() {
     });
 
     test("alg cannot overrule the published key's declaration", () async {
-      final envelope = rsaEnvelope();
-      tamper(envelope, 'protected',
-          b64u('{"alg":"ML-DSA-65","kid":"enroll-1","v":1}'));
+      final envelope = rsaEnvelope()
+          .claiming({'alg': 'ML-DSA-65', 'kid': 'enroll-1', 'v': 1});
 
       await expectLater(
           () => verifyEnvelope(envelope,
@@ -140,10 +125,10 @@ void main() {
     });
 
     test('a corrupted signature fails', () async {
-      final envelope = rsaEnvelope();
-      final signature = entryOf(envelope)['signature'] as String;
-      tamper(envelope, 'signature',
-          signature.replaceRange(0, 1, signature[0] == 'A' ? 'B' : 'A'));
+      final original = rsaEnvelope();
+      final s = original.signature.signature;
+      final envelope = original.withEntryMember(
+          'signature', s.replaceRange(0, 1, s[0] == 'A' ? 'B' : 'A'));
 
       await expectLater(
           () => verifyEnvelope(envelope,
@@ -156,23 +141,21 @@ void main() {
     test('signs and verifies under the array _apsk', () async {
       final envelope = mlDsaEnvelope();
 
-      final signature = entryOf(envelope)['signature'] as String;
+      final signature = envelope.signature.signature;
       expect(signature.length, 4412,
           reason: 'ML-DSA-65 is 3309 signature bytes — and 4412 % 4 == 0, so '
               'this arm alone can NEVER catch a missing base64 '
               'normalisation; that is what the RSA arm is for');
       expect(signature.contains('='), isFalse);
-
-      final headerJson =
-          decodeB64u(entryOf(envelope)['protected'] as String);
-      expect(headerJson, '{"alg":"ML-DSA-65","kid":"enroll-pq","v":1}');
+      expect(unb64u(envelope.signature.protected),
+          '{"alg":"ML-DSA-65","kid":"enroll-pq","v":1}');
 
       await verifyEnvelope(envelope, signerPublicKey: mlDsaApsk());
     });
 
     test('a tampered payload fails', () async {
-      final envelope = mlDsaEnvelope();
-      envelope['payload'] = b64u('{"hello":"universe","n":1}');
+      final envelope =
+          mlDsaEnvelope().withPayloadJson({'hello': 'universe', 'n': 1});
 
       await expectLater(
           () => verifyEnvelope(envelope, signerPublicKey: mlDsaApsk()),
@@ -181,98 +164,108 @@ void main() {
   });
 
   group('reading an envelope', () {
-    test('envelopePayloadOf decodes what a direct read cannot', () {
+    test('payload decodes what the raw member cannot give you', () {
       final envelope = rsaEnvelope();
 
-      expect(envelope['payload'], isA<String>(),
+      expect(envelope.payloadB64, isA<String>(),
           reason: 'the raw member is base64url text, never the payload');
-      expect(envelopePayloadOf(envelope), payload);
+      expect(envelope.payload, payload);
     });
 
-    test('envelopeSignerOf reads the kid claim', () {
-      expect(envelopeSignerOf(rsaEnvelope()), 'enroll-1');
+    test('the header exposes alg, kid and version', () {
+      final entry = rsaEnvelope().signature;
+
+      expect(entry.alg, 'RS256');
+      expect(entry.kid, 'enroll-1');
+      expect(entry.version, envelopeVersion);
+    });
+
+    test('signerEnrollmentId reads the kid claim', () {
+      expect(rsaEnvelope().signerEnrollmentId, 'enroll-1');
     });
 
     test('no enrollment, no claim — and no kid member at all', () {
       final envelope = rsaEnvelope(enrollmentId: null);
 
-      expect(envelopeSignerOf(envelope), isNull);
-      expect(decodeB64u(entryOf(envelope)['protected'] as String),
-          '{"alg":"RS256","v":1}',
+      expect(envelope.signerEnrollmentId, isNull);
+      expect(unb64u(envelope.signature.protected), '{"alg":"RS256","v":1}',
           reason: 'a guessed or sentinel id would be frozen inside the '
               'signature where nobody could correct it');
     });
 
     test('a String payload becomes JSON, so decoding is unconditional', () {
-      final envelope = signEnvelope('just text', keys: rsaKeys());
-
-      expect(envelopePayloadOf(envelope), 'just text',
+      expect(signEnvelope('just text', keys: rsaKeys()).payload, 'just text',
           reason: 'what comes out of base64url is JSON, whatever went in');
+    });
+
+    test('toJson reproduces what fromJson was given, byte for byte', () {
+      // The property the whole shape rests on: the signing input is the
+      // RECEIVED characters, so a round trip through the type must not
+      // re-encode anything.
+      final wire = rsaEnvelope().toJson();
+      expect(SignedEnvelope.fromJson(wire).toJson(), wire);
+      expect(jsonEncode(SignedEnvelope.fromJson(wire).toJson()),
+          jsonEncode(wire));
     });
   });
 
   group('refusals', () {
     test('an envelope with no signatures array is refused, not a cast error',
-        () async {
-      final envelope = rsaEnvelope();
-      envelope.remove('signatures');
+        () {
+      final json = rsaEnvelope().toJson()..remove('signatures');
 
-      expect(() => envelopeSignerOf(envelope),
-          throwsA(isA<AtSigningVerificationException>()));
-      await expectLater(
-          () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
+      expect(() => SignedEnvelope.fromJson(json),
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('an empty signatures array is refused, not treated as unsigned',
-        () async {
+    test('an empty signatures array is refused, not treated as unsigned', () {
       // The arm that matters: an envelope nobody signed must not verify
       // vacuously by having nothing to check.
-      final envelope = rsaEnvelope();
-      envelope['signatures'] = [];
-
-      await expectLater(
-          () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
+      expect(
+          () => SignedEnvelope.fromJson(rsaEnvelope().withRawSignatures([])),
           throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
               'message', contains('non-empty signatures array'))));
     });
 
-    test('a signatures entry that is not an object is refused', () async {
-      final envelope = rsaEnvelope();
-      envelope['signatures'] = ['not-an-object'];
-
-      expect(() => envelopeSignerOf(envelope),
-          throwsA(isA<AtSigningVerificationException>()));
-      await expectLater(
-          () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
+    test('a signatures entry that is not an object is refused', () {
+      expect(
+          () => SignedEnvelope.fromJson(
+              rsaEnvelope().withRawSignatures(['not-an-object'])),
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('an entry missing its protected header is refused', () async {
+    test('an entry missing its protected header is refused', () {
       final envelope = rsaEnvelope();
-      envelope['signatures'] = [
-        {'signature': entryOf(envelope)['signature']}
-      ];
-
-      await expectLater(
-          () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
-          throwsA(isA<AtSigningVerificationException>()));
-      expect(() => envelopeSignerOf(envelope),
+      expect(
+          () => SignedEnvelope.fromJson(envelope.withRawSignatures([
+                {'signature': envelope.signature.signature}
+              ])),
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('a payload that does not decode is refused', () {
-      final envelope = rsaEnvelope();
-      envelope['payload'] = 'not!!!base64url';
-      expect(() => envelopePayloadOf(envelope),
+    test('a non-string payload is refused', () {
+      expect(
+          () => SignedEnvelope.fromJson(
+              {...rsaEnvelope().toJson(), 'payload': 42}),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('a protected header that is not JSON is refused at parse', () {
+      // At parse, not at read: an entry whose header cannot be read is not an
+      // entry, and nothing downstream should have to re-check it.
+      expect(() => rsaEnvelope().claiming(const {}).withEntryMember(
+          'protected', b64u('{truncated')),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
+    test('a payload that does not decode is refused at READ, not at parse', () {
+      // The other side of that line: a payload is only decoded by whoever
+      // wants it, so a bad one is not a malformed envelope.
+      final envelope = rsaEnvelope().withPayload('not!!!base64url');
+      expect(() => envelope.payload,
           throwsA(isA<AtSigningVerificationException>()));
 
-      envelope['payload'] = b64u('{truncated');
-      expect(() => envelopePayloadOf(envelope),
+      expect(() => rsaEnvelope().withPayload(b64u('{truncated')).payload,
           throwsA(isA<AtSigningVerificationException>()));
     });
 
@@ -280,23 +273,14 @@ void main() {
       // The version is inside the signature, so this is not a tamper defence
       // — it is what stops a future shape being read as this one by a build
       // that has no code for it.
-      final envelope = rsaEnvelope();
-      tamper(envelope, 'protected',
-          b64u('{"alg":"RS256","kid":"enroll-1","v":2}'));
+      final envelope =
+          rsaEnvelope().claiming({'alg': 'RS256', 'kid': 'enroll-1', 'v': 2});
 
       await expectLater(
           () => verifyEnvelope(envelope,
               signerPublicKey: rsaPair.atPublicKey.publicKey),
           throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
               'message', contains('claims envelope version'))));
-    });
-
-    test('a protected header that is not JSON is refused', () {
-      final envelope = rsaEnvelope();
-      tamper(envelope, 'protected', b64u('{truncated'));
-
-      expect(() => envelopeSignerOf(envelope),
-          throwsA(isA<AtSigningVerificationException>()));
     });
 
     test('the producer refuses a signing algorithm it has no mapping for', () {

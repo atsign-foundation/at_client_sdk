@@ -7,7 +7,7 @@ import 'dart:convert' show base64Decode, jsonDecode;
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf;
+    show SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
@@ -87,9 +87,10 @@ void main() {
         useRemoteAtServer: true);
     final value = await atClient.get(remote.single,
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
-    final payload =
-        (envelopePayloadOf(jsonDecode(value.value as String) as Map) as Map)
-            .cast<String, dynamic>();
+    final payload = (SignedEnvelope.fromJson(
+                jsonDecode(value.value as String) as Map)
+            .payload as Map)
+        .cast<String, dynamic>();
 
     expect(payload['suite'], SecretSharingAlgos.xWingRfc9180,
         reason: 'both parties are this build, so both advertise the RFC 9180 '

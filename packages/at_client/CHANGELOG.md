@@ -1,4 +1,21 @@
 ## 3.14.1
+- **breaking (unreleased surface): the signed envelope is a `SignedEnvelope`,
+  not a `Map`.** `signEnvelope` returns one; `verifyEnvelope`, `wrapAndSign`
+  and `verifyEnvelopeSignature` take one; `envelopePayloadOf` and
+  `envelopeSignerOf` are replaced by `.payload` and `.signerEnrollmentId`.
+  `SignedEnvelope.fromJson` validates the structure once at the read boundary
+  and `toJson()` is the wire form — both members are held as the base64url
+  text they arrived as, so a round trip reproduces the signed bytes exactly.
+  The type exists because reshaping a `Map`-shaped envelope breaks consumers
+  the analyzer cannot see: a `['signature']` read on a shape that moved its
+  signature one level down compiles and yields null. `EnvelopeSignature`
+  carries one entry's `protected`, `signature` and decoded header; both
+  classes have value equality.
+- fix: `enrollmentKeyPackageBuilder` puts the envelope's **JSON** into
+  `EnrollParams.metadata` rather than the envelope object. The map is
+  JSON-encoded onto the wire, so the object survived encoding only because
+  Dart's default encodable calls `toJson` for you — while every in-process
+  reader got something it could not index.
 - fix: `PqSigningChain.publishPendingLink` compares the conveyed link against
   the published one **whole**, rather than by a top-level `signature` member
   the envelope does not have. It read null on both sides, so `null == null`

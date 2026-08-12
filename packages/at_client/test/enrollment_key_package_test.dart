@@ -8,6 +8,8 @@ import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/envelope_tamper.dart';
+
 /// The builder that puts a key package on `enroll:request`.
 ///
 /// It runs at the one moment this is possible — the APKAM keypair exists and
@@ -36,7 +38,7 @@ void main() {
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
 
     final payload =
-        envelopePayloadOf(metadata!['keyPackage'] as Map) as Map;
+        SignedEnvelope.fromJson(metadata!['keyPackage'] as Map).payload as Map;
     final advertised = (payload['keys'] as List).single as Map;
     final kpid = advertised['kid'] as String;
 
@@ -63,7 +65,7 @@ void main() {
 
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
     final payload =
-        envelopePayloadOf(metadata!['keyPackage'] as Map) as Map;
+        SignedEnvelope.fromJson(metadata!['keyPackage'] as Map).payload as Map;
     final advertised = (payload['keys'] as List).single as Map;
     final kpid = advertised['kid'] as String;
 
@@ -94,7 +96,7 @@ void main() {
     final (io, _, apkam) = await freshKeys();
 
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
-    final envelope = metadata!['keyPackage'] as Map;
+    final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
 
     // _apsk is populated by the atServer from the record's apkamPublicKey, so
     // this is the key a verifier will actually check against.
@@ -106,9 +108,9 @@ void main() {
     final (io, _, apkam) = await freshKeys();
 
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
-    final envelope = Map<String, Object?>.from(metadata!['keyPackage'] as Map);
-    final payload =
-        Map<String, Object?>.from(envelopePayloadOf(envelope) as Map);
+    final envelope =
+        SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
+    final payload = Map<String, Object?>.from(envelope.payload as Map);
     // Substitute an encapsulation target — the attack the signature exists to
     // stop, since every structural field still agrees afterwards.
     final other = await XWingPureDartAlgo.instance.generateKeyPair();
@@ -120,11 +122,9 @@ void main() {
         'kid': 'unchanged',
       }
     ];
-    envelope['payload'] =
-        base64Url.encode(utf8.encode(jsonEncode(payload))).replaceAll('=', '');
 
     await expectLater(
-      () => verifyEnvelope(envelope,
+      () => verifyEnvelope(envelope.withPayloadJson(payload),
           signerPublicKey: apkam.atPublicKey.publicKey),
       throwsA(isA<AtSigningVerificationException>()),
     );
@@ -140,9 +140,9 @@ void main() {
     final (io, _, _) = await freshKeys();
 
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
-    final envelope = metadata!['keyPackage'] as Map;
+    final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
 
-    expect(envelope.containsKey('enrollmentId'), isFalse,
+    expect(envelope.signerEnrollmentId, isNull,
         reason: 'a guessed or sentinel id would be frozen inside the signature '
             'where nobody could correct it, and the verifier compares the '
             'claim against the record id — so every package would be rejected');

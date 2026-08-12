@@ -7,6 +7,8 @@ import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:test/test.dart';
 
+import 'test_utils/envelope_tamper.dart';
+
 /// The committed JWS vectors (`test/vectors/jws_envelope.json`) against
 /// our own verifier — the other half of the off-the-shelf check
 /// (`tool/verify_jws_vectors.mjs`, which hands the same bytes to an
@@ -29,17 +31,15 @@ void main() {
 
   test('the RS256 vector verifies, and tampering is refused', () async {
     final arm = vectors['rs256'] as Map<String, dynamic>;
-    final envelope = Map<String, Object?>.from(arm['envelope'] as Map);
+    final envelope = SignedEnvelope.fromJson(arm['envelope'] as Map);
 
     await verifyEnvelope(envelope,
         signerPublicKey: arm['apskPublicKey'] as String);
-    expect(envelopePayloadOf(envelope), vectors['payload']);
-    expect(envelopeSignerOf(envelope), 'vector-1');
+    expect(envelope.payload, vectors['payload']);
+    expect(envelope.signerEnrollmentId, 'vector-1');
 
-    envelope['payload'] =
-        base64Url.encode(utf8.encode('{"doc":"tampered"}')).replaceAll('=', '');
     await expectLater(
-        () => verifyEnvelope(envelope,
+        () => verifyEnvelope(envelope.withPayloadJson({'doc': 'tampered'}),
             signerPublicKey: arm['apskPublicKey'] as String),
         throwsA(isA<AtSigningVerificationException>()));
   });
@@ -53,7 +53,7 @@ void main() {
             privateKey: arm['privateKey'] as String),
         enrollmentId: 'vector-1');
 
-    expect(resigned, arm['envelope'],
+    expect(resigned.toJson(), arm['envelope'],
         reason: 'PKCS#1 v1.5 is deterministic, so any byte of producer '
             'drift — payload encoding, header order, base64url, signing '
             'input — shows up here');
@@ -61,17 +61,17 @@ void main() {
 
   test('the ML-DSA-65 vector verifies, and tampering is refused', () async {
     final arm = vectors['mlDsa65'] as Map<String, dynamic>;
-    final envelope = Map<String, Object?>.from(arm['envelope'] as Map);
+    final envelope = SignedEnvelope.fromJson(arm['envelope'] as Map);
     final apsk = jsonEncode(apskAdvertisement(
         apkamPublicKey: arm['publicKey'] as String,
         signingAlgo: SigningAlgoType.mldsa65));
 
     await verifyEnvelope(envelope, signerPublicKey: apsk);
-    expect(envelopePayloadOf(envelope), vectors['payload']);
+    expect(envelope.payload, vectors['payload']);
 
-    envelope['payload'] =
-        base64Url.encode(utf8.encode('{"doc":"tampered"}')).replaceAll('=', '');
-    await expectLater(() => verifyEnvelope(envelope, signerPublicKey: apsk),
+    await expectLater(
+        () => verifyEnvelope(envelope.withPayloadJson({'doc': 'tampered'}),
+            signerPublicKey: apsk),
         throwsA(isA<AtSigningVerificationException>()));
   });
 }

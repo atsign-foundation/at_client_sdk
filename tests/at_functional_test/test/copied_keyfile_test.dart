@@ -6,7 +6,7 @@ import 'package:at_chops/at_chops.dart'
     show AtChopsImpl, AtChopsKeys, AtEncryptionKeyPair, AtPkamKeyPair;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf;
+    show SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/secret_sharing/key_package_persistence.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -83,7 +83,7 @@ void main() {
       apkamSymmetricKey: AtBytes.fromString(''),
     ));
 
-    final advertisedKpid = (((envelopePayloadOf(built!['keyPackage'] as Map)
+    final advertisedKpid = (((SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload
             as Map)['keys'] as List)
         .single as Map)['kid'] as String;
 

@@ -537,38 +537,34 @@ void main() {
         enrollmentId: 'e1',
       );
 
-      expect(envelope.keys.toList(), ['payload', 'signatures'],
+      expect(envelope.toJson().keys.toList(), ['payload', 'signatures'],
           reason: 'exactly RFC 7515 general serialization — a member of our '
               'own here would be the thing that stops it being the standard');
-      final signatures = envelope['signatures'] as List;
-      expect(signatures, hasLength(1));
-      final entry = signatures.single as Map;
-      expect(entry.keys.toList(), ['protected', 'signature']);
+      expect(envelope.signatures, hasLength(1));
+      final entry = envelope.signature;
+      expect(entry.toJson().keys.toList(), ['protected', 'signature']);
 
       for (final text in [
-        envelope['payload'] as String,
-        entry['protected'] as String,
-        entry['signature'] as String,
+        envelope.payloadB64,
+        entry.protected,
+        entry.signature,
       ]) {
         expect(text.contains('='), isFalse,
             reason: 'RFC 7515 base64url carries no padding');
       }
       expect(
-          utf8.decode(
-              base64Decode(base64.normalize(envelope['payload'] as String))),
+          utf8.decode(base64Decode(base64.normalize(envelope.payloadB64))),
           '{"hello":"world"}');
       // RSA-2048 → 256 signature bytes → 342 unpadded base64url chars, a
       // length Dart's bare base64Decode throws on. Pinned because it is the
       // one arm that can catch a missing base64 normalisation: ML-DSA-65's
       // 4412 chars are a multiple of 4 and decode either way.
-      expect((entry['signature'] as String).length, 342);
+      expect(entry.signature.length, 342);
     });
 
     test('the protected header bytes, both algorithms', () async {
-      String headerOf(Map<String, Object?> envelope) => utf8.decode(
-          base64Decode(base64.normalize(
-              ((envelope['signatures'] as List).single as Map)['protected']
-                  as String)));
+      String headerOf(SignedEnvelope envelope) => utf8.decode(
+          base64Decode(base64.normalize(envelope.signature.protected)));
 
       final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
       expect(
@@ -602,9 +598,8 @@ void main() {
             privateKey: pair.atPrivateKey.privateKey),
       );
       expect(
-          utf8.decode(base64Decode(base64.normalize(
-              ((envelope['signatures'] as List).single as Map)['protected']
-                  as String))),
+          utf8.decode(
+              base64Decode(base64.normalize(envelope.signature.protected))),
           '{"alg":"RS256","v":1}',
           reason: 'the key-package path signs before the atServer assigns an '
               'id, and a guessed or sentinel value would be frozen inside the '

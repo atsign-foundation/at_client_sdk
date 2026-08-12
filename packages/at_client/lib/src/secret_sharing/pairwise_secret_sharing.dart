@@ -23,7 +23,7 @@ import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/secret_sharing/key_package_registration.dart';
 import 'package:at_client/src/secret_sharing/secret_envelope.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf, envelopeSignerOf;
+    show SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:uuid/uuid.dart' show Uuid;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
@@ -475,19 +475,20 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       {bool fromRemote = false}) async {
     final AtValue av = await atClient.get(envelopeKey,
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = fromRemote);
-    final signedEnvelope = jsonDecode(av.value as String) as Map;
+    final signedEnvelope =
+        SignedEnvelope.fromJson(jsonDecode(av.value as String) as Map);
     // Verify FIRST: the sealed envelope's AEAD authenticates the payload
     // bytes, but only the APKAM signature authenticates WHO sent it.
     await verifyEnvelopeSignature(signedEnvelope,
         signerAtSign: atClient.getCurrentAtSign()!);
-    final envelope = SecretEnvelope.fromJson(envelopePayloadOf(signedEnvelope));
+    final envelope = SecretEnvelope.fromJson(signedEnvelope.payload);
 
     if (envelope.toKpid != kpid) {
       logger.warning('Envelope $envelopeKey is addressed to '
           '${envelope.toKpid}, not to this client; skipping');
       return null;
     }
-    final signerClaim = envelopeSignerOf(signedEnvelope);
+    final signerClaim = signedEnvelope.signerEnrollmentId;
     if (signerClaim != envelope.fromEnrollmentId) {
       logger.warning('Envelope $envelopeKey: signer enrollment '
           '$signerClaim does not match claimed sender '

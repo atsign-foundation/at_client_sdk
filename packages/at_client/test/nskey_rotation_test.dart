@@ -8,7 +8,7 @@ import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf;
+    show SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -138,7 +138,7 @@ void main() {
 
       expect(c.published, hasLength(1));
       final envelope = jsonDecode(c.published.single) as Map<String, dynamic>;
-      expect((envelopePayloadOf(envelope) as Map)['v'],
+      expect((SignedEnvelope.fromJson(envelope).payload as Map)['v'],
           nskeyAdvertisementVersion);
     });
 

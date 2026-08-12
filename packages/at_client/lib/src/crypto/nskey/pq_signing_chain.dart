@@ -14,7 +14,7 @@ import 'package:at_client/src/mixins/envelope_signing.dart'
 import 'package:at_client/src/signing/envelope_signature.dart'
     as envelope_signature show apskUri;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf, envelopeSignerOf, signableTextOf;
+    show SignedEnvelope, signableTextOf;
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -165,7 +165,7 @@ class PqSigningChain {
   /// Returns null when the child's `_apsk` is not readable, which is not worth
   /// failing an approval over — the chain link is additive, and an enrollment
   /// without one is simply unsigned, which verifiers already tolerate.
-  Future<Map<String, Object?>?> signLinkFor(
+  Future<SignedEnvelope?> signLinkFor(
     EnvelopeSigning signer,
     String childEnrollmentId,
   ) async {
@@ -263,13 +263,13 @@ class PqSigningChain {
   /// it. Only `additional` carries anything new.
   Future<void> publishLink(
     String enrollmentId,
-    Map<String, Object?> link, {
+    SignedEnvelope link, {
     AtValue? current,
   }) async {
     // Resolved before the write: a link so malformed its signer cannot be
     // read is refused here rather than published and then logged broken.
-    final signer = envelopeSignerOf(link);
-    await _publishInto(enrollmentId, linkField, link,
+    final signer = link.signerEnrollmentId;
+    await _publishInto(enrollmentId, linkField, link.toJson(),
         current: current);
     _logger.info('Published chain link for $enrollmentId, signed by enrollment '
         '$signer');
@@ -322,10 +322,12 @@ class PqSigningChain {
   ///
   /// An absent link is ordinary — the enrollment has not run since approval,
   /// or predates the chain — so this reports absence rather than failing.
-  Future<Map<String, Object?>?> readLink(
+  Future<SignedEnvelope?> readLink(
     String enrollmentId,
-  ) async =>
-      _readField(enrollmentId, linkField);
+  ) async {
+    final field = await _readField(enrollmentId, linkField);
+    return field == null ? null : SignedEnvelope.fromJson(field);
+  }
 
   Future<Map<String, Object?>?> _readField(
     String enrollmentId,
@@ -563,11 +565,11 @@ class PqSigningChain {
         .firstOrNull;
     if (secret == null) return false;
 
-    final Map<String, Object?> link;
+    final SignedEnvelope link;
     final Map payload;
     try {
-      link = decodeConveyedLink(secret.value);
-      payload = envelopePayloadOf(link) as Map;
+      link = SignedEnvelope.fromJson(decodeConveyedLink(secret.value));
+      payload = link.payload as Map;
     } catch (e) {
       _logger.warning('Conveyed chain link is malformed; not publishing: $e');
       return false;
@@ -608,7 +610,7 @@ class PqSigningChain {
     }
 
     final existing = _fieldFrom(current, linkField);
-    if (existing != null && _sameLink(existing, link)) {
+    if (existing != null && _sameLink(existing, link.toJson())) {
       return false;
     }
 
@@ -681,7 +683,7 @@ class PqSigningChain {
         return ChainResult(ChainVerdict.broken, path, failure);
       }
 
-      final parent = envelopeSignerOf(link);
+      final parent = link.signerEnrollmentId;
       if (parent == null || parent.isEmpty) {
         return ChainResult(
             ChainVerdict.broken,
@@ -702,7 +704,7 @@ class PqSigningChain {
     EnvelopeSigning verifier,
     String atSign,
     String enrollmentId,
-    Map<String, Object?> link,
+    SignedEnvelope link,
   ) async {
     try {
       await verifier.verifyEnvelopeSignature(link, signerAtSign: atSign);
@@ -710,7 +712,7 @@ class PqSigningChain {
       return 'the link on $enrollmentId does not verify against the '
           'enrollment it names as signer: $e';
     }
-    final payload = envelopePayloadOf(link);
+    final payload = link.payload;
     if (payload is! Map) return 'the link on $enrollmentId has no payload';
     if (payload['childEnrollmentId'] != enrollmentId) {
       return 'the link on $enrollmentId vouches for '

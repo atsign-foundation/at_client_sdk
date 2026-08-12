@@ -7,6 +7,8 @@ import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:test/test.dart';
 
+import 'test_utils/envelope_tamper.dart';
+
 /// Every form a published `_apsk` comes in, and the verify that reads them.
 ///
 /// Two forms, because which one a record holds depends on what wrote it: the
@@ -98,14 +100,14 @@ void main() {
       mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
     });
 
-    Map<String, Object?> rsaEnvelope() => signEnvelope(payload,
+    SignedEnvelope rsaEnvelope() => signEnvelope(payload,
         keys: ApkamSigningKeys(
             publicKey: rsaPair.atPublicKey.publicKey,
             privateKey: rsaPair.atPrivateKey.privateKey));
 
     /// What a 4.x enrollment's signer produces: the same envelope shape,
     /// signed ML-DSA-65, naming that algorithm in its protected header.
-    Map<String, Object?> mlDsaEnvelope() => signEnvelope(payload,
+    SignedEnvelope mlDsaEnvelope() => signEnvelope(payload,
         keys: ApkamSigningKeys(
             publicKey: base64Encode(mlDsaPair.publicKey),
             privateKey: base64Encode(mlDsaPair.secretKey)),
@@ -116,20 +118,8 @@ void main() {
     /// envelope claim an algorithm its key does not match. The header is
     /// inside the signature, so this is a re-stamp rather than an edit — and
     /// it is the only way to build the mismatch at all.
-    Map<String, Object?> claimingAlg(
-            Map<String, Object?> envelope, String alg) =>
-        {
-          ...envelope,
-          'signatures': [
-            {
-              ...((envelope['signatures'] as List).single as Map)
-                  .cast<String, Object?>(),
-              'protected': base64Url
-                  .encode(utf8.encode(jsonEncode({'alg': alg, 'v': 1})))
-                  .replaceAll('=', ''),
-            }
-          ],
-        };
+    SignedEnvelope claimingAlg(SignedEnvelope envelope, String alg) =>
+        envelope.claiming({'alg': alg, 'v': 1});
 
     /// The `_apsk` an ML-DSA enrollment publishes: what its client composed,
     /// written verbatim by the atServer at approval.
@@ -170,24 +160,18 @@ void main() {
               privateKey: base64Encode(mlDsaPair.secretKey)),
           enrollmentId: 'enroll-pq',
           signingAlgo: SigningAlgoType.mldsa65);
-      final entry = (envelope['signatures'] as List).single as Map;
-      expect(
-          jsonDecode(utf8.decode(base64Decode(
-              base64.normalize(entry['protected'] as String))))['alg'],
-          'ML-DSA-65');
-      expect(
-          base64Decode(base64.normalize(entry['signature'] as String)).length,
-          3309,
+      final entry = envelope.signature;
+      expect(entry.alg, 'ML-DSA-65');
+      expect(base64Decode(base64.normalize(entry.signature)).length, 3309,
           reason: 'an ML-DSA-65 signature is 3309 bytes — an RSA-sized '
               'signature here means the sign dispatch ignored signingAlgo');
 
       final apsk = mlDsaApsk();
       await verifyEnvelope(envelope, signerPublicKey: apsk);
 
-      envelope['payload'] = base64Url
-          .encode(utf8.encode('"a different text"'))
-          .replaceAll('=', '');
-      await expectLater(() => verifyEnvelope(envelope, signerPublicKey: apsk),
+      await expectLater(
+          () => verifyEnvelope(envelope.withPayloadJson('a different text'),
+              signerPublicKey: apsk),
           throwsA(isA<AtSigningVerificationException>()));
     });
 
@@ -201,10 +185,7 @@ void main() {
 
     test('a tampered ML-DSA envelope fails', () async {
       final apsk = mlDsaApsk();
-      final envelope = mlDsaEnvelope();
-      envelope['payload'] = base64Url
-          .encode(utf8.encode('"a different text"'))
-          .replaceAll('=', '');
+      final envelope = mlDsaEnvelope().withPayloadJson('a different text');
 
       await expectLater(() => verifyEnvelope(envelope, signerPublicKey: apsk),
           throwsA(isA<AtSigningVerificationException>()),

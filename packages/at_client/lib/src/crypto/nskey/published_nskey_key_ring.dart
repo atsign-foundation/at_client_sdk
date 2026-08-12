@@ -12,7 +12,7 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf;
+    show SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -69,34 +69,27 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
 
   @override
   Future<NskeyAdvertisement> verify(String owner, String payload) async {
-    final Map<String, dynamic> envelope;
+    final SignedEnvelope envelope;
     try {
-      envelope = jsonDecode(payload) as Map<String, dynamic>;
+      // fromJson is the structural check: a payload string and at least one
+      // signatures entry carrying a readable protected header. Doing it here
+      // rather than letting a member surface as a cast error keeps a
+      // malformed advertisement a refusal rather than something that reads
+      // like a bug.
+      envelope = SignedEnvelope.fromJson(jsonDecode(payload) as Map);
     } on FormatException catch (e) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner is not JSON: ${e.message}');
-    }
-    // Checked up front: a missing member otherwise surfaces as a cast error,
-    // which reads like a bug rather than the refusal it is. The algorithm and
-    // signer claim live inside `protected`, so the shape to check is the
-    // payload plus one signatures entry carrying both of its members.
-    final signatures = envelope['signatures'];
-    final entry = signatures is List && signatures.isNotEmpty
-        ? signatures.first
-        : null;
-    if (envelope['payload'] is! String ||
-        entry is! Map ||
-        entry['protected'] is! String ||
-        entry['signature'] is! String) {
+    } on AtSigningVerificationException catch (e) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner carries no APKAM signature, so the '
           'key sealed to would be only as trustworthy as the server that '
-          'served it');
+          'served it: ${e.message}');
     }
 
     await _signer.verifyEnvelopeSignature(envelope, signerAtSign: owner);
 
-    final advertised = envelopePayloadOf(envelope);
+    final advertised = envelope.payload;
     if (advertised is! Map) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner has a signature over a payload that '

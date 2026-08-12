@@ -4,7 +4,7 @@ import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf, envelopeSignerOf;
+    show SignedEnvelope;
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -226,6 +226,14 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
         'is not a map; not sealing to it');
     return (null, KeyPackageStatus.rejected);
   }
+  final SignedEnvelope envelope;
+  try {
+    envelope = SignedEnvelope.fromJson(advertised);
+  } on AtSigningVerificationException catch (e) {
+    _logger.severe('enrollment $enrollmentId advertised a key package that is '
+        'not a signed envelope; not sealing to it: $e');
+    return (null, KeyPackageStatus.rejected);
+  }
 
   // The record names whose enrollment this is, and that is what the _apsk
   // lookup goes on. A package may also name its own signer; if it does and
@@ -240,14 +248,7 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   // Named `claimedSigner`, not `signer`: that is the AtClientEnvelopeSigner
   // parameter, and a Map lookup is dynamic, so shadowing it compiles happily
   // and then fails at runtime on every verification.
-  final String? claimedSigner;
-  try {
-    claimedSigner = envelopeSignerOf(advertised);
-  } on AtSigningVerificationException catch (e) {
-    _logger.severe('enrollment $enrollmentId advertised a key package whose '
-        'signer claim cannot be read; not sealing to it: $e');
-    return (null, KeyPackageStatus.rejected);
-  }
+  final String? claimedSigner = envelope.signerEnrollmentId;
   if (claimedSigner != null && claimedSigner != enrollmentId) {
     _logger.severe('enrollment $enrollmentId advertised a key package signed '
         'by $claimedSigner; not sealing to it');
@@ -255,7 +256,7 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   }
 
   try {
-    await signer.verifyEnvelopeSignature(advertised,
+    await signer.verifyEnvelopeSignature(envelope,
         signerAtSign: signerAtSign, signerEnrollmentId: enrollmentId);
   } catch (e) {
     _logger.severe('the key package advertised by enrollment $enrollmentId '
@@ -267,7 +268,7 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
   try {
     return (
       KeyPackage.fromPayload(
-        envelopePayloadOf(advertised),
+        envelope.payload,
         enrollmentId: enrollmentId,
         apkamId: apkamId,
       ),

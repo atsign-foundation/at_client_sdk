@@ -125,6 +125,11 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
     );
 
     return {
+      // toJson, not the envelope itself: this map is `EnrollParams.metadata`,
+      // which is JSON-encoded onto the wire and read back as a Map by every
+      // consumer. A Dart object here survives `jsonEncode` only because its
+      // default encodable calls `toJson` for you, and reaches every in-process
+      // reader as something they cannot index.
       'keyPackage': signEnvelope(
         payload,
         keys: ApkamSigningKeys(
@@ -132,7 +137,7 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
           privateKey: apkamPrivateKey.toString(),
         ),
         signingAlgo: signingAlgo,
-      ),
+      ).toJson(),
     };
   };
 }

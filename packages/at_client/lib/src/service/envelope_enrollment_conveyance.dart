@@ -152,7 +152,7 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
             Secret(
               namespace: _conveyanceNamespaceFor(enrollment),
               name: PqSigningChain.linkSecretName,
-              value: PqSigningChain.encodeLink(link),
+              value: PqSigningChain.encodeLink(link.toJson()),
             ));
       }
     }

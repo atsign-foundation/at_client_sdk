@@ -6,7 +6,7 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf;
+    show SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_functional_test/src/config_util.dart';
@@ -64,7 +64,7 @@ void main() {
     );
     expect(response.enrollStatus, EnrollmentStatus.pending);
 
-    final payload = envelopePayloadOf(built!['keyPackage'] as Map) as Map;
+    final payload = SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
     return (
       enrollmentId: response.enrollmentId,
       kpid: ((payload['keys'] as List).single as Map)['kid'] as String,

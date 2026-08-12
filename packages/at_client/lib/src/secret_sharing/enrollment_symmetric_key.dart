@@ -15,7 +15,7 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
 import 'package:at_client/src/secret_sharing/secret_envelope.dart'
     show SecretEnvelope;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show apskUri, envelopePayloadOf, envelopeSignerOf, verifyEnvelope;
+    show apskUri, SignedEnvelope, verifyEnvelope;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -164,12 +164,13 @@ Future<String?> _openIfSymmetricKey(
   Uint8List secretKey,
   String keyAlgo,
 ) async {
-  final Map signedEnvelope;
+  final SignedEnvelope signedEnvelope;
   try {
     final String? raw =
         await atLookUp.executeCommand('llookup:$envelopeKey\n', auth: true);
     if (raw == null) return null;
-    signedEnvelope = jsonDecode(raw.replaceFirst(RegExp('^data:'), '')) as Map;
+    signedEnvelope = SignedEnvelope.fromJson(
+        jsonDecode(raw.replaceFirst(RegExp('^data:'), '')) as Map);
   } catch (e) {
     _logger.info('Could not read envelope $envelopeKey: $e');
     return null;
@@ -195,7 +196,7 @@ Future<String?> _openIfSymmetricKey(
 
   final SecretEnvelope envelope;
   try {
-    envelope = SecretEnvelope.fromJson(envelopePayloadOf(signedEnvelope));
+    envelope = SecretEnvelope.fromJson(signedEnvelope.payload);
   } catch (e) {
     _logger.warning('Envelope $envelopeKey is malformed; skipping: $e');
     return null;
@@ -206,7 +207,7 @@ Future<String?> _openIfSymmetricKey(
   // second list that has to agree with this one.
   final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
   if (envelope.toKpid != kpid ||
-      envelopeSignerOf(signedEnvelope) != envelope.fromEnrollmentId ||
+      signedEnvelope.signerEnrollmentId != envelope.fromEnrollmentId ||
       kem == null ||
       // The suite's KEM must be the one this key package's key belongs to.
       // A sender that picked the other one produced something [secretKey]
@@ -247,10 +248,10 @@ Future<String?> _openIfSymmetricKey(
 /// caller's skip has to catch more than the typed refusal.
 Future<void> _verifyAgainstApsk(
   AtLookUp atLookUp,
-  Map signedEnvelope,
+  SignedEnvelope signedEnvelope,
   String atSign,
 ) async {
-  final claimed = envelopeSignerOf(signedEnvelope);
+  final claimed = signedEnvelope.signerEnrollmentId;
   if (claimed == null || claimed.isEmpty) {
     throw AtSigningVerificationException(
         'Envelope names no enrollment, so there is no _apsk to check its '

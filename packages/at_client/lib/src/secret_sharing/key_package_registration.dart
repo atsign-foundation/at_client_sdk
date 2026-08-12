@@ -6,6 +6,8 @@ import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/mixins/envelope_signing.dart'
     show EnvelopeSigning;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show SignedEnvelope;
 import 'package:at_client/src/secret_sharing/enrollment_directory.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:meta/meta.dart' show experimental, protected;
@@ -158,7 +160,7 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// whatever served the enrollment record.
   ///
   /// Throws [StateError] until [register] has generated the enc keypair.
-  Future<Map<String, Object?>> signedKeyPackagePayload() async =>
+  Future<SignedEnvelope> signedKeyPackagePayload() async =>
       await wrapAndSign(myKeyPackage.toJson());
 
   /// Generates (or loads, via [loadApkamKeys]) this APKAM keypair's KEM enc

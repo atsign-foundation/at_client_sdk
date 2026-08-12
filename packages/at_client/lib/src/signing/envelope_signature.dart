@@ -21,6 +21,7 @@ import 'dart:convert'
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart' show apskSigningKeys;
+import 'package:collection/collection.dart' show ListEquality;
 import 'package:at_chops/at_chops.dart'
     show
         HashingAlgoType,
@@ -79,83 +80,194 @@ Uint8List _base64UrlDecode(String s, String what) {
   }
 }
 
-/// The `signatures` entries [envelope] carries, refusing anything malformed.
+/// One entry of a [SignedEnvelope]'s `signatures` array: a protected header
+/// and the signature over it.
 ///
-/// RFC 7515 general serialization always carries an array, even for one
-/// signature. An empty one is refused rather than treated as unsigned: an
-/// envelope nobody signed is not an envelope that verifies vacuously.
-List _signaturesOf(Map envelope) {
-  final signatures = envelope['signatures'];
-  if (signatures is! List || signatures.isEmpty) {
-    throw AtSigningVerificationException(
-        'an envelope must carry a non-empty signatures array');
+/// Both halves are kept as the base64url text they arrived as, never as
+/// something decoded and re-encoded. The signing input is those exact
+/// characters joined by a dot, so a round trip through any decoder is a
+/// chance to change the bytes the signature covers — which is precisely what
+/// makes canonicalisation irrelevant in this shape, and only stays true if
+/// nothing re-encodes them.
+class EnvelopeSignature {
+  /// The protected header, base64url, verbatim.
+  final String protected;
+
+  /// The signature, base64url, verbatim.
+  final String signature;
+
+  /// The decoded protected header. Decoded once at construction, because an
+  /// entry whose header cannot be read is not an entry.
+  final Map<String, Object?> header;
+
+  const EnvelopeSignature._(this.protected, this.signature, this.header);
+
+  /// The JOSE algorithm this signature is under (`RS256`, `ML-DSA-65`).
+  /// Null when the header names none, which [verifyEnvelope] refuses.
+  String? get alg => header['alg'] is String ? header['alg'] as String : null;
+
+  /// The signer's enrollment-id claim, or null when it makes none.
+  String? get kid => header['kid'] is String ? header['kid'] as String : null;
+
+  /// The envelope-shape version this entry was signed under.
+  Object? get version => header['v'];
+
+  /// Parses one entry, refusing anything malformed.
+  factory EnvelopeSignature.fromJson(Object? json) {
+    if (json is! Map) {
+      throw AtSigningVerificationException(
+          'a signatures entry must be a JSON object');
+    }
+    final protected = json['protected'];
+    final signature = json['signature'];
+    if (protected is! String || signature is! String) {
+      // Refusal, not a cast error: a malformed envelope must land in the same
+      // `on AtSigningVerificationException` guards every caller already has.
+      throw AtSigningVerificationException(
+          'a signature entry must carry its protected header and its '
+          'signature as strings');
+    }
+    final Object? decoded;
+    try {
+      decoded = jsonDecode(
+          utf8.decode(_base64UrlDecode(protected, 'protected header')));
+    } on FormatException catch (e) {
+      throw AtSigningVerificationException(
+          "the envelope's protected header does not decode to JSON: "
+          '${e.message}');
+    }
+    if (decoded is! Map) {
+      throw AtSigningVerificationException(
+          "the envelope's protected header is not a JSON object");
+    }
+    return EnvelopeSignature._(
+        protected, signature, decoded.cast<String, Object?>());
   }
-  return signatures;
+
+  Map<String, Object?> toJson() =>
+      {'protected': protected, 'signature': signature};
+
+  // Value equality on the two wire members. The header is derived from
+  // `protected`, so comparing it too would be comparing the same bytes twice.
+  @override
+  bool operator ==(Object other) =>
+      other is EnvelopeSignature &&
+      other.protected == protected &&
+      other.signature == signature;
+
+  @override
+  int get hashCode => Object.hash(protected, signature);
 }
 
-/// The decoded protected header of one `signatures` entry, refusing anything
-/// malformed.
-Map _decodeProtectedHeader(Map entry) {
-  final protected = entry['protected'];
-  if (protected is! String) {
-    throw AtSigningVerificationException(
-        'a signature entry must carry its protected header as a string');
-  }
-  final Object? decoded;
-  try {
-    decoded = jsonDecode(
-        utf8.decode(_base64UrlDecode(protected, 'protected header')));
-  } on FormatException catch (e) {
-    throw AtSigningVerificationException(
-        "the envelope's protected header does not decode to JSON: "
-        '${e.message}');
-  }
-  if (decoded is! Map) {
-    throw AtSigningVerificationException(
-        "the envelope's protected header is not a JSON object");
-  }
-  return decoded;
-}
+/// A signed envelope: RFC 7515 general JSON serialization, and the only shape
+/// this build signs or verifies.
+///
+/// It is a type rather than a `Map` on purpose. Every consumer of this
+/// document reaches for a member of it, and a `Map` makes each of those reads
+/// invisible to the analyzer — `envelope['signature']` on a shape that keeps
+/// its signature one level down compiles fine and yields null. That is not
+/// hypothetical: it is how the signing chain's already-published check came
+/// to compare null against null and silently stop publishing. Holding a
+/// [SignedEnvelope] means the structure was checked once, at the boundary,
+/// and every read after that is a field the compiler knows about.
+///
+/// [fromJson] validates structure — a string payload, a non-empty
+/// `signatures` array, each entry carrying a readable protected header. It
+/// deliberately does NOT check the envelope's version or decode the payload:
+/// version is a question about whether this build can *act* on the envelope,
+/// which [verifyEnvelope] answers, and a payload is only decoded by whoever
+/// wants it.
+class SignedEnvelope {
+  /// The payload, base64url, verbatim — see [EnvelopeSignature.protected] for
+  /// why it is never held decoded.
+  final String payloadB64;
 
-/// The payload [envelope] carries, decoded.
-///
-/// This is the one way to read a payload out of a signed envelope — a direct
-/// `envelope['payload']` read gets the undecoded base64url string. Throws
-/// [AtSigningVerificationException] for a payload that does not decode.
-Object? envelopePayloadOf(Map envelope) {
-  final payload = envelope['payload'];
-  if (payload is! String) {
-    throw AtSigningVerificationException(
-        'a JWS envelope must carry its payload as a string');
-  }
-  try {
-    return jsonDecode(utf8.decode(_base64UrlDecode(payload, 'payload')));
-  } on FormatException catch (e) {
-    throw AtSigningVerificationException(
-        "the envelope's payload does not decode to JSON: ${e.message}");
-  }
-}
+  /// One entry per signing key of one signer. One today; the array is what
+  /// lets signature agility add an entry rather than change the shape.
+  final List<EnvelopeSignature> signatures;
 
-/// The signer's enrollment-id claim — the first signature's protected-header
-/// `kid`. Null when the envelope makes no claim: a key package signed at
-/// `enroll:request` time has no id to stamp, and its authority is the record
-/// binding it to the request that created it.
-///
-/// The claim is under the signature, so it cannot be edited in flight. It is
-/// still a *claim* — what makes it true is the signature verifying against
-/// the named enrollment's own `_apsk`.
-///
-/// First entry, not a search: an envelope carries one signature per active
-/// signing key of **one** signer, so every entry names the same `kid`. The
-/// multi-signature reader that walks the rest arrives with signature agility.
-String? envelopeSignerOf(Map envelope) {
-  final entry = _signaturesOf(envelope).first;
-  if (entry is! Map) {
-    throw AtSigningVerificationException(
-        'a signatures entry must be a JSON object');
+  const SignedEnvelope._(this.payloadB64, this.signatures);
+
+  /// The entry a verifier checks.
+  ///
+  /// First, not a search: an envelope carries one signature per active
+  /// signing key of **one** signer, so every entry names the same `kid`. The
+  /// reader that walks every entry and picks the strongest arrives with
+  /// signature agility.
+  EnvelopeSignature get signature => signatures.first;
+
+  /// The signer's enrollment-id claim, or null when the envelope makes none —
+  /// a key package signed at `enroll:request` time has no id to stamp, and
+  /// its authority is the record binding it to the request that created it.
+  ///
+  /// The claim is under the signature, so it cannot be edited in flight. It
+  /// is still a *claim*: what makes it true is the signature verifying
+  /// against the named enrollment's own `_apsk`.
+  String? get signerEnrollmentId => signature.kid;
+
+  /// The payload, decoded.
+  ///
+  /// Throws [AtSigningVerificationException] for a payload that does not
+  /// decode — which is a different failure from a malformed envelope, and is
+  /// why it is not checked at [fromJson].
+  Object? get payload {
+    try {
+      return jsonDecode(utf8.decode(_base64UrlDecode(payloadB64, 'payload')));
+    } on FormatException catch (e) {
+      throw AtSigningVerificationException(
+          "the envelope's payload does not decode to JSON: ${e.message}");
+    }
   }
-  final kid = _decodeProtectedHeader(entry)['kid'];
-  return kid is String ? kid : null;
+
+  /// Parses [json], refusing anything that is not structurally an envelope.
+  ///
+  /// An empty `signatures` array is refused rather than treated as unsigned:
+  /// an envelope nobody signed is not one that verifies vacuously.
+  factory SignedEnvelope.fromJson(Map json) {
+    final payload = json['payload'];
+    if (payload is! String) {
+      throw AtSigningVerificationException(
+          'an envelope must carry its payload as a string');
+    }
+    final signatures = json['signatures'];
+    if (signatures is! List || signatures.isEmpty) {
+      throw AtSigningVerificationException(
+          'an envelope must carry a non-empty signatures array');
+    }
+    return SignedEnvelope._(
+        payload, signatures.map(EnvelopeSignature.fromJson).toList());
+  }
+
+  /// The wire form. Reproduces what was parsed byte for byte, because both
+  /// halves were kept verbatim.
+  Map<String, Object?> toJson() => {
+        'payload': payloadB64,
+        'signatures': [for (final s in signatures) s.toJson()],
+      };
+
+  /// Value equality over the wire bytes, which is what "the same envelope"
+  /// means for a document whose whole identity is the characters that were
+  /// signed. Two envelopes carrying the same payload under the same signature
+  /// ARE the same envelope, whether one was parsed and the other signed.
+  ///
+  /// Worth having rather than leaving callers to compare a member: comparing
+  /// one member of an envelope is how the signing chain's already-published
+  /// check came to compare null against null.
+  @override
+  bool operator ==(Object other) =>
+      other is SignedEnvelope &&
+      other.payloadB64 == payloadB64 &&
+      const ListEquality<EnvelopeSignature>()
+          .equals(other.signatures, signatures);
+
+  @override
+  int get hashCode =>
+      Object.hash(payloadB64, const ListEquality().hash(signatures));
+
+  @override
+  String toString() =>
+      'SignedEnvelope(alg: ${signature.alg}, kid: $signerEnrollmentId, '
+      'v: ${signature.version})';
 }
 
 /// The APKAM key material an envelope signature needs. The public half is
@@ -205,7 +317,7 @@ String signableTextOf(
 /// the shape rather than a restriction — the old envelope carried `hashingAlgo`
 /// as its own unsigned member, so a hash had to be selected, policed, and
 /// distrusted on the way back in.
-Map<String, Object?> signEnvelope(
+SignedEnvelope signEnvelope(
   Object? payload, {
   required ApkamSigningKeys keys,
   String? enrollmentId,
@@ -251,7 +363,9 @@ Map<String, Object?> signEnvelope(
           signingAlgo, 'signingAlgo', 'no envelope signing support');
   }
 
-  return {
+  // Built through fromJson rather than a private constructor, so what a
+  // signer produces has been through exactly the checks a reader applies.
+  return SignedEnvelope.fromJson({
     'payload': payloadB64,
     'signatures': [
       {
@@ -259,7 +373,7 @@ Map<String, Object?> signEnvelope(
         'signature': _base64UrlUnpadded(signatureBytes),
       }
     ],
-  };
+  });
 }
 
 /// A parsed `_apsk` value: which algorithm the key is for, and the key itself.
@@ -350,39 +464,23 @@ ParsedApsk parseApskValue(String value) {
 /// written today; the reader that walks every entry and picks the strongest
 /// arrives with signature agility.
 Future<void> verifyEnvelope(
-  Map envelope, {
+  SignedEnvelope envelope, {
   required String signerPublicKey,
-  Object? Function(Object? nonEncodable)? toEncodable,
 }) async {
   final parsed = parseApskValue(signerPublicKey);
+  final entry = envelope.signature;
 
-  final entry = _signaturesOf(envelope).first;
-  if (entry is! Map) {
+  if (entry.version != envelopeVersion) {
     throw AtSigningVerificationException(
-        'a signatures entry must be a JSON object');
-  }
-  final protected = entry['protected'];
-  final payload = envelope['payload'];
-  final signature = entry['signature'];
-  if (protected is! String || payload is! String || signature is! String) {
-    // Refusal, not a cast error: a malformed envelope must land in the same
-    // `on AtSigningVerificationException` guards every caller already has.
-    throw AtSigningVerificationException(
-        'an envelope must carry payload, and each signature entry its '
-        'protected header and signature, as strings');
-  }
-  final header = _decodeProtectedHeader(entry);
-  if (header['v'] != envelopeVersion) {
-    throw AtSigningVerificationException(
-        'the protected header claims envelope version "${header['v']}", and '
+        'the protected header claims envelope version "${entry.version}", and '
         'this build signs and verifies $envelopeVersion — refusing rather '
         'than reading it as a shape it may not be');
   }
 
   void requireAlg(String expected) {
-    if (header['alg'] != expected) {
+    if (entry.alg != expected) {
       throw AtSigningVerificationException(
-          'the envelope claims alg "${header['alg']}" but the published '
+          'the envelope claims alg "${entry.alg}" but the published '
           '_apsk is a ${parsed.signingAlgo.name} key, which verifies '
           '$expected — refusing the mismatch rather than letting the claim '
           'choose the routine');
@@ -392,8 +490,8 @@ Future<void> verifyEnvelope(
   // The signing input is the RECEIVED protected and payload strings verbatim,
   // never a re-encoding of anything decoded — which is what makes
   // canonicalisation irrelevant in this shape.
-  final signingInput = utf8.encode('$protected.$payload');
-  final signatureBytes = _base64UrlDecode(signature, 'signature');
+  final signingInput = utf8.encode('${entry.protected}.${envelope.payloadB64}');
+  final signatureBytes = _base64UrlDecode(entry.signature, 'signature');
 
   final bool ok;
   switch (parsed.signingAlgo) {

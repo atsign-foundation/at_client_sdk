@@ -7,7 +7,7 @@ import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show signingAlgoOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show apskUri, envelopeSignerOf, signEnvelope, verifyEnvelope;
+    show apskUri, SignedEnvelope, signEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart'
     show AtKey, AtSigningVerificationException, AtValue, IllegalStateException;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -41,7 +41,7 @@ mixin EnvelopeSigning on ApkamSigning {
   /// [payload] must be a String or a json-encodable object.
   /// [toEncodable] is passed directly to [jsonEncode].
   /// Read the [jsonEncode] docs to learn how to use it.
-  FutureOr<Map<String, Object?>> wrapAndSign(
+  FutureOr<SignedEnvelope> wrapAndSign(
     Object? payload, {
     Object? Function(Object? nonEncodable)? toEncodable,
   }) {
@@ -74,9 +74,10 @@ mixin EnvelopeSigning on ApkamSigning {
     Object? payload, {
     Object? Function(Object? nonEncodable)? toEncodable,
   }) async {
-    Map<String, Object?> envelope =
-        await wrapAndSign(payload, toEncodable: toEncodable);
-    return jsonEncode(envelope, toEncodable: toEncodable);
+    final envelope = await wrapAndSign(payload, toEncodable: toEncodable);
+    // No toEncodable here: the payload was already encoded into base64url by
+    // the signing, and what is left is strings.
+    return jsonEncode(envelope.toJson());
   }
 
   /// Verify an envelope created by [wrapAndSign] or [wrapAndSignAndJsonEncode].
@@ -96,11 +97,11 @@ mixin EnvelopeSigning on ApkamSigning {
   /// that: the atServer had not assigned an id yet, so there was nothing
   /// truthful to stamp.
   Future<void> verifyEnvelopeSignature(
-    Map envelope, {
+    SignedEnvelope envelope, {
     required String signerAtSign,
     String? signerEnrollmentId,
   }) async {
-    final String? id = signerEnrollmentId ?? envelopeSignerOf(envelope);
+    final String? id = signerEnrollmentId ?? envelope.signerEnrollmentId;
     if (id == null) {
       throw AtSigningVerificationException(
           'Cannot verify an envelope that names no enrollment and was given '

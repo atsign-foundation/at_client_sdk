@@ -13,6 +13,7 @@ import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
 
 import 'fake_enrollment_directory.dart';
+import 'test_utils/envelope_tamper.dart';
 
 class TestRegistrant
     with ApkamSigning, EnvelopeSigning, KeyPackageRegistration {
@@ -491,18 +492,15 @@ void main() {
 
     test('a tampered key package is not sealed to', () async {
       final b = await registered('enroll-b');
-      final envelope = await b.signedKeyPackagePayload();
       // Signature intact over the original body; only the advertised key is
       // swapped, which is the substitution that matters.
-      envelope['payload'] = base64Url
-          .encode(utf8.encode(jsonEncode({
-            'v': 1,
-            'createdAt': '2026-06-11T00:00:00.000Z',
-            'keys': [
-              {'kid': 'evil', 'use': 'enc', 'alg': 'x-wing', 'pub': 'evil-pub'}
-            ],
-          })))
-          .replaceAll('=', '');
+      final envelope = (await b.signedKeyPackagePayload()).withPayloadJson({
+        'v': 1,
+        'createdAt': '2026-06-11T00:00:00.000Z',
+        'keys': [
+          {'kid': 'evil', 'use': 'enc', 'alg': 'x-wing', 'pub': 'evil-pub'}
+        ],
+      });
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [record('enroll-b', envelope)]);
 
@@ -598,18 +596,8 @@ void main() {
       // reason. That makes it `rejected`, not the `unsupported` a merely
       // newer PAYLOAD gets: that one verified first, and this one cannot.
       final b = await registered('enroll-b');
-      final envelope = await b.signedKeyPackagePayload();
-      final entry = ((envelope['signatures'] as List).single as Map)
-          .cast<String, Object?>();
-      envelope['signatures'] = [
-        {
-          ...entry,
-          'protected': base64Url
-              .encode(utf8.encode(jsonEncode(
-                  {'alg': 'RS256', 'kid': 'enroll-b', 'v': 2})))
-              .replaceAll('=', ''),
-        }
-      ];
+      final envelope = (await b.signedKeyPackagePayload())
+          .claiming({'alg': 'RS256', 'kid': 'enroll-b', 'v': 2});
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [record('enroll-b', envelope)]);
 
@@ -623,15 +611,17 @@ void main() {
     test('a package whose protected header cannot be read is rejected',
         () async {
       final b = await registered('enroll-b');
-      final envelope = signEnvelope(b.myKeyPackage.toJson(),
+      // Built through the raw JSON, because the type refuses this at parse:
+      // an entry whose header cannot be read is not an entry, which is the
+      // property under test one layer down.
+      final signed = signEnvelope(b.myKeyPackage.toJson(),
           keys: b.signingKeys, enrollmentId: 'enroll-b');
-      envelope['signatures'] = [
-        {
-          ...((envelope['signatures'] as List).single as Map)
-              .cast<String, Object?>(),
-          'protected': 'not!!!base64url',
-        }
-      ];
+      final envelope = {
+        ...signed.toJson(),
+        'signatures': [
+          {...signed.signature.toJson(), 'protected': 'not!!!base64url'}
+        ],
+      };
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [record('enroll-b', envelope)]);
 

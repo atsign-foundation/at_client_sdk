@@ -14,6 +14,10 @@ import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show SignedEnvelope;
+
+import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
 
@@ -74,7 +78,7 @@ void main() {
 
   /// An enrollee that has registered, so its `_apsk` is published and the
   /// package it advertises verifies against it.
-  Future<Object> advertisedKeyPackage() async {
+  Future<SignedEnvelope> advertisedKeyPackage() async {
     final enrollee =
         AtClientSecretSharing.forClient(buildMockClient(enrolleeId));
     await enrollee.register();
@@ -90,7 +94,7 @@ void main() {
 
   test('an approver with no key package is told what to call', () async {
     final approver = buildMockClient('approver-1');
-    stubPendingEnrollment(approver, await advertisedKeyPackage());
+    stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
 
     await expectLater(
         approveWith(approver),
@@ -104,7 +108,7 @@ void main() {
   test('an approver that has registered conveys the key', () async {
     final approver = buildMockClient('approver-1');
     await AtClientSecretSharing.forClient(approver).register();
-    stubPendingEnrollment(approver, await advertisedKeyPackage());
+    stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
 
     await approveWith(approver);
 
@@ -237,20 +241,13 @@ void main() {
       () async {
     final approver = buildMockClient('approver-1');
     await AtClientSecretSharing.forClient(approver).register();
-    final pkg = (await advertisedKeyPackage()) as Map;
     // Inside the signatures entry: a top-level `signature` member is not
     // where the verifier looks, so overwriting one would leave the real
-    // signature intact and the "tampered" package would verify.
-    final tampered = Map<String, Object?>.from(pkg)
-      ..['signatures'] = [
-        {
-          ...((pkg['signatures'] as List).single as Map)
-              .cast<String, Object?>(),
-          'signature':
-              base64Url.encode(List<int>.filled(64, 1)).replaceAll('=', ''),
-        }
-      ];
-    stubPendingEnrollment(approver, tampered);
+    // signature intact and the "tampered" package would verify. The type is
+    // what makes that spelling impossible now.
+    final tampered = (await advertisedKeyPackage())
+        .withEntryMember('signature', b64u('not the signature'));
+    stubPendingEnrollment(approver, tampered.toJson());
 
     await expectLater(
         approveWith(approver),

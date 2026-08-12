@@ -1,13 +1,11 @@
-import 'dart:convert' show base64Url, utf8;
-
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
-import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopePayloadOf, envelopeSignerOf;
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
+
+import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {
@@ -85,11 +83,11 @@ void main() {
       final payload = {'hello': 'world', 'n': 42};
       final envelope = await signerA.wrapAndSign(payload);
 
-      expect(envelopePayloadOf(envelope), payload,
+      expect(envelope.payload, payload,
           reason: 'the payload round-trips through base64url JSON — a direct '
               'read gets the undecoded string');
-      expect(envelope['signatures'], hasLength(1));
-      expect(envelopeSignerOf(envelope), 'enroll-a',
+      expect(envelope.signatures, hasLength(1));
+      expect(envelope.signerEnrollmentId, 'enroll-a',
           reason: "the mixin stamps the signer's enrollment as `kid`, inside "
               'the protected header where the signature covers it');
     });
@@ -118,10 +116,8 @@ void main() {
     });
 
     test('tampered payload fails verification', () async {
-      final envelope = await signerA.wrapAndSign({'amount': 10});
-      envelope['payload'] = base64Url
-          .encode(utf8.encode('{"amount":1000000}'))
-          .replaceAll('=', '');
+      final envelope = (await signerA.wrapAndSign({'amount': 10}))
+          .withPayloadJson({'amount': 1000000});
       stubApskGet(atClientB, pkamPublicKey(atChopsA));
 
       await expectLater(
