@@ -12,7 +12,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show envelopeVersionOf, jwsEnvelopeVersion, verifyEnvelope;
+    show envelopeVersionOf, jwsEnvelopeVersion, parseApskValue, verifyEnvelope;
 import 'package:at_demo_data/at_demo_data.dart' show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -85,9 +85,18 @@ void main() {
     await mintLegacyKeyfile(keysFilePath);
   });
 
-  Future<AtAuthSession> legacySession() async {
+  /// Authenticates from a legacy keyfile — the shared one by default, or an
+  /// arm's own.
+  ///
+  /// An arm that retrofits **rsa2048** needs its own, because a keyfile is
+  /// retrofitted once: the first arm to retrofit the shared file fixes its
+  /// algorithm, and every later arm asking for a different one is refused.
+  /// The mldsa65 arms share it deliberately — the last of them asserts that a
+  /// rerun reuses rather than re-mints.
+  Future<AtAuthSession> legacySession([String Function(String)? pathFor]) async {
     final auth = await AtAuth.create().authenticate(
-        AtAuthRequest(atSign, atKeysIo: FileAtKeysIo(filePath: keysFilePath))
+        AtAuthRequest(atSign,
+            atKeysIo: FileAtKeysIo(filePath: pathFor ?? keysFilePath))
           ..rootDomain = rootDomain);
     expect(auth.isSuccessful, true);
     return auth.session!;
@@ -96,7 +105,12 @@ void main() {
   test(
       'the rollout-window retrofit: an rsa2048 self-enrollment auto-approves '
       'and RSA PKAM succeeds under the new id', () async {
-    final session = await legacySession();
+    // Its own keyfile: this arm retrofits rsa2048, and a keyfile takes one
+    // retrofit. Sharing the file with the mldsa65 arms would let whichever
+    // ran first claim it and refuse the rest.
+    String t1Path(String a) => 'test/testData/rf2b-t1$a.atKeys';
+    await mintLegacyKeyfile(t1Path);
+    final session = await legacySession(t1Path);
 
     final response = await AtEnrollment.create().submit(
         AtSelfEnrollmentRequest(
@@ -113,14 +127,14 @@ void main() {
     final newId = response.enrollmentId;
     expect(newId, isNot(session.enrollmentId));
 
-    final keys = await FileAtKeysIo(filePath: keysFilePath).read(atSign);
+    final keys = await FileAtKeysIo(filePath: t1Path).read(atSign);
     expect(keys.signingAlgorithmForEnrollment(newId), SigningAlgoType.rsa2048,
         reason: 'the rollout-window mode mints a FRESH RSA keypair — the '
             'same algorithm as legacy, a new key object, its own enrollment '
             'id — and needs no ML-DSA anywhere');
 
     final rsaAuth = await AtAuth.create().authenticate(AtAuthRequest(atSign,
-        atKeysIo: FileAtKeysIo(filePath: keysFilePath))
+        atKeysIo: FileAtKeysIo(filePath: t1Path))
       ..enrollmentId = newId
       ..rootDomain = rootDomain);
     expect(rsaAuth.isSuccessful, true,
@@ -171,14 +185,14 @@ void main() {
         reason: 'the retrofitted enrollment must be usable IMMEDIATELY: '
             'keyfile → AtChops → pkam dispatch, all genuinely ML-DSA');
 
-    // The atServer published the tagged, self-describing _apsk for the new
-    // enrollment — composed server-side from the record.
+    // The _apsk this enrollment composed on its own enroll:request, published
+    // verbatim by the atServer at approval — the server composes none.
     final apskResponse = await session.atLookUp!.executeCommand(
         'llookup:public:_apsk.$newId.a.__e$atSign\n',
         auth: true);
-    final tagged = jsonDecode(apskResponse!.replaceFirst('data:', ''))
-        as Map<String, dynamic>;
-    expect(tagged['signingAlgo'], 'mldsa65',
+    final published = parseApskValue(
+        apskResponse!.replaceFirst('data:', '').trim());
+    expect(published.signingAlgo, SigningAlgoType.mldsa65,
         reason: 'a bare value would be parsed as an RSA key by every '
             'verifier, and the ML-DSA enrollment could never verify');
 
@@ -188,7 +202,7 @@ void main() {
     final ok = await MlDsa65PureDartAlgo().verifyBytes(
         utf8.encode(jsonEncode(envelope['payload'])),
         signature: base64Decode(envelope['signature'] as String),
-        publicKey: base64Decode(tagged['publicKey'] as String));
+        publicKey: base64Decode(published.publicKey));
     expect(ok, true,
         reason: 'signer and published verify key must be the same keypair on '
             'the real wire, or every advertised-key verification fails');
@@ -271,9 +285,9 @@ void main() {
             'authenticated — sender is the owner client, receiver is this '
             'one, so this is a genuine cross-client delivery');
 
-    // Envelope signing: what this client signs verifies against the tagged
-    // _apsk the atServer serves for its enrollment — wrapAndSign must have
-    // signed ML-DSA, or the verify refuses the algorithm mismatch.
+    // Envelope signing: what this client signs verifies against the _apsk the
+    // atServer serves for its enrollment — wrapAndSign must have signed
+    // ML-DSA, or the verify refuses the algorithm mismatch.
     final sharing = AtClientSecretSharing.forClient(client);
     final envelope = await sharing.wrapAndSign('rf2c-proof');
     final apsk = (await client.getRemoteSecondary()!.executeCommand(
@@ -285,7 +299,7 @@ void main() {
     // The same loop under the JWS wrapper: the signer's version flag is the
     // rollout lever, and this is the flipped world in miniature against a
     // REAL served key — ML-DSA under `protected.payload`, verified against
-    // the tagged _apsk the atServer composed at approval.
+    // the _apsk this enrollment composed and the atServer published verbatim.
     sharing.envelopeVersion = jwsEnvelopeVersion;
     final jws = await sharing.wrapAndSign('rf2c-proof-v2');
     expect(jws['v'], 2);
@@ -339,7 +353,11 @@ void main() {
   test(
       'an argless retrofit under the default preference stays rsa2048 — the '
       'migration posture is really consulted, not a constant', () async {
-    final session = await legacySession();
+    // Its own keyfile, for the same reason as the first arm: this one
+    // resolves rsa2048, and the shared file is the mldsa65 arms'.
+    String t5Path(String a) => 'test/testData/rf2b-t5$a.atKeys';
+    await mintLegacyKeyfile(t5Path);
+    final session = await legacySession(t5Path);
     final manager = await selfRetrofit(
         session: session,
         preference: TestUtils.getPreference(atSign),
@@ -369,12 +387,17 @@ void main() {
 
     expect(again.enrollStatus, EnrollmentStatus.approved);
     final keys = await FileAtKeysIo(filePath: keysFilePath).read(atSign);
-    final signingMaterials = keys.keys.where((m) =>
+    // privateAuthentication, not privateSigning: a retrofit files its APKAM
+    // keypair (`fileApkamMaterial`), and nothing in production calls
+    // `fileSigningMaterial` at all — per-algorithm signing material has no
+    // writer yet. Filtering on privateSigning matches nothing, so this
+    // assertion would fail for a reason that has nothing to do with reuse.
+    final pqMaterials = keys.keys.where((m) =>
         m.keyAlgorithmType == KeyAlgorithmType.mlDsa65 &&
-        m.keyPartType == CryptographicKeyType.privateSigning);
-    expect(signingMaterials, hasLength(1),
+        m.keyPartType == CryptographicKeyType.privateAuthentication);
+    expect(pqMaterials, hasLength(1),
         reason: 'a keyfile that already carries a PQ enrollment must reuse '
             'it, not mint a second — this is UC-A2.2\'s other arm');
-    expect(again.enrollmentId, signingMaterials.single.enrollmentId);
+    expect(again.enrollmentId, pqMaterials.single.enrollmentId);
   });
 }

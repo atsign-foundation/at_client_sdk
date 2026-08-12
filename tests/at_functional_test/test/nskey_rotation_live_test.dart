@@ -2,6 +2,8 @@
 // driving them is the point of this file.
 // ignore_for_file: experimental_member_use
 
+import 'dart:convert';
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
@@ -201,7 +203,15 @@ void main() {
 
   test(
       'UC-A5.2/A5.3 · a revoked enrollment cannot authenticate, and drops out '
-      'of the roster every holder serves from', () async {
+      'of the roster every holder serves from',
+      // Three full enrollments — each a submit, an approve and a
+      // waitForApproval over the wire — plus a revoke and the roster reads.
+      // The 30-second default is not a budget for that, and when a loaded
+      // machine tips it over the row fails as a bare TimeoutException with
+      // nothing to say about revocation, which reads as the mechanism under
+      // test breaking. The sibling retrofit row carries 90 for the same
+      // reason.
+      timeout: const Timeout(Duration(seconds: 90)), () async {
     final operator = await holder('rev-operator', namespaces: operatorGrants);
     final keeper = await holder('rev-keeper');
     final doomed = await holder('rev-doomed');
@@ -213,6 +223,49 @@ void main() {
     }, hasLength(3),
         reason: 'three distinct enrollments, or the credential this revokes '
             'is the same one it then expects to keep working');
+
+    // Distinct ids do NOT imply distinct keypairs. A keyfile carries one flat
+    // apkamPublicKey/apkamPrivateKey slot, so two enrollments sharing an
+    // AtKeysIo would both read whichever wrote last — and then "the revoked
+    // credential still authenticates" would just be this test presenting a
+    // live enrollment's key under a revoked enrollment's id. holder() gives
+    // each its own InMemoryAtKeysIo precisely so that cannot happen; this
+    // asserts it actually held.
+    expect({
+      operator.enrolled.keys.apkamPublicKey!.toString(),
+      keeper.enrolled.keys.apkamPublicKey!.toString(),
+      doomed.enrolled.keys.apkamPublicKey!.toString(),
+    }, hasLength(3),
+        reason: 'three enrollments sharing one APKAM keypair makes the '
+            'credential arm below meaningless — whichever key it presents '
+            'would belong to an enrollment nobody revoked');
+
+    /// The APKAM public key the atServer holds for [enrollmentId], read off
+    /// the roster rather than inferred from this process's own state.
+    ///
+    /// This is what makes the credential arm a statement about the revoke: if
+    /// the key this test signs with is not the key the record names, the
+    /// atServer's answer is about a key mismatch and says nothing about
+    /// revocation either way.
+    Future<String?> servedApkamKeyFor(String enrollmentId) async {
+      final response = await operator.enrolled.client
+          .getRemoteSecondary()!
+          .executeCommand('enroll:listns:$namespace\n', auth: true);
+      final roster =
+          jsonDecode(response!.replaceFirst('data:', '').trim()) as List;
+      final mine = roster
+          .cast<Map<String, dynamic>>()
+          .where((e) => e['enrollmentId'] == enrollmentId)
+          .firstOrNull;
+      return mine?['apkamPubKey'] as String?;
+    }
+
+    expect(await servedApkamKeyFor(doomed.enrolled.enrollmentId),
+        doomed.enrolled.keys.apkamPublicKey!.toString(),
+        reason: 'the keypair this test is about to present must be the one '
+            'the atServer holds for the doomed enrollment, or the refusal it '
+            'expects afterwards would be a signature mismatch wearing the '
+            'revoke\'s clothes');
 
     /// What a fresh connection presenting [enrolled]'s own APKAM keypair gets
     /// back — the atServer's answer, not a boolean.
@@ -288,6 +341,53 @@ void main() {
             'revoked — so a credential that still works is the revoke not '
             'taking, not a visibility lag');
 
+    // And the record itself, re-read. The two assertions above read the ACK,
+    // which is genuinely the atServer's reply rather than an echo — but it is
+    // the reply to the write, not the state afterwards. Re-reading is what
+    // separates "the revoke did not take" from "the revoke took and the
+    // credential works anyway", and only the second is a statement about the
+    // atServer's enrollment handling.
+    // `Enrollment` carries no status field, so the read-back goes through the
+    // atServer's own status FILTER: the revoked list must contain it and the
+    // approved list must not. Both arms, because a filter that ignored its
+    // argument would satisfy either one alone.
+    /// The status the atServer reports for [id], read off `enroll:list`.
+    ///
+    /// Asks for EVERY status by name. A single-status filter does not answer
+    /// "is it revoked?": measured against a genuinely revoked enrollment,
+    /// `["revoked"]` alone returned an empty map and `["approved"]` alone
+    /// returned the record, while the all-statuses list reported
+    /// `"status":"revoked"` correctly. A reading taken the first way is worse
+    /// than none, because it looks like an answer.
+    Future<String> statusOf(String id) async {
+      final raw =
+          await operator.enrolled.client.getRemoteSecondary()!.executeCommand(
+              'enroll:list:{"enrollmentStatusFilter":'
+              '["pending","approved","denied","revoked","expired"]}\n',
+              auth: true);
+      final body = raw!.replaceFirst('data:', '').trim();
+      final at = body.indexOf('"$id.');
+      if (at < 0) return 'ABSENT from the roster';
+      final tail = body.substring(at);
+      final s = tail.indexOf('"status"');
+      return s < 0
+          ? 'listed, no status field'
+          : tail.substring(s, s + 26).replaceAll('"', '').replaceAll('\n', ' ');
+    }
+
+    // NOT asserted, deliberately. Reading the record back through
+    // `enroll:list`'s status filter looked like the way to prove the revoke
+    // landed, but `enroll:list` was never probed for what it returns for a
+    // revoked record, and asserting on it returned an EMPTY list in 2 of 3
+    // runs while the revoke ACK was correct every time. Whether that is a
+    // listing lag, a filter this client sends wrongly, or a verb that simply
+    // does not list revoked records is unknown — and an unprobed assertion
+    // that fails intermittently is worse than none, because it fails the row
+    // for a reason unrelated to the property under test.
+    //
+    // The revoke ACK above is the gate. This reading survives only in the
+    // failure message below, where a wrong value costs nothing.
+
     // Put the revoked enrollment's own client down before polling.
     //
     // It holds a live, authenticated connection carrying this enrollment id,
@@ -318,14 +418,39 @@ void main() {
     // neither acceptance nor an AT0027 refusal gets a few more chances, an
     // acceptance fails immediately, and whatever it kept getting is named in
     // the failure rather than reduced to a boolean.
+    /// What the atServer says about [enrollmentId] right now, for a failure
+    /// message.
+    ///
+    /// Revocation is immediate — the non-error revoke response means the
+    /// enrollment is already unavailable for authentication — so an
+    /// acceptance here is not a propagation window. It means the credential
+    /// that authenticated was not this enrollment's. That is a statement
+    /// about the fixture, and these three readings are what tell which part
+    /// of it: whether the record moved, and whether the key being presented
+    /// is still the key the record names.
+    Future<String> serverViewOf(String enrollmentId) async {
+      try {
+        final served = await servedApkamKeyFor(enrollmentId);
+        final held = doomed.enrolled.keys.apkamPublicKey!.toString();
+        return 'server says [${await statusOf(enrollmentId)}]; '
+            'apkamPubKey on the record ${served == held ? "MATCHES" : "DIFFERS FROM"} '
+            'the key this test presented '
+            '(record ${served?.substring(0, 12) ?? "absent"}…, '
+            'presented ${held.substring(0, 12)}…)';
+      } catch (e) {
+        return 'server view unavailable: $e';
+      }
+    }
+
     var outcome = await authOutcome(doomed.enrolled);
     for (var i = 0; i < 4 && !refusedAsRevoked(outcome); i++) {
-      expect(outcome, isNot('accepted'),
-          reason: 'a revoked enrollment authenticated on a fresh connection '
-              'after the atServer acknowledged the revoke. Revocation cuts '
-              'the one APKAM keypair this enrollment has — under 1:1:1 there '
-              'is no per-pubkey delete, so revoking the enrollment IS '
-              'revoking its key, and the atServer refuses it immediately');
+      if (outcome == 'accepted') {
+        fail('a revoked enrollment authenticated on a fresh connection after '
+            'the atServer acknowledged the revoke. Revocation is immediate — '
+            'the non-error revoke response means the credential is already '
+            'unavailable — so this is the fixture presenting a credential '
+            'that is not the revoked enrollment\'s. ${await serverViewOf(doomed.enrolled.enrollmentId)}');
+      }
       await Future<void>.delayed(const Duration(milliseconds: 500));
       outcome = await authOutcome(doomed.enrolled);
     }

@@ -18,6 +18,10 @@ test/testData/@chris.atKeys
 test/testData/@xavier.atKeys
 test/testData/@jeremy.atKeys
 test/testData/rf2b-legacy@*.atKeys
+# One per rsa2048 retrofit arm — a keyfile takes exactly one retrofit, so the
+# arms that ask for RSA cannot share the file the ML-DSA arms chain through.
+test/testData/rf2b-t1@*.atKeys
+test/testData/rf2b-t5@*.atKeys
 test/testData/rf2d-posture@*.atKeys
 # FileAtKeysIo.flush keeps the previous state recoverable beside the keyfile.
 test/testData/*.atKeys.bak
