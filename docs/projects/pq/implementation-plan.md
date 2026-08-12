@@ -2428,11 +2428,11 @@ builds on it.
 | # | Work | Detail |
 |---|------|--------|
 | 3 | **DONE 2026-08-12 — one envelope shape, RFC 7515 general serialization**, `{payload, signatures:[{protected, signature}]}` with `{alg, kid, v}` in each `protected`. Deleted `signedEnvelopeVersion`, `jwsEnvelopeVersion`'s flattened form, `envelopeVersionOf`'s dispatch, the `wrapperFields` ternary in `ApkamSignedAdvertisedKeys.verify`, and `envelopeVersion` as a `ReleasePosture` axis. Also took `hashingAlgo` off `signEnvelope` — `alg` names the hash, so nothing unsigned selects a routine — and retired UC-C1.3, the rollout's envelope axis, which had nothing left to drive. The `.mjs` adjudicator moved `flattenedVerify` → `generalVerify`; vectors regenerated at `test/vectors/jws_envelope.json`. **Found en route:** `publishPendingLink`'s already-published check compared a top-level `['signature']` the envelope does not have, so `null == null` matched every time and a different link conveyed later was silently never published | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 1, **superseding [91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11) ruling 12**'s bespoke container |
-| 4 | One key-entry vocabulary across all three advertising records — `{use, alg, pub, kid, status?}` inside `{v, keys:[…], suites}`; the nskey advertisement converges onto it, one kid function over raw key bytes, one `bestSuiteFor`, one seal/open helper taking `(kem, pub, info, version)`. Deletes the unshipped-predecessor hatches and both `legacy*Suites` constants | [`decisions.md` 94](decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — ⚠️ **before step 6, or that parser becomes the third hand-rolled codec for one shape** |
-| 5 | The **`retired` key path**: `bestKeyFor` skips retired entries, `kpid` becomes the *active* enc key's kid, `_consume`'s two equality checks become "one of the keys I hold", and `KeyPackageRegistration` + `PersistedApkamKeys` go **plural**. ⚠️ app-facing: `PersistedApkamKeys` is what apps build in `loadApkamKeys`/`saveApkamKeys` | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) rulings 6–9 — without the plural holding the field is decorative. Also settle the **name collision**: `KeyPackageStatus` is already a Dart enum for a reader's verdict on a whole package (`present`/`absent`/`rejected`/`unsupported`), and the new `status` is a per-entry wire key. Different namespaces, so it compiles either way — decide whether the Dart type carrying the wire value is named apart from it before two `status`es sit in one file |
+| 4 | **PART-DONE 2026-08-12.** One key-entry vocabulary across all three advertising records — `{use, alg, pub, kid, status?}` inside `{v, keys:[…], suites}`. **Landed:** ruling 3 (one kid function, at_auth's `publicKeyKid`, over the key's raw BYTES — `apskKid` hashed the base64 text and `nskeyKidOf` the material, and every kpid changes value); ruling 4 (`v`, `alg`, `suites` required, both `legacy*Suites` deleted); ruling 5 (one `SecretSharingAlgos.bestSuiteBetween`). **Still owed: ruling 2** — the nskey advertisement gains a `keys` list and adopts the shared spelling — **and ruling 6**, the shared seal/open helper taking `(kem, pub, info, version)`. ⚠️ On ruling 6 the `info` values MUST stay different (`at_client/secret_sharing/v1` vs `at/nskey/…:<owner>:<namespace>`): domain separation is what stops an envelope from one substrate being replayed into the other, so a *shared* `info` is the one bug this consolidation could plausibly introduce. Shared code, distinct binding — and the differential must prove the two bindings really differ, not merely that both seal | [`decisions.md` 94](decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — ⚠️ **before step 6**, or that parser becomes the third hand-rolled codec for one shape |
+| 5 | The **`retired` key path**: `bestKeyFor` skips retired entries, `kpid` becomes the *active* enc key's kid, `_consume`'s two equality checks become "one of the keys I hold", and `KeyPackageRegistration` + `PersistedApkamKeys` go **plural**. ⚠️ app-facing: `PersistedApkamKeys` is what apps build in `loadApkamKeys`/`saveApkamKeys` | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) rulings 6–9 — without the plural holding the field is decorative. Also settle the **name collision**: `KeyPackageStatus` is already a Dart enum for a reader's verdict on a whole package (`present`/`absent`/`rejected`/`unsupported`), and the new `status` is a per-entry wire key. Different namespaces, so it compiles either way — **SETTLED 2026-08-12 (gkc): the new per-entry wire value gets a Dart type named `KeyEntryStatus`, and the existing `KeyPackageStatus` — the reader's verdict on a whole package — keeps its name.** Nothing renames, and the two read as clearly different things at every call site |
 | 6 | `_apsk` array parser — the array **and** the released bare string | [`design.md` 9.3](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
 | 7 | Strength order beside `SigningAlgoType` in at_chops, with a raw-literal tripwire | [14.17](#1417-signature-agility--what-is-built-and-what-is-owed) |
-| 8 | Invert `requireAlg` (`envelope_signature.dart:573`) from refuse-on-mismatch to verify-the-strongest-understood | ⚠️ an inversion, not an addition |
+| 8 | Invert `requireAlg` (`envelope_signature.dart:480` — the file was rewritten twice on 2026-08-12; re-grep rather than trusting any line number here) from refuse-on-mismatch to verify-the-strongest-understood | ⚠️ an inversion, not an addition |
 | 9 | Multi-signature envelope **reader** | [`design.md` 9.4](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
 
 **A reader understanding no entry refuses outright** — no downgrade, no fallback
@@ -2501,3 +2501,30 @@ Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https:/
 Then, as the release programme rather than development: publish at_chops 3.6.0
 → at_commons 5.15.0 → at_auth 3.4.0 → at_client's GA minor, and finally
 **R-2**, the 4.0.0 posture flip.
+
+### 14.19 Four small items, raised 2026-08-12 and not yet acted on
+
+Each is real, verified at the time of writing, and too small to be a step of
+its own. None blocks anything.
+
+1. **`packages/at_client/lib/src/exception/at_client_exception.dart` is dead.**
+   `@Deprecated` since the type moved to at_commons, not exported from the
+   barrel, and imported by nothing in at_client or either test package
+   (verified by grep 2026-08-12). It is reachable only by a deep
+   `package:at_client/src/…` import, so deleting it is not a public-API change.
+2. **`at_commons`' `KeyUtil` (`lib/src/keystore/at_key_util.dart`) has zero
+   callers** anywhere in the workspace — but unlike the above it IS published
+   public API, so removing it is a deprecate-then-delete, not an edit.
+3. **`enrollment_service_test.dart:206` asserts
+   `(metadata!['keyPackage'] as Map)['signature'] == 'sig'`** against an opaque
+   stub. It passes and tests metadata pass-through correctly, but it reads as
+   documentation of the pre-2026-08-12 envelope shape, which had a top-level
+   `signature`. Cosmetic; the risk is a future reader believing it.
+4. **Every kpid changed value** at
+   [`8d44a9222`](#1418-the-remaining-d1-initial-development-sequence) (step 4,
+   ruling 3 — the kid preimage became the key's raw bytes). Licensed by ruling
+   94.4 and the `@experimental` marker, and nothing published reads a kpid. The
+   operational consequence: **a long-lived local virtualenv holding enrollments
+   minted before that commit derives different kpids than it did**, so recycle
+   it before trusting their key packages. A fresh `runLocal.sh` run is
+   unaffected — it recycles the container anyway.

@@ -14,6 +14,12 @@
 // base64url, and `openssl pkeyutl -verify -rawin` over an SPKI-wrapped
 // public key checks it — see docs/projects/pq/decisions.md 60.4 for the
 // exact run this was proven with. Exits non-zero on any failure.
+//
+// Re-confirmed 2026-08-12 against the general-serialization vectors: RS256
+// passes here under generalVerify, and the ML-DSA-65 arm verifies under
+// Homebrew OpenSSL 3.6.3 with a negative control (one flipped input byte must
+// FAIL — without that arm a "verified" from a broken rig is indistinguishable
+// from a real one).
 import { readFileSync } from 'node:fs';
 import { createPublicKey } from 'node:crypto';
 import { generalVerify } from 'jose';
