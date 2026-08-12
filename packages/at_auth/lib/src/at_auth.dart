@@ -12,9 +12,12 @@ import 'package:at_utils/at_progress.dart';
 /// normally when it is and throwing when it is not.
 ///
 /// [validateAtServer] polls this while waiting for a newly-provisioned atServer
-/// to come up. The transport is the caller's choice: the WASM-safe barrel ships
-/// no default, and `package:at_auth/at_auth_io.dart` supplies the TLS-socket
-/// implementation (`secureSocketProbe`) this package used before 4.0.0.
+/// to come up.
+///
+/// The transport is the caller's choice, with a platform-conditional default: on
+/// a `dart:io` host it is `secureSocketProbe` (a TLS connect-and-drop, exported
+/// from `package:at_auth/at_auth.dart`), and on web/WASM there is none, since a
+/// browser cannot open a raw socket.
 typedef AtServerProbe = Future<void> Function(String host, int port);
 
 /// Interface for onboarding and authentication to a secondary server of an atsign
@@ -23,9 +26,9 @@ abstract interface class AtAuth {
   AtLookUp? atLookUp;
   Stream<ProgressEvent> get progressStream;
 
-  /// Leaving [probeSocket] null skips the atServer readiness probe in
-  /// [validateAtServer]. On a `dart:io` host, pass `secureSocketProbe` from
-  /// `package:at_auth/at_auth_io.dart` to get the pre-4.0.0 behaviour.
+  /// [probeSocket] defaults to `secureSocketProbe` on a `dart:io` host and to
+  /// null on web/WASM, where [validateAtServer] then skips the readiness probe
+  /// and polls only the atDirectory.
   factory AtAuth.create(
       {AtLookUp? atLookUp,
       AtChops? atChops,

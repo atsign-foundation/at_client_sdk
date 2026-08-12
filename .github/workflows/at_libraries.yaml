@@ -150,6 +150,47 @@ jobs:
           dart test --concurrency=1 --tags ffi
           dart test --concurrency=1 test/at_pqc_test.dart
 
+  # Keeps the web-safe barrels web-safe. Two checks that catch different things,
+  # because neither is sufficient alone:
+  #
+  #  - The dep-tree shakedown walks every import/export reachable from the web
+  #    barrel and fails on a browser-hostile platform library. This is the only
+  #    thing that catches `dart:io`, which `dart compile wasm` ACCEPTS — it ships
+  #    a stub that throws at runtime, so a bad import compiles clean and fails in
+  #    the browser instead (measured on Dart 3.12).
+  #  - The wasm compile catches what the shakedown cannot: `dart:ffi`, which the
+  #    compiler does reject outright. One stray at_chops_ffi.dart import in the
+  #    reachable graph and the web build stops building.
+  wasm_compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - at_auth
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      - name: Install dependencies in ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: dart pub get
+
+      # Resolves package: URIs through .dart_tool/package_config.json, so it
+      # follows the tree across package boundaries into at_chops, at_lookup,
+      # at_utils and third-party packages — not just this package's own sources.
+      - name: Dependency-tree shakedown in ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: dart test --concurrency=1 test/wasm/dep_tree_test.dart
+
+      - name: Compile the wasm smoke entrypoint in ${{ matrix.package }}
+        working-directory: packages/${{ matrix.package }}
+        run: dart compile wasm test/wasm/smoke.dart -o "${RUNNER_TEMP}/smoke.wasm"
+
+      - name: Confirm a module was produced
+        run: test -s "${RUNNER_TEMP}/smoke.wasm"
+
   functional_tests_at_onboarding_cli:
     runs-on: ubuntu-latest
     strategy:

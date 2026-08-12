@@ -1,4 +1,9 @@
-import 'package:at_auth/at_auth.dart';
+// Narrow src imports, not the public barrel: `at_auth.dart` carries the
+// `dart:io` half of the package, so importing it here would drag `FileAtKeysIo`
+// and the TLS probe into everything reachable from `at_auth_web.dart`.
+import 'package:at_auth/src/auth/models/at_auth_session.dart';
+import 'package:at_auth/src/enroll/models/namespace_permission.dart';
+import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart';
 
@@ -137,7 +142,8 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   AtRootDomain? rootDomain;
 
   /// The authentication keys associated with the enrollment.
-  @Deprecated('Use `session` instead; the keys are sourced via `session.atKeysIo`.')
+  @Deprecated(
+      'Use `session` instead; the keys are sourced via `session.atKeysIo`.')
   AtKeys? atAuthKeys;
 
   /// The hand-off session for the newly enrolled app, populated on the
