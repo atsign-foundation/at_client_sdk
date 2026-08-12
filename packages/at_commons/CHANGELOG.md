@@ -1,16 +1,29 @@
 ## 5.15.0
 
+- feat: add `EnrollVerbBuilder.apsk`, threading the existing
+  `EnrollParams.apsk` through to the built command. The field had no route to
+  the wire, so nothing could send the value the atServer publishes verbatim.
 - feat: add `EnrollParams.apskLegacy` and the matching `EnrollVerbBuilder`
   field, carrying the **bare** RSA `_apsk` string an enrollment publishes
   verbatim. Every deployed `_apsk` consumer base64-decodes the value as an RSA
   key, so a plain-legacy enrollment must be able to publish that shape through
   the same verb every other enrollment uses. A separate field rather than
   widening `apsk` to two types, which would have been source-breaking on a
-  published field.
-- feat: add `EnrollVerbBuilder.apsk`, threading the existing
-  `EnrollParams.apsk` through to the built command. The field had no route to
-  the wire, so nothing could send it.
+  published field. The atServer writes it as-is — **not** JSON-encoded, since a
+  quoted string is not what a bare-RSA parser reads — and refuses a request
+  carrying both fields, which would disagree about one record with no basis for
+  choosing between them.
+- fix: `EnrollParams.apsk`'s entry `status` is `active` or **`retired`**, not
+  `verifyOnly` as 5.14.0 documented, and the entry carries a `kid` like every
+  other key entry in the protocol. `retired` is use-neutral — "retained, not
+  for new operations" — because `use` already names the operation a key serves:
+  a retired signing key still verifies old envelopes, and a retired
+  encapsulation key still opens records already sealed to it. Documentation
+  only; the atServer stores the value verbatim, so no record carries either
+  spelling.
 
+<!-- SPIKE-ONLY, NOT IN THE PUBLISHED 5.15.0 — needs its own version heading
+     before this reaches trunk. -->
 - feat: add `Metadata.copy()` — a field-for-field copy, so callers handing
   metadata from one object to another stop hand-rolling the field list. A
   hand-rolled copier silently drops any field added to `Metadata` later: the
@@ -18,13 +31,6 @@
   which is how `immutable` and `appMetadata` went astray on several paths in
   `at_client`. A caller that must not carry a field clears it after copying, so
   the exception is written where it applies rather than being the default.
-- fix: `EnrollParams.apsk`'s entry `status` is `active` or **`retired`**, not
-  `verifyOnly` as 5.14.0 documented. The value is use-neutral — "retained, not
-  for new operations" — because `use` already names the operation a key serves:
-  a retired signing key still verifies old envelopes, and a retired
-  encapsulation key still opens records already sealed to it. Documentation
-  only; nothing composes an `apsk` yet, and the atServer stores the value
-  verbatim, so no record carries either spelling.
 
 ## 5.14.0
 

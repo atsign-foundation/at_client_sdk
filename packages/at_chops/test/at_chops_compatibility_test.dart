@@ -551,7 +551,7 @@ void main() {
           DefaultSigningAlgo(null, signingInput.hashingAlgoType);
       try {
         atChops.sign(signingInput);
-      } catch (e, _) {
+      } catch (e) {
         assert(e is AtSigningException);
         expect(e.toString(),
             'Exception: encryption key pair not set for rsa signing algo');
@@ -568,7 +568,7 @@ void main() {
           DefaultSigningAlgo(encryptionKeypair, signingInput.hashingAlgoType);
       try {
         atChops.sign(signingInput);
-      } catch (e, _) {
+      } catch (e) {
         assert(e is InvalidDataException);
         expect(e.toString(), 'Exception: Unrecognized type of data: 213456777');
       }
