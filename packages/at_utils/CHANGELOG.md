@@ -1,3 +1,46 @@
+## 3.5.0
+
+- feat: `package:at_utils/at_logger.dart` no longer reaches `dart:io`, so it is
+  safe to import from a web/WASM build graph. `at_chops`, `at_auth`, `at_lookup`
+  and `at_client` all import this barrel, and it was the path by which `dart:io`
+  reached every one of them.
+
+  `src/logging/handlers.dart` keeps the platform-neutral half — the
+  `LoggingHandler` interface and `ConsoleLoggingHandler`, the default — and the
+  three handlers that need `dart:io` (`FileLoggingHandler`,
+  `StdErrLoggingHandler`, `CLILoggingHandler`) move to a new
+  `src/logging/handlers_io.dart`, paired with console-backed stand-ins in
+  `src/logging/handlers_stub.dart`. `at_logger.dart` selects between them with an
+  `if (dart.library.io)` conditional export.
+
+  **This is not a breaking change.** All three handler names are still exported
+  from `at_logger.dart` on every platform, with the same constructors, and
+  `AtSignLogger.stdErrLoggingHandler` keeps its type — so existing call sites
+  compile untouched. On native, behaviour is byte-identical: the handlers are the
+  same code, and the pipe-delimited format (including its trailing `" \n"`) is now
+  produced by a shared `logRecordLine` helper so the two platforms cannot drift.
+
+  On web, where there is no file system and no stderr, all three route to the
+  console and warn once on first use naming what was unavailable. Redirecting
+  rather than throwing is deliberate — a logging call should not be what takes an
+  application down — but it does mean a web build gets console output where a
+  native build writes a file, which is what the warning exists to surface.
+- feat: add `logRecordLine(LogRecord)` and `cliLevelLabel(Level)` to
+  `at_logger.dart`: the shared log-line format and the CLI level labels
+  (`WARN`/`ERROR`/`INFO`/`FINER`), extracted so the `dart:io` handlers and their
+  web stubs share one definition.
+- test: add `test/logging_handlers_test.dart`, pinning the contract the
+  conditional export relies on — every handler name resolves from
+  `at_logger.dart`, each satisfies `LoggingHandler`, the `AtSignLogger` statics
+  stay assignable to `defaultLoggingHandler`, and the shared format helpers
+  behave as specified.
+- **Not** addressed: `at_utils.dart` still exports `src/config/app_config.dart`
+  (`File`) and `src/networking/pseudo_server_socket.dart` (`ServerSocket`), so
+  that barrel remains `dart:io`-bound. Both are reachable only through it and
+  neither is ever called on the web; `PseudoServerSocket implements ServerSocket`
+  so it cannot be stubbed, only relocated, and at_server consumes both through
+  the full barrel. Splitting them is a breaking change for a later major.
+
 ## 3.4.0
 - feat: Introduce CLILoggingHandler for command-line applications
 - fix: made AtSignLogger.level setter case-insensitive

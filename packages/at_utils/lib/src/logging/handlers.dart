@@ -1,7 +1,19 @@
-import 'dart:io';
-
-import 'package:chalkdart/chalk.dart';
 import 'package:logging/logging.dart';
+
+/// The platform-neutral half of at_utils' logging handlers: the
+/// [LoggingHandler] interface and [ConsoleLoggingHandler], the default.
+///
+/// The handlers that need `dart:io` — `FileLoggingHandler`,
+/// `StdErrLoggingHandler` and `CLILoggingHandler` — live in `handlers_io.dart`,
+/// with console-backed equivalents in `handlers_stub.dart`. `at_logger.dart`
+/// picks between those two with an `if (dart.library.io)` conditional export, so
+/// all three names remain importable from `package:at_utils/at_logger.dart` on
+/// every platform. Keeping them out of *this* file is what lets `at_logger.dart`
+/// — which `at_chops`, `at_auth`, `at_lookup` and `at_client` all import — stay
+/// free of `dart:io`.
+///
+/// [logRecordLine] is the shared wire format, so every handler on every
+/// platform emits byte-identical output.
 
 /// Handler class for AtSignLogger.
 ///
@@ -11,87 +23,40 @@ abstract class LoggingHandler {
   void call(LogRecord record);
 }
 
+/// The pipe-delimited line every built-in handler emits:
+/// `LEVEL|timestamp|loggerName|message`.
+///
+/// Shared so the `dart:io` handlers and their web stubs cannot drift apart. The
+/// trailing space-newline is preserved from the original implementation.
+String logRecordLine(LogRecord record) =>
+    '${record.level.name}|${record.time}|${record.loggerName}|${record.message} \n';
+
 /// Outputs log messages to stdout in pipe-delimited format.
 ///
 /// Format: `LEVEL|timestamp|loggerName|message`
 class ConsoleLoggingHandler implements LoggingHandler {
   @override
   void call(LogRecord record) {
-    print(
-        '${record.level.name}|${record.time}|${record.loggerName}|${record.message} \n');
+    print(logRecordLine(record));
   }
 }
 
-/// Appends log messages to a file in pipe-delimited format.
+/// The label [CLILoggingHandler] prints for [level], without colour.
 ///
-/// Format: `LEVEL|timestamp|loggerName|message`
-///
-/// ## Usage
-/// ```dart
-/// var logger = AtSignLogger('MyApp');
-/// logger.loggingHandler = FileLoggingHandler('app.log');
-/// ```
-class FileLoggingHandler implements LoggingHandler {
-  late File _file;
-
-  FileLoggingHandler(String filename) {
-    _file = File(filename);
-  }
-
-  @override
-  void call(LogRecord record) {
-    var f = _file.openSync(mode: FileMode.append);
-    f.writeStringSync(
-        '${record.level.name}|${record.time}|${record.loggerName}|${record.message} \n');
-    f.closeSync();
-  }
-}
-
-/// Outputs log messages to stderr in pipe-delimited format.
-///
-/// Format: `LEVEL|timestamp|loggerName|message`
-class StdErrLoggingHandler implements LoggingHandler {
-  @override
-  void call(LogRecord record) {
-    stderr.write(
-        '${record.level.name}|${record.time}|${record.loggerName}|${record.message} \n');
-  }
-}
-
-/// A logging handler that outputs colored log messages to stderr for CLIs.
-///
-/// Formats logs with color-coded severity levels for better terminal readability.
-///
-/// ## Usage
-/// ```dart
-/// AtSignLogger.root_level = 'INFO';
-/// var logger = AtSignLogger('MyApp', loggingHandler: CLILoggingHandler());
-/// logger.info('Application started');
-/// ```
-class CLILoggingHandler implements LoggingHandler {
-  /// Handles a log record by writing it to stderr with color formatting.
-  ///
-  /// Output format: [LEVEL] message
-  @override
-  void call(LogRecord record) {
-    final String coloredLevel = _getColoredLevel(record.level);
-    stderr.writeln('[${chalk.bold(coloredLevel)}] ${record.message}');
-  }
-
-  /// Returns a color-coded label for the given log level.
-  String _getColoredLevel(Level level) {
-    switch (level) {
-      case Level.WARNING:
-        return chalk.yellow('WARN');
-      case Level.SEVERE:
-      case Level.SHOUT:
-        return chalk.red('ERROR');
-      case Level.INFO:
-        return chalk.blueBright('INFO');
-      case Level.FINER:
-      case Level.FINEST:
-      default:
-        return chalk.gray('FINER');
-    }
+/// Shared with the web stub so both platforms agree on the wording; the
+/// `dart:io` handler wraps the result in chalk colours.
+String cliLevelLabel(Level level) {
+  switch (level) {
+    case Level.WARNING:
+      return 'WARN';
+    case Level.SEVERE:
+    case Level.SHOUT:
+      return 'ERROR';
+    case Level.INFO:
+      return 'INFO';
+    case Level.FINER:
+    case Level.FINEST:
+    default:
+      return 'FINER';
   }
 }

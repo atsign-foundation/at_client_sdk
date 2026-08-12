@@ -1,6 +1,12 @@
 // ignore_for_file: non_constant_identifier_names
 
 import 'package:at_utils/src/logging/handlers.dart';
+// Resolves to the real StdErrLoggingHandler on a dart:io host and to the
+// console-backed stand-in on web/WASM. Both declare StdErrLoggingHandler, so
+// [AtSignLogger.stdErrLoggingHandler] keeps its type and every existing call
+// site compiles unchanged — see at_logger.dart.
+import 'package:at_utils/src/logging/handlers_stub.dart'
+    if (dart.library.io) 'package:at_utils/src/logging/handlers_io.dart';
 import 'package:collection/collection.dart' show IterableExtension;
 import 'package:logging/logging.dart' as logging;
 
