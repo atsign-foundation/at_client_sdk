@@ -51,6 +51,18 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
   /// package (`metadata.keyPackage`) for the secret-sharing substrate.
   Map<String, dynamic>? metadata;
 
+  /// The value to publish as this enrollment's `_apsk` signing key. See
+  /// [EnrollParams.apsk] for the shape and why the atServer composes nothing.
+  ///
+  /// An enrollment that sends neither this nor [apskLegacy] gets no `_apsk`
+  /// published, and an approver then has no key to verify its advertised key
+  /// package against.
+  Map<String, dynamic>? apsk;
+
+  /// The bare RSA `_apsk` string, published verbatim. See
+  /// [EnrollParams.apskLegacy]. Mutually exclusive with [apsk].
+  String? apskLegacy;
+
   /// Used to force revoke the enrollment request.
   bool force = false;
 
@@ -84,6 +96,8 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
       ..selfEncKeyIV = selfEncKeyIV
       ..encryptedAPKAMSymmetricKey = encryptedAPKAMSymmetricKey
       ..signingAlgo = signingAlgo
+      ..apsk = apsk
+      ..apskLegacy = apskLegacy
       ..metadata = metadata
       ..enrollmentStatusFilter = enrollmentStatusFilter
       ..apkamKeysExpiryDuration = apkamKeysExpiryDuration;
