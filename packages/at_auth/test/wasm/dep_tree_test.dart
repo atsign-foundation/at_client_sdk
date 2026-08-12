@@ -55,9 +55,6 @@ void main() {
         // src/config/app_config.dart (File) and
         // src/networking/pseudo_server_socket.dart (ServerSocket). Tasks I1-I3.
         'at_utils',
-        // at_server_status: src/model/at_status.dart uses HttpStatus purely for
-        // five int constants. Task I13 — the cheapest item on the list.
-        'at_server_status',
         // Third-party: chalkdart reads the terminal for ANSI support. Reached
         // via at_utils' progress.dart (at_progress.dart) and handlers.dart, so
         // it survives even a perfect at_utils logging split. Needs an upstream
