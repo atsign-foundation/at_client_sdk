@@ -292,9 +292,9 @@ class FirstEnrollmentRequest extends EnrollmentRequest {
   /// The signing algorithm of [apkamPublicKey] — `rsa2048` for a legacy
   /// onboard, `mldsa65` for a PQ-native one.
   ///
-  /// It reaches the enrollment record, and the atServer composes the tagged
-  /// `_apsk` from `(apkamPublicKey, signingAlgo)` for any non-`rsa2048`
-  /// algorithm. Getting it wrong is not a degraded mode but a broken one: the
+  /// It reaches the enrollment record, and names the algorithm of the key this
+  /// request advertises in its `_apsk` (see `apskAdvertisement`); the atServer
+  /// composes nothing. Getting it wrong is not a degraded mode but a broken one: the
   /// atServer would verify this enrollment's PKAM signatures with the wrong
   /// routine, so the first enrollment could never authenticate.
   SigningAlgoType signingAlgo;

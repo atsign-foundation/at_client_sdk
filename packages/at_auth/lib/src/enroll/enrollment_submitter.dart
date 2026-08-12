@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_auth/src/enroll/apsk_advertisement.dart';
 import 'package:at_auth/src/enroll/enrollment_approver.dart';
 import 'package:at_auth/src/enroll/enrollment_progress.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
@@ -89,6 +90,13 @@ class EnrollmentSubmitter {
       ..deviceName = enrollmentRequest.deviceName
       ..signingAlgo = enrollmentRequest.signingAlgo.name
       ..metadata = metadata;
+    final advertised = _apskFor(
+        apkamPublicKey: enrollmentRequest.apkamPublicKey!,
+        signingAlgo: enrollmentRequest.signingAlgo,
+        metadata: metadata);
+    enrollVerbBuilder
+      ..apsk = advertised.apsk
+      ..apskLegacy = advertised.apskLegacy;
     enrollVerbBuilder.apkamPublicKey = enrollmentRequest.apkamPublicKey;
 
     String? serverResponse =
@@ -102,6 +110,38 @@ class EnrollmentSubmitter {
       enrollStatus,
       atSign: enrollmentRequest.atSign,
       rootDomain: enrollmentRequest.rootDomain,
+    );
+  }
+
+  /// The `_apsk` this request advertises: the bare RSA string, or the
+  /// structured array. Never both — they would disagree about one record.
+  ///
+  /// A plain-legacy enrollment sends the **bare** form, which is the key
+  /// itself. Every deployed `_apsk` consumer base64-decodes the value as an
+  /// RSA key, so a JSON one fails their parse — fail-closed, but
+  /// service-breaking for anything already running. Sending the bare key here
+  /// reproduces exactly what the atServer used to compose for such an
+  /// enrollment, so the published record is unchanged from the day this moved
+  /// client-side.
+  ///
+  /// Everything else sends the array: an enrollment advertising a key package
+  /// must, because the approver verifies that package against this value and
+  /// shares no secrets with an enrollment whose package it cannot verify; and
+  /// so must one whose signing algorithm is not the rsa2048 a bare value
+  /// implies, since nothing could read its key otherwise.
+  ({Map<String, dynamic>? apsk, String? apskLegacy}) _apskFor({
+    required String apkamPublicKey,
+    required SigningAlgoType signingAlgo,
+    required Map<String, dynamic>? metadata,
+  }) {
+    if (signingAlgo == SigningAlgoType.rsa2048 &&
+        metadata?['keyPackage'] == null) {
+      return (apsk: null, apskLegacy: apkamPublicKey);
+    }
+    return (
+      apsk: apskAdvertisement(
+          apkamPublicKey: apkamPublicKey, signingAlgo: signingAlgo),
+      apskLegacy: null
     );
   }
 
@@ -203,6 +243,17 @@ class EnrollmentSubmitter {
       ..namespaces = atEnrollmentRequest.namespaces
       ..apkamKeysExpiryDuration = atEnrollmentRequest.apkamKeysExpiryDuration
       ..metadata = metadata;
+    // Without an `_apsk` the atServer publishes nothing, and the approver has
+    // no key to verify the advertised key package against — so it seals no
+    // secrets to an enrollment that is otherwise perfectly good. This path
+    // mints an RSA keypair, so that is the algorithm it advertises.
+    final advertised = _apskFor(
+        apkamPublicKey: apkamKeyPair.atPublicKey.publicKey,
+        signingAlgo: SigningAlgoType.rsa2048,
+        metadata: metadata);
+    enrollVerbBuilder
+      ..apsk = advertised.apsk
+      ..apskLegacy = advertised.apskLegacy;
 
     String? serverResponse =
         await _executeEnrollCommand(enrollVerbBuilder, atLookUp);
@@ -349,6 +400,16 @@ class EnrollmentSubmitter {
         ..namespaces = request.namespaces
         ..apkamKeysExpiryDuration = request.apkamKeysExpiryDuration
         ..metadata = metadata;
+      // The retrofitted enrollment publishes the key it just minted, not the
+      // one the keyfile arrived with: `_apsk` is per enrollment, and this is a
+      // new enrollment id.
+      final advertised = _apskFor(
+          apkamPublicKey: apkamPublic,
+          signingAlgo: request.signingAlgo,
+          metadata: metadata);
+      enrollVerbBuilder
+        ..apsk = advertised.apsk
+        ..apskLegacy = advertised.apskLegacy;
 
       // auth:true so a dropped connection re-authenticates as the parent
       // enrollment rather than reconnecting unauthenticated — the atServer

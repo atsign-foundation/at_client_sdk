@@ -11,7 +11,7 @@ resolution: workspace
 
 dependencies:
   at_server_status: ^1.1.0
-  at_commons: ^5.13.0
+  at_commons: ^5.15.0
   at_lookup: ^3.6.0
   at_chops: ^3.4.2
   at_utils: ^3.0.19

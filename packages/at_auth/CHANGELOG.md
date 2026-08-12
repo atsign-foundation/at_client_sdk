@@ -1,4 +1,15 @@
 ## 3.4.0
+- feat: add `apskAdvertisement`, `apskSigningKeys`, `ApskSigningKey` and
+  `apskKid` — the one definition of the `_apsk` signing-key advertisement,
+  composed and parsed in one place. The atServer stopped composing `_apsk`
+  (at_server#2744): it publishes what a request sends and nothing when a
+  request sends none, so an enrollment that advertised a key package and sent
+  no `_apsk` had it rejected by the approver, which verifies the package
+  against that value.
+- feat: every `enroll:request` now carries its `_apsk`. A plain-legacy
+  enrollment sends the bare RSA key on `apskLegacy` — exactly what the
+  atServer used to compose for it, so the published record is unchanged —
+  and everything else sends the array on `apsk`.
 - fix: `waitForApproval` no longer polls forever on a refusal it cannot
   resolve. The handler matched `AT0401`/`AT0026` (not yet decided, keep
   waiting) and `AT0025` (denied, throw) and had no other branch, so any other

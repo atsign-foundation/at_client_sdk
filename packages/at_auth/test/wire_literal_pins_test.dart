@@ -201,6 +201,87 @@ void main() {
     });
   });
 
+  group('FROZEN: the _apsk signing-key advertisement', () {
+    // What an enrollment publishes as its signing key, and what every verifier
+    // parses. The atServer stores this map verbatim and writes its JSON
+    // encoding to public:_apsk.<enrollmentId>.a.__e@<atSign> — it composes
+    // nothing — so a change here changes the published record with no server
+    // release to review it.
+    test('the composed advertisement, as a raw literal', () {
+      final json =
+          jsonEncode(apskAdvertisement(
+              apkamPublicKey: 'PUBKEY', signingAlgo: SigningAlgoType.rsa2048));
+
+      expect(
+          json,
+          '{"v":1,"keys":[{"kid":"cff3d220cf61dd4a","use":"sign",'
+          '"alg":"rsa2048","pub":"PUBKEY"}]}',
+          reason: 'field names, field ORDER and the kid derivation are all '
+              'wire contract; the kid is the first 16 hex chars of the '
+              'SHA-256 of the key string, so a changed prefix length or a '
+              'switch to hashing decoded bytes shows up here');
+    });
+
+    test('the kid is the SHA-256 prefix, and one function computes it', () {
+      // Pinned against a digest computed outside this tree, so the assertion
+      // cannot follow the implementation it is checking.
+      expect(apskKid('PUBKEY'), 'cff3d220cf61dd4a');
+    });
+
+    test('mldsa65 spells its algorithm the same as the pkam verb', () {
+      final entry = (apskAdvertisement(
+              apkamPublicKey: 'AAEC',
+              signingAlgo: SigningAlgoType.mldsa65)['keys'] as List)
+          .single as Map;
+
+      expect(entry['alg'], 'mldsa65');
+      expect(entry['use'], 'sign');
+    });
+
+    test('what is composed is what is read back', () {
+      final advertisement = apskAdvertisement(
+          apkamPublicKey: 'AAEC', signingAlgo: SigningAlgoType.mldsa65);
+
+      final read = apskSigningKeys(advertisement).single;
+      expect(read.alg, SigningAlgoType.mldsa65);
+      expect(read.pub, 'AAEC');
+      expect(read.kid, apskKid('AAEC'));
+    });
+
+    test('an entry this build cannot use is skipped, not guessed at', () {
+      final future = {
+        'v': 1,
+        'keys': [
+          {'kid': 'k1', 'use': 'sign', 'alg': 'post2030', 'pub': 'AAEC'},
+          {'kid': 'k2', 'use': 'kem', 'alg': 'mldsa65', 'pub': 'BBEC'},
+          {'kid': 'k3', 'use': 'sign', 'alg': 'rsa2048', 'pub': 'CCEC'},
+        ]
+      };
+
+      final read = apskSigningKeys(future);
+      expect(read, hasLength(1),
+          reason: 'an unknown algorithm and a non-signing use are both '
+              'skipped, which is what lets an enrollment advertise a new '
+              'algorithm beside an old one without breaking readers that '
+              'predate it');
+      expect(read.single.pub, 'CCEC');
+    });
+
+    test('an advertisement of nothing understood comes back empty', () {
+      final read = apskSigningKeys({
+        'v': 1,
+        'keys': [
+          {'kid': 'k1', 'use': 'sign', 'alg': 'post2030', 'pub': 'AAEC'}
+        ]
+      });
+
+      expect(read, isEmpty,
+          reason: 'the caller must refuse outright rather than fall back to a '
+              'key derived some other way — a signature means something only '
+              'if the verifier used the key the signer published');
+    });
+  });
+
   group('FROZEN: keyfile tokens shared with the wire', () {
     test('KeyAlgorithmType tokens, as raw strings', () {
       // rsa2048 / mldsa65 / ecc_secp256r1 double as the pkam and

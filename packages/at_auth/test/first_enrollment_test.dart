@@ -42,8 +42,8 @@ void main() {
     ..apkamPrivateKey = AtBytes.fromString(b64('apkam-private'));
 
   group('FirstEnrollmentRequest', () {
-    test('defaults to rsa2048 and sends no metadata — the legacy onboard is '
-        'byte-unchanged', () async {
+    test('defaults to rsa2048, sends no metadata, and publishes the same bare '
+        '_apsk a legacy onboard always has', () async {
       final mock = approvingLookUp();
 
       final response = await AtEnrollmentImpl().submit(
@@ -61,6 +61,14 @@ void main() {
       expect(params.containsKey('metadata'), isFalse,
           reason: 'an empty metadata map is dropped rather than sent, so a '
               'legacy onboard puts nothing new on the wire');
+      expect(params.containsKey('apsk'), isFalse,
+          reason: 'no structured _apsk: every released consumer base64-decodes '
+              'that value as an RSA key, so publishing JSON for a plain-legacy '
+              'enrollment would fail their parse');
+      expect(params['apskLegacy'], b64('apkam-public'),
+          reason: 'the bare key rides apskLegacy instead, which is exactly '
+              'what the atServer used to compose for this enrollment — so the '
+              'published record is unchanged by the move to client-composed');
     });
 
     test('a PQ-native first enrollment declares mldsa65', () async {
@@ -75,10 +83,15 @@ void main() {
               signingAlgo: SigningAlgoType.mldsa65),
           mock);
 
-      expect(paramsOf(mock)['signingAlgo'], 'mldsa65',
-          reason: 'the atServer composes the tagged _apsk from '
-              '(apkamPublicKey, signingAlgo), and verifies this enrollment\'s '
-              'PKAM signatures with the algorithm the record names');
+      final params = paramsOf(mock);
+      expect(params['signingAlgo'], 'mldsa65',
+          reason: 'the atServer verifies this enrollment\'s PKAM signatures '
+              'with the algorithm its record names');
+      expect(
+          (params['apsk']['keys'] as List).single['alg'], 'mldsa65',
+          reason: 'and the request carries the signing key itself, because the '
+              'atServer composes no _apsk — an mldsa65 enrollment that sent '
+              'none would publish nothing any verifier could read');
     });
 
     test('the metadataBuilder\'s result rides the request', () async {

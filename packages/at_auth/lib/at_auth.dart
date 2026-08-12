@@ -10,6 +10,8 @@ export 'src/auth/models/at_auth_responses.dart';
 export 'src/auth/models/at_auth_session.dart';
 // Contains method related to submit, approve and deny an enrollment.
 export 'src/enroll/at_enrollment.dart';
+// Composes the `_apsk` signing-key advertisement an enrollment publishes.
+export 'src/enroll/apsk_advertisement.dart';
 // Contains fields related to enrollment response received from the secondary server
 export 'src/enroll/models/at_enrollment_response.dart';
 // Contains the NamespacePermission model
