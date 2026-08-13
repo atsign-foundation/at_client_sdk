@@ -615,6 +615,128 @@ void main() {
     });
   });
 
+  group('a rotated client still answers at its superseded address', () {
+    // Nothing rotates an enc key yet, so the holding is built directly. That
+    // is the point of the ordering: the receive side has to work before a
+    // rotation can be turned on, or the first one loses a week of traffic.
+    late TestSharer rotated;
+    late String oldKpid;
+
+    /// The key package a sender fetched BEFORE the rotation: the old key, and
+    /// nothing saying it is not current, because at the time it was.
+    late KeyPackage staleView;
+
+    setUp(() async {
+      rotated = TestSharer(buildMockClient('enroll-b'))
+        ..directory = directory
+        ..requestAnswerJitter = Duration.zero;
+      rotated.loadApkamKeys = () async => PersistedApkamKeys(encKeys: [
+            PersistedEncKey(
+                encSeed: base64Encode(seedB), status: KeyEntryStatus.retired),
+            PersistedEncKey(encSeed: base64Encode(seedC)),
+          ]);
+      final pkg = await rotated.register();
+      directory.seed('enroll-b', pkg);
+
+      final old =
+          pkg.keys.singleWhere((k) => k.status == KeyEntryStatus.retired);
+      oldKpid = old.kid;
+      staleView = KeyPackage(
+        enrollmentId: 'enroll-b',
+        createdAt: DateTime.now().toUtc(),
+        keys: [PackageKey(use: old.use, alg: old.alg, pub: old.pub)],
+      );
+    });
+
+    test('the address it advertises is the active key, not the retained one',
+        () {
+      expect(rotated.kpid, isNot(oldKpid));
+      expect(rotated.heldKpids, {rotated.kpid, oldKpid});
+      expect(rotated.myKeyPackage.kpid, rotated.kpid);
+    });
+
+    test('an envelope sealed to the superseded key is swept and opened',
+        () async {
+      await sharerA.sendEnvelope(staleView, 'myapp', {'hello': 'still here'});
+      expect(remoteData.keys.any((k) => k.contains('.$oldKpid.__ssenv.')),
+          isTrue,
+          reason: 'the sender addressed the old key, which is the whole '
+              'situation being tested');
+
+      final received = <ReceivedEnvelope>[];
+      final sub = rotated.receivedEnvelopes.listen(received.add);
+
+      expect(await rotated.sweepOnce(), 1,
+          reason: 'a sweep filtering on the active address alone would not '
+              'even find this envelope, so the open would never be reached');
+
+      await sub.cancel();
+      expect(received.single.payload, {'hello': 'still here'});
+      expect(received.single.fromKpid, sharerA.kpid);
+    });
+
+    test('an envelope to the active key still works alongside', () async {
+      await sharerA
+          .sendEnvelope(rotated.myKeyPackage, 'myapp', {'hello': 'current'});
+      await sharerA.sendEnvelope(staleView, 'myapp', {'hello': 'in flight'});
+
+      final received = <ReceivedEnvelope>[];
+      final sub = rotated.receivedEnvelopes.listen(received.add);
+      expect(await rotated.sweepOnce(), 2);
+      await sub.cancel();
+
+      expect(received.map((r) => r.payload['hello']),
+          unorderedEquals(['current', 'in flight']));
+    });
+
+    test('an envelope addressed to a key it has never held is still skipped',
+        () async {
+      final envelope = SecretEnvelope(
+        fromKpid: sharerA.kpid,
+        fromEnrollmentId: 'enroll-a',
+        toKpid: 'a-kpid-nobody-here-holds',
+        suite: SecretSharingAlgos.xWingHpke,
+        kid: 'a-kpid-nobody-here-holds',
+        sealed: 'xx',
+      );
+      remoteData['x.${rotated.kpid}.__ssenv.myapp@alice'] =
+          await sharerA.wrapAndSignAndJsonEncode(envelope.toJson());
+
+      expect(await rotated.sweepOnce(), 0,
+          reason: 'widening "is it mine" from one address to a set must not '
+              'widen it to any address at all');
+    });
+
+    test('an envelope whose suite and key name different KEMs is skipped',
+        () async {
+      // Newly possible now that a client can hold keys under more than one
+      // KEM. No guard in _consume covers it and none is wanted: at_chops maps
+      // the wrong-length secret key to a PqOpenException, which the open
+      // already catches, and the message names the mismatch. This pins that
+      // the envelope is skipped rather than crashing the sweep — the thing
+      // that would actually matter, since one throw here takes every
+      // remaining envelope in the batch with it.
+      final envelope = SecretEnvelope(
+        fromKpid: sharerA.kpid,
+        fromEnrollmentId: 'enroll-a',
+        toKpid: oldKpid,
+        suite: SecretSharingAlgos.mlKem1024Rfc9180,
+        kid: oldKpid,
+        sealed: 'xx',
+      );
+      remoteData['y.$oldKpid.__ssenv.myapp@alice'] =
+          await sharerA.wrapAndSignAndJsonEncode(envelope.toJson());
+      await sharerA.sendEnvelope(staleView, 'myapp', {'hello': 'behind it'});
+
+      final received = <ReceivedEnvelope>[];
+      final sub = rotated.receivedEnvelopes.listen(received.add);
+      expect(await rotated.sweepOnce(), 1);
+      await sub.cancel();
+      expect(received.single.payload, {'hello': 'behind it'},
+          reason: 'the good envelope beside it is still delivered');
+    });
+  });
+
   group('startListening', () {
     test('a syncing client sweeps locally — sync is what fills that store',
         () async {

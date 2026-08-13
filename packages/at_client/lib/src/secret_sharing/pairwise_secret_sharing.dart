@@ -368,10 +368,16 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     if (_sweepTimer != null) {
       return;
     }
-    // Throws StateError if not registered:
-    final String marker = EnvelopeAddressing.fragmentFor(kpid);
+    // Throws StateError if not registered. Every address this client holds,
+    // not just the active one: a sender that read the key package before a
+    // rotation addresses the superseded key, and its envelope is openable but
+    // only if it is looked for.
+    final Set<String> addresses = heldKpids;
+    final List<String> markers = [
+      for (final held in addresses) EnvelopeAddressing.fragmentFor(held)
+    ];
 
-    _syncListener = _EnvelopeSyncListener(marker, () {
+    _syncListener = _EnvelopeSyncListener(markers, () {
       unawaited(sweepOnce());
     });
     atClient.syncService.addProgressListener(_syncListener!);
@@ -380,7 +386,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     // it triggers reads remote.
     _wakeUpSubscription = atClient.notificationService
         .subscribe(
-            regex: EnvelopeAddressing.regexFor(kpid), shouldDecrypt: false)
+            regex: EnvelopeAddressing.regexForAny(addresses),
+            shouldDecrypt: false)
         .listen((_) => unawaited(sweepOnce(fromRemote: true)));
     // Envelopes only reach the local store via sync, so a client that does
     // not sync must sweep the atServer or its periodic sweep can never find
@@ -416,7 +423,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// no synced local copy — can still receive envelopes.
   Future<int> sweepOnce({bool fromRemote = false}) async {
     final List<AtKey> envelopeKeys = await atClient.getAtKeys(
-        regex: EnvelopeAddressing.sweepRegexFor(kpid),
+        regex: EnvelopeAddressing.sweepRegexForAny(heldKpids),
         useRemoteAtServer: fromRemote);
     int consumed = 0;
     for (final envelopeKey in envelopeKeys) {
@@ -485,9 +492,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         signerAtSign: atClient.getCurrentAtSign()!);
     final envelope = SecretEnvelope.fromJson(signedEnvelope.payload);
 
-    if (envelope.toKpid != kpid) {
+    if (!heldKpids.contains(envelope.toKpid)) {
       logger.warning('Envelope $envelopeKey is addressed to '
-          '${envelope.toKpid}, not to this client; skipping');
+          '${envelope.toKpid}, not to any key this client holds; skipping');
       return null;
     }
     final signerClaim = signedEnvelope.signerEnrollmentId;
@@ -508,11 +515,23 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
           '${envelope.suite}; skipping');
       return null;
     }
-    if (envelope.kid != kpid) {
+    // The key the envelope was sealed to, which is not necessarily the one this
+    // client currently advertises: a sender that read the key package before a
+    // rotation sealed to the superseded key, and that key is retained precisely
+    // so this still opens.
+    final held = encKeyFor(envelope.kid);
+    if (held == null) {
       logger.warning('Envelope $envelopeKey was encrypted to key '
           '${envelope.kid} which this client does not hold; skipping');
       return null;
     }
+    // An envelope naming a suite whose KEM is not the one its named key belongs
+    // to — newly possible now that a client can hold keys under more than one —
+    // needs no check of its own. at_chops maps the wrong-length secret key to a
+    // PqOpenException, which the open below already catches and skips, and its
+    // message names the mismatch: "ML-KEM-1024 secret key must be 3168 bytes:
+    // 32". A guard here would change no outcome and read like a security check
+    // it is not.
 
     // The open reads the envelope's version byte itself, but the KEM instance
     // is this caller's to supply and the two must agree — a hybrid envelope
@@ -528,7 +547,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     try {
       plaintext = await pqOpenFromBase64(
         kem,
-        encKeyFor(envelope.kid)!.secretKey,
+        held.secretKey,
         envelope.sealed,
         info: sealInfo,
       );
@@ -989,10 +1008,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 }
 
 class _EnvelopeSyncListener extends SyncProgressListener {
-  final String marker;
+  /// One `.<kpid>.__ssenv.` fragment per address this client answers at.
+  final List<String> markers;
   final void Function() onEnvelopeSynced;
 
-  _EnvelopeSyncListener(this.marker, this.onEnvelopeSynced);
+  _EnvelopeSyncListener(this.markers, this.onEnvelopeSynced);
 
   @override
   void onSyncProgressEvent(SyncProgress syncProgress) {
@@ -1002,7 +1022,7 @@ class _EnvelopeSyncListener extends SyncProgressListener {
     }
     final delivered = keyInfoList.any((keyInfo) =>
         keyInfo.syncDirection == SyncDirection.remoteToLocal &&
-        keyInfo.key.contains(marker));
+        markers.any(keyInfo.key.contains));
     if (delivered) {
       onEnvelopeSynced();
     }

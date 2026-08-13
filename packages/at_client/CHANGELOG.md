@@ -1,4 +1,13 @@
 ## 3.14.1
+- fix: a client sweeps for, and opens, envelopes addressed to **any** key it
+  holds, not only the one it currently advertises. The sweep filter, the wake-up
+  subscription and the sync listener all cover every held address —
+  `EnvelopeAddressing.regexForAny` / `sweepRegexForAny` are the one-alternation
+  forms, and a filter over no addresses is refused rather than emitted, since
+  spelled carelessly it matches either nothing or everything. `_consume` then
+  opens with the key the envelope names rather than the current one. Without
+  the sweep half the rest is decorative: an envelope a client never scans for
+  is one it never opens, however willing it is to.
 - **breaking (unreleased surface): a client holds a list of encapsulation
   keys, not one.** `PersistedApkamKeys` becomes `{encKeys: [{encSeed, keyAlgo,
   status}]}` — a list of the new `PersistedEncKey` — where it was a single

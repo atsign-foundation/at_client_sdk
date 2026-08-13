@@ -25,6 +25,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
 import 'package:at_client/src/crypto/nskey/nskey_mint_lock.dart';
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_chops/at_chops.dart'
     show
@@ -384,6 +385,50 @@ void main() {
       expect(PairwiseSecretSharing.envelopeKeyMarker, '__ssenv');
       expect(PairwiseSecretSharing.secretPayloadKind, 'secret');
       expect(PairwiseSecretSharing.secretRequestKind, 'request');
+    });
+
+    test('the envelope filters the atServer is asked to apply', () {
+      // Not stored anywhere, but the atServer evaluates them, so their grammar
+      // is a contract with it — the alternation especially, which arrived when
+      // a client began answering at more than one address.
+      expect(EnvelopeAddressing.envelopeKey(
+              msgId: 'msg-1',
+              recipientKpid: 'kp-1',
+              appNamespace: 'myapp',
+              sharedBy: '@alice',
+              ttl: const Duration(hours: 1))
+          .toString(),
+          'msg-1.kp-1.__ssenv.myapp@alice');
+      expect(EnvelopeAddressing.fragmentFor('kp-1'), '.kp-1.__ssenv.');
+      expect(EnvelopeAddressing.regexFor('kp-1'), '\\.kp-1\\.__ssenv\\.');
+      expect(EnvelopeAddressing.sweepRegexFor('kp-1'),
+          '.*\\.kp-1\\.__ssenv\\..*');
+      expect(EnvelopeAddressing.regexForAny(['kp-1', 'kp-2']),
+          '\\.(kp-1|kp-2)\\.__ssenv\\.');
+      expect(EnvelopeAddressing.sweepRegexForAny(['kp-1', 'kp-2']),
+          '.*\\.(kp-1|kp-2)\\.__ssenv\\..*');
+      expect(EnvelopeAddressing.namespaceSweepRegexFor('kp-1', 'myapp'),
+          '.*\\.kp-1\\.__ssenv\\.myapp.*');
+    });
+
+    test('the alternation filter really matches only the named addresses', () {
+      // A pin on the string alone would not notice a grouping mistake that
+      // makes the filter match everything, which is the way this goes wrong.
+      final sweep =
+          RegExp(EnvelopeAddressing.sweepRegexForAny(['kp-1', 'kp-2']));
+      expect(sweep.hasMatch('m.kp-1.__ssenv.myapp@alice'), isTrue);
+      expect(sweep.hasMatch('m.kp-2.__ssenv.myapp@alice'), isTrue);
+      expect(sweep.hasMatch('m.kp-3.__ssenv.myapp@alice'), isFalse);
+      expect(sweep.hasMatch('m.kp-1.__other.myapp@alice'), isFalse);
+    });
+
+    test('a filter over no addresses is refused rather than emitted', () {
+      // Spelled carelessly it becomes `\.()\.__ssenv\.` — which matches
+      // nothing, so a client would receive nothing and log no reason.
+      expect(() => EnvelopeAddressing.regexForAny(const []),
+          throwsA(isA<ArgumentError>()));
+      expect(() => EnvelopeAddressing.sweepRegexForAny(const []),
+          throwsA(isA<ArgumentError>()));
     });
 
     test('SecretEnvelope emits its exact JSON shape', () {

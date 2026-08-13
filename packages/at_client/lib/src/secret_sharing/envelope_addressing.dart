@@ -41,8 +41,33 @@ class EnvelopeAddressing {
   /// rather than full-match.
   static String regexFor(String kpid) => '\\.$kpid\\.$marker\\.';
 
+  /// [regexFor] over any of [kpids] — one filter for a client that answers at
+  /// more than one address.
+  ///
+  /// A client that has rotated its enc key still holds the superseded one so
+  /// that envelopes already in flight to it can be opened, and an envelope it
+  /// never scans for is one it never opens however willing it is to. One
+  /// alternation rather than a scan per address, because a sweep is a round
+  /// trip and the addresses are known together.
+  ///
+  /// [kpids] must not be empty: a filter over no addresses would either match
+  /// nothing (a client that silently receives nothing) or, spelled carelessly,
+  /// match every envelope on the atServer.
+  static String regexForAny(Iterable<String> kpids) {
+    if (kpids.isEmpty) {
+      throw ArgumentError.value(kpids, 'kpids',
+          'an envelope filter over no addresses matches either nothing or '
+          'everything, and neither is a thing to ask the atServer for');
+    }
+    return '\\.(${kpids.join('|')})\\.$marker\\.';
+  }
+
   /// [regexFor] anchored for full-match filters (`getAtKeys`).
   static String sweepRegexFor(String kpid) => '.*${regexFor(kpid)}.*';
+
+  /// [regexForAny] anchored for full-match filters (`getAtKeys`).
+  static String sweepRegexForAny(Iterable<String> kpids) =>
+      '.*${regexForAny(kpids)}.*';
 
   /// [sweepRegexFor] narrowed to envelopes addressed through one namespace.
   static String namespaceSweepRegexFor(String kpid, String appNamespace) =>
