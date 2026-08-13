@@ -416,6 +416,81 @@ void main() {
               'downgrade, and no fallback to a key derived some other way');
     });
 
+    test('a retired entry is not what a sender is pointed at', () async {
+      // This record's own writer never retires an entry — it overwrites on
+      // rotation — so this is the reader honouring a vocabulary a newer or a
+      // foreign implementation may use. Encapsulating to a generation the
+      // owner has moved off writes something the owner never looks for.
+      //
+      // The retired entry is bob's X-Wing key, which is FIRST in
+      // SecretSharingAlgos.keyAlgos — so preference order on its own would
+      // choose it and only status can make the reader pass it over. Putting
+      // the retired key under the LESS preferred algorithm would have been a
+      // test that passes whether or not status is honoured at all.
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final pair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final payload = advertisementPayload(bobKey);
+      for (final entry in payload['keys'] as List) {
+        (entry as Map)['status'] = 'retired';
+      }
+      (payload['keys'] as List).add({
+        'kid': nskeyKidOf(pair.publicKey),
+        'use': 'enc',
+        'alg': SecretSharingAlgos.mlKem1024,
+        'pub': base64Encode(pair.publicKey),
+      });
+      final c =
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+
+      final advertised =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+
+      expect(advertised?.publicKey, pair.publicKey);
+      expect(advertised?.alg, SecretSharingAlgos.mlKem1024);
+      expect(advertised?.publicKey, isNot(bobKey.publicKeyBytes),
+          reason: 'the retired X-Wing key is the one preference order would '
+              'have reached first');
+    });
+
+    test('a retired entry is still checked for being well formed', () async {
+      // It is not sealed to, but it is still part of the document being
+      // believed. Waving it through would mean an owner could publish anything
+      // at all beside a good key by calling it retired.
+      final payload = advertisementPayload(bobKey);
+      (payload['keys'] as List).add({
+        'kid': nskeyKidOf(bobKey.publicKeyBytes),
+        'use': 'enc',
+        'alg': SecretSharingAlgos.xWing,
+        'pub': base64Encode(bobKey.publicKeyBytes.sublist(0, 100)),
+        'status': 'retired',
+      });
+      final c =
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((e) => '$e', 'message', contains('bytes'))));
+    });
+
+    test('an advertisement that retires every key it names is refused',
+        () async {
+      final payload = advertisementPayload(bobKey);
+      for (final entry in payload['keys'] as List) {
+        (entry as Map)['status'] = 'retired';
+      }
+      final c =
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>().having(
+              (e) => '$e', 'message', contains('retires every key'))),
+          reason: 'a distinct refusal from the unusable-algorithm one: the '
+              'algorithms are fine and the owner has withdrawn the keys, '
+              'which is a different thing to go and look at');
+    });
+
     test('a malformed entry beside a usable one still refuses', () async {
       // Sealing to the good entry and ignoring the bad one would be reading
       // past evidence that the owner's publishing is broken.

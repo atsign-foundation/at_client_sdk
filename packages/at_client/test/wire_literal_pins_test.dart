@@ -409,6 +409,49 @@ void main() {
           '{"kid":"b5d4045c3f466fa9","use":"enc","alg":"x-wing","pub":"QUJD"}');
     });
 
+    test('a retired key entry says so, and an active one says nothing', () {
+      // Two claims, and the second is the one that can break silently. Absent
+      // means active, so an active entry must keep emitting NO status field —
+      // otherwise every advertisement in the protocol changes bytes to state
+      // what its silence already stated, and the pins above go red for a
+      // reason that has nothing to do with rotation.
+      expect(
+          jsonEncode(PackageKey(
+                  use: 'enc',
+                  alg: 'x-wing',
+                  pub: 'QUJD',
+                  status: KeyEntryStatus.retired)
+              .toJson()),
+          '{"kid":"b5d4045c3f466fa9","use":"enc","alg":"x-wing","pub":"QUJD",'
+          '"status":"retired"}');
+      expect(
+          PackageKey(
+                  use: 'enc',
+                  alg: 'x-wing',
+                  pub: 'QUJD',
+                  status: KeyEntryStatus.active)
+              .toJson(),
+          isNot(contains('status')));
+    });
+
+    test('the status spellings a reader accepts are frozen', () {
+      // Raw literals rather than `KeyEntryStatus.retired.name`, which would
+      // follow a rename through and pin nothing. The atServer stores these
+      // verbatim and every implementation reads them, so a change here is a
+      // protocol change and editing this line is what makes it reviewable.
+      expect(KeyEntryStatus.fromWire('active'), KeyEntryStatus.active);
+      expect(KeyEntryStatus.fromWire('retired'), KeyEntryStatus.retired);
+      expect(KeyEntryStatus.fromWire(null), KeyEntryStatus.active,
+          reason: 'absent is how every record written before rotation existed '
+              'spells active');
+      expect(KeyEntryStatus.fromWire('verifyOnly'), KeyEntryStatus.retired,
+          reason: 'the spelling this one replaced, and an example of the rule '
+              'that governs every value this build does not know: narrower '
+              'than active, so never sealed to');
+      expect(KeyEntryStatus.fromWire(7), KeyEntryStatus.retired,
+          reason: 'a non-String status is not a licence to use the key');
+    });
+
     test('computeKid hashes the decoded key BYTES, not the base64 text', () {
       // It used to be the other way round, and this pin is what recorded it:
       // the kid was SHA-256 over the UTF-8 of the base64 STRING, which was an

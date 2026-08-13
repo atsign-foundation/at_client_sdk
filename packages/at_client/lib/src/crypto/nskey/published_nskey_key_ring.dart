@@ -9,6 +9,8 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
+import 'package:at_client/src/secret_sharing/key_package.dart'
+    show KeyEntryStatus;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
@@ -98,10 +100,15 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
     // not choose. A malformed entry beside a good one is a signal about the
     // advertisement as a whole, and sealing to the good one while ignoring it
     // would be reading past evidence that the owner's publishing is broken.
-    var usable = 0;
+    var understood = 0;
+    var sealable = 0;
     for (final key in advertisement.keys) {
       if (SecretSharingAlgos.kemFor(key.alg) == null) continue;
-      usable++;
+      understood++;
+      // A retired entry is still checked — it has to be well formed to be
+      // believed at all — but it is not something to seal to, so it does not
+      // count towards this advertisement having an encapsulation target.
+      if (key.status == KeyEntryStatus.active) sealable++;
       // Length before anything is sealed to it. A kid is the digest of
       // whatever bytes are carried, so it matches a forged key as readily as a
       // real one and the check below cannot see a wrong-length key at all.
@@ -130,12 +137,22 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
             'of the key it carries');
       }
     }
-    if (usable == 0) {
+    if (understood == 0) {
       throw AtSigningVerificationException(
           'the advertised nskey for $owner offers only key-establishment '
           'algorithms this build cannot encapsulate to '
           '(${advertisement.keys.map((k) => '"${k.alg}"').join(', ')}) — '
           'refusing rather than sealing under one it did not name');
+    }
+    if (sealable == 0) {
+      // A separate refusal from the one above because it is a different
+      // situation for whoever reads the log: the algorithms are fine and the
+      // owner has withdrawn every key from new use. This record's writer never
+      // does that — it overwrites on rotation — so the reader is looking at
+      // something a newer or a foreign implementation published.
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner retires every key this build can '
+          'encapsulate to, so it names nothing to seal to now');
     }
     return advertisement;
   }

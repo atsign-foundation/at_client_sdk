@@ -1,4 +1,19 @@
 ## 3.14.1
+- feat: a key entry can say it is `retired` — retained, but not offered for new
+  operations. `PackageKey` gains a `status` of `active` or `retired`
+  (`KeyEntryStatus`), and `bestKeyFor` on both a key package and an nskey
+  advertisement passes a retired key over, because that method answers "which
+  key should be used now" for a sender. Retirement withdraws the future and not
+  the past: the entry stays in the list so its holder can still open what was
+  already sealed to it, where dropping the entry outright would strand every
+  record ever sealed under that key. Use-neutral, because `use` already names
+  the operation a key serves — a retired signing key still verifies what it
+  signed. Emitted only when a key is retired, since absent already reads as
+  active, so no record that has never rotated changes a byte. A `status` this
+  build does not recognise reads as retired, the one reading that cannot make
+  it use a key its owner has withdrawn. Nothing in this release produces a
+  retired entry; the reader has to understand the shape before any writer can
+  emit it.
 - **breaking (unreleased surface): the nskey advertisement carries a list of
   keys, spelled the way the other two advertising records spell theirs.**
   `public:__nskey.<ns>@<owner>` was the last record still describing its key

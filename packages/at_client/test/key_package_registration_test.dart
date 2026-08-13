@@ -230,6 +230,65 @@ void main() {
       expect(pkg.bestKeyFor(['something-else']), isNull);
     });
 
+    test('a retired key is kept, but is not what a sender is pointed at', () {
+      final pkg = KeyPackage.fromPayload({
+        'v': 1,
+        'createdAt': '2026-06-11T00:00:00.000Z',
+        'keys': [
+          // The retired one FIRST, and under the stronger algorithm, so
+          // preference order alone would choose it. Selection has to lose to
+          // status, not merely coincide with it.
+          {
+            'kid': 'old',
+            'use': 'enc',
+            'alg': SecretSharingAlgos.xWing,
+            'pub': 'b2xk',
+            'status': 'retired',
+          },
+          {
+            'kid': 'new',
+            'use': 'enc',
+            'alg': SecretSharingAlgos.mlKem1024,
+            'pub': 'bmV3',
+          },
+        ],
+        'suites': ['x-wing-hpke-v1'],
+      }, enrollmentId: 'enroll-x');
+
+      expect(pkg.keys, hasLength(2),
+          reason: 'a retired entry is retained — the holder can still open '
+              'what was already sealed to it');
+      expect(pkg.bestKeyFor(SecretSharingAlgos.keyAlgos)!.kid, 'new');
+      expect(pkg.kpid, 'new',
+          reason: 'the address senders use from now on is the active key');
+      expect(pkg.bestKeyFor([SecretSharingAlgos.xWing]), isNull,
+          reason: 'asking for the retired key by its algorithm still gets '
+              'nothing — the answer is about status, not about ordering');
+    });
+
+    test('a package whose every key is retired points a sender nowhere', () {
+      final pkg = KeyPackage.fromPayload({
+        'v': 1,
+        'createdAt': '2026-06-11T00:00:00.000Z',
+        'keys': [
+          {
+            'kid': 'old',
+            'use': 'enc',
+            'alg': SecretSharingAlgos.xWing,
+            'pub': 'b2xk',
+            'status': 'retired',
+          },
+        ],
+        'suites': ['x-wing-hpke-v1'],
+      }, enrollmentId: 'enroll-x');
+
+      expect(pkg.kpid, isNull);
+      // requestSecretsFromNamespace and shareSecretWithNamespace both skip a
+      // member whose kpid is null, so a holder that has retired everything is
+      // passed over rather than sealed to at an address it has withdrawn.
+      expect(pkg.bestKeyFor(SecretSharingAlgos.keyAlgos), isNull);
+    });
+
     test('a package that names no suites is refused, not read as the oldest',
         () {
       // It used to be read as "the one construction that existed before the

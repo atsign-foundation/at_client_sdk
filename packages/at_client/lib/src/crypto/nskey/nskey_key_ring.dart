@@ -2,7 +2,8 @@ import 'dart:typed_data';
 
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
-import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
+import 'package:at_client/src/secret_sharing/key_package.dart'
+    show KeyEntryStatus, PackageKey;
 import 'package:at_auth/at_auth.dart' show publicKeyKid;
 
 /// The version stamped on the nskey advertisement payload.
@@ -164,14 +165,26 @@ class NskeyAdvertisement {
     );
   }
 
-  /// The first key in [supportedAlgos] order (strongest first) this
+  /// The first **active** key in [supportedAlgos] order (strongest first) this
   /// advertisement offers for [use], or null when there is no algorithm in
-  /// common.
+  /// common and when every one they share is retired.
+  ///
+  /// This record's writer never retires an entry — rotation here overwrites the
+  /// record and retains the superseded private filed under its own
+  /// [nskeyKidOf], so a superseded generation is simply absent rather than
+  /// listed. The reader honours the field anyway: the alternative is a
+  /// vocabulary whose meaning depends on which record carries it, and a sender
+  /// that encapsulates to a generation the owner has moved off writes something
+  /// the owner will never look for.
   PackageKey? bestKeyFor(List<String> supportedAlgos,
       {String use = SecretSharingAlgos.useEnc}) {
     for (final alg in supportedAlgos) {
       for (final key in keys) {
-        if (key.alg == alg && key.use == use) return key;
+        if (key.alg == alg &&
+            key.use == use &&
+            key.status == KeyEntryStatus.active) {
+          return key;
+        }
       }
     }
     return null;

@@ -5,6 +5,35 @@ import 'package:at_auth/at_auth.dart' show publicKeyKidOfBase64;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:meta/meta.dart' show experimental;
 
+/// Whether a key entry is still offered for **new** operations.
+///
+/// Use-neutral, because [PackageKey.use] already names the operation a key
+/// serves. Retirement withdraws the future, never the past: a retired signing
+/// key still verifies the envelopes it signed, and a retired encapsulation key
+/// still opens the records already sealed to it. What it forbids is a sender
+/// sealing to it, or a signer signing with it, from now on.
+///
+/// Retaining rather than withdrawing is the whole point. Envelopes and chain
+/// links are stored durably and verified long after they are written, so
+/// dropping a key's entry outright would retroactively unverify everything ever
+/// signed with it, and unopenably strand everything ever sealed to it.
+@experimental
+enum KeyEntryStatus {
+  active,
+  retired;
+
+  /// Reads a wire `status`. Absent — which is how every record that has never
+  /// rotated spells it — is [active].
+  ///
+  /// **Anything else is [retired]**, rather than an error or a fallback to
+  /// [active]. A value this build has never heard of was written by a newer
+  /// client to say something narrower about the key than "offered for new
+  /// operations", and reading an unknown state as active is the one answer that
+  /// can make this build use a key whose owner has withdrawn it.
+  static KeyEntryStatus fromWire(Object? value) =>
+      value == null || value == active.name ? active : retired;
+}
+
 /// One public key advertised in a [KeyPackage].
 ///
 /// [kid] is a short identifier for the key (a SHA-256 prefix of [pub]) which
@@ -19,11 +48,16 @@ class PackageKey {
   final String alg;
   final String pub;
 
+  /// Whether this key is still offered for new operations — see
+  /// [KeyEntryStatus].
+  final KeyEntryStatus status;
+
   PackageKey({
     required this.use,
     required this.alg,
     required this.pub,
     String? kid,
+    this.status = KeyEntryStatus.active,
   }) : kid = kid ?? computeKid(pub);
 
   /// A key held as raw material rather than as the base64 an advertisement
@@ -36,7 +70,8 @@ class PackageKey {
     required String use,
     required String alg,
     required Uint8List pub,
-  }) : this(use: use, alg: alg, pub: base64Encode(pub));
+    KeyEntryStatus status = KeyEntryStatus.active,
+  }) : this(use: use, alg: alg, pub: base64Encode(pub), status: status);
 
   /// The key material [pub] encodes.
   ///
@@ -58,11 +93,17 @@ class PackageKey {
   /// not verify, or a sender sealing to a kid nobody listens on.
   static String computeKid(String pub) => publicKeyKidOfBase64(pub);
 
+  /// `status` is emitted only when the key is retired, because absent already
+  /// means [KeyEntryStatus.active] and every record written before rotation
+  /// existed says it that way. Emitting the default on every entry would move
+  /// the bytes of every advertisement in the protocol to state what their
+  /// absence already states.
   Map<String, Object?> toJson() => {
         'kid': kid,
         'use': use,
         'alg': alg,
         'pub': pub,
+        if (status != KeyEntryStatus.active) 'status': status.name,
       };
 
   static PackageKey? fromJson(Object? json) {
@@ -74,7 +115,13 @@ class PackageKey {
     if (kid is! String || use is! String || alg is! String || pub is! String) {
       return null;
     }
-    return PackageKey(kid: kid, use: use, alg: alg, pub: pub);
+    return PackageKey(
+      kid: kid,
+      use: use,
+      alg: alg,
+      pub: pub,
+      status: KeyEntryStatus.fromWire(json['status']),
+    );
   }
 }
 
@@ -178,19 +225,32 @@ class KeyPackage {
   String? bestSuiteFor(List<String> senderSuites) =>
       SecretSharingAlgos.bestSuiteBetween(senderSuites, suites);
 
-  /// The addressing token for this key package: the [kid] of its
-  /// enc-use key (the KEM public key a sender seals to). Null if the
-  /// package advertises no key for [SecretSharingAlgos.keyAlgos].
+  /// The addressing token for this key package: the [kid] of its **active**
+  /// enc-use key (the KEM public key a sender seals to). Null if the package
+  /// advertises no active key for [SecretSharingAlgos.keyAlgos].
+  ///
+  /// A package that has rotated advertises the superseded key as well, so that
+  /// envelopes still in flight to it can be opened; this is the address senders
+  /// use from now on, which is the new one.
   String? get kpid => bestKeyFor(SecretSharingAlgos.keyAlgos)?.kid;
 
-  /// The first key in [supportedAlgos] order (strongest first) that this key
-  /// package advertises for [use]. Returns null if the package and
-  /// [supportedAlgos] have no algorithm in common.
+  /// The first **active** key in [supportedAlgos] order (strongest first) that
+  /// this key package advertises for [use]. Returns null if the package and
+  /// [supportedAlgos] have no algorithm in common, or if every key they do have
+  /// in common is retired.
+  ///
+  /// Retired entries are skipped because this answers "which key should be used
+  /// now" for a sender, and a retired key is retained for opening what was
+  /// already sealed to it rather than for receiving anything more — see
+  /// [KeyEntryStatus]. A holder deciding whether it can open a given envelope
+  /// asks [keys] instead, which carries retired entries too.
   PackageKey? bestKeyFor(List<String> supportedAlgos,
       {String use = SecretSharingAlgos.useEnc}) {
     for (final alg in supportedAlgos) {
       for (final key in keys) {
-        if (key.alg == alg && key.use == use) {
+        if (key.alg == alg &&
+            key.use == use &&
+            key.status == KeyEntryStatus.active) {
           return key;
         }
       }
