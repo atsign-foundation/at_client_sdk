@@ -1,4 +1,19 @@
 ## 3.14.1
+- feat: a client mints, advertises and files a signing key of its own for every
+  algorithm `AtClientPreference.inUseSigningAlgorithms` names and its
+  enrollment does not hold — a ninth PQ startup step, `mintInUseSigningKeys`,
+  gated by `PqStartupGates` and inert while that set is empty, which is the 3.x
+  default. A signing keypair can be minted unilaterally: unlike the APKAM
+  authentication key it needs no server approval and no change to what
+  authenticates. It runs before every startup step that signs, so a key minted
+  on a given start is advertised before anything signs with it.
+  **It publishes before it files**, deliberately: filing first would have the
+  client signing under a key its `_apsk` does not name, and since envelopes are
+  stored durably and verified on every read, every envelope written before the
+  publish landed would be unverifiable for good, with nothing to retry it. An
+  advertised key that was never filed costs a verifier one candidate that does
+  not match, and is gone at the next publish. An enrolled client advertises by
+  `enroll:update`; one with no enrollment publishes the record itself.
 - fix: a verifier tries **every** key the signer advertises under the resolved
   algorithm, rather than the first, and refuses only when none of them
   verifies. One algorithm can name several `_apsk` entries: an enrollment that

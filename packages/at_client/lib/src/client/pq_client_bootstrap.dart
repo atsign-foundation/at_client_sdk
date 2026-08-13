@@ -17,6 +17,8 @@ import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart'
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
+import 'package:at_client/src/signing/signing_key_minting.dart'
+    show SigningKeyMinting;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
@@ -38,6 +40,7 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 @experimental
 class PqStartupGates {
   const PqStartupGates({
+    this.mintInUseSigningKeys = true,
     this.requestRootPrivate = true,
     this.requestMissingPrivates = true,
     this.publishRootLink = true,
@@ -45,6 +48,12 @@ class PqStartupGates {
     this.sweepUnanchoredEnrollments = true,
     this.askOnReadMiss = true,
   });
+
+  /// Active: mints, advertises and files a signing key for every algorithm
+  /// `AtClientPreference.inUseSigningAlgorithms` names and this enrollment
+  /// does not hold. Inert while that set is empty, which is the 3.x default,
+  /// so this gate governs the 4.0 posture and an app that opts in early.
+  final bool mintInUseSigningKeys;
 
   /// Active: broadcasts an ask for the signing-root private.
   final bool requestRootPrivate;
@@ -90,18 +99,22 @@ class PqStartupGates {
 ///     deletes the requests it finds.
 ///  2. collect conveyed keys  — read-precondition: the only route by which
 ///     key material conveyed by other enrollments reaches the keyfile.
-///  3. seed namespace keys    — active, gated by
+///  3. mint in-use signing keys — active: gives this enrollment a signing key
+///     of its own for every algorithm the in-use set names. Before every step
+///     that signs, so that anything published later in this same startup is
+///     signed by the keys the advertisement now names.
+///  4. seed namespace keys    — active, gated by
 ///     `AtClientPreference.seedNamespaceKeys`: mints and publishes this
 ///     atSign's namespace keys and conveys each private.
-///  4. request root private   — active: asks holders for the signing-root
+///  5. request root private   — active: asks holders for the signing-root
 ///     private this enrollment should have and does not.
-///  5. request missing privates — active: the pull half of the self-heal
+///  6. request missing privates — active: the pull half of the self-heal
 ///     invariant (decisions.md 38).
-///  6. publish root link      — active: anchor directly to the root when
+///  7. publish root link      — active: anchor directly to the root when
 ///     this enrollment can; the better outcome of the two link kinds.
-///  7. publish chain link     — active: fall back to the approval-chain
+///  8. publish chain link     — active: fall back to the approval-chain
 ///     link this enrollment was given.
-///  8. sweep unanchored       — active, privilege-gated: a fully
+///  9. sweep unanchored       — active, privilege-gated: a fully
 ///     privileged client signs and conveys links for approved enrollments
 ///     that lack one.
 ///
@@ -154,6 +167,7 @@ class PqClientBootstrap {
     );
     root = PqSigningRoot(_atClient, keysIo: keysIo);
     chain = PqSigningChain(_atClient);
+    minting = SigningKeyMinting(_atClient);
   }
 
   final AtClient _atClient;
@@ -183,6 +197,9 @@ class PqClientBootstrap {
 
   /// This client's view of the approval chain.
   late final PqSigningChain chain;
+
+  /// Gives this enrollment its own signing keys, per the in-use set.
+  late final SigningKeyMinting minting;
 
   String get _atSign => _atClient.getCurrentAtSign()!;
 
@@ -214,6 +231,7 @@ class PqClientBootstrap {
       for (final step in [
         _hydrateHeldSecrets,
         _collectConveyedKeys,
+        _mintInUseSigningKeys,
         _seedNamespaceKeys,
         _requestRootPrivate,
         _requestMissingPrivates,
@@ -290,6 +308,25 @@ class PqClientBootstrap {
       _logger.warning('Collecting conveyed key material failed for $_atSign; '
           'this enrollment holds only what it already had, and the next '
           'start retries: $e, $st');
+    }
+  }
+
+  /// Mints, advertises and files a signing key for every algorithm the in-use
+  /// set names and this enrollment does not hold.
+  ///
+  /// Runs before every step that signs — the namespace-key seeding, both link
+  /// publications and the sweep all produce signed envelopes — so a key minted
+  /// on this start is already advertised by the time anything signs with it.
+  /// Running it after them would leave one start's envelopes signed by a key
+  /// the advertisement of that moment did not name.
+  Future<void> _mintInUseSigningKeys() async {
+    if (!_gates.mintInUseSigningKeys) return;
+    try {
+      await minting.mintMissing();
+    } catch (e, st) {
+      _logger.warning('Minting this enrollment\'s own signing keys failed for '
+          '$_atSign; it keeps signing with the key it already advertises, and '
+          'the next start retries: $e, $st');
     }
   }
 
@@ -412,6 +449,7 @@ class PqClientBootstrap {
   static const List<String> stepNamesInOrder = [
     'hydrateHeldSecrets',
     'collectConveyedKeys',
+    'mintInUseSigningKeys',
     'seedNamespaceKeys',
     'requestRootPrivate',
     'requestMissingPrivates',

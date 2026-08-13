@@ -2163,9 +2163,25 @@ order leaves the choice undefined for exactly the pair nobody thought about,
 and the pin fails on a new member left unplaced.
 
 When the in-use set names an algorithm the enrollment holds no key for, the
-client mints one at start, files it, and publishes the updated array. A signing
-keypair can be minted unilaterally because it needs no server approval and no
-enrollment-record change — which is the practical payoff of the split.
+client mints one at start, **publishes the updated array, and then files it**. A
+signing keypair can be minted unilaterally because it needs no server approval
+and no enrollment-record change — which is the practical payoff of the split.
+
+The order is the design, and it is the opposite of the nskey path's. File first
+and the client signs with a key its `_apsk` does not name; envelopes are stored
+durably, so every one written before the publish lands is permanently
+unverifiable, and nothing retries, because the next start finds the key already
+held and mints nothing. Publish first and the advertisement names a key nobody
+holds — nothing signs with it, no envelope refers to it, and it disappears at
+the next publish, since the advertisement is composed from what the keyfile
+holds. An nskey private is filed before its public half is published for the
+mirror-image reason: an encapsulation key published without its private has
+senders sealing data nobody can open.
+
+Which writer depends on whether there is an enrollment record. An enrolled
+client sends `enroll:update`, because the atServer is the only writer of an
+enrollment's `_apsk`; a client with no enrollment publishes the record itself,
+under `primary`.
 
 When an algorithm leaves the in-use set, signing with it stops; the key and its
 `_apsk` entry are retained indefinitely as `retired`.

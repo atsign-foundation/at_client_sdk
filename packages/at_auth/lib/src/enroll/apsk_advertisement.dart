@@ -22,10 +22,13 @@ import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo, SigningAlgoType;
 /// protocol. `keys` has been an array from the outset, and a second
 /// algorithm's key is added beside the first rather than replacing it:
 /// envelopes are stored durably and verified later, so a key that stops being
-/// used must still be able to verify what it already signed. An enrollment
-/// still advertises exactly one key in practice, because nothing mints
-/// per-algorithm signing material yet — but that is a fact about the minting,
-/// not about this shape or this composer.
+/// used must still be able to verify what it already signed. An enrollment that
+/// mints a signing key of its own therefore advertises at least two: that key,
+/// and the APKAM authentication key it used to sign with, marked `retired`.
+/// One enrollment can also advertise two keys of one **algorithm**, which is
+/// what a post-quantum-native enrollment publishes — its authentication key is
+/// ML-DSA and so is what it mints — so a reader selecting by algorithm must
+/// consider every entry naming it, not the first.
 ///
 /// ```json
 /// {"v": 1, "keys": [

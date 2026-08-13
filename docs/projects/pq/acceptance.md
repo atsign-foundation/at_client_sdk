@@ -1463,6 +1463,18 @@ side nobody wrote — the published arm is the only thing that measures
   `status: retired`, and an envelope signed with it before the drop still
   verifies.
 
+- **UC-G1.9a · the client mints what the in-use set names, advertising before
+  filing.**
+  *Given* an enrollment holding no signing key of its own and a preference
+  whose in-use set names one.
+  *When* the client starts.
+  *Then* it mints that keypair, advertises it — by `enroll:update` where there
+  is an enrollment record and by publishing `_apsk` directly where there is
+  not — and **only then** files it, so no envelope is ever signed under a key
+  the advertisement does not name. A second start mints nothing, and an empty
+  in-use set mints nothing at all.
+  Covered by `packages/at_client/test/signing_key_minting_test.dart`.
+
 ### 16.4 `enroll:update` rows
 
 - **UC-G1.10 · rekey keeps the enrollment id.**

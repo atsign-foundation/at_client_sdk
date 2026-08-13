@@ -206,6 +206,11 @@ void main() {
     expect(PqClientBootstrap.stepNamesInOrder, const [
       'hydrateHeldSecrets',
       'collectConveyedKeys',
+      // Before every step that signs — seeding, both link publications and
+      // the sweep all produce signed envelopes, and a key minted after them
+      // would leave that start's envelopes signed under a key the
+      // advertisement of that moment did not name.
+      'mintInUseSigningKeys',
       'seedNamespaceKeys',
       'requestRootPrivate',
       'requestMissingPrivates',

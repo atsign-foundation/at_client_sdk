@@ -41,8 +41,13 @@ mixin ApkamSigning {
   /// used to read the record and log "have already published", so a key that
   /// had rotated never reached the atServer and every envelope signed with the
   /// new one was verified against the old.
-  Future publishPublicSigningKey() async {
-    final value = await publicSigningKeyValue;
+  ///
+  /// [value] overrides what is published, for the one caller that must
+  /// advertise a key before filing it: [publicSigningKeyValue] is composed from
+  /// what the keyfile holds, and a minter publishes first precisely so that no
+  /// envelope is ever signed under a key the advertisement does not name.
+  Future publishPublicSigningKey({String? value}) async {
+    value ??= await publicSigningKeyValue;
 
     String? published;
     try {
