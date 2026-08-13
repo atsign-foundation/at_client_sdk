@@ -2821,6 +2821,25 @@ its own. None blocks anything.
     which is a small deliberate diff on a published package rather than
     something to fold into another step's commit.
 
+13. **`SigningAlgoType` is not reachable from at_client's barrel, so naming an
+    in-use signing algorithm needs a second import.** An app writing
+    `AtClientPreference(inUseSigningAlgorithms: {SigningAlgoType.mldsa65})` must
+    import `package:at_chops/at_chops.dart` as well as at_client. Verified by
+    probe 2026-08-13: a test importing only `package:at_client/at_client.dart`
+    fails to compile on the name.
+
+    **Left as is, deliberately**, and recorded so the next reader does not
+    re-derive it as a defect: the two SigningAlgoType-valued knobs already on
+    the preference — the deprecated `signingAlgoType` and
+    `ReleasePosture.retrofitSigningAlgo` — have always required that import, so
+    exporting it now would be a new inconsistency rather than a fix, and a
+    barrel export is public surface that cannot be withdrawn. `SigningRollout`,
+    the axis an app is more likely to name, **is** reachable (it lives in
+    `release_posture.dart`, which the barrel exports). If this is revisited,
+    the precedent is `EnrollmentKeyExchangeMode`, show-narrowed onto the barrel
+    for exactly this discoverability argument
+    ([`decisions.md` 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)).
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.
