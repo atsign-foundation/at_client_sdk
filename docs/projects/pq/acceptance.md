@@ -128,7 +128,7 @@ per keyfile/install):
   and conveyed to each authorised enrollment as a Secret over the substrate (never
   derived). The public half is **published eagerly** — written at mint, always:
   - `public:__nskey.<ns>@alice`, an APKAM-signed envelope carrying
-    `{nskeyKid, publicKey}`. The leading underscore keeps it out of every scan
+    `{v, createdAt, keys:[…], suites}`. The leading underscore keeps it out of every scan
     (`showhidden` reveals only `public:__`, and an unauthenticated scan ignores it
     altogether) while `plookup` still serves it on an exact name, cross-atSign — so
     the namespace's *existence* is not enumerable.
@@ -451,7 +451,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      create — so a concurrent enrollment loses and re-reads), mints the **one**
      `app_1.my_apps` nskey X-Wing keypair, publishes its public half **immediately**
      as the APKAM-signed `public:__nskey.app_1.my_apps@alice` carrying
-     `{nskeyKid, publicKey}`, holds the private, and releases.
+     `{v, createdAt, keys:[…], suites}`, holds the private, and releases.
   2. Convey the CK once via the nskey data path (as A3.1): seal the CK to the nskey
      (`recipientKind: nskey`) in an `at/nskey` record; write the data under
      `at/symmetric/AES/GCM`.
@@ -530,8 +530,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When:** `alice1` mints and publishes the namespace key (as
   [UC-A3.2](#42-uc-a32--a-client-mints-and-publishes-the-nskey-for-each-namespace-it-is-authorised-for)).
 - **Then:**
-  - the APKAM-signed advertisement carries **`alg` and `suites`** beside
-    `{v, nskeyKid, publicKey}`. `alg` is not decorative: a sender cannot tell an X-Wing
+  - the APKAM-signed advertisement carries **`suites`** beside each entry's
+    **`alg`** in `{v, createdAt, keys:[{use, alg, pub, kid}], suites}`.
+    `alg` is not decorative: a sender cannot tell an X-Wing
     encapsulation key from an ML-KEM one by looking — both are opaque byte strings — and
     encapsulating under the wrong KEM produces a conveyance the owner can never open;
   - a CK conveyance into that namespace is sealed under the KEM `alg` names and stamped
@@ -745,7 +746,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When (b) — revocation + PCS = rotate the nskey *keypair*:** `alice1` takes the
   `_nskeylock.app_1.my_apps@alice` lock, mints the next nskey keypair **excluding the
   revoked enrollment**, **overwrites** `public:__nskey.app_1.my_apps@alice` with the new
-  APKAM-signed `{nskeyKid, publicKey}`, pushes the successor private to the surviving
+  APKAM-signed advertisement, pushes the successor private to the surviving
   enrollments — seal to each surviving key package via `__ssenv`, dropping the revoked
   one — and releases the lock.
 - **Then (b):** new CKs are sealed to the successor nskey and their conveyances carry

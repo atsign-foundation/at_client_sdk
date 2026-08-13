@@ -1122,7 +1122,10 @@ substrate advertises the key package **unsigned** — tracked as a gap in `desig
    `public:__nskey.<ns>@<owner>`. There is no owner-only self at-key stage, no promotion
    step, and no first-cross-atSign-share trigger.
 2. **The advertisement is mutable.** That one record holds an APKAM-signed
-   `{nskeyKid, publicKey}` and is **overwritten** on rotation. Creation and rotation
+   `{nskeyKid, publicKey}` — the shape as of this ruling; it became
+   `{v, createdAt, keys:[…], suites}` under [section 94](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)
+   ruling 2, which changes nothing about the three points here — and is
+   **overwritten** on rotation. Creation and rotation
    serialise behind a short-TTL **immutable lock key** — a self key, since only the
    owner's own enrollments can race for it.
 3. **Generations are addressed by `nskeyKid`.** Every `at/nskey` CK-conveyance record
@@ -7987,6 +7990,15 @@ envelope wrapping a list of keys with algorithms:
 | `metadata.keyPackage` (a field *inside* the enrollment record) | `{kid, use, alg, pub}` |
 | `public:__nskey.<ns>@<owner>` | flat `{nskeyKid, publicKey, alg}` — no list |
 
+> ⚠️ **Corrected 2026-08-13, while implementing ruling 2.** Two of those three
+> rows were wrong when written. `apskAdvertisement`
+> (`at_auth/lib/src/enroll/apsk_advertisement.dart`) composes
+> `{kid, use, alg, pub}` — **no `status`** — and **no record carried `status`
+> at all**, so ruling 2's `status?` was introducing a field rather than
+> adopting one. The nskey row omitted `suites`, which it did carry. The table
+> was read as an observation and was a description; the codecs were one grep
+> away. See also ruling 2's own amendment below.
+
 `EnrollParams.apsk`'s own dartdoc says its entries are "spelled as
 `KeyPackage`'s keys are so that one vocabulary covers every 'list of keys with
 algorithms' in the protocol". That ruling already exists and already has two
@@ -8000,6 +8012,38 @@ and the advertisement gains a `keys` list. The list is a capability rather
 than ceremony — an atSign cannot advertise both X-Wing and ML-KEM for a
 namespace today, because the advertisement holds exactly one key by
 construction.
+
+> **LANDED 2026-08-13**, in `6462ae786`, `d28ef48a9` and `69449603e`, and it
+> did not land as written. Four amendments:
+>
+> - **`status` is not part of it.** Nothing carried one (see the table
+>   correction above) and `KeyEntryStatus` did not exist, so shipping the field
+>   here would have put a value on the wire that no writer sets. Gary's call:
+>   it belongs entirely to ruling 95.6–9's retired-key path. The vocabulary as
+>   landed is `{use, alg, pub, kid}`.
+> - **The container is `{v, createdAt, keys:[…], suites}`** — `createdAt` was
+>   added for symmetry with `KeyPackage`, which requires one. `v` stays **1**:
+>   nothing is released, so no advertisement in the old shape exists anywhere
+>   for a version 2 to distinguish this from.
+> - **"One vocabulary" cannot mean one Dart type.** at_client depends on
+>   at_auth, so at_auth cannot reach `PackageKey` and `_apsk` keeps its own
+>   `ApskSigningKey`. It is one **wire spelling** across two types, by
+>   construction; only the kid derivation is genuinely shared, and ruling 3
+>   already unified that.
+> - **The reader had to grow before the writer.** `nskeyKid`, `publicKey` and
+>   `alg` survive as getters reading the strongest usable entry rather than
+>   `keys.single`, and `verify` skips entries whose algorithm this build has no
+>   KEM for. Without both, the first advertisement carrying two keys would have
+>   thrown, so the capability could never have been switched on.
+>
+> Found en route and fixed in `d28ef48a9`: `ApkamSignedAdvertisedKeys.verify`
+> checked that the kid was the digest of the key it carried but never the
+> key's **length**. A kid is the digest of whatever bytes are present, so a
+> forged advertisement carries a matching one for free; the wrong-length key
+> reached `pqSeal`, and the first sign of trouble was inside the KEM one seal
+> later. `SecretSharingAlgos.publicKeyLengthFor` now answers from each KEM's
+> own constant — `AtKemAlgorithm` deliberately keeps lengths off itself, so
+> putting one there would be another breaking at_chops change.
 
 **3. One kid function, over the raw key bytes.** `nskeyKidOf` is right;
 `PackageKey.computeKid` hashes the base64 **text** of the key rather than the

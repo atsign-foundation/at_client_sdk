@@ -157,7 +157,7 @@ content-key kids. Working names marked.
 
 | Object | Shape | Published? | Who holds the private | Role |
 |---|---|---|---|---|
-| **nskey** | `public:__nskey.app_1.my_apps@alice` — written at mint, **mutable**, APKAM-signed `{v, nskeyKid, publicKey, alg, suites}` | published from mint; **hidden from scan** (double `_` — revealed only by `scan showhidden:true`; a single `_` would never sync) but served on an exact `plookup`, cross-atSign | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it; external senders encapsulate CKs to it |
+| **nskey** | `public:__nskey.app_1.my_apps@alice` — written at mint, **mutable**, APKAM-signed `{v, createdAt, keys:[{use, alg, pub, kid}], suites}` | published from mint; **hidden from scan** (double `_` — revealed only by `scan showhidden:true`; a single `_` would never sync) but served on an exact `plookup`, cross-atSign | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it; external senders encapsulate CKs to it |
 | **nskey mint/rotate lock** *(working)* | `_nskeylock.app_1.my_apps@alice` (self key, immutable create, short ttl) | no | n/a | serialises create and rotate between the owner's own enrollments |
 | **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `pqSeal(ck)` to the nskey named by `nskeyKid`, under the KEM that nskey's `alg` names |
 | **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
@@ -205,7 +205,7 @@ and distributed per-APKAM over the substrate** (sealed to each authorised
 enrollment's key package) — it is **never derived from a shared seed** ([`decisions.md`](decisions.md) [section 11](decisions.md#11-single-nskey-per-namespace-lazily-published-2026-06-30)).
 The public half is published **eagerly** — written at mint, always, to
 `public:__nskey.<ns>@<atSign>` as an **APKAM-signed envelope** carrying
-`{v, nskeyKid, publicKey, alg, suites}`, verified against the publishing enrollment's
+`{v, createdAt, keys:[{use, alg, pub, kid}], suites}`, verified against the publishing enrollment's
 `_apsk` exactly
 as a key package is (see *Advertised-key authenticity*,
 [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify)). There is no owner-only stage
@@ -483,7 +483,7 @@ nskey private.
 
 **(B5b) nskey-keypair rotation — the expensive PCS + revocation lever. O(n) per-APKAM.**
 Take the `_nskeylock.<ns>@<atSign>` lock → mint a **new nskey keypair** →
-**overwrite** `public:__nskey.<ns>@<atSign>` with the new `{nskeyKid, publicKey}`
+**overwrite** `public:__nskey.<ns>@<atSign>` with the new advertisement
 envelope → convey the new nskey private **per-APKAM over the substrate** (`__ssenv`
 envelopes sealed to each authorised APKAM keypair's key package, pushed via
 `enroll:listns` + the pull backstop —
