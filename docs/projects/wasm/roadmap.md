@@ -26,16 +26,17 @@ implementations, so that a browser WasmGC build runs without runtime failures. T
 
 ## Document map
 
-This is one of **five** docs. Each keeps to its lane; cross-references point at the
+This is one of **six** docs. Each keeps to its lane; cross-references point at the
 canonical home rather than duplicating it.
 
-| Doc | What lives there |
-|---|---|
-| **roadmap.md** (this doc) | The WHY + WHAT — the neutrality thesis, the compiler-blindness finding, the three-tier model, goals/non-goals, the PQ ownership boundary, the phase trajectory. |
-| [`design.md`](design.md) | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
-| [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder. |
-| [`acceptance.md`](acceptance.md) | The gates, tiered T0–T5, with the measured evidence for each and an explicit statement of what each tier does *not* prove. |
-| [`decisions.md`](decisions.md) | The decision log — the binding rulings (D-1..D-6), their rationale, the measured findings that drove them, and the open questions. |
+| Doc                                                | What lives there                                                                                                                                                                                                                                                                                           |
+| -------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **roadmap.md** (this doc)                          | The WHY + WHAT — the neutrality thesis, the compiler-blindness finding, the three-tier model, goals/non-goals, the PQ ownership boundary, the phase trajectory.                                                                                                                                            |
+| [`design.md`](design.md)                           | The per-capability seam designs — transport, storage bootstrap, sync queue, keys, HTTP, connectivity, logging, filesystem, process/env. Current call sites with `file:line`, the proposed interface, and who implements it on each platform. Plus the dead-end seams and the `AtClientPreference` reframe. |
+| [`implementation-plan.md`](implementation-plan.md) | The build sequence — phases, the task backlog (P/T/I/C/G/D groups), dependency order, and the publish ladder.                                                                                                                                                                                              |
+| [`acceptance.md`](acceptance.md)                   | The gates, tiered T0–T5, with the measured evidence for each and an explicit statement of what each tier does *not* prove.                                                                                                                                                                                 |
+| [`decisions.md`](decisions.md)                     | The decision log — the binding rulings (D-1..D-9), their rationale, the measured findings that drove them, and the open questions.                                                                                                                                                                         |
+| [`js-api.md`](js-api.md)                           | The non-Dart consumer story — the dart2js compile target, the measured JS/TS language boundary, the TypeScript surface, error mapping, TS-supplied implementations, Node, and npm packaging.                                                                                                               |
 
 ---
 
@@ -80,14 +81,14 @@ reachable code transitively imports it."*
 `dart compile wasm` against a program with a reachable, non-tree-shakeable
 `File.existsSync()` and `Platform.pathSeparator`:
 
-| Library | `dart compile wasm` | Runtime |
-|---|---|---|
-| `dart:io` | **exit 0**, module produced | **throws** `Unsupported operation: _Namespace` on first use |
-| `dart:isolate` | **exit 0**, module produced | — |
-| `dart:ffi` | rejected — *"Dart library 'dart:ffi' is not available on this platform"* | — |
-| `dart:html` | rejected | — |
-| `dart:js` | rejected | — |
-| `dart:mirrors` | rejected | — |
+| Library        | `dart compile wasm`                                                      | Runtime                                                     |
+| -------------- | ------------------------------------------------------------------------ | ----------------------------------------------------------- |
+| `dart:io`      | **exit 0**, module produced                                              | **throws** `Unsupported operation: _Namespace` on first use |
+| `dart:isolate` | **exit 0**, module produced                                              | —                                                           |
+| `dart:ffi`     | rejected — *"Dart library 'dart:ffi' is not available on this platform"* | —                                                           |
+| `dart:html`    | rejected                                                                 | —                                                           |
+| `dart:js`      | rejected                                                                 | —                                                           |
+| `dart:mirrors` | rejected                                                                 | —                                                           |
 
 The compiled module was executed under Node 24.18 to confirm the runtime half.
 Full method in [`acceptance.md`](acceptance.md).
@@ -137,6 +138,32 @@ neutral barrel's import graph. Consumers add one import.
   `ServiceFactoryWithNoOpSyncService`). Extracting a real package is deferred; until
   then they consume the Tier-2 `_io` barrels.
 
+### Tier 4 — non-Dart consumers
+
+A JavaScript/TypeScript facade compiled from `at_client_web`'s own entry point and
+published to npm. Design in [`js-api.md`](js-api.md); rulings D-7..D-9 in
+[`decisions.md`](decisions.md).
+
+```
+        JS / TS apps  (npm: browser SPA · Node service · TS agent)
+                    ▲
+        the @JSExport facade — packages/at_client_web/lib/src/js/
+                    ▲
+at_client_web      *_io barrels      at_client_flutter
+                    ▲
+        at_client / at_lookup / at_utils / at_auth / at_chops
+```
+
+Two things about this tier are worth stating at roadmap level:
+
+- **It adds no Dart package.** The facade is an entry point inside `at_client_web`, and
+  the npm artifact is a build output, not a pub package — so D-4 stands unamended.
+- **Node is a target, not just the browser.** Node supplies `WebSocket`,
+  `crypto.subtle`, `fetch` and `navigator`, but **no `indexedDB` and no `localStorage`**,
+  so a Node consumer supplies storage from TypeScript. This works because a JS object can
+  satisfy a Dart interface — measured — which means the injection seams this project
+  builds are reachable from TypeScript, and no Dart `at_client_node` is needed.
+
 ## 4. Goals and non-goals
 
 ### Goals
@@ -160,8 +187,15 @@ changes and are accepted as such — [`decisions.md`](decisions.md) D-3.
 
 ### Non-goals
 
-- **WASI.** No Dart→WASI toolchain exists. `dart compile wasm` targets the browser's
+- **WASI.** No Dart→WASI toolchain exists. Both Dart web compilers target the browser's
   JS embedding, and that is the spec.
+
+> **On the project's name.** "WASM" names the effort, not the deliverable. The product is
+> an implementation-neutral client that runs outside a Dart VM; *which* web compiler emits
+> it is a packaging decision made at the end. [`decisions.md`](decisions.md) D-7 selects
+> **dart2js** for the JS/TS artifact and keeps dart2wasm open at zero cost, because the
+> source is identical for both. Neutrality is required either way — measured, `dart:io`
+> compiles and then throws under both compilers.
 - **Flutter web / Flutter WASM.** A separate, unsupported track. `at_client_flutter`
   is in scope only as a consumer of the breaking majors.
 - **CLI packages as a port target.** `at_onboarding_cli` and `at_cli_commons` never
@@ -191,15 +225,16 @@ ruling that a removed default is preferable to a conditional default.
 
 ## 6. The phase trajectory at a glance
 
-| Phase | What lands | Gate it turns on |
-|---|---|---|
-| **0 — Ratchet** | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink. | T0 |
-| **1 — Cheap seams** | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`. | T0 shrinks |
-| **2 — Transport** | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0. | T0 for at_lookup |
-| **3 — Storage** | Web SQLite open path in `at_persistence_secondary_server`; selectable backend; backend-neutral `AtSyncQueue`. | T2 for storage |
-| **4 — Sweep** | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0. | T0 green, T1, T2 |
-| **5 — `at_client_web`** | The platform package; first live browser session. | T3, T4 |
-| **6 — Deferred** | File transfer on web, browser onboarding UX, Argon2id performance, the `at_client_cli` / `at_client_flutter` implementer packages. | — |
+| Phase                   | What lands                                                                                                                         | Gate it turns on |
+| ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
+| **0 — Ratchet**         | The structural dependency-tree walk, per core package, in CI. Baselined against today's violations so it can only shrink.          | T0               |
+| **1 — Cheap seams**     | Plumb the four seams that already exist and are never passed through; delete `sync_isolate_manager.dart`; fix `at_server_status`.  | T0 shrinks       |
+| **2 — Transport**       | `AtTransport`; `Socket getSocket()` removed; `at_lookup_io.dart`; `at_lookup` 4.0.0.                                               | T0 for at_lookup |
+| **3 — Storage**         | Web SQLite open path in `at_persistence_secondary_server`; selectable backend; backend-neutral `AtSyncQueue`.                      | T2 for storage   |
+| **4 — Sweep**           | `at_utils` barrel split, connectivity, file transfer off the reachable surface; `at_client` 4.0.0.                                 | T0 green, T1, T2 |
+| **5 — `at_client_web`** | The platform package; first live browser session.                                                                                  | T3, T4           |
+| **6 — JS/TS facade**    | The `@JSExport` facade and its entry point inside `at_client_web`; the npm package. See [`js-api.md`](js-api.md).                  | T6               |
+| **7 — Deferred**        | File transfer on web, browser onboarding UX, Argon2id performance, the `at_client_cli` / `at_client_flutter` implementer packages. | —                |
 
 Phases 2 and 3 are independent and can run in parallel. Phase 0 gates everything,
 because without it each phase's gains decay behind the next one.

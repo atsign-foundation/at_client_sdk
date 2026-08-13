@@ -7,7 +7,8 @@
 **Lane:** this doc carries **sequencing, the backlog, dependency order and the publish
 ladder — only**. For *how* each seam works see [`design.md`](design.md); for the gates
 see [`acceptance.md`](acceptance.md); for the *why* see [`decisions.md`](decisions.md);
-for the trajectory see [`roadmap.md`](roadmap.md).
+for the trajectory see [`roadmap.md`](roadmap.md); for the non-Dart consumer story see
+[`js-api.md`](js-api.md).
 
 ## Table of contents
 
@@ -19,9 +20,10 @@ for the trajectory see [`roadmap.md`](roadmap.md).
 - [5. Phase 3 — persistence (P)](#5-phase-3--persistence-p)
 - [6. Phase 4 — the sweep (I) and crypto (C)](#6-phase-4--the-sweep-i-and-crypto-c)
 - [7. Phase 5 — `at_client_web` (W)](#7-phase-5--at_client_web-w)
-- [8. Phase 6 — deferred (D)](#8-phase-6--deferred-d)
-- [9. Publish ladder](#9-publish-ladder)
-- [10. Dependencies on the PQ program](#10-dependencies-on-the-pq-program)
+- [8. Phase 6 — the JS/TS facade (J)](#8-phase-6--the-jsts-facade-j)
+- [9. Phase 7 — deferred (D)](#9-phase-7--deferred-d)
+- [10. Publish ladder](#10-publish-ladder)
+- [11. Dependencies on the PQ program](#11-dependencies-on-the-pq-program)
 
 ---
 
@@ -67,6 +69,12 @@ S1..S5        T1..T4          P1..P5         C1..C3
                            │
                            ▼
                         T4 gates
+                           │
+                           ▼
+                    J1..J8 (JS/TS facade + npm)
+                           │
+                           ▼
+                        T6 gates
 ```
 
 T (transport), P (persistence) and C (crypto verification) are independent and run in
@@ -259,12 +267,42 @@ Now verified **by execution** under T2.3 rather than by compile.
   `dart test -p chrome -c dart2wasm` executes at all — unverified locally
   ([`decisions.md`](decisions.md) §2.3).
 - **W3 — First live browser session.** → T4.1, T4.2
-- **W4 — Payload measurement.** Compiled `.wasm` + `sqlite3.wasm` + JS glue, gzipped
-  and Brotli. Record **before** revisiting the IndexedDB question. → X2
+- **W4 — Payload measurement.** Compiled output + `sqlite3.wasm` + JS glue, gzipped and
+  Brotli, for **both** compile targets. Record **before** revisiting the IndexedDB
+  question. → X2
 
 ---
 
-## 8. Phase 6 — deferred (D)
+## 8. Phase 6 — the JS/TS facade (J)
+
+Design in [`js-api.md`](js-api.md); rulings D-7..D-9 in [`decisions.md`](decisions.md).
+Builds on W1. Adds no Dart package — everything lands inside `at_client_web`.
+
+- **J1 — The facade.** `packages/at_client_web/lib/src/js/`: an `@JSExport` class
+  wrapping the ~25-method surface from [`js-api.md`](js-api.md) §5.2. Every async member
+  returns `JSPromise<…>`; every collection returns `JSArray`/`JSUint8Array`. No Dart type
+  escapes. → T6.3
+- **J2 — Error mapping.** Catch on the Dart side and rethrow a structured `AtError` with
+  a stable `code`. The default boxed rejection must never reach a consumer. → T6.4
+- **J3 — Event surfaces.** `subscribe(cb) → unsubscribe` for notifications and data
+  events; `Stream` has no JS bridge. → T6.5
+- **J4 — The TS-supplied `KeyStore` seam.** Adapt a JS object behind the Dart storage
+  interface, so Node consumers supply storage without a Dart package. → T6.6
+- **J5 — Entry point.** `packages/at_client_web/web/at_client_js.dart` — the `main()`
+  that installs the facade on the global scope. Compiled with `dart compile js`; keep the
+  dart2wasm build green in CI to preserve the option.
+- **J6 — npm package.** `packages/at_client_web/npm/` — `package.json`, a hand-written
+  `index.js` (which **must** set `globalThis.self` before load, or every Promise hangs on
+  Node) and `index.d.ts`. Ship the `.js.map`.
+- **J7 — T6 harness**, timeout-bounded throughout, plus a sample TS consumer that
+  `tsc --noEmit` type-checks against the published typings. → T6.1, T6.2, T6.7
+- **J8 — Resolve JS-1**: measure which implementation `cryptography` selects under
+  dart2js and whether Web Crypto removes the deferred Argon2id work
+  ([`design.md`](design.md) §2.10).
+
+---
+
+## 9. Phase 7 — deferred (D)
 
 - **D1 — File-transfer web implementation** via `package:web` File/Blob.
 - **D2 — Browser onboarding and key-import UX.** The `.atKeys` *file* does not exist in
@@ -281,20 +319,20 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 ---
 
-## 9. Publish ladder
+## 10. Publish ladder
 
 Dependency order, one major per package:
 
-| # | Package | Version | Phase | Break |
-|---|---|---|---|---|
-| 1 | `at_chops` | minor | C, S6 | none — dependency move only |
-| 2 | `at_auth` | **4.0.0** | *PQ S-5* | `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
-| 3 | `at_utils` | **4.0.0** | I1–I4 | barrel split; native handlers → `at_utils_io.dart` |
-| 4 | `at_lookup` | **4.0.0** | T | `Socket getSocket()` removed; factories retyped |
-| 5 | `at_server_status` | minor | S5 | none — `HttpStatus` → literals |
-| 6 | `at_client` | **4.0.0** | I | `File` off the spec; storage backend selectable; connectivity injected |
-| 7 | `at_client_web` | 1.0.0 | W | new |
-| 8 | consumers | — | — | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages |
+| #   | Package            | Version   | Phase    | Break                                                                           |
+| --- | ------------------ | --------- | -------- | ------------------------------------------------------------------------------- |
+| 1   | `at_chops`         | minor     | C, S6    | none — dependency move only                                                     |
+| 2   | `at_auth`          | **4.0.0** | *PQ S-5* | `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
+| 3   | `at_utils`         | **4.0.0** | I1–I4    | barrel split; native handlers → `at_utils_io.dart`                              |
+| 4   | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped                                 |
+| 5   | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals                                                  |
+| 6   | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected          |
+| 7   | `at_client_web`    | 1.0.0     | W        | new                                                                             |
+| 8   | consumers          | —         | —        | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages  |
 
 **Coordinate step 8 with the PQ program's S-6**, which bumps the same consumers for
 `at_auth ^4.0.0`. Doing them separately means two breaking sweeps through the same
@@ -302,13 +340,13 @@ files.
 
 ---
 
-## 10. Dependencies on the PQ program
+## 11. Dependencies on the PQ program
 
-| This project needs | From | Status |
-|---|---|---|
+| This project needs                                                                                                                                                  | From                                                                                | Status                                         |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------- |
 | `at_auth.dart` free of `dart:io`; `FileAtKeysIo` in `at_auth_io.dart`; the `atKeysIo ??=` default removed; registrar on `package:http`; `_defaultProbeSocket` moved | **PQ S-5** ([`../pq/implementation-plan.md`](../pq/implementation-plan.md):312-326) | Planned, parallel, off the PQ GA critical path |
-| Consumer bumps onto `at_auth ^4.0.0` | **PQ S-6** (:328-339) | Follows S-5 |
-| A ruling on conditional-default vs removed-default in at_auth | OQ-1 | Open |
+| Consumer bumps onto `at_auth ^4.0.0`                                                                                                                                | **PQ S-6** (:328-339)                                                               | Follows S-5                                    |
+| A ruling on conditional-default vs removed-default in at_auth                                                                                                       | OQ-1                                                                                | Open                                           |
 
 This project does **not** touch `at_auth`. The predecessor doc's tasks I4–I8 are
 removed for that reason ([`decisions.md`](decisions.md) §3). If S-5 slips, the sweep

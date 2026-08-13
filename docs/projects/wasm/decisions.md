@@ -1,12 +1,13 @@
 # decisions.md — Rulings, measured findings & open questions
 
 **Status:** decision record (binding).
-**Scope:** the rulings D-1..D-6 that govern the implementation-neutral `AtClient`
+**Scope:** the rulings D-1..D-9 that govern the implementation-neutral `AtClient`
 work, the measurements that drove them, the superseded positions from the predecessor
 `plan.md`, the open questions, and a dated log.
 **Lane:** this doc owns *why*, not *how* or *when*. Mechanics live in
 [`design.md`](design.md); sequencing in [`implementation-plan.md`](implementation-plan.md);
-gates in [`acceptance.md`](acceptance.md); the thesis in [`roadmap.md`](roadmap.md).
+gates in [`acceptance.md`](acceptance.md); the thesis in [`roadmap.md`](roadmap.md); the
+non-Dart consumer story in [`js-api.md`](js-api.md).
 
 ## Table of contents
 
@@ -105,6 +106,57 @@ without T0's result beside it.
 **Why.** Measured: `dart compile wasm` accepts `dart:io` and `dart:isolate` (§2.1). The
 compiler is blind to the two libraries that dominate this port's surface.
 
+**Strengthened by D-7.** Under dart2js the compiler catches *less* still — only
+`dart:ffi` and `dart:mirrors` (§2.4). Choosing dart2js makes T0 more load-bearing, not
+less.
+
+### D-7 — dart2js is the compile target for the JS/TS artifact (2026-08-13)
+
+The npm artifact described in [`js-api.md`](js-api.md) is built with `dart compile js`.
+dart2wasm stays available at zero cost.
+
+**Why.** The facade source is **identical** for both compilers — same
+`dart:js_interop`, same `@JSExport`, same `.toJS` — so this is a packaging decision, not
+a design one, and it is reversible. Measured on the same source, dart2js gives a single
+77 KB file (24.5 KB gzipped) against dart2wasm's four files at ~25 KB gzipped: **size
+parity**, plus universal browser support, trivial bundling, no CSP allowance, and correct
+`is`/`as` on interop types. For a library that other people bundle, every remaining
+factor favours dart2js. Precedent: Sass, the most-consumed Dart library on npm, ships
+dart2js.
+
+**Consequences that must not be lost** (detail in [`js-api.md`](js-api.md) §3):
+
+- `dart:html` and `dart:js` stop being compiler-rejected, so "do not import them" becomes
+  a **policy** enforced by [`acceptance.md`](acceptance.md) T0.1 rather than by the
+  toolchain. It is kept in order to leave dart2wasm open.
+- Open question C1 changes character: `cryptography`'s Web Crypto path becomes reachable
+  under dart2js, which may remove the deferred Argon2id work
+  ([`design.md`](design.md) §2.10).
+- **Neutrality is unaffected.** `dart:io` compiles and then throws under *both*
+  compilers (§2.4).
+
+### D-8 — The JS facade lives in `at_client_web`; D-4 is not amended (2026-08-13)
+
+No new Dart package. The facade sits at `packages/at_client_web/lib/src/js/` with its
+entry point at `web/at_client_js.dart`, and the npm package is a build artifact
+(compiled `.js` + hand-written `index.js`/`index.d.ts`), not a pub package.
+
+**Why.** `dart compile js` compiles a *program*, so the facade is an entry point rather
+than a library; packages ship entry points routinely. It is reachable only from that
+`main()`, so it tree-shakes out of any Dart app importing `at_client_web` as a library —
+Dart consumers pay nothing.
+
+### D-9 — Keys cross the JS boundary as strings; events as callbacks (2026-08-13)
+
+`AtKey` and `AtValue` are never materialised in JavaScript. Keys cross as the wire form
+(`public:phone.wavi@bob`); metadata crosses as a plain object.
+
+**Why.** `AtKey` has no JSON codec — every codec in
+`packages/at_commons/lib/src/keystore/at_key.dart` belongs to `Metadata` (`:627`/`:661`)
+or `AppMetadata` (`:852`/`:862`) — and `AtKey.fromString` is lossy on metadata.
+Separately, `Stream` has no JS bridge in any Dart SDK, official or community, so every
+event surface is `subscribe(cb) → unsubscribe`.
+
 ---
 
 ## 2. Measured findings
@@ -115,14 +167,14 @@ and output in [`acceptance.md`](acceptance.md) §1.
 
 ### 2.1 dart2wasm accepts `dart:io` and `dart:isolate`
 
-| Library | `dart compile wasm` |
-|---|---|
-| `dart:io` | compiles, exit 0 |
-| `dart:isolate` | compiles, exit 0 |
-| `dart:ffi` | rejected |
-| `dart:html` | rejected |
-| `dart:js` | rejected |
-| `dart:mirrors` | rejected |
+| Library        | `dart compile wasm` |
+| -------------- | ------------------- |
+| `dart:io`      | compiles, exit 0    |
+| `dart:isolate` | compiles, exit 0    |
+| `dart:ffi`     | rejected            |
+| `dart:html`    | rejected            |
+| `dart:js`      | rejected            |
+| `dart:mirrors` | rejected            |
 
 ### 2.2 The `dart:io` stub throws on first use
 
@@ -141,19 +193,55 @@ rather than as an aspiration.
 executing** — no Chrome binary in the development environment. T3 must be validated on
 its first CI run.
 
+### 2.4 dart2js is blind to `dart:io` too, and permits more besides
+
+Same probes, run through `dart compile js`:
+
+| Library           | dart2js      | dart2wasm |
+| ----------------- | ------------ | --------- |
+| `dart:io`         | compiles     | compiles  |
+| `dart:isolate`    | compiles     | compiles  |
+| `dart:html`       | **compiles** | rejected  |
+| `dart:js`         | **compiles** | rejected  |
+| `dart:js_interop` | compiles     | compiles  |
+| `dart:ffi`        | rejected     | rejected  |
+| `dart:mirrors`    | rejected     | rejected  |
+
+dart2js emits the same `_Namespace` throwing stub for `dart:io`. So **no Dart web
+compiler gates `dart:io`** — switching targets buys no protection, and D-6 holds
+regardless of D-7.
+
+### 2.5 The JS/TS language boundary
+
+Measured with `@JSExport` + `createJSInteropWrapper`, called from Node 24.18.0. Full
+tables in [`js-api.md`](js-api.md) §1. The load-bearing results:
+
+- **Nothing converts automatically** — `Future`, `Stream`, `List<T>`, `Uint8List` and
+  custom classes all cross as opaque Dart handles.
+- **An unconverted `Future` completing with an error killed the Node process** — no
+  rejection, no catch. This is why [`acceptance.md`](acceptance.md) T6 gates on it.
+- **Hand-adapted signatures work**: `JSPromise<JSString>` and friends yield real strings,
+  a real `Uint8Array`, a real `Array`, and catchable rejections.
+- **JavaScript objects can satisfy Dart interfaces** — a JS `{read, write}` was used
+  behind a Dart `abstract interface class`. This is what lets TypeScript supply platform
+  implementations, and is why Node needs no Dart package of its own.
+- **dart2js on Node hangs silently without `globalThis.self = globalThis`** — Node has
+  neither `self` nor `MutationObserver`, so Dart's microtask scheduler never runs and
+  every Promise stays pending. No error is raised.
+
 ---
 
 ## 3. Superseded positions
 
-| Position in `plan.md` | Status |
-|---|---|
-| "No `dart:io`. The compiler hard-errors if any *reachable* code transitively imports it." (§1) | **False on Dart 3.12** — §2.1. Superseded by D-6. |
-| "Isolates are experimental under dart2wasm" (§1) | Incomplete — `dart:isolate` compiles without complaint, so the compiler gives no signal either way. |
-| "Use **conditional imports** … plus the injection seams" (§4, packaging strategy) | Superseded by D-1. |
-| "One set of core packages … platform differences live behind conditional imports" (Goal 2) | Superseded by D-1 / D-5. The packages stay single-sourced; the mechanism changes. |
-| "No regression on native. Every conditional seam keeps the existing native path byte-for-byte" (Goal 3) | Narrowed by D-3 to a behavioural commitment. |
-| Gates A1/A2 (`dart compile wasm`) as the leading acceptance criteria | Demoted to T1 by D-6. |
-| Tasks I4–I8 (the `at_auth` sweep) | Removed — owned by the PQ program's S-5/S-6. |
+| Position in `plan.md`                                                                                   | Status                                                                                              |
+| ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------- |
+| "No `dart:io`. The compiler hard-errors if any *reachable* code transitively imports it." (§1)          | **False on Dart 3.12** — §2.1. Superseded by D-6.                                                   |
+| "Isolates are experimental under dart2wasm" (§1)                                                        | Incomplete — `dart:isolate` compiles without complaint, so the compiler gives no signal either way. |
+| "Use **conditional imports** … plus the injection seams" (§4, packaging strategy)                       | Superseded by D-1.                                                                                  |
+| "One set of core packages … platform differences live behind conditional imports" (Goal 2)              | Superseded by D-1 / D-5. The packages stay single-sourced; the mechanism changes.                   |
+| "No regression on native. Every conditional seam keeps the existing native path byte-for-byte" (Goal 3) | Narrowed by D-3 to a behavioural commitment.                                                        |
+| Gates A1/A2 (`dart compile wasm`) as the leading acceptance criteria                                    | Demoted to T1 by D-6.                                                                               |
+| Tasks I4–I8 (the `at_auth` sweep)                                                                       | Removed — owned by the PQ program's S-5/S-6.                                                        |
 
 The predecessor `plan.md` is deleted rather than left in place, because its §1
 constraint table and its A1/A2 gates are actively misleading. It remains in git history
@@ -250,21 +338,34 @@ internal conditional imports *should* resolve to the no-op `stub` backend when b
 direct `hive` dependency is required or merely tidy. Note that §2.1 makes this less
 comfortable than it sounds: a stub that compiles is exactly what does not prove safety.
 
+**OQ-10 — Does `package:hive`'s stub resolve under *dart2js*?** OQ-9 asks this for
+dart2wasm, where `dart.library.html` is false. Under dart2js it is **true**, so Hive may
+resolve to its real IndexedDB backend rather than the no-op stub — a different outcome,
+and possibly a working one. Re-ask against D-7's target before acting on OQ-9.
+
+The JS/TS-surface questions (**JS-1..JS-5** — `cryptography`'s path under dart2js,
+whether `AtCollection` is exposed, whether to ship a dart2wasm build too, whether
+`at_client_web` keeps both jobs, and who owns the npm release) live in
+[`js-api.md`](js-api.md) §11.
+
 **Answered.** *Does `package:sqlite3`'s web entry point compile under dart2wasm?*
 **Yes** — Dart 3.11.3, `sqlite3` 2.9.4, with a negative control that failed as
 required. [`design.md`](design.md) §0.2. Runtime behaviour remains unproven and is
-covered by T3.1 and X1.
+covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths:
+`package:sqlite3`'s web support was originally built for dart2js.
 
 ---
 
 ## 6. Decision log
 
-| Date | Entry |
-|---|---|
-| 2026-08-03 | Predecessor `plan.md` written against `33a062a61` by gkc. `package:sqlite3` web compile validated. |
-| 2026-08-12 | `at_client_sdk-atauth-wasm` worktree prototypes the at_auth barrel split and the dependency-tree walk; its `dep_tree_test.dart` header records that dart2wasm does not reject `dart:io`. |
-| 2026-08-13 | Measured and confirmed the dart2wasm library-acceptance matrix (§2.1), the runtime throw (§2.2), and the browser-free test gate (§2.3). |
-| 2026-08-13 | **D-1..D-6 ruled.** Injection over conditional imports; no throwing stubs; breaking majors accepted; `at_client_web` the only new package; `_io` barrels for native; structural gate primary. |
-| 2026-08-13 | Doc set split five ways on the `docs/projects/pq` convention; `plan.md` deleted. |
-| 2026-08-13 | Corrected the `at_server_status` "unused import" claim and the `at_client_flutter` "platform implementer" framing (§4). |
-| 2026-08-13 | Ceded `at_auth` to the PQ program's S-5/S-6; tasks I4–I8 removed from this backlog. |
+| Date       | Entry                                                                                                                                                                                               |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2026-08-03 | Predecessor `plan.md` written against `33a062a61` by gkc. `package:sqlite3` web compile validated.                                                                                                  |
+| 2026-08-12 | `at_client_sdk-atauth-wasm` worktree prototypes the at_auth barrel split and the dependency-tree walk; its `dep_tree_test.dart` header records that dart2wasm does not reject `dart:io`.            |
+| 2026-08-13 | Measured and confirmed the dart2wasm library-acceptance matrix (§2.1), the runtime throw (§2.2), and the browser-free test gate (§2.3).                                                             |
+| 2026-08-13 | **D-1..D-6 ruled.** Injection over conditional imports; no throwing stubs; breaking majors accepted; `at_client_web` the only new package; `_io` barrels for native; structural gate primary.       |
+| 2026-08-13 | Doc set split five ways on the `docs/projects/pq` convention; `plan.md` deleted.                                                                                                                    |
+| 2026-08-13 | Corrected the `at_server_status` "unused import" claim and the `at_client_flutter` "platform implementer" framing (§4).                                                                             |
+| 2026-08-13 | Ceded `at_auth` to the PQ program's S-5/S-6; tasks I4–I8 removed from this backlog.                                                                                                                 |
+| 2026-08-13 | Measured the JS/TS language boundary (§2.5) and the dart2js library matrix (§2.4); confirmed no Dart web compiler gates `dart:io`.                                                                  |
+| 2026-08-13 | **D-7..D-9 ruled.** dart2js is the JS/TS compile target; the facade lives in `at_client_web` with D-4 unamended; keys cross as strings and events as callbacks. `js-api.md` added as the sixth doc. |

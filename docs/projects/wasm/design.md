@@ -7,7 +7,8 @@ that replaces them, and who implements it on each platform.
 **Lane:** this doc owns *how it is built and where the code lives*. For the thesis see
 [`roadmap.md`](roadmap.md); for sequencing see
 [`implementation-plan.md`](implementation-plan.md); for the gates see
-[`acceptance.md`](acceptance.md); for the rulings see [`decisions.md`](decisions.md).
+[`acceptance.md`](acceptance.md); for the rulings see [`decisions.md`](decisions.md);
+for the non-Dart consumer story see [`js-api.md`](js-api.md).
 **Verified against:** `trunk` at `20f7f4da5`, 2026-08-13.
 
 ## Table of contents
@@ -122,7 +123,9 @@ export 'src/io/secure_socket_transport.dart';  // the only file naming dart:io
 
 ```dart
 // package:at_client_web/at_client_web.dart
-class WebSocketTransport implements AtTransport { … }
+class WebSocketTransport implements AtTransport {
+  // ...
+}
 ```
 
 Three rules make this work, and they are rulings rather than style —
@@ -147,14 +150,14 @@ default.
 
 **The largest item.** Everything that reaches an atServer terminates in one function.
 
-| Site | What it does |
-|---|---|
+| Site                                                                        | What it does                                                                                                                                                                                                       |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `at_lookup/lib/src/util/secure_socket_util.dart:12,23,25,29,35,43,49,54,55` | `SecurityContext.defaultContext`, cert `File`, `setTrustedCertificates`, `SecureSocket.connect` ×2, `setOption(tcpNoDelay)` ×2, TLS-keylog `File` + append-write. **Every connection in every package ends here.** |
-| `at_lookup/lib/src/monitor_client.dart:63` | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`. |
-| `at_client/lib/src/stream/stream_notification_handler.dart:27` | `SecureSocket.connect(host, port)` — raw. |
-| `at_client/lib/src/manager/monitor.dart:539` | `SecureSocketUtil.createSecureSocket(...)` inside the default `MonitorOutboundConnectionFactory`. |
-| `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222` | raw TLS socket to `root.atsign.org:64` for directory lookup. |
-| `at_auth/lib/src/at_auth_impl.dart:396` | `_defaultProbeSocket` → `SecureSocket.connect`. **Owned by the PQ program's S-5**, not here. |
+| `at_lookup/lib/src/monitor_client.dart:63`                                  | `SecureSocket.connect(host, int.parse(port))` — raw, bypasses even `SecureSocketUtil`.                                                                                                                             |
+| `at_client/lib/src/stream/stream_notification_handler.dart:27`              | `SecureSocket.connect(host, port)` — raw.                                                                                                                                                                          |
+| `at_client/lib/src/manager/monitor.dart:539`                                | `SecureSocketUtil.createSecureSocket(...)` inside the default `MonitorOutboundConnectionFactory`.                                                                                                                  |
+| `at_lookup/lib/src/cache/cacheable_secondary_address_finder.dart:209,222`   | raw TLS socket to `root.atsign.org:64` for directory lookup.                                                                                                                                                       |
+| `at_auth/lib/src/at_auth_impl.dart:396`                                     | `_defaultProbeSocket` → `SecureSocket.connect`. **Owned by the PQ program's S-5**, not here.                                                                                                                       |
 
 **The ABI leak** is the interface, not the implementation:
 
@@ -224,7 +227,7 @@ name on web (§4). Add a `SqlitePersistenceConfig.clientDefaults(...)` mirroring
 **The canonical runtime landmine, and the one to lead with when explaining this
 project.**
 
-```dart
+```text
 // at_client/lib/src/sync/at_sync_queue.dart:121
 _box = await Hive.openBox<String>(boxNameForAtSign(_atSign));
 ```
@@ -254,11 +257,11 @@ Drop the direct `hive` dependency once this and §2.2 land.
 `WrittenAtKeysIo` (`:24`) and `GeneratedAtKeysIo` (`:57`). Three implementations exist
 across three platforms:
 
-| Impl | Home | Platform |
-|---|---|---|
-| `FileAtKeysIo` | `at_auth/lib/src/keys/io/file_io.dart` | native (moves to `at_auth_io.dart` under S-5) |
-| `InMemoryAtKeysIo` | `at_auth/lib/src/keys/io/memory_io.dart` | any |
-| `KeychainAtKeysIo` | `at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10` | Flutter |
+| Impl               | Home                                                          | Platform                                      |
+| ------------------ | ------------------------------------------------------------- | --------------------------------------------- |
+| `FileAtKeysIo`     | `at_auth/lib/src/keys/io/file_io.dart`                        | native (moves to `at_auth_io.dart` under S-5) |
+| `InMemoryAtKeysIo` | `at_auth/lib/src/keys/io/memory_io.dart`                      | any                                           |
+| `KeychainAtKeysIo` | `at_client_flutter/lib/src/keychain/keychain_io_impl.dart:10` | Flutter                                       |
 
 Injected through `AtClientImpl.create(atKeysIo:)` (`at_client_impl.dart:311,386`) and
 `AtClientManager` (`:81`). This is a neutral interface, multiple real implementations,
@@ -275,10 +278,10 @@ IndexedDB or WebCrypto-wrapped storage — a new subtype, not a new abstraction.
 
 ### 2.5 HTTP
 
-| Site | State |
-|---|---|
-| `at_auth/lib/src/registrar/registrar_service.dart:34` | `IOClient(HttpClient())` — but `http.Client? httpClient` is an injectable constructor param at `:26`. Only the default is native. **S-5 moves it to `package:http`.** |
-| `at_client/lib/src/service/file_transfer_service.dart:14,31,40,50` | Top-level `http.post` / `http.StreamedRequest` / `http.get`. **No injection at all.** |
+| Site                                                               | State                                                                                                                                                                 |
+| ------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `at_auth/lib/src/registrar/registrar_service.dart:34`              | `IOClient(HttpClient())` — but `http.Client? httpClient` is an injectable constructor param at `:26`. Only the default is native. **S-5 moves it to `package:http`.** |
+| `at_client/lib/src/service/file_transfer_service.dart:14,31,40,50` | Top-level `http.post` / `http.StreamedRequest` / `http.get`. **No injection at all.**                                                                                 |
 
 `package:http` works under WASM via `fetch`, so the fix is an injected `http.Client`
 rather than a new abstraction. File transfer is deferred (§2.8), but the client
@@ -368,22 +371,37 @@ right shape (§0.3), and T0 holds them.
 The real risk is the **pure-Dart path itself**, because a WASM build has no fallback —
 these are the algorithms it must use:
 
-| Package | Backs |
-|---|---|
-| `cryptography` | `x_wing_pure_dart.dart`, `x25519_pure_dart_algo.dart`, `aes_gcm.dart`, `x25519_key_pair.dart`, `argon2id.dart`, `at_chops_util.dart` |
-| `pqcrypto` | `ml_kem_768_pure_dart.dart`, `ml_dsa_65_pure_dart.dart` |
-| `better_cryptography` | `aes.dart`, `aes_ctr_factory.dart`, `ed25519.dart`, `at_chops_util.dart` |
+| Package               | Backs                                                                                                                                |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `cryptography`        | `x_wing_pure_dart.dart`, `x25519_pure_dart_algo.dart`, `aes_gcm.dart`, `x25519_key_pair.dart`, `argon2id.dart`, `at_chops_util.dart` |
+| `pqcrypto`            | `ml_kem_768_pure_dart.dart`, `ml_dsa_65_pure_dart.dart`                                                                              |
+| `better_cryptography` | `aes.dart`, `aes_ctr_factory.dart`, `ed25519.dart`, `at_chops_util.dart`                                                             |
 
-`cryptography` 2.x's browser path uses Web Crypto via `dart:html`, which dart2wasm
-rejects outright — so it must resolve to its pure-Dart implementation. `pqcrypto` is
+`cryptography` 2.x's browser path uses Web Crypto via `dart:html`. `pqcrypto` is
 additionally fragile: `ml_kem_768_pure_dart.dart` reaches into
 `package:pqcrypto/src/…` for `KyberLevel`, a private-path import that can break on any
-upstream release. `better_cryptography` is a `cryptography` fork with unknown WASM
-status.
+upstream release. `better_cryptography` is a `cryptography` fork with unknown web status.
 
-All three are now verifiable **by execution** rather than by compile — the at_chops
-suite runs under [`acceptance.md`](acceptance.md) T2.3. That is a strictly better
-answer than the predecessor doc's compile check, and it closes the same questions.
+**The compile target changes what this question even asks.** Under dart2wasm,
+`dart:html` is rejected, so `cryptography` *must* fall back to pure Dart — and pure-Dart
+Argon2id is the reason `.atKeys` decryption was expected to be slow enough to need
+deferred UX work ([`acceptance.md`](acceptance.md) T4.6). Under **dart2js**, which
+[`decisions.md`](decisions.md) D-7 selects, `dart:html` compiles — so the Web Crypto path
+is reachable and may activate automatically.
+
+So C1 is no longer "will it compile?" but:
+
+1. Which implementation does `cryptography` select under dart2js?
+2. If it is Web Crypto, how much faster are Argon2id and AES?
+3. Does that remove the deferred Argon2id work outright?
+
+**Measure before assuming either way** — and note that a dependency silently relying on
+the deprecated `dart:html` is a risk to track, not a licence for our own code to use it
+(T0.1 keeps it on the forbidden list for package-owned sources).
+
+All three packages are verifiable **by execution** rather than by compile — the at_chops
+suite runs under [`acceptance.md`](acceptance.md) T2.3. That is a strictly better answer
+than the predecessor doc's compile check, and it closes the same questions.
 
 `pointycastle`, `crypto`, `crypton`, `encrypt`, `ecdsa` and `elliptic` are pure Dart
 and fine. `dart_periphery` sits in at_chops's `dependencies:` despite being FFI-based
@@ -408,12 +426,12 @@ an oversight.
 Four injection points already exist and are simply never passed through. Plumbing them
 changes no interface, breaks nothing, and shrinks every later diff.
 
-| Seam | Defined at | Never passed by |
-|---|---|---|
-| `AtLookupSecureSocketFactory`, `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory` | `at_lookup/lib/src/at_lookup_impl.dart:740,749,756`, constructor params at `:108-131` | `RemoteSecondary` — `at_client/lib/src/client/remote_secondary.dart:44-56` builds `AtLookupImpl` without any of them |
-| `MonitorOutboundConnectionFactory` | `at_client/lib/src/manager/monitor.dart:531`, constructor param at `:93` | `NotificationServiceImpl._` — `notification_service_impl.dart:76-84`; `create` exposes only `monitor:` and `secondaryAddressFinder:` |
-| `AtSyncQueue.open({injectedBox})` | `at_client/lib/src/sync/at_sync_queue.dart:116` | Not reachable from `AtClientImpl.create` |
-| `http.Client` | `at_auth/lib/src/registrar/registrar_service.dart:26` | Plumbed — listed for completeness; the default is the only native part |
+| Seam                                                                                                      | Defined at                                                                            | Never passed by                                                                                                                      |
+| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
+| `AtLookupSecureSocketFactory`, `AtLookupSecureSocketListenerFactory`, `AtLookupOutboundConnectionFactory` | `at_lookup/lib/src/at_lookup_impl.dart:740,749,756`, constructor params at `:108-131` | `RemoteSecondary` — `at_client/lib/src/client/remote_secondary.dart:44-56` builds `AtLookupImpl` without any of them                 |
+| `MonitorOutboundConnectionFactory`                                                                        | `at_client/lib/src/manager/monitor.dart:531`, constructor param at `:93`              | `NotificationServiceImpl._` — `notification_service_impl.dart:76-84`; `create` exposes only `monitor:` and `secondaryAddressFinder:` |
+| `AtSyncQueue.open({injectedBox})`                                                                         | `at_client/lib/src/sync/at_sync_queue.dart:116`                                       | Not reachable from `AtClientImpl.create`                                                                                             |
+| `http.Client`                                                                                             | `at_auth/lib/src/registrar/registrar_service.dart:26`                                 | Plumbed — listed for completeness; the default is the only native part                                                               |
 
 The second `RemoteSecondary` construction at `at_client_impl.dart:1225` (the
 stream/file-transfer path) is not injectable at all and needs the same treatment.
@@ -430,15 +448,15 @@ change *plus* a plumbing change.
 `at_client/lib/src/preference/at_client_preference.dart` has **no `dart:io` import**.
 It carries platform-specific configuration as `String?`:
 
-| Field | Line | Reaches |
-|---|---|---|
-| `hiveStoragePath` | 10 | `Hive.init` |
-| `commitLogPath` | 13 | vestigial — client bundles are commit-log-free |
-| `downloadPath` | 66 | file transfer |
-| `tlsKeysSavePath` | 112 | `File(...).writeAsStringSync` in `SecureSocketUtil` |
-| `pathToCerts` | 115 | `SecurityContext.setTrustedCertificates` |
-| `decryptPackets` | 109 | gates the TLS keylog write |
-| `keyStoreSecret` | 37 | passed to `StorageManager.init` and ignored |
+| Field             | Line | Reaches                                             |
+| ----------------- | ---- | --------------------------------------------------- |
+| `hiveStoragePath` | 10   | `Hive.init`                                         |
+| `commitLogPath`   | 13   | vestigial — client bundles are commit-log-free      |
+| `downloadPath`    | 66   | file transfer                                       |
+| `tlsKeysSavePath` | 112  | `File(...).writeAsStringSync` in `SecureSocketUtil` |
+| `pathToCerts`     | 115  | `SecurityContext.setTrustedCertificates`            |
+| `decryptPackets`  | 109  | gates the TLS keylog write                          |
+| `keyStoreSecret`  | 37   | passed to `StorageManager.init` and ignored         |
 
 **This is the mechanism by which native-only configuration compiles on web and fails at
 runtime.** A path is a string everywhere; it only stops meaning anything when something
@@ -469,19 +487,19 @@ There is no sync-returning method that would force an in-memory key index or a
 cross-package caller migration. The choice is about fidelity, reuse and payload size,
 not feasibility.
 
-| Spec member | SQLite-wasm | IndexedDB |
-|---|---|---|
-| `get` / `put` / `create` / `remove` | Yes | Yes — object-store ops |
-| `getMany` / `removeMany` | Yes | Yes — loop inside one IDB transaction |
-| `exists` | Yes | Yes — `count()` on the key |
-| `getExpiredKeys` / `deleteExpiredKeys` / `nextExpiresAt` / `peekExpired` | Yes — indexed on `expiry` | Needs an index on the expiry timestamp, else full scan |
-| `getKeys(regex:)` | Yes | Cursor walk plus a Dart regex — no IDB equivalent |
-| `scanKeys(KeyPattern)` | Yes — indexed on the structured columns | Cursor walk; maps to indexes only if `sharedBy`/`sharedWith`/`namespace`/`idPrefix` are stored as separate indexed fields |
-| `changes` stream | Yes | Yes — app-level broadcast controller |
-| `transaction` | Yes — true atomic transactions | Real, but IDB transactions **auto-close on the first `await` of non-IDB work**. The buffer-then-apply `KeyStoreTxn` model fits; nested awaits inside `body` are a footgun |
-| `supportsSnapshots` / `snapshot` | `true` | `false` — no snapshot isolation |
-| `supportsPathQueries` / `queryByPath` | `true` | `false` unless composite indexes are hand-built |
-| `stats` | Yes | Cursor count / `count()` |
+| Spec member                                                              | SQLite-wasm                             | IndexedDB                                                                                                                                                                 |
+| ------------------------------------------------------------------------ | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `get` / `put` / `create` / `remove`                                      | Yes                                     | Yes — object-store ops                                                                                                                                                    |
+| `getMany` / `removeMany`                                                 | Yes                                     | Yes — loop inside one IDB transaction                                                                                                                                     |
+| `exists`                                                                 | Yes                                     | Yes — `count()` on the key                                                                                                                                                |
+| `getExpiredKeys` / `deleteExpiredKeys` / `nextExpiresAt` / `peekExpired` | Yes — indexed on `expiry`               | Needs an index on the expiry timestamp, else full scan                                                                                                                    |
+| `getKeys(regex:)`                                                        | Yes                                     | Cursor walk plus a Dart regex — no IDB equivalent                                                                                                                         |
+| `scanKeys(KeyPattern)`                                                   | Yes — indexed on the structured columns | Cursor walk; maps to indexes only if `sharedBy`/`sharedWith`/`namespace`/`idPrefix` are stored as separate indexed fields                                                 |
+| `changes` stream                                                         | Yes                                     | Yes — app-level broadcast controller                                                                                                                                      |
+| `transaction`                                                            | Yes — true atomic transactions          | Real, but IDB transactions **auto-close on the first `await` of non-IDB work**. The buffer-then-apply `KeyStoreTxn` model fits; nested awaits inside `body` are a footgun |
+| `supportsSnapshots` / `snapshot`                                         | `true`                                  | `false` — no snapshot isolation                                                                                                                                           |
+| `supportsPathQueries` / `queryByPath`                                    | `true`                                  | `false` unless composite indexes are hand-built                                                                                                                           |
+| `stats`                                                                  | Yes                                     | Cursor count / `count()`                                                                                                                                                  |
 
 **Ruling: SQLite-wasm is the WASM storage backend.** The backend already exists, is
 published, and is covered by a conversion-integrity gate; it is the only backend that
