@@ -499,8 +499,30 @@ class ParsedApsk {
   /// A verifier resolves the algorithm first — from what the envelope and the
   /// advertisement have in common — and then asks for that key, rather than
   /// taking a key and requiring the envelope to match it.
-  ApskSigningKey? keyFor(SigningAlgoType algo) =>
-      keys.where((k) => k.alg == algo).firstOrNull;
+  ///
+  /// **The first of possibly several.** An advertisement can hold more than one
+  /// key under one algorithm, so a verifier uses [keysFor] and tries them all;
+  /// this answers the singular getters above, where "the" key means "the one to
+  /// treat as current", which is the first an enrollment publishes.
+  ApskSigningKey? keyFor(SigningAlgoType algo) => keysFor(algo).firstOrNull;
+
+  /// Every advertised key for [algo], in published order.
+  ///
+  /// One algorithm can name several keys, and the case is not exotic: an
+  /// enrollment that mints its own signing key keeps publishing the APKAM
+  /// authentication key it used to sign with, because that is what verifies
+  /// everything it signed earlier — and where both are ML-DSA, which is what a
+  /// post-quantum-native enrollment holds, the two entries share an algorithm.
+  /// A verifier that took only the first would refuse every envelope signed
+  /// before the split.
+  ///
+  /// Trying each is **not** the fallback ruling 11 forbids. That refusal is
+  /// about algorithms: dropping to a weaker one after a failure hands the
+  /// choice of algorithm to whoever wrote the envelope. The algorithm is
+  /// already fixed here by the strongest-shared rule, and every key tried is
+  /// one this signer published under it.
+  List<ApskSigningKey> keysFor(SigningAlgoType algo) =>
+      [for (final key in keys) if (key.alg == algo) key];
 }
 
 /// Parses a fetched `_apsk` value, bare or array.
@@ -593,7 +615,7 @@ Future<void> verifyEnvelope(
         'way: a signature means something only if the verifier used the key '
         'the signer published');
   }
-  final key = parsed.keyFor(algo)!;
+  final candidates = parsed.keysFor(algo);
   final jose = _joseAlgFor(algo)!;
   final entry = envelope.signatures.firstWhere((s) => s.alg == jose);
 
@@ -610,35 +632,43 @@ Future<void> verifyEnvelope(
   final signingInput = utf8.encode('${entry.protected}.${envelope.payloadB64}');
   final signatureBytes = _base64UrlDecode(entry.signature, 'signature');
 
-  final bool ok;
-  switch (algo) {
-    case SigningAlgoType.mldsa65:
-      ok = await MlDsa65PureDartAlgo().verifyBytes(
-        signingInput,
-        signature: signatureBytes,
-        publicKey: base64Decode(key.pub),
-      );
-    case SigningAlgoType.rsa2048:
-      // RS256 names its hash: RSASSA-PKCS1-v1_5 with SHA-256. Nothing
-      // unsigned selects a routine in this shape.
-      ok = RsaSigningAlgo(null, HashingAlgoType.sha256).verify(
-        signingInput,
-        signatureBytes,
-        publicKey: key.pub,
-      );
-    default:
-      // Unreachable: _joseAlgFor answered for this algorithm a few lines up,
-      // and it answers for exactly the two below. Refusing rather than
-      // asserting, because the two would have drifted for it to be reached.
-      throw AtSigningVerificationException(
-          'no verify routine for ${algo.name}, which this build claims to '
-          'sign envelopes with');
+  // Every key advertised under the resolved algorithm, in published order.
+  // The current one is first, so the ordinary envelope verifies on the first
+  // attempt and the later keys are reached only by an envelope old enough to
+  // have been signed by one of them.
+  var ok = false;
+  for (final key in candidates) {
+    switch (algo) {
+      case SigningAlgoType.mldsa65:
+        ok = await MlDsa65PureDartAlgo().verifyBytes(
+          signingInput,
+          signature: signatureBytes,
+          publicKey: base64Decode(key.pub),
+        );
+      case SigningAlgoType.rsa2048:
+        // RS256 names its hash: RSASSA-PKCS1-v1_5 with SHA-256. Nothing
+        // unsigned selects a routine in this shape.
+        ok = RsaSigningAlgo(null, HashingAlgoType.sha256).verify(
+          signingInput,
+          signatureBytes,
+          publicKey: key.pub,
+        );
+      default:
+        // Unreachable: _joseAlgFor answered for this algorithm a few lines up,
+        // and it answers for exactly the two below. Refusing rather than
+        // asserting, because the two would have drifted for it to be reached.
+        throw AtSigningVerificationException(
+            'no verify routine for ${algo.name}, which this build claims to '
+            'sign envelopes with');
+    }
+    if (ok) break;
   }
   if (!ok) {
     throw AtSigningVerificationException(
-        'the envelope\'s ${algo.name} signature does not verify against the '
-        'published _apsk key for that algorithm. Refusing outright — a weaker '
-        'signature on the same envelope is not a second opinion, it is the '
-        'algorithm being chosen by whoever wrote it');
+        'the envelope\'s ${algo.name} signature does not verify against any of '
+        'the ${candidates.length} ${algo.name} key(s) the published _apsk '
+        'advertises. Refusing outright — a weaker signature on the same '
+        'envelope is not a second opinion, it is the algorithm being chosen by '
+        'whoever wrote it');
   }
 }

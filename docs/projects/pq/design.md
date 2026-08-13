@@ -2094,6 +2094,15 @@ weaker one. Falling through to whichever signature happens to verify hands the
 choice of algorithm to whoever tampered with the envelope, and it would read as
 success in every log.
 
+One algorithm can name **several** advertised keys, and every one of them is
+tried before the refusal. An enrollment that mints its own signing key keeps
+advertising the APKAM authentication key it used to sign with, and for a
+post-quantum-native enrollment both are ML-DSA — so a verifier that took the
+first entry for the algorithm would refuse every envelope signed before the
+split. This is not the fallback the paragraph above forbids: that one is about
+dropping to a weaker *algorithm*, which is already fixed here, and each key
+tried is one this signer published under it.
+
 An envelope naming an algorithm with no matching `_apsk` entry is refused for
 that reason specifically, which is the failure a rollout-2 sender produces
 against a fleet that has not reached rollout 1.

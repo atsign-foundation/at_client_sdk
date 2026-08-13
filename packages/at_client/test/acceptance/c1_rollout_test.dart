@@ -7,11 +7,12 @@ import 'proven_elsewhere.dart';
 /// The capstone of the rollout-posture design (`decisions.md` 56.4): 4.0 is
 /// final-3.x code with different flag defaults, so the entire rollout must be
 /// drivable from this codebase by flag manipulation — each axis in isolation,
-/// and all four as the grouped `ReleasePosture`.
+/// and all five as the grouped `ReleasePosture`.
 ///
-/// There were five. The envelope-shape axis (UC-C1.3) is gone because the
-/// envelope stopped having a second shape to roll out to, so there was no
-/// axis left to drive.
+/// The envelope-shape axis (UC-C1.3) is gone because the envelope stopped
+/// having a second shape to roll out to, so there was no axis left to drive;
+/// the in-use signing set (UC-C1.7) took the vacated fifth slot. The count is
+/// five by coincidence rather than because the original five stand.
 void main() {
   test('UC-C1.1 · the era axis: a postured client writes PQ by default', () {
     // GIVEN a client built with ReleasePosture.postQuantum() and no
@@ -100,5 +101,30 @@ void main() {
     provenIn('packages/at_client/test/release_posture_test.dart',
         'a bare preference runs the migration posture',
         proves: 'naming nothing keeps today\'s behaviour byte-identical');
+  });
+
+  test('UC-C1.7 · the signing-set axis: which keys an enrollment holds', () {
+    // GIVEN a preference built with ReleasePosture.postQuantum() and no
+    //       explicit inUseSigningAlgorithms argument.
+    // WHEN  the set is read.
+    // THEN  it is {mldsa65}, while a migration-postured preference's is empty
+    //       — an enrollment that mints no signing key of its own keeps signing
+    //       with its APKAM authentication key. An explicit argument wins both
+    //       ways, and an algorithm this build cannot sign under is refused
+    //       where it is named.
+    provenIn('packages/at_client/test/release_posture_test.dart',
+        'postQuantum is the 4.0 column of the rollout table',
+        proves: 'the 4.0 default, pinned as a literal: {mldsa65}');
+    provenIn('packages/at_client/test/release_posture_test.dart',
+        'migration is the 3.x column of the rollout table',
+        proves: 'the 3.x default is empty — no client mints until the posture '
+            'says so');
+    // The two below are in that file's "the in-use signing set" group.
+    provenIn('packages/at_client/test/release_posture_test.dart',
+        'follows the posture, and an explicit set beats it both ways',
+        proves: 'the per-axis override contract, in both directions');
+    provenIn('packages/at_client/test/release_posture_test.dart',
+        'refuses an algorithm this build cannot sign an envelope under',
+        proves: 'the refusal is at construction, where the algorithm is named');
   });
 }

@@ -1,12 +1,10 @@
-import 'dart:convert' show jsonEncode;
-
-import 'package:at_auth/at_auth.dart'
-    show ApskSigningKey, AtKeys, apskAdvertisement;
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_auth/at_auth.dart' show AtKeys;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions, PutRequestOptions;
 import 'package:at_commons/at_commons.dart' show AtKey, AtKeyNotFoundException;
+import 'package:at_client/src/signing/apsk_composition.dart'
+    show apskEntries, apskValueOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, apskUri, canSignEnvelopeWith;
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
@@ -73,31 +71,17 @@ mixin ApkamSigning {
     );
   }
 
-  /// What [publishPublicSigningKey] writes: the bare public key when this
-  /// client holds exactly one `rsa2048` signing key, and the JSON `_apsk`
-  /// advertisement otherwise.
+  /// What [publishPublicSigningKey] writes: this client's signing keys, plus
+  /// the APKAM authentication key it used to sign with, composed by
+  /// [apskEntries] and spelled by [apskValueOf].
   ///
-  /// The bare form is kept for the one case that can still be read by
-  /// everything deployed. Every `_apsk` consumer that predates the array
-  /// base64-decodes the value as an RSA key, so publishing JSON where a bare
-  /// key would do breaks them — fail-closed, but service-breaking for anything
-  /// already running. The same rule decides the enrollment path's
-  /// `apsk`-versus-`apskLegacy`, and the two must agree: they describe one
-  /// record.
-  ///
-  /// Anything else has to be the array. A bare value says "rsa2048" by
-  /// convention and can name only one key, so it cannot express a second
-  /// algorithm or a retired entry at all.
-  Future<String> get publicSigningKeyValue async {
-    final keys = await signingKeys;
-    if (keys.length == 1 && keys.single.algorithm == SigningAlgoType.rsa2048) {
-      return keys.single.publicKey;
-    }
-    return jsonEncode(apskAdvertisement(keys: [
-      for (final key in keys)
-        ApskSigningKey.forPublicKey(alg: key.algorithm, pub: key.publicKey)
-    ]));
-  }
+  /// The same rule decides the enrollment path's `apsk`-versus-`apskLegacy`,
+  /// and the two must agree: they describe one record.
+  Future<String> get publicSigningKeyValue async =>
+      apskValueOf(apskEntries(
+        signing: await heldSigningKeys,
+        authentication: authenticationSigningKey,
+      ));
 
   /// This client's signing keys, strongest algorithm first — one entry per
   /// algorithm this enrollment holds a key for, which is what a
@@ -122,23 +106,34 @@ mixin ApkamSigning {
   /// everything signed before an enrollment held signing keys of its own was
   /// signed by it, and withdrawing it would retroactively unverify all of it.
   Future<List<ApkamSigningKeys>> get signingKeys async {
-    final held = await _heldSigningKeys();
+    final held = await heldSigningKeys;
     if (held.isNotEmpty) return held;
 
-    final keyPair = atClient.atChops!.atChopsKeys.atPkamKeyPair!;
-    return [
-      ApkamSigningKeys(
-        algorithm: signingAlgoOf(atClient),
-        publicKey: keyPair.atPublicKey.publicKey,
-        privateKey: keyPair.atPrivateKey.privateKey,
-      )
-    ];
+    return [authenticationSigningKey!];
+  }
+
+  /// The APKAM **authentication** keypair as a signing key, or null when this
+  /// client holds no `AtChops` keypair.
+  ///
+  /// Two jobs, one key, for as long as an enrollment holds no signing material
+  /// of its own: it authenticates the connection and it signs what the
+  /// enrollment attests to. Once signing keys exist it stops signing, and its
+  /// public half stays advertised so that what it already signed still
+  /// verifies ([apskEntries]).
+  ApkamSigningKeys? get authenticationSigningKey {
+    final keyPair = atClient.atChops?.atChopsKeys.atPkamKeyPair;
+    if (keyPair == null) return null;
+    return ApkamSigningKeys(
+      algorithm: signingAlgoOf(atClient),
+      publicKey: keyPair.atPublicKey.publicKey,
+      privateKey: keyPair.atPrivateKey.privateKey,
+    );
   }
 
   /// What the keyfile holds for [enrollmentId], filtered to what this build
   /// can sign an envelope with. Empty when the client has no key source, when
   /// the read fails, or when the enrollment holds none.
-  Future<List<ApkamSigningKeys>> _heldSigningKeys() async {
+  Future<List<ApkamSigningKeys>> get heldSigningKeys async {
     final io = atClient.atKeysIo;
     final atSign = atClient.getCurrentAtSign();
     if (io == null || atSign == null) return const [];

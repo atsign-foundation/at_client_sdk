@@ -1450,6 +1450,12 @@ side nobody wrote — the published arm is the only thing that measures
   *When* the enrollment moves to rollout 2 and republishes `_apsk` as an array.
   *Then* the stored envelope still verifies, against the auth key's
   `retired` entry.
+  *And* this holds when the retained entry names the **same algorithm** as the
+  active one, which is what a post-quantum-native enrollment publishes: its
+  auth key is ML-DSA and so is the key it mints. The verifier resolves the
+  algorithm first and then tries every key advertised under it, rather than the
+  first — proven in `packages/at_client/test/jws_envelope_test.dart`, group
+  "one algorithm, several advertised keys".
 
 - **UC-G1.9 · a retired algorithm still verifies history.**
   *Given* an algorithm dropped from the in-use set.

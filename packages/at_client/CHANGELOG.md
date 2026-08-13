@@ -1,4 +1,19 @@
 ## 3.14.1
+- fix: a verifier tries **every** key the signer advertises under the resolved
+  algorithm, rather than the first, and refuses only when none of them
+  verifies. One algorithm can name several `_apsk` entries: an enrollment that
+  mints its own signing key keeps advertising the APKAM authentication key it
+  used to sign with, and for a post-quantum-native enrollment both are ML-DSA,
+  so taking the first entry would refuse every envelope signed before the two
+  jobs were separated. This is not a fallback to a weaker algorithm — the
+  algorithm is fixed first, by what the envelope and the advertisement share,
+  and every key tried is one that signer published under it.
+- feat: the `_apsk` an enrollment publishes lists its signing keys and then the
+  APKAM authentication key it used to sign with, marked `retired`. An
+  enrollment with no signing keys of its own advertises that key as active and
+  is byte-for-byte what it published before, so nothing changes until something
+  mints. `apskEntries` and `apskValueOf` are the one composition, shared by
+  both publishers of that record.
 - feat: `AtClientPreference.inUseSigningAlgorithms` — which algorithms this
   client keeps an active signing key for, which is a different job from
   `signingAlgoType`'s APKAM authentication key. A `Set<SigningAlgoType>`,

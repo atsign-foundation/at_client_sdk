@@ -261,9 +261,33 @@ void main() {
       final advertised = jsonDecode(await signer.publicSigningKeyValue);
       final entries = (advertised['keys'] as List).cast<Map>();
 
-      expect(entries.map((e) => e['alg']).toList(), ['mldsa65', 'rsa2048']);
+      // Held keys first, strongest first, then the APKAM authentication key
+      // this enrollment used to sign with — kept, and marked retired, because
+      // it is what verifies the envelopes it signed before the split.
+      expect(entries.map((e) => e['alg']).toList(),
+          ['mldsa65', 'rsa2048', 'rsa2048']);
       expect(entries.map((e) => e['pub']).toList(),
-          [b64('mldsa-pub'), b64('rsa-pub')]);
+          [b64('mldsa-pub'), b64('rsa-pub'), pkamPublicKey()]);
+      expect(entries.map((e) => e['status']).toList(),
+          [null, null, 'retired']);
+    });
+
+    test('the authentication key is retained, not duplicated', () async {
+      // Its own authentication keypair filed as signing material: one key,
+      // already listed as active. Listing it a second time as retired would
+      // describe one key as both current and withdrawn, and a verifier picking
+      // between them has nothing to pick on.
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
+          keys.fileSigningMaterial(
+              enrollmentId: enrollmentId,
+              algorithm: KeyAlgorithmType.rsa2048,
+              publicKey: pkamPublicKey(),
+              privateKey: b64('rsa-priv'))));
+
+      final value = await signer.publicSigningKeyValue;
+
+      // One active rsa2048 entry is the bare form, exactly as before.
+      expect(value, pkamPublicKey());
     });
   });
 

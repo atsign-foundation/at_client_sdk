@@ -1,7 +1,8 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, KeyEntryStatus, apskAdvertisement;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
@@ -448,6 +449,74 @@ void main() {
           throwsA(isA<ArgumentError>()),
           reason: 'no envelope signs under Ed25519, and a shape that guessed '
               'an alg name for it would freeze the guess inside a signature');
+    });
+  });
+
+  group('one algorithm, several advertised keys', () {
+    late ({Uint8List publicKey, Uint8List secretKey}) retiredPair;
+
+    setUpAll(() async {
+      retiredPair = await MlDsa65PureDartAlgo().generateKeyPair();
+    });
+
+    /// What a post-quantum-native enrollment publishes once it mints a signing
+    /// key of its own: the new key active, and the ML-DSA APKAM
+    /// authentication key it used to sign with kept as `retired`. **Both
+    /// entries are mldsa65** — which is the case a verifier taking the first
+    /// entry for an algorithm gets wrong.
+    String apskWithRetained() => jsonEncode(apskAdvertisement(keys: [
+          ApskSigningKey.forPublicKey(
+              alg: SigningAlgoType.mldsa65,
+              pub: base64Encode(mlDsaPair.publicKey)),
+          ApskSigningKey.forPublicKey(
+              alg: SigningAlgoType.mldsa65,
+              pub: base64Encode(retiredPair.publicKey),
+              status: KeyEntryStatus.retired),
+        ]));
+
+    test('an envelope signed by the retained key still verifies', () async {
+      // The envelope this enrollment signed BEFORE it split authentication
+      // from signing. Envelopes are stored durably and verified whenever they
+      // are read, so this is not a historical curiosity — it is every record
+      // the enrollment wrote up to the moment it minted.
+      final envelope = signEnvelope(payload,
+          keys: [
+            ApkamSigningKeys(
+                algorithm: SigningAlgoType.mldsa65,
+                publicKey: base64Encode(retiredPair.publicKey),
+                privateKey: base64Encode(retiredPair.secretKey))
+          ],
+          enrollmentId: 'enroll-pq');
+
+      await verifyEnvelope(envelope, signerPublicKey: apskWithRetained());
+    });
+
+    test('and one signed by the current key verifies on the first attempt',
+        () async {
+      await verifyEnvelope(mlDsaEnvelope(),
+          signerPublicKey: apskWithRetained());
+    });
+
+    test('a signature under neither key is still refused', () async {
+      // Trying every key of the resolved algorithm is not "keep going until
+      // something passes": a key this enrollment never published must not
+      // verify, or the loop would be an acceptance of anything.
+      final stranger = await MlDsa65PureDartAlgo().generateKeyPair();
+      final envelope = signEnvelope(payload,
+          keys: [
+            ApkamSigningKeys(
+                algorithm: SigningAlgoType.mldsa65,
+                publicKey: base64Encode(stranger.publicKey),
+                privateKey: base64Encode(stranger.secretKey))
+          ],
+          enrollmentId: 'enroll-pq');
+
+      await expectLater(
+          () => verifyEnvelope(envelope, signerPublicKey: apskWithRetained()),
+          throwsA(isA<AtSigningVerificationException>().having(
+              (e) => e.message,
+              'message',
+              contains('does not verify against any of the 2 mldsa65 key(s)'))));
     });
   });
 }
