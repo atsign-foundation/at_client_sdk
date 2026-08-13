@@ -169,8 +169,12 @@ mixin ApkamSigning {
   /// The public key which verifies signatures made using [signingKeys] — the
   /// strongest one held, since [signingKeys] is ordered and never empty.
   ///
-  /// One key, because [publishPublicSigningKey] writes `_apsk` as a bare
-  /// string. The array composer that publishes every held key replaces both.
+  /// **One key out of what may be several, which is why nothing in production
+  /// reads this.** An envelope carries a signature per key held and a verifier
+  /// picks the strongest algorithm the envelope and the published `_apsk` have
+  /// in common, so a caller that took this one would be choosing on the
+  /// signer's behalf. What is published is [publicSigningKeyValue], which
+  /// names every key.
   Future<String> get publicSigningKey async =>
       (await signingKeys).first.publicKey;
 }
