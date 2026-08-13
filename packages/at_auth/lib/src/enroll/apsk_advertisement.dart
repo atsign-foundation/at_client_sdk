@@ -1,6 +1,8 @@
 import 'dart:convert' show base64Decode;
 import 'dart:typed_data' show Uint8List;
 
+import 'package:at_auth/src/enroll/key_entry_status.dart'
+    show KeyEntryStatus;
 import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo, SigningAlgoType;
 
 /// The `_apsk` value an enrollment publishes: the signing keys that verify
@@ -50,8 +52,20 @@ class ApskSigningKey {
   final SigningAlgoType alg;
   final String pub;
 
-  const ApskSigningKey(
-      {required this.kid, required this.alg, required this.pub});
+  /// Whether this key still signs — see [KeyEntryStatus].
+  ///
+  /// A retired entry is **kept** rather than skipped, because the keys an
+  /// enrollment has retired are exactly the ones its stored envelopes were
+  /// signed with, and this list is what verifies them. What a caller must not
+  /// do is choose a retired key to sign something new with.
+  final KeyEntryStatus status;
+
+  const ApskSigningKey({
+    required this.kid,
+    required this.alg,
+    required this.pub,
+    this.status = KeyEntryStatus.active,
+  });
 }
 
 /// The signing keys an [apskAdvertisement] advertises, in published order.
@@ -63,6 +77,18 @@ class ApskSigningKey {
 /// comes back empty, and a caller must refuse outright rather than fall back
 /// to a key it derived some other way: the whole point of the signature is
 /// that the verifier used the key the signer published.
+///
+/// A `retired` entry is **not** skipped — it is returned with its
+/// [ApskSigningKey.status] — because this list is what verifies stored
+/// envelopes, and the keys an enrollment has retired are precisely the ones
+/// that signed its older ones. Filtering here would retroactively unverify
+/// them. It is a caller *choosing a key to sign with* that must exclude them,
+/// and that caller does not exist yet.
+///
+/// `kid` is required, like every other field: an entry without one is skipped.
+/// The atServer stores this document verbatim and forms no opinion on it, so a
+/// writer that omits `kid` produces an advertisement every reader treats as
+/// empty — and then refuses outright, rather than half-reading it.
 List<ApskSigningKey> apskSigningKeys(Map<String, dynamic> advertisement) {
   final keys = advertisement['keys'];
   if (keys is! List) return const [];
@@ -79,7 +105,11 @@ List<ApskSigningKey> apskSigningKeys(Map<String, dynamic> advertisement) {
     if (use != 'sign') continue;
     final algo = SigningAlgoType.values.where((a) => a.name == alg).firstOrNull;
     if (algo == null) continue;
-    result.add(ApskSigningKey(kid: kid, alg: algo, pub: pub));
+    result.add(ApskSigningKey(
+        kid: kid,
+        alg: algo,
+        pub: pub,
+        status: KeyEntryStatus.fromWire(entry['status'])));
   }
   return result;
 }

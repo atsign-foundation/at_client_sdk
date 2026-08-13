@@ -257,6 +257,63 @@ void main() {
       expect(read.kid, publicKeyKidOfBase64('AAEC'));
     });
 
+    test('a composed entry says nothing about status, and reads as active',
+        () {
+      final advertisement = apskAdvertisement(
+          apkamPublicKey: 'AAEC', signingAlgo: SigningAlgoType.mldsa65);
+      final entry = (advertisement['keys'] as List).single as Map;
+
+      expect(entry.containsKey('status'), isFalse,
+          reason: 'absent already reads as active, so emitting the default '
+              'would change the bytes of every advertisement in the protocol '
+              'to state what their silence states');
+      expect(apskSigningKeys(advertisement).single.status,
+          KeyEntryStatus.active);
+    });
+
+    test('a retired entry is KEPT, because it is what verifies old envelopes',
+        () {
+      final read = apskSigningKeys({
+        'v': 1,
+        'keys': [
+          {
+            'kid': 'k1',
+            'use': 'sign',
+            'alg': 'rsa2048',
+            'pub': 'AAEC',
+            'status': 'retired'
+          },
+          {'kid': 'k2', 'use': 'sign', 'alg': 'mldsa65', 'pub': 'BBEC'},
+        ]
+      });
+
+      expect(read, hasLength(2),
+          reason: 'dropping the retired entry would retroactively unverify '
+              'every envelope this enrollment ever signed with it — the '
+              'opposite of what retiring a key is for');
+      expect(
+          read.firstWhere((k) => k.kid == 'k1').status, KeyEntryStatus.retired);
+      expect(
+          read.firstWhere((k) => k.kid == 'k2').status, KeyEntryStatus.active);
+      expect(read.firstWhere((k) => k.kid == 'k1').status.name, 'retired',
+          reason: 'raw-literal: the atServer stores this document verbatim '
+              'and every implementation reads these spellings');
+    });
+
+    test('an entry with no kid is skipped, so a writer cannot omit it', () {
+      // design.md 9.3's example omitted `kid` until 2026-08-13. A document
+      // written from that example reads as empty and is then refused outright
+      // — the right outcome, and a poor way to discover the typo.
+      expect(
+          apskSigningKeys({
+            'v': 1,
+            'keys': [
+              {'use': 'sign', 'alg': 'mldsa65', 'pub': 'AAEC'}
+            ]
+          }),
+          isEmpty);
+    });
+
     test('an entry this build cannot use is skipped, not guessed at', () {
       final future = {
         'v': 1,

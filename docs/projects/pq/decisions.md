@@ -8051,11 +8051,22 @@ construction.
 >   added for symmetry with `KeyPackage`, which requires one. `v` stays **1**:
 >   nothing is released, so no advertisement in the old shape exists anywhere
 >   for a version 2 to distinguish this from.
-> - **"One vocabulary" cannot mean one Dart type.** at_client depends on
->   at_auth, so at_auth cannot reach `PackageKey` and `_apsk` keeps its own
->   `ApskSigningKey`. It is one **wire spelling** across two types, by
+> - **"One vocabulary" cannot mean one Dart type** *for the entry*. at_client
+>   depends on at_auth, so at_auth cannot reach `PackageKey` and `_apsk` keeps
+>   its own `ApskSigningKey`. It is one **wire spelling** across two types, by
 >   construction; only the kid derivation is genuinely shared, and ruling 3
 >   already unified that.
+>
+>   ⚠️ **Narrowed 2026-08-13.** True of the entry *class*, and it was applied
+>   too widely: it says a shared type is impossible, when what is impossible is
+>   sharing one that lives in at_client. at_auth is the **lower** package, so a
+>   type placed *there* is reachable by both — which is exactly where
+>   `publicKeyKid` already sits, cited two lines above as the thing that IS
+>   shared. `KeyEntryStatus` was landed in at_client on 2026-08-13 under this
+>   reasoning and moved to at_auth the same day, so `status` is now one type as
+>   well as one spelling. `PackageKey` itself could follow if a second reason
+>   ever appears; nothing needs it today. **The lesson is the direction:** ask
+>   whether a type can move DOWN before concluding it cannot be shared.
 > - **The reader had to grow before the writer.** `nskeyKid`, `publicKey` and
 >   `alg` survive as getters reading the strongest usable entry rather than
 >   `keys.single`, and `verify` skips entries whose algorithm this build has no

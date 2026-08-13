@@ -1,4 +1,19 @@
 ## 3.4.0
+- feat: add `KeyEntryStatus` — `active` or `retired`, the status every
+  advertised key entry in the protocol carries — and read it on `_apsk`, where
+  `ApskSigningKey` gains a `status`. It lives here rather than in at_client
+  because at_auth is the lower package: all three records that advertise keys
+  carry the same field with the same two values, at_client depends on at_auth
+  and not the reverse, so this is the only direction a shared type can travel.
+  `publicKeyKid` sits here for the same reason. Absent reads as `active`, and a
+  value this build does not recognise reads as `retired` — an unknown state is
+  narrower than "offered for new operations", and the permissive reading is the
+  one that can make a build use a key its owner has withdrawn.
+- feat: `apskSigningKeys` **keeps** a retired entry rather than skipping it.
+  This list is what verifies stored envelopes, and the keys an enrollment has
+  retired are precisely the ones that signed its older ones, so filtering here
+  would retroactively unverify them. Excluding them is the job of a caller
+  choosing a key to sign something new with, and that caller does not exist yet.
 - **breaking (unreleased): `apskKid` becomes `publicKeyKid(Uint8List)`, and it
   hashes the key's raw BYTES.** It hashed the base64 text as published, while
   at_client's `nskeyKidOf` hashed the decoded bytes — two derivations, both

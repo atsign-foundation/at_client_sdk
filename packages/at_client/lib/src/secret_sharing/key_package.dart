@@ -1,38 +1,16 @@
 import 'dart:convert' show base64Decode, base64Encode;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_auth/at_auth.dart' show publicKeyKidOfBase64;
+import 'package:at_auth/at_auth.dart'
+    show KeyEntryStatus, publicKeyKidOfBase64;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:meta/meta.dart' show experimental;
 
-/// Whether a key entry is still offered for **new** operations.
-///
-/// Use-neutral, because [PackageKey.use] already names the operation a key
-/// serves. Retirement withdraws the future, never the past: a retired signing
-/// key still verifies the envelopes it signed, and a retired encapsulation key
-/// still opens the records already sealed to it. What it forbids is a sender
-/// sealing to it, or a signer signing with it, from now on.
-///
-/// Retaining rather than withdrawing is the whole point. Envelopes and chain
-/// links are stored durably and verified long after they are written, so
-/// dropping a key's entry outright would retroactively unverify everything ever
-/// signed with it, and unopenably strand everything ever sealed to it.
-@experimental
-enum KeyEntryStatus {
-  active,
-  retired;
-
-  /// Reads a wire `status`. Absent — which is how every record that has never
-  /// rotated spells it — is [active].
-  ///
-  /// **Anything else is [retired]**, rather than an error or a fallback to
-  /// [active]. A value this build has never heard of was written by a newer
-  /// client to say something narrower about the key than "offered for new
-  /// operations", and reading an unknown state as active is the one answer that
-  /// can make this build use a key whose owner has withdrawn it.
-  static KeyEntryStatus fromWire(Object? value) =>
-      value == null || value == active.name ? active : retired;
-}
+/// Re-exported so that the three records advertising keys name one type for
+/// one field. It lives in at_auth because at_auth is the lower package and the
+/// `_apsk` advertisement composed there carries the same `status` — the same
+/// reason `publicKeyKid` lives there rather than here.
+export 'package:at_auth/at_auth.dart' show KeyEntryStatus;
 
 /// One public key advertised in a [KeyPackage].
 ///

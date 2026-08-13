@@ -1999,19 +1999,37 @@ is never written again.
 {
   "v": 1,
   "keys": [
-    {"use": "sign", "alg": "mldsa65", "pub": "…", "status": "active"},
-    {"use": "sign", "alg": "rsa2048", "pub": "…", "status": "retired"}
+    {"kid": "…", "use": "sign", "alg": "mldsa65", "pub": "…"},
+    {"kid": "…", "use": "sign", "alg": "rsa2048", "pub": "…",
+     "status": "retired"}
   ]
 }
 ```
 
-`use`, `alg` and `pub` are `PackageKey`'s spellings
-(`key_package.dart:36`), deliberately, so the design has one vocabulary for a
-list of keys with algorithms. `status` absent reads as `active`.
+⚠️ **Corrected 2026-08-13: `kid` was missing from this example**, and it is
+required — `apskSigningKeys` skips any entry lacking one, so the document as
+previously shown is one every reader treats as empty and then refuses outright.
+`apskAdvertisement` has always written it. The example also showed
+`"status": "active"` on the live entry; the field is **omitted** when a key is
+active, because absent already reads as active and stating the default would
+change the bytes of every advertisement in the protocol.
+
+`kid`, `use`, `alg`, `pub` and `status` are `PackageKey`'s spellings
+(`packages/at_client/lib/src/secret_sharing/key_package.dart` — grep the class,
+not a line number), deliberately, so the design has one vocabulary for a list of
+keys with algorithms. `status` is the shared
+[`KeyEntryStatus`](../../../packages/at_auth/lib/src/enroll/key_entry_status.dart),
+which lives in at_auth so that all three advertising records name one type:
+at_client depends on at_auth and not the reverse, which is the only direction a
+shared type can travel, and `publicKeyKid` sits there for the same reason.
+Absent reads as `active`; a value this build does not know reads as `retired`.
 
 A reader accepts this and the released bare string (an `rsa2048` key published
 by at_client **3.13.0**'s `mixins/apkam_signing.dart`). A writer emits only
-this.
+this. A **`retired` entry is kept by the reader**, not skipped: this list is
+what verifies stored envelopes, and a retired key is precisely what signed the
+older ones. It is a caller *choosing a key to sign with* that must exclude
+them.
 
 The value is composed client-side and travels on `EnrollParams.apsk`. The
 atServer stores it verbatim on the enrollment record, writes its JSON encoding

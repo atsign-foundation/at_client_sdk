@@ -38,7 +38,10 @@
   now the first entry of that list.
 - feat: a key entry can say it is `retired` — retained, but not offered for new
   operations. `PackageKey` gains a `status` of `active` or `retired`
-  (`KeyEntryStatus`), and `bestKeyFor` on both a key package and an nskey
+  (`KeyEntryStatus`, which lives in **at_auth** so that all three records
+  advertising keys name one type for one field — at_client depends on at_auth
+  and not the reverse, the same reason `publicKeyKid` lives there; re-exported
+  from `secret_sharing.dart`), and `bestKeyFor` on both a key package and an nskey
   advertisement passes a retired key over, because that method answers "which
   key should be used now" for a sender. Retirement withdraws the future and not
   the past: the entry stays in the list so its holder can still open what was
