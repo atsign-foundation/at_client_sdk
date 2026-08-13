@@ -2136,10 +2136,22 @@ Three separate things, deliberately in three places:
 |-------|-------|-----------|
 | Strength order | at_chops, beside `SigningAlgoType` | A protocol fact every implementation must agree on, including the atServer |
 | Verifiable set | derived from what the at_chops build implements | A build cannot claim an algorithm it cannot run |
-| In-use-for-signing set | `AtClientPreference`, defaulted by `ReleasePosture` | A rollout decision, which is what posture carries |
+| In-use-for-signing set | `AtClientPreference.inUseSigningAlgorithms`, defaulted by `ReleasePosture` | A rollout decision, which is what posture carries |
 
-Order: `mldsa65` > `ecc_secp256r1` > `rsa2048`, pinned by a raw-literal
-tripwire test in the style of `KeyAlgorithmType`'s.
+The in-use set is a `Set<SigningAlgoType>`, final at construction and
+unmodifiable, defaulting to `{}` under `ReleasePosture.migration()` and
+`{mldsa65}` under `ReleasePosture.postQuantum()`. Empty is not "unsigned": an
+enrollment with no signing key of its own signs with its APKAM authentication
+key, which is what stays published afterwards. Naming an algorithm this build
+produces no envelope signature for is refused at construction rather than
+skipped. The reasoning for each of those is in
+[`decisions.md` 91.3](decisions.md#913-the-rulings) ruling 16.
+
+Order: `SigningAlgoType.strongestFirst` — `mldsa65` > `rsa4096` > `ed25519` >
+`ecc_secp256r1` > `rsa2048`, pinned by a raw-literal tripwire test in the style
+of `KeyAlgorithmType`'s. It is **total**, covering every member: a partial
+order leaves the choice undefined for exactly the pair nobody thought about,
+and the pin fails on a new member left unplaced.
 
 When the in-use set names an algorithm the enrollment holds no key for, the
 client mints one at start, files it, and publishes the updated array. A signing

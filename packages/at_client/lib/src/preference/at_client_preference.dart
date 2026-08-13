@@ -3,6 +3,8 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/preference/release_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show canSignEnvelopeWith;
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/service/sync_service.dart';
 import 'package:at_commons/at_commons.dart';
@@ -49,20 +51,69 @@ class AtClientPreference {
   /// the 3.x posture; pass [ReleasePosture.postQuantum] to run the 4.0
   /// defaults today.
   ///
-  /// Individual flags still win: an explicit [disallowLegacyEncryption]
-  /// argument, an assigned [crypto], a per-signer envelope version, or a
-  /// per-call algorithm each override the posture's value for that one axis.
+  /// Individual flags still win: an explicit [disallowLegacyEncryption] or
+  /// [inUseSigningAlgorithms] argument, an assigned [crypto], or a per-call
+  /// algorithm each override the posture's value for that one axis.
   ///
   /// Final at construction, like [disallowLegacyEncryption] and for the same
   /// reason: what a client writes must not change meaning mid-run. A cached
   /// client keeps the posture it was built under.
   final ReleasePosture posture;
 
+  /// Which algorithms this client keeps an **active signing key** for — the
+  /// keys that sign what its enrollment attests to, which is a different job
+  /// from the APKAM authentication key that proves possession on a connection.
+  ///
+  /// Not to be confused with [signingAlgoType], which is that authentication
+  /// key's algorithm and is resolved from the key material rather than chosen.
+  ///
+  /// **Empty in 3.x, `{mldsa65}` in 4.0** ([ReleasePosture]). Empty is not
+  /// "unsigned": with no signing key of its own an enrollment signs with its
+  /// APKAM authentication key, whose public half is published as this
+  /// enrollment's signing key and stays published afterwards, because it is
+  /// what verifies every envelope signed before the two jobs were separated.
+  ///
+  /// Naming an algorithm this build cannot sign an envelope under is
+  /// **refused at construction**. Skipping it quietly would leave an app that
+  /// asked for a post-quantum signature believing it had one while every
+  /// signature it produced was classical.
+  ///
+  /// **Final at construction**, like [disallowLegacyEncryption]: an app that
+  /// could change it mid-run would leave "which key signed this, and does it
+  /// still exist?" without an answer. A [Set] rather than a list because
+  /// membership is the whole of the meaning — the order signatures are emitted
+  /// in is the strongest-first order the keyfile is read in, never this one.
+  final Set<SigningAlgoType> inUseSigningAlgorithms;
+
   AtClientPreference(
       {this.posture = const ReleasePosture.migration(),
-      bool? disallowLegacyEncryption})
+      bool? disallowLegacyEncryption,
+      Set<SigningAlgoType>? inUseSigningAlgorithms})
       : disallowLegacyEncryption =
-            disallowLegacyEncryption ?? posture.disallowLegacyEncryption;
+            disallowLegacyEncryption ?? posture.disallowLegacyEncryption,
+        inUseSigningAlgorithms = _signableOrRefuse(
+            inUseSigningAlgorithms ?? posture.inUseSigningAlgorithms);
+
+  /// [algorithms] unmodifiable, or an [ArgumentError] naming the first member
+  /// this build produces no envelope signature for.
+  ///
+  /// Unmodifiable because the field is only as final as its contents: an app
+  /// holding the set it passed could otherwise add an algorithm afterwards and
+  /// get past this check.
+  static Set<SigningAlgoType> _signableOrRefuse(
+      Set<SigningAlgoType> algorithms) {
+    for (final algorithm in algorithms) {
+      if (!canSignEnvelopeWith(algorithm)) {
+        final signable = SigningAlgoType.strongestFirst
+            .where(canSignEnvelopeWith)
+            .map((signableAlgorithm) => signableAlgorithm.name)
+            .join(', ');
+        throw ArgumentError.value(algorithm.name, 'inUseSigningAlgorithms',
+            'this build signs under $signable');
+      }
+    }
+    return Set.unmodifiable(algorithms);
+  }
 
   /// Local device path of hive storage
   String? hiveStoragePath;

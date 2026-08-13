@@ -1,4 +1,16 @@
 ## 3.14.1
+- feat: `AtClientPreference.inUseSigningAlgorithms` — which algorithms this
+  client keeps an active signing key for, which is a different job from
+  `signingAlgoType`'s APKAM authentication key. A `Set<SigningAlgoType>`,
+  final at construction and held unmodifiable, defaulted from a new fifth
+  `ReleasePosture` axis: empty in the 3.x posture and `{mldsa65}` in the 4.0
+  one. Empty is not "unsigned" — an enrollment with no signing key of its own
+  signs with its APKAM authentication key, whose public half is published as
+  its signing key and stays published, because that is what verifies
+  everything signed before the two jobs were separated. Naming an algorithm
+  this build produces no envelope signature for is refused at construction,
+  rather than skipped: an app that asked for a post-quantum signature and was
+  quietly given a classical one has no way to notice.
 - feat!: `signEnvelope` signs under a **list** of keys and emits one signature
   entry per key, in the order given — which is what the RFC 7515 general
   serialization the envelope already used is for. `wrapAndSign` now passes

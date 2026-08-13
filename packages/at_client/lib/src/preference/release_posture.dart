@@ -1,7 +1,7 @@
 import 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 
-/// The post-quantum rollout's four flags, set as a group.
+/// The post-quantum rollout's five flags, set as a group.
 ///
 /// From the rollout's point of view, at_client 4.0 is the *same code* as
 /// final 3.x with different flag defaults (`docs/projects/pq/decisions.md`
@@ -27,6 +27,10 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 ///   exactly as the request's own documentation describes.
 /// - **What a self-retrofit mints** — [retrofitSigningAlgo], the default for
 ///   `selfRetrofit`'s `signingAlgo` parameter. An explicit argument wins.
+/// - **Which signing keys an enrollment holds** —
+///   [inUseSigningAlgorithms], the default for
+///   [AtClientPreference.inUseSigningAlgorithms]. An explicit constructor
+///   argument wins.
 ///
 /// The posture is **applied at construction**: it rides
 /// [AtClientPreference.posture] into the client, and the construction-time
@@ -54,17 +58,29 @@ class ReleasePosture {
   /// The signing algorithm `selfRetrofit` mints when the caller names none.
   final SigningAlgoType retrofitSigningAlgo;
 
+  /// The signing algorithms an enrollment keeps an active signing key for
+  /// under this posture. See [AtClientPreference.inUseSigningAlgorithms] for
+  /// what naming one means and what an empty set leaves in place.
+  final Set<SigningAlgoType> inUseSigningAlgorithms;
+
   /// The 3.x defaults — the migration under way.
   ///
   /// Reads are fully post-quantum-capable; writes, enrollments and retrofits
   /// stay classical, so nothing this client produces outruns what the rest of
   /// the fleet can read. The envelope is not an axis here — there is one
   /// shape, emitted under every posture.
+  ///
+  /// [inUseSigningAlgorithms] is empty for the same reason. An enrollment that
+  /// holds a signing key of its own holds *two* keys — that one and the APKAM
+  /// authentication key, which stays published for as long as the envelopes it
+  /// signed must verify — and two keys cannot be advertised as the bare public
+  /// key string that everything deployed can read.
   const ReleasePosture.migration()
       : writesPqByDefault = false,
         disallowLegacyEncryption = false,
         keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
-        retrofitSigningAlgo = SigningAlgoType.rsa2048;
+        retrofitSigningAlgo = SigningAlgoType.rsa2048,
+        inUseSigningAlgorithms = const {};
 
   /// The 4.0 defaults — post-quantum by default.
   ///
@@ -93,9 +109,18 @@ class ReleasePosture {
   /// The readers for everything this posture emits — the nskey records among
   /// them — ship in the **same release line as the posture itself**, so its
   /// peers must be on at least that release, not merely "any 3.x".
+  ///
+  /// [inUseSigningAlgorithms] is ML-DSA alone, and RSA is deliberately not
+  /// beside it. A verifier takes the strongest algorithm the envelope and the
+  /// signer's advertisement have in common, so a second, weaker signature is
+  /// only ever the one that is passed over: it would cost a key, an
+  /// advertisement entry and a signature per envelope to be ignored. What
+  /// keeps older envelopes verifiable is not a weaker key in this set, it is
+  /// the APKAM authentication key staying published after it stops signing.
   const ReleasePosture.postQuantum()
       : writesPqByDefault = true,
         disallowLegacyEncryption = true,
         keyExchangeMode = EnrollmentKeyExchangeMode.pq,
-        retrofitSigningAlgo = SigningAlgoType.mldsa65;
+        retrofitSigningAlgo = SigningAlgoType.mldsa65,
+        inUseSigningAlgorithms = const {SigningAlgoType.mldsa65};
 }

@@ -5194,9 +5194,18 @@ per-operation flags still override per call):
 |---|---|---|---|
 | Crypto era default | `Expando` keyed by `AtClient` (§27.2 — never the shared preference) | reads-nskey, writes-legacy | writes-PQ |
 | `disallowLegacyEncryption` | `AtClientPreference`, final at construction | false | true |
-| Signed-envelope version | signer config | v1 | v2 (§56.5) |
+| In-use-for-signing set | `AtClientPreference`, final at construction (§91.3 ruling 16) | `{}` | `{mldsa65}` |
 | `EnrollmentKeyExchangeMode` | `AtEnrollmentRequest` | legacy | pq |
 | Retrofit signing algorithm | per-retrofit parameter (§56.3) | RSA | ML-DSA |
+
+*Table amended 2026-08-13 during implementation. It carried a **Signed-envelope
+version** axis — signer config, v1 in 3.x and v2 in 4.0 — and that axis no
+longer exists: [§95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 1 collapsed the envelope to one shape, so there is nothing for a posture
+to choose between, and `envelopeVersion` is a plain constant. The in-use signing
+set took the fifth slot when it landed. **The count is five by coincidence, not
+because the same five axes stand** — an amended count is exactly the kind of
+number a later reader takes as evidence that nothing moved.*
 
 `EnrollmentKeyExchangeMode.pq` — the KEM-based `apkamSymmetricKey` conveyance,
 the one legitimate KEM in the enrollment path — is built and functionally
@@ -6487,7 +6496,16 @@ rows share one keyfile.
 
 **Status:** accepted and landed. The convenience posture helper the 56.4
 ruling promised — the five rollout axes, each still an independent flag in
-its natural home, settable as a group. `ReleasePosture` (at_client, main
+its natural home, settable as a group.
+
+*Amended 2026-08-13 during implementation: two of the axes this entry describes
+have moved. The signed-envelope version stopped being an axis
+([§95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 1) — the paragraph below still describes `EnvelopeSigning.envelopeVersion`
+resolving per-signer → posture → v1, and none of that mechanism exists; there is
+one shape and a constant. The in-use signing set ([§91.3](#913-the-rulings)
+ruling 16) took the vacated fifth slot, so the heading's count is right again by
+coincidence rather than because these five stand.* `ReleasePosture` (at_client, main
 barrel) has exactly two constructors and no general one: `migration()` is
 the 3.x column of the 56.4 table, `postQuantum()` the 4.0 column, and a
 deployment wanting a mixture sets the individual flag beside the posture
@@ -7796,8 +7814,8 @@ superseded kpid is not retired) is the same shape as ruling 9 below.
 | 12 | **The envelope collapses to one versioned shape,** `{"v":1,"signatures":[{"alg","sig"}],"enrollmentId":…}`. The entries use `alg` to match the `_apsk` array's spelling, so one vocabulary covers both halves of a verification — the algorithm named in the signature against the algorithm named in the published entry. `signedEnvelopeVersion = 1` (tagged) and `jwsEnvelopeVersion = 2` (JWS) are both unreleased and are removed rather than carried. **Superseded 2026-08-12 by [95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 1** — "removed rather than carried" stands; the replacement is RFC 7515 general serialization rather than this bespoke container, which was chosen when the standards argument had only been weighed against the *flattened* JWS shape |
 | 13 | **Section 68's `enroll:updateMetadata` is renamed `enroll:update`** and widened to reach `apkamPublicKey`, `signingAlgo`, `apsk` and `metadata`. Nothing is built, so the wire token is still free and never will be again; a name saying "metadata" while reaching `apkamPublicKey` generates wrong assumptions for years. **`namespaces` and the approval state stay out of reach permanently** — the operation is self-only, so reaching namespaces would let an enrollment grant itself scope |
 | 14 | **`EnrollParams.apkamPublicKeySignature`** carries a signature by the **new** private key over `enrollmentId\|apkamPublicKey\|signingAlgo`, verified against the new public key in the same request. Without it a compromised-but-authenticated client can install a public key whose private half it does not hold, locking out the legitimate holder while the record looks valid. No nonce: the operation is self-only and the old key stops authenticating after the rotation, so a replay can only be sent by the current holder — section 68 ruling 2's own argument that rollback is self-harm rather than an attack. **The signature is `AtSigningMode.pkam` with `HashingAlgoType.sha256`**, not `AtSigningMode.data`: `data` mode signs with the *encryption* keypair, so it cannot express possession of an APKAM signing key at all, and `pkam` is the mode PKAM verification already uses, so both sides frame the bytes identically. Learned from a red test rather than from reading — the first implementation chose `data` and failed with "Encryption keypair required for signing" |
-| 15 | **The strength order is an explicit ordered list beside `SigningAlgoType` in at_chops** — `mldsa65` > `ecc_secp256r1` > `rsa2048` — pinned by a raw-literal tripwire test in the style of `KeyAlgorithmType`'s. It is a protocol fact every implementation must agree on. The **verifiable** set is derived from what the at_chops build implements, so a build cannot claim an algorithm it cannot run |
-| 16 | **The in-use-for-signing set is app-settable on `AtClientPreference`, defaulted by `ReleasePosture`,** and SDK releases move that default. When the in-use set names an algorithm the enrollment holds no key for, the client mints one locally at start, files it and publishes it — which a signing keypair can do precisely because it needs no server approval, unlike the auth key |
+| 15 | **The strength order is an explicit ordered list beside `SigningAlgoType` in at_chops** — `mldsa65` > `ecc_secp256r1` > `rsa2048` — pinned by a raw-literal tripwire test in the style of `KeyAlgorithmType`'s. *Amended 2026-08-13 during implementation: the order shipped **total**, over all five members — `mldsa65` > `rsa4096` > `ed25519` > `ecc_secp256r1` > `rsa2048` — because a partial order leaves the choice undefined for exactly the pair nobody thought about, and the tripwire fails on a new member left unplaced.* It is a protocol fact every implementation must agree on. The **verifiable** set is derived from what the at_chops build implements, so a build cannot claim an algorithm it cannot run |
+| 16 | **The in-use-for-signing set is app-settable on `AtClientPreference`, defaulted by `ReleasePosture`,** and SDK releases move that default. When the in-use set names an algorithm the enrollment holds no key for, the client mints one locally at start, files it and publishes it — which a signing keypair can do precisely because it needs no server approval, unlike the auth key. *Four things this ruling left open were settled on gkc's ruling 2026-08-13, when `AtClientPreference.inUseSigningAlgorithms` landed. **The defaults are `{}` in 3.x and `{mldsa65}` in 4.0.** Empty in 3.x because an enrollment holding a signing key of its own holds **two** keys — that one and the APKAM authentication key, which ruling 10 keeps published for as long as the envelopes it signed must verify — and two keys cannot be advertised as the bare public-key string every deployed reader understands, so a non-empty 3.x default would publish an array at clients whose peers refuse it. ML-DSA **alone** in 4.0, with no RSA beside it: ruling 11 has the verifier take the strongest algorithm the envelope and the advertisement share, so a second, weaker signature is only ever the one passed over — it would cost a key, an advertisement entry and a signature per envelope to be ignored, and what keeps older envelopes verifiable is ruling 10's retained auth key rather than a weaker key in this set. **A `Set`, not a list**, because membership is the whole meaning: signatures are emitted in the strongest-first order the keyfile is read in, never in the preference's order. **Final at construction and unmodifiable**, like `disallowLegacyEncryption` and for the same reason — and unmodifiable specifically because a caller retaining the set it passed could otherwise add to it after the check. **An algorithm this build cannot sign an envelope under is refused at construction** (`ArgumentError`), not skipped: skipping quietly leaves an app that asked for a post-quantum signature believing it has one while every signature it produced was classical, which is ruling 15's "a build cannot claim an algorithm it cannot run" from the app's side.* |
 
 **Renamed 2026-08-12:** the `status` value spelled `verifyOnly` in rulings 8, 9
 and 10 above is **`retired`** — use-neutral, because `use` already names the

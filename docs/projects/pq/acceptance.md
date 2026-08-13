@@ -1332,8 +1332,25 @@ on failure.
   retrofits are built from that one preference.
 - **Then:** all five axes run the 4.0 defaults — the pinned columns of the
   `decisions.md` 56.4 table — and each remains individually overridable
-  (UC-C1.1–C1.5 prove the arms). A bare preference runs the migration
-  posture, byte-identical to the pre-posture SDK.
+  (UC-C1.1, C1.2, C1.4, C1.5 and C1.7 prove the arms; C1.3 is withdrawn and
+  its axis no longer exists). A bare preference runs the migration posture,
+  byte-identical to the pre-posture SDK.
+
+### 15.7 UC-C1.7 — The signing-set axis: which keys an enrollment holds
+
+- **Given:** a preference built with `ReleasePosture.postQuantum()` and no
+  explicit `inUseSigningAlgorithms` argument.
+- **When:** the set is read.
+- **Then:** it is `{mldsa65}`, while a migration-postured preference's is
+  empty — an enrollment that mints no signing key of its own keeps signing
+  with its APKAM authentication key, whose public half is what stays
+  published. An explicit argument beats the posture in both directions.
+- **And:** an algorithm this build produces no envelope signature for
+  (anything but `mldsa65` and `rsa2048`) is refused where it is named, at
+  construction — not skipped at signing time, which would leave an app that
+  asked for a post-quantum signature holding a classical one.
+
+Covered by `packages/at_client/test/release_posture_test.dart`.
 
 ## 16. G1 · Signature agility and the rollout matrix
 
