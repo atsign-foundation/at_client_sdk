@@ -1880,9 +1880,13 @@ ruling 13, superseding `enroll:updateMetadata` in
 [`decisions.md` 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10))
 reaches `metadata` — along with `apkamPublicKey`, `signingAlgo` and `apsk` —
 and is **built and functionally verified on the atServer** (at_server
-`gkc-apsk-auto-publish`, 210/210). The client caller is owed; see
-[14.17](#1417-signature-agility--what-is-built-and-what-is-owed). The original
-statement of the defect follows.
+`gkc-apsk-auto-publish`, 210/210). ✅ **The client caller landed 2026-08-13**
+([14.18 step 16](#1418-the-remaining-d1-initial-development-sequence)), so the
+door has a handle on both sides: `EnrollmentUpdateRequest.metadata` merges
+per-key into the record, and the remedy for an unparseable key package is no
+longer delete-and-re-enrol. What is still owed is a *caller that uses it for
+that* — nothing re-advertises a key package today. The original statement of
+the defect follows.
 
 
 It is a signed envelope, and it is written only by `enroll:request` and never
@@ -1902,9 +1906,9 @@ does not list it.
 ([decisions 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)).
 `enroll:update` makes the record rewritable by the enrollment that owns
 it, so 14.3's wrapper shape stops being an irreversible bet and the remedy for an
-unparseable package stops being delete-and-re-enrol. It is unbuilt — the item
-above stands until **KE-2** ships — but it is a scheduling problem now rather than
-a shape-freezing deadline.
+unparseable package stops being delete-and-re-enrol. It was unbuilt when this was
+written — both halves now exist (see the status above), so what remains is a
+caller that re-advertises a package, not a shape-freezing deadline.
 
 ### 14.7 NoPorts carries its own copy of the envelope shape
 
@@ -2299,10 +2303,12 @@ than it looks** (both re-verified against the source 2026-08-11):
      today, so [UC-G1.7](acceptance.md#16-g1--signature-agility-and-the-rollout-matrix)
      ("the verifier takes the strongest and does not fall back") has nothing to
      run against.
-   - **The `enroll:update` caller** and its PoP signature (`AtSigningMode.pkam`,
-     SHA-256 — see ruling 14, and note that `AtSigningMode.data` cannot work).
-     No client caller exists; the `'update'` hits in at_client are AtCollection
-     notification operations and unrelated.
+   - ~~**The `enroll:update` caller** and its PoP signature~~ — ✅ **BUILT
+     2026-08-13** as [14.18 step 16](#1418-the-remaining-d1-initial-development-sequence):
+     `AtEnrollment.update`, `EnrollmentUpdateRequest`, `EnrollmentUpdater` and
+     `apkamPossessionSignature` (`AtSigningMode.pkam`, SHA-256 — ruling 14, and
+     `AtSigningMode.data` cannot work). ⚠️ A rotation is not persisted anywhere,
+     [14.19 item 11](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on).
    - **The in-use signing set** on `AtClientPreference`, defaulted from
      `ReleasePosture`. The preference carries only the single
      `signingAlgoType = SigningAlgoType.rsa2048` today.

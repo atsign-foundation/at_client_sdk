@@ -15,6 +15,7 @@ rather than consuming `at_auth` directly.
 | PKAM authentication             | `AtAuth.authenticate(AtAuthRequest)`                   |
 | APKAM enrollment (request side) | `AtEnrollment.submit(...)`                             |
 | APKAM enrollment (approve side) | `AtEnrollment.approve(...)` / `AtEnrollment.deny(...)` |
+| APKAM enrollment (self side)    | `AtEnrollment.update(...)` — an approved enrollment amending its own record |
 | Free atSign registration        | `RegistrarService` (fetches CRAM key by email)         |
 
 See [`example/onboard.dart`](example/onboard.dart),

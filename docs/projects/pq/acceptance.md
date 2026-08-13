@@ -352,7 +352,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Cross-ref:** [`decisions.md` 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
   (why the knob is a preference and not a `CryptoConfig` field);
   [`implementation-plan.md` 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
-  (the door `enroll:update` opened, and which nothing yet walks through).
+  (the door `enroll:update` opened; `AtEnrollment.update` can walk through it
+  as of 2026-08-13, but nothing re-advertises a key package yet).
 
 ### 3.5 UC-A2.5 — An enrollment amends its own key package (`enroll:update`)
 
