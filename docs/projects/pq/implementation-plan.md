@@ -1320,8 +1320,15 @@ handed **the secret selected by `envelope.kid`**. A replaced kpid is retained �
 the update still opens — and it *is* marked retired, which is what stops a sender addressing it while the
 holder keeps opening what already named it (95 rulings 6–9 supersede this entry's "never retired").
 The `to.kpid != kpid` self-check was already fixed: `_isSelf` compares `enrollmentId`.
-**What this leaves for B-2** is the writer that creates the state — the `enroll:update` caller that mints
-the new key, marks the old one retired and republishes the package. Nothing rotates yet.
+**What this leaves for B-2** is the writer that creates the state. **Updated 2026-08-13:** the
+`enroll:update` *caller* now exists — `AtEnrollment.update` /`EnrollmentUpdateRequest`, and
+`EnrollmentUpdateRequest.metadata` merges per-key into the record
+([14.18](#1418-the-remaining-d1-initial-development-sequence) step 16) — so what is still owed is
+the part that gives it something to send: **minting** a new KEM key, **marking the old one retired**
+and **republishing the package**. Nothing rotates yet, and nothing calls `update` in production.
+⚠️ **[#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133)'s title still reads
+`enroll:updateMetadata`**, the name superseded by ruling 13 — the issue has not been retitled or
+given a status block since the client half landed.
 **Acceptance → [acceptance.md](acceptance.md):** UC-A2.5 (a package gains a second KEM key; a peer negotiates
 to it; envelopes at the old kpid still open) and UC-A2.6 (a foreign enrollment, and an owner connection, are
 both refused).
@@ -1449,7 +1456,7 @@ at_chops, not deleting — with 9 more importers inside at_chops besides. (b) Al
 deprecations (`AtChopsKeys` 65, `AtChopsUtil` 59, `AtChopsImpl` 45, `AtChops`
 44, `AtChopsKeys.create` 38 — 251 of 299 from those five); removing at_client's
 own 75 `@Deprecated` members would move the count by zero. See
-[14.11](#1411-299-deprecated_member_use-findings-in-at_client).
+[14.11](#1411-deprecated_member_use-findings-across-the-workspace).
 
 ⚠️ **Test blast radius, before touching the default.** The shared `MockAtClient`
 holds a default-constructed `AtClientPreference`, so flipping the default turns
@@ -1592,7 +1599,9 @@ is worth costing before ON-1 rather than after. It has **no PR**, so nothing run
 **Everything up to and including SS-3 is landed as of 2026-08-03** (SS-1c/SS-2/SS-3 on `gkc-pq-d1-spike`, plus [at_server#2736](https://github.com/atsign-foundation/at_server/pull/2736) for SS-3's server half). **`SS-4`'s signing chain landed 2026-08-04** — mint, root-private conveyance, self-anchoring and the graded walk, all live-covered. **B-1 landed too, and R-1 was delivered 2026-08-05 as the flag alone** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)); **SH-1, RF-SRV's server half, RF-2b and RF-2c's switch-over all landed 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)–[44](decisions.md#44-rf-2c-the-switch-over-and-what-it-cost-to-make-a-client-pq-2026-08-05)), and **B-2 landed 2026-08-06** ([decisions 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)) with all four UC-A5.x rows green. **KE-1 landed 2026-08-07** ([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)) — the selectable KEM, the negotiated construction, and plan-backlog 14.2/14.4/14.5 discharged — so the path now waits on **ON-1**, **R-2** and **S-3**. RF-2c's UC-B1.x e2e rows are done; two named residuals are left: RF-SRV's revocation cascade (server) — `parentEnrollmentId` is stored but `enroll:revoke` does not yet walk descendants ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05) item 2) — the **at_chops 3.5.0 publish** that KE-1 put in front of the GA release, and a
 **revocation-visibility lag** on the atServer ([14.9](#149-a-revoked-enrollment-can-still-authenticate-briefly)).
 Separately, `at_lookup` 3.6.1 ([PR #2127](https://github.com/atsign-foundation/at_client_sdk/pull/2127),
-branched from trunk) is open and needs merging; it is not a GA gate.
+branched from trunk) is **DONE** — corrected 2026-08-13, having said "is open and
+needs merging" for five days after it was neither: the PR merged 2026-08-08 and
+`at_lookup` 3.6.1 is published on pub.dev. It was never a GA gate.
 **Off-path (parallel):** `RF-2b → RF-2c` (RF-1 confirm), `B-3`, `ON-1`, `S-5 → S-6`, `D2-1`, `KF-1`
 (builds on S-3), and the final `R-2`.
 
@@ -2053,13 +2062,44 @@ being cited long after the project ships; what actually blocked it was the
 harness. And writing it found a real defect rather than merely ticking a box —
 the aborted upgrade left its own enrollment request `pending`, one per retry.
 
-### 14.11 299 `deprecated_member_use` findings in at_client
+### 14.11 `deprecated_member_use` findings across the workspace
 
-Everything else `dart analyze` reported is cleared (`3e3ac1075`); at_chops is
-clean outright. What remains is live use of deprecated-but-still-required APIs
-— the `AtChops` compatibility shim, `AtSigningInput`, `apkamPublicKey` — so
-clearing them means migrating call sites, which is a code change rather than a
-lint sweep and wants its own pass.
+Everything else `dart analyze` reported is cleared (`3e3ac1075`); at_chops and
+at_commons are clean outright. What remains is live use of
+deprecated-but-still-required APIs — the `AtChops` compatibility shim,
+`AtSigningInput`, `apkamPublicKey` — so clearing them means migrating call
+sites, which is a code change rather than a lint sweep and wants its own pass.
+
+**Re-measured 2026-08-13** (the heading said 299 and named only at_client). Per
+package, `dart analyze lib test` from each package directory, counted with
+`grep -c deprecated_member_use`:
+
+| package | findings |
+|---|---|
+| `at_client` | 340 |
+| `at_onboarding_cli` | 183 |
+| `at_auth` | 110 |
+| `at_lookup` | 28 |
+| `at_chops`, `at_commons` | 0 |
+
+⚠️ **Scope this before starting it — a straight "migrate off the deprecated
+member" sweep is not available for the PKAM signing path.** `PkamSigningAlgo`
+and `PkamMlDsa65SigningAlgo` are both deprecated *classes*, and so are
+`AtChopsImpl`, `AtChopsKeys`, `AtSigningInput`, `AtSigningMode` and
+`AtPkamKeyPair`. Non-deprecated key material *does* exist —
+`RsaSignatureAlgo`, and `MlDsa65PureDartAlgo.signBytesSync`/`verifyBytes` with
+explicit keys — so what is missing is not a replacement but the **dispatcher**:
+nothing non-deprecated selects an algorithm from a `SigningAlgoType` the way
+`AtChopsImpl.sign` does in pkam mode. A caller wanting both algorithms writes
+the two-way branch itself.
+
+And the RSA arm is not a free swap: the atServer's `ApkamSignatureVerifier`
+records that **`RsaSignatureAlgo` refuses any modulus that is not exactly 2048
+bits, which `PkamSigningAlgo` does not**, so adopting it would stop an
+enrollment holding an off-size RSA key from authenticating. That is a change to
+what verifies on the authentication path, not a refactor. Any sweep that
+touches signing has to decide this deliberately; the rest of the findings
+(models, `apkamPublicKey`, collection APIs) are ordinary migrations.
 
 ### 14.12 A `mintLegacyMaterial:false` atSign cannot write a public record
 
@@ -2519,12 +2559,15 @@ measurement rather than a claim — see [`acceptance.md` 16.1](acceptance.md#161
 | 27 | Domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) |
 | 28 | NoPorts' own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) |
 | 29 | The four audit residuals — perf ceiling on a real low-end device, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
-| 30 | 299 `deprecated_member_use` findings in at_client | [14.11](#1411-299-deprecated_member_use-findings-in-at_client) |
+| 30 | `deprecated_member_use` findings across the workspace (340 at_client, 183 at_onboarding_cli, 110 at_auth, 28 at_lookup) | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
 | 31 | Pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) |
 
-Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128)),
-**KF-1** ([#2129](https://github.com/atsign-foundation/at_client_sdk/issues/2129)),
-**IS-1**, and merging at_lookup 3.6.1 ([#2127](https://github.com/atsign-foundation/at_client_sdk/pull/2127)).
+Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128),
+open), **KF-1** ([#2129](https://github.com/atsign-foundation/at_client_sdk/issues/2129),
+open), and **IS-1**. ~~merging at_lookup 3.6.1 (#2127)~~ — dropped 2026-08-13:
+that PR merged 2026-08-08 and 3.6.1 is on pub.dev, so it had been listed as
+parallel work for five days after it was finished. Issue states verified with
+`gh` on 2026-08-13; re-derive rather than trusting this line.
 
 **Stage 6 — the carve-up, which is where D1 initial development ends.**
 
@@ -2778,3 +2821,20 @@ place with what it used to say.
    rejected 2026-08-13 while wiring [14.18](#1418-the-remaining-d1-initial-development-sequence)
    step 11; the same reasoning is now a comment above the method, because the
    invitation is in the file rather than in this document.
+6. **Do NOT add `update` to at_client's `EnrollmentService`.** The invitation is
+   strong and will recur: `AtEnrollment.update` landed with no at_client-side
+   entry point, `EnrollmentServiceImpl` already wraps an `AtEnrollment`, and it
+   already forwards `approve`/`deny`/`revoke` — so exposing `update` beside them
+   looks like finishing the job. It is not. That facade is the **approver** side:
+   every verb on it needs a connection holding `__manage` and acts on *somebody
+   else's* enrollment. `enroll:update` is the opposite — no privilege at all, and
+   only ever on the enrollment the connection *is*, with the atServer refusing an
+   owner connection rather than waving it through. Putting both behind one
+   interface makes the two authorities look interchangeable to every caller and
+   every reviewer, which is the distinction the whole self-only security argument
+   rests on. Note also that the facade does **not** mirror `AtEnrollment` today —
+   it carries no `submit`, no `list`, no otp verbs — so "it forwards the others"
+   was never the rule. Proposed and rejected 2026-08-13 while landing
+   [14.18](#1418-the-remaining-d1-initial-development-sequence) step 16. When
+   steps 17–18 need to reach `update` from at_client, give it a seam of its own
+   on the signing path rather than widening this one.

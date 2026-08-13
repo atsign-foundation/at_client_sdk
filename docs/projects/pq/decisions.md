@@ -8008,6 +8008,11 @@ in it reaches trunk as stacked PRs.
 and 14.16's four residuals are all in scope, as are S-3's completion, B-3
 (#2128), KF-1 (#2129), IS-1, and merging at_lookup 3.6.1 (PR #2127).
 
+> **Amended 2026-08-13.** The ruling stands; one of its items was already done
+> when it was written down and stayed on the list. **at_lookup 3.6.1 needs no
+> merging** — PR #2127 merged 2026-08-08 and 3.6.1 is published on pub.dev.
+> The rest of the item list is unchanged.
+
 The ordered sequence these rulings produce is
 [14.18](implementation-plan.md#1418-the-remaining-d1-initial-development-sequence).
 
