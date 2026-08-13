@@ -1,4 +1,24 @@
 ## 3.4.0
+- feat: add `AtEnrollment.update` — the `enroll:update` caller, with
+  `EnrollmentUpdateRequest` and `EnrollmentUpdater` beside the approver. An
+  approved enrollment can now amend its own record: the APKAM authentication
+  key, the `_apsk` signing keys it advertises, and its metadata. Nothing sent
+  an `enroll:update` anywhere, so a signing key minted after the enrollment
+  request had no way to reach the record. The operation is self-only and cannot
+  reach the namespaces or the approval state, so an enrollment amending itself
+  cannot widen its own grant.
+- feat: add `apkamPossessionSignable` and `apkamPossessionSignature` — the
+  proof an `enroll:update` carries when it installs a new `apkamPublicKey`,
+  base64 of a signature by the **new** private key over
+  `<enrollmentId>|<apkamPublicKey>|<signingAlgo>`. The connection proves
+  possession of the enrollment's current key and nothing else proves possession
+  of the new one, so without this a compromised-but-authenticated client could
+  install a key whose private half is held by someone else and lock the
+  legitimate holder out while the record still looked valid. Signed through the
+  path a PKAM challenge is signed through, because the atServer verifies both
+  through one verifier: `mldsa65` signs the message bytes directly while
+  `rsa2048` signs their SHA-256, so an implementation that hashed for both
+  fails on the post-quantum path alone.
 - feat!: `apskAdvertisement` composes an array from a list of keys rather than
   one key from `(apkamPublicKey, signingAlgo)`. The record has been an array
   since it shipped, but nothing could put a second entry in it, which is what

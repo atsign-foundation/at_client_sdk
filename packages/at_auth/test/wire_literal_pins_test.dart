@@ -399,6 +399,40 @@ void main() {
     });
   });
 
+  group('FROZEN: the enroll:update proof of possession', () {
+    // The bytes an enrollment signs to prove it holds the private half of the
+    // APKAM key it is asking to install. Every atServer implementation
+    // assembles this same string from the request it received and verifies the
+    // signature against it, and neither repository compiles against the other
+    // — so the separator, the field order and the spellings are contract, and
+    // a change here silently stops every rotation verifying anywhere.
+    test('the signable, as a raw literal', () {
+      expect(
+          apkamPossessionSignable(
+              enrollmentId: 'e-1',
+              apkamPublicKey: 'PUBKEY',
+              signingAlgo: 'mldsa65'),
+          'e-1|PUBKEY|mldsa65');
+    });
+
+    test('an absent algorithm is the four literal characters "null"', () {
+      // The atServer computes `request.signingAlgo ?? record.signingAlgo` and
+      // string-interpolates the result, so an enrollment whose record names no
+      // algorithm signs the word null. EnrollmentUpdateRequest never composes
+      // that form — it requires an algorithm — but a second implementation
+      // reading this contract has to know the server accepts it, because a
+      // client that treats the absent case as an empty segment produces a
+      // signature the server computes differently and rejects.
+      const String? recordNamesNoAlgorithm = null;
+      expect(
+          apkamPossessionSignable(
+              enrollmentId: 'e-1',
+              apkamPublicKey: 'PUBKEY',
+              signingAlgo: '$recordNamesNoAlgorithm'),
+          'e-1|PUBKEY|null');
+    });
+  });
+
   group('FROZEN: keyfile tokens shared with the wire', () {
     test('KeyAlgorithmType tokens, as raw strings', () {
       // rsa2048 / mldsa65 / ecc_secp256r1 double as the pkam and

@@ -12,6 +12,11 @@ export 'src/auth/models/at_auth_session.dart';
 export 'src/enroll/at_enrollment.dart';
 // Composes the `_apsk` signing-key advertisement an enrollment publishes.
 export 'src/enroll/apsk_advertisement.dart';
+// The proof of possession an enroll:update carries when it installs a new
+// APKAM public key. A cross-tier contract with every atServer implementation.
+export 'src/enroll/apkam_possession_proof.dart';
+// What an approved enrollment is asking to change about its own record.
+export 'src/enroll/models/enrollment_update_request.dart';
 // The active/retired status every advertised key entry in the protocol carries.
 export 'src/enroll/key_entry_status.dart';
 // Contains fields related to enrollment response received from the secondary server

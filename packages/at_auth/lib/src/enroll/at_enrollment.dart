@@ -4,6 +4,7 @@ import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
+import 'package:at_auth/src/enroll/models/enrollment_update_request.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -160,6 +161,37 @@ abstract class AtEnrollment {
   /// ```
   Future<AtEnrollmentResponse> revoke(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+
+  /// Amends this enrollment's own record — its APKAM authentication key, the
+  /// signing keys it advertises, or its metadata.
+  ///
+  /// Self-only: [atLookUp] must be authenticated as the enrollment named by
+  /// [EnrollmentUpdateRequest.enrollmentId], and the enrollment must already be
+  /// approved. Unlike [approve], [deny] and [revoke], this needs no `__manage`
+  /// privilege — and holding `__manage` does not substitute for being the
+  /// enrollment, because the atServer refuses an owner connection here rather
+  /// than waving it through.
+  ///
+  /// Nothing this reaches can widen the enrollment's own grant: the namespaces
+  /// and the approval state are permanently out of reach, and a request naming
+  /// them is refused rather than partly obeyed.
+  ///
+  /// ⚠️ Rotating the APKAM keypair changes what every later authentication is
+  /// judged against, and nothing here writes the new keypair to a keyfile —
+  /// see [EnrollmentUpdateRequest.apkamPublicKey].
+  ///
+  /// ```dart
+  /// AtEnrollmentResponse response = await atEnrollment.update(
+  ///     EnrollmentUpdateRequest(
+  ///         enrollmentId: enrollmentId,
+  ///         signingKeys: [
+  ///           ApskSigningKey.forPublicKey(
+  ///               alg: SigningAlgoType.mldsa65, pub: publicKey)
+  ///         ]),
+  ///     atLookUp);
+  /// ```
+  Future<AtEnrollmentResponse> update(
+      EnrollmentUpdateRequest enrollmentUpdateRequest, AtLookUp atLookUp);
 
   /// Lists all enrollments.
   ///

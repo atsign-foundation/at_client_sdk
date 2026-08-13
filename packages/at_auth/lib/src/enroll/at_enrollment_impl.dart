@@ -5,9 +5,11 @@ import 'package:at_auth/src/enroll/enrollment_approver.dart';
 import 'package:at_auth/src/enroll/enrollment_handshake.dart';
 import 'package:at_auth/src/enroll/enrollment_progress.dart';
 import 'package:at_auth/src/enroll/enrollment_submitter.dart';
+import 'package:at_auth/src/enroll/enrollment_updater.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
+import 'package:at_auth/src/enroll/models/enrollment_update_request.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -15,11 +17,13 @@ import 'package:at_utils/at_progress.dart';
 
 /// A concrete implementation of [AtEnrollment] for managing enrollments.
 ///
-/// The work belongs to three collaborators, one per side of an enrollment:
-/// [EnrollmentSubmitter] asks, [EnrollmentApprover] decides, and
-/// [EnrollmentHandshake] waits out the decision and collects what it
-/// released. They share one [EnrollmentProgress] because a caller listens to
-/// [progressStream] once, across a submission and the wait that follows it.
+/// The work belongs to four collaborators, one per side of an enrollment:
+/// [EnrollmentSubmitter] asks, [EnrollmentApprover] decides,
+/// [EnrollmentHandshake] waits out the decision and collects what it released,
+/// and [EnrollmentUpdater] carries the amendments an approved enrollment makes
+/// to its own record. The first three share one [EnrollmentProgress] because a
+/// caller listens to [progressStream] once, across a submission and the wait
+/// that follows it; an update is a single round trip with nothing to narrate.
 ///
 /// This class holds no enrollment state of its own, and it declares no
 /// defaults of its own either: every unstated value comes from the constants
@@ -35,6 +39,7 @@ class AtEnrollmentImpl implements AtEnrollment {
   late final EnrollmentSubmitter _submitter =
       EnrollmentSubmitter(_progress, _approver);
   late final EnrollmentHandshake _handshake = EnrollmentHandshake(_progress);
+  late final EnrollmentUpdater _updater = EnrollmentUpdater();
 
   @override
   Stream<ProgressEvent> get progressStream => _progress.stream;
@@ -61,6 +66,12 @@ class AtEnrollmentImpl implements AtEnrollment {
           EnrollmentRequestDecision enrollmentRequestDecision,
           AtLookUp atLookUp) =>
       _approver.revoke(enrollmentRequestDecision, atLookUp);
+
+  @override
+  Future<AtEnrollmentResponse> update(
+          EnrollmentUpdateRequest enrollmentUpdateRequest,
+          AtLookUp atLookUp) =>
+      _updater.update(enrollmentUpdateRequest, atLookUp);
 
   @override
   Future<List<EnrollmentServerResponse>> list(
