@@ -2337,6 +2337,16 @@ than it looks** (both re-verified against the source 2026-08-11):
      an `AtKeysIo` — today it is nullable and most apps supply none, so reading
      through it would break them."* `_atKeysIo` is indeed `AtKeysIo?`
      (`at_client_impl.dart:80`) and honoured only on first construction.
+     ⚠️ **Amended 2026-08-13: that quoted dartdoc is now half wrong, and it is
+     still in the file.** The claim was measured — 0 of 22 repos on disk
+     supplied one — but the cause was one SDK line, and
+     [14.18](#1418-the-remaining-d1-initial-development-sequence) step 11 fixed
+     it, so an `at_onboarding_cli` client has a source now. What survives is
+     that an app building its own client still supplies none *and is entitled
+     to*: a source-less client is a deliberate, tested property protecting the
+     cicd atServers. So the accessor needs a defined answer for "no source"
+     rather than a precondition that there always is one. Rewriting the dartdoc
+     is part of step 12.
 
    So **owed item 2 is not merely the largest remaining piece, it is the gate on
    this one** — which is the argument for doing it before the composer, and the
@@ -2456,7 +2466,7 @@ to a derivable legacy key ([`decisions.md` 93](decisions.md#93-the-d1-remaining-
 |---|------|
 | 10 | **DONE 2026-08-13 — one resolver, not a materialised projection.** `AtKeys.authenticationFor(enrollmentId)` returns the AtChops and the PKAM algorithm, with typed material winning wherever the keyfile holds it for that enrollment and the flat fields answering only where it holds none; `authenticationAlgorithmFor` is the algorithm half, so a caller holding an injected AtChops does not build one `toAtChops` would throw on. `AtAuthImpl.authenticate` and `AtClientImpl._createAtChops` both move onto it. **Ruling 7 as written could not be built** and is amended in place ([`decisions.md` 91.3](decisions.md#913-the-rulings)): filing a projected material makes `toJson` emit `version`/`atsign`/`keys` — the guard is `keys.isEmpty` and both stores stamp `atsign` first — which breaks the byte-identical legacy round-trip [91.4](decisions.md#914-what-is-released-and-therefore-what-must-still-be-read) promises, and on a retrofitted keyfile the one-active-`privateAuthentication`-per-document rule refuses the add outright. Four shipping shapes hold nothing to project from: a pre-typed `.atKeys`, an `rsa2048` first onboard, an OTP enrollment, and an onboard handed its keys by the caller. **Found en route and fixed:** `_createAtChops` picked its keypair off the algorithm `_resolveSigningAlgoFromKeyMaterial` had recorded, and that records nothing when its own read throws — so a transient keyfile failure made a retrofitted client PKAM with the *flat* enrollment's key while its typed material sat in the same file. Its comment claimed it mirrored `AtAuthImpl`; it did not. Rails: at_auth 257/257, at_client 1217/1217 |
 | 11 | **PARTLY DONE 2026-08-13 — the wiring half.** ⚠️ **The nullability was never the problem, and the blocking claim was measured rather than inherited.** `apkam_signing.dart`'s dartdoc says sourcing from `AtKeys` "cannot land until every client has an `AtKeysIo` — today it is nullable and most apps supply none". Measured over the 22 repos on disk that depend on at_client: **0 of 22** supply one to a client and **0 of 22** use `fromAuthSession`, so the claim is TRUE — but the dominant cause is one SDK line, not app behaviour. `AtOnboardingServiceImpl.authenticate()` built a `FileAtKeysIo` for `AtAuth` and then created the client without it, so every `at_cli_commons` consumer (at_talk, sshnoports, noports-tools, at_demos, ogentic) inherited a source-less client. **Fixed:** `_initAtClient` takes the source and threads it to `setCurrentAtSign`. The injected AtChops still authenticates — this only gives the client the source for what AtChops cannot answer. ⚠️ **Deliberately NOT done: an `atKeysIo ??=` default on at_client_flutter's `AuthService.authenticate()`.** `AtAuthRequest`'s constructor already refuses a request with neither `atKeysIo` nor `atAuthKeys`, so the default could only ever fire when the caller supplied `atAuthKeys` — an app that loaded its own key material — and pointing it at a keychain that may hold another atSign's keys, or none, is a guess. The asymmetry with `onboard()`'s `??=` is correct: onboarding mints keys and needs somewhere to write them. ⚠️ **The null case is a tested, deliberate property**, not an oversight — `no_atkeysio_inertness_test.dart` pins that a source-less client performs zero PQ writes at startup, which is what protects the long-lived cicd atServers, and the e2e pack builds its clients through `setCurrentAtSign` directly so this change does not reach them. **Still owed:** the signing half — `signingKeys` sourcing from `AtKeys` instead of reading the APKAM auth keypair out of `atChops`. That is the same design as step 12's accessor and should be built once, with it |
-| 12 | A per-algorithm signing-key accessor on `AtKeys`; widen or replace `ApkamSigningKeys`, which holds one pair today. ⚠️ **`fileSigningMaterial` has no production writer** — verified 2026-08-13, its only caller anywhere is `wire_literal_pins_test.dart:415`, so a `sign:` keyId has never been minted outside a unit test. The accessor is half the step; something has to file the material for it to read |
+| 12 | A per-algorithm signing-key accessor on `AtKeys`; widen or replace `ApkamSigningKeys`, which holds one pair today. ⚠️ **`fileSigningMaterial` has no production writer** — verified 2026-08-13, its only caller anywhere is `wire_literal_pins_test.dart:415`, so a `sign:` keyId has never been minted outside a unit test. The accessor is half the step; something has to file the material for it to read. ⚠️ **`signingKeys`' own dartdoc (`apkam_signing.dart:49-55`) is now STALE and must be rewritten by this step** — it says the move "cannot land until every client has an `AtKeysIo` — today it is nullable and most apps supply none", and step 11 removed the SDK line that made that true for `at_onboarding_cli` consumers. Left as-is it tells the next reader a gate still exists when half of it is gone. The other half stands: an app that builds its own client still supplies none, and a source-less client is a deliberate tested property, so the accessor needs a defined answer for that case rather than a requirement that everyone have a source. **Sourcing from `AtKeys` also makes `signingKeys` async** — two production call sites, both already `FutureOr` |
 
 **Stage 3 — the `_apsk` writer half (rollout 2).**
 
@@ -2640,12 +2650,15 @@ its own. None blocks anything.
    mechanism 2026-08-13; it wants a differential test whose two arms are a null
    id and a present one.
 
-#### 14.19.1 Three things that LOOK like defects and are not
+#### 14.19.1 Things that LOOK like defects and are not
 
-Recorded because each was proposed as a fix during ruling 6 and **rejected on
-evidence**. Without this note the next reader re-derives the proposal, "fixes"
-it, and ships a false claim — one of them was already drafted into a CHANGELOG
-line before an adversarial pass killed it.
+Recorded because each was proposed as a fix and **rejected on evidence**.
+Without this note the next reader re-derives the proposal, "fixes" it, and ships
+a false claim — one of them was already drafted into a CHANGELOG line before an
+adversarial pass killed it. Items 1–3 came from ruling 6; the rest were raised
+later, so do not read this list as scoped to one ruling. **Add to it rather
+than re-litigating an entry**, and if an entry is genuinely wrong, amend it in
+place with what it used to say.
 
 1. **A corrupt-base64 pairwise envelope is NOT misclassified as transient.**
    It is tempting to read `sweepOnce`'s broad `catch` arm as the "retry
@@ -2680,3 +2693,17 @@ line before an adversarial pass killed it.
    outcome and reads like a security check it is not. What *does* matter is
    pinned instead: the envelope is skipped rather than crashing the sweep, so
    the good envelopes behind it in the batch still arrive.
+5. **Do NOT add `atKeysIo ??= KeychainAtKeysIo()` to at_client_flutter's
+   `AuthService.authenticate()`.** `onboard()` has exactly that line
+   (`auth_service.dart:40`) and `authenticate()` does not, which reads as an
+   oversight and is not. `AtAuthRequest`'s constructor already refuses a
+   request carrying neither `atKeysIo` nor `atAuthKeys`
+   (`at_auth_requests.dart:119`), so on the authenticate path the `??=` could
+   only ever fire when the caller supplied **`atAuthKeys`** — an app that
+   loaded its own key material and is telling you so. Defaulting a keychain
+   source there points the client at a store that may hold another atSign's
+   keys, or none. The asymmetry is correct: onboarding *mints* keys and needs
+   somewhere to write them, while authenticating does not. Proposed and
+   rejected 2026-08-13 while wiring [14.18](#1418-the-remaining-d1-initial-development-sequence)
+   step 11; the same reasoning is now a comment above the method, because the
+   invitation is in the file rather than in this document.
