@@ -4698,8 +4698,10 @@ is holding.
 
 So `AtKemAlgorithm` gains `newSeed()` and `keyPairFromSeed()`, and every
 persisted key in at_client is filed as its **seed** with the algorithm
-alongside — `PersistedApkamKeys.encSeed` + `keyAlgo`, and the nskey private
-likewise. 32 and 64 bytes are both valid seeds for *some* backend, so the bytes
+alongside — `PersistedEncKey.encSeed` + `keyAlgo` (spelled
+`PersistedApkamKeys.encSeed` + `keyAlgo` until 2026-08-13, when the holding
+became a list — [95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 9), and the nskey private likewise. 32 and 64 bytes are both valid seeds for *some* backend, so the bytes
 alone cannot say which. `NskeyKeyRing.privateHalf` now returns the decapsulation
 key — what `pqOpen` takes, which is what it always meant — and expands on the
 way out. Byte-identical for X-Wing, so existing keyfiles are untouched.
@@ -6368,6 +6370,30 @@ returns whichever key the reading build prefers, so two clients with different
 `keyAlgos` orderings disagree about a package's kid and a client can fail to
 recognise itself. The check should compare `enrollmentId`, which is what it
 actually means and what `NamespaceMember` already carries.
+
+⚠️ **Amended 2026-08-13 — most of this table is now built, and two of its rows
+were wrong.** [14.18](implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+step 5 landed the receiver-multi-kpid work as
+[95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+rulings 6–9, in `6a5eac838`, `f956b2146` and `f6fc3796e`. Everything above is
+done except as noted. Grep for the symbol rather than trusting a line number:
+every file in the table has moved since it was written.
+
+- **The `_envelopeKeysFor` / `_answerAlreadySent` row is wrong.** Its address is
+  the **requester's** (`_answerAlreadySent(received.fromKpid, …)`), not one this
+  client holds, so "any held address does" names the wrong party. Both the
+  suppression check and the answers that would trip it use the requester's
+  active key, so they agree and nothing changes. Unchanged, deliberately.
+- **The `_keyPackageHalves` row is the one site left singular**, and step 5 does
+  not need it: it runs at enrollment time on a keyfile that holds exactly the
+  package `enrollmentKeyPackageBuilder` has just filed. Two can only appear on a
+  **retrofitted** keyfile, and there the real defect is a different one —
+  `_keyPackageHalves` scopes by neither enrollment id nor recency, where
+  `keyPackageMaterials` does both, so it can pick a co-tenant's package and then
+  poll for envelopes at an address nobody is writing to until it times out. That
+  is pre-existing and unrelated to plurality; it wants its own fix.
+- **The self-identification defect described below the table is already fixed.**
+  `_isSelf` compares `member.enrollmentId == selfEnrollmentId` today.
 
 ### 68.6 What this does not do
 
@@ -8267,3 +8293,53 @@ the part that matters.** Four consequences, all owed in the same step:
 
 Without the last one the field is decorative: senders would correctly avoid the
 retired key, and the receiver still could not open anything sealed to it.
+
+### Rulings 6–9 landed 2026-08-13
+
+Three commits: `6a5eac838` (the vocabulary gains `status`), `f956b2146` (the
+plural holding), `f6fc3796e` (answering at every held address). Rails: at_client
+1210/1210, functional pack against `at_virtual_env:local`. Five things differ
+from the rulings as written.
+
+**A fifth consequence was missing from ruling 9, and it is the one that makes
+the other four reachable.** The **sweep filter** watches one address. An
+envelope sealed to a superseded key is never scanned for, so `_consume` never
+sees it and the widened equality checks never run — the same "decorative"
+failure the ruling warns about for the plural holding, one layer out.
+`EnvelopeAddressing` gained `regexForAny`/`sweepRegexForAny`, and the sweep, the
+wake-up subscription and the sync listener all cover every held address.
+
+**The keyfile already records the status, which ruling 9 did not know.**
+`AtKeysMaterial` carries a `KeyPartStatus` of `active`/`retired`/`dead`,
+`AtKeys.retireKey` is how a rotation records the transition, and
+`AtKeysAssurance` enforces at most one **active** `publicEncapsulation` material
+per (enrollment, algorithm) — the same invariant `_activeEncKey` needs, already
+enforced one layer down. The first implementation derived the status from
+`createdAt` instead and was corrected when the assurance rule refused the test
+fixture. `dead` material is not adopted at all: retirement is as close to
+deletion as a keyfile gets and dead is the end of that road.
+
+**An unrecognised `status` reads as `retired`, not as `active`.** Ruling 6 fixes
+absent and the two known values and says nothing about a third. A value written
+by a newer client says something narrower than "offered for new operations", so
+reading it as active is the one answer that can make a build use a key its owner
+has withdrawn.
+
+**`status` is emitted only when a key is retired.** Absent already reads as
+active, so emitting the default would change the bytes of every advertisement in
+the protocol to state what their silence states — and would make ruling 8's "the
+writer omits the field" a special case rather than the ordinary behaviour.
+
+**Nothing rotates yet.** Rulings 6–9 build the holding and the receive path a
+rotation will need; the rotation itself is step 16's `enroll:update` caller. The
+reader shipping first is the same ordering the multi-key advertisement reader
+took in ruling 2, and for the same reason.
+
+Recorded and *not* done, with the reason: a guard for an envelope whose suite
+and whose named key belong to different KEMs — newly possible now that a client
+can hold keys under more than one. It was written, and removing it turned
+nothing red. at_chops maps the wrong-length secret key to a `PqOpenException`
+that the open already catches and skips, and the message names the mismatch
+("ML-KEM-1024 secret key must be 3168 bytes: 32"). A check that changes no
+outcome and reads like a security check it is not. Belongs beside
+[14.19.1](implementation-plan.md#14191-three-things-that-look-like-defects-and-are-not).

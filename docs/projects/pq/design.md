@@ -157,7 +157,7 @@ content-key kids. Working names marked.
 
 | Object | Shape | Published? | Who holds the private | Role |
 |---|---|---|---|---|
-| **nskey** | `public:__nskey.app_1.my_apps@alice` — written at mint, **mutable**, APKAM-signed `{v, createdAt, keys:[{use, alg, pub, kid}], suites}` | published from mint; **hidden from scan** (double `_` — revealed only by `scan showhidden:true`; a single `_` would never sync) but served on an exact `plookup`, cross-atSign | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it; external senders encapsulate CKs to it |
+| **nskey** | `public:__nskey.app_1.my_apps@alice` — written at mint, **mutable**, APKAM-signed `{v, createdAt, keys:[{use, alg, pub, kid, status?}], suites}` | published from mint; **hidden from scan** (double `_` — revealed only by `scan showhidden:true`; a single `_` would never sync) but served on an exact `plookup`, cross-atSign | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it; external senders encapsulate CKs to it |
 | **nskey mint/rotate lock** *(working)* | `_nskeylock.app_1.my_apps@alice` (self key, immutable create, short ttl) | no | n/a | serialises create and rotate between the owner's own enrollments |
 | **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `pqSeal(ck)` to the nskey named by `nskeyKid`, under the KEM that nskey's `alg` names |
 | **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
@@ -205,7 +205,7 @@ and distributed per-APKAM over the substrate** (sealed to each authorised
 enrollment's key package) — it is **never derived from a shared seed** ([`decisions.md`](decisions.md) [section 11](decisions.md#11-single-nskey-per-namespace-lazily-published-2026-06-30)).
 The public half is published **eagerly** — written at mint, always, to
 `public:__nskey.<ns>@<atSign>` as an **APKAM-signed envelope** carrying
-`{v, createdAt, keys:[{use, alg, pub, kid}], suites}`, verified against the publishing enrollment's
+`{v, createdAt, keys:[{use, alg, pub, kid, status?}], suites}`, verified against the publishing enrollment's
 `_apsk` exactly
 as a key package is (see *Advertised-key authenticity*,
 [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify)). There is no owner-only stage
@@ -925,7 +925,25 @@ value is the
 authenticity*, [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify)); the server
 stores and returns it opaquely and has no opinion on its contents.
 
-The payload is `{v, createdAt, keys: [{kid, use, alg, pub}], suites: [...]}`.
+The payload is `{v, createdAt, keys: [{kid, use, alg, pub, status?}], suites: [...]}`.
+
+**`status`** is `active` or `retired`, and it is **absent on every entry that is
+active** — which is every entry a client that has never rotated writes, so the
+four-field spelling above is what a reader sees in practice. It is the same field, with
+the same two values and the same use-neutral meaning, on all three records that
+advertise keys (`_apsk`, the key package, the nskey advertisement): *retained, not
+offered for new operations*. A retired entry is skipped when choosing what to seal to
+or sign with, and kept for everything already sealed to or signed by it — an envelope
+lives seven days, so dropping a rotated key's entry would strand a week of traffic, and
+dropping a rotated signing key's entry would retroactively unverify everything it ever
+signed. A value a reader does not recognise reads as `retired`, never as `active`: an
+unknown state is narrower than "offered for new operations", and the permissive reading
+is the one that can make a build use a key its owner has withdrawn. The nskey
+advertisement's writer never emits the field — a rotation there overwrites the record —
+and its reader honours it anyway, so the vocabulary means one thing everywhere rather
+than something per record ([`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+rulings 6–9).
+
 `keys[].alg` says which KEM key a sender encapsulates to; **`suites` says which sealing
 constructions the holder can open**, which is a different question — an X-Wing private
 unwraps both X-Wing constructions, since they differ in key schedule and AEAD and not
