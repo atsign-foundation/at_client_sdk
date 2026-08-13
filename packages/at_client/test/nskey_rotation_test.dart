@@ -111,12 +111,10 @@ void main() {
   /// Puts [ring] into the "already published" state without a live atServer,
   /// and returns the generation it now serves.
   NskeyAdvertisement published(PublishedNskeyKeyRing ring, Uint8List seed) {
-    final advertisement = (
-      nskeyKid: nskeyKidOf(seed),
+    final advertisement = NskeyAdvertisement.single(
       publicKey: seed,
       alg: SecretSharingAlgos.xWing,
-            suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing)
+      suites: SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
     );
     ring.rememberOwn(atSign, namespace, advertisement);
     return advertisement;

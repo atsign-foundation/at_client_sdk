@@ -1,4 +1,23 @@
 ## 3.14.1
+- **breaking (unreleased surface): the nskey advertisement carries a list of
+  keys, spelled the way the other two advertising records spell theirs.**
+  `public:__nskey.<ns>@<owner>` was the last record still describing its key
+  its own way — flat `{nskeyKid, publicKey, alg}` beside the `{use, alg, pub,
+  kid}` entries that `_apsk` and the enrollment key package already used. It is
+  now `{v, createdAt, keys:[…], suites}`, so one vocabulary covers every list
+  of keys with algorithms in the protocol and a reader learns one shape rather
+  than three. The list is a capability rather than ceremony: an atSign could
+  not advertise both X-Wing and ML-KEM for a namespace while the advertisement
+  held exactly one key by construction. `NskeyAdvertisement` becomes a class
+  with one codec — `toPayload`/`fromPayload` — replacing a map literal in the
+  minting path and a hand-rolled parser in the verifying path that sat 250
+  lines apart and had to be kept in step by eye. `v` stays 1: nothing is
+  released, so there is no advertisement in the old shape for a version 2 to
+  distinguish this from.
+- feat: `PackageKey.fromBytes` and `PackageKey.pubBytes` — a key entry built
+  from raw material, and the material read back out. Every consumer that hands
+  a key to a KEM wants bytes while the wire carries base64, and decoding in one
+  place is what keeps a key from being decoded two ways.
 - **breaking (unreleased surface): `v`, `alg` and `suites` are required on an
   nskey advertisement, and `suites` on a key package.** Each had an
   absent-means-the-shape-that-predates-it hatch, defending against a

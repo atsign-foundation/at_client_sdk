@@ -56,8 +56,9 @@ void main() {
     await PublishedNskeyKeyRing(atClient).mintAndPublish(ns);
 
     final substitute = await XWingKeyPair.generate();
-    final unsigned = '{"nskeyKid":"${nskeyKidOf(substitute.publicKeyBytes)}",'
-        '"publicKey":"unsigned"}';
+    final unsigned = '{"v":1,"keys":[{"kid":'
+        '"${nskeyKidOf(substitute.publicKeyBytes)}","use":"enc",'
+        '"alg":"x-wing","pub":"unsigned"}]}';
     // Local-first, deliberately: `currentPublic` reads through `atClient.get`,
     // so substituting only on the atServer would leave the genuine local copy
     // answering and the test would pass without proving anything.

@@ -93,8 +93,9 @@ void main() {
     }
 
     final advertised = jsonDecode(remoteData['public:__nskey.buzz$atSign']!);
-    final nskeyKid = (SignedEnvelope.fromJson(advertised as Map).payload
-        as Map)['nskeyKid'] as String;
+    final nskeyKid = NskeyAdvertisement.fromPayload(
+            SignedEnvelope.fromJson(advertised as Map).payload)
+        .nskeyKid;
 
     final material = (await inner.read(atSign)).getKey(
         NskeyPrivateFiling.keyIdFor('buzz', nskeyKid),

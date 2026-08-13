@@ -1,6 +1,5 @@
 import 'dart:async' show unawaited;
-import 'dart:convert';
-import 'dart:typed_data';
+import 'dart:convert' show jsonDecode;
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -31,18 +30,6 @@ abstract class AdvertisedKeyVerifier {
   /// trusted as [owner]'s.
   Future<NskeyAdvertisement> verify(String owner, String payload);
 }
-
-/// The version stamped on the nskey advertisement payload.
-///
-/// The payload carried none until 2026-08-06, which left a reader nothing to
-/// dispatch on if the construction changed — every other signed payload in the
-/// design carries one. The record IS rewritable (a rotation overwrites it), so
-/// this is cheap insurance rather than a deadline.
-///
-/// Required on the way in: a reader that treats an absent version as "the
-/// oldest shape I know" is guessing on the writer's behalf about the meaning
-/// of every field after it.
-const int nskeyAdvertisementVersion = 1;
 
 /// Verifies an advertisement's APKAM signature against the `_apsk` public key
 /// that the signing enrollment published under [owner]'s atSign.
@@ -92,66 +79,36 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
 
     await _signer.verifyEnvelopeSignature(envelope, signerAtSign: owner);
 
-    final advertised = envelope.payload;
-    if (advertised is! Map) {
+    final NskeyAdvertisement advertisement;
+    try {
+      advertisement = NskeyAdvertisement.fromPayload(envelope.payload);
+    } on FormatException catch (e) {
       throw AtSigningVerificationException(
-          'the advertised nskey for $owner has a signature over a payload that '
-          'is not an advertisement');
-    }
-    // Required. A version this build has no code for is refused rather than
-    // read as if it were v1, because the fields it would go on to parse might
-    // mean something else entirely — and an ABSENT version is the same
-    // situation with less to go on, not a licence to assume the oldest shape.
-    final version = advertised['v'];
-    if (version != nskeyAdvertisementVersion) {
-      throw AtSigningVerificationException(
-          'the advertised nskey for $owner declares payload version $version, '
-          'which this build has no code for — refusing rather than reading it '
-          'as version $nskeyAdvertisementVersion');
+          'the advertised nskey for $owner ${e.message}');
     }
 
-    // Required, and an algorithm this build cannot resolve is refused rather
-    // than guessed at: encapsulating under the wrong KEM produces a
-    // conveyance the owner can never open, and the failure would surface on
-    // their side with nothing to point at. An absent `alg` used to mean
-    // X-Wing, back when it was the only KEM — a default that spoke for owners
-    // who had named nothing.
-    final declaredAlg = advertised['alg'];
-    if (declaredAlg is! String ||
-        SecretSharingAlgos.kemFor(declaredAlg) == null) {
-      throw AtSigningVerificationException(
-          'the advertised nskey for $owner names key-establishment algorithm '
-          '"$declaredAlg", which this build cannot encapsulate to');
+    for (final key in advertisement.keys) {
+      // An algorithm this build cannot resolve is refused rather than guessed
+      // at: encapsulating under the wrong KEM produces a conveyance the owner
+      // can never open, and the failure would surface on their side with
+      // nothing to point at. An absent `alg` used to mean X-Wing, back when it
+      // was the only KEM — a default that spoke for owners who had named
+      // nothing.
+      if (SecretSharingAlgos.kemFor(key.alg) == null) {
+        throw AtSigningVerificationException(
+            'the advertised nskey for $owner names key-establishment algorithm '
+            '"${key.alg}", which this build cannot encapsulate to');
+      }
+      if (key.kid != nskeyKidOf(key.pubBytes)) {
+        // A kid that does not name its own key would let a rotation be reported
+        // as a generation the recipient never minted, so a conveyance sealed to
+        // it could never be opened.
+        throw AtSigningVerificationException(
+            'the advertised nskey for $owner names a kid that is not the digest '
+            'of the key it carries');
+      }
     }
-
-    final publicKey =
-        Uint8List.fromList(base64Decode(advertised['publicKey'] as String));
-    final nskeyKid = advertised['nskeyKid'] as String;
-    if (nskeyKid != nskeyKidOf(publicKey)) {
-      // A kid that does not name its own key would let a rotation be reported
-      // as a generation the recipient never minted, so a conveyance sealed to
-      // it could never be opened.
-      throw AtSigningVerificationException(
-          'the advertised nskey for $owner names a kid that is not the digest '
-          'of the key it carries');
-    }
-    // Required. Entries this build does not know are kept — the list is the
-    // OWNER's statement about what it can open, and a newer owner may name a
-    // construction we simply do not use yet. What is refused is the list
-    // being absent: a sender that invents one on the owner's behalf seals
-    // something the owner may not be able to unwrap.
-    final declaredSuites = advertised['suites'];
-    if (declaredSuites is! List) {
-      throw AtSigningVerificationException(
-          'the advertised nskey for $owner declares no suites, so there is '
-          'nothing it can be sealed under');
-    }
-    return (
-      nskeyKid: nskeyKid,
-      publicKey: publicKey,
-      alg: declaredAlg,
-      suites: declaredSuites.whereType<String>().toList(),
-    );
+    return advertisement;
   }
 }
 
@@ -353,8 +310,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     // a restart.
     final seed = NskeySeed(kem.newSeed());
     final pair = await kem.keyPairFromSeed(seed.bytes);
-    final advertisement = (
-      nskeyKid: nskeyKidOf(pair.publicKey),
+    final advertisement = NskeyAdvertisement.single(
       publicKey: pair.publicKey,
       alg: keyAlgo,
       // Derived from the key, never stated from the build's own list: what
@@ -387,18 +343,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     }
 
     await _signer.publishPublicSigningKey();
-    final payload = await _signer.wrapAndSignAndJsonEncode({
-      'v': nskeyAdvertisementVersion,
-      'nskeyKid': advertisement.nskeyKid,
-      'publicKey': base64Encode(advertisement.publicKey),
-      // Without this a sender has an opaque byte string and no way to tell
-      // which KEM it belongs to.
-      'alg': keyAlgo,
-      // And without this it cannot tell which *construction* the owner can
-      // unwrap, so a new one could only ever arrive by upgrading every reader
-      // first — release-ordering agility rather than negotiated agility.
-      'suites': advertisement.suites,
-    });
+    // One codec, both directions. Each entry carries its own `alg`, without
+    // which a sender has an opaque byte string and no way to tell which KEM it
+    // belongs to; `suites` says which *construction* the owner can unwrap,
+    // without which a new one could only ever arrive by upgrading every reader
+    // first — release-ordering agility rather than negotiated agility.
+    final payload =
+        await _signer.wrapAndSignAndJsonEncode(advertisement.toPayload());
 
     // Straight to the atServer first: an advertisement is only useful once a
     // *peer* can fetch it, and going through the local-first put would leave it

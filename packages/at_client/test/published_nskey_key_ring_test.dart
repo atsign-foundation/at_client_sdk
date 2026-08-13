@@ -61,16 +61,20 @@ void main() {
   /// each had an absent-means-the-old-shape hatch to fall through. The
   /// docstring said "really publishes" the whole time; removing the hatches is
   /// what made that true.
+  /// That payload unsigned, so a test can take a field away and watch the
+  /// reader refuse what is left.
+  Map<String, Object?> advertisementPayload(XWingKeyPair pair,
+          {List<String>? suites}) =>
+      NskeyAdvertisement.single(
+        publicKey: pair.publicKeyBytes,
+        alg: SecretSharingAlgos.xWing,
+        suites: suites,
+      ).toPayload();
+
   Future<String> signedPayloadFor(XWingKeyPair pair,
           {List<String>? suites}) async =>
-      bobSigner.wrapAndSignAndJsonEncode({
-        'v': nskeyAdvertisementVersion,
-        'nskeyKid': nskeyKidOf(pair.publicKeyBytes),
-        'publicKey': base64Encode(pair.publicKeyBytes),
-        'alg': SecretSharingAlgos.xWing,
-        'suites': suites ??
-            SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
-      });
+      bobSigner
+          .wrapAndSignAndJsonEncode(advertisementPayload(pair, suites: suites));
 
   String bobsApskPublicKey() =>
       bobChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
@@ -202,13 +206,15 @@ void main() {
       final c = client(payload: await signedPayloadFor(bobKey));
       final ring = PublishedNskeyKeyRing(c.atClient);
       // Stand in for mintAndPublish, which needs a remote secondary.
-      ring.rememberOwn(alice, namespace, (
-        nskeyKid: nskeyKidOf(bobKey.publicKeyBytes),
-        publicKey: bobKey.publicKeyBytes,
-        alg: SecretSharingAlgos.xWing,
+      ring.rememberOwn(
+          alice,
+          namespace,
+          NskeyAdvertisement.single(
+            publicKey: bobKey.publicKeyBytes,
+            alg: SecretSharingAlgos.xWing,
             suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing)
-      ));
+                SecretSharingAlgos.xWing),
+          ));
 
       expect((await ring.currentPublic(alice, namespace))?.nskeyKid,
           nskeyKidOf(bobKey.publicKeyBytes));
@@ -236,14 +242,7 @@ void main() {
       // protected.payload, and the payload out of base64url.
       final pair = bobChops.atChopsKeys.atPkamKeyPair!;
       final envelope = signEnvelope(
-          {
-            'v': nskeyAdvertisementVersion,
-            'nskeyKid': nskeyKidOf(bobKey.publicKeyBytes),
-            'publicKey': base64Encode(bobKey.publicKeyBytes),
-            'alg': SecretSharingAlgos.xWing,
-            'suites':
-                SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
-          },
+          advertisementPayload(bobKey),
           keys: ApkamSigningKeys(
               publicKey: pair.atPublicKey.publicKey,
               privateKey: pair.atPrivateKey.privateKey),
@@ -278,10 +277,7 @@ void main() {
       final envelope =
           jsonDecode(await signedPayloadFor(bobKey)) as Map<String, dynamic>;
       final mallorysKey = await XWingKeyPair.generate();
-      envelope['payload'] = {
-        'nskeyKid': nskeyKidOf(mallorysKey.publicKeyBytes),
-        'publicKey': base64Encode(mallorysKey.publicKeyBytes),
-      };
+      envelope['payload'] = advertisementPayload(mallorysKey);
       final c = client(payload: jsonEncode(envelope));
 
       await expectLater(
@@ -289,24 +285,16 @@ void main() {
           throwsA(isA<AtSigningVerificationException>()));
     });
 
-    test('an advertisement missing v, alg or suites is refused', () async {
-      // Each of the three had an absent-means-the-old-shape hatch, defending
+    test('an advertisement missing any required field is refused', () async {
+      // Each of these had an absent-means-the-old-shape hatch, defending
       // against a predecessor that never shipped. What the hatches actually
       // did was let a reader answer, on the owner's behalf, questions the
       // owner had not answered — which KEM the bytes belong to and which
       // construction they can unwrap. A sender acts on both immediately.
-      final full = {
-        'v': nskeyAdvertisementVersion,
-        'nskeyKid': nskeyKidOf(bobKey.publicKeyBytes),
-        'publicKey': base64Encode(bobKey.publicKeyBytes),
-        'alg': SecretSharingAlgos.xWing,
-        'suites': SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
-      };
-
-      for (final missing in ['v', 'alg', 'suites']) {
+      for (final missing in ['v', 'createdAt', 'keys', 'suites']) {
         final c = client(
-            payload: await bobSigner
-                .wrapAndSignAndJsonEncode(Map.of(full)..remove(missing)));
+            payload: await bobSigner.wrapAndSignAndJsonEncode(
+                Map.of(advertisementPayload(bobKey))..remove(missing)));
 
         await expectLater(
             PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -315,9 +303,28 @@ void main() {
                 'it is an advertisement that does not say');
       }
 
-      // The control: the same payload WITH all three resolves, so the loop
-      // above is failing on the removal rather than on the fixture.
-      final c = client(payload: await bobSigner.wrapAndSignAndJsonEncode(full));
+      // `alg` and the key itself sit INSIDE the entry now that the three
+      // advertising records share one key vocabulary. Removing them from the
+      // top level would remove nothing, so these cases have to reach into the
+      // entry or they pass for the absence rather than for the guard.
+      for (final missing in ['use', 'alg', 'pub', 'kid']) {
+        final payload = advertisementPayload(bobKey);
+        ((payload['keys'] as List).first as Map).remove(missing);
+        final c =
+            client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+
+        await expectLater(
+            PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+            throwsA(isA<AtSigningVerificationException>()),
+            reason: 'an entry with no $missing is not a key this build can '
+                'seal to, and the advertisement carries no other');
+      }
+
+      // The control: the same payload with everything present resolves, so the
+      // loops above are failing on the removal rather than on the fixture.
+      final c = client(
+          payload:
+              await bobSigner.wrapAndSignAndJsonEncode(advertisementPayload(bobKey)));
       expect(
           (await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace))
               ?.publicKey,
@@ -342,12 +349,12 @@ void main() {
       // Refusing beats reading it as v1: a later version's fields might mean
       // something else, and sealing to a key resolved from a misread payload
       // is not recoverable.
+      // Otherwise well-formed, so the refusal is about the version and not
+      // about a field the newer shape happens to be missing.
       final c = client(
-          payload: await bobSigner.wrapAndSignAndJsonEncode({
-        'v': nskeyAdvertisementVersion + 1,
-        'nskeyKid': nskeyKidOf(bobKey.publicKeyBytes),
-        'publicKey': base64Encode(bobKey.publicKeyBytes),
-      }));
+          payload: await bobSigner.wrapAndSignAndJsonEncode(
+              advertisementPayload(bobKey)
+                ..['v'] = nskeyAdvertisementVersion + 1));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -356,11 +363,7 @@ void main() {
     });
 
     test('an unsigned advertisement is rejected, not accepted bare', () async {
-      final c = client(
-          payload: jsonEncode({
-        'nskeyKid': nskeyKidOf(bobKey.publicKeyBytes),
-        'publicKey': base64Encode(bobKey.publicKeyBytes),
-      }));
+      final c = client(payload: jsonEncode(advertisementPayload(bobKey)));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -370,12 +373,15 @@ void main() {
     });
 
     test('a kid that does not name its own key is rejected', () async {
+      // The kid has to be written over the entry the codec built, because
+      // NskeyAdvertisement derives a kid from the key it is given and so
+      // cannot produce this pairing by construction.
       final otherKey = await XWingKeyPair.generate();
-      final c = client(
-          payload: await bobSigner.wrapAndSignAndJsonEncode({
-        'nskeyKid': nskeyKidOf(otherKey.publicKeyBytes),
-        'publicKey': base64Encode(bobKey.publicKeyBytes),
-      }));
+      final payload = advertisementPayload(bobKey);
+      ((payload['keys'] as List).first as Map)['kid'] =
+          nskeyKidOf(otherKey.publicKeyBytes);
+      final c =
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),

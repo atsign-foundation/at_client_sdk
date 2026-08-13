@@ -1,3 +1,6 @@
+import 'dart:convert' show base64Decode, base64Encode;
+import 'dart:typed_data' show Uint8List;
+
 import 'package:at_auth/at_auth.dart' show publicKeyKidOfBase64;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:meta/meta.dart' show experimental;
@@ -22,6 +25,27 @@ class PackageKey {
     required this.pub,
     String? kid,
   }) : kid = kid ?? computeKid(pub);
+
+  /// A key held as raw material rather than as the base64 an advertisement
+  /// carries — what a freshly minted KEM keypair hands back.
+  ///
+  /// The [kid] this derives is identical to [publicKeyKid] over the same bytes,
+  /// because [computeKid] decodes before hashing; a caller that has bytes and a
+  /// caller that has text arrive at the same id.
+  PackageKey.fromBytes({
+    required String use,
+    required String alg,
+    required Uint8List pub,
+  }) : this(use: use, alg: alg, pub: base64Encode(pub));
+
+  /// The key material [pub] encodes.
+  ///
+  /// Every consumer that hands the key to a KEM wants the material — an
+  /// encapsulation is over bytes — while the wire carries base64. Decoding once
+  /// here rather than at each call site is the same reasoning that puts
+  /// [publicKeyKidOfBase64] beside `publicKeyKid`: a key decoded in two places
+  /// is a key that can be decoded two ways.
+  late final Uint8List pubBytes = base64Decode(pub);
 
   /// First 8 bytes, hex-encoded, of the SHA-256 of the public key material,
   /// for a [pub] held as base64 — which is how a key package carries one.

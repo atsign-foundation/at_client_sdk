@@ -96,11 +96,14 @@ void main() {
   test('the published advertisement emits its exact wire shape — raw literals',
       () async {
     // Emitter pin, frozen forever for both halves — the payload and the
-    // envelope carrying it. Raw strings
-    // deliberately: the sibling tests assert through the constants that
-    // define these values, which follow a changed value silently. Absent-'v'
-    // and absent-'alg'/'suites' reads are tolerated back-compat, so removing
-    // a field here changes meaning rather than failing — only this pin says.
+    // envelope carrying it. Raw strings deliberately: the sibling tests assert
+    // through the constants that define these values, which follow a changed
+    // value silently. Only this pin fails when the wire moves, which is what
+    // makes editing it the review.
+    //
+    // The entry spelling `{use, alg, pub, kid}` inside `{v, createdAt, keys,
+    // suites}` is shared with the `_apsk` advertisement and the enrollment key
+    // package, so a field renamed here is a field renamed in three records.
     final c = client();
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
 
@@ -113,13 +116,20 @@ void main() {
     final payload =
         (SignedEnvelope.fromJson(envelope).payload as Map)
             .cast<String, dynamic>();
-    expect(payload.keys.toList(),
-        ['v', 'nskeyKid', 'publicKey', 'alg', 'suites'],
+    expect(payload.keys.toList(), ['v', 'createdAt', 'keys', 'suites'],
         reason: 'the payload — frozen forever');
     expect(payload['v'], 1);
-    expect(payload['nskeyKid'], advertisement.nskeyKid);
-    expect(payload['alg'], 'x-wing');
     expect(payload['suites'], ['x-wing-rfc9180-v1', 'x-wing-hpke-v1']);
+
+    final keys = (payload['keys'] as List).cast<Map<String, dynamic>>();
+    expect(keys, hasLength(1),
+        reason: 'a mint advertises one key; the list is what lets a second '
+            'algorithm be added beside it later');
+    expect(keys.single.keys.toList(), ['kid', 'use', 'alg', 'pub'],
+        reason: 'the entry — the vocabulary all three advertising records use');
+    expect(keys.single['use'], 'enc');
+    expect(keys.single['alg'], 'x-wing');
+    expect(keys.single['kid'], advertisement.nskeyKid);
   });
 
   test('a mint that cannot store its private publishes nothing', () async {
@@ -160,13 +170,14 @@ void main() {
     final winner = await XWingKeyPair.generate();
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
     // The winner published while this client was trying to take the lock.
-    ring.rememberOwn(atSign, namespace, (
-      nskeyKid: nskeyKidOf(winner.publicKeyBytes),
-      publicKey: winner.publicKeyBytes,
-      alg: SecretSharingAlgos.xWing,
-            suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing)
-    ));
+    ring.rememberOwn(
+        atSign,
+        namespace,
+        NskeyAdvertisement.single(
+          publicKey: winner.publicKeyBytes,
+          alg: SecretSharingAlgos.xWing,
+          suites: SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
+        ));
 
     final adopted = await ring.mintAndPublish(namespace);
 

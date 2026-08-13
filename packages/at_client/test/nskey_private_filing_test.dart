@@ -6,7 +6,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
-    show NskeySeed, nskeyKidOf;
+    show NskeyAdvertisement, NskeySeed;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
@@ -107,12 +107,10 @@ void main() {
     final filer = NskeyPrivateFiling(
       keysIo: io,
       atSign: atSign,
-      publishedGeneration: (_, __) async => (
-        nskeyKid: nskeyKidOf(real.publicKeyBytes),
+      publishedGeneration: (_, __) async => NskeyAdvertisement.single(
         publicKey: real.publicKeyBytes,
         alg: SecretSharingAlgos.xWing,
-            suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing)
+        suites: SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
       ),
     );
 
@@ -137,12 +135,10 @@ void main() {
     final filer = NskeyPrivateFiling(
       keysIo: io,
       atSign: atSign,
-      publishedGeneration: (_, __) async => (
-        nskeyKid: nskeyKidOf(real.publicKeyBytes),
+      publishedGeneration: (_, __) async => NskeyAdvertisement.single(
         publicKey: real.publicKeyBytes,
         alg: SecretSharingAlgos.xWing,
-            suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing)
+        suites: SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
       ),
     );
 

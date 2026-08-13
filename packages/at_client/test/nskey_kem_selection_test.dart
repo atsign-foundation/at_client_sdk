@@ -83,12 +83,13 @@ void main() {
       // raised by upgrading every reader first.
       final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
       final pair = await kem.keyPairFromSeed(kem.newSeed());
-      final ring = _FixedRing((
-        nskeyKid: nskeyKidOf(pair.publicKey),
-        publicKey: pair.publicKey,
-        alg: SecretSharingAlgos.xWing,
-        suites: const [SecretSharingAlgos.xWingHpke],
-      ), pair.secretKey);
+      final ring = _FixedRing(
+          NskeyAdvertisement.single(
+            publicKey: pair.publicKey,
+            alg: SecretSharingAlgos.xWing,
+            suites: const [SecretSharingAlgos.xWingHpke],
+          ),
+          pair.secretKey);
       final provider = NskeyProvider(
           keyRing: ring,
           cache: ContentKeyCache(),
@@ -107,12 +108,13 @@ void main() {
     test('no shared construction is a refusal, not a guess', () async {
       final kem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
       final pair = await kem.keyPairFromSeed(kem.newSeed());
-      final ring = _FixedRing((
-        nskeyKid: nskeyKidOf(pair.publicKey),
-        publicKey: pair.publicKey,
-        alg: SecretSharingAlgos.xWing,
-        suites: const ['x-wing-hpke-v99'],
-      ), pair.secretKey);
+      final ring = _FixedRing(
+          NskeyAdvertisement.single(
+            publicKey: pair.publicKey,
+            alg: SecretSharingAlgos.xWing,
+            suites: const ['x-wing-hpke-v99'],
+          ),
+          pair.secretKey);
       final provider = NskeyProvider(
           keyRing: ring,
           cache: ContentKeyCache(),

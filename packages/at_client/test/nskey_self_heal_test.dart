@@ -68,12 +68,11 @@ void main() {
       ring.rememberOwn(
           atSign,
           namespace,
-          (
-            nskeyKid: kid,
+          NskeyAdvertisement.single(
             publicKey: pair.publicKeyBytes,
             alg: SecretSharingAlgos.xWing,
             suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing)
+                SecretSharingAlgos.xWing),
           ));
 
       final sharing = MockPairwiseSecretSharing();
@@ -105,12 +104,11 @@ void main() {
       ring.rememberOwn(
           atSign,
           namespace,
-          (
-            nskeyKid: kid,
+          NskeyAdvertisement.single(
             publicKey: pair.publicKeyBytes,
             alg: SecretSharingAlgos.xWing,
             suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing)
+                SecretSharingAlgos.xWing),
           ));
 
       final sharing = MockPairwiseSecretSharing();
@@ -154,12 +152,11 @@ void main() {
       ring.rememberOwn(
           atSign,
           namespace,
-          (
-            nskeyKid: kid,
+          NskeyAdvertisement.single(
             publicKey: pair.publicKeyBytes,
             alg: SecretSharingAlgos.xWing,
             suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing)
+                SecretSharingAlgos.xWing),
           ));
 
       final sharing = MockPairwiseSecretSharing();
@@ -191,16 +188,14 @@ void main() {
     test('a client with nowhere to file the answer does not ask', () async {
       final atClient = client();
       final ring = PublishedNskeyKeyRing(atClient);
-      final kid = nskeyKidOf(pair.publicKeyBytes);
       ring.rememberOwn(
           atSign,
           namespace,
-          (
-            nskeyKid: kid,
+          NskeyAdvertisement.single(
             publicKey: pair.publicKeyBytes,
             alg: SecretSharingAlgos.xWing,
             suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing)
+                SecretSharingAlgos.xWing),
           ));
       final sharing = MockPairwiseSecretSharing();
 
