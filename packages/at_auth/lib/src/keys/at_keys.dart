@@ -541,16 +541,27 @@ class AtKeys {
   /// what the wire's `signingAlgo` field carries; the key it describes is the
   /// authentication keypair, not the enrollment's attestation signing keys.
   SigningAlgoType? signingAlgorithmForEnrollment(String enrollmentId) {
-    final material = keysForEnrollment(enrollmentId)
-        .where((m) =>
-            m.keyPartType == CryptographicKeyType.privateAuthentication &&
-            m.status == KeyPartStatus.active)
-        .firstOrNull;
+    final material = _activeAuthenticationMaterial(enrollmentId);
     if (material == null) return null;
     return SigningAlgoType.values
         .where((a) => a.name == material.keyAlgorithmType)
         .firstOrNull;
   }
+
+  /// [enrollmentId]'s active private authentication material, whatever
+  /// algorithm it names — including one this build does not recognise.
+  ///
+  /// Whether the enrollment HAS typed material is a different question from
+  /// whether this build can sign with it, and [authenticationFor] has to tell
+  /// them apart: a keyfile written by a newer client still holds that
+  /// enrollment's key, so answering "none" for it would send the caller to the
+  /// flat fields, which on a retrofitted keyfile belong to somebody else.
+  AtKeysMaterial? _activeAuthenticationMaterial(String enrollmentId) =>
+      keysForEnrollment(enrollmentId)
+          .where((m) =>
+              m.keyPartType == CryptographicKeyType.privateAuthentication &&
+              m.status == KeyPartStatus.active)
+          .firstOrNull;
 
   /// The AtChops and the PKAM signing algorithm [enrollmentId] authenticates
   /// with — the one place either half of an APKAM keypair is resolved.
@@ -577,10 +588,26 @@ class AtKeys {
   /// A null [enrollmentId] asks for the flat fields directly — callers reach
   /// here having already defaulted it to this keyfile's own [enrollmentId],
   /// which on a retrofitted file is deliberately the legacy one.
+  /// Throws [AtKeyNotFoundException] when [enrollmentId] holds typed
+  /// authentication material under an algorithm this build cannot sign with.
+  /// Falling back to the flat fields there would authenticate as whoever owns
+  /// them, and at_lookup's default is `rsa2048`, so the wrong key would be
+  /// signed by the wrong routine. A keyfile written by a newer client is the
+  /// way this happens.
   ({AtChops chops, SigningAlgoType? algorithm}) authenticationFor(
       String? enrollmentId) {
     final algorithm = authenticationAlgorithmFor(enrollmentId);
     if (algorithm == null) {
+      final material = enrollmentId == null
+          ? null
+          : _activeAuthenticationMaterial(enrollmentId);
+      if (material != null) {
+        throw AtKeyNotFoundException(
+            'Enrollment $enrollmentId authenticates with '
+            '"${material.keyAlgorithmType}", which this build cannot sign '
+            'with. Its keypair is in this keyfile; the flat fields are a '
+            'different enrollment\'s and are not a substitute for it.');
+      }
       return (chops: toAtChops(), algorithm: null);
     }
     return (chops: toAtChopsForEnrollment(enrollmentId!), algorithm: algorithm);

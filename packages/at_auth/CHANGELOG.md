@@ -1,4 +1,12 @@
 ## 3.4.0
+- fix: `authenticationFor` refuses an enrollment whose typed authentication
+  material names an algorithm this build cannot sign with, instead of falling
+  back to the flat fields. The keypair is still that enrollment's, so the flat
+  fields are a *different* enrollment's on a retrofitted keyfile — and
+  at_lookup's default is `rsa2048`, so the fallback signed the wrong key with
+  the wrong routine. "This enrollment has no typed material" remains a separate
+  answer and still reaches the flat fields. A keyfile written by a newer client
+  is how this arises.
 - fix: two active authentication keys carrying no enrollment id are refused,
   as two carrying one already were. `validateKeyMaterials` used a single
   variable as both the enrollment id it had seen and the flag for *whether* it

@@ -2590,8 +2590,11 @@ its own. None blocks anything.
    deliberately not folded into the ruling-6 commits because it has nothing to
    do with domain separation — it wants its own subject line and its own test.
 
-7. **An APKAM filed under an algorithm this build does not recognise falls
-   back to the flat fields.** `signingAlgorithmForEnrollment` matches the
+7. ~~**An APKAM filed under an algorithm this build does not recognise falls
+   back to the flat fields.**~~ **FIXED 2026-08-13.** `authenticationFor` now
+   refuses with an `AtKeyNotFoundException` naming the algorithm, and
+   "this enrollment has no typed material" stays a separate answer that still
+   reaches the flat fields. Original finding: `signingAlgorithmForEnrollment` matches the
    material's `keyAlgorithmType` against `SigningAlgoType.values` and returns
    null for anything else, and `authenticationFor` reads null as "no typed
    material for this enrollment" — so a keyfile written by a newer client

@@ -225,6 +225,26 @@ void main() {
       expect(resolved.algorithm, isNull);
     });
 
+    test('an algorithm this build cannot sign with is refused, not fallen '
+        'back from', () {
+      // A keyfile written by a newer client. Its material is still this
+      // enrollment's, so serving the flat fields would authenticate as the
+      // enrollment that owns those — and at_lookup's rsa2048 default would
+      // sign the wrong key with the wrong routine.
+      final futureAlgo = createKeys()
+        ..fileApkamMaterial(
+            enrollmentId: 'future-algorithm',
+            algorithm: 'sphincs-plus-256s',
+            publicKey: typedApkamPublicKey,
+            privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
+
+      expect(() => futureAlgo.authenticationFor('future-algorithm'),
+          throwsA(isA<AtKeyNotFoundException>()));
+      // An enrollment the keyfile holds nothing for still gets the flat
+      // fields: absent material and unusable material are different answers.
+      expect(futureAlgo.authenticationFor('never-held-here').chops, isNotNull);
+    });
+
     test('authenticationAlgorithmFor answers without building an AtChops', () {
       // Only typed material, so toAtChops() has no flat keypair to build from
       // and throws. The algorithm still resolves — which is what lets a caller
