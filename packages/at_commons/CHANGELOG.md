@@ -1,5 +1,10 @@
 ## 5.16.0
 
+- feat: add `EnrollVerbBuilder.apkamPublicKeySignature`, threading the existing
+  `EnrollParams.apkamPublicKeySignature` through to the built command. The field
+  had no route to the wire, so an `enroll:update` could not carry the proof of
+  possession the atServer requires before it installs a new `apkamPublicKey` —
+  which made the rotation the field exists for unsendable.
 - feat: add `Metadata.copy()` — a field-for-field copy, so callers handing
   metadata from one object to another stop hand-rolling the field list. A
   hand-rolled copier silently drops any field added to `Metadata` later: the

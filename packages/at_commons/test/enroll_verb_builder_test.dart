@@ -145,6 +145,46 @@ void main() {
           'enroll:unrevoke:{"enrollmentId":"123"}\n');
     });
 
+    // The same reason the two apsk pins above are raw literals:
+    // `apkamPublicKeySignature` existed on EnrollParams with no route to the
+    // built command, so a test reading the builder's own field back would have
+    // passed for as long as the value could not be sent at all.
+    test('an update carries the possession signature to the wire', () {
+      var enrollVerbBuilder = EnrollVerbBuilder()
+        ..operation = EnrollOperationEnum.update
+        ..enrollmentId = '123'
+        ..apkamPublicKey = 'NEWKEY'
+        ..signingAlgo = 'mldsa65'
+        ..apkamPublicKeySignature = 'ZmFrZS1zaWduYXR1cmU=';
+      expect(
+          enrollVerbBuilder.buildCommand(),
+          'enroll:update:{"enrollmentId":"123","apkamPublicKey":"NEWKEY",'
+          '"signingAlgo":"mldsa65",'
+          '"apkamPublicKeySignature":"ZmFrZS1zaWduYXR1cmU="}\n');
+    });
+
+    test('an update that changes only the advertisement sends only that', () {
+      var enrollVerbBuilder = EnrollVerbBuilder()
+        ..operation = EnrollOperationEnum.update
+        ..enrollmentId = '123'
+        ..apsk = {
+          'v': 1,
+          'keys': [
+            {
+              'kid': '0123456789abcdef',
+              'use': 'sign',
+              'alg': 'mldsa65',
+              'pub': 'PUBKEY'
+            }
+          ]
+        };
+      expect(
+          enrollVerbBuilder.buildCommand(),
+          'enroll:update:{"enrollmentId":"123","apsk":{"v":1,"keys":'
+          '[{"kid":"0123456789abcdef","use":"sign","alg":"mldsa65",'
+          '"pub":"PUBKEY"}]}}\n');
+    });
+
     test('A test to validate enroll delete command', () {
       EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
         ..operation = EnrollOperationEnum.delete

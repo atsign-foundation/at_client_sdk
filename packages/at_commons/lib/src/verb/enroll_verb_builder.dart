@@ -63,6 +63,14 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
   /// [EnrollParams.apskLegacy]. Mutually exclusive with [apsk].
   String? apskLegacy;
 
+  /// Proof that the sender holds the private half of the [apkamPublicKey] it
+  /// is asking the atServer to install. See
+  /// [EnrollParams.apkamPublicKeySignature] for what is signed and why.
+  ///
+  /// Required on an `enroll:update` that changes [apkamPublicKey], and refused
+  /// without it.
+  String? apkamPublicKeySignature;
+
   /// Used to force revoke the enrollment request.
   bool force = false;
 
@@ -98,6 +106,7 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
       ..signingAlgo = signingAlgo
       ..apsk = apsk
       ..apskLegacy = apskLegacy
+      ..apkamPublicKeySignature = apkamPublicKeySignature
       ..metadata = metadata
       ..enrollmentStatusFilter = enrollmentStatusFilter
       ..apkamKeysExpiryDuration = apkamKeysExpiryDuration;
