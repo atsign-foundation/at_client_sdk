@@ -87,18 +87,21 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
           'the advertised nskey for $owner ${e.message}');
     }
 
+    // An entry naming an algorithm this build does not implement is SKIPPED,
+    // not refused: that is what lets an owner advertise a new KEM beside an old
+    // one without cutting off every peer that predates it. What is refused is
+    // an advertisement with nothing left after the skipping — a reader that
+    // understands no entry refuses outright rather than falling back to a key
+    // it derived some other way.
+    //
+    // Every entry this build DOES understand is checked, including ones it will
+    // not choose. A malformed entry beside a good one is a signal about the
+    // advertisement as a whole, and sealing to the good one while ignoring it
+    // would be reading past evidence that the owner's publishing is broken.
+    var usable = 0;
     for (final key in advertisement.keys) {
-      // An algorithm this build cannot resolve is refused rather than guessed
-      // at: encapsulating under the wrong KEM produces a conveyance the owner
-      // can never open, and the failure would surface on their side with
-      // nothing to point at. An absent `alg` used to mean X-Wing, back when it
-      // was the only KEM — a default that spoke for owners who had named
-      // nothing.
-      if (SecretSharingAlgos.kemFor(key.alg) == null) {
-        throw AtSigningVerificationException(
-            'the advertised nskey for $owner names key-establishment algorithm '
-            '"${key.alg}", which this build cannot encapsulate to');
-      }
+      if (SecretSharingAlgos.kemFor(key.alg) == null) continue;
+      usable++;
       // Length before anything is sealed to it. A kid is the digest of
       // whatever bytes are carried, so it matches a forged key as readily as a
       // real one and the check below cannot see a wrong-length key at all.
@@ -126,6 +129,13 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
             'the advertised nskey for $owner names a kid that is not the digest '
             'of the key it carries');
       }
+    }
+    if (usable == 0) {
+      throw AtSigningVerificationException(
+          'the advertised nskey for $owner offers only key-establishment '
+          'algorithms this build cannot encapsulate to '
+          '(${advertisement.keys.map((k) => '"${k.alg}"').join(', ')}) — '
+          'refusing rather than sealing under one it did not name');
     }
     return advertisement;
   }

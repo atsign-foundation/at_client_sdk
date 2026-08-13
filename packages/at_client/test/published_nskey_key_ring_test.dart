@@ -372,6 +372,71 @@ void main() {
               'trustworthy as the server that served it');
     });
 
+    /// An entry for an algorithm this build has no KEM for.
+    Map<String, Object?> unusableEntry() => {
+          'kid': 'a-kid-for-an-algorithm-nobody-here-implements',
+          'use': 'enc',
+          'alg': 'kyber-1024-v9',
+          'pub': base64Encode(List<int>.filled(32, 7)),
+        };
+
+    test('an entry this build cannot use is skipped, not fatal', () async {
+      // The list exists so an owner can offer a new KEM beside an old one. A
+      // reader that refused the whole advertisement on the first unknown entry
+      // would mean nobody could publish the new one without cutting off every
+      // peer that predates it — the reader has to understand the shape before
+      // any writer produces it.
+      final payload = advertisementPayload(bobKey);
+      (payload['keys'] as List).insert(0, unusableEntry());
+      final c =
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+
+      final advertised =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+
+      expect(advertised?.publicKey, bobKey.publicKeyBytes,
+          reason: 'the unusable entry is FIRST in the list, so a reader taking '
+              'the first entry rather than the best usable one would have '
+              'picked it');
+    });
+
+    test('an advertisement of only unusable entries is refused', () async {
+      final payload = advertisementPayload(bobKey);
+      (payload['keys'] as List)
+        ..clear()
+        ..add(unusableEntry());
+      final c =
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>().having(
+              (e) => '$e', 'message', contains('cannot encapsulate to'))),
+          reason: 'a reader understanding no entry refuses outright — no '
+              'downgrade, and no fallback to a key derived some other way');
+    });
+
+    test('a malformed entry beside a usable one still refuses', () async {
+      // Sealing to the good entry and ignoring the bad one would be reading
+      // past evidence that the owner's publishing is broken.
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final pair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final payload = advertisementPayload(bobKey);
+      (payload['keys'] as List).add({
+        'kid': nskeyKidOf(pair.publicKey),
+        'use': 'enc',
+        'alg': SecretSharingAlgos.mlKem1024,
+        // Truncated: a length this build CAN state, and does not match.
+        'pub': base64Encode(pair.publicKey.sublist(0, 100)),
+      });
+      final c =
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
     test('a key that is not its algorithm\'s length is rejected', () async {
       // The kid is the digest of whatever bytes are carried, so a forger gets
       // a matching one for free and the kid check cannot see this. The length

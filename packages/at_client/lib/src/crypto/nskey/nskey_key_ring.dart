@@ -177,21 +177,29 @@ class NskeyAdvertisement {
     return null;
   }
 
-  /// The one encapsulation key this advertisement carries.
+  /// The entry a sender on this build should encapsulate to: the strongest
+  /// algorithm it implements that this advertisement offers.
   ///
-  /// Every advertisement holds exactly one until the multi-key writer lands, so
-  /// the three accessors below read it directly rather than negotiating. They
-  /// exist so that callers written against the flat shape keep compiling across
-  /// that change, and they go when the writer can emit a second entry — an
-  /// advertisement with two ways to name its key is the thing this converged
-  /// vocabulary is meant to stop.
-  PackageKey get _only => keys.single;
+  /// Not `keys.single`. A writer emits one key today, but the list exists so
+  /// that a newer one can offer two, and a reader that assumed one would throw
+  /// on the first advertisement that did — the reader has to understand the
+  /// shape before any writer produces it, or the capability can never be turned
+  /// on without breaking every peer that has not upgraded.
+  ///
+  /// [SecretSharingAlgos.keyAlgos] is strongest-first, so an owner offering
+  /// both gets sealed to under the better one without either side negotiating.
+  PackageKey get _usable =>
+      bestKeyFor(SecretSharingAlgos.keyAlgos) ??
+      (throw StateError(
+          'this advertisement offers no key this build can encapsulate to. A '
+          'verified advertisement always offers one, so this came from '
+          'somewhere other than the reader'));
 
-  String get nskeyKid => _only.kid;
+  String get nskeyKid => _usable.kid;
 
-  Uint8List get publicKey => _only.pubBytes;
+  Uint8List get publicKey => _usable.pubBytes;
 
-  String get alg => _only.alg;
+  String get alg => _usable.alg;
 }
 
 /// The id of an nskey generation — a SHA-256 prefix of its public half, so it

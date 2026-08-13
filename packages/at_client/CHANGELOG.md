@@ -14,6 +14,16 @@
   lines apart and had to be kept in step by eye. `v` stays 1: nothing is
   released, so there is no advertisement in the old shape for a version 2 to
   distinguish this from.
+- feat: an nskey advertisement offering a key-establishment algorithm this
+  build does not implement is read past rather than refused, and a sender
+  encapsulates to the strongest algorithm it implements that the owner offers.
+  This is the half that has to ship first: a reader assuming one key would
+  throw on the first advertisement carrying two, so nobody could publish a
+  second algorithm without cutting off every peer that predates it. An
+  advertisement whose entries are *all* unusable is still refused outright —
+  no downgrade, and no fallback to a key derived some other way. A malformed
+  entry beside a usable one refuses too, because sealing to the good one would
+  be reading past evidence that the owner's publishing is broken.
 - fix: a signed nskey advertisement carrying a key that is not its algorithm's
   length is refused, rather than sealed to. A key id is the SHA-256 prefix of
   whatever bytes it is computed over, so a forged advertisement carries a
