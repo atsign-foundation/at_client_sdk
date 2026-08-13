@@ -2540,7 +2540,17 @@ its own. None blocks anything.
    minted before that commit derives different kpids than it did**, so recycle
    it before trusting their key packages. A fresh `runLocal.sh` run is
    unaffected — it recycles the container anyway.
-6. **`_keyPackageHalves` can adopt a co-tenant's key package.**
+6. ~~**`_keyPackageHalves` can adopt a co-tenant's key package.**~~ **FIXED
+   2026-08-13** by routing through `keyPackageMaterial`, exactly as the entry
+   below proposed. **A second defect came with it, unrecorded until now:** an
+   nskey private is filed under the same `privateDecapsulation` part type but
+   arrives *alone*, so the hand-rolled selection could adopt one as this
+   enrollment's recipient identity — `keyPackageMaterials`' requirement that
+   both halves share a keyId is what excludes it, and its own dartdoc had
+   named that hazard all along. ⚠️ **The test fixture was standing in for a
+   shape production never produces**: `withKeyPackage()` filed only the private
+   half, while `enrollmentKeyPackageBuilder` (`enrollment_key_package.dart:101-110`)
+   files both. Reverting the fix turns both new rows red. Original finding:
    `enrollment_symmetric_key.dart`'s `_keyPackageHalves` selects the private
    half with `firstOrNull` over an unsorted list, scoping by neither enrollment
    id nor recency — where `keyPackageMaterials` does both, deliberately, and

@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysMaterial, CryptographicKeyType;
+    show AtKeys, AtKeysMaterial;
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64;
@@ -10,6 +10,8 @@ import 'package:at_commons/at_builders.dart' show ScanVerbBuilder;
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
+import 'package:at_client/src/secret_sharing/key_package_persistence.dart'
+    show keyPackageMaterial;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
     show EnvelopeAddressing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -107,11 +109,19 @@ Future<String> Function(AtKeys, AtLookUp) enrollmentApkamSymmetricKeyResolver(
 /// expanded and which no seeded call reproduces from. So the seed is expanded
 /// here, once, rather than handed to `pqOpen` as if it were the key.
 Future<(String, Uint8List, String)> _keyPackageHalves(AtKeys keys) async {
-  final AtKeysMaterial? private = keys.keys
-      .where((m) =>
-          m.keyPartType == CryptographicKeyType.privateDecapsulation &&
-          SecretSharingAlgos.keyAlgoForMaterial(m.keyAlgorithmType) != null)
-      .firstOrNull;
+  // The selection rule lives in keyPackageMaterials and is not restated here.
+  // Picking the first `privateDecapsulation` by hand got two things wrong on a
+  // keyfile holding more than one: it could take a co-tenant's package — a
+  // retrofitted file carries the legacy enrollment's beside this one's — and
+  // it could take an nskey private, which is filed under the same part type
+  // but arrives without a public half, so adopting it as this enrollment's
+  // recipient identity means polling an address nobody writes to until the
+  // enrollment times out. keyPackageMaterials requires both halves under one
+  // keyId, skips dead material, and orders active-then-newest.
+  //
+  // No enrollment id to scope by: this runs before one has been filed against
+  // the freshly minted package, and that is the case the untagged arm serves.
+  final AtKeysMaterial? private = keyPackageMaterial(keys);
   if (private == null) {
     throw StateError(
         'These AtKeys hold no key-establishment decapsulation private key, so '

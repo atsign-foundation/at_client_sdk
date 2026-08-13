@@ -1,4 +1,13 @@
 ## 3.14.1
+- fix: a new enrollment collecting its conveyed `apkamSymmetricKey` uses its
+  own key package. The selection took the first `privateDecapsulation` material
+  in the keyfile, scoped by neither enrollment nor recency, so on a retrofitted
+  keyfile — which carries the legacy enrollment's package beside the new one's
+  — it could adopt a co-tenant's, and an nskey private (same part type, filed
+  alone) could be adopted as the recipient identity too. Either way the
+  enrollment polls an address nobody is writing to until it times out. Now
+  routed through `keyPackageMaterial`, which already required both halves under
+  one keyId, skipped dead material and ordered active-then-newest.
 - fix: a client builds its PKAM keypair from the keyfile it just read, not from
   the algorithm an earlier read recorded. `_createAtChops` consulted the value
   `_resolveSigningAlgoFromKeyMaterial` had stored, and that stores nothing when

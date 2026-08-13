@@ -22,16 +22,46 @@ void main() {
   const atSign = '@alice';
   const kpid = 'kpid-1';
 
-  /// AtKeys holding a key-package private, which is what the resolver needs to
+  /// Files a key package — **both** halves under one keyId, which is what
+  /// `enrollmentKeyPackageBuilder` produces and what identifies a package as
+  /// distinct from an nskey private, which is filed under the same part type
+  /// but arrives alone.
+  void fileKeyPackage(
+    AtKeys keys, {
+    required String keyId,
+    String? enrollmentId,
+    int seed = 0,
+    DateTime? createdAt,
+  }) {
+    final at = createdAt ?? DateTime.now().toUtc();
+    keys
+      ..addKey(AtKeysMaterial(
+        keyId: keyId,
+        enrollmentId: enrollmentId,
+        keyPartType: CryptographicKeyType.privateDecapsulation,
+        keyAlgorithmType: KeyAlgorithmType.xWing,
+        bytes: AtBytes(
+            Uint8List.fromList(List<int>.generate(32, (i) => i + seed))),
+        createdAt: at,
+      ))
+      ..addKey(AtKeysMaterial(
+        keyId: keyId,
+        enrollmentId: enrollmentId,
+        keyPartType: CryptographicKeyType.publicEncapsulation,
+        keyAlgorithmType: KeyAlgorithmType.xWing,
+        bytes: AtBytes(
+            Uint8List.fromList(List<int>.generate(32, (i) => i + seed + 100))),
+        createdAt: at,
+      ));
+  }
+
+  /// AtKeys holding a key-package, which is what the resolver needs to
   /// identify this enrollment's kpid at all.
-  AtKeys withKeyPackage() => AtKeys()
-    ..addKey(AtKeysMaterial(
-      keyId: kpid,
-      keyPartType: CryptographicKeyType.privateDecapsulation,
-      keyAlgorithmType: KeyAlgorithmType.xWing,
-      bytes: AtBytes(Uint8List.fromList(List<int>.generate(32, (i) => i))),
-      createdAt: DateTime.now().toUtc(),
-    ));
+  AtKeys withKeyPackage() {
+    final keys = AtKeys();
+    fileKeyPackage(keys, keyId: kpid);
+    return keys;
+  }
 
   const envelopeKey = '@alice:abc.$kpid.__ssenv.myapp@alice';
 
@@ -167,5 +197,50 @@ void main() {
             'polling for half a minute to say so helps nobody. The message '
             'names no single KEM because the lookup accepts any this build '
             'implements — an enrollment minted under either is openable here');
+  });
+
+  test('a co-tenant enrollment\'s key package is never adopted', () async {
+    // A retrofitted keyfile carries the legacy enrollment's package beside
+    // this one's. Taking the wrong one means polling an address nobody is
+    // writing to until the enrollment times out — and the failure names the
+    // co-tenant's kpid, which points the reader at the wrong enrollment.
+    final keys = AtKeys();
+    fileKeyPackage(keys,
+        keyId: 'co-tenant-kpid',
+        enrollmentId: 'someone-elses-enrollment',
+        seed: 50);
+    fileKeyPackage(keys, keyId: kpid);
+
+    final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+        timeout: Duration(milliseconds: 1),
+        pollInterval: Duration(milliseconds: 1));
+
+    await expectLater(
+        resolve(keys, lookupWith(signer: 'live-enrollment', apsk: 'whatever')),
+        throwsA(isA<StateError>().having((e) => '$e', 'message',
+            allOf(contains(kpid), isNot(contains('co-tenant-kpid'))))),
+        reason: 'the untagged package is this enrollment\'s; one tagged for '
+            'another enrollment is never a candidate');
+  });
+
+  test('an nskey private is not mistaken for a key package', () async {
+    // Same part type, but filed alone — its public half lives on the
+    // atServer. Adopting it as the recipient identity would make this
+    // enrollment answer at an address it never advertised.
+    final keys = AtKeys()
+      ..addKey(AtKeysMaterial(
+        keyId: 'nskey-private',
+        keyPartType: CryptographicKeyType.privateDecapsulation,
+        keyAlgorithmType: KeyAlgorithmType.xWing,
+        bytes: AtBytes(Uint8List.fromList(List<int>.generate(32, (i) => i))),
+        createdAt: DateTime.now().toUtc(),
+      ));
+
+    final resolve = enrollmentApkamSymmetricKeyResolver(atSign);
+
+    await expectLater(
+        resolve(keys, lookupWith(signer: 'anyone')),
+        throwsA(isA<StateError>().having((e) => '$e', 'message',
+            contains('no key-establishment decapsulation private key'))));
   });
 }
