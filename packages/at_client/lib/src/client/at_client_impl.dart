@@ -1404,13 +1404,15 @@ class AtClientImpl implements AtClient {
       // its own signing keypair and algorithm; the flat fields keep carrying
       // the original enrollment's RSA credentials, so reading them here
       // would sign PKAM with the wrong key under this client's enrollment
-      // id. _resolveSigningAlgoFromKeyMaterial has already run, so its
-      // answer is the decision. Mirrors AtAuthImpl.authenticate's resolution.
-      final id = enrollmentId;
-      if (id != null && resolved_algo.resolvedSigningAlgoFor(this) != null) {
-        return keys.toAtChopsForEnrollment(id);
-      }
-      return keys.toAtChops();
+      // id. AtKeys decides which of the two this enrollment owns, off the
+      // keyfile just read — the same resolver AtAuthImpl.authenticate uses.
+      //
+      // Not the algorithm _resolveSigningAlgoFromKeyMaterial recorded: that
+      // records nothing when its own read throws, and it documents the
+      // consequence as a preference fallback for the *algorithm*. Letting it
+      // pick the keypair too turns a survivable failure into signing with a
+      // key that is not this enrollment's.
+      return keys.authenticationFor(enrollmentId).chops;
     }
     AtEncryptionKeyPair? atEncryptionKeyPair;
     AtPkamKeyPair? atPkamKeyPair;

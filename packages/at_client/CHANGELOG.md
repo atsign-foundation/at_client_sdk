@@ -1,4 +1,14 @@
 ## 3.14.1
+- fix: a client builds its PKAM keypair from the keyfile it just read, not from
+  the algorithm an earlier read recorded. `_createAtChops` consulted the value
+  `_resolveSigningAlgoFromKeyMaterial` had stored, and that stores nothing when
+  its own read throws — so one transient keyfile failure made a retrofitted
+  client authenticate with the *flat* fields' key while its own enrollment's
+  typed material sat in the same file. Losing the algorithm is survivable and
+  documented as a fallback to the preference; losing the keypair is not, because
+  the atServer checks the signature against the enrollment the client named. Now
+  routed through `AtKeys.authenticationFor`, the same resolver
+  `AtAuthImpl.authenticate` uses — which its comment already claimed.
 - **breaking (unreleased surface): the envelope verifier resolves its algorithm
   instead of requiring one.** `verifyEnvelope` takes the strongest algorithm the
   envelope's `signatures` and the signer's `_apsk` have in common, verifies that

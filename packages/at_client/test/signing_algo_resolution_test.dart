@@ -116,4 +116,85 @@ void main() {
         reason: 'no typed material means a legacy RSA enrollment — the '
             'fallback, not a resolution failure');
   });
+
+  test(
+      'the keypair comes from the keyfile even when the algorithm resolution '
+      'failed', () async {
+    const atSign = '@algo_resolution_3';
+    const enrollmentId = 'pq-enrollment-3';
+    AtClientImpl.atClientInstanceMap
+        .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
+
+    final io = await mlDsaKeyfile(atSign, enrollmentId);
+    // Flat fields too, so this keyfile is the retrofitted shape: a legacy
+    // enrollment's RSA credentials beside the live enrollment's typed
+    // material. Without them toAtChops() throws and the two arms would
+    // differ by an exception rather than by which key was chosen.
+    final stored = await io.read(atSign);
+    stored
+      ..apkamPublicKey = AtBytes.fromString(_flatApkamPublicKey)
+      ..apkamPrivateKey = AtBytes.fromString(_flatApkamPrivateKey)
+      ..defaultEncryptionPublicKey = AtBytes.fromString('ZmxhdC1lbmMtcHVibGlj')
+      ..defaultEncryptionPrivateKey =
+          AtBytes.fromString('ZmxhdC1lbmMtcHJpdmF0ZQ==')
+      ..defaultSelfEncryptionKey =
+          AtBytes.fromString('REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=');
+
+    final preferences = AtClientPreference()
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/path';
+
+    final ac = await AtClientImpl.create(
+      atSign,
+      'unit',
+      preferences,
+      remoteSecondary: MockRemoteSecondary(),
+      // No injected AtChops, so the client builds its own — which is the
+      // path under test.
+      atKeysIo: _FailsFirstReadAtKeysIo(io),
+      enrollmentId: enrollmentId,
+    ) as AtClientImpl;
+
+    // The first read threw, so nothing was recorded and the preference's
+    // rsa2048 stands as the algorithm — the documented, survivable fallback.
+    expect(ac.signingAlgoType, SigningAlgoType.rsa2048);
+
+    // The keypair is a different question, and it is not survivable: the
+    // keyfile holds this enrollment's ML-DSA material, so serving the flat
+    // fields signs PKAM as the enrollment that owns them.
+    final pkam =
+        (ac.atChops as AtChopsImpl).atChopsKeys.atPkamKeyPair!.atPublicKey;
+    expect(pkam.publicKey, isNot(_flatApkamPublicKey),
+        reason: 'the flat fields belong to a different enrollment');
+  });
+}
+
+const _flatApkamPublicKey = 'ZmxhdC1hcGthbS1wdWJsaWM=';
+const _flatApkamPrivateKey = 'ZmxhdC1hcGthbS1wcml2YXRl';
+
+/// Throws once, then delegates — the transient keyfile failure
+/// `_resolveSigningAlgoFromKeyMaterial` catches and logs, leaving nothing
+/// recorded for a later reader to consult.
+class _FailsFirstReadAtKeysIo extends WrittenAtKeysIo {
+  _FailsFirstReadAtKeysIo(this._delegate);
+
+  final InMemoryAtKeysIo _delegate;
+  bool _thrown = false;
+
+  @override
+  Future<AtKeys> read(String atsign) async {
+    if (!_thrown) {
+      _thrown = true;
+      throw AtKeysNotInMemoryException('transient read failure');
+    }
+    return await _delegate.read(atsign);
+  }
+
+  @override
+  Future<void> write(String atsign, AtKeys atKeys) =>
+      _delegate.write(atsign, atKeys);
+
+  @override
+  Future<void> flush(Atsign atsign, AtKeys atKeys) async =>
+      _delegate.flush(atsign, atKeys);
 }
