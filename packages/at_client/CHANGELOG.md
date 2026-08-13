@@ -1,4 +1,21 @@
 ## 3.14.1
+- **breaking (unreleased surface): the envelope verifier resolves its algorithm
+  instead of requiring one.** `verifyEnvelope` takes the strongest algorithm the
+  envelope's `signatures` and the signer's `_apsk` have in common, verifies that
+  one entry, and refuses on failure — it does not fall through to a weaker
+  signature that happens to check out, which would hand the choice of algorithm
+  to whoever tampered with the envelope and read as success in every log. It
+  took `signatures.first` and required the envelope's `alg` to match the one
+  advertised key; the refusal that enforced (`requireAlg`) is gone, replaced by
+  a refusal naming both lists when they share no algorithm. `ParsedApsk` carries
+  `keys` and `keyFor(algo)`, with `signingAlgo`/`publicKey` surviving as
+  strongest-of getters, and the bare RSA form parses to a one-entry list so both
+  published forms are one shape to a caller.
+- fix: `SignedEnvelope.fromJson` refuses an envelope whose entries name more
+  than one signer. `signerEnrollmentId` reads the first entry while the verified
+  entry is now chosen by algorithm, so the two could be different entries:
+  appending a signature under a stronger algorithm carrying another `kid` would
+  make a caller act on a signer whose signature was never checked.
 - fix: `parseApskValue` takes the **strongest** signing algorithm an `_apsk`
   advertises that this build implements, by at_chops'
   `SigningAlgoType.strongestFirst`, where it took the first entry listed. The

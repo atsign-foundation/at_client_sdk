@@ -114,14 +114,18 @@ void main() {
     });
 
     test("alg cannot overrule the published key's declaration", () async {
+      // Relabelling the one signature as ML-DSA leaves the envelope with
+      // nothing the RSA-only _apsk can check: the claim does not select the
+      // routine, and the verifier does not quietly fall back to trying the RSA
+      // key against an entry that says it is not RSA.
       final envelope = rsaEnvelope()
           .claiming({'alg': 'ML-DSA-65', 'kid': 'enroll-1', 'v': 1});
 
       await expectLater(
           () => verifyEnvelope(envelope,
               signerPublicKey: rsaPair.atPublicKey.publicKey),
-          throwsA(isA<AtSigningVerificationException>().having(
-              (e) => e.message, 'message', contains('refusing the mismatch'))));
+          throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
+              'message', contains('no algorithm in common'))));
     });
 
     test('a corrupted signature fails', () async {
@@ -134,6 +138,139 @@ void main() {
           () => verifyEnvelope(envelope,
               signerPublicKey: rsaPair.atPublicKey.publicKey),
           throwsA(isA<AtSigningVerificationException>()));
+    });
+  });
+
+  group('UC-G1.7 · the verifier takes the strongest and does not fall back',
+      () {
+    /// An `_apsk` advertising both signing keys of one enrollment — the shape
+    /// a rollout-2 enrollment publishes.
+    String bothApsk() => jsonEncode({
+          'v': 1,
+          'keys': [
+            ...(apskAdvertisement(
+                apkamPublicKey: rsaPair.atPublicKey.publicKey,
+                signingAlgo: SigningAlgoType.rsa2048)['keys'] as List),
+            ...(apskAdvertisement(
+                apkamPublicKey: base64Encode(mlDsaPair.publicKey),
+                signingAlgo: SigningAlgoType.mldsa65)['keys'] as List),
+          ],
+        });
+
+    /// One envelope over one payload, signed by both keys — RSA listed FIRST,
+    /// so a verifier taking `signatures.first` picks the weaker one.
+    SignedEnvelope bothSigned() {
+      final rsa = signEnvelope(payload,
+          keys: rsaKeys(),
+          enrollmentId: 'enroll-1',
+          signingAlgo: SigningAlgoType.rsa2048);
+      final mlDsa = signEnvelope(payload,
+          keys: mlDsaKeys(),
+          enrollmentId: 'enroll-1',
+          signingAlgo: SigningAlgoType.mldsa65);
+      return SignedEnvelope.fromJson({
+        'payload': rsa.payloadB64,
+        'signatures': [
+          rsa.signature.toJson(),
+          mlDsa.signature.toJson(),
+        ],
+      });
+    }
+
+    test('the control arm: both signatures valid, and it verifies', () async {
+      await verifyEnvelope(bothSigned(), signerPublicKey: bothApsk());
+    });
+
+    test('a valid RSA signature does NOT rescue a corrupt ML-DSA one',
+        () async {
+      // The row itself. Falling through to the signature that happens to check
+      // out hands the choice of algorithm to whoever tampered with the
+      // envelope, and reads as success in every log.
+      final both = bothSigned();
+      final ml = both.signatures[1];
+      final corrupted = SignedEnvelope.fromJson({
+        'payload': both.payloadB64,
+        'signatures': [
+          both.signatures[0].toJson(),
+          {
+            'protected': ml.protected,
+            'signature': ml.signature
+                .replaceRange(0, 1, ml.signature[0] == 'A' ? 'B' : 'A'),
+          },
+        ],
+      });
+
+      await expectLater(
+          () => verifyEnvelope(corrupted, signerPublicKey: bothApsk()),
+          throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
+              'message', contains('mldsa65 signature does not verify'))),
+          reason: 'the refusal must name ML-DSA — a message naming RSA would '
+              'mean the weaker entry was the one checked');
+    });
+
+    test('and the strongest is chosen however the entries are ordered',
+        () async {
+      // RSA is listed first above. Pinning only that order would pass on a
+      // reader that simply took the LAST entry.
+      final both = bothSigned();
+      final reordered = SignedEnvelope.fromJson({
+        'payload': both.payloadB64,
+        'signatures': [
+          both.signatures[1].toJson(),
+          both.signatures[0].toJson(),
+        ],
+      });
+
+      await verifyEnvelope(reordered, signerPublicKey: bothApsk());
+
+      // Corrupt the RSA entry in each ordering: the verdict must not change,
+      // because RSA is never the entry checked when ML-DSA is on offer.
+      for (final entries in [
+        [both.signatures[1], both.signatures[0]],
+        [both.signatures[0], both.signatures[1]],
+      ]) {
+        final rsa = entries.firstWhere((s) => s.alg == 'RS256');
+        final other = entries.firstWhere((s) => s.alg != 'RS256');
+        await verifyEnvelope(
+            SignedEnvelope.fromJson({
+              'payload': both.payloadB64,
+              'signatures': [
+                for (final s in entries)
+                  if (identical(s, rsa))
+                    {
+                      'protected': rsa.protected,
+                      'signature': rsa.signature.replaceRange(
+                          0, 1, rsa.signature[0] == 'A' ? 'B' : 'A'),
+                    }
+                  else
+                    other.toJson()
+              ],
+            }),
+            signerPublicKey: bothApsk());
+      }
+    });
+
+    test('an envelope claiming two different signers is refused', () {
+      // The entry that verifies and the entry a caller reads
+      // signerEnrollmentId from must be the same entry. Otherwise appending a
+      // signature under a stronger algorithm, carrying someone else's kid,
+      // makes a caller act on a signer whose signature was never checked.
+      final both = bothSigned();
+      final impostor = signEnvelope(payload,
+          keys: mlDsaKeys(),
+          enrollmentId: 'someone-else',
+          signingAlgo: SigningAlgoType.mldsa65);
+
+      expect(
+          () => SignedEnvelope.fromJson({
+                'payload': both.payloadB64,
+                'signatures': [
+                  both.signatures[0].toJson(),
+                  impostor.signature.toJson(),
+                ],
+              }),
+          throwsA(isA<AtSigningVerificationException>().having(
+              (e) => e.message, 'message', contains('one signer'))));
     });
   });
 

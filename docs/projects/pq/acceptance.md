@@ -1416,6 +1416,17 @@ side nobody wrote — the published arm is the only thing that measures
   *Then* it **refuses**, naming the ML-DSA failure — it must not fall through
   to the valid RSA signature. The control arm, both signatures valid, passes.
 
+  ✅ **Covered 2026-08-13** — `test/jws_envelope_test.dart`, group `UC-G1.7`.
+  Four rows: the control arm, the corrupt-ML-DSA refusal (asserted on a message
+  naming `mldsa65`, since one naming RSA would mean the weaker entry was
+  checked), the same verdict under either listing order — RSA is listed first,
+  so a reader taking the last entry would pass a one-order pin — and an
+  envelope whose entries claim two different signers, refused at parse. That
+  last one is not in the row as written and belongs with it: without it the
+  entry that verifies and the entry a caller reads `signerEnrollmentId` from
+  can differ, so appending a signature under a stronger algorithm carrying
+  another kid makes a caller act on a signer whose signature was never checked.
+
 - **UC-G1.8 · the auth key stays verifiable after rollout 2.**
   *Given* an envelope signed at rollout 1 by the APKAM auth key.
   *When* the enrollment moves to rollout 2 and republishes `_apsk` as an array.

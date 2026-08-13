@@ -20,7 +20,8 @@ import 'dart:convert'
     show base64, base64Decode, base64Url, jsonDecode, jsonEncode, utf8;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_auth/at_auth.dart' show apskSigningKeys;
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, apskSigningKeys, publicKeyKidOfBase64;
 import 'package:collection/collection.dart' show ListEquality;
 import 'package:at_chops/at_chops.dart'
     show
@@ -65,6 +66,20 @@ const int envelopeVersion = 1;
 /// a producer does.
 const String _jwsAlgRs256 = 'RS256';
 const String _jwsAlgMlDsa65 = 'ML-DSA-65';
+
+/// The JOSE `alg` [algo] signs under, or null when this build produces no
+/// envelope signature for it.
+///
+/// One mapping for both directions, read by the signer choosing what to stamp
+/// and by the verifier matching an `_apsk` entry against an envelope entry. Two
+/// switches would be two chances to disagree, and a disagreement here presents
+/// as a signature that will not verify with nothing to say for itself.
+String? _joseAlgFor(SigningAlgoType algo) => switch (algo) {
+      SigningAlgoType.rsa2048 => _jwsAlgRs256,
+      // ML-DSA signs the message directly (RFC 9964); no hash to name.
+      SigningAlgoType.mldsa65 => _jwsAlgMlDsa65,
+      _ => null,
+    };
 
 String _base64UrlUnpadded(List<int> bytes) =>
     base64Url.encode(bytes).replaceAll('=', '');
@@ -188,12 +203,12 @@ class SignedEnvelope {
 
   const SignedEnvelope._(this.payloadB64, this.signatures);
 
-  /// The entry a verifier checks.
+  /// The first entry, for the callers that want *an* entry — the payload's
+  /// encoding and the signer claim are the same in all of them.
   ///
-  /// First, not a search: an envelope carries one signature per active
-  /// signing key of **one** signer, so every entry names the same `kid`. The
-  /// reader that walks every entry and picks the strongest arrives with
-  /// signature agility.
+  /// **Not the entry a verifier checks.** `verifyEnvelope` resolves that from
+  /// the algorithms the envelope and the signer's `_apsk` share, taking the
+  /// strongest; taking the first would let the signer's ordering decide.
   EnvelopeSignature get signature => signatures.first;
 
   /// The signer's enrollment-id claim, or null when the envelope makes none —
@@ -234,8 +249,22 @@ class SignedEnvelope {
       throw AtSigningVerificationException(
           'an envelope must carry a non-empty signatures array');
     }
-    return SignedEnvelope._(
-        payload, signatures.map(EnvelopeSignature.fromJson).toList());
+    final parsed = signatures.map(EnvelopeSignature.fromJson).toList();
+    // Every entry names one signer, so every entry must name the SAME one.
+    // Without this the entry that verifies and the entry a caller reads
+    // `signerEnrollmentId` from can be different entries: append a signature
+    // under a stronger algorithm carrying someone else's kid, and a caller acts
+    // on a signer whose signature was never the one checked. Refused here
+    // rather than at verify, because an envelope claiming two signers is not
+    // this shape at all.
+    final kids = {for (final s in parsed) s.kid};
+    if (kids.length > 1) {
+      throw AtSigningVerificationException(
+          'an envelope carries one signer\'s signatures, and this one names '
+          '${kids.map((k) => '"$k"').join(', ')} — refusing rather than '
+          'verifying under one of them and reporting another');
+    }
+    return SignedEnvelope._(payload, parsed);
   }
 
   /// The wire form. Reproduces what was parsed byte for byte, because both
@@ -324,16 +353,10 @@ SignedEnvelope signEnvelope(
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   Object? Function(Object? nonEncodable)? toEncodable,
 }) {
-  final String alg;
-  switch (signingAlgo) {
-    case SigningAlgoType.rsa2048:
-      alg = _jwsAlgRs256;
-    case SigningAlgoType.mldsa65:
-      // ML-DSA signs the message directly (RFC 9964); no hash to name.
-      alg = _jwsAlgMlDsa65;
-    default:
-      throw ArgumentError.value(
-          signingAlgo, 'signingAlgo', 'no envelope signing support');
+  final String? alg = _joseAlgFor(signingAlgo);
+  if (alg == null) {
+    throw ArgumentError.value(
+        signingAlgo, 'signingAlgo', 'no envelope signing support');
   }
 
   // The payload is always its JSON encoding, including a String payload.
@@ -397,13 +420,40 @@ SignedEnvelope signEnvelope(
 /// it — which is exactly why a plain-legacy enrollment publishes the bare form
 /// instead of it.
 class ParsedApsk {
-  final SigningAlgoType signingAlgo;
+  /// Every advertised key this build has a [SigningAlgoType] for, in published
+  /// order — one for a bare value, and one per usable entry for an array.
+  ///
+  /// Retired entries are **in** this list. `_apsk` retains a key so that
+  /// envelopes it already signed keep verifying, so a verifier that dropped one
+  /// would refuse exactly the history retirement exists to preserve. Excluding
+  /// them is the business of a caller choosing a key to sign with.
+  final List<ApskSigningKey> keys;
 
-  /// The key material: the bare RSA string for [SigningAlgoType.rsa2048], or
-  /// base64 of the raw ML-DSA-65 public key for [SigningAlgoType.mldsa65].
-  final String publicKey;
+  const ParsedApsk({required this.keys});
 
-  const ParsedApsk({required this.signingAlgo, required this.publicKey});
+  /// The strongest advertised algorithm this build implements, by
+  /// [SigningAlgoType.strongestFirst].
+  ///
+  /// Never the first entry: publication order is the *signer's* choice, so
+  /// reading it as preference would let whoever wrote the advertisement pick
+  /// the algorithm its envelopes are verified under.
+  SigningAlgoType get signingAlgo => _strongest.alg;
+
+  /// The key material for [signingAlgo]: the bare RSA string for
+  /// [SigningAlgoType.rsa2048], or base64 of the raw ML-DSA-65 public key for
+  /// [SigningAlgoType.mldsa65].
+  String get publicKey => _strongest.pub;
+
+  ApskSigningKey get _strongest =>
+      keyFor(SigningAlgoType.strongestOf(keys.map((k) => k.alg))!)!;
+
+  /// The advertised key for [algo], or null if this `_apsk` advertises none.
+  ///
+  /// A verifier resolves the algorithm first — from what the envelope and the
+  /// advertisement have in common — and then asks for that key, rather than
+  /// taking a key and requiring the envelope to match it.
+  ApskSigningKey? keyFor(SigningAlgoType algo) =>
+      keys.where((k) => k.alg == algo).firstOrNull;
 }
 
 /// Parses a fetched `_apsk` value, bare or array.
@@ -417,8 +467,15 @@ class ParsedApsk {
 ParsedApsk parseApskValue(String value) {
   final trimmed = value.trim();
   if (!trimmed.startsWith('{')) {
-    // The bare legacy form: an RSA public key string, as published today.
-    return ParsedApsk(signingAlgo: SigningAlgoType.rsa2048, publicKey: trimmed);
+    // The bare legacy form: an RSA public key string, as published today. It
+    // carries no kid — nothing in the bare form ever did — so one is derived,
+    // which is what lets a caller treat both forms as the same list.
+    return ParsedApsk(keys: [
+      ApskSigningKey(
+          kid: publicKeyKidOfBase64(trimmed),
+          alg: SigningAlgoType.rsa2048,
+          pub: trimmed)
+    ]);
   }
 
   final Map<String, dynamic> advertisement;
@@ -438,18 +495,9 @@ ParsedApsk parseApskValue(String value) {
         'the _apsk advertises no signing key this build understands — '
         'refusing to verify rather than guessing');
   }
-  // The strongest advertised algorithm this build implements, by at_chops'
-  // order — never the first entry, because the order entries arrive in is the
-  // signer's choice and letting it decide would hand the algorithm to whoever
-  // wrote the advertisement. Non-null: `advertised` is non-empty here, and
-  // every entry in it already resolved to a SigningAlgoType.
-  final strongest = SigningAlgoType.strongestOf(advertised.map((k) => k.alg))!;
-  // Retired entries are deliberately still in play. `_apsk` retains a key so
-  // that envelopes it already signed keep verifying, so excluding one here
-  // would refuse exactly the history retirement exists to preserve. What must
-  // never happen is signing something NEW with it, and nothing here signs.
-  final key = advertised.firstWhere((k) => k.alg == strongest);
-  return ParsedApsk(signingAlgo: key.alg, publicKey: key.pub);
+  // Every usable entry, not a choice made here: which one verifies an envelope
+  // depends on what that envelope carries, and only the verifier knows it.
+  return ParsedApsk(keys: advertised);
 }
 
 /// Verifies an envelope produced by [signEnvelope] against
@@ -468,31 +516,45 @@ ParsedApsk parseApskValue(String value) {
 /// out. Verification needs no keypair of its own: the public key is the whole
 /// input, which is why this works on a client holding no keys at all.
 ///
-/// Verifies the **first** signature entry. One entry per signer is what is
-/// written today; the reader that walks every entry and picks the strongest
-/// arrives with signature agility.
+/// **The strongest algorithm the envelope and the `_apsk` have in common is
+/// the one verified, and its failure is the answer.** There is no fallback to
+/// a weaker signature that happens to check out: that would hand the choice of
+/// algorithm to whoever tampered with the envelope, and it would read as
+/// success in every log. An envelope carrying a valid RSA signature beside a
+/// corrupt ML-DSA one, against an `_apsk` advertising both, is refused.
 Future<void> verifyEnvelope(
   SignedEnvelope envelope, {
   required String signerPublicKey,
 }) async {
   final parsed = parseApskValue(signerPublicKey);
-  final entry = envelope.signature;
+
+  // Resolve the algorithm from what the two documents share, then fetch the
+  // key for it — the inversion. This used to take the one advertised key and
+  // require the envelope to match it, whose diagnostic ("the published _apsk
+  // is a <algo> key") states the singular assumption outright.
+  final shared = <SigningAlgoType>{
+    for (final k in parsed.keys)
+      if (envelope.signatures.any((s) => s.alg == _joseAlgFor(k.alg))) k.alg
+  };
+  final SigningAlgoType? algo = SigningAlgoType.strongestOf(shared);
+  if (algo == null) {
+    throw AtSigningVerificationException(
+        'the envelope is signed under ${envelope.signatures.map((s) => '"${s.alg}"').join(', ')} '
+        'and the published _apsk advertises ${parsed.keys.map((k) => '"${k.alg.name}"').join(', ')} '
+        '— no algorithm in common, so there is no signature here this key can '
+        'check. Refusing rather than falling back to a key derived some other '
+        'way: a signature means something only if the verifier used the key '
+        'the signer published');
+  }
+  final key = parsed.keyFor(algo)!;
+  final jose = _joseAlgFor(algo)!;
+  final entry = envelope.signatures.firstWhere((s) => s.alg == jose);
 
   if (entry.version != envelopeVersion) {
     throw AtSigningVerificationException(
         'the protected header claims envelope version "${entry.version}", and '
         'this build signs and verifies $envelopeVersion — refusing rather '
         'than reading it as a shape it may not be');
-  }
-
-  void requireAlg(String expected) {
-    if (entry.alg != expected) {
-      throw AtSigningVerificationException(
-          'the envelope claims alg "${entry.alg}" but the published '
-          '_apsk is a ${parsed.signingAlgo.name} key, which verifies '
-          '$expected — refusing the mismatch rather than letting the claim '
-          'choose the routine');
-    }
   }
 
   // The signing input is the RECEIVED protected and payload strings verbatim,
@@ -502,29 +564,34 @@ Future<void> verifyEnvelope(
   final signatureBytes = _base64UrlDecode(entry.signature, 'signature');
 
   final bool ok;
-  switch (parsed.signingAlgo) {
+  switch (algo) {
     case SigningAlgoType.mldsa65:
-      requireAlg(_jwsAlgMlDsa65);
       ok = await MlDsa65PureDartAlgo().verifyBytes(
         signingInput,
         signature: signatureBytes,
-        publicKey: base64Decode(parsed.publicKey),
+        publicKey: base64Decode(key.pub),
       );
     case SigningAlgoType.rsa2048:
       // RS256 names its hash: RSASSA-PKCS1-v1_5 with SHA-256. Nothing
       // unsigned selects a routine in this shape.
-      requireAlg(_jwsAlgRs256);
       ok = RsaSigningAlgo(null, HashingAlgoType.sha256).verify(
         signingInput,
         signatureBytes,
-        publicKey: parsed.publicKey,
+        publicKey: key.pub,
       );
     default:
+      // Unreachable: _joseAlgFor answered for this algorithm a few lines up,
+      // and it answers for exactly the two below. Refusing rather than
+      // asserting, because the two would have drifted for it to be reached.
       throw AtSigningVerificationException(
-          'no verify routine for ${parsed.signingAlgo.name}');
+          'no verify routine for ${algo.name}, which this build claims to '
+          'sign envelopes with');
   }
   if (!ok) {
     throw AtSigningVerificationException(
-        'Signature verification failed using public key $signerPublicKey');
+        'the envelope\'s ${algo.name} signature does not verify against the '
+        'published _apsk key for that algorithm. Refusing outright — a weaker '
+        'signature on the same envelope is not a second opinion, it is the '
+        'algorithm being chosen by whoever wrote it');
   }
 }
