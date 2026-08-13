@@ -6468,7 +6468,9 @@ not by this change).
 
 **Status:** accepted. The retrofit signing algorithm is a per-operation
 PARAMETER (never a preference), the last of the five rollout axes to
-gain its flag. `AtSelfEnrollmentRequest.signingAlgo` (at_auth 3.4.0,
+gain its flag. *Amended 2026-08-13: "the last" was true when written and is
+not now — the in-use signing set ([§91.3](#913-the-rulings) ruling 16) became
+an axis later, taking the slot the deleted signed-envelope-version axis left.* `AtSelfEnrollmentRequest.signingAlgo` (at_auth 3.4.0,
 additive, default `mldsa65` — the mechanism keeps its old behaviour)
 selects what the self-enrollment mints: `rsa2048` is type-1, the
 rollout-window mode — a FRESH RSA keypair under a new enrollment id,
