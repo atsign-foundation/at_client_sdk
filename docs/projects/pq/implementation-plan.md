@@ -2260,12 +2260,17 @@ than it looks** (both re-verified against the source 2026-08-11):
    fail-closed handling of a malformed APKAM key or signature. **The functional
    number is stale twice over** (different code, different at_commons source)
    and has to be re-earned before it is cited again.
-2. **Ruling 7's remaining half: flat → typed.** The flat `apkamPublicKey` /
-   `apkamPrivateKey` must become a write-only projection that nothing reads as
-   the source of truth. Readers to move: `AtKeys.toAtChops()`,
-   `at_auth_impl.dart` (several), `onboarding_mint.dart`, `file_io.dart`. This
-   is the authentication path — it is the largest remaining client piece and
-   deliberately was not started at the end of a long session.
+2. ~~**Ruling 7's remaining half: flat → typed.**~~ **DONE 2026-08-13**, and
+   narrowed on evidence — see [14.18](#1418-the-remaining-d1-initial-development-sequence)
+   step 10 and the amendment in [`decisions.md` 91.3](decisions.md#913-the-rulings)
+   ruling 7. The projection cannot be **materialised**, so "nothing reads them"
+   became "one place reads them": `AtKeys.authenticationFor` /
+   `authenticationAlgorithmFor`. ⚠️ **The reader list above was wrong on two of
+   its four entries.** `file_io.dart` touches no `AtKeys` flat field at all —
+   its only `atKeys.*` uses are `atsign` and `toJson` — and `onboarding_mint.dart`
+   *writes* them at mint time, which is the projection working as intended
+   rather than a read to move. The two that did move are `AtKeys.toAtChops()`'s
+   callers in `at_auth_impl.dart` and, not on the list, `at_client_impl.dart`.
 3. **The wire half, client side — none of it exists.** Verified against the
    source 2026-08-11, with the sites named so the next session does not have to
    re-find them:
@@ -2449,9 +2454,9 @@ to a derivable legacy key ([`decisions.md` 93](decisions.md#93-the-d1-remaining-
 
 | # | Work |
 |---|------|
-| 10 | Ruling 7's remaining half — flat `apkamPublicKey`/`apkamPrivateKey` becomes a write-only projection; move `AtKeys.toAtChops()`, `at_auth_impl.dart`, `onboarding_mint.dart`, `file_io.dart` |
+| 10 | **DONE 2026-08-13 — one resolver, not a materialised projection.** `AtKeys.authenticationFor(enrollmentId)` returns the AtChops and the PKAM algorithm, with typed material winning wherever the keyfile holds it for that enrollment and the flat fields answering only where it holds none; `authenticationAlgorithmFor` is the algorithm half, so a caller holding an injected AtChops does not build one `toAtChops` would throw on. `AtAuthImpl.authenticate` and `AtClientImpl._createAtChops` both move onto it. **Ruling 7 as written could not be built** and is amended in place ([`decisions.md` 91.3](decisions.md#913-the-rulings)): filing a projected material makes `toJson` emit `version`/`atsign`/`keys` — the guard is `keys.isEmpty` and both stores stamp `atsign` first — which breaks the byte-identical legacy round-trip [91.4](decisions.md#914-what-is-released-and-therefore-what-must-still-be-read) promises, and on a retrofitted keyfile the one-active-`privateAuthentication`-per-document rule refuses the add outright. Four shipping shapes hold nothing to project from: a pre-typed `.atKeys`, an `rsa2048` first onboard, an OTP enrollment, and an onboard handed its keys by the caller. **Found en route and fixed:** `_createAtChops` picked its keypair off the algorithm `_resolveSigningAlgoFromKeyMaterial` had recorded, and that records nothing when its own read throws — so a transient keyfile failure made a retrofitted client PKAM with the *flat* enrollment's key while its typed material sat in the same file. Its comment claimed it mirrored `AtAuthImpl`; it did not. Rails: at_auth 257/257, at_client 1217/1217 |
 | 11 | Resolve `atKeysIo` nullability — entangled with **S-3** (partly landed) |
-| 12 | A per-algorithm signing-key accessor on `AtKeys`; widen or replace `ApkamSigningKeys`, which holds one pair today |
+| 12 | A per-algorithm signing-key accessor on `AtKeys`; widen or replace `ApkamSigningKeys`, which holds one pair today. ⚠️ **`fileSigningMaterial` has no production writer** — verified 2026-08-13, its only caller anywhere is `wire_literal_pins_test.dart:415`, so a `sign:` keyId has never been minted outside a unit test. The accessor is half the step; something has to file the material for it to read |
 
 **Stage 3 — the `_apsk` writer half (rollout 2).**
 
@@ -2558,6 +2563,31 @@ its own. None blocks anything.
    design `requestAnswerJitter` exists to manage. Real, unfixed, and
    deliberately not folded into the ruling-6 commits because it has nothing to
    do with domain separation — it wants its own subject line and its own test.
+
+7. **An APKAM filed under an algorithm this build does not recognise falls
+   back to the flat fields.** `signingAlgorithmForEnrollment` matches the
+   material's `keyAlgorithmType` against `SigningAlgoType.values` and returns
+   null for anything else, and `authenticationFor` reads null as "no typed
+   material for this enrollment" — so a keyfile written by a newer client
+   authenticates from the flat fields instead, which on a retrofitted file are
+   a *different* enrollment's credentials. The two cases are not the same
+   question: "this enrollment has no typed material" and "it has some I cannot
+   sign with" want different answers, and only the first should reach the flat
+   fields. Not reachable today — `KeyAlgorithmType`'s signing tokens and
+   `SigningAlgoType`'s names agree exactly — so this is a forward-compatibility
+   hole rather than a live defect. [14.18](#1418-the-remaining-d1-initial-development-sequence)
+   step 10 is what makes it a one-line fix: the decision now lives in one
+   place.
+8. **Typed key material is not self-encrypted at rest; the flat fields are.**
+   `file_io.dart`'s `_selfEncryptedLegacyFields` names exactly four keys —
+   `aesPkamPublicKey`, `aesPkamPrivateKey`, `aesEncryptPublicKey`,
+   `aesEncryptPrivateKey` — and nothing else in `packages/at_auth/lib/src/keys/`
+   encrypts anything. So a PQ-native keyfile's ML-DSA APKAM **private** key is
+   written in the clear, while the RSA private key of a legacy keyfile beside
+   it is not, and the only thing covering the typed section is the optional
+   passphrase envelope. Worth a ruling rather than a patch: extending the
+   self-encryption to the typed section changes the at-rest format, and the
+   passphrase envelope may be the answer instead.
 
 #### 14.19.1 Three things that LOOK like defects and are not
 
