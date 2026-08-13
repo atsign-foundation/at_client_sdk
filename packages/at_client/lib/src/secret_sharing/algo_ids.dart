@@ -169,6 +169,24 @@ class SecretSharingAlgos {
         _ => null,
       };
 
+  /// The public key length [keyAlgo] requires, or null for an id this build
+  /// does not implement.
+  ///
+  /// Read from each KEM's own constant rather than restated here: a length
+  /// written down twice is a length that can disagree with the code enforcing
+  /// it. [AtKemAlgorithm] deliberately keeps lengths off itself, so this is
+  /// the one place that knows which concrete class answers for which id — and
+  /// it must stay in step with [kemFor], which a test over [keyAlgos] pins.
+  ///
+  /// A reader needs this because a key id proves nothing about length: it is
+  /// the digest of whatever bytes are carried, so it matches a forged key as
+  /// readily as a real one.
+  static int? publicKeyLengthFor(String keyAlgo) => switch (keyAlgo) {
+        xWing => XWingPureDartAlgo.publicKeyLength,
+        mlKem1024 => MlKem1024PureDartAlgo.publicKeyLength,
+        _ => null,
+      };
+
   /// The KEM that opens an envelope produced under [suite].
   ///
   /// The receive path's counterpart to [kemFor]: `pqOpen` reads the version

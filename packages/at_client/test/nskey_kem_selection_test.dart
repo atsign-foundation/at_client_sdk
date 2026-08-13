@@ -173,6 +173,25 @@ void main() {
     test('an unimplemented algorithm has no id rather than a default', () {
       expect(nskeyProviderIdFor('kyber-1024-v9'), isNull);
     });
+
+    test('every algorithm with a KEM also states a key length', () {
+      // kemFor and publicKeyLengthFor are two switches over the same ids, and
+      // the advertisement reader needs both: it refuses an algorithm with no
+      // KEM, then refuses a key that is not that algorithm's length. If only
+      // the second gained an id the reader would accept any length for it, so
+      // this pins the pair rather than either alone.
+      for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
+        expect(SecretSharingAlgos.kemFor(keyAlgo), isNotNull,
+            reason: '$keyAlgo is offered but has no KEM');
+        expect(SecretSharingAlgos.publicKeyLengthFor(keyAlgo), isNotNull,
+            reason: '$keyAlgo has a KEM but no key length, so a forged '
+                'advertisement naming it would pass the length check');
+      }
+    });
+
+    test('an unimplemented algorithm states no key length either', () {
+      expect(SecretSharingAlgos.publicKeyLengthFor('kyber-1024-v9'), isNull);
+    });
   });
 
   group('the crypto config registers a conveyance provider per KEM', () {

@@ -372,6 +372,30 @@ void main() {
               'trustworthy as the server that served it');
     });
 
+    test('a key that is not its algorithm\'s length is rejected', () async {
+      // The kid is the digest of whatever bytes are carried, so a forger gets
+      // a matching one for free and the kid check cannot see this. The length
+      // is what says these bytes are an X-Wing public key at all. Without it
+      // the advertisement verifies, and the failure lands inside the KEM one
+      // seal later, on a stack that names neither the owner nor the
+      // advertisement it came from.
+      final truncated = bobKey.publicKeyBytes.sublist(0, 1000);
+      final payload = advertisementPayload(bobKey);
+      final entry = (payload['keys'] as List).first as Map;
+      entry['pub'] = base64Encode(truncated);
+      entry['kid'] = nskeyKidOf(truncated);
+      final c =
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+
+      await expectLater(
+          PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
+          throwsA(isA<AtSigningVerificationException>().having(
+              (e) => '$e', 'message', contains('1216'))),
+          reason: 'a kid computed over the wrong bytes still matches them, so '
+              'only the length stands between a forged advertisement and the '
+              'seal');
+    });
+
     test('a kid that does not name its own key is rejected', () async {
       // The kid has to be written over the entry the codec built, because
       // NskeyAdvertisement derives a kid from the key it is given and so

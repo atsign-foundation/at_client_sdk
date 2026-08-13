@@ -99,6 +99,25 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
             'the advertised nskey for $owner names key-establishment algorithm '
             '"${key.alg}", which this build cannot encapsulate to');
       }
+      // Length before anything is sealed to it. A kid is the digest of
+      // whatever bytes are carried, so it matches a forged key as readily as a
+      // real one and the check below cannot see a wrong-length key at all.
+      // Without this the first sign of trouble is inside the KEM, one seal
+      // later, on a stack naming neither the owner nor the advertisement.
+      final expected = SecretSharingAlgos.publicKeyLengthFor(key.alg);
+      if (expected == null) {
+        // kemFor accepted this algorithm a few lines up, so the two switches
+        // have drifted. Refuse rather than let the length check quietly not
+        // happen.
+        throw AtSigningVerificationException(
+            'the advertised nskey for $owner names "${key.alg}", which this '
+            'build can encapsulate to but cannot state a key length for');
+      }
+      if (key.pubBytes.length != expected) {
+        throw AtSigningVerificationException(
+            'the advertised nskey for $owner carries a ${key.pubBytes.length}-'
+            'byte key for "${key.alg}", which takes $expected bytes');
+      }
       if (key.kid != nskeyKidOf(key.pubBytes)) {
         // A kid that does not name its own key would let a rotation be reported
         // as a generation the recipient never minted, so a conveyance sealed to

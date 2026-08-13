@@ -14,6 +14,16 @@
   lines apart and had to be kept in step by eye. `v` stays 1: nothing is
   released, so there is no advertisement in the old shape for a version 2 to
   distinguish this from.
+- fix: a signed nskey advertisement carrying a key that is not its algorithm's
+  length is refused, rather than sealed to. A key id is the SHA-256 prefix of
+  whatever bytes it is computed over, so a forged advertisement carries a
+  matching one for free and the id check could never see this. The reader
+  checked the signature, matched the id and handed the bytes on; the first sign
+  of trouble was inside the KEM one seal later, on a stack naming neither the
+  owner nor the advertisement it came from. `SecretSharingAlgos
+  .publicKeyLengthFor` answers the length from each KEM's own constant rather
+  than restating a number, and a test over `keyAlgos` pins it against `kemFor`
+  so an algorithm cannot gain a KEM without gaining a length.
 - feat: `PackageKey.fromBytes` and `PackageKey.pubBytes` — a key entry built
   from raw material, and the material read back out. Every consumer that hands
   a key to a KEM wants bytes while the wire carries base64, and decoding in one
