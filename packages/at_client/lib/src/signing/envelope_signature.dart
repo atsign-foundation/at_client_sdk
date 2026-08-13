@@ -438,9 +438,17 @@ ParsedApsk parseApskValue(String value) {
         'the _apsk advertises no signing key this build understands — '
         'refusing to verify rather than guessing');
   }
-  // One key per enrollment today, so first is unambiguous. Ranking several by
-  // strength arrives with the strength order beside SigningAlgoType.
-  final key = advertised.first;
+  // The strongest advertised algorithm this build implements, by at_chops'
+  // order — never the first entry, because the order entries arrive in is the
+  // signer's choice and letting it decide would hand the algorithm to whoever
+  // wrote the advertisement. Non-null: `advertised` is non-empty here, and
+  // every entry in it already resolved to a SigningAlgoType.
+  final strongest = SigningAlgoType.strongestOf(advertised.map((k) => k.alg))!;
+  // Retired entries are deliberately still in play. `_apsk` retains a key so
+  // that envelopes it already signed keep verifying, so excluding one here
+  // would refuse exactly the history retirement exists to preserve. What must
+  // never happen is signing something NEW with it, and nothing here signs.
+  final key = advertised.firstWhere((k) => k.alg == strongest);
   return ParsedApsk(signingAlgo: key.alg, publicKey: key.pub);
 }
 

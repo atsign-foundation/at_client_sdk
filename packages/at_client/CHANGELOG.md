@@ -1,4 +1,13 @@
 ## 3.14.1
+- fix: `parseApskValue` takes the **strongest** signing algorithm an `_apsk`
+  advertises that this build implements, by at_chops'
+  `SigningAlgoType.strongestFirst`, where it took the first entry listed. The
+  order entries arrive in is the signer's choice, so letting it decide handed
+  the algorithm to whoever wrote the advertisement — an enrollment advertising
+  ML-DSA-65 beside RSA-2048 would have been verified against whichever it
+  happened to list first. A retired entry is still read: `_apsk` retains a key
+  so that envelopes it already signed keep verifying, and nothing on this path
+  signs anything new.
 - fix: a client sweeps for, and opens, envelopes addressed to **any** key it
   holds, not only the one it currently advertises. The sweep filter, the wake-up
   subscription and the sync listener all cover every held address —

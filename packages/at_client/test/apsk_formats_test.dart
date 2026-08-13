@@ -77,6 +77,44 @@ void main() {
       expect(parsed.publicKey, 'CCEC');
     });
 
+    test('the STRONGEST advertised algorithm wins, not the first listed', () {
+      // The weaker key is listed first, so taking `advertised.first` — which
+      // is what this did until the strength order existed — picks RSA. The
+      // order entries arrive in is the signer's choice, and letting it decide
+      // hands the algorithm to whoever wrote the advertisement.
+      final parsed = parseApskValue('{"v":1,"keys":['
+          '{"kid":"k1","use":"sign","alg":"rsa2048","pub":"AAEC"},'
+          '{"kid":"k2","use":"sign","alg":"mldsa65","pub":"CCEC"}]}');
+
+      expect(parsed.signingAlgo, SigningAlgoType.mldsa65);
+      expect(parsed.publicKey, 'CCEC');
+    });
+
+    test('and the same advertisement in the other order reads the same', () {
+      final parsed = parseApskValue('{"v":1,"keys":['
+          '{"kid":"k2","use":"sign","alg":"mldsa65","pub":"CCEC"},'
+          '{"kid":"k1","use":"sign","alg":"rsa2048","pub":"AAEC"}]}');
+
+      expect(parsed.signingAlgo, SigningAlgoType.mldsa65);
+      expect(parsed.publicKey, 'CCEC',
+          reason: 'the verdict must not depend on listing order at all — a '
+              'test that only pins the weak-first case would pass on a reader '
+              'that simply took the last entry');
+    });
+
+    test('a retired signing key is still read, because it verifies history',
+        () {
+      // `_apsk` retains a key so envelopes it already signed keep verifying.
+      // Skipping retired entries here would refuse exactly the history that
+      // retirement exists to preserve. Nothing in this path signs.
+      final parsed = parseApskValue('{"v":1,"keys":['
+          '{"kid":"k1","use":"sign","alg":"rsa2048","pub":"AAEC",'
+          '"status":"retired"}]}');
+
+      expect(parsed.signingAlgo, SigningAlgoType.rsa2048);
+      expect(parsed.publicKey, 'AAEC');
+    });
+
     test('the array form is unmistakable to a bare-RSA consumer', () {
       final array = jsonEncode(apskAdvertisement(
           apkamPublicKey: 'AAEC', signingAlgo: SigningAlgoType.mldsa65));

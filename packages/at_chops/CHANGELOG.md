@@ -1,4 +1,24 @@
 ## 3.6.0
+- feat: add `SigningAlgoType.strongestFirst` and `SigningAlgoType.strongestOf`
+  — the order a verifier uses to choose which of several signatures on one
+  envelope to check, and the lookup over it. Purely additive: two static
+  members on the existing enum, no member added, moved or renamed.
+
+  Separate from declaration order on purpose. The members are declared in the
+  order they were added and reordering them would be a wire change, so
+  preference is a second statement rather than a reading of the first. It lives
+  here rather than in a consumer because a signer and a verifier that disagreed
+  about "strongest" would negotiate against themselves.
+
+  `mldsa65` is first and the gap to second place is not a matter of degree: it
+  is the only member Shor's algorithm does not break, so no classical parameter
+  size promotes anything above it. The rest rank by classical security level —
+  RSA-4096, then the two 128-bit curves with `ed25519` above `ecc_secp256r1` on
+  the tiebreak of being deterministic and harder to misuse, then RSA-2048. This
+  is the project's preference order, not a universal ranking, and it is total on
+  purpose: a partial order leaves the choice undefined for exactly the pair
+  nobody thought about. A new member left out of it turns
+  `test/signing_strength_test.dart` red.
 - breaking: `pqSeal` and `pqOpen` take `info` as a **required** parameter. It
   was optional, and an omitted `info` derived the same key schedule as an empty
   one — so two protocols that each said nothing shared a binding, and either
