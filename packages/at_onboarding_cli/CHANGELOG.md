@@ -1,4 +1,12 @@
 ## 1.17.0
+- fix: `authenticate()` hands its key source to the AtClient it creates. It
+  built a `FileAtKeysIo` for `AtAuth` and then created the client without one,
+  so every consumer — including everything built on `at_cli_commons` — got a
+  client with no key-material source at all: it could not resolve its PKAM
+  algorithm from the keyfile, file conveyed private keys, or reach an
+  enrollment's typed material. The client still authenticates with the AtChops
+  auth hands over; the source is what it keeps for everything that AtChops
+  cannot answer.
 - docs: `auth enroll --max-retries` and `AtOnboardingService.awaitApproval`
   both described a give-up that does not exist. Waiting for an approval
   decision is unbounded — somebody has to decide the request, on their own

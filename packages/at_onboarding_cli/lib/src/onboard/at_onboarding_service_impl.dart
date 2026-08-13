@@ -107,7 +107,17 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  Future<void> _initAtClient(AtChops atChops, {String? enrollmentId}) async {
+  /// [atKeysIo] is the key *source* the client keeps for everything the
+  /// injected [atChops] cannot answer — resolving its PKAM algorithm from the
+  /// key material, filing conveyed privates, sourcing per-algorithm signing
+  /// keys. It does not change which AtChops authenticates: `AtClientImpl`
+  /// honours the injected one and never builds its own when it has it.
+  ///
+  /// Null where there is no source to hand across. The enrollment path is one:
+  /// it authenticates with the APKAM keypair it just had approved, and the
+  /// keyfile that will hold it is written afterwards.
+  Future<void> _initAtClient(AtChops atChops,
+      {String? enrollmentId, AtKeysIo? atKeysIo}) async {
     AtClientManager atClientManager = AtClientManager.getInstance();
     if (atOnboardingPreference.skipSync) {
       atServiceFactory = ServiceFactoryWithNoOpSyncService();
@@ -115,6 +125,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     await atClientManager.setCurrentAtSign(
         _atSign, atOnboardingPreference.namespace, atOnboardingPreference,
         atChops: atChops,
+        atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         serviceFactory: atServiceFactory,
         enrollmentId: enrollmentId);
@@ -595,12 +606,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   @override
   Future<bool> authenticate({String? enrollmentId}) async {
     atAuth ??= AtAuth.create();
-    var atAuthRequest = AtAuthRequest(_atSign,
-        atKeysIo: FileAtKeysIo(
-            filePath: !atOnboardingPreference.atKeysFilePath.isNull
-                ? (_) => atOnboardingPreference.atKeysFilePath!
-                : null,
-            passPhrase: atOnboardingPreference.passPhrase))
+    // Held in a local so the client gets the same source auth read from,
+    // rather than a second store built over the same path.
+    final atKeysIo = FileAtKeysIo(
+        filePath: !atOnboardingPreference.atKeysFilePath.isNull
+            ? (_) => atOnboardingPreference.atKeysFilePath!
+            : null,
+        passPhrase: atOnboardingPreference.passPhrase);
+    var atAuthRequest = AtAuthRequest(_atSign, atKeysIo: atKeysIo)
       ..enrollmentId = enrollmentId
       ..rootDomain = AtRootDomain(
           atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
@@ -610,7 +623,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atOnboardingPreference.atKeysFilePath != null) {
       logger.finer('Calling persist keys to local secondary');
       await _initAtClient(atAuth!.atChops!,
-          enrollmentId: atAuthResponse.atAuthKeys!.enrollmentId);
+          enrollmentId: atAuthResponse.atAuthKeys!.enrollmentId,
+          atKeysIo: atKeysIo);
       await _persistKeysLocalSecondary(atAuthResponse.atAuthKeys!);
     }
 

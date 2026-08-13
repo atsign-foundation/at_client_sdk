@@ -102,6 +102,42 @@ void main() {
       var authResult = await onboardingService.authenticate();
       expect(authResult, true);
     });
+
+    test('authenticate hands the key source across to the client', () async {
+      final atSign = '@alice🛠';
+      AtOnboardingPreference onboardingPreference = AtOnboardingPreference()
+        ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
+        ..namespace = 'unit_test';
+      AtOnboardingService onboardingService =
+          AtOnboardingServiceImpl(atSign, onboardingPreference);
+      onboardingService.atLookUp = mockAtLookup;
+      mockAtAuth.atChops = AtChopsImpl(AtChopsKeys());
+      onboardingService.atAuth = mockAtAuth;
+      when(() => mockAtLookup.pkamAuthenticate())
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtAuth.authenticate(any()))
+          .thenAnswer((_) => Future.value(AtAuthResponse(atSign)
+            ..isSuccessful = true
+            ..atAuthKeys = (AtKeys()
+              ..apkamPublicKey = AtBytes.fromString('dumm')
+              ..apkamPrivateKey = AtBytes.fromString('dumm')
+              ..defaultSelfEncryptionKey = AtBytes.fromString('dumm')
+              ..defaultEncryptionPrivateKey = AtBytes.fromString('dumm')
+              ..defaultEncryptionPublicKey = AtBytes.fromString('dumm')
+              ..apkamSymmetricKey = AtBytes.fromString('dumm')
+              ..enrollmentId = 'source-handoff-enroll-id')));
+      when(() => mockAtAuth.atChops)
+          .thenAnswer((_) => AtChopsImpl(AtChopsKeys()));
+
+      await onboardingService.authenticate();
+
+      // The FileAtKeysIo authenticate() builds for AtAuth must reach the
+      // client too. Without it the client has no key-material source at all —
+      // it cannot resolve its PKAM algorithm from the keyfile, file conveyed
+      // privates, or source per-algorithm signing keys — and every
+      // at_cli_commons consumer inherits that.
+      expect(AtClientManager.getInstance().atClient.atKeysIo, isNotNull);
+    });
     // TODO: add more tests
     tearDown(() async => await tearDownFunc());
   });
