@@ -7747,6 +7747,13 @@ signs everything an enrollment attests to — signed envelopes, key packages,
 chain links. `ApkamSigning.signingKeys` (`apkam_signing.dart:56`) reads the one
 PKAM keypair out of `atChops` and hands it to both.
 
+*This describes the tree on 2026-08-11 and no longer describes it: on
+2026-08-13 `signingKeys` became a `Future<List<ApkamSigningKeys>>` sourced from
+`AtKeys.signingKeysFor`, one entry per algorithm. It still answers with the
+authentication keypair where an enrollment holds no signing material — which
+is every keyfile until something files some — so the first cost below is the
+one that has moved and the third is unchanged in practice.*
+
 Three costs follow, and all three are present in the tree:
 
 1. **No agility.** `_apsk` is published as a bare public-key string with no
@@ -8353,4 +8360,4 @@ nothing red. at_chops maps the wrong-length secret key to a `PqOpenException`
 that the open already catches and skips, and the message names the mismatch
 ("ML-KEM-1024 secret key must be 3168 bytes: 32"). A check that changes no
 outcome and reads like a security check it is not. Belongs beside
-[14.19.1](implementation-plan.md#14191-three-things-that-look-like-defects-and-are-not).
+[14.19.1](implementation-plan.md#14191-things-that-look-like-defects-and-are-not).

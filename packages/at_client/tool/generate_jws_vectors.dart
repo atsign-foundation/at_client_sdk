@@ -20,6 +20,7 @@ Future<void> main() async {
   final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
   final rsaEnvelope = signEnvelope(payload,
       keys: ApkamSigningKeys(
+          algorithm: SigningAlgoType.rsa2048,
           publicKey: rsaPair.atPublicKey.publicKey,
           privateKey: rsaPair.atPrivateKey.privateKey),
       enrollmentId: 'vector-1');
@@ -27,10 +28,10 @@ Future<void> main() async {
   final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   final mlDsaEnvelope = signEnvelope(payload,
       keys: ApkamSigningKeys(
+          algorithm: SigningAlgoType.mldsa65,
           publicKey: base64Encode(mlDsaPair.publicKey),
           privateKey: base64Encode(mlDsaPair.secretKey)),
-      enrollmentId: 'vector-1',
-      signingAlgo: SigningAlgoType.mldsa65);
+      enrollmentId: 'vector-1');
 
   final out = const JsonEncoder.withIndent('  ').convert({
     'comment': 'JWS signed-envelope vectors, RFC 7515 general JSON '

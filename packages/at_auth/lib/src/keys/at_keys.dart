@@ -170,6 +170,73 @@ class AtKeys {
     return highest + 1;
   }
 
+  /// Every active signing keypair [enrollmentId] holds, strongest algorithm
+  /// first — one entry per algorithm, which is what a multi-signature writer
+  /// iterates and what a `_apsk` array is composed from.
+  ///
+  /// Selected by the keyId shape [fileSigningMaterial] writes, **not** by the
+  /// `privateSigning` role. That role is shared: `PqSigningRoot` files the
+  /// atSign-wide signing root as `privateSigning` too, under its own keyId
+  /// and with no enrollment id at all, so a role filter would hand an
+  /// enrollment a signing key that was never its own.
+  ///
+  /// Both halves must be present and active. A private with no published
+  /// public cannot be verified against anything, and a public with no private
+  /// cannot sign.
+  ///
+  /// An entry naming an algorithm [SigningAlgoType] does not know is skipped
+  /// rather than refused — a keyfile written by a newer client holds keys this
+  /// build cannot sign with, and its other keys are still usable. Skipping is
+  /// safe here in a way it is not in [authenticationFor]: an unusable signing
+  /// key costs one signature, while an unusable authentication key would send
+  /// the caller to the flat fields and sign the PKAM challenge as somebody
+  /// else.
+  List<({SigningAlgoType algorithm, String publicKey, String privateKey})>
+      signingKeysFor(String enrollmentId) {
+    final prefix = 'sign:$enrollmentId:';
+    final held =
+        <({SigningAlgoType algorithm, String publicKey, String privateKey})>[];
+    for (final keyId in _materialsByKeyId.keys) {
+      if (!keyId.startsWith(prefix)) continue;
+      // `<algo>:<n>` exactly — the same parse [nextSigningGeneration] does, so
+      // an enrollment id that is a prefix of another cannot collect its keys.
+      final suffix = keyId.substring(prefix.length).split(':');
+      if (suffix.length != 2 || int.tryParse(suffix[1]) == null) continue;
+
+      final private = getKey(keyId, CryptographicKeyType.privateSigning);
+      final public = getKey(keyId, CryptographicKeyType.publicVerification);
+      if (private == null || public == null) continue;
+      if (private.status != KeyPartStatus.active ||
+          public.status != KeyPartStatus.active) {
+        continue;
+      }
+      // Halves that disagree about their algorithm are not a keypair, and
+      // nothing refuses the combination on the way in: the invariants are per
+      // `(keyPartType, keyAlgorithmType)`, so a keyId's two halves are never
+      // compared with each other and a document can carry it. Taking the
+      // algorithm from one half and the public bytes from the other would
+      // sign under one algorithm while advertising the other's public key, so
+      // every signature would fail verification with nothing naming the
+      // keyfile as the cause.
+      if (private.keyAlgorithmType != public.keyAlgorithmType) continue;
+
+      final algorithm = SigningAlgoType.values
+          .where((a) => a.name == private.keyAlgorithmType)
+          .firstOrNull;
+      if (algorithm == null) continue;
+
+      held.add((
+        algorithm: algorithm,
+        publicKey: public.bytes.toString(),
+        privateKey: private.bytes.toString(),
+      ));
+    }
+    held.sort((a, b) => SigningAlgoType.strongestFirst
+        .indexOf(a.algorithm)
+        .compareTo(SigningAlgoType.strongestFirst.indexOf(b.algorithm)));
+    return held;
+  }
+
   /// Adopts [materials] — what an enrollment request's metadataBuilder filed
   /// into the construction keys it was handed — tagged with the enrollment id
   /// they now belong to.

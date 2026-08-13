@@ -133,10 +133,10 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
       'keyPackage': signEnvelope(
         payload,
         keys: ApkamSigningKeys(
+          algorithm: signingAlgo,
           publicKey: apkamPublicKey.toString(),
           privateKey: apkamPrivateKey.toString(),
         ),
-        signingAlgo: signingAlgo,
       ).toJson(),
     };
   };

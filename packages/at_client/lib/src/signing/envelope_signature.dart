@@ -299,14 +299,32 @@ class SignedEnvelope {
       'v: ${signature.version})';
 }
 
-/// The APKAM key material an envelope signature needs. The public half is
+/// One signing keypair and the algorithm it signs under. The public half is
 /// what a verifier fetches from the signer's `_apsk`; the private half signs.
+///
+/// [algorithm] travels **inside** the keypair rather than beside it because a
+/// key and an algorithm that arrive separately can disagree, and the signature
+/// that results is produced by the wrong routine over the right bytes — it
+/// verifies against nothing and says nothing about why. An enrollment holds
+/// one of these per algorithm it still signs with.
 class ApkamSigningKeys {
+  final SigningAlgoType algorithm;
   final String publicKey;
   final String privateKey;
 
-  const ApkamSigningKeys({required this.publicKey, required this.privateKey});
+  const ApkamSigningKeys({
+    required this.algorithm,
+    required this.publicKey,
+    required this.privateKey,
+  });
 }
+
+/// Whether [signEnvelope] can produce a signature under [algo].
+///
+/// The writer's half of "a build cannot claim an algorithm it cannot run": a
+/// keyfile can hold a signing key for an algorithm this build has no envelope
+/// support for, and a signer skips it rather than throwing.
+bool canSignEnvelopeWith(SigningAlgoType algo) => _joseAlgFor(algo) != null;
 
 /// The exact text that is signed and verified. Strings are signed as-is;
 /// everything else is signed as its JSON encoding. Verification re-derives
@@ -350,13 +368,13 @@ SignedEnvelope signEnvelope(
   Object? payload, {
   required ApkamSigningKeys keys,
   String? enrollmentId,
-  SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   Object? Function(Object? nonEncodable)? toEncodable,
 }) {
+  final SigningAlgoType signingAlgo = keys.algorithm;
   final String? alg = _joseAlgFor(signingAlgo);
   if (alg == null) {
     throw ArgumentError.value(
-        signingAlgo, 'signingAlgo', 'no envelope signing support');
+        signingAlgo, 'keys.algorithm', 'no envelope signing support');
   }
 
   // The payload is always its JSON encoding, including a String payload.

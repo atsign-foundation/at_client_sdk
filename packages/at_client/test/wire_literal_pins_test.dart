@@ -656,6 +656,7 @@ void main() {
       final envelope = signEnvelope(
         {'hello': 'world'},
         keys: ApkamSigningKeys(
+            algorithm: SigningAlgoType.rsa2048,
             publicKey: pair.atPublicKey.publicKey,
             privateKey: pair.atPrivateKey.privateKey),
         enrollmentId: 'e1',
@@ -694,6 +695,7 @@ void main() {
       expect(
           headerOf(signEnvelope({'p': 1},
               keys: ApkamSigningKeys(
+                  algorithm: SigningAlgoType.rsa2048,
                   publicKey: rsaPair.atPublicKey.publicKey,
                   privateKey: rsaPair.atPrivateKey.privateKey),
               enrollmentId: 'e1')),
@@ -705,10 +707,10 @@ void main() {
       expect(
           headerOf(signEnvelope({'p': 1},
               keys: ApkamSigningKeys(
+                  algorithm: SigningAlgoType.mldsa65,
                   publicKey: base64Encode(mlDsaPair.publicKey),
                   privateKey: base64Encode(mlDsaPair.secretKey)),
-              enrollmentId: 'e1',
-              signingAlgo: SigningAlgoType.mldsa65)),
+              enrollmentId: 'e1')),
           '{"alg":"ML-DSA-65","kid":"e1","v":1}',
           reason: 'ML-DSA-65 is the RFC 9964 registered JOSE name');
     });
@@ -718,6 +720,7 @@ void main() {
       final envelope = signEnvelope(
         {'hello': 'world'},
         keys: ApkamSigningKeys(
+            algorithm: SigningAlgoType.rsa2048,
             publicKey: pair.atPublicKey.publicKey,
             privateKey: pair.atPrivateKey.privateKey),
       );

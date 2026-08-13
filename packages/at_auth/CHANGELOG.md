@@ -1,4 +1,18 @@
 ## 3.4.0
+- feat: add `AtKeys.signingKeysFor(enrollmentId)` — every active signing
+  keypair an enrollment holds, one per algorithm, strongest first. A
+  multi-signature writer needs one keypair per algorithm, and nothing
+  enumerated them. Entries are selected by the keyId shape
+  `fileSigningMaterial` writes rather than by the `privateSigning` role,
+  because that role is shared: the atSign-wide PQ signing root is filed under
+  it too, with no enrollment id, and a role filter would hand an enrollment a
+  key that was never its own. A half pair, a retired pair, an algorithm this
+  build does not know, and a keyId whose two halves disagree about their
+  algorithm are each skipped rather than refused — the rest of a keyfile
+  written by a newer client is still usable. That last case is reachable:
+  the invariants are per `(keyPartType, keyAlgorithmType)`, so a keyId's two
+  halves are never compared with each other, and handing the pair out would
+  sign under one algorithm while advertising the other's public key.
 - fix: `authenticationFor` refuses an enrollment whose typed authentication
   material names an algorithm this build cannot sign with, instead of falling
   back to the flat fields. The keypair is still that enrollment's, so the flat

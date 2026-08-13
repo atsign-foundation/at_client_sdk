@@ -140,6 +140,7 @@ void main() {
 
     SignedEnvelope rsaEnvelope() => signEnvelope(payload,
         keys: ApkamSigningKeys(
+            algorithm: SigningAlgoType.rsa2048,
             publicKey: rsaPair.atPublicKey.publicKey,
             privateKey: rsaPair.atPrivateKey.privateKey));
 
@@ -147,10 +148,10 @@ void main() {
     /// signed ML-DSA-65, naming that algorithm in its protected header.
     SignedEnvelope mlDsaEnvelope() => signEnvelope(payload,
         keys: ApkamSigningKeys(
+            algorithm: SigningAlgoType.mldsa65,
             publicKey: base64Encode(mlDsaPair.publicKey),
             privateKey: base64Encode(mlDsaPair.secretKey)),
-        enrollmentId: 'enroll-pq',
-        signingAlgo: SigningAlgoType.mldsa65);
+        enrollmentId: 'enroll-pq');
 
     /// [envelope] with its protected header replaced, so a test can make the
     /// envelope claim an algorithm its key does not match. The header is
@@ -194,15 +195,16 @@ void main() {
         () async {
       final envelope = signEnvelope(payload,
           keys: ApkamSigningKeys(
+              algorithm: SigningAlgoType.mldsa65,
               publicKey: base64Encode(mlDsaPair.publicKey),
               privateKey: base64Encode(mlDsaPair.secretKey)),
-          enrollmentId: 'enroll-pq',
-          signingAlgo: SigningAlgoType.mldsa65);
+          enrollmentId: 'enroll-pq');
       final entry = envelope.signature;
       expect(entry.alg, 'ML-DSA-65');
       expect(base64Decode(base64.normalize(entry.signature)).length, 3309,
           reason: 'an ML-DSA-65 signature is 3309 bytes — an RSA-sized '
-              'signature here means the sign dispatch ignored signingAlgo');
+              'signature here means the sign dispatch ignored the algorithm '
+              'the keys name');
 
       final apsk = mlDsaApsk();
       await verifyEnvelope(envelope, signerPublicKey: apsk);
@@ -216,8 +218,10 @@ void main() {
     test('signEnvelope refuses an algorithm it has no signing code for', () {
       expect(
           () => signEnvelope(payload,
-              keys: ApkamSigningKeys(publicKey: 'x', privateKey: 'y'),
-              signingAlgo: SigningAlgoType.ecc_secp256r1),
+              keys: ApkamSigningKeys(
+                  algorithm: SigningAlgoType.ecc_secp256r1,
+                  publicKey: 'x',
+                  privateKey: 'y')),
           throwsA(isA<ArgumentError>()));
     });
 

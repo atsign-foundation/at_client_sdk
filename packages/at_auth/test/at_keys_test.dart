@@ -785,6 +785,134 @@ void main() {
           createdAt: DateTime.utc(2026, 1, 1)));
     });
 
+    group('signingKeysFor', () {
+      // Key material is base64 on the way in and on the way out, so a
+      // readable label has to be encoded to be filed and encoded again to be
+      // asserted against.
+      String b64(String label) => base64Encode(utf8.encode(label));
+
+      AtKeysMaterial part(String keyId, String type, String algo, String value,
+              {String? enrollmentId,
+              KeyPartStatus status = KeyPartStatus.active}) =>
+          AtKeysMaterial(
+              keyId: keyId,
+              enrollmentId: enrollmentId,
+              keyPartType: type,
+              keyAlgorithmType: algo,
+              bytes: AtBytes.fromString(b64(value)),
+              createdAt: DateTime.utc(2026, 1, 1),
+              status: status);
+
+      /// A complete signing keypair for [enrollmentId], both halves.
+      List<AtKeysMaterial> signingPair(String enrollmentId, String algo,
+              {int generation = 1,
+              String value = 'a',
+              KeyPartStatus status = KeyPartStatus.active}) =>
+          [
+            part('sign:$enrollmentId:$algo:$generation',
+                CryptographicKeyType.privateSigning, algo, '$value-priv',
+                enrollmentId: enrollmentId, status: status),
+            part('sign:$enrollmentId:$algo:$generation',
+                CryptographicKeyType.publicVerification, algo, '$value-pub',
+                enrollmentId: enrollmentId, status: status),
+          ];
+
+      /// The atSign-wide PQ signing root as `PqSigningRoot` files it: the same
+      /// `privateSigning` role an enrollment's signing key uses, under its own
+      /// keyId, with **no** enrollment id.
+      List<AtKeysMaterial> signingRoot() => [
+            part('pq_signing_root', CryptographicKeyType.privateSigning,
+                KeyAlgorithmType.mlDsa65, 'root-priv'),
+            part('pq_signing_root', CryptographicKeyType.publicVerification,
+                KeyAlgorithmType.mlDsa65, 'root-pub'),
+          ];
+
+      test('returns one entry per algorithm, strongest first', () {
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          // Filed weakest-first, so the order under test is the accessor's
+          // rather than the order the keyfile happened to hold them in.
+          ...signingPair('E1', KeyAlgorithmType.rsa2048, value: 'rsa'),
+          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'mldsa'),
+        ]);
+
+        expect(atKeys.signingKeysFor('E1').map((k) => k.algorithm).toList(),
+            [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048],
+            reason: 'a multi-signature writer emits strongest first, and a '
+                'single-signature one signs with only that');
+        expect(atKeys.signingKeysFor('E1').first.privateKey, b64('mldsa-priv'));
+        expect(atKeys.signingKeysFor('E1').first.publicKey, b64('mldsa-pub'));
+      });
+
+      test('does not adopt the atSign-wide signing root as an enrollment key',
+          () {
+        // The root shares the `privateSigning` role, so selecting on the role
+        // would hand E1 a key that was never its own — and E1 would sign with
+        // a key whose public half is in no _apsk of its own, producing
+        // signatures that verify against nothing.
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          ...signingRoot(),
+          authKey('apkam:E1:1', enrollmentId: 'E1'),
+        ]);
+
+        expect(atKeys.signingKeysFor('E1'), isEmpty);
+
+        // ...and still excluded when E1 holds a key of the same algorithm,
+        // which is the shape in which the wrong one could win.
+        final withOwn = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          ...signingRoot(),
+          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'own'),
+        ]);
+        expect(withOwn.signingKeysFor('E1').single.privateKey, b64('own-priv'));
+      });
+
+      test('skips a half pair, a retired pair, and an unreadable algorithm',
+          () {
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          // No publicVerification half, so nothing could verify what it signs.
+          part('sign:E1:rsa2048:1', CryptographicKeyType.privateSigning,
+              KeyAlgorithmType.rsa2048, 'lonely',
+              enrollmentId: 'E1'),
+          // Retained to verify what it signed, but no longer signing.
+          ...signingPair('E1', KeyAlgorithmType.ed25519,
+              value: 'old', status: KeyPartStatus.retired),
+          // What a newer client's keyfile looks like from here.
+          ...signingPair('E1', 'pq-something-later', value: 'future'),
+          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'live'),
+        ]);
+
+        expect(atKeys.signingKeysFor('E1').single.privateKey, b64('live-priv'),
+            reason: 'an entry this build cannot read is skipped, not refused: '
+                'the rest of the keyfile is still usable');
+      });
+
+      test('skips a keyId whose two halves disagree about their algorithm',
+          () {
+        // Reachable: the invariants are per (keyPartType, keyAlgorithmType),
+        // so nothing compares a keyId's two halves with each other — verified
+        // by probe, `addKey` accepts this. Handing the pair out would sign
+        // ML-DSA while advertising an RSA public key.
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          part('sign:E1:mldsa65:1', CryptographicKeyType.privateSigning,
+              KeyAlgorithmType.mlDsa65, 'mldsa-priv',
+              enrollmentId: 'E1'),
+          part('sign:E1:mldsa65:1', CryptographicKeyType.publicVerification,
+              KeyAlgorithmType.rsa2048, 'rsa-pub',
+              enrollmentId: 'E1'),
+        ]);
+
+        expect(atKeys.signingKeysFor('E1'), isEmpty);
+      });
+
+      test('does not collect an enrollment whose id it merely prefixes', () {
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          ...signingPair('E1:sub', KeyAlgorithmType.mlDsa65, value: 'sub'),
+        ]);
+
+        expect(atKeys.signingKeysFor('E1'), isEmpty);
+        expect(atKeys.signingKeysFor('E1:sub').single.privateKey, b64('sub-priv'));
+      });
+    });
+
     test('replaceKey retires and files in one call', () {
       final atKeys = AtKeys(
           atsign: '@alice'.toAtsign(),

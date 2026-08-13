@@ -1,4 +1,25 @@
 ## 3.14.1
+- feat: `ApkamSigning.signingKeys` is a `Future<List<ApkamSigningKeys>>`
+  sourced from the keyfile — one entry per algorithm the enrollment holds a
+  signing key for, strongest first. It read the APKAM *authentication* keypair
+  out of `AtChops` and handed out exactly one pair, which a multi-signature
+  writer cannot use. Where the enrollment holds no signing material this build
+  can sign with, or the client has no key source, it falls back to that
+  authentication keypair: its public half stays published in `_apsk`
+  permanently, because everything signed before an enrollment held signing
+  keys of its own was signed by it. Nothing files per-algorithm signing
+  material yet, so today that fallback is always the answer and envelopes are
+  byte-identical to what shipped. `publicSigningKey` becomes a
+  `Future<String>` and `wrapAndSign` returns a `Future` rather than a
+  `FutureOr`; the keyfile is read per call, because a cached copy would go
+  stale the moment a rotation retired the key it held.
+- feat!: `ApkamSigningKeys` carries the algorithm it signs under, and
+  `signEnvelope` takes it from there instead of a separate `signingAlgo`
+  argument. A key and an algorithm that arrive separately can disagree, and
+  the signature that results is made by the wrong routine over the right
+  bytes — it verifies against nothing and says nothing about why.
+  `canSignEnvelopeWith` is public so a signer can skip a held key this build
+  has no envelope support for rather than throwing out of every call.
 - fix: one unreachable peer no longer ends a whole namespace broadcast.
   `requestSecretsFromNamespace` and `pushSecretToNamespaceMembers` awaited each
   member's send with no guard, so a member advertising no mutually supported

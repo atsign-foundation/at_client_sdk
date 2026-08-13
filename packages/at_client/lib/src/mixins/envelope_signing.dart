@@ -4,8 +4,6 @@ import 'dart:convert' show jsonEncode;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
-import 'package:at_client/src/signing/resolved_signing_algo.dart'
-    show signingAlgoOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show apskUri, SignedEnvelope, signEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart'
@@ -41,23 +39,25 @@ mixin EnvelopeSigning on ApkamSigning {
   /// [payload] must be a String or a json-encodable object.
   /// [toEncodable] is passed directly to [jsonEncode].
   /// Read the [jsonEncode] docs to learn how to use it.
-  FutureOr<SignedEnvelope> wrapAndSign(
+  Future<SignedEnvelope> wrapAndSign(
     Object? payload, {
     Object? Function(Object? nonEncodable)? toEncodable,
-  }) {
+  }) async {
+    // Resolved before the try, not inside it: that catch reports a payload
+    // that could not be encoded, and a keyfile read that fails is not one.
+    final keys = await signingKeys;
     try {
-      // Sign with the APKAM (PKAM) keypair: its public half is what
-      // [ApkamSigning.publishPublicSigningKey] publishes, so verifiers can
-      // check the signature against the per-enrollment _apsk key. (Signing
+      // Sign with the strongest key this enrollment holds, whose public half
+      // is what [ApkamSigning.publishPublicSigningKey] publishes, so verifiers
+      // can check the signature against the per-enrollment _apsk key. (Signing
       // with the atSign-wide encryption keypair would use a key that is NOT
-      // the published one.) The algorithm is the client's resolved one: a
-      // self-retrofit's ML-DSA enrollment must sign mldsa65, or every
-      // envelope is refused against the _apsk its record published.
+      // the published one.) One signature: a signer emits one per active
+      // signing key it holds, and the multi-signature writer is what turns
+      // this into the whole set.
       return signEnvelope(
         payload,
-        keys: signingKeys,
+        keys: keys.first,
         enrollmentId: enrollmentId,
-        signingAlgo: signingAlgoOf(atClient),
         toEncodable: toEncodable,
       );
     } on Object catch (e, st) {

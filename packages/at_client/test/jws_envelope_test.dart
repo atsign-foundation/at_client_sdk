@@ -36,10 +36,12 @@ void main() {
   });
 
   ApkamSigningKeys rsaKeys() => ApkamSigningKeys(
+      algorithm: SigningAlgoType.rsa2048,
       publicKey: rsaPair.atPublicKey.publicKey,
       privateKey: rsaPair.atPrivateKey.privateKey);
 
   ApkamSigningKeys mlDsaKeys() => ApkamSigningKeys(
+      algorithm: SigningAlgoType.mldsa65,
       publicKey: base64Encode(mlDsaPair.publicKey),
       privateKey: base64Encode(mlDsaPair.secretKey));
 
@@ -50,10 +52,8 @@ void main() {
   SignedEnvelope rsaEnvelope({String? enrollmentId = 'enroll-1'}) =>
       signEnvelope(payload, keys: rsaKeys(), enrollmentId: enrollmentId);
 
-  SignedEnvelope mlDsaEnvelope() => signEnvelope(payload,
-      keys: mlDsaKeys(),
-      enrollmentId: 'enroll-pq',
-      signingAlgo: SigningAlgoType.mldsa65);
+  SignedEnvelope mlDsaEnvelope() =>
+      signEnvelope(payload, keys: mlDsaKeys(), enrollmentId: 'enroll-pq');
 
   group('the envelope shape, RSA arm', () {
     test('signs, verifies, and survives the base64 padding trap', () async {
@@ -160,14 +160,10 @@ void main() {
     /// One envelope over one payload, signed by both keys — RSA listed FIRST,
     /// so a verifier taking `signatures.first` picks the weaker one.
     SignedEnvelope bothSigned() {
-      final rsa = signEnvelope(payload,
-          keys: rsaKeys(),
-          enrollmentId: 'enroll-1',
-          signingAlgo: SigningAlgoType.rsa2048);
-      final mlDsa = signEnvelope(payload,
-          keys: mlDsaKeys(),
-          enrollmentId: 'enroll-1',
-          signingAlgo: SigningAlgoType.mldsa65);
+      final rsa =
+          signEnvelope(payload, keys: rsaKeys(), enrollmentId: 'enroll-1');
+      final mlDsa =
+          signEnvelope(payload, keys: mlDsaKeys(), enrollmentId: 'enroll-1');
       return SignedEnvelope.fromJson({
         'payload': rsa.payloadB64,
         'signatures': [
@@ -256,10 +252,8 @@ void main() {
       // signature under a stronger algorithm, carrying someone else's kid,
       // makes a caller act on a signer whose signature was never checked.
       final both = bothSigned();
-      final impostor = signEnvelope(payload,
-          keys: mlDsaKeys(),
-          enrollmentId: 'someone-else',
-          signingAlgo: SigningAlgoType.mldsa65);
+      final impostor =
+          signEnvelope(payload, keys: mlDsaKeys(), enrollmentId: 'someone-else');
 
       expect(
           () => SignedEnvelope.fromJson({
@@ -423,7 +417,10 @@ void main() {
     test('the producer refuses a signing algorithm it has no mapping for', () {
       expect(
           () => signEnvelope(payload,
-              keys: rsaKeys(), signingAlgo: SigningAlgoType.ed25519),
+              keys: ApkamSigningKeys(
+                  algorithm: SigningAlgoType.ed25519,
+                  publicKey: rsaKeys().publicKey,
+                  privateKey: rsaKeys().privateKey)),
           throwsA(isA<ArgumentError>()),
           reason: 'no envelope signs under Ed25519, and a shape that guessed '
               'an alg name for it would freeze the guess inside a signature');

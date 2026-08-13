@@ -49,6 +49,7 @@ void main() {
 
     final resigned = signEnvelope(vectors['payload'],
         keys: ApkamSigningKeys(
+            algorithm: SigningAlgoType.rsa2048,
             publicKey: arm['apskPublicKey'] as String,
             privateKey: arm['privateKey'] as String),
         enrollmentId: 'vector-1');

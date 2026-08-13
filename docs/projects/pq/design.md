@@ -1973,6 +1973,16 @@ pair `privateAuthentication` / `publicAuthentication`. A new sibling files a
 signing keypair under `sign:<enrollmentId>:<algo>:<n>` as
 `privateSigning` / `publicVerification`.
 
+Reading them back is `AtKeys.signingKeysFor(enrollmentId)`, which selects on
+that **keyId shape** rather than on the `privateSigning` role. The role is not
+unique to an enrollment's signing keys: the atSign-wide `pq_signing_root` is
+filed under it too, with no enrollment id, so selecting by role hands an
+enrollment a key that was never its own — and a signature made with it verifies
+against nothing, since its public half is in no `_apsk`. Both halves must be
+present and active; an
+algorithm this build does not know is skipped rather than refused, because the
+rest of a keyfile written by a newer client is still usable.
+
 `AtKeysAssurance.validateKeyMaterials` and `.validateAddKey` gain a status
 filter, and the file-wide single-active-authentication rule. The file-wide rule
 is what makes the enrollment id derivable, and it is a throw rather than a

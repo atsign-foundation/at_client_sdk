@@ -83,7 +83,7 @@ void main() {
 
       // the _apsk signing key was published so peers can verify envelopes
       expect(remoteData['public:_apsk.enroll-a.a.__e$atSign'],
-          registrant.publicSigningKey);
+          await registrant.publicSigningKey);
 
       // the returned key package carries the x-wing enc key; register() does
       // NOT write it anywhere (it rides enroll:request), and nothing is
@@ -659,7 +659,7 @@ void main() {
       // anyone with their own key can do, and which is exactly why the claim
       // is worth nothing until it is checked against enroll-b's own _apsk.
       final forged = signEnvelope(d.myKeyPackage.toJson(),
-          keys: d.signingKeys, enrollmentId: 'enroll-b');
+          keys: (await d.signingKeys).first, enrollmentId: 'enroll-b');
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [record('enroll-b', forged)]);
 
@@ -709,7 +709,8 @@ void main() {
         record(
             'enroll-future',
             signEnvelope({'shape': 'from a later version'},
-                keys: future.signingKeys, enrollmentId: 'enroll-future')),
+                keys: (await future.signingKeys).first,
+                enrollmentId: 'enroll-future')),
       ]);
 
       final byId = {
@@ -752,7 +753,7 @@ void main() {
         record(
             'enroll-b',
             signEnvelope(b.myKeyPackage.toJson(),
-                keys: b.signingKeys, enrollmentId: null)),
+                keys: (await b.signingKeys).first, enrollmentId: null)),
       ]);
 
       final member =
@@ -795,7 +796,7 @@ void main() {
       // an entry whose header cannot be read is not an entry, which is the
       // property under test one layer down.
       final signed = signEnvelope(b.myKeyPackage.toJson(),
-          keys: b.signingKeys, enrollmentId: 'enroll-b');
+          keys: (await b.signingKeys).first, enrollmentId: 'enroll-b');
       final envelope = {
         ...signed.toJson(),
         'signatures': [
