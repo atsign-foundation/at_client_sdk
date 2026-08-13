@@ -1,4 +1,17 @@
 ## 3.4.0
+- feat: add `AtKeys.authenticationFor(enrollmentId)` and
+  `authenticationAlgorithmFor(enrollmentId)` — the one place either half of an
+  APKAM keypair is resolved. Typed material wins wherever the keyfile holds it
+  for that enrollment; the flat `apkamPublicKey`/`apkamPrivateKey` answer only
+  where it holds none, which is where four shipping shapes still keep the
+  keypair: a keyfile written before the typed section existed, an `rsa2048`
+  first onboard, an OTP enrollment, and an onboard handed its keys by the
+  caller. Which way round matters on a retrofitted keyfile, the one shape
+  holding both — the flat fields there are a *different*, capped enrollment's
+  credentials, so resolving to them signs the PKAM challenge as the wrong
+  principal. `authenticationAlgorithmFor` answers without building an AtChops,
+  because a caller holding an injected one still has to name the algorithm and
+  `toAtChops` throws on a keyfile missing material that caller never needed.
 - feat: add `KeyEntryStatus` — `active` or `retired`, the status every
   advertised key entry in the protocol carries — and read it on `_apsk`, where
   `ApskSigningKey` gains a `status`. It lives here rather than in at_client

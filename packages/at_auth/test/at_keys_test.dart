@@ -166,6 +166,92 @@ void main() {
     });
   });
 
+  group('AtKeys authenticationFor', () {
+    // The fixture's flat fields are this enrollment's own credentials.
+    final flatEnrollmentId = encryptedAtKeysMap['enrollmentId'] as String;
+    final flatApkamPublicKey =
+        encryptedAtKeysMap[auth_constants.apkamPublicKey] as String;
+    const typedApkamPublicKey = 'dHlwZWQtcHVibGlj';
+    const typedEnrollmentId = 'the-retrofitted-enrollment';
+
+    String pkamPublicKeyOf(AtChops chops) =>
+        (chops as AtChopsImpl).atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+
+    /// A keyfile carrying the capped legacy enrollment in the flat fields and
+    /// a live enrollment's APKAM in the typed section — the one shape that
+    /// holds both, and so the only one where resolving the wrong way round is
+    /// observable.
+    AtKeys retrofitted() => createKeys()
+      ..fileApkamMaterial(
+          enrollmentId: typedEnrollmentId,
+          algorithm: KeyAlgorithmType.mlDsa65,
+          publicKey: typedApkamPublicKey,
+          privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
+
+    test('the two sources genuinely differ', () {
+      // Without this the tests below would pass on a resolver that always
+      // returned the same keypair.
+      expect(flatApkamPublicKey, isNot(typedApkamPublicKey));
+    });
+
+    test('a legacy keyfile answers from the flat fields, with no algorithm',
+        () {
+      final resolved = createKeys().authenticationFor(flatEnrollmentId);
+
+      expect(pkamPublicKeyOf(resolved.chops), flatApkamPublicKey);
+      // Null leaves at_lookup at its rsa2048 default, which is what the flat
+      // fields hold.
+      expect(resolved.algorithm, isNull);
+    });
+
+    test('a null enrollment id answers from the flat fields', () {
+      final resolved = retrofitted().authenticationFor(null);
+
+      expect(pkamPublicKeyOf(resolved.chops), flatApkamPublicKey);
+      expect(resolved.algorithm, isNull);
+    });
+
+    test('typed material wins for the enrollment that holds it', () {
+      final resolved = retrofitted().authenticationFor(typedEnrollmentId);
+
+      expect(pkamPublicKeyOf(resolved.chops), typedApkamPublicKey);
+      expect(resolved.algorithm, SigningAlgoType.mldsa65);
+    });
+
+    test('the flat fields still answer for the enrollment that owns them', () {
+      final resolved = retrofitted().authenticationFor(flatEnrollmentId);
+
+      expect(pkamPublicKeyOf(resolved.chops), flatApkamPublicKey);
+      expect(resolved.algorithm, isNull);
+    });
+
+    test('authenticationAlgorithmFor answers without building an AtChops', () {
+      // Only typed material, so toAtChops() has no flat keypair to build from
+      // and throws. The algorithm still resolves — which is what lets a caller
+      // holding an injected AtChops name the algorithm without paying for one
+      // it will discard.
+      final typedOnly = AtKeys()
+        ..fileApkamMaterial(
+            enrollmentId: typedEnrollmentId,
+            algorithm: KeyAlgorithmType.mlDsa65,
+            publicKey: typedApkamPublicKey,
+            privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
+
+      expect(() => typedOnly.toAtChops(), throwsA(isA<AtException>()));
+      expect(typedOnly.authenticationAlgorithmFor(typedEnrollmentId),
+          SigningAlgoType.mldsa65);
+    });
+
+    test('authenticationAlgorithmFor mirrors the resolution', () {
+      expect(createKeys().authenticationAlgorithmFor(flatEnrollmentId), isNull);
+      expect(retrofitted().authenticationAlgorithmFor(null), isNull);
+      expect(retrofitted().authenticationAlgorithmFor(typedEnrollmentId),
+          SigningAlgoType.mldsa65);
+      expect(
+          retrofitted().authenticationAlgorithmFor(flatEnrollmentId), isNull);
+    });
+  });
+
   group('AtKeys typed key lookup', () {
     test('equality includes atsign and typed key material', () {
       final first = AtKeys(

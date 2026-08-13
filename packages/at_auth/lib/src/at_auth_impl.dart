@@ -108,17 +108,14 @@ class AtAuthImpl implements AtAuth {
     // A typed-material enrollment (a self-retrofit's) authenticates with its
     // own signing keypair and algorithm, resolved from the keyfile rather
     // than caller-supplied; the flat fields keep carrying the original
-    // enrollment's RSA credentials. ??= to support mocking.
-    final requestedEnrollmentId = atAuthRequest.enrollmentId;
-    final typedSigningAlgo = requestedEnrollmentId == null
-        ? null
-        : atAuthKeys.signingAlgorithmForEnrollment(requestedEnrollmentId);
-    if (typedSigningAlgo != null) {
-      atChops ??= atAuthKeys.toAtChopsForEnrollment(requestedEnrollmentId!);
-      atLookUp!.signingAlgoType = typedSigningAlgo;
-    } else {
-      atChops ??= atAuthKeys.toAtChops();
+    // enrollment's RSA credentials. AtKeys owns that resolution — it is the
+    // only reader of either source. ??= to support mocking.
+    final algorithm =
+        atAuthKeys.authenticationAlgorithmFor(atAuthRequest.enrollmentId);
+    if (algorithm != null) {
+      atLookUp!.signingAlgoType = algorithm;
     }
+    atChops ??= atAuthKeys.authenticationFor(atAuthRequest.enrollmentId).chops;
     atLookUp!.atChops = atChops;
 
     _logger.finer('Authenticating using PKAM');

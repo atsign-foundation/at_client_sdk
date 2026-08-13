@@ -552,6 +552,49 @@ class AtKeys {
         .firstOrNull;
   }
 
+  /// The AtChops and the PKAM signing algorithm [enrollmentId] authenticates
+  /// with — the one place either half of an APKAM keypair is resolved.
+  ///
+  /// Typed material wins wherever this keyfile holds it for [enrollmentId].
+  /// The flat [apkamPublicKey]/[apkamPrivateKey] answer only when it holds
+  /// none, and that is a fallback to where the keypair actually lives rather
+  /// than a default: four shipping shapes file no typed authentication
+  /// material at all — a keyfile written before the typed section existed, an
+  /// `rsa2048` first onboard, an OTP enrollment, and an onboard handed its
+  /// keys by the caller.
+  ///
+  /// Which way round matters on a **retrofitted** keyfile, the one shape that
+  /// holds both: the flat fields keep the capped legacy enrollment's RSA
+  /// credentials while the typed section carries the live enrollment's.
+  /// Reading the flat fields for an enrollment that has typed material of its
+  /// own signs the PKAM challenge as the wrong principal, and the atServer
+  /// checks that signature against the named enrollment's record — so the
+  /// misresolution surfaces as an authentication failure with nothing
+  /// pointing at its cause.
+  ///
+  /// A null [algorithm] means the caller leaves `signingAlgoType` at
+  /// at_lookup's default, which is what the flat fields' RSA keypair needs.
+  /// A null [enrollmentId] asks for the flat fields directly — callers reach
+  /// here having already defaulted it to this keyfile's own [enrollmentId],
+  /// which on a retrofitted file is deliberately the legacy one.
+  ({AtChops chops, SigningAlgoType? algorithm}) authenticationFor(
+      String? enrollmentId) {
+    final algorithm = authenticationAlgorithmFor(enrollmentId);
+    if (algorithm == null) {
+      return (chops: toAtChops(), algorithm: null);
+    }
+    return (chops: toAtChopsForEnrollment(enrollmentId!), algorithm: algorithm);
+  }
+
+  /// The algorithm half of [authenticationFor], without building an AtChops.
+  ///
+  /// A caller holding an injected AtChops still has to name the algorithm, and
+  /// building one it will discard is not free — [toAtChops] throws on a
+  /// keyfile that is missing any of the material it needs, so resolving
+  /// eagerly would fail a caller that never needed the keypair at all.
+  SigningAlgoType? authenticationAlgorithmFor(String? enrollmentId) =>
+      enrollmentId == null ? null : signingAlgorithmForEnrollment(enrollmentId);
+
   @Deprecated('legacy, please use addKey to add additional keys.')
   AtKeys copyWith(AtKeys other) {
     var keys = AtKeys()
