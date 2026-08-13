@@ -2455,7 +2455,7 @@ to a derivable legacy key ([`decisions.md` 93](decisions.md#93-the-d1-remaining-
 | # | Work |
 |---|------|
 | 10 | **DONE 2026-08-13 — one resolver, not a materialised projection.** `AtKeys.authenticationFor(enrollmentId)` returns the AtChops and the PKAM algorithm, with typed material winning wherever the keyfile holds it for that enrollment and the flat fields answering only where it holds none; `authenticationAlgorithmFor` is the algorithm half, so a caller holding an injected AtChops does not build one `toAtChops` would throw on. `AtAuthImpl.authenticate` and `AtClientImpl._createAtChops` both move onto it. **Ruling 7 as written could not be built** and is amended in place ([`decisions.md` 91.3](decisions.md#913-the-rulings)): filing a projected material makes `toJson` emit `version`/`atsign`/`keys` — the guard is `keys.isEmpty` and both stores stamp `atsign` first — which breaks the byte-identical legacy round-trip [91.4](decisions.md#914-what-is-released-and-therefore-what-must-still-be-read) promises, and on a retrofitted keyfile the one-active-`privateAuthentication`-per-document rule refuses the add outright. Four shipping shapes hold nothing to project from: a pre-typed `.atKeys`, an `rsa2048` first onboard, an OTP enrollment, and an onboard handed its keys by the caller. **Found en route and fixed:** `_createAtChops` picked its keypair off the algorithm `_resolveSigningAlgoFromKeyMaterial` had recorded, and that records nothing when its own read throws — so a transient keyfile failure made a retrofitted client PKAM with the *flat* enrollment's key while its typed material sat in the same file. Its comment claimed it mirrored `AtAuthImpl`; it did not. Rails: at_auth 257/257, at_client 1217/1217 |
-| 11 | Resolve `atKeysIo` nullability — entangled with **S-3** (partly landed) |
+| 11 | **PARTLY DONE 2026-08-13 — the wiring half.** ⚠️ **The nullability was never the problem, and the blocking claim was measured rather than inherited.** `apkam_signing.dart`'s dartdoc says sourcing from `AtKeys` "cannot land until every client has an `AtKeysIo` — today it is nullable and most apps supply none". Measured over the 22 repos on disk that depend on at_client: **0 of 22** supply one to a client and **0 of 22** use `fromAuthSession`, so the claim is TRUE — but the dominant cause is one SDK line, not app behaviour. `AtOnboardingServiceImpl.authenticate()` built a `FileAtKeysIo` for `AtAuth` and then created the client without it, so every `at_cli_commons` consumer (at_talk, sshnoports, noports-tools, at_demos, ogentic) inherited a source-less client. **Fixed:** `_initAtClient` takes the source and threads it to `setCurrentAtSign`. The injected AtChops still authenticates — this only gives the client the source for what AtChops cannot answer. ⚠️ **Deliberately NOT done: an `atKeysIo ??=` default on at_client_flutter's `AuthService.authenticate()`.** `AtAuthRequest`'s constructor already refuses a request with neither `atKeysIo` nor `atAuthKeys`, so the default could only ever fire when the caller supplied `atAuthKeys` — an app that loaded its own key material — and pointing it at a keychain that may hold another atSign's keys, or none, is a guess. The asymmetry with `onboard()`'s `??=` is correct: onboarding mints keys and needs somewhere to write them. ⚠️ **The null case is a tested, deliberate property**, not an oversight — `no_atkeysio_inertness_test.dart` pins that a source-less client performs zero PQ writes at startup, which is what protects the long-lived cicd atServers, and the e2e pack builds its clients through `setCurrentAtSign` directly so this change does not reach them. **Still owed:** the signing half — `signingKeys` sourcing from `AtKeys` instead of reading the APKAM auth keypair out of `atChops`. That is the same design as step 12's accessor and should be built once, with it |
 | 12 | A per-algorithm signing-key accessor on `AtKeys`; widen or replace `ApkamSigningKeys`, which holds one pair today. ⚠️ **`fileSigningMaterial` has no production writer** — verified 2026-08-13, its only caller anywhere is `wire_literal_pins_test.dart:415`, so a `sign:` keyId has never been minted outside a unit test. The accessor is half the step; something has to file the material for it to read |
 
 **Stage 3 — the `_apsk` writer half (rollout 2).**
@@ -2588,6 +2588,24 @@ its own. None blocks anything.
    passphrase envelope. Worth a ruling rather than a patch: extending the
    self-encryption to the typed section changes the at-rest format, and the
    passphrase envelope may be the answer instead.
+
+9. **The one-live-enrollment invariant does not hold when the enrollment id is
+   absent.** `AtKeysAssurance.validateKeyMaterials`
+   (`assurance.dart:134-161`) uses one variable, `activeAuthEnrollment`, as
+   both the id it has seen and the flag for *whether* it has seen one — so the
+   guard is `if (activeAuthEnrollment != null)`. `enrollmentId` is parsed with
+   `optionalString` (`atkey_material.dart:250`) and the field is `String?`, so
+   a material may legitimately carry none; a first active
+   `privateAuthentication` with a null id therefore leaves the guard armed with
+   null and the **second one does not throw**. That breaks the document-wide
+   rule the same method's own dartdoc states — "a second active authentication
+   key is a corrupt keyfile whatever algorithm it names" — and it is the rule
+   `AtKeys.activeEnrollmentId` relies on for its answer to be unique, which is
+   the whole argument for deriving that rather than storing it
+   ([`decisions.md` 91.3](decisions.md#913-the-rulings) ruling 5). The fix is to
+   track "have I seen one" separately from the id. Verified by reading the
+   mechanism 2026-08-13; it wants a differential test whose two arms are a null
+   id and a present one.
 
 #### 14.19.1 Three things that LOOK like defects and are not
 
