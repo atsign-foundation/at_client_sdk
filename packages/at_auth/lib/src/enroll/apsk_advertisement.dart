@@ -19,11 +19,13 @@ import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo, SigningAlgoType;
 ///
 /// The entry spelling is the key package's (`PackageKey` in at_client), so
 /// that one vocabulary covers every "list of keys with algorithms" in the
-/// protocol. `keys` is an array from the
-/// outset even though an enrollment holds exactly one signing key today: a
-/// second algorithm's key is added beside the first rather than replacing it,
-/// because envelopes are stored durably and verified later, so a key that
-/// stops being used must still be able to verify what it already signed.
+/// protocol. `keys` has been an array from the outset, and a second
+/// algorithm's key is added beside the first rather than replacing it:
+/// envelopes are stored durably and verified later, so a key that stops being
+/// used must still be able to verify what it already signed. An enrollment
+/// still advertises exactly one key in practice, because nothing mints
+/// per-algorithm signing material yet — but that is a fact about the minting,
+/// not about this shape or this composer.
 ///
 /// ```json
 /// {"v": 1, "keys": [

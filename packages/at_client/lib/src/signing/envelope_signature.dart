@@ -197,8 +197,16 @@ class SignedEnvelope {
   /// why it is never held decoded.
   final String payloadB64;
 
-  /// One entry per signing key of one signer. One today; the array is what
-  /// lets signature agility add an entry rather than change the shape.
+  /// One entry per signing key of one signer, in the order the signer listed
+  /// them — every entry over the same payload, each under its own algorithm,
+  /// all naming the same signer.
+  ///
+  /// Several is the point: a verifier takes the strongest algorithm this
+  /// envelope and the signer's published `_apsk` share, so an envelope
+  /// carrying two is readable both by a peer that implements the stronger one
+  /// and by a peer that does not. In practice there is exactly one until
+  /// something files per-algorithm signing material, because a signer with one
+  /// key emits one signature.
   final List<EnvelopeSignature> signatures;
 
   const SignedEnvelope._(this.payloadB64, this.signatures);
