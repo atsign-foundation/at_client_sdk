@@ -48,10 +48,10 @@ void main() {
     final arm = vectors['rs256'] as Map<String, dynamic>;
 
     final resigned = signEnvelope(vectors['payload'],
-        keys: ApkamSigningKeys(
+        keys: [ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
             publicKey: arm['apskPublicKey'] as String,
-            privateKey: arm['privateKey'] as String),
+            privateKey: arm['privateKey'] as String)],
         enrollmentId: 'vector-1');
 
     expect(resigned.toJson(), arm['envelope'],

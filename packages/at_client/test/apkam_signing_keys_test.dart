@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
     show AtKeys, InMemoryAtKeysIo, KeyAlgorithmType;
@@ -28,6 +29,20 @@ class TestSigner with ApkamSigning {
   TestSigner(this.atClient);
 }
 
+class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
+  @override
+  final AtClient atClient;
+
+  @override
+  final AtSignLogger logger = AtSignLogger('TestEnvelopeSigner');
+
+  @override
+  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
+      null;
+
+  TestEnvelopeSigner(this.atClient);
+}
+
 /// Where a client's signing keys come from, and what answers when the keyfile
 /// holds none — which is every keyfile until something files per-algorithm
 /// signing material.
@@ -38,6 +53,8 @@ void main() {
   late MockAtClient atClient;
   late AtChops atChops;
   late TestSigner signer;
+  late AtPkamKeyPair rsaPair;
+  late ({Uint8List publicKey, Uint8List secretKey}) mlDsaPair;
 
   String b64(String label) => base64Encode(utf8.encode(label));
 
@@ -55,8 +72,10 @@ void main() {
     return io;
   }
 
-  setUpAll(() {
+  setUpAll(() async {
     registerFallbackValue(AtKey());
+    rsaPair = AtChopsUtil.generateAtPkamKeyPair();
+    mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   });
 
   setUp(() {
@@ -164,6 +183,43 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(InMemoryAtKeysIo());
 
       expect((await signer.signingKeys).single.publicKey, pkamPublicKey());
+    });
+  });
+
+  group('wrapAndSign signs with every key held', () {
+    test('one signature per held key, all naming this enrollment', () async {
+      final envelopeSigner = TestEnvelopeSigner(atClient);
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: KeyAlgorithmType.rsa2048,
+            publicKey: rsaPair.atPublicKey.publicKey,
+            privateKey: rsaPair.atPrivateKey.privateKey)
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: KeyAlgorithmType.mlDsa65,
+            publicKey: base64Encode(mlDsaPair.publicKey),
+            privateKey: base64Encode(mlDsaPair.secretKey))));
+
+      final envelope = await envelopeSigner.wrapAndSign({'a': 1});
+
+      expect(envelope.signatures, hasLength(2),
+          reason: 'signing under only this build\'s strongest algorithm is '
+              'unverifiable to any peer that does not implement it, which is '
+              'the whole rollout problem');
+      expect(envelope.signatures.map((s) => s.kid).toSet(), {enrollmentId});
+      expect(envelope.signatures.map((s) => s.alg).toList(),
+          ['ML-DSA-65', 'RS256'],
+          reason: 'strongest first, which is the order signingKeys returns');
+    });
+
+    test('one held key is still one signature', () async {
+      // The shape every client produces today, and the one that must not
+      // change: nothing files per-algorithm signing material yet.
+      final envelope = await TestEnvelopeSigner(atClient).wrapAndSign({'a': 1});
+
+      expect(envelope.signatures, hasLength(1));
+      expect(envelope.signature.alg, 'RS256');
     });
   });
 

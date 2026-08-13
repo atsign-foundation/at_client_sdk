@@ -243,10 +243,10 @@ void main() {
       final pair = bobChops.atChopsKeys.atPkamKeyPair!;
       final envelope = signEnvelope(
           advertisementPayload(bobKey),
-          keys: ApkamSigningKeys(
+          keys: [ApkamSigningKeys(
               algorithm: SigningAlgoType.rsa2048,
               publicKey: pair.atPublicKey.publicKey,
-              privateKey: pair.atPrivateKey.privateKey),
+              privateKey: pair.atPrivateKey.privateKey)],
           enrollmentId: 'enroll-bob');
       final c = client(payload: jsonEncode(envelope));
 

@@ -1,4 +1,16 @@
 ## 3.14.1
+- feat!: `signEnvelope` signs under a **list** of keys and emits one signature
+  entry per key, in the order given — which is what the RFC 7515 general
+  serialization the envelope already used is for. `wrapAndSign` now passes
+  every signing key the enrollment holds rather than its strongest: the
+  verifier is the one that chooses, taking the strongest algorithm the
+  envelope and the published `_apsk` share, so signing only under this build's
+  strongest would be unverifiable to any peer that has not implemented it. An
+  envelope carrying both is readable by the peer that has upgraded and by the
+  peer that has not. The payload is encoded once and every entry signs its own
+  protected header joined to that same text, so the entries are alternatives
+  rather than a chain. Nothing files per-algorithm signing material yet, so
+  today every envelope still carries exactly one signature.
 - fix: `publishPublicSigningKey` republishes when what is published is not
   what the client holds. It read the record and logged "have already
   published", so a rotated signing key never reached the atServer and every

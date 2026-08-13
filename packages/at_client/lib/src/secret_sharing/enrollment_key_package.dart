@@ -132,11 +132,15 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
       // reader as something they cannot index.
       'keyPackage': signEnvelope(
         payload,
-        keys: ApkamSigningKeys(
-          algorithm: signingAlgo,
-          publicKey: apkamPublicKey.toString(),
-          privateKey: apkamPrivateKey.toString(),
-        ),
+        // One key: this signs a package for an enrollment that does not exist
+        // yet, so the only keypair in play is the one just minted for it.
+        keys: [
+          ApkamSigningKeys(
+            algorithm: signingAlgo,
+            publicKey: apkamPublicKey.toString(),
+            privateKey: apkamPrivateKey.toString(),
+          )
+        ],
       ).toJson(),
     };
   };

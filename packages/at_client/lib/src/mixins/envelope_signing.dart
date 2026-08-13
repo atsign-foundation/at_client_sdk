@@ -47,16 +47,21 @@ mixin EnvelopeSigning on ApkamSigning {
     // that could not be encoded, and a keyfile read that fails is not one.
     final keys = await signingKeys;
     try {
-      // Sign with the strongest key this enrollment holds, whose public half
-      // is what [ApkamSigning.publishPublicSigningKey] publishes, so verifiers
-      // can check the signature against the per-enrollment _apsk key. (Signing
-      // with the atSign-wide encryption keypair would use a key that is NOT
-      // the published one.) One signature: a signer emits one per active
-      // signing key it holds, and the multi-signature writer is what turns
-      // this into the whole set.
+      // One signature per signing key this enrollment holds, whose public
+      // halves are what [ApkamSigning.publishPublicSigningKey] publishes, so a
+      // verifier can check against the per-enrollment `_apsk`. (Signing with
+      // the atSign-wide encryption keypair would use a key that is NOT a
+      // published one.)
+      //
+      // All of them rather than the strongest, because the verifier is the one
+      // that chooses: it takes the strongest algorithm the envelope and the
+      // `_apsk` SHARE. Signing only under this build's strongest would be
+      // unverifiable to any peer that does not implement it, which is the
+      // whole rollout problem — an envelope carrying both is readable by the
+      // peer that has upgraded and by the peer that has not.
       return signEnvelope(
         payload,
-        keys: keys.first,
+        keys: keys,
         enrollmentId: enrollmentId,
         toEncodable: toEncodable,
       );

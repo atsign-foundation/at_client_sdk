@@ -354,10 +354,16 @@ String signableTextOf(
 /// created it.
 ///
 /// The result is RFC 7515 **general** JSON serialization:
-/// `{payload, signatures: [{protected, signature}]}`, one entry per signing
-/// key. One entry today; the multi-signature writer arrives with signature
-/// agility, and the array is what lets it add an entry rather than change the
-/// shape.
+/// `{payload, signatures: [{protected, signature}]}`, **one entry per key in
+/// [keys]**, in the order given — a signer emits one signature per active
+/// signing key it holds, so a verifier can pick the strongest algorithm the
+/// two of them share.
+///
+/// One payload, signed several times: the `payload` member is computed once
+/// and every entry signs `<its own protected>.<that payload>`, which is what
+/// makes the entries alternatives rather than a chain. Each carries its own
+/// `alg`, all carry the same `kid`, and [SignedEnvelope.fromJson] refuses the
+/// document if they do not — an envelope naming two signers is not this shape.
 ///
 /// There is no hash to choose. `alg` names it: `RS256` **is** RSASSA-PKCS1-v1_5
 /// with SHA-256, and ML-DSA signs the message directly. That is a property of
@@ -366,9 +372,36 @@ String signableTextOf(
 /// distrusted on the way back in.
 SignedEnvelope signEnvelope(
   Object? payload, {
-  required ApkamSigningKeys keys,
+  required List<ApkamSigningKeys> keys,
   String? enrollmentId,
   Object? Function(Object? nonEncodable)? toEncodable,
+}) {
+  // The payload is always its JSON encoding, including a String payload.
+  // That keeps decode unconditional: what comes out of base64url is JSON,
+  // whatever went in. Encoded once, and every signature covers this same
+  // text — re-encoding per key would let two entries sign different bytes.
+  final payloadB64 = _base64UrlUnpadded(
+      utf8.encode(jsonEncode(payload, toEncodable: toEncodable)));
+
+  // Built through fromJson rather than a private constructor, so what a
+  // signer produces has been through exactly the checks a reader applies —
+  // including the refusals for an empty signatures array and for entries that
+  // do not all name one signer.
+  return SignedEnvelope.fromJson({
+    'payload': payloadB64,
+    'signatures': [
+      for (final key in keys)
+        _signatureOver(payloadB64, keys: key, enrollmentId: enrollmentId)
+    ],
+  });
+}
+
+/// One `{protected, signature}` entry: [keys] signing
+/// `<its own protected>.<payloadB64>`.
+Map<String, String> _signatureOver(
+  String payloadB64, {
+  required ApkamSigningKeys keys,
+  String? enrollmentId,
 }) {
   final SigningAlgoType signingAlgo = keys.algorithm;
   final String? alg = _joseAlgFor(signingAlgo);
@@ -377,11 +410,6 @@ SignedEnvelope signEnvelope(
         signingAlgo, 'keys.algorithm', 'no envelope signing support');
   }
 
-  // The payload is always its JSON encoding, including a String payload.
-  // That keeps decode unconditional: what comes out of base64url is JSON,
-  // whatever went in.
-  final payloadB64 = _base64UrlUnpadded(
-      utf8.encode(jsonEncode(payload, toEncodable: toEncodable)));
   final protectedB64 = _base64UrlUnpadded(utf8.encode(jsonEncode({
     'alg': alg,
     if (enrollmentId != null) 'kid': enrollmentId,
@@ -401,20 +429,13 @@ SignedEnvelope signEnvelope(
           secretKey: base64Decode(keys.privateKey));
     default:
       throw ArgumentError.value(
-          signingAlgo, 'signingAlgo', 'no envelope signing support');
+          signingAlgo, 'keys.algorithm', 'no envelope signing support');
   }
 
-  // Built through fromJson rather than a private constructor, so what a
-  // signer produces has been through exactly the checks a reader applies.
-  return SignedEnvelope.fromJson({
-    'payload': payloadB64,
-    'signatures': [
-      {
-        'protected': protectedB64,
-        'signature': _base64UrlUnpadded(signatureBytes),
-      }
-    ],
-  });
+  return {
+    'protected': protectedB64,
+    'signature': _base64UrlUnpadded(signatureBytes),
+  };
 }
 
 /// A parsed `_apsk` value: which algorithm the key is for, and the key itself.

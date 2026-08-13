@@ -655,10 +655,10 @@ void main() {
       final pair = AtChopsUtil.generateAtPkamKeyPair();
       final envelope = signEnvelope(
         {'hello': 'world'},
-        keys: ApkamSigningKeys(
+        keys: [ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
             publicKey: pair.atPublicKey.publicKey,
-            privateKey: pair.atPrivateKey.privateKey),
+            privateKey: pair.atPrivateKey.privateKey)],
         enrollmentId: 'e1',
       );
 
@@ -694,10 +694,10 @@ void main() {
       final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
       expect(
           headerOf(signEnvelope({'p': 1},
-              keys: ApkamSigningKeys(
+              keys: [ApkamSigningKeys(
                   algorithm: SigningAlgoType.rsa2048,
                   publicKey: rsaPair.atPublicKey.publicKey,
-                  privateKey: rsaPair.atPrivateKey.privateKey),
+                  privateKey: rsaPair.atPrivateKey.privateKey)],
               enrollmentId: 'e1')),
           '{"alg":"RS256","kid":"e1","v":1}',
           reason: 'RS256, not rsa2048: the JOSE registered name, and SHA-256 '
@@ -706,10 +706,10 @@ void main() {
       final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
       expect(
           headerOf(signEnvelope({'p': 1},
-              keys: ApkamSigningKeys(
+              keys: [ApkamSigningKeys(
                   algorithm: SigningAlgoType.mldsa65,
                   publicKey: base64Encode(mlDsaPair.publicKey),
-                  privateKey: base64Encode(mlDsaPair.secretKey)),
+                  privateKey: base64Encode(mlDsaPair.secretKey))],
               enrollmentId: 'e1')),
           '{"alg":"ML-DSA-65","kid":"e1","v":1}',
           reason: 'ML-DSA-65 is the RFC 9964 registered JOSE name');
@@ -719,10 +719,10 @@ void main() {
       final pair = AtChopsUtil.generateAtPkamKeyPair();
       final envelope = signEnvelope(
         {'hello': 'world'},
-        keys: ApkamSigningKeys(
+        keys: [ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
             publicKey: pair.atPublicKey.publicKey,
-            privateKey: pair.atPrivateKey.privateKey),
+            privateKey: pair.atPrivateKey.privateKey)],
       );
       expect(
           utf8.decode(

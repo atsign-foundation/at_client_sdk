@@ -143,18 +143,18 @@ void main() {
     });
 
     SignedEnvelope rsaEnvelope() => signEnvelope(payload,
-        keys: ApkamSigningKeys(
+        keys: [ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
             publicKey: rsaPair.atPublicKey.publicKey,
-            privateKey: rsaPair.atPrivateKey.privateKey));
+            privateKey: rsaPair.atPrivateKey.privateKey)]);
 
     /// What a 4.x enrollment's signer produces: the same envelope shape,
     /// signed ML-DSA-65, naming that algorithm in its protected header.
     SignedEnvelope mlDsaEnvelope() => signEnvelope(payload,
-        keys: ApkamSigningKeys(
+        keys: [ApkamSigningKeys(
             algorithm: SigningAlgoType.mldsa65,
             publicKey: base64Encode(mlDsaPair.publicKey),
-            privateKey: base64Encode(mlDsaPair.secretKey)),
+            privateKey: base64Encode(mlDsaPair.secretKey))],
         enrollmentId: 'enroll-pq');
 
     /// [envelope] with its protected header replaced, so a test can make the
@@ -200,10 +200,10 @@ void main() {
     test('signEnvelope signs ML-DSA when asked, and the result verifies',
         () async {
       final envelope = signEnvelope(payload,
-          keys: ApkamSigningKeys(
+          keys: [ApkamSigningKeys(
               algorithm: SigningAlgoType.mldsa65,
               publicKey: base64Encode(mlDsaPair.publicKey),
-              privateKey: base64Encode(mlDsaPair.secretKey)),
+              privateKey: base64Encode(mlDsaPair.secretKey))],
           enrollmentId: 'enroll-pq');
       final entry = envelope.signature;
       expect(entry.alg, 'ML-DSA-65');
@@ -224,10 +224,10 @@ void main() {
     test('signEnvelope refuses an algorithm it has no signing code for', () {
       expect(
           () => signEnvelope(payload,
-              keys: ApkamSigningKeys(
+              keys: [ApkamSigningKeys(
                   algorithm: SigningAlgoType.ecc_secp256r1,
                   publicKey: 'x',
-                  privateKey: 'y')),
+                  privateKey: 'y')]),
           throwsA(isA<ArgumentError>()));
     });
 

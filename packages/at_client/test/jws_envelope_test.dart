@@ -51,10 +51,10 @@ void main() {
       ]));
 
   SignedEnvelope rsaEnvelope({String? enrollmentId = 'enroll-1'}) =>
-      signEnvelope(payload, keys: rsaKeys(), enrollmentId: enrollmentId);
+      signEnvelope(payload, keys: [rsaKeys()], enrollmentId: enrollmentId);
 
   SignedEnvelope mlDsaEnvelope() =>
-      signEnvelope(payload, keys: mlDsaKeys(), enrollmentId: 'enroll-pq');
+      signEnvelope(payload, keys: [mlDsaKeys()], enrollmentId: 'enroll-pq');
 
   group('the envelope shape, RSA arm', () {
     test('signs, verifies, and survives the base64 padding trap', () async {
@@ -162,19 +162,40 @@ void main() {
 
     /// One envelope over one payload, signed by both keys — RSA listed FIRST,
     /// so a verifier taking `signatures.first` picks the weaker one.
-    SignedEnvelope bothSigned() {
-      final rsa =
-          signEnvelope(payload, keys: rsaKeys(), enrollmentId: 'enroll-1');
-      final mlDsa =
-          signEnvelope(payload, keys: mlDsaKeys(), enrollmentId: 'enroll-1');
-      return SignedEnvelope.fromJson({
-        'payload': rsa.payloadB64,
-        'signatures': [
-          rsa.signature.toJson(),
-          mlDsa.signature.toJson(),
-        ],
-      });
-    }
+    ///
+    /// Built by the **real writer**, not assembled here. It used to merge two
+    /// single-signature envelopes by hand, which made this whole group a test
+    /// of the fixture: it would have gone on passing against a writer that
+    /// could not emit two signatures at all.
+    SignedEnvelope bothSigned() => signEnvelope(payload,
+        keys: [rsaKeys(), mlDsaKeys()], enrollmentId: 'enroll-1');
+
+    test('the writer emits one signature per key, over one payload', () async {
+      final envelope = bothSigned();
+
+      expect(envelope.signatures, hasLength(2));
+      expect(
+          envelope.signatures
+              .map((s) => jsonDecode(unb64u(s.protected))['alg'])
+              .toList(),
+          ['RS256', 'ML-DSA-65'],
+          reason: 'one entry per key, in the order the signer listed them');
+      expect(envelope.signatures.map((s) => s.kid).toSet(), {'enroll-1'},
+          reason: 'every entry names the one signer, which is what lets an '
+              'envelope carry several signatures at all');
+      expect(envelope.signatures[0].signature,
+          isNot(envelope.signatures[1].signature));
+
+      // The property that makes the entries alternatives rather than a chain:
+      // one payload member, and each signature covers its own protected header
+      // joined to that same text. Re-encoding the payload per key would let
+      // two entries sign different bytes and both verify in isolation.
+      for (final entry in envelope.signatures) {
+        expect(envelope.payloadB64, isNotEmpty);
+        expect(entry.protected, isNotEmpty);
+      }
+      expect(envelope.payload, payload);
+    });
 
     test('the control arm: both signatures valid, and it verifies', () async {
       await verifyEnvelope(bothSigned(), signerPublicKey: bothApsk());
@@ -256,7 +277,7 @@ void main() {
       // makes a caller act on a signer whose signature was never checked.
       final both = bothSigned();
       final impostor =
-          signEnvelope(payload, keys: mlDsaKeys(), enrollmentId: 'someone-else');
+          signEnvelope(payload, keys: [mlDsaKeys()], enrollmentId: 'someone-else');
 
       expect(
           () => SignedEnvelope.fromJson({
@@ -328,7 +349,7 @@ void main() {
     });
 
     test('a String payload becomes JSON, so decoding is unconditional', () {
-      expect(signEnvelope('just text', keys: rsaKeys()).payload, 'just text',
+      expect(signEnvelope('just text', keys: [rsaKeys()]).payload, 'just text',
           reason: 'what comes out of base64url is JSON, whatever went in');
     });
 
@@ -420,10 +441,10 @@ void main() {
     test('the producer refuses a signing algorithm it has no mapping for', () {
       expect(
           () => signEnvelope(payload,
-              keys: ApkamSigningKeys(
+              keys: [ApkamSigningKeys(
                   algorithm: SigningAlgoType.ed25519,
                   publicKey: rsaKeys().publicKey,
-                  privateKey: rsaKeys().privateKey)),
+                  privateKey: rsaKeys().privateKey)]),
           throwsA(isA<ArgumentError>()),
           reason: 'no envelope signs under Ed25519, and a shape that guessed '
               'an alg name for it would freeze the guess inside a signature');
