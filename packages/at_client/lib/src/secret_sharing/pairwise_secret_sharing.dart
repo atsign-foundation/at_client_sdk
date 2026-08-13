@@ -528,7 +528,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     try {
       plaintext = await pqOpenFromBase64(
         kem,
-        encSecretKey,
+        encKeyFor(envelope.kid)!.secretKey,
         envelope.sealed,
         info: sealInfo,
       );

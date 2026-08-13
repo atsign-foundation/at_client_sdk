@@ -1,4 +1,32 @@
 ## 3.14.1
+- **breaking (unreleased surface): a client holds a list of encapsulation
+  keys, not one.** `PersistedApkamKeys` becomes `{encKeys: [{encSeed, keyAlgo,
+  status}]}` — a list of the new `PersistedEncKey` — where it was a single
+  `{encSeed, keyAlgo}` pair, and `PersistedApkamKeys.single(...)` is the
+  one-key form a client that has never rotated uses. This is the shape apps
+  build in their own `loadApkamKeys` / `saveApkamKeys` callbacks, so it is an
+  app-facing contract change rather than a codec change. Rotating an
+  encapsulation key has to be non-lossy: an unconsumed envelope lives seven
+  days, so at the moment a client starts advertising a new key there is up to a
+  week of traffic still addressed to the old one, and a client holding only the
+  new key could open none of it. `KeyPackageRegistration` expands every held
+  key, advertises them all — each carrying its own status — and answers at all
+  of their addresses, while `kpid`, `encPublicKey` and `encKeyAlgo` mean the
+  **active** key. `encSecretKey` is replaced by `encKeyFor(kid)`, which answers
+  for the key an envelope actually names, and `heldKpids` lists every address
+  this client can be reached at. Nothing rotates yet; this is the holding a
+  rotation will need.
+- feat: `keyPackageMaterials` reads every usable key package a keyfile holds
+  for one enrollment, active first, and `bindKeyPackageToAtKeys` adopts the
+  superseded ones as retired so a restart does not strand what is in flight.
+  The status comes from the keyfile's own `KeyPartStatus` rather than from
+  `createdAt`: `AtKeys.retireKey` is how a rotation records the transition and
+  `AtKeysAssurance` already enforces at most one active `publicEncapsulation`
+  material per enrollment and algorithm, so the file answers the question and
+  guessing from age would be a second opinion about it. `dead` material is not
+  adopted at all — retirement is as close to deletion as a keyfile gets, and
+  dead is the end of that road. `keyPackageMaterial` keeps its signature and is
+  now the first entry of that list.
 - feat: a key entry can say it is `retired` — retained, but not offered for new
   operations. `PackageKey` gains a `status` of `active` or `retired`
   (`KeyEntryStatus`), and `bestKeyFor` on both a key package and an nskey

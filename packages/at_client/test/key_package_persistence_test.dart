@@ -192,5 +192,105 @@ void main() {
         legacyKpid,
         reason: 'a package tagged for a different enrollment is never '
             'adopted; the untagged pre-id-era package is the fallback');
+
+    expect(
+        keyPackageMaterials(keys, enrollmentId: 'pq-enrollment-1')
+            .map((m) => m.keyId),
+        [pqKpid],
+        reason: 'the tagged and untagged sets do not merge — taking both '
+            'would let a co-tenant\'s package into this principal\'s '
+            'holding, which is the whole thing the scoping exists to stop');
+    expect(keyPackageMaterials(keys).map((m) => m.keyId), [legacyKpid]);
+  });
+
+  /// Files both halves of [pair] under its kpid, for `enroll-1`.
+  String fileKeyPackage(
+      AtKeys keys, ({Uint8List publicKey, Uint8List secretKey}) pair,
+      {required DateTime createdAt,
+      KeyPartStatus status = KeyPartStatus.active}) {
+    final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
+    for (final (part, bytes) in [
+      (CryptographicKeyType.publicEncapsulation, pair.publicKey),
+      (CryptographicKeyType.privateDecapsulation, pair.secretKey),
+    ]) {
+      keys.addKey(AtKeysMaterial(
+          keyId: kpid,
+          enrollmentId: 'enroll-1',
+          keyPartType: part,
+          keyAlgorithmType: KeyAlgorithmType.xWing,
+          bytes: AtBytes(bytes),
+          createdAt: createdAt,
+          status: status));
+    }
+    return kpid;
+  }
+
+  test('a keyfile carrying a superseded package keeps it, as retired',
+      () async {
+    // What a rotation leaves behind: the enrollment advertises the newer key
+    // and the older one is still filed, marked retired by AtKeys.retireKey.
+    // Dropping it on restart would strand every envelope a peer addressed
+    // before the rotation — up to envelopeTtl, seven days, of traffic this
+    // client could no longer even look for.
+    final keys = AtKeys();
+    final oldKpid = fileKeyPackage(
+        keys, await XWingPureDartAlgo.instance.generateKeyPair(),
+        createdAt: DateTime.now().toUtc().subtract(const Duration(days: 3)),
+        status: KeyPartStatus.retired);
+    final newKpid = fileKeyPackage(
+        keys, await XWingPureDartAlgo.instance.generateKeyPair(),
+        createdAt: DateTime.now().toUtc());
+
+    expect(
+        keyPackageMaterials(keys, enrollmentId: 'enroll-1').map((m) => m.keyId),
+        [newKpid, oldKpid],
+        reason: 'active first, then retired — the keyfile records the status '
+            'itself, and AtKeysAssurance already enforces at most one active '
+            'publicEncapsulation material per enrollment and algorithm');
+
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, keys);
+    final registrant = TestRegistrant(buildMockClient())
+      ..directory = FakeEnrollmentDirectory();
+    bindKeyPackageToAtKeys(registrant,
+        keysIo: io, atSign: atSign, enrollmentId: 'enroll-1');
+    final pkg = await registrant.register();
+
+    expect(registrant.kpid, newKpid,
+        reason: 'the address is the active key, which is the one the '
+            'enrollment record advertises');
+    expect(registrant.heldKpids, {newKpid, oldKpid});
+    expect(pkg.keys.singleWhere((k) => k.kid == oldKpid).status,
+        KeyEntryStatus.retired);
+    expect(pkg.keys.singleWhere((k) => k.kid == newKpid).status,
+        KeyEntryStatus.active);
+  });
+
+  test('a dead key package is not adopted at all', () async {
+    // Retirement is as close to deletion as a keyfile gets — status only moves
+    // forward and dead is the end of that road — so a dead key is not
+    // something to keep answering on, or to tell peers about.
+    final keys = AtKeys();
+    fileKeyPackage(keys, await XWingPureDartAlgo.instance.generateKeyPair(),
+        createdAt: DateTime.now().toUtc().subtract(const Duration(days: 9)),
+        status: KeyPartStatus.dead);
+    final liveKpid = fileKeyPackage(
+        keys, await XWingPureDartAlgo.instance.generateKeyPair(),
+        createdAt: DateTime.now().toUtc());
+
+    expect(
+        keyPackageMaterials(keys, enrollmentId: 'enroll-1').map((m) => m.keyId),
+        [liveKpid]);
+
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, keys);
+    final registrant = TestRegistrant(buildMockClient())
+      ..directory = FakeEnrollmentDirectory();
+    bindKeyPackageToAtKeys(registrant,
+        keysIo: io, atSign: atSign, enrollmentId: 'enroll-1');
+    final pkg = await registrant.register();
+
+    expect(registrant.heldKpids, {liveKpid});
+    expect(pkg.keys.map((k) => k.kid), [liveKpid]);
   });
 }

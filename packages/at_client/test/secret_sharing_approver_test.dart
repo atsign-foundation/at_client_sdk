@@ -117,7 +117,7 @@ void main() {
     final sharer = TestSharer(buildMockClient(enrollmentId))
       ..directory = directory;
     sharer.loadApkamKeys =
-        () async => PersistedApkamKeys(encSeed: base64Encode(seed));
+        () async => PersistedApkamKeys.single(encSeed: base64Encode(seed));
     return sharer;
   }
 

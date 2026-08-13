@@ -28,6 +28,13 @@ class TestRegistrant
       null;
 
   TestRegistrant(this.atClient);
+
+  /// encKeyFor is @protected — a composing mixin's business rather than an
+  /// app's. Reaching it through a member of the class is what a composing
+  /// mixin does, so this test double does the same thing PairwiseSecretSharing
+  /// does.
+  ({Uint8List secretKey, String keyAlgo})? heldKeyFor(String kid) =>
+      encKeyFor(kid);
 }
 
 void main() {
@@ -54,7 +61,7 @@ void main() {
       ..directory = directory;
     if (seed != null) {
       registrant.loadApkamKeys =
-          () async => PersistedApkamKeys(encSeed: base64Encode(seed));
+          () async => PersistedApkamKeys.single(encSeed: base64Encode(seed));
     }
     return registrant;
   }
@@ -101,7 +108,7 @@ void main() {
       expect(saved, isNotNull);
       // the persisted seed deterministically re-derives the registered key
       final rederived = await XWingPureDartAlgo.instance
-          .generateKeyPair(base64Decode(saved!.encSeed));
+          .generateKeyPair(base64Decode(saved!.encKeys.single.encSeed));
       expect(base64Encode(rederived.publicKey),
           keyPackage.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub);
     });
@@ -168,15 +175,15 @@ void main() {
       registrant.saveApkamKeys = (keys) async => saved = keys;
       final pkg = await registrant.register();
 
-      expect(saved!.keyAlgo, SecretSharingAlgos.mlKem1024,
+      expect(saved!.encKeys.single.keyAlgo, SecretSharingAlgos.mlKem1024,
           reason: 'the algorithm travels with the seed: 32 and 64 bytes are '
               'both valid seeds for some backend, so the bytes alone do not '
               'say which');
-      expect(base64Decode(saved!.encSeed),
+      expect(base64Decode(saved!.encKeys.single.encSeed),
           hasLength(MlKem1024PureDartAlgo.seedLength));
 
       final rederived = await MlKem1024PureDartAlgo.instance
-          .keyPairFromSeed(base64Decode(saved!.encSeed));
+          .keyPairFromSeed(base64Decode(saved!.encKeys.single.encSeed));
       expect(base64Encode(rederived.publicKey),
           pkg.bestKeyFor(SecretSharingAlgos.keyAlgos)!.pub);
     });
@@ -187,7 +194,7 @@ void main() {
       // enrollment record that is never rewritten. Re-minting under a newly
       // configured KEM would move this client to an address nobody writes to.
       final registrant = registrantFor(SecretSharingAlgos.mlKem1024);
-      registrant.loadApkamKeys = () async => PersistedApkamKeys(
+      registrant.loadApkamKeys = () async => PersistedApkamKeys.single(
           encSeed: base64Encode(seedA), keyAlgo: SecretSharingAlgos.xWing);
 
       final pkg = await registrant.register();
@@ -202,6 +209,122 @@ void main() {
         () async {
       await expectLater(registrantFor('kyber-1024-v9').register(),
           throwsA(isA<StateError>()));
+    });
+  });
+
+  group('holding more than one enc key', () {
+    // ML-KEM seeds are the 64-byte d||z, not X-Wing's 32.
+    final Uint8List mlSeed =
+        Uint8List.fromList(List<int>.generate(64, (i) => 200 - i));
+    late Uint8List mlPublicKey;
+
+    setUpAll(() async {
+      mlPublicKey = (await MlKem1024PureDartAlgo.instance
+              .keyPairFromSeed(mlSeed))
+          .publicKey;
+    });
+
+    /// A client restarting after a rotation: it advertises the ML-KEM key and
+    /// retains the X-Wing one it used to be reached at.
+    ///
+    /// The retired key is the X-Wing one deliberately, because X-Wing is FIRST
+    /// in SecretSharingAlgos.keyAlgos — so preference order alone would pick
+    /// it and only status can send the active key to the ML-KEM entry.
+    TestRegistrant rotated() {
+      final registrant = TestRegistrant(buildMockClient('enroll-a'))
+        ..directory = FakeEnrollmentDirectory();
+      registrant.loadApkamKeys = () async => PersistedApkamKeys(encKeys: [
+            PersistedEncKey(
+                encSeed: base64Encode(seedA),
+                keyAlgo: SecretSharingAlgos.xWing,
+                status: KeyEntryStatus.retired),
+            PersistedEncKey(
+                encSeed: base64Encode(mlSeed),
+                keyAlgo: SecretSharingAlgos.mlKem1024),
+          ]);
+      return registrant;
+    }
+
+    test('both keys are expanded, and the active one is the address', () async {
+      final registrant = rotated();
+      final pkg = await registrant.register();
+
+      expect(registrant.encKeyAlgo, SecretSharingAlgos.mlKem1024);
+      expect(registrant.encPublicKey, mlPublicKey);
+      expect(registrant.kpid, PackageKey.computeKid(base64Encode(mlPublicKey)));
+      expect(registrant.kpid,
+          isNot(PackageKey.computeKid(base64Encode(publicKeyA))),
+          reason: 'the retired X-Wing key is what preference order would have '
+              'reached first');
+      expect(pkg.kpid, registrant.kpid,
+          reason: 'the holder and its advertised package must agree about the '
+              'address, or the client listens where nobody writes');
+    });
+
+    test('the package advertises the retired key too, saying so', () async {
+      final pkg = await rotated().register();
+
+      expect(pkg.keys, hasLength(2));
+      final retired = pkg.keys.singleWhere((k) => k.alg == SecretSharingAlgos.xWing);
+      expect(retired.status, KeyEntryStatus.retired);
+      expect(retired.pub, base64Encode(publicKeyA));
+      expect(
+          pkg.keys
+              .singleWhere((k) => k.alg == SecretSharingAlgos.mlKem1024)
+              .status,
+          KeyEntryStatus.active);
+      expect(pkg.suites, contains(SecretSharingAlgos.mlKem1024Rfc9180));
+    });
+
+    test('a retired key is still held, and still opens what named it',
+        () async {
+      final registrant = rotated();
+      await registrant.register();
+
+      final retiredKid = PackageKey.computeKid(base64Encode(publicKeyA));
+      expect(registrant.heldKpids, {registrant.kpid, retiredKid},
+          reason: 'both addresses are swept, or an envelope in flight to the '
+              'old one is never even looked for');
+
+      final held = registrant.heldKeyFor(retiredKid);
+      expect(held, isNotNull);
+      expect(held!.keyAlgo, SecretSharingAlgos.xWing);
+      final rederived =
+          await XWingPureDartAlgo.instance.keyPairFromSeed(seedA);
+      expect(held.secretKey, rederived.secretKey);
+
+      expect(registrant.heldKeyFor('not-a-kid-this-client-holds'), isNull);
+    });
+
+    test('a holding with nothing active refuses rather than picking one',
+        () async {
+      final registrant = TestRegistrant(buildMockClient('enroll-a'))
+        ..directory = FakeEnrollmentDirectory();
+      registrant.loadApkamKeys = () async => PersistedApkamKeys(encKeys: [
+            PersistedEncKey(
+                encSeed: base64Encode(seedA),
+                status: KeyEntryStatus.retired),
+          ]);
+
+      await expectLater(
+          registrant.register(),
+          throwsA(isA<StateError>().having(
+              (e) => '$e', 'message', contains('every one of them is retired'))),
+          reason: 'a retired key is retained to open what is in flight to it, '
+              'not to be reached at — advertising one as the address would '
+              'point every peer at a key this client has withdrawn');
+    });
+
+    test('an empty holding refuses rather than minting behind the app\'s back',
+        () async {
+      final registrant = TestRegistrant(buildMockClient('enroll-a'))
+        ..directory = FakeEnrollmentDirectory();
+      registrant.loadApkamKeys = () async => PersistedApkamKeys(encKeys: []);
+
+      await expectLater(registrant.register(), throwsA(isA<StateError>()),
+          reason: 'null means "nothing to restore, mint one"; an empty list '
+              'says "these are the keys" and names none, and minting anyway '
+              'answers at an address the enrollment never advertised');
     });
   });
 

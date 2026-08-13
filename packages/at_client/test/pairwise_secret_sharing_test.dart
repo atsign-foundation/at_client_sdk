@@ -195,7 +195,7 @@ void main() {
           // Future.delayed. The suppression it enables is asserted directly.
           ..requestAnswerJitter = Duration.zero;
     sharer.loadApkamKeys =
-        () async => PersistedApkamKeys(encSeed: base64Encode(seed));
+        () async => PersistedApkamKeys.single(encSeed: base64Encode(seed));
     return sharer;
   }
 
@@ -365,7 +365,7 @@ void main() {
         final sharer = TestSharer(client)
           ..directory = directory
           ..requestAnswerJitter = Duration.zero;
-        sharer.loadApkamKeys = () async => PersistedApkamKeys(
+        sharer.loadApkamKeys = () async => PersistedApkamKeys.single(
             encSeed: base64Encode(seed),
             keyAlgo: SecretSharingAlgos.mlKem1024);
         return sharer;
