@@ -2535,6 +2535,21 @@ its own. None blocks anything.
    minted before that commit derives different kpids than it did**, so recycle
    it before trusting their key packages. A fresh `runLocal.sh` run is
    unaffected — it recycles the container anyway.
+6. **`_keyPackageHalves` can adopt a co-tenant's key package.**
+   `enrollment_symmetric_key.dart`'s `_keyPackageHalves` selects the private
+   half with `firstOrNull` over an unsorted list, scoping by neither enrollment
+   id nor recency — where `keyPackageMaterials` does both, deliberately, and
+   documents why. On a **retrofitted** keyfile, which carries the legacy
+   enrollment's package alongside the new one, it can pick the wrong principal's
+   key and then poll for envelopes at an address nobody is writing to until it
+   times out, failing the enrollment. Real, unfixed, and pre-existing: it is
+   about *scoping*, not about the plural holding
+   [14.18](#1418-the-remaining-d1-initial-development-sequence) step 5 landed,
+   which is why that step deliberately left this site singular
+   ([`decisions.md` 68.5](decisions.md#685-the-receiver-becomes-multi-kpid)).
+   The fix is to route it through `keyPackageMaterials`, which already answers
+   this question correctly, rather than to add a second selection rule.
+
 5. **One bad peer aborts a whole secret broadcast.**
    `PairwiseSecretSharing.requestSecretsFromNamespace` awaits `sendEnvelope`
    per member with no guard, so `sendEnvelope`'s own documented `StateError`
