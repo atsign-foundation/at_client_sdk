@@ -30,19 +30,31 @@ import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo, SigningAlgoType;
 ///   {"kid": "…", "use": "sign", "alg": "mldsa65", "pub": "…"}
 /// ]}
 /// ```
+///
+/// [keys] is published in the order given; a signer that holds several lists
+/// them strongest first, which costs a reader nothing — [apskSigningKeys]'
+/// consumers select by algorithm — but makes the record read the way the
+/// signer chooses.
+///
+/// `status` is emitted **only for a retired key**. Absent already reads as
+/// active ([KeyEntryStatus.fromWire]), so an advertisement that has never
+/// rotated is byte-for-byte what a build predating the field would have
+/// written, and the field appears exactly when it has something to say.
 Map<String, dynamic> apskAdvertisement({
-  required String apkamPublicKey,
-  required SigningAlgoType signingAlgo,
+  required List<ApskSigningKey> keys,
 }) =>
     {
       'v': 1,
       'keys': [
-        {
-          'kid': publicKeyKidOfBase64(apkamPublicKey),
-          'use': 'sign',
-          'alg': signingAlgo.name,
-          'pub': apkamPublicKey,
-        }
+        for (final key in keys)
+          {
+            'kid': key.kid,
+            'use': 'sign',
+            'alg': key.alg.name,
+            'pub': key.pub,
+            if (key.status != KeyEntryStatus.active)
+              'status': key.status.name,
+          }
       ],
     };
 
@@ -66,6 +78,21 @@ class ApskSigningKey {
     required this.pub,
     this.status = KeyEntryStatus.active,
   });
+
+  /// A key to advertise, with its [kid] derived from [pub].
+  ///
+  /// The kid is never a caller's to supply on the write side: it is a
+  /// function of the key material, and two spellings of it verify nothing —
+  /// a sender addresses a kid nobody is listening on, and both sides compile.
+  /// [publicKeyKidOfBase64] is the one derivation, and this is how a writer
+  /// reaches it.
+  factory ApskSigningKey.forPublicKey({
+    required SigningAlgoType alg,
+    required String pub,
+    KeyEntryStatus status = KeyEntryStatus.active,
+  }) =>
+      ApskSigningKey(
+          kid: publicKeyKidOfBase64(pub), alg: alg, pub: pub, status: status);
 }
 
 /// The signing keys an [apskAdvertisement] advertises, in published order.

@@ -138,9 +138,14 @@ class EnrollmentSubmitter {
         metadata?['keyPackage'] == null) {
       return (apsk: null, apskLegacy: apkamPublicKey);
     }
+    // One key: at request time the enrollment has just been minted and holds
+    // nothing but this APKAM keypair. A second algorithm's key is added by a
+    // later `enroll:update`, once something has minted one — which is why the
+    // record is an array from its first byte rather than growing into one.
     return (
-      apsk: apskAdvertisement(
-          apkamPublicKey: apkamPublicKey, signingAlgo: signingAlgo),
+      apsk: apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(alg: signingAlgo, pub: apkamPublicKey)
+      ]),
       apskLegacy: null
     );
   }

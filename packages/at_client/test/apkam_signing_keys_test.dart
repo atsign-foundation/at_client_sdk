@@ -7,6 +7,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show recordResolvedSigningAlgo;
+import 'package:at_commons/at_commons.dart'
+    show AtKey, AtKeyNotFoundException, AtValue;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_utils.dart';
 import 'package:mocktail/mocktail.dart';
@@ -52,6 +54,10 @@ void main() {
     await io.write(atSign, keys);
     return io;
   }
+
+  setUpAll(() {
+    registerFallbackValue(AtKey());
+  });
 
   setUp(() {
     atChops = AtChopsImpl(
@@ -158,6 +164,99 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(InMemoryAtKeysIo());
 
       expect((await signer.signingKeys).single.publicKey, pkamPublicKey());
+    });
+  });
+
+  group('publicSigningKeyValue', () {
+    test('one rsa2048 key publishes bare, exactly as it always has', () async {
+      // The one form everything deployed can read. Every _apsk consumer that
+      // predates the array base64-decodes the value as an RSA key, so
+      // publishing JSON where a bare key would do breaks them.
+      final value = await signer.publicSigningKeyValue;
+
+      expect(value, pkamPublicKey());
+      expect(value.startsWith('{'), isFalse);
+    });
+
+    test('a single non-rsa2048 key publishes the array', () async {
+      // A bare value says "rsa2048" by convention, so it cannot describe this
+      // key at all — nothing could read it.
+      recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
+
+      final advertised = jsonDecode(await signer.publicSigningKeyValue);
+      expect(advertised['v'], 1);
+      expect((advertised['keys'] as List).single['alg'], 'mldsa65');
+      expect((advertised['keys'] as List).single['pub'], pkamPublicKey());
+    });
+
+    test('several keys publish the array, strongest first', () async {
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: KeyAlgorithmType.rsa2048,
+            publicKey: b64('rsa-pub'),
+            privateKey: b64('rsa-priv'))
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: KeyAlgorithmType.mlDsa65,
+            publicKey: b64('mldsa-pub'),
+            privateKey: b64('mldsa-priv'))));
+
+      final advertised = jsonDecode(await signer.publicSigningKeyValue);
+      final entries = (advertised['keys'] as List).cast<Map>();
+
+      expect(entries.map((e) => e['alg']).toList(), ['mldsa65', 'rsa2048']);
+      expect(entries.map((e) => e['pub']).toList(),
+          [b64('mldsa-pub'), b64('rsa-pub')]);
+    });
+  });
+
+  group('publishPublicSigningKey', () {
+    /// Records what was put, so a test can tell "wrote nothing" from "wrote
+    /// the same value again".
+    List<String> stubPutAndGet(String? alreadyPublished) {
+      final written = <String>[];
+      when(() => atClient.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+        if (alreadyPublished == null) {
+          throw AtKeyNotFoundException('not there');
+        }
+        return Future.value(AtValue()..value = alreadyPublished);
+      });
+      when(() => atClient.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions'))).thenAnswer((i) {
+        written.add(i.positionalArguments[1] as String);
+        return Future.value(true);
+      });
+      return written;
+    }
+
+    test('publishes when nothing is there', () async {
+      final written = stubPutAndGet(null);
+
+      await signer.publishPublicSigningKey();
+
+      expect(written, [pkamPublicKey()]);
+    });
+
+    test('writes nothing when the published value already matches', () async {
+      final written = stubPutAndGet(pkamPublicKey());
+
+      await signer.publishPublicSigningKey();
+
+      expect(written, isEmpty);
+    });
+
+    test('republishes when the published value is not what it holds', () async {
+      // The defect this replaces: it read the record, logged "have already
+      // published" and returned, so a key that had rotated never reached the
+      // atServer and every envelope signed with the new one was verified
+      // against the old.
+      final written = stubPutAndGet('a-different-key-published-earlier');
+
+      await signer.publishPublicSigningKey();
+
+      expect(written, [pkamPublicKey()]);
     });
   });
 }

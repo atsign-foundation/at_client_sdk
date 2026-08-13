@@ -7763,6 +7763,9 @@ Three costs follow, and all three are present in the tree:
 2. **It is written once, ever.** `publishPublicSigningKey`
    (`apkam_signing.dart:29`) reads the record first and logs "have already
    published" if it exists. A rotated key would never reach the atServer.
+   *Fixed 2026-08-13 by [14.18](implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+   step 13: it compares what is published against what the client holds and
+   republishes on a difference, still writing nothing when the two agree.*
 3. **Key reuse across protocols.** An authentication signature proves liveness
    on a connection; an envelope signature is a durable attestation. One key
    serving both is a cross-protocol surface with no reason to exist.

@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart' show apskAdvertisement;
+import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
@@ -47,8 +47,10 @@ void main() {
     });
 
     test('an array value names the algorithm of the key it advertises', () {
-      final array = jsonEncode(apskAdvertisement(
-          apkamPublicKey: 'AAEC', signingAlgo: SigningAlgoType.mldsa65));
+      final array = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+      ]));
 
       final parsed = parseApskValue(array);
       expect(parsed.signingAlgo, SigningAlgoType.mldsa65);
@@ -116,8 +118,10 @@ void main() {
     });
 
     test('the array form is unmistakable to a bare-RSA consumer', () {
-      final array = jsonEncode(apskAdvertisement(
-          apkamPublicKey: 'AAEC', signingAlgo: SigningAlgoType.mldsa65));
+      final array = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+      ]));
 
       // What an old parser does with the value: treat it as base64 RSA key
       // material. It must throw, never quietly produce a key.
@@ -162,9 +166,10 @@ void main() {
 
     /// The `_apsk` an ML-DSA enrollment publishes: what its client composed,
     /// written verbatim by the atServer at approval.
-    String mlDsaApsk() => jsonEncode(apskAdvertisement(
-        apkamPublicKey: base64Encode(mlDsaPair.publicKey),
-        signingAlgo: SigningAlgoType.mldsa65));
+    String mlDsaApsk() => jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: base64Encode(mlDsaPair.publicKey))
+      ]));
 
     test('a bare RSA _apsk verifies an RSA envelope — today\'s traffic',
         () async {
@@ -180,9 +185,10 @@ void main() {
     });
 
     test('an array RSA _apsk refuses an envelope claiming ML-DSA-65', () async {
-      final apsk = jsonEncode(apskAdvertisement(
-          apkamPublicKey: rsaPair.atPublicKey.publicKey,
-          signingAlgo: SigningAlgoType.rsa2048));
+      final apsk = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.rsa2048, pub: rsaPair.atPublicKey.publicKey)
+      ]));
       final envelope = claimingAlg(rsaEnvelope(), 'ML-DSA-65');
 
       await expectLater(() => verifyEnvelope(envelope, signerPublicKey: apsk),

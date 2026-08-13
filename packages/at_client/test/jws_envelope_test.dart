@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart' show apskAdvertisement;
+import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
@@ -45,9 +45,10 @@ void main() {
       publicKey: base64Encode(mlDsaPair.publicKey),
       privateKey: base64Encode(mlDsaPair.secretKey));
 
-  String mlDsaApsk() => jsonEncode(apskAdvertisement(
-      apkamPublicKey: base64Encode(mlDsaPair.publicKey),
-      signingAlgo: SigningAlgoType.mldsa65));
+  String mlDsaApsk() => jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: base64Encode(mlDsaPair.publicKey))
+      ]));
 
   SignedEnvelope rsaEnvelope({String? enrollmentId = 'enroll-1'}) =>
       signEnvelope(payload, keys: rsaKeys(), enrollmentId: enrollmentId);
@@ -148,12 +149,14 @@ void main() {
     String bothApsk() => jsonEncode({
           'v': 1,
           'keys': [
-            ...(apskAdvertisement(
-                apkamPublicKey: rsaPair.atPublicKey.publicKey,
-                signingAlgo: SigningAlgoType.rsa2048)['keys'] as List),
-            ...(apskAdvertisement(
-                apkamPublicKey: base64Encode(mlDsaPair.publicKey),
-                signingAlgo: SigningAlgoType.mldsa65)['keys'] as List),
+            ...(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.rsa2048, pub: rsaPair.atPublicKey.publicKey)
+      ])['keys'] as List),
+            ...(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: base64Encode(mlDsaPair.publicKey))
+      ])['keys'] as List),
           ],
         });
 

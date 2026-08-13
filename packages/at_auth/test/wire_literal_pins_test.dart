@@ -211,8 +211,10 @@ void main() {
     test('the composed advertisement, as a raw literal', () {
       // The key is valid base64 because the kid's preimage is the DECODED
       // material now; a placeholder that is not base64 no longer has a kid.
-      final json = jsonEncode(apskAdvertisement(
-          apkamPublicKey: 'AAEC', signingAlgo: SigningAlgoType.rsa2048));
+      final json = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.rsa2048, pub: 'AAEC')
+      ]));
 
       expect(
           json,
@@ -238,9 +240,10 @@ void main() {
     });
 
     test('mldsa65 spells its algorithm the same as the pkam verb', () {
-      final entry = (apskAdvertisement(
-              apkamPublicKey: 'AAEC',
-              signingAlgo: SigningAlgoType.mldsa65)['keys'] as List)
+      final entry = (apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+      ])['keys'] as List)
           .single as Map;
 
       expect(entry['alg'], 'mldsa65');
@@ -248,8 +251,10 @@ void main() {
     });
 
     test('what is composed is what is read back', () {
-      final advertisement = apskAdvertisement(
-          apkamPublicKey: 'AAEC', signingAlgo: SigningAlgoType.mldsa65);
+      final advertisement = apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+      ]);
 
       final read = apskSigningKeys(advertisement).single;
       expect(read.alg, SigningAlgoType.mldsa65);
@@ -259,8 +264,10 @@ void main() {
 
     test('a composed entry says nothing about status, and reads as active',
         () {
-      final advertisement = apskAdvertisement(
-          apkamPublicKey: 'AAEC', signingAlgo: SigningAlgoType.mldsa65);
+      final advertisement = apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+      ]);
       final entry = (advertisement['keys'] as List).single as Map;
 
       expect(entry.containsKey('status'), isFalse,
@@ -269,6 +276,50 @@ void main() {
               'to state what their silence states');
       expect(apskSigningKeys(advertisement).single.status,
           KeyEntryStatus.active);
+    });
+
+    test('several keys are several entries, in the order given', () {
+      // The shape a signer publishes once it holds more than one algorithm:
+      // one entry per key, listed strongest first, each with its own kid.
+      // Nothing composed one until the composer took a list.
+      final entries = (apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: 'AAEC'),
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.rsa2048, pub: 'CCEC'),
+      ])['keys'] as List)
+          .cast<Map>();
+
+      expect(entries, hasLength(2));
+      expect(entries.map((e) => e['alg']).toList(), ['mldsa65', 'rsa2048']);
+      expect(entries.map((e) => e['pub']).toList(), ['AAEC', 'CCEC']);
+      expect(entries[0]['kid'], publicKeyKidOfBase64('AAEC'));
+      expect(entries[1]['kid'], publicKeyKidOfBase64('CCEC'),
+          reason: 'each entry carries its OWN kid — one derivation reused for '
+              'every entry would address the wrong key');
+      expect(entries[0]['kid'], isNot(entries[1]['kid']));
+    });
+
+    test('only a retired key carries a status, and it round-trips', () {
+      final advertisement = apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: 'AAEC'),
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.rsa2048,
+            pub: 'CCEC',
+            status: KeyEntryStatus.retired),
+      ]);
+      final entries = (advertisement['keys'] as List).cast<Map>();
+
+      expect(entries[0].containsKey('status'), isFalse);
+      expect(entries[1]['status'], 'retired',
+          reason: 'the field appears exactly when it has something to say, so '
+              'an advertisement that has never rotated is byte-identical to '
+              'what a build predating the field would have written');
+
+      final read = apskSigningKeys(advertisement);
+      expect(read.map((k) => k.status).toList(),
+          [KeyEntryStatus.active, KeyEntryStatus.retired]);
+      expect(read.map((k) => k.pub).toList(), ['AAEC', 'CCEC'],
+          reason: 'a retired key is read back, not dropped: it is what '
+              'verifies the envelopes it already signed');
     });
 
     test('a retired entry is KEPT, because it is what verifies old envelopes',

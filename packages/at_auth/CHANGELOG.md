@@ -1,4 +1,15 @@
 ## 3.4.0
+- feat!: `apskAdvertisement` composes an array from a list of keys rather than
+  one key from `(apkamPublicKey, signingAlgo)`. The record has been an array
+  since it shipped, but nothing could put a second entry in it, which is what
+  signature agility needs — an enrollment adds a second algorithm's key beside
+  the first rather than replacing it, because envelopes are stored durably and
+  a key that stops signing must still verify what it already signed. `status`
+  is emitted only for a retired key, so an advertisement that has never
+  rotated is byte-identical to what the single-key composer wrote.
+  `ApskSigningKey.forPublicKey` is how a writer builds an entry: the `kid` is
+  a function of the key material and is never a caller's to supply, because
+  two spellings of it verify nothing and both compile.
 - feat: add `AtKeys.signingKeysFor(enrollmentId)` — every active signing
   keypair an enrollment holds, one per algorithm, strongest first. A
   multi-signature writer needs one keypair per algorithm, and nothing

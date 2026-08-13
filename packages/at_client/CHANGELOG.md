@@ -1,4 +1,17 @@
 ## 3.14.1
+- fix: `publishPublicSigningKey` republishes when what is published is not
+  what the client holds. It read the record and logged "have already
+  published", so a rotated signing key never reached the atServer and every
+  envelope signed with the new one was verified against the old. It still
+  writes nothing when the two already agree.
+- feat: `publicSigningKeyValue` is what that publishes — the bare public key
+  when the client holds exactly one `rsa2048` signing key, and the `_apsk`
+  array otherwise. The bare form is kept for the one case everything deployed
+  can read, since every consumer predating the array base64-decodes the value
+  as an RSA key; anything else cannot be expressed by a bare value at all,
+  which names one key and says `rsa2048` by convention. This is the same rule
+  the enrollment path uses to choose between `apsk` and `apskLegacy`, and the
+  two must agree because they describe one record.
 - feat: `ApkamSigning.signingKeys` is a `Future<List<ApkamSigningKeys>>`
   sourced from the keyfile — one entry per algorithm the enrollment holds a
   signing key for, strongest first. It read the APKAM *authentication* keypair

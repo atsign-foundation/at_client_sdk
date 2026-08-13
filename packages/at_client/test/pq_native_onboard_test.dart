@@ -47,8 +47,10 @@ void main() {
     // publishes verbatim — a bare value is classified as an RSA key by the
     // verifier, so the array is what proves the ML-DSA path end to end.
     await verifyEnvelope(envelope,
-        signerPublicKey: jsonEncode(apskAdvertisement(
-            apkamPublicKey: public, signingAlgo: SigningAlgoType.mldsa65)));
+        signerPublicKey: jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: public)
+      ])));
 
     expect(envelope.signerEnrollmentId, isNull,
         reason: 'an onboard has no enrollment id to stamp: this signs before '

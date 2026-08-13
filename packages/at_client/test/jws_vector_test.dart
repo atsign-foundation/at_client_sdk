@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show apskAdvertisement;
+import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
@@ -63,9 +63,10 @@ void main() {
   test('the ML-DSA-65 vector verifies, and tampering is refused', () async {
     final arm = vectors['mlDsa65'] as Map<String, dynamic>;
     final envelope = SignedEnvelope.fromJson(arm['envelope'] as Map);
-    final apsk = jsonEncode(apskAdvertisement(
-        apkamPublicKey: arm['publicKey'] as String,
-        signingAlgo: SigningAlgoType.mldsa65));
+    final apsk = jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: SigningAlgoType.mldsa65, pub: arm['publicKey'] as String)
+      ]));
 
     await verifyEnvelope(envelope, signerPublicKey: apsk);
     expect(envelope.payload, vectors['payload']);
