@@ -2589,8 +2589,12 @@ its own. None blocks anything.
    self-encryption to the typed section changes the at-rest format, and the
    passphrase envelope may be the answer instead.
 
-9. **The one-live-enrollment invariant does not hold when the enrollment id is
-   absent.** `AtKeysAssurance.validateKeyMaterials`
+9. ~~**The one-live-enrollment invariant does not hold when the enrollment id
+   is absent.**~~ **FIXED 2026-08-13.** "Have I seen one" is now tracked apart
+   from which one it was, and the diagnostic says `no enrollment id` rather
+   than naming null. Four rows in `assurance_test.dart`, and reverting the
+   guard turns exactly the two null-id ones red while the both-named one stays
+   green. Original finding: `AtKeysAssurance.validateKeyMaterials`
    (`assurance.dart:134-161`) uses one variable, `activeAuthEnrollment`, as
    both the id it has seen and the flag for *whether* it has seen one — so the
    guard is `if (activeAuthEnrollment != null)`. `enrollmentId` is parsed with

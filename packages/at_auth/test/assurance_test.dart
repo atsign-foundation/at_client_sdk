@@ -330,6 +330,72 @@ void main() {
         throwsA(isA<AtKeysParseException>()),
       );
     });
+
+    group('one live enrollment per keyfile', () {
+      AtKeysMaterial authMaterial(String keyId, {String? enrollmentId}) =>
+          AtKeysMaterial(
+            keyId: keyId,
+            enrollmentId: enrollmentId,
+            keyPartType: CryptographicKeyType.privateAuthentication,
+            keyAlgorithmType: KeyAlgorithmType.rsa2048,
+            bytes: AtBytes.fromString('dmFsdWU='),
+            createdAt: _createdAt,
+          );
+
+      test(
+          'two active authentication keys are refused when both name an '
+          'enrollment', () {
+        expect(
+          () => assurance.validateKeyMaterials([
+            authMaterial('apkam:e1:1', enrollmentId: 'e1'),
+            authMaterial('apkam:e2:1', enrollmentId: 'e2'),
+          ]),
+          throwsA(isA<AtKeysEnrollmentException>()),
+        );
+      });
+
+      test(
+          'two active authentication keys are refused when NEITHER names one',
+          () {
+        // The other arm of the same rule. enrollmentId is optional in the
+        // document, so null is a legitimate value the check must survive —
+        // reading it as "none seen yet" let the second key through, and this
+        // document-wide rule is what makes AtKeys.activeEnrollmentId's answer
+        // unique.
+        expect(
+          () => assurance.validateKeyMaterials([
+            authMaterial('apkam:anon:1'),
+            authMaterial('apkam:anon:2'),
+          ]),
+          throwsA(isA<AtKeysEnrollmentException>()),
+        );
+      });
+
+      test('the refusal says "no enrollment id" rather than naming null', () {
+        expect(
+          () => assurance.validateKeyMaterials([
+            authMaterial('apkam:anon:1'),
+            authMaterial('apkam:e2:1', enrollmentId: 'e2'),
+          ]),
+          throwsA(
+            isA<AtKeysEnrollmentException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('no enrollment id'), contains('"e2"')),
+            ),
+          ),
+        );
+      });
+
+      test('one active authentication key with no enrollment id is fine', () {
+        // Guards against over-correction: a single anonymous authentication
+        // key is a legacy shape, not a corrupt keyfile.
+        expect(
+          () => assurance.validateKeyMaterials([authMaterial('apkam:anon:1')]),
+          returnsNormally,
+        );
+      });
+    });
   });
 }
 

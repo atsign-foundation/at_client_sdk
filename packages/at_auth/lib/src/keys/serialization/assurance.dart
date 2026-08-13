@@ -133,18 +133,26 @@ class AtKeysAssurance {
   /// keyfile whatever algorithm it names.
   void validateKeyMaterials(List<AtKeysMaterial> materials) {
     final typesByEnrollment = <String, Set<String>>{};
+    // Whether one has been seen is tracked apart from which one it was:
+    // `enrollmentId` is nullable and optional in the document, so a null is a
+    // legitimate value rather than "none yet". Folding the two together let a
+    // first authentication key with no enrollment id leave the check armed
+    // with null, and the second one through.
+    var activeAuthSeen = false;
     String? activeAuthEnrollment;
     for (final material in materials) {
       if (material.status != KeyPartStatus.active) {
         continue;
       }
       if (material.keyPartType == CryptographicKeyType.privateAuthentication) {
-        if (activeAuthEnrollment != null) {
+        if (activeAuthSeen) {
           throw AtKeysEnrollmentException(
               'AtKeys holds an active authentication key for both '
-              '"$activeAuthEnrollment" and "${material.enrollmentId}"; only '
-              'one enrollment may be live in a keyfile');
+              '${_enrollmentLabel(activeAuthEnrollment)} and '
+              '${_enrollmentLabel(material.enrollmentId)}; only one '
+              'enrollment may be live in a keyfile');
         }
+        activeAuthSeen = true;
         activeAuthEnrollment = material.enrollmentId;
       }
       final enrollmentId = material.enrollmentId;
@@ -161,6 +169,11 @@ class AtKeysAssurance {
       }
     }
   }
+
+  /// Names an enrollment in a diagnostic, distinguishing "no enrollment id"
+  /// from an enrollment literally called `null`.
+  String _enrollmentLabel(String? enrollmentId) =>
+      enrollmentId == null ? 'no enrollment id' : '"$enrollmentId"';
 
   /// All of `AtKeys.addKey`'s validation in one place. Rejects, in order:
   /// a duplicate `(keyId, keyPartType)`, an enrollmentId that disagrees with

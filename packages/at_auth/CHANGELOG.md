@@ -1,4 +1,13 @@
 ## 3.4.0
+- fix: two active authentication keys carrying no enrollment id are refused,
+  as two carrying one already were. `validateKeyMaterials` used a single
+  variable as both the enrollment id it had seen and the flag for *whether* it
+  had seen one, and `enrollmentId` is optional in the keyfile document — so a
+  first key with none left the check armed with null and the second passed.
+  That is the document-wide rule `AtKeys.activeEnrollmentId` relies on for its
+  answer to be unique, which is the whole argument for deriving it rather than
+  storing a pointer. A single key with no enrollment id is still fine: it is a
+  legacy shape, not a corrupt keyfile.
 - feat: add `AtKeys.authenticationFor(enrollmentId)` and
   `authenticationAlgorithmFor(enrollmentId)` — the one place either half of an
   APKAM keypair is resolved. Typed material wins wherever the keyfile holds it
