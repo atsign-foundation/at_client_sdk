@@ -1,4 +1,13 @@
 ## 3.14.1
+- fix: one unreachable peer no longer ends a whole namespace broadcast.
+  `requestSecretsFromNamespace` and `pushSecretToNamespaceMembers` awaited each
+  member's send with no guard, so a member advertising no mutually supported
+  sealing suite raised a `StateError` that stopped the loop and left every
+  remaining member unasked — undercutting the N-holders design the substrate
+  exists for. Each send is now guarded on its own and a failure logs a warning
+  naming the enrollment and its kpid. This is a *different* case from the peer
+  whose algorithm is unknown, which has a null kpid and was already filtered
+  before the send.
 - fix: a new enrollment collecting its conveyed `apkamSymmetricKey` uses its
   own key package. The selection took the first `privateDecapsulation` material
   in the keyfile, scoped by neither enrollment nor recency, so on a retrofitted

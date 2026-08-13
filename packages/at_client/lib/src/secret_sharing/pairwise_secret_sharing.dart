@@ -618,12 +618,27 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     for (final member in members) {
       final to = member.keyPackage;
       if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
-        await sendEnvelope(to, namespace, {
-          'kind': secretRequestKind,
-          if (names != null) 'want': names,
-          if (namePrefix != null) 'namePrefix': namePrefix,
-        });
-        sent++;
+        // Per member, because one peer this client cannot seal to says
+        // nothing about the rest: sendEnvelope throws StateError when a
+        // member advertises no mutually supported algorithm, and letting it
+        // out of the loop leaves every member after it unasked. The design is
+        // N holders precisely so that some can be unreachable — aborting the
+        // broadcast on the first one undoes that.
+        try {
+          await sendEnvelope(to, namespace, {
+            'kind': secretRequestKind,
+            if (names != null) 'want': names,
+            if (namePrefix != null) 'namePrefix': namePrefix,
+          });
+          sent++;
+        } catch (e) {
+          // Warning, not finer: a request that never went out is
+          // indistinguishable from one nobody answered, so at a lower level
+          // this presents as the holders ignoring us.
+          logger.warning('Could not request secrets from enrollment '
+              '${member.enrollmentId} (kpid ${to.kpid}) in $namespace: $e. '
+              'The remaining members are still being asked.');
+        }
       }
     }
     return sent;
@@ -954,8 +969,18 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     for (final member in members) {
       final to = member.keyPackage;
       if (to != null && to.kpid != null && !_isSelf(member, selfId)) {
-        await shareSecretWith(to, secret);
-        pushed++;
+        // Per member, for the same reason as requestSecretsFromNamespace: one
+        // peer this client cannot seal to must not stop the broadcast reaching
+        // the others.
+        try {
+          await shareSecretWith(to, secret);
+          pushed++;
+        } catch (e) {
+          logger.warning('Could not push "${secret.name}" to enrollment '
+              '${member.enrollmentId} (kpid ${to.kpid}) in '
+              '${secret.namespace}: $e. The remaining members are still '
+              'being pushed to.');
+        }
       }
     }
     return pushed;

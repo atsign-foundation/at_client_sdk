@@ -913,6 +913,47 @@ void main() {
     });
   });
 
+  group('a member whose SUITES do not overlap is skipped, not fatal', () {
+    // The group above is the peer whose *algorithm* this client does not
+    // know: its kpid is null and the loop's own guard skips it. This one is
+    // the case that guard cannot see — a peer advertising a key this client
+    // understands, so kpid resolves, while advertising only suites it cannot
+    // produce. sendEnvelope refuses that peer with a StateError, and an
+    // unguarded await let one such member end the whole broadcast.
+    setUp(() {
+      directory.authorize('myapp', 'enroll-a');
+      directory.authorize('myapp', 'enroll-b');
+      final futureSuites = KeyPackage(
+        enrollmentId: 'enroll-future-suites',
+        createdAt: DateTime.utc(2026, 6, 11),
+        keys: sharerB.myKeyPackage.keys,
+        suites: const ['x-wing-hpke-v99'],
+      );
+      // The discriminator: unlike enroll-future, this peer HAS a usable kpid,
+      // so it reaches sendEnvelope rather than being filtered before it.
+      expect(futureSuites.kpid, isNotNull);
+      directory.seed('enroll-future-suites', futureSuites);
+      directory.authorize('myapp', 'enroll-future-suites');
+    });
+
+    test('requestSecretsFromNamespace still reaches the rest', () async {
+      final sent = await sharerA.requestSecretsFromNamespace('myapp');
+      expect(sent, 1,
+          reason: 'enroll-b must still be asked; the design is N holders '
+              'precisely so some can be unreachable');
+    });
+
+    test('pushSecretToNamespaceMembers still reaches the rest', () async {
+      await sharerA.secretStore
+          .putSecret(Secret(namespace: 'myapp', name: 'token', value: 'v'));
+      final pushed = await sharerA.pushSecretToNamespaceMembers(
+          sharerA.secretStore.getSecret('myapp', 'token')!);
+      expect(pushed, 1);
+      expect(await sharerB.sweepOnce(), 1,
+          reason: 'the reachable member got a real, openable envelope');
+    });
+  });
+
   group('a broadcast identifies itself by enrollment, not by kpid', () {
     // The roster serves enroll-a a package whose kpid is NOT the one this
     // instance holds. That is not hypothetical: an instance whose enrollment

@@ -2565,7 +2565,23 @@ its own. None blocks anything.
    The fix is to route it through `keyPackageMaterials`, which already answers
    this question correctly, rather than to add a second selection rule.
 
-5. **One bad peer aborts a whole secret broadcast.**
+5. ~~**One bad peer aborts a whole secret broadcast.**~~ **FIXED 2026-08-13.**
+   ⚠️ **The blast radius was two methods, not one:**
+   `pushSecretToNamespaceMembers` has the identical unguarded loop and was
+   fixed with it. `shareAllSecretsWith` was deliberately left alone — it loops
+   *secrets* for one recipient, so a throw there means that recipient is
+   unreachable rather than the broadcast dying early. **Left unruled:**
+   `shareAllSecretsWithEnrollment` loops one enrollment's several packages and
+   aborts on the first failure; that is the same shape for addresses rather
+   than principals, and wants a decision rather than a copied guard.
+   ⚠️ **The reachable case is not the one the entry below names.**
+   `sendEnvelope` throws twice: once when the peer advertises no key with a
+   supported *algorithm*, and once when there is no mutually supported
+   *suite*. The loop's own `to.kpid != null` guard already filtered the first
+   — that is what the existing "no mutually-supported key is skipped" group
+   covers — so only the second could ever abort a broadcast, and a peer
+   reaching it has a perfectly good kpid. Both new rows go red when the guards
+   rethrow. Original finding:
    `PairwiseSecretSharing.requestSecretsFromNamespace` awaits `sendEnvelope`
    per member with no guard, so `sendEnvelope`'s own documented `StateError`
    (one member advertising no mutually supported construction) stops the loop
