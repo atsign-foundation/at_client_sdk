@@ -1,6 +1,52 @@
 import 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 
+/// Where a build stands in the rollout that separates an enrollment's
+/// **signing** keys from the APKAM key that **authenticates** its connections.
+///
+/// A position, not a mechanism. Three writer behaviours move together — mint
+/// signing keys of one's own, publish `_apsk` as an array, emit an envelope
+/// with one signature per key — and a build doing any one without the others
+/// emits something the rest of the fleet cannot handle. They are inseparable
+/// by construction rather than by agreement: the array form and the second
+/// signature are both *consequences* of the enrollment holding a second key,
+/// so naming the stage names all three.
+enum SigningRollout {
+  /// One key does both jobs, as every released build does. The APKAM
+  /// authentication key signs, and `_apsk` advertises it — as the bare public
+  /// key string where that key is RSA, which is the form every deployed reader
+  /// parses.
+  now,
+
+  /// Readers everywhere understand the array form and a multi-signature
+  /// envelope; writers have not moved.
+  ///
+  /// **Deliberately identical to [now] in what this client writes** — a reader
+  /// that understands more shapes is safe in any fleet, so the reader half
+  /// needs no gate at all. What this value carries is the *fleet's* position:
+  /// it says the upgrade has reached the peers, which is the precondition for
+  /// anyone moving to [rollout2]. A client cannot observe that for itself,
+  /// which is why it is a value an operator sets rather than a state the SDK
+  /// derives.
+  rollout1,
+
+  /// The split is on: this enrollment mints and advertises signing keys of its
+  /// own, and the APKAM authentication key is retained in `_apsk` as `retired`
+  /// so that everything it signed still verifies.
+  rollout2;
+
+  /// What [AtClientPreference.inUseSigningAlgorithms] defaults to at this
+  /// stage. The set is the thing a client obeys; this is where its default
+  /// comes from, so a stage and a behaviour cannot drift apart.
+  Set<SigningAlgoType> get defaultInUseSigningAlgorithms => switch (this) {
+        // An enrollment that holds a signing key of its own holds two keys —
+        // that one and the retained authentication key — and two cannot be
+        // advertised as the bare string every deployed reader parses.
+        SigningRollout.now || SigningRollout.rollout1 => const {},
+        SigningRollout.rollout2 => const {SigningAlgoType.mldsa65},
+      };
+}
+
 /// The post-quantum rollout's five flags, set as a group.
 ///
 /// From the rollout's point of view, at_client 4.0 is the *same code* as
@@ -27,8 +73,8 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 ///   exactly as the request's own documentation describes.
 /// - **What a self-retrofit mints** — [retrofitSigningAlgo], the default for
 ///   `selfRetrofit`'s `signingAlgo` parameter. An explicit argument wins.
-/// - **Which signing keys an enrollment holds** —
-///   [inUseSigningAlgorithms], the default for
+/// - **Where the auth/signing split stands** — [signingRollout], whose
+///   [SigningRollout.defaultInUseSigningAlgorithms] is the default for
 ///   [AtClientPreference.inUseSigningAlgorithms]. An explicit constructor
 ///   argument wins.
 ///
@@ -58,10 +104,19 @@ class ReleasePosture {
   /// The signing algorithm `selfRetrofit` mints when the caller names none.
   final SigningAlgoType retrofitSigningAlgo;
 
+  /// Where this posture stands in the auth/signing split.
+  final SigningRollout signingRollout;
+
   /// The signing algorithms an enrollment keeps an active signing key for
-  /// under this posture. See [AtClientPreference.inUseSigningAlgorithms] for
-  /// what naming one means and what an empty set leaves in place.
-  final Set<SigningAlgoType> inUseSigningAlgorithms;
+  /// under this posture — **derived** from [signingRollout], never stored
+  /// beside it.
+  ///
+  /// Two fields would be two controls over one behaviour, and the day they
+  /// disagreed one of them would be a lie with no way to tell which. See
+  /// [AtClientPreference.inUseSigningAlgorithms] for what naming an algorithm
+  /// means and what an empty set leaves in place.
+  Set<SigningAlgoType> get inUseSigningAlgorithms =>
+      signingRollout.defaultInUseSigningAlgorithms;
 
   /// The 3.x defaults — the migration under way.
   ///
@@ -70,17 +125,21 @@ class ReleasePosture {
   /// the fleet can read. The envelope is not an axis here — there is one
   /// shape, emitted under every posture.
   ///
-  /// [inUseSigningAlgorithms] is empty for the same reason. An enrollment that
-  /// holds a signing key of its own holds *two* keys — that one and the APKAM
-  /// authentication key, which stays published for as long as the envelopes it
-  /// signed must verify — and two keys cannot be advertised as the bare public
-  /// key string that everything deployed can read.
+  /// [signingRollout] is [SigningRollout.now] for the same reason, so
+  /// [inUseSigningAlgorithms] is empty. An enrollment that holds a signing key
+  /// of its own holds *two* keys — that one and the APKAM authentication key,
+  /// which stays published for as long as the envelopes it signed must verify
+  /// — and two keys cannot be advertised as the bare public key string that
+  /// everything deployed can read. A deployment whose peers have all upgraded
+  /// their readers states that by setting [SigningRollout.rollout1] beside
+  /// this posture; it changes nothing this client writes, and is the
+  /// precondition for anyone moving to [SigningRollout.rollout2].
   const ReleasePosture.migration()
       : writesPqByDefault = false,
         disallowLegacyEncryption = false,
         keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
         retrofitSigningAlgo = SigningAlgoType.rsa2048,
-        inUseSigningAlgorithms = const {};
+        signingRollout = SigningRollout.now;
 
   /// The 4.0 defaults — post-quantum by default.
   ///
@@ -122,5 +181,5 @@ class ReleasePosture {
         disallowLegacyEncryption = true,
         keyExchangeMode = EnrollmentKeyExchangeMode.pq,
         retrofitSigningAlgo = SigningAlgoType.mldsa65,
-        inUseSigningAlgorithms = const {SigningAlgoType.mldsa65};
+        signingRollout = SigningRollout.rollout2;
 }

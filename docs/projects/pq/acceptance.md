@@ -1349,6 +1349,12 @@ on failure.
   (anything but `mldsa65` and `rsa2048`) is refused where it is named, at
   construction — not skipped at signing time, which would leave an app that
   asked for a post-quantum signature holding a classical one.
+- **And:** the set is derived from a named rollout position,
+  `SigningRollout.now` / `.rollout1` / `.rollout2`, which the posture carries
+  and a preference can override. `rollout1` writes exactly what `now` writes —
+  the reader half needs no gate — and states the fleet's position instead. It
+  is reachable only through the preference, there being two postures and no
+  general constructor.
 
 Covered by `packages/at_client/test/release_posture_test.dart`.
 

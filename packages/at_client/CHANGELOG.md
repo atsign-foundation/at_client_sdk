@@ -1,4 +1,13 @@
 ## 3.14.1
+- feat: `SigningRollout` — where a build stands in the rollout that separates
+  an enrollment's signing keys from its APKAM authentication key: `now`,
+  `rollout1`, `rollout2`. It rides `ReleasePosture.signingRollout` and is
+  overridable per `AtClientPreference`, and `inUseSigningAlgorithms` derives
+  its default from it. The posture derives that set rather than storing both,
+  because two stored fields are two controls over one behaviour; where an app
+  names both, the set is what the client obeys. `rollout1` writes exactly what
+  `now` writes — the reader half of this rollout needs no gate — and carries
+  the fleet's position instead, which no client can observe for itself.
 - feat: a client mints, advertises and files a signing key of its own for every
   algorithm `AtClientPreference.inUseSigningAlgorithms` names and its
   enrollment does not hold — a ninth PQ startup step, `mintInUseSigningKeys`,

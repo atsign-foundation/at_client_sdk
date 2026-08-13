@@ -126,5 +126,14 @@ void main() {
     provenIn('packages/at_client/test/release_posture_test.dart',
         'refuses an algorithm this build cannot sign an envelope under',
         proves: 'the refusal is at construction, where the algorithm is named');
+    // And the named rollout position the set derives from.
+    provenIn('packages/at_client/test/release_posture_test.dart',
+        'each stage names the set a client at that stage signs with',
+        proves: 'the three positions, pinned as literals — rollout1 writes '
+            'what now writes');
+    provenIn('packages/at_client/test/release_posture_test.dart',
+        'rollout1 is reachable — a client can state the fleet has upgraded',
+        proves: 'the value no posture can produce is still reachable, so it '
+            'is not a position nothing can be in');
   });
 }

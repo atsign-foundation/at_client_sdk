@@ -2196,6 +2196,23 @@ so they do not get independent flags.
 Rollout 1 is the reader half only, and is not gated — a reader that understands
 more shapes is always safe.
 
-The axis's name is not yet chosen. It should read as a rollout position rather
-than as the mechanism it switches, so that a build's stance is legible from the
-posture value alone.
+**The axis is `SigningRollout`,** on `ReleasePosture.signingRollout` and
+overridable per `AtClientPreference`. It names a position — `now`, `rollout1`,
+`rollout2` — rather than the mechanism it switches.
+
+It turned out the three behaviours are inseparable *by construction*, which is
+stronger than the paragraph above asked for. Only the first is a decision: the
+array form and the second signature are both consequences of the enrollment
+holding a second key (`apskValueOf` emits the bare string only for a single
+active `rsa2048` entry, and `wrapAndSign` signs with every key the keyfile
+holds). So the stage does not switch three flags — it names the position, and
+supplies the default for the one piece of state all three read,
+`AtClientPreference.inUseSigningAlgorithms`. The posture derives that set from
+the stage rather than storing both, because two stored fields are two controls
+over one behaviour.
+
+`rollout1` writes exactly what `now` writes, deliberately. What it carries is
+the *fleet's* position — the peers' readers have upgraded — which no client can
+observe for itself and which is the precondition for anyone moving to
+`rollout2`. It is reachable only through `AtClientPreference`, since there are
+two postures and no general constructor.

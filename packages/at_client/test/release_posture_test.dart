@@ -19,6 +19,7 @@ void main() {
       expect(p.disallowLegacyEncryption, false);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
       expect(p.retrofitSigningAlgo, SigningAlgoType.rsa2048);
+      expect(p.signingRollout, SigningRollout.now);
       expect(p.inUseSigningAlgorithms, isEmpty,
           reason: 'an enrollment holding a signing key of its own holds two '
               'keys, and two keys cannot be advertised as the bare public key '
@@ -31,6 +32,7 @@ void main() {
       expect(p.disallowLegacyEncryption, true);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(p.retrofitSigningAlgo, SigningAlgoType.mldsa65);
+      expect(p.signingRollout, SigningRollout.rollout2);
       expect(p.inUseSigningAlgorithms, {SigningAlgoType.mldsa65},
           reason: 'ML-DSA alone: a verifier takes the strongest algorithm the '
               'envelope and the advertisement share, so a second, weaker key '
@@ -67,6 +69,64 @@ void main() {
           AtClientPreference(disallowLegacyEncryption: true)
               .disallowLegacyEncryption,
           true);
+    });
+  });
+
+  group('the signing rollout stage', () {
+    test('each stage names the set a client at that stage signs with', () {
+      // Raw literals: these three are the rollout's contract, and a pin that
+      // read them back through the enum would follow an accidental edit.
+      expect(SigningRollout.now.defaultInUseSigningAlgorithms, isEmpty);
+      expect(SigningRollout.rollout1.defaultInUseSigningAlgorithms, isEmpty,
+          reason: 'rollout 1 is the reader half, which needs no gate — a '
+              'reader that understands more shapes is safe in any fleet, so '
+              'this stage deliberately writes exactly what "now" writes');
+      expect(SigningRollout.rollout2.defaultInUseSigningAlgorithms,
+          {SigningAlgoType.mldsa65});
+    });
+
+    test('the posture derives its set from the stage, never storing both', () {
+      // Two stored fields would be two controls over one behaviour, and the
+      // day they disagreed one would be a lie with no way to tell which.
+      for (final posture in [
+        const ReleasePosture.migration(),
+        const ReleasePosture.postQuantum()
+      ]) {
+        expect(posture.inUseSigningAlgorithms,
+            posture.signingRollout.defaultInUseSigningAlgorithms);
+      }
+    });
+
+    test('rollout1 is reachable — a client can state the fleet has upgraded',
+        () {
+      // It cannot come from a posture: there are two postures and no general
+      // constructor, so without the preference argument this value would name
+      // a rollout position nothing could ever be in.
+      final preference =
+          AtClientPreference(signingRollout: SigningRollout.rollout1);
+
+      expect(preference.signingRollout, SigningRollout.rollout1);
+      expect(preference.inUseSigningAlgorithms, isEmpty,
+          reason: 'and it changes nothing this client writes');
+    });
+
+    test('an explicit stage beats the posture, and an explicit set beats both',
+        () {
+      expect(
+          AtClientPreference(
+                  posture: const ReleasePosture.migration(),
+                  signingRollout: SigningRollout.rollout2)
+              .inUseSigningAlgorithms,
+          {SigningAlgoType.mldsa65},
+          reason: 'the stage supplies the set when the app names no set');
+      expect(
+          AtClientPreference(
+                  signingRollout: SigningRollout.rollout2,
+                  inUseSigningAlgorithms: const {SigningAlgoType.rsa2048})
+              .inUseSigningAlgorithms,
+          {SigningAlgoType.rsa2048},
+          reason: 'the set is what the client obeys — naming both is naming a '
+              'mixture on purpose');
     });
   });
 

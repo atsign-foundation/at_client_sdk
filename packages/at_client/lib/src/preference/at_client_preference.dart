@@ -85,14 +85,32 @@ class AtClientPreference {
   /// in is the strongest-first order the keyfile is read in, never this one.
   final Set<SigningAlgoType> inUseSigningAlgorithms;
 
+  /// Where this client stands in the rollout that separates an enrollment's
+  /// signing keys from its APKAM authentication key — a **position**, and the
+  /// source of [inUseSigningAlgorithms]' default.
+  ///
+  /// [SigningRollout.rollout1] is the value a deployment sets here rather than
+  /// on the posture: it says the fleet's readers have upgraded, which no client
+  /// can observe for itself, and it changes nothing this client writes.
+  ///
+  /// **When both this and [inUseSigningAlgorithms] are given explicitly, the
+  /// set is what the client obeys.** Only the stage's default reaches
+  /// behaviour, so naming both is naming a mixture on purpose — the same
+  /// contract every other axis has, where an explicitly set flag beats the
+  /// group it came from.
+  final SigningRollout signingRollout;
+
   AtClientPreference(
       {this.posture = const ReleasePosture.migration(),
       bool? disallowLegacyEncryption,
+      SigningRollout? signingRollout,
       Set<SigningAlgoType>? inUseSigningAlgorithms})
       : disallowLegacyEncryption =
             disallowLegacyEncryption ?? posture.disallowLegacyEncryption,
-        inUseSigningAlgorithms = _signableOrRefuse(
-            inUseSigningAlgorithms ?? posture.inUseSigningAlgorithms);
+        signingRollout = signingRollout ?? posture.signingRollout,
+        inUseSigningAlgorithms = _signableOrRefuse(inUseSigningAlgorithms ??
+            (signingRollout ?? posture.signingRollout)
+                .defaultInUseSigningAlgorithms);
 
   /// [algorithms] unmodifiable, or an [ArgumentError] naming the first member
   /// this build produces no envelope signature for.
