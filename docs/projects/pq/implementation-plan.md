@@ -2658,6 +2658,37 @@ its own. None blocks anything.
    mechanism 2026-08-13; it wants a differential test whose two arms are a null
    id and a present one.
 
+10. **⚠️ UNEXPLAINED: one functional run lost 26 tests to missing PKAM keys,
+    and the mechanism was never found.** 2026-08-13, over
+    [14.18](#1418-the-remaining-d1-initial-development-sequence) step 12
+    against `at_virtual_env:local`: run 1 was `+115 -26`, every failure
+    `@alice🛠` → `privatekey:at_pkam_publickey does not exist in keystore`,
+    across sync/notify/put files that the change under test does not touch.
+    Run 2, same tree, same runner: **146/146** with zero such errors.
+
+    **What was measured, so it is not re-measured.** `pkam.sh` is
+    `sleep 25; install_PKAM_Keys`, and the install itself takes **0.17s** for
+    all 40 atSigns with no retry. `@alice🛠` is installed *before*
+    `@sitaram🛠` (`.490007` vs `.490549`), so waiting on sitaram is if
+    anything the later signal — the "it watches the wrong atSign" theory is
+    **wrong**. Both runs' setup phases were byte-identical (26s, sitaram
+    found). `install_PKAM_Keys` covers alice; the four atSigns it reports no
+    success for are `@srie`, `@sachin` (the CRAM-onboardable pair, by design)
+    and `@cloudvm2`, `@device2`. Nothing in `/apps/logs/pkam.log` logs a
+    failure — a skip and a success are indistinguishable there except by
+    absence.
+
+    **What was done anyway,** because it is a real weakness independent of
+    this run: `runLocal.sh` now polls pkamLoad's own log until every atSign
+    the suite authenticates as has its key, and refuses to start otherwise.
+    The previous gate proved one atSign had one record, and `public:publickey`
+    is not the record authentication needs. **This is not known to prevent the
+    failure above** — it makes the next occurrence present as a named setup
+    refusal instead of 26 red tests pointing away from the cause.
+
+    Treat a recurrence as a live question, not a known flake: **one red run in
+    three** is a rate, and nobody has bounded it.
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.

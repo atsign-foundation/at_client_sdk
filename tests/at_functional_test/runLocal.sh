@@ -49,6 +49,51 @@ echo "*** Checking docker readiness" && dart run test/check_docker_readiness.dar
 
 echo "*** Executing pkamLoad" && docker exec test-virtualenv-1 supervisorctl start pkamLoad
 
+# Wait for pkamLoad to have actually installed the PKAM public keys.
+#
+# `supervisorctl start` returns as soon as the program is running, and the
+# program sleeps 25 seconds before installing anything — so on its own it
+# guarantees nothing. check_test_env below is not this wait either: it proves
+# that ONE atSign (@sitaram🛠) has ONE record.
+#
+# When the suite starts before the keys are in, every authentication fails with
+# "privatekey:at_pkam_publickey does not exist in keystore" and it presents as
+# dozens of failures in whichever unrelated tests happened to run — sync,
+# notify, put — rather than as a setup problem. That misattribution is the
+# expensive part: the failing tests are not the broken thing.
+#
+# @srie and @sachin are deliberately NOT in this list. They are the
+# CRAM-onboardable atSigns, and their onboarding tests require them to have no
+# PKAM key yet, so pkamLoad leaves them out by design.
+echo "*** Waiting for pkamLoad to install PKAM keys"
+for attempt in $(seq 1 60); do
+  # One exec per poll, listing whatever is still missing. A failed exec yields
+  # a non-empty result on purpose, so a container that went away keeps us
+  # waiting and then fails loudly rather than reading as "nothing missing".
+  if ! missing=$(docker exec test-virtualenv-1 sh -c '
+      for a in "@alice🛠" "@bob🛠" "@sitaram🛠" "@eve🛠" "@denise"; do
+        grep -q "cramAndPkamAuth successful for $a" /apps/logs/pkam.log \
+          2>/dev/null || printf "%s " "$a"
+      done'); then
+    missing="(could not read /apps/logs/pkam.log)"
+  fi
+
+  if [[ -z "${missing// /}" ]]; then
+    echo "*** PKAM keys installed"
+    break
+  fi
+
+  if [[ "$attempt" -eq 60 ]]; then
+    echo "!!! pkamLoad has not installed PKAM keys for: $missing"
+    echo "!!! Refusing to run the suite: every test authenticating as one of"
+    echo "!!! those would fail with 'at_pkam_publickey does not exist in"
+    echo "!!! keystore', in tests that have nothing to do with the cause."
+    docker exec test-virtualenv-1 tail -20 /apps/logs/pkam.log || true
+    exit 1
+  fi
+  sleep 2
+done
+
 echo "*** Checking test environment" && dart run test/check_test_env.dart
 
 echo "*** Clearing client test storage" && rm -rf test/hive && rm -f test/testData/@srie.atKeys
