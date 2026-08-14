@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
@@ -253,8 +254,22 @@ void main() {
       // listener on atSign_2 cannot survive the getAtClient(atSign_1) switch:
       // AtClientManager is a singleton and setCurrentAtSign stops the previous
       // current AtClient, tearing down its monitor. Subscribing after the
-      // notify lets the receiver's catch-up replay the stored notification
-      // through the provider's decrypt path (decrypt() -> 'twin').
+      // notify relies on the receiver's catch-up to replay the stored
+      // notification through the provider's decrypt path (decrypt() -> 'twin').
+      //
+      // Quirk: getLastNotificationTime() returns null on its FIRST call for a
+      // given keystore, and a monitor started with null asks the atServer for
+      // no replay at all — so the notification above is never seen. Burn that
+      // first call here. Without it this test only passes when some other test
+      // file happened to start atSign_2's monitor first, which is what made it
+      // flake.
+      final receiverNotifications =
+          (await getAtClient(atSign_2, testProviderId: providerId))
+              .notificationService as NotificationServiceImpl;
+      await receiverNotifications.getLastNotificationTime();
+      expect(await receiverNotifications.getLastNotificationTime(), isNotNull,
+          reason: 'without this the monitor below asks for no replay');
+
       AtClient ac1 = await getAtClient(atSign_1, testProviderId: providerId);
       final atKey = sharedKey(keyName);
       atKey.metadata.appMetadata = AppMetadata(providerId: providerId);
