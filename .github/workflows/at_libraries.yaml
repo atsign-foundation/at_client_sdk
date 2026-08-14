@@ -150,11 +150,11 @@ jobs:
           dart test --concurrency=1 --tags ffi
           dart test --concurrency=1 test/at_pqc_test.dart
 
-  # The source-level neutrality gates: no platform conditionals, and no throwing
-  # platform fallbacks, in any package that is supposed to be free of platform
-  # implementations. Also runs the dependency-tree walk's own unit tests, which
-  # every wasm_ratchet job below depends on being correct.
-  wasm_neutrality:
+  # The dependency-tree walk's own unit tests, which every wasm_ratchet job below
+  # depends on being correct. A green ratchet means nothing if the walk that
+  # produced it is broken, so this runs as its own job rather than inside the
+  # matrix.
+  wasm_shakedown_tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

@@ -1,8 +1,8 @@
 # wasm_shakedown
 
 Dev-only tooling that keeps the platform-neutral packages neutral. Not published;
-a workspace member used by tests and by CI's `wasm_neutrality` and `wasm_ratchet`
-jobs in `.github/workflows/at_libraries.yaml`.
+a workspace member used by tests and by CI's `wasm_shakedown_tests` and
+`wasm_ratchet` jobs in `.github/workflows/at_libraries.yaml`.
 
 ## Why this exists
 
@@ -24,13 +24,11 @@ No Dart web compiler gates `dart:io`. A build step therefore cannot police
 neutrality, and that is the whole reason this package is a graph walk rather than
 a compile.
 
-## The three gates
+## The gate
 
-| Gate                  | Lives in                                 | Catches                                                       |
-| --------------------- | ---------------------------------------- | ------------------------------------------------------------- |
-| Dependency-tree walk  | each package's `test/wasm/dep_tree_test.dart` | a platform library reachable from a barrel                |
-| No platform conditionals | `test/neutrality_test.dart`           | `if (dart.library.…)` in a package that must not know platforms differ |
-| No throwing fallbacks | `test/neutrality_test.dart`              | `throw UnsupportedError` — a capability a platform lacks must be unreachable there, not reachable-and-explosive |
+| Gate                 | Lives in                                      | Catches                                    |
+| -------------------- | --------------------------------------------- | ------------------------------------------ |
+| Dependency-tree walk | each package's `test/wasm/dep_tree_test.dart` | a platform library reachable from a barrel |
 
 The walk crosses package boundaries via `.dart_tool/package_config.json`, so it
 covers siblings and third-party packages, and it resolves configurable URIs the
@@ -61,7 +59,7 @@ barrels get merged.
 ## Running it
 
 ```bash
-cd tools/wasm_shakedown && dart test    # both source gates + the walk's own tests
+cd tools/wasm_shakedown && dart test    # the walk's own tests
 cd packages/at_lookup   && dart test test/wasm/dep_tree_test.dart
 ```
 
@@ -69,7 +67,7 @@ Every suite here reads the filesystem, so all of them are `@TestOn('vm')`. They
 are deliberately invisible to the `dart test -p node -c dart2wasm` platform run,
 which exists to execute the *libraries* under WasmGC.
 
-## What these gates do not prove
+## What this gate does not prove
 
 That the code is correct under WasmGC. A package can be perfectly neutral and
 still mishandle a 64-bit integer, a string encoding, or an async ordering
