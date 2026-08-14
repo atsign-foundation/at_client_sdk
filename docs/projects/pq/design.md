@@ -2047,7 +2047,10 @@ to the legacy block.)
 keyId's materials and files the replacements in one call. Rotation is never two
 caller-sequenced mutations across a flush. It takes the enrollment because
 identity is `(enrollment, keyId)`; `retireAtSignKey` is the atSign-scope
-sibling. (This read `replaceKey(keyId, newMaterial)` until the 2026-08-14
+sibling. `retireSigningKeys(enrollmentId, algorithm)` withdraws an
+enrollment's signing keypair for one algorithm — the caller names the
+algorithm because that is the unit a signing key leaves service in, and the
+`sign:<algo>:<generation>` grammar is `AtKeys`'s own. (This read `replaceKey(keyId, newMaterial)` until the 2026-08-14
 sweep — the signature gained its enrollment in row A1.)
 
 Reading, in order of what a file can contain:
@@ -2249,7 +2252,19 @@ enrollment's `_apsk`; a client with no enrollment publishes the record itself,
 under `primary`.
 
 When an algorithm leaves the in-use set, signing with it stops; the key and its
-`_apsk` entry are retained indefinitely as `retired`.
+`_apsk` entry are retained indefinitely as `retired`. The same start does both
+halves, in one order that matters: publish the post-move advertisement, file
+the new key, then file the withdrawal. The publish is **handed** the keys being
+retired rather than re-reading them, because the keyfile still holds them as
+active at that point and a re-read would drop them from the advertisement
+altogether instead of moving them to `retired`. Filing the withdrawal first
+would leave a moment with no active signing key, where the client falls back to
+signing with its APKAM authentication key — which the advertisement has by then
+stopped naming.
+
+An **empty** in-use set retires nothing. It is the released posture rather than
+"every algorithm has left the set": a client there goes on signing with the key
+it holds and advertising it bare, which is what that posture publishes.
 
 ### 9.7 Rollout gate
 

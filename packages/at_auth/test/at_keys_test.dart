@@ -821,49 +821,51 @@ void main() {
           createdAt: DateTime.utc(2026, 1, 1)));
     });
 
+    // Key material is base64 on the way in and on the way out, so a readable
+    // label has to be encoded to be filed and encoded again to be asserted
+    // against. Declared here rather than inside `signingKeysFor` because the
+    // selection it fixtures is read by that accessor, by
+    // `retiredSigningKeysFor` and by `retireSigningKeys` — three views of one
+    // shape, which are only comparable if they are given the same material.
+    String b64(String label) => base64Encode(utf8.encode(label));
+
+    AtKeysMaterial part(String keyId, String type, String algo, String value,
+            {String? enrollmentId, String status = KeyPartStatus.active}) =>
+        AtKeysMaterial(
+            keyId: keyId,
+            enrollmentId: enrollmentId,
+            keyPartType: type,
+            keyAlgorithmType: algo,
+            bytes: AtBytes.fromString(b64(value)),
+            createdAt: DateTime.utc(2026, 1, 1),
+            status: status);
+
+    /// A complete signing keypair for [enrollmentId], both halves.
+    List<AtKeysMaterial> signingPair(String enrollmentId, String algo,
+            {int generation = 1,
+            String value = 'a',
+            String status = KeyPartStatus.active}) =>
+        [
+          part('sign:$algo:$generation', CryptographicKeyType.privateSigning,
+              algo, '$value-priv',
+              enrollmentId: enrollmentId, status: status),
+          part('sign:$algo:$generation',
+              CryptographicKeyType.publicVerification, algo, '$value-pub',
+              enrollmentId: enrollmentId, status: status),
+        ];
+
+    /// The atSign-wide PQ signing root as `PqSigningRoot` files it: the same
+    /// `privateSigning` role an enrollment's signing key uses, under its own
+    /// keyId, with **no** enrollment id — so it lands in the atSign's own
+    /// container rather than any enrollment's.
+    List<AtKeysMaterial> signingRoot() => [
+          part('root:mldsa65:1', CryptographicKeyType.privateSigning,
+              KeyAlgorithmType.mlDsa65, 'root-priv'),
+          part('root:mldsa65:1', CryptographicKeyType.publicVerification,
+              KeyAlgorithmType.mlDsa65, 'root-pub'),
+        ];
+
     group('signingKeysFor', () {
-      // Key material is base64 on the way in and on the way out, so a
-      // readable label has to be encoded to be filed and encoded again to be
-      // asserted against.
-      String b64(String label) => base64Encode(utf8.encode(label));
-
-      AtKeysMaterial part(String keyId, String type, String algo, String value,
-              {String? enrollmentId,
-              String status = KeyPartStatus.active}) =>
-          AtKeysMaterial(
-              keyId: keyId,
-              enrollmentId: enrollmentId,
-              keyPartType: type,
-              keyAlgorithmType: algo,
-              bytes: AtBytes.fromString(b64(value)),
-              createdAt: DateTime.utc(2026, 1, 1),
-              status: status);
-
-      /// A complete signing keypair for [enrollmentId], both halves.
-      List<AtKeysMaterial> signingPair(String enrollmentId, String algo,
-              {int generation = 1,
-              String value = 'a',
-              String status = KeyPartStatus.active}) =>
-          [
-            part('sign:$algo:$generation',
-                CryptographicKeyType.privateSigning, algo, '$value-priv',
-                enrollmentId: enrollmentId, status: status),
-            part('sign:$algo:$generation',
-                CryptographicKeyType.publicVerification, algo, '$value-pub',
-                enrollmentId: enrollmentId, status: status),
-          ];
-
-      /// The atSign-wide PQ signing root as `PqSigningRoot` files it: the same
-      /// `privateSigning` role an enrollment's signing key uses, under its own
-      /// keyId, with **no** enrollment id — so it lands in the atSign's own
-      /// container rather than any enrollment's.
-      List<AtKeysMaterial> signingRoot() => [
-            part('root:mldsa65:1', CryptographicKeyType.privateSigning,
-                KeyAlgorithmType.mlDsa65, 'root-priv'),
-            part('root:mldsa65:1', CryptographicKeyType.publicVerification,
-                KeyAlgorithmType.mlDsa65, 'root-pub'),
-          ];
-
       test('returns one entry per algorithm, strongest first', () {
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
           // Filed weakest-first, so the order under test is the accessor's
@@ -954,6 +956,125 @@ void main() {
 
         expect(atKeys.signingKeysFor('E1'), isEmpty);
         expect(atKeys.signingKeysFor('E1:sub').single.privateKey, b64('sub-priv'));
+      });
+    });
+
+    /// Withdrawing an enrollment's signing key for one algorithm — what a
+    /// client does when that algorithm leaves its in-use set.
+    ///
+    /// The caller names the algorithm, not the keyId: the generation is this
+    /// class's grammar, and a caller reconstructing `sign:<algo>:<n>` would be
+    /// holding a second copy of it.
+    group('retireSigningKeys', () {
+      test('retires both halves of the named algorithm and returns its keyId',
+          () {
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          ...signingPair('E1', KeyAlgorithmType.rsa2048, value: 'rsa'),
+          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'mldsa'),
+        ]);
+
+        expect(atKeys.retireSigningKeys('E1', KeyAlgorithmType.rsa2048),
+            ['sign:rsa2048:1']);
+
+        expect(atKeys.signingKeysFor('E1').map((k) => k.algorithm).toList(),
+            [SigningAlgoType.mldsa65],
+            reason: 'the withdrawn key stops being one this enrollment signs '
+                'with');
+        expect(atKeys.retiredSigningKeysFor('E1').single.publicKey,
+            b64('rsa-pub'),
+            reason: 'and starts being one it advertises as retired — the same '
+                'key, which is what keeps what it signed verifiable');
+        for (final type in [
+          CryptographicKeyType.privateSigning,
+          CryptographicKeyType.publicVerification
+        ]) {
+          final material = atKeys.getKey('E1', 'sign:rsa2048:1', type);
+          expect(material!.status, KeyPartStatus.retired,
+              reason: 'both halves: a keypair half-retired at rest is one the '
+                  'next reader can read either way');
+          expect(material.bytes.toString(), isNotEmpty,
+              reason: 'retired, not removed');
+        }
+      });
+
+      test('withdraws nothing of another owner', () {
+        // Two things share this algorithm and neither is the key being
+        // withdrawn: the atSign's own signing root, which lives in the other
+        // container, and another enrollment's key of the same keyId, since
+        // identity is (enrollment, keyId).
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          ...signingRoot(),
+          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'own'),
+          ...signingPair('E2', KeyAlgorithmType.mlDsa65, value: 'other'),
+        ]);
+
+        expect(atKeys.retireSigningKeys('E1', KeyAlgorithmType.mlDsa65),
+            ['sign:mldsa65:1']);
+
+        expect(
+            atKeys
+                .getAtSignKey(
+                    'root:mldsa65:1', CryptographicKeyType.privateSigning)!
+                .status,
+            KeyPartStatus.active);
+        expect(atKeys.signingKeysFor('E2').single.privateKey, b64('other-priv'),
+            reason: 'identity is (enrollment, keyId): E2 holds the same keyId '
+                'and is not touched');
+      });
+
+      test('withdraws nothing of this enrollment that merely signs', () {
+        // The SHAPE filter rather than the `privateSigning` role, which an
+        // enrollment can hold material under for more than one reason. It has
+        // to be the enrollment's ONLY material of this algorithm and role —
+        // holding it beside a real signing key is a state `addKey` refuses,
+        // one active per (enrollment, role, algorithm) — so this is what the
+        // hazard actually looks like: an enrollment with no signing key at
+        // all, where a role-based selector would withdraw the other thing and
+        // report that it had retired a signing key.
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          part('root:mldsa65:1', CryptographicKeyType.privateSigning,
+              KeyAlgorithmType.mlDsa65, 'not-a-signing-key',
+              enrollmentId: 'E1'),
+        ]);
+
+        expect(
+            atKeys.retireSigningKeys('E1', KeyAlgorithmType.mlDsa65), isEmpty);
+        expect(
+            atKeys
+                .getKey('E1', 'root:mldsa65:1',
+                    CryptographicKeyType.privateSigning)!
+                .status,
+            KeyPartStatus.active);
+      });
+
+      test('is a no-op when the enrollment holds nothing of that algorithm',
+          () {
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'mldsa'),
+        ]);
+
+        expect(atKeys.retireSigningKeys('E1', KeyAlgorithmType.rsa2048),
+            isEmpty);
+        expect(atKeys.retireSigningKeys('E-unknown', KeyAlgorithmType.mlDsa65),
+            isEmpty,
+            reason: 'an enrollment this file does not hold is not an error '
+                'here: retireKey throws on an unknown keyId, and turning that '
+                'into a throw would make a caller reconciling several '
+                'algorithms fail on the one it had nothing to do for');
+        expect(atKeys.signingKeysFor('E1'), hasLength(1));
+      });
+
+      test('leaves an already-retired key where it is', () {
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          ...signingPair('E1', KeyAlgorithmType.rsa2048,
+              value: 'rsa', status: KeyPartStatus.retired),
+        ]);
+
+        expect(atKeys.retireSigningKeys('E1', KeyAlgorithmType.rsa2048),
+            isEmpty,
+            reason: 'selected on active material, so a start after the '
+                'withdrawal has nothing to do and rewrites nothing');
+        expect(atKeys.retiredSigningKeysFor('E1'), hasLength(1));
       });
     });
 

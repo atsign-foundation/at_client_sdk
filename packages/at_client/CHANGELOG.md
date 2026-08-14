@@ -1,4 +1,22 @@
 ## 3.14.1
+- feat!: a client start now **retires** a signing key whose algorithm has left
+  `AtClientPreference.inUseSigningAlgorithms`, as well as minting the ones it
+  names. `SigningKeyMinting.mintMissing` is renamed `reconcileSigningKeys` and
+  returns what it minted **and** what it retired; the startup gate is still
+  `PqStartupGates.mintInUseSigningKeys`.
+  - Without it a client moving from one stage to the next kept both keys
+    active: every envelope carried a second signature nothing asked for, and
+    `_apsk` advertised both as current where the stage says one is retired.
+  - The retired key stays advertised, as `retired`. It is retained for what it
+    already signed — including, under rollout 1, the enrollment's key package,
+    which a peer verifies before sealing any secret to it.
+  - Order: publish, then file the addition, then file the withdrawal. At every
+    instant in between, every key this client might sign with is one the
+    advertisement names.
+  - An empty in-use set retires nothing. That is the released posture, not
+    "every algorithm has left the set": a client there goes on signing with the
+    key it holds and advertising it bare, and retiring would drop it to signing
+    with its authentication key and turn the advertisement into an array.
 - feat: a `selfRetrofit` at `SigningRollout.rollout1` or beyond mints a fresh
   RSA-2048 **signing** keypair before submitting, so the new enrollment owns
   one from its first byte. `_apsk` advertises that key rather than the APKAM

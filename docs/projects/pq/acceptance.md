@@ -1491,6 +1491,18 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   `status: retired`, and an envelope signed with it before the drop still
   verifies.
 
+  ✅ **Covered 2026-08-14** — `packages/at_client/test/signing_key_minting_test.dart`,
+  group "a stage transition". Eight rows, of which the last is this one: an
+  envelope signed while the in-use set was `{rsa2048}`, verified again after
+  the move to `{mldsa65}` against the `_apsk` value the client published on
+  the way. It runs on the **no-enrollment** arm deliberately, because that is
+  the path where this client composes the `_apsk` *value* — on the enrolled
+  path it hands entries to the atServer, and a test there would have to
+  reconstruct the wire form and would then be pinning the reconstruction.
+  The stage transition itself was covered nowhere before this: the rollout
+  matrix copies a fresh keyfile per cell, so every cell measures a client born
+  at its stage and none moves between two.
+
 - **UC-G1.9a · the client mints what the in-use set names, advertising before
   filing.**
   *Given* an enrollment holding no signing key of its own and a preference

@@ -1,4 +1,16 @@
 ## 3.4.0
+- feat: `AtKeys.retireSigningKeys(enrollmentId, algorithm)` — withdraws every
+  active signing keypair an enrollment holds for one algorithm, returning the
+  keyIds it moved. Both halves move to `retired` and nothing is removed, so
+  the public half goes on being advertised by `retiredSigningKeysFor` and what
+  the key signed still verifies.
+  - The caller names the **algorithm**, not the keyId: a signing key leaves
+    service because its algorithm left a client's in-use set, and the
+    `sign:<algo>:<generation>` grammar is this class's own. A caller
+    reconstructing it would be holding a second copy of that grammar.
+  - Selects the same material `signingKeysFor` returns — the keyId shape, not
+    the `privateSigning` role, which the atSign's own signing root shares and
+    an enrollment can hold material under for more than one reason.
 - feat: `AtOnboardingRequest.advertisedSigningKey` — the activation-time form
   of the field below. An atSign's first enrollment owns a signing key from
   birth, `_apsk` advertises it, and `AtAuthImpl` files it under the id the

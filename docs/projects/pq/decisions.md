@@ -8942,7 +8942,34 @@ where [91.3](#913-the-rulings) ruling 9 says it stops signing and is retained as
 `retired`. Latent under the old stages (rollout 1 held no signing key, so there
 was nothing to retire); **required** under
 [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14),
-which makes that transition a real algorithm retirement. Owed, unbuilt.
+which makes that transition a real algorithm retirement.
+
+✅ **BUILT 2026-08-14** (this paragraph read "Owed, unbuilt" until then).
+`mintMissing` is now `reconcileSigningKeys`, which computes *held − wanted*
+beside *wanted − held* and returns both. New
+`AtKeys.retireSigningKeys(enrollmentId, algorithm)` moves both halves to
+`retired`, selected on the `sign:<algo>:<n>` shape rather than the
+`privateSigning` role. Three things the build settled that this ruling did not
+say:
+
+- **The publish is handed the keys it is about to retire**, rather than
+  re-reading them. The keyfile still holds them as *active* at that point,
+  because the publish comes first, so a re-read returns the record's history
+  and misses this withdrawal — and the key would then vanish from the
+  advertisement rather than move to `retired`, unverifying everything it
+  signed. Measured: reverting that one argument turns the advertisement pin
+  red and makes an envelope signed before the move fail with *"the envelope is
+  signed under `RS256` and the published `_apsk` advertises `mldsa65` — no
+  algorithm in common"*.
+- **The withdrawal is filed after the addition.** Filing it first leaves a
+  moment with no active signing key, where `signingKeys` falls back to the
+  APKAM authentication key — which the advertisement has by then stopped
+  naming, so anything signed in that window would never verify.
+- **An empty in-use set retires nothing**, which is deliberately not read as
+  "every algorithm has left the set". It is the released posture, where a
+  client holding a signing key goes on signing with it and advertising it
+  bare; retiring there would drop it to its authentication key and publish an
+  array, on the one stage that must never see one.
 
 ## 100. The seven shapes ruling 99 left open (2026-08-14)
 

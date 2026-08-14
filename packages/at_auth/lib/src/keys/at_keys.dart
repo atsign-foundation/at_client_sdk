@@ -452,6 +452,49 @@ class AtKeys {
     return retired;
   }
 
+  /// Retires every active signing keypair [enrollmentId] holds for
+  /// [algorithm], returning the keyIds it moved — empty when it holds none,
+  /// which is the ordinary case on a client whose in-use set has not changed.
+  ///
+  /// The caller names an **algorithm** rather than a keyId, because the
+  /// algorithm is the unit a signing key leaves service in: a client's in-use
+  /// set names algorithms, a verifier selects on them, and the generation a
+  /// key happens to sit under is this class's own grammar. A caller that had
+  /// to reconstruct `sign:<algo>:<n>` would be holding a second copy of that
+  /// grammar, and the two would drift.
+  ///
+  /// [algorithm] is a [KeyAlgorithmType] token — the same spelling
+  /// [fileSigningMaterial] files under and [signingKeysFor] reads back.
+  ///
+  /// Retires the keypair rather than removing it, and **both halves**. The
+  /// public half is what [retiredSigningKeysFor] reads back so the enrollment
+  /// can go on advertising it as `retired`, which is what keeps envelopes
+  /// signed before the withdrawal verifiable; the private half stays because
+  /// nothing in this file is ever deleted.
+  ///
+  /// Selects exactly what [signingKeysFor] would have returned for
+  /// [algorithm]: the `sign:<algo>:<n>` shape, not the `privateSigning` role,
+  /// which an enrollment can hold material for under more than one keyId.
+  /// Withdrawing a signing key must not withdraw anything else that happens to
+  /// sign.
+  List<String> retireSigningKeys(String enrollmentId, String algorithm,
+      {String to = KeyPartStatus.retired}) {
+    final Map<String, Map<String, AtKeysMaterial>> byKeyId =
+        _enrollments[enrollmentId]?.materialsByKeyId ?? const {};
+    final keyIds = [
+      for (final entry in byKeyId.entries)
+        if (_isSigningKeyId(entry.key) &&
+            entry.value.values.any((material) =>
+                material.status == KeyPartStatus.active &&
+                material.keyAlgorithmType == algorithm))
+          entry.key
+    ];
+    for (final keyId in keyIds) {
+      retireKey(enrollmentId, keyId, to: to);
+    }
+    return keyIds;
+  }
+
   /// Whether [keyId] names an enrollment's own signing keypair —
   /// `sign:<algo>:<n>` exactly, the shape [fileSigningMaterial] writes and the
   /// same parse [nextSigningGeneration] does.

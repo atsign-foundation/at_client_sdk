@@ -49,10 +49,12 @@ class PqStartupGates {
     this.askOnReadMiss = true,
   });
 
-  /// Active: mints, advertises and files a signing key for every algorithm
-  /// `AtClientPreference.inUseSigningAlgorithms` names and this enrollment
-  /// does not hold. Inert while that set is empty, which is the 3.x default,
-  /// so this gate governs the 4.0 posture and an app that opts in early.
+  /// Active: brings this enrollment's signing keys into line with
+  /// `AtClientPreference.inUseSigningAlgorithms` — minting, advertising and
+  /// filing one for every algorithm the set names and the enrollment does not
+  /// hold, and retiring every one it holds that the set no longer names.
+  /// Inert while that set is empty, which is the 3.x default, so this gate
+  /// governs the 4.0 posture and an app that opts in early.
   final bool mintInUseSigningKeys;
 
   /// Active: broadcasts an ask for the signing-root private.
@@ -100,9 +102,10 @@ class PqStartupGates {
 ///  2. collect conveyed keys  — read-precondition: the only route by which
 ///     key material conveyed by other enrollments reaches the keyfile.
 ///  3. mint in-use signing keys — active: gives this enrollment a signing key
-///     of its own for every algorithm the in-use set names. Before every step
-///     that signs, so that anything published later in this same startup is
-///     signed by the keys the advertisement now names.
+///     of its own for every algorithm the in-use set names, and retires the
+///     ones it no longer names. Before every step that signs, so that anything
+///     published later in this same startup is signed by the keys the
+///     advertisement now names, and by none it has withdrawn.
 ///  4. seed namespace keys    — active, gated by
 ///     `AtClientPreference.seedNamespaceKeys`: mints and publishes this
 ///     atSign's namespace keys and conveys each private.
@@ -312,17 +315,20 @@ class PqClientBootstrap {
   }
 
   /// Mints, advertises and files a signing key for every algorithm the in-use
-  /// set names and this enrollment does not hold.
+  /// set names and this enrollment does not hold, and retires every one it
+  /// holds that the set no longer names.
   ///
   /// Runs before every step that signs — the namespace-key seeding, both link
   /// publications and the sweep all produce signed envelopes — so a key minted
-  /// on this start is already advertised by the time anything signs with it.
-  /// Running it after them would leave one start's envelopes signed by a key
-  /// the advertisement of that moment did not name.
+  /// on this start is already advertised by the time anything signs with it,
+  /// and a key retired on this start signs nothing more. Running it after them
+  /// would leave one start's envelopes signed by a key the advertisement of
+  /// that moment did not name, and one start's worth signed by a key that has
+  /// left service.
   Future<void> _mintInUseSigningKeys() async {
     if (!_gates.mintInUseSigningKeys) return;
     try {
-      await minting.mintMissing();
+      await minting.reconcileSigningKeys();
     } catch (e, st) {
       _logger.warning('Minting this enrollment\'s own signing keys failed for '
           '$_atSign; it keeps signing with the key it already advertises, and '
