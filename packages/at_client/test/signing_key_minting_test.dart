@@ -159,20 +159,19 @@ void main() {
           reason: 'and it is filed by the time the call returns');
     });
 
-    test('the advertisement names the minted key and retains the auth key',
+    test('the advertisement names the minted key and drops the auth key',
         () async {
       await minter().mintMissing();
 
       final advertised = updates.single.signingKeys!;
-      expect(advertised.map((e) => e.alg).toList(),
-          [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048]);
-      expect(advertised.map((e) => e.status).toList(),
-          [KeyEntryStatus.active, KeyEntryStatus.retired]);
-      expect(advertised.last.pub, pkamPublicKey(),
-          reason: 'the APKAM authentication key, retained: it is what '
-              'verifies every envelope this enrollment signed before it had a '
-              'signing key of its own');
-      expect(advertised.first.pub, isNot(pkamPublicKey()));
+      expect(advertised.map((e) => e.alg).toList(), [SigningAlgoType.mldsa65]);
+      expect(advertised.single.status, KeyEntryStatus.active);
+      expect(advertised.single.pub, isNot(pkamPublicKey()),
+          reason: 'the APKAM authentication key stops being advertised the '
+              'moment this enrollment holds a signing key of its own. It is '
+              'not retained: a key is kept for what it SIGNED, and an '
+              'enrollment holding signing keys signs nothing with its auth '
+              'key that outlives the transition');
     });
 
     test('the update names this enrollment and changes nothing else', () async {
@@ -197,7 +196,10 @@ void main() {
       expect(await minter().mintMissing(),
           [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048]);
       expect(updates.single.signingKeys!.map((e) => e.alg).toList(),
-          [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048, SigningAlgoType.rsa2048]);
+          [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048],
+          reason: 'the two minted keys and nothing else — the APKAM '
+              'authentication key is rsa2048 too, and a third entry here '
+              'would be it');
       expect(await heldKeyIds(), ['mldsa65', 'rsa2048']);
     });
   });
@@ -229,9 +231,10 @@ void main() {
 
       final advertised = (jsonDecode(published.single)['keys'] as List)
           .cast<Map>();
-      expect(advertised.map((e) => e['alg']).toList(), ['mldsa65', 'rsa2048']);
-      expect(advertised.last['status'], 'retired');
-      expect(advertised.last['pub'], pkamPublicKey());
+      expect(advertised.map((e) => e['alg']).toList(), ['mldsa65']);
+      expect(advertised.single['status'], isNull,
+          reason: 'active, which the wire spells by omitting the field');
+      expect(advertised.single['pub'], isNot(pkamPublicKey()));
     });
 
     test('and files under the same id the reader looks for', () async {

@@ -2208,7 +2208,12 @@ The in-use set is a `Set<SigningAlgoType>`, final at construction and
 unmodifiable, defaulting to `{}` under `ReleasePosture.migration()` and
 `{mldsa65}` under `ReleasePosture.postQuantum()`. Empty is not "unsigned": an
 enrollment with no signing key of its own signs with its APKAM authentication
-key, which is what stays published afterwards. Naming an algorithm this build
+key, and that is the key `_apsk` advertises for exactly as long as it is the
+signer. ⚠️ **Amended 2026-08-14 by [`decisions.md` 98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
+ruling 2**, which this sentence used to contradict: it said the auth key
+"~~stays published afterwards~~", i.e. was retained once the enrollment held
+signing keys. It is not — a key is retained for what it *signed*, and an
+enrollment holding signing keys held them from birth. Naming an algorithm this build
 produces no envelope signature for is refused at construction rather than
 skipped. The reasoning for each of those is in
 [`decisions.md` 91.3](decisions.md#913-the-rulings) ruling 16.

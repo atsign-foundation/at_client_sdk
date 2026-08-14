@@ -1,4 +1,25 @@
 ## 3.14.1
+- feat: the published `_apsk` record advertises the keys that sign for an
+  enrollment now plus the signing keys it has **retired**. The APKAM
+  authentication key appears only while it *is* the signer — an enrollment
+  holding no signing key of its own — and is never retained afterwards.
+  - **A change to what the record contains**, not to any exported Dart API:
+    the composer and the mixin behind it are both library-private. An
+    enrollment that already held signing keys will drop its authentication
+    key's entry at the next publish.
+  - A key is retained for **what it signed**, and an enrollment that holds
+    signing keys held them from birth, so its authentication key signs nothing
+    that outlives the transition. Retaining it would advertise a key with
+    nothing to verify.
+  - An enrollment holding no signing material advertises exactly what it did
+    before: one active entry, which for `rsa2048` is the bare public-key
+    string every deployed reader parses. Nothing at the default posture moves.
+  - The retired entries are read unfiltered by `canSignEnvelopeWith`, unlike
+    the active ones. That filter asks what this build can *sign* with, and
+    these entries exist for other parties to *verify* with — dropping one
+    because this build has no signing routine for its algorithm would
+    unverify that key's envelopes for every reader that could have handled
+    them.
 - **BREAKING** feat: `PqSigningRoot.keyId` becomes `PqSigningRoot.keyIdPrefix`.
   The signing root is filed under `root:mldsa65:<generation>` in the keyfile's
   new atSign-scope container, and the generation IS the slot: a pair that lost

@@ -1,4 +1,17 @@
 ## 3.4.0
+- feat: `AtKeys.retiredSigningKeysFor(enrollmentId)` returns the **public**
+  half of every signing keypair that enrollment has retired, strongest
+  algorithm first — the entries an `_apsk` advertisement carries as `retired`
+  so that envelopes signed before a key was withdrawn still verify.
+  - Public-only: a retired key exists to verify what it already signed and
+    must never sign again, so its private half is not handed back.
+  - The private half is not required to be *present* either. A build that
+    wipes a withdrawn key's private material is doing the hygienic thing, and
+    dropping the advertisement entry when it does would retroactively
+    unverify everything that key signed.
+  - Selected on exactly `KeyPartStatus.retired`. `dead` material was never
+    adopted and has nothing to verify; a status this build has never seen is
+    skipped rather than guessed at.
 - feat: a keyfile holding more than one live enrollment is **read**, and only a
   writer refuses to create one. The single-active-authentication rule moves off
   `AtKeysAssurance.validateKeyMaterials` onto a new

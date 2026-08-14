@@ -132,7 +132,13 @@ class SigningKeyMinting with ApkamSigning {
     }
   }
 
-  /// Advertises [active] plus the retained APKAM authentication key.
+  /// Advertises [active] plus this enrollment's retired signing keys.
+  ///
+  /// The retired entries are re-read here rather than assumed empty: this
+  /// publish rewrites the whole record, so anything it leaves out is withdrawn.
+  /// An enrollment that had retired a key and then minted a new one would
+  /// otherwise lose the retired entry at the moment it gained a replacement,
+  /// which is exactly when the old key's envelopes still need verifying.
   ///
   /// Which writer depends on whether there is an enrollment record to carry it.
   /// An enrolled client sends `enroll:update`, because the atServer is the only
@@ -141,8 +147,10 @@ class SigningKeyMinting with ApkamSigning {
   /// client with no enrollment publishes the record itself, under `primary`,
   /// which has no enrollment record for the atServer to compose one from.
   Future<void> _publish(List<ApkamSigningKeys> active) async {
-    final entries =
-        apskEntries(signing: active, authentication: authenticationSigningKey);
+    final entries = apskEntries(
+        signing: active,
+        retired: await retiredSigningKeys,
+        authentication: authenticationSigningKey);
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
 
     if (atLookUp?.enrollmentId == null) {

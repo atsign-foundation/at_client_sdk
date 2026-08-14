@@ -369,15 +369,11 @@ class AtKeys {
   /// else.
   List<({SigningAlgoType algorithm, String publicKey, String privateKey})>
       signingKeysFor(String enrollmentId) {
-    const prefix = 'sign:';
     final held =
         <({SigningAlgoType algorithm, String publicKey, String privateKey})>[];
     for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
         const <String>[]) {
-      if (!keyId.startsWith(prefix)) continue;
-      // `<algo>:<n>` exactly — the same parse [nextSigningGeneration] does.
-      final suffix = keyId.substring(prefix.length).split(':');
-      if (suffix.length != 2 || int.tryParse(suffix[1]) == null) continue;
+      if (!_isSigningKeyId(keyId)) continue;
 
       final private =
           getKey(enrollmentId, keyId, CryptographicKeyType.privateSigning);
@@ -409,11 +405,70 @@ class AtKeys {
         privateKey: private.bytes.toString(),
       ));
     }
-    held.sort((a, b) => SigningAlgoType.strongestFirst
-        .indexOf(a.algorithm)
-        .compareTo(SigningAlgoType.strongestFirst.indexOf(b.algorithm)));
+    held.sort((a, b) => _strongestFirst(a.algorithm, b.algorithm));
     return held;
   }
+
+  /// The **public** half of every signing keypair [enrollmentId] has retired,
+  /// strongest algorithm first — the entries an `_apsk` advertisement carries
+  /// as `retired`, so that envelopes signed before a key was withdrawn still
+  /// verify.
+  ///
+  /// **Public-only, deliberately.** A retired key exists to verify what it
+  /// already signed and must never sign again, so handing back its private
+  /// half would only invite that. For the same reason the private half is not
+  /// required to be *present*: a build that wipes a withdrawn key's private
+  /// material is doing the hygienic thing, and dropping the advertisement
+  /// entry when it does would retroactively unverify everything that key
+  /// signed — the precise loss retention exists to prevent.
+  ///
+  /// Selected on exactly [KeyPartStatus.retired]. `dead` material was never
+  /// adopted and has nothing to verify, and a status this build has never seen
+  /// is skipped rather than guessed at: advertising a key whose standing
+  /// cannot be read would state something about it this build does not know.
+  ///
+  /// Same keyId shape and same unknown-algorithm skip as [signingKeysFor]; an
+  /// enrollment's other `privateSigning` material is not a signing key of its
+  /// own and is not advertised as one.
+  List<({SigningAlgoType algorithm, String publicKey})> retiredSigningKeysFor(
+      String enrollmentId) {
+    final retired = <({SigningAlgoType algorithm, String publicKey})>[];
+    for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
+        const <String>[]) {
+      if (!_isSigningKeyId(keyId)) continue;
+
+      final public =
+          getKey(enrollmentId, keyId, CryptographicKeyType.publicVerification);
+      if (public == null || public.status != KeyPartStatus.retired) continue;
+
+      final algorithm = SigningAlgoType.values
+          .where((a) => a.name == public.keyAlgorithmType)
+          .firstOrNull;
+      if (algorithm == null) continue;
+
+      retired.add((algorithm: algorithm, publicKey: public.bytes.toString()));
+    }
+    retired.sort((a, b) => _strongestFirst(a.algorithm, b.algorithm));
+    return retired;
+  }
+
+  /// Whether [keyId] names an enrollment's own signing keypair —
+  /// `sign:<algo>:<n>` exactly, the shape [fileSigningMaterial] writes and the
+  /// same parse [nextSigningGeneration] does.
+  ///
+  /// The shape is the filter, **not** the `privateSigning` role, which an
+  /// enrollment can hold material for under more than one keyId.
+  static bool _isSigningKeyId(String keyId) {
+    const prefix = 'sign:';
+    if (!keyId.startsWith(prefix)) return false;
+    final suffix = keyId.substring(prefix.length).split(':');
+    return suffix.length == 2 && int.tryParse(suffix[1]) != null;
+  }
+
+  static int _strongestFirst(SigningAlgoType a, SigningAlgoType b) =>
+      SigningAlgoType.strongestFirst
+          .indexOf(a)
+          .compareTo(SigningAlgoType.strongestFirst.indexOf(b));
 
   /// Adopts [materials] — what an enrollment request's metadataBuilder filed
   /// into the construction keys it was handed — tagged with the enrollment id

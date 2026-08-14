@@ -261,22 +261,21 @@ void main() {
       final advertised = jsonDecode(await signer.publicSigningKeyValue);
       final entries = (advertised['keys'] as List).cast<Map>();
 
-      // Held keys first, strongest first, then the APKAM authentication key
-      // this enrollment used to sign with — kept, and marked retired, because
-      // it is what verifies the envelopes it signed before the split.
-      expect(entries.map((e) => e['alg']).toList(),
-          ['mldsa65', 'rsa2048', 'rsa2048']);
+      // The held keys, strongest first, and nothing else. The APKAM
+      // authentication key is absent: this enrollment holds signing keys, so
+      // that key never signed anything durable and has nothing to verify.
+      expect(entries.map((e) => e['alg']).toList(), ['mldsa65', 'rsa2048']);
       expect(entries.map((e) => e['pub']).toList(),
-          [b64('mldsa-pub'), b64('rsa-pub'), pkamPublicKey()]);
-      expect(entries.map((e) => e['status']).toList(),
-          [null, null, 'retired']);
+          [b64('mldsa-pub'), b64('rsa-pub')]);
+      expect(entries.map((e) => e['status']).toList(), [null, null]);
+      expect(entries.map((e) => e['pub']), isNot(contains(pkamPublicKey())));
     });
 
-    test('the authentication key is retained, not duplicated', () async {
+    test('an enrollment holding its own authentication keypair publishes bare',
+        () async {
       // Its own authentication keypair filed as signing material: one key,
-      // already listed as active. Listing it a second time as retired would
-      // describe one key as both current and withdrawn, and a verifier picking
-      // between them has nothing to pick on.
+      // listed once, as the active signer. One active rsa2048 entry is the
+      // bare form, which is what every deployed reader parses.
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileSigningMaterial(
               enrollmentId: enrollmentId,
@@ -286,8 +285,79 @@ void main() {
 
       final value = await signer.publicSigningKeyValue;
 
-      // One active rsa2048 entry is the bare form, exactly as before.
       expect(value, pkamPublicKey());
+    });
+
+    test('a retired signing key stays advertised, marked retired', () async {
+      // A key is retained for what it SIGNED. Withdrawing this entry would
+      // retroactively unverify every envelope it produced, which is a loss no
+      // later publish undoes.
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: KeyAlgorithmType.rsa2048,
+            publicKey: b64('old-rsa-pub'),
+            privateKey: b64('old-rsa-priv'))
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: KeyAlgorithmType.mlDsa65,
+            publicKey: b64('mldsa-pub'),
+            privateKey: b64('mldsa-priv'))
+        ..retireKey(enrollmentId, 'sign:rsa2048:1')));
+
+      final entries =
+          (jsonDecode(await signer.publicSigningKeyValue)['keys'] as List)
+              .cast<Map>();
+
+      expect(entries.map((e) => e['alg']).toList(), ['mldsa65', 'rsa2048']);
+      expect(entries.map((e) => e['pub']).toList(),
+          [b64('mldsa-pub'), b64('old-rsa-pub')]);
+      expect(entries.map((e) => e['status']).toList(), [null, 'retired']);
+    });
+
+    test('a retired signing key is advertised even with no active one',
+        () async {
+      // Nothing active left, so the APKAM authentication key is the signer
+      // again and is advertised as such — beside, not instead of, the retired
+      // entry it replaced.
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: KeyAlgorithmType.rsa2048,
+            publicKey: b64('old-rsa-pub'),
+            privateKey: b64('old-rsa-priv'))
+        ..retireKey(enrollmentId, 'sign:rsa2048:1')));
+
+      final entries =
+          (jsonDecode(await signer.publicSigningKeyValue)['keys'] as List)
+              .cast<Map>();
+
+      expect(entries.map((e) => e['pub']).toList(),
+          [pkamPublicKey(), b64('old-rsa-pub')]);
+      expect(entries.map((e) => e['status']).toList(), [null, 'retired']);
+    });
+
+    test('a retired key matching an active signer is not listed twice',
+        () async {
+      // One key described as both current and withdrawn is a document a
+      // verifier has to choose between with nothing to choose on. Reachable
+      // when a key is retired and the same material is filed again — a new
+      // generation of the same public half.
+      when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: KeyAlgorithmType.rsa2048,
+            publicKey: b64('rsa-pub'),
+            privateKey: b64('rsa-priv'))
+        ..retireKey(enrollmentId, 'sign:rsa2048:1')
+        ..fileSigningMaterial(
+            enrollmentId: enrollmentId,
+            algorithm: KeyAlgorithmType.rsa2048,
+            publicKey: b64('rsa-pub'),
+            privateKey: b64('rsa-priv'))));
+
+      // The active generation wins, and one active rsa2048 entry is bare.
+      expect(await signer.publicSigningKeyValue, b64('rsa-pub'));
     });
   });
 

@@ -6,8 +6,8 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys;
 
-/// The `_apsk` entries an enrollment advertises: the signing keys it signs
-/// with now, followed by the APKAM authentication key it used to sign with.
+/// The `_apsk` entries an enrollment advertises: **the keys that sign for it
+/// now, plus the signing keys it has retired.**
 ///
 /// One composer for both publishers. `_apsk` is one record whether the
 /// atServer writes it from an `enroll:request`/`enroll:update` or a client
@@ -15,45 +15,59 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 /// record are two chances to disagree about what an enrollment can verify.
 ///
 /// [signing] is what the enrollment holds of its own, strongest first — the
-/// active entries. [authentication] is the APKAM authentication keypair, and
-/// its treatment is the whole point of this function:
+/// active entries. [retired] is the public half of every signing key it has
+/// withdrawn, which stays advertised because envelopes are stored durably and
+/// verified whenever they are read: a key is retained for **what it signed**.
+///
+/// [authentication] is the APKAM authentication keypair, and its treatment is
+/// the whole point of this function:
 ///
 /// - **With no signing keys of its own**, an enrollment signs with the
-///   authentication key, so that key is the one active entry. This is every
-///   enrollment until something mints signing material, and the advertisement
-///   is byte-for-byte what the single-key composer wrote.
-/// - **Once it holds signing keys**, the authentication key stops signing and
-///   is kept as a `retired` entry rather than dropped. Envelopes are stored
-///   durably and verified whenever they are read, so withdrawing that key
-///   retroactively unverifies everything signed before the split.
+///   authentication key, so that key is the one active entry. The
+///   advertisement is byte-for-byte what the single-key composer wrote, which
+///   is what every deployed reader parses.
+/// - **Once it holds signing keys**, the authentication key never signed
+///   anything durable and is **not advertised at all** — neither active nor
+///   retained.
 ///
-/// A key already listed as active is not listed again as retired. The two
-/// halves can name one key — an enrollment whose signing material was filed
-/// from its own authentication keypair — and one key described twice, once as
-/// current and once as withdrawn, is a document a verifier has to choose
-/// between with nothing to choose on.
+/// ⚠️ **The authentication key is never retained, and that asymmetry is the
+/// design rather than an oversight.** An enrollment that holds signing keys
+/// held them from birth, so its authentication key signs nothing that outlives
+/// the transition; retaining it would advertise a key with nothing to verify.
+/// This rests on a deployment premise recorded with the ruling — that no
+/// long-lived auth-key-signed material is extant — and if that turns out to be
+/// false the ruling reopens rather than this function growing a special case.
+///
+/// A key already listed as an active signer is not listed again as retired.
+/// One key described twice, once as current and once as withdrawn, is a
+/// document a verifier has to choose between with nothing to choose on.
 List<ApskSigningKey> apskEntries({
   required List<ApkamSigningKeys> signing,
+  required List<({SigningAlgoType algorithm, String publicKey})> retired,
   required ApkamSigningKeys? authentication,
 }) {
   final entries = [
     for (final key in signing)
       ApskSigningKey.forPublicKey(alg: key.algorithm, pub: key.publicKey)
   ];
-  if (authentication == null) return entries;
-  if (entries.any((entry) => entry.pub == authentication.publicKey)) {
-    return entries;
+
+  // The authentication key is the signer exactly while the enrollment holds no
+  // active signing key of its own — the same condition ApkamSigning.signingKeys
+  // falls back on. Advertising it here and falling back there are one rule, so
+  // what signs and what is advertised cannot disagree.
+  if (entries.isEmpty && authentication != null) {
+    entries.add(ApskSigningKey.forPublicKey(
+        alg: authentication.algorithm, pub: authentication.publicKey));
   }
-  return [
-    ...entries,
-    ApskSigningKey.forPublicKey(
-        alg: authentication.algorithm,
-        pub: authentication.publicKey,
-        // Active when it is the only thing signing, retired once the
-        // enrollment has keys of its own — the same key, in two eras.
-        status:
-            entries.isEmpty ? KeyEntryStatus.active : KeyEntryStatus.retired),
-  ];
+
+  for (final key in retired) {
+    if (entries.any((entry) => entry.pub == key.publicKey)) continue;
+    entries.add(ApskSigningKey.forPublicKey(
+        alg: key.algorithm,
+        pub: key.publicKey,
+        status: KeyEntryStatus.retired));
+  }
+  return entries;
 }
 
 /// The `_apsk` value for [entries]: the bare public key when they are a single
