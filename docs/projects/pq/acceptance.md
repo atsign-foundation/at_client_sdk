@@ -1360,6 +1360,19 @@ Covered by `packages/at_client/test/release_posture_test.dart`.
 
 ## 16. G1 · Signature agility and the rollout matrix
 
+⚠️ **The stages were redefined 2026-08-14 — [`decisions.md` 98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14).**
+Rollout 1 moves the **authentication** key to ML-DSA-65 and mints a fresh
+**RSA-2048 signing key** to be advertised in its place, because only the
+atServer verifies the authentication key while every peer verifies the signing
+key. Rows below written before that ruling may still describe rollout 1 as
+"reader capability only"; where they do, the ruling governs.
+
+| | auth key | signing key | `_apsk` |
+|---|---|---|---|
+| `now` | `rsa2048` | none — the auth key signs | bare RSA (the auth key) |
+| `rollout1` | `mldsa65` | `rsa2048` | bare RSA (the signing key) |
+| `rollout2` | `mldsa65` | `mldsa65` active, `rsa2048` retired | the array |
+
 Acceptance for [`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11);
 design in [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
 
@@ -1604,8 +1617,20 @@ capability-before-active is unaffected and lives in
 [`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11);
 what is gone is the claim that this matrix demonstrates it.
 
-- **UC-G1.14 · rollout 1 changes nothing on the wire.**
-  *Given* two clients both at rollout 1.
-  *Then* the envelopes exchanged and the `_apsk` published are byte-identical
-  to the `now`/`now` cell. Rollout 1 is reader capability only, and this is
-  what proves it.
+- **UC-G1.14 · rollout 1 is invisible to a deployed peer.**
+  *Given* a sender at rollout 1 — an ML-DSA-65 authentication key and a freshly
+  minted RSA-2048 signing key.
+  *When* a **published-arm** client (at_client 3.14.0, resolved from pub.dev)
+  fetches that enrollment's `_apsk`.
+  *Then* `getApkamPublicKey` returns a String which base64-decodes as an RSA
+  public key, exactly as it does for a `now` sender — so the released reader
+  cannot tell the two stages apart.
+
+  ⚠️ **This row used to read "rollout 1 changes nothing on the wire", asserting
+  the envelopes and the `_apsk` were byte-identical to the `now`/`now` cell.**
+  That is false under [`decisions.md` 98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14):
+  rollout 1 publishes a *different key* from `now` — its own signing key rather
+  than its authentication key — so the bytes differ by design. What must hold
+  is the **form**, and only a released reader can settle that. Byte-identity
+  was a claim about our own writer; this is a measurement against the reader
+  that actually matters.

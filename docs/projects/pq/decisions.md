@@ -112,6 +112,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [95. The envelope keeps one shape, and a retained key says so (2026-08-12)](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) — *rulings 2 and 3 amended 2026-08-14: a published envelope reader does exist, and reachability rather than absence carries the decision*
 - [96. The programme pair gets a home outside the workspace (2026-08-14)](#96-the-programme-pair-gets-a-home-outside-the-workspace-2026-08-14)
 - [97. A keyfile status a build has never seen is read, not refused (2026-08-14)](#97-a-keyfile-status-a-build-has-never-seen-is-read-not-refused-2026-08-14)
+- [98. Rollout 1 moves the authentication key, not the signing key (2026-08-14)](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) — *supersedes [91.3](#913-the-rulings) ruling 10; the auth key is never retained in `_apsk`*
 
 ---
 
@@ -7820,7 +7821,7 @@ superseded kpid is not retired) is the same shape as ruling 9 below.
 | 7  | **All key material becomes typed.** The flat `apkamPublicKey`/`apkamPrivateKey` stay as a compatibility projection, read in exactly one place. `rsa2048` exists only as a retrofit's legacy APKAM keypair. *Amended 2026-08-13 during implementation: this ruling first said the flat fields become a **write-only** projection over the typed materials, "never read as the source of truth", and the projection cannot be materialised — two probes refused it. Filing a projected material makes `toJson` emit `version`/`atsign`/`keys`, because its guard is `keys.isEmpty` and both stores stamp `atsign` first (`file_io.dart:113`, `keychain_io_impl.dart:89`), which breaks the byte-identical legacy round-trip [§91.4](#914-what-is-released-and-therefore-what-must-still-be-read) promises; and on a retrofitted keyfile the one-active-`privateAuthentication`-per-document rule in `assurance.dart` refuses the add outright. There is also nothing to project from on four shipping shapes — a keyfile written before the typed section existed, an `rsa2048` first onboard, an OTP enrollment, and an onboard handed its keys by the caller. So "never read" narrows to "read in one place": `AtKeys.authenticationFor` / `authenticationAlgorithmFor` is the single resolver every caller goes through, typed material winning wherever the keyfile holds it for that enrollment and the flat fields answering only where it holds none.* |
 | 8  | **`_apsk` becomes `{"v":1,"keys":[{"use","alg","pub","status"}]}`,** reusing `PackageKey`'s vocabulary so the design has one spelling for "a list of keys with algorithms". `status` is `active` or `verifyOnly`; absent reads as `active`. Written by the atServer verbatim from `EnrollParams.apsk`, at approval and on `enroll:update` — one writer for the record's whole life, which makes a rotation atomic from the client's view |
 | 9  | **The array is append-mostly.** An algorithm leaving the in-use set stops signing; its key and its published entry are retained indefinitely as `verifyOnly`. Key packages and chain links are stored durably, so withdrawing an entry retroactively unverifies everything ever signed with it |
-| 10 | **The APKAM auth key is in the array permanently, as `verifyOnly`.** Everything signed before rollout 2 was signed by it; the array replacing the bare-string record would otherwise unverify all of it. This is ruling 9 applied at the rollout boundary rather than at an algorithm retirement. *Amended 2026-08-13 during implementation: as written this ruling could not do its job, because the reader took **one key per algorithm** — `ParsedApsk.keyFor` was `where(alg).firstOrNull` and `verifyEnvelope` checked that one. Retaining the auth key works only where its algorithm differs from the minted key's, which is the **legacy** enrollment. A post-quantum-native enrollment holds an ML-DSA auth key and mints an ML-DSA signing key, so both entries name `mldsa65`, the active one is found first, and every envelope signed before the split fails to verify — the exact outcome this ruling exists to prevent, in what will be the ordinary 4.0 case. The reader now resolves the algorithm first and tries **every** key advertised under it, refusing only when none verifies. That is not the fallback ruling 11 forbids: 11 is about dropping to a weaker algorithm after a failure, and the algorithm here is already fixed by the strongest-shared rule, with every key tried one this signer published under it.* |
+| 10 | ⚠️ **SUPERSEDED 2026-08-14 by [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 2 — the auth key is never retained in `_apsk`.** What it said, and why it stood until then, is kept below because the reasoning is still correct *given its premise*: the premise was that the auth key had signed durable envelopes worth verifying. gkc ruled 2026-08-14 that **no long-lived signatures exist**, so it protects nothing; and under 98 an enrollment holds a signing key from birth, so its auth key never signs at all. ~~**The APKAM auth key is in the array permanently, as `verifyOnly`.** Everything signed before rollout 2 was signed by it; the array replacing the bare-string record would otherwise unverify all of it.~~ This is ruling 9 applied at the rollout boundary rather than at an algorithm retirement. *Amended 2026-08-13 during implementation: as written this ruling could not do its job, because the reader took **one key per algorithm** — `ParsedApsk.keyFor` was `where(alg).firstOrNull` and `verifyEnvelope` checked that one. Retaining the auth key works only where its algorithm differs from the minted key's, which is the **legacy** enrollment. A post-quantum-native enrollment holds an ML-DSA auth key and mints an ML-DSA signing key, so both entries name `mldsa65`, the active one is found first, and every envelope signed before the split fails to verify — the exact outcome this ruling exists to prevent, in what will be the ordinary 4.0 case. The reader now resolves the algorithm first and tries **every** key advertised under it, refusing only when none verifies. That is not the fallback ruling 11 forbids: 11 is about dropping to a weaker algorithm after a failure, and the algorithm here is already fixed by the strongest-shared rule, with every key tried one this signer published under it.* |
 | 11 | **A signer emits one signature per active signing key it holds.** A verifier picks the strongest algorithm it understands from those present, verifies that one, and **refuses outright** on failure — never falling back to a weaker signature, which would be a downgrade attack with an attacker-chosen algorithm |
 | 12 | **The envelope collapses to one versioned shape,** `{"v":1,"signatures":[{"alg","sig"}],"enrollmentId":…}`. The entries use `alg` to match the `_apsk` array's spelling, so one vocabulary covers both halves of a verification — the algorithm named in the signature against the algorithm named in the published entry. `signedEnvelopeVersion = 1` (tagged) and `jwsEnvelopeVersion = 2` (JWS) are both unreleased and are removed rather than carried. **Superseded 2026-08-12 by [95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 1** — "removed rather than carried" stands; the replacement is RFC 7515 general serialization rather than this bespoke container, which was chosen when the standards argument had only been weighed against the *flattened* JWS shape |
 | 13 | **Section 68's `enroll:updateMetadata` is renamed `enroll:update`** and widened to reach `apkamPublicKey`, `signingAlgo`, `apsk` and `metadata`. Nothing is built, so the wire token is still free and never will be again; a name saying "metadata" while reaching `apkamPublicKey` generates wrong assumptions for years. **`namespaces` and the approval state stay out of reach permanently** — the operation is self-only, so reaching namespaces would let an enrollment grant itself scope |
@@ -8559,3 +8560,167 @@ under `~/dev/atsign` and no package in `~/.pub-cache` references
 break** — at_auth joins at_chops in owing a major-version decision
 ([92](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11));
 the bump is not taken here.
+
+## 98. Rollout 1 moves the authentication key, not the signing key (2026-08-14)
+
+Ruled by gkc over a fourteen-question walk, prompted by generating a keyfile's
+evolution through the stages
+(`untracked/scratchpad/atkeys_structure/`, machine-local) and finding that the
+stages as built did not say what they were for.
+
+**The insight the whole section rests on: the two keys have different
+audiences.** Only the **atServer** verifies the APKAM authentication key, and
+it is the operator's own infrastructure. **Every peer** verifies the signing
+key, and the fleet is not the operator's to upgrade. So the authentication key
+can go post-quantum immediately while the signing key must stay classical until
+readers move — which is the reverse of what the stages did, and it is the whole
+point of having separated the two keys in the first place.
+
+### 98.1 The stages
+
+| | auth key | signing key | `_apsk` published |
+|---|---|---|---|
+| `now` | `rsa2048` | none — the auth key signs by fallback | bare RSA (**the auth key**) |
+| `rollout1` | **`mldsa65`** | **`rsa2048`**, minted at enrollment-request time | bare RSA (**the signing key**) |
+| `rollout2` | `mldsa65` | `mldsa65` active, `rsa2048` retired | the array |
+
+**1. Rollout 1 mints an ML-DSA-65 authentication keypair and a fresh RSA-2048
+signing keypair.** The quantum-forgeable credential moves first. An APKAM
+public key sits on the enrollment record where anyone can harvest it, so an
+adversary who breaks RSA later can forge authentication for any enrollment that
+never moved — and unlike encryption there is no "harvest now" caveat to argue
+about, the exposure is simply the key's published lifetime. Meanwhile the
+signing key stays RSA because `apskValueOf` emits the deployed-readable bare
+string only for a single active `rsa2048` entry, and every un-upgraded peer
+parses `_apsk` by base64-decoding it as an RSA key.
+
+⚠️ **This reverses `SigningRollout.rollout1`'s "deliberately identical to
+[now] in what this client writes".** That sentence, and UC-G1.14's
+byte-identity claim, are both false under this ruling and are rewritten with
+it.
+
+### 98.2 What `_apsk` advertises
+
+**2. `_apsk` advertises the keys that currently sign, plus signing keys that
+have been retired. The authentication key is advertised only while it *is* the
+signer, and is never retained after.**
+
+- At `now` the enrollment holds no signing key, `signingKeys` falls back to the
+  auth key, and that key signs everything — so advertising it is advertising
+  the signer, not making an exception.
+- At `rollout1` and beyond the enrollment holds a signing key from birth, so
+  the auth key never signs and never appears.
+- A **signing** key whose algorithm leaves the in-use set is retained as
+  `retired`, because it signed durable envelopes — [91.3](#913-the-rulings)
+  ruling 9, preserved.
+
+The asymmetry is principled rather than convenient: a key is retained because
+of **what it signed**, and an auth key under this design signs nothing that
+outlives the transition. [91.3](#913-the-rulings) ruling 10 is superseded and
+amended in place.
+
+⚠️ **The deletion rests on a premise gkc supplied and this project has not
+measured: there are no long-lived signatures extant today.** It is a deployment
+fact rather than a code fact, which is why it is recorded as a premise and not
+as a finding. Should any long-lived atSign turn out to hold auth-key-signed
+material, this ruling needs reopening rather than patching — the retention it
+deletes is the only thing that would have kept that material verifiable.
+
+**3. An earlier draft of ruling 2 said "never advertise the auth key at all"
+and was wrong.** Taken literally it empties `_apsk` at `now`, where the auth
+key is the only signer, and every envelope a released-posture client produces
+becomes unverifiable. Recorded because the wrong version is the one that reads
+as simpler, and a later reader reaching for it would break the default posture.
+
+### 98.3 Where the signing key comes from
+
+**4. The retrofit and the greenfield onboard mint the signing keypair *before*
+submitting, and the enrollment request advertises it as `apskLegacy`.**
+
+`_apskFor` composes `_apsk` from `apkamPublicKey` today, and its own comment
+states the assumption this ruling breaks: *"at request time the enrollment has
+just been minted and holds nothing but this APKAM keypair."* Under rollout 1
+that keypair is ML-DSA, so the existing code would publish an **array
+containing the ML-DSA auth key** at the moment of enrollment — the precise
+breakage rollout 1 exists to prevent, arriving before any client has started,
+and landing on peers who cannot fix it and would not know why.
+
+So `_apskFor` stops reading `apkamPublicKey` and takes the signing key's public
+half instead. The record is correct from its first byte. The cost, accepted:
+signing keys are minted at two sites, and `SigningKeyMinting` at client start
+becomes the **heal path** for enrollments that predate this rather than the
+only producer.
+
+**5. Rollout 1 is entered only by a new enrollment.** An existing `now`
+enrollment does not rotate into it; it stays at `now` until it retrofits, and
+the retrofit mints a new enrollment id with both keys. This is what keeps
+rollout 1 free of an APKAM rotation — so it depends on neither step 20's
+unbuilt rotation arm nor the at_auth release that arm waits on. **Rollout 1 is
+buildable today.**
+
+### 98.4 Where the stage lives
+
+**6. Both halves derive from `SigningRollout`.** It gains
+`defaultRetrofitAuthenticationAlgo` beside `defaultInUseSigningAlgorithms`
+(`now` → `rsa2048`, `rollout1`/`rollout2` → `mldsa65`), and the in-use set
+becomes `{}` / `{rsa2048}` / `{mldsa65}`. This is step 19's reasoning applied to
+the other half: two stored fields would be two controls over one position, and
+an operator who set the stage but forgot the algorithm would land in a state no
+release defines with nothing to tell them.
+
+**7. `ReleasePosture.retrofitSigningAlgo` is renamed
+`retrofitAuthenticationAlgo`.** It selects the algorithm of the key that
+*authenticates*, in the one subsystem whose entire premise is that
+authenticating and signing are different keys. The rename is free —
+`ReleasePosture` does not exist in at_client 3.14.0, verified.
+
+**8. The wire field `EnrollParams.signingAlgo` keeps its name; its dartdoc is
+corrected.** It is documented as "the signing algorithm of `apkamPublicKey`" —
+i.e. it has always named the *authentication* key's algorithm, from before an
+enrollment had signing keys of its own. Renaming it is a multi-repo protocol
+seam against a released atServer, and a stale reader seeing an absent field
+falls back to `rsa2048`, which is a silent wrong-algorithm PKAM. Not worth it
+for a naming fix; the dartdoc says plainly what the name does not.
+
+### 98.5 Two findings from the same session, unrelated to the stages
+
+**9. A cached client silently keeps its original preference, and it must throw
+instead.** `AtClientImpl.create` caches by `(atSign, enrollmentId)` and on a
+cache hit adopts **only** `preferences.crypto`, with a comment asserting "there
+is nothing else to reconcile" — true when written, false since `posture`,
+`signingRollout`, `inUseSigningAlgorithms` and `disallowLegacyEncryption`
+became final-at-construction fields. Measured: a client asked for
+`signingRollout: rollout2` reported `now` and an empty in-use set, and minted
+nothing while every other diagnostic looked healthy.
+
+It throws rather than warns, over the final-at-construction fields only.
+Reconciling them instead was rejected: they are final precisely because the
+substrate reads them once, so a client whose bootstrap already ran under the
+old value would be a worse lie than the current one. A warning was rejected
+because a silently-wrong posture is exactly the failure the dropped-event rule
+says goes unnoticed. `namespace` and `rootDomain` stay out of the comparison —
+re-scoping a client is an existing pattern.
+
+**10. `selfRetrofit`'s "no ML-DSA anywhere" is wrong and the doc is fixed, not
+the gate.** A fully privileged `rsa2048` retrofit files an ML-DSA-65
+`pq_signing_root`, because `mintIfAbsent` gates on privilege and never on the
+retrofit algorithm — observed in a generated keyfile. The root is the
+**atSign's**, not the enrollment's, and gating it on a per-enrollment algorithm
+choice would let the first privileged retrofit's mode decide whether the atSign
+ever gets a root at all. The sentence is scoped to the enrollment's own keys.
+
+**11. The legacy flat block is permanent.** `aesPkamPrivateKey` and its
+siblings survive every stage verbatim, and nothing will remove them. It is the
+legacy round-trip contract, and a scheme to retire them would need a party to
+run it and a definition of "proven" — the shape this project has built and
+removed before.
+
+### 98.6 What this replaces in acceptance
+
+**12. UC-G1.14 stops asserting byte-identity and asserts that a released reader
+can parse a rollout-1 sender's `_apsk`.** Byte-identity is false now (rollout 1
+publishes a different key from `now`) and was always a claim about our own
+writer. The property worth protecting is that a deployed peer is unaffected,
+and the published arm can measure exactly that — an at_client 3.14.0 client
+fetching the record and base64-decoding it as an RSA key, the same as it does
+for a `now` sender.
