@@ -2,8 +2,13 @@
 // ignore_for_file: experimental_member_use
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+// The heal path itself, not a reimplementation of it: the question here is
+// what the production writer puts on the wire.
+import 'package:at_client/src/signing/signing_key_minting.dart'
+    show SigningKeyMinting;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 import 'package:at_functional_test/src/config_util.dart';
@@ -162,6 +167,70 @@ void main() {
     expect(after, isNot(contains('attacker-substituted-signing-key')),
         reason: 'stated the other way round, so a change in how the record is '
             'serialized cannot make the comparison above vacuous');
+  });
+
+  /// The heal path's wire form, which nothing had watched.
+  ///
+  /// An enrollment created without a signing key of its own — every enrollment
+  /// a build predating enrollment-time minting made — gets one at its next
+  /// start, and the client advertises it by `enroll:update`. The **form** of
+  /// that advertisement is the whole question: a single active `rsa2048` key
+  /// has to travel as the bare string, because every deployed `_apsk` consumer
+  /// base64-decodes the value as an RSA key and fails on JSON.
+  ///
+  /// Two links, and only the first is a client-side claim a unit suite can
+  /// settle. That the client sends `apskLegacy` rather than `apsk` is pinned
+  /// in `packages/at_client/test/signing_key_minting_test.dart`. That **the
+  /// atServer honours `apskLegacy` on an update** — rather than only on the
+  /// enrolment request, which is the only place it had ever been sent — is a
+  /// claim about the server, and this is what measures it.
+  test('a healed enrollment advertises its signing key in the bare form',
+      () async {
+    final keysIo = InMemoryAtKeysIo();
+    final enrolled = await enrolAndAuthenticate(
+      approver: approver,
+      atSign: atSign,
+      namespace: namespace,
+      // rollout 1, so the in-use set derives to {rsa2048} exactly as it does
+      // for an app that names a stage — rather than the set being handed over
+      // here, which would drive a preference no app would hold.
+      preference: TestUtils.getPreference(atSign,
+          signingRollout: SigningRollout.rollout1),
+      rootDomain: rootDomain,
+      rootPort: TestUtils.rootServerPort,
+      deviceName: 'apsk-heal-$runId',
+      atKeysIo: keysIo,
+    );
+
+    // The control: before the heal this enrollment holds no signing key, so
+    // whatever the record carries now is not what the assertion below is
+    // about. Without it the test would pass for an enrollment that had been
+    // advertising a bare RSA key since it was created.
+    expect((await keysIo.read(atSign)).signingKeysFor(enrolled.enrollmentId),
+        isEmpty,
+        reason: 'this row is about the heal path, which exists only for an '
+            'enrollment holding no signing key of its own');
+
+    final reconciled =
+        await SigningKeyMinting(enrolled.client).reconcileSigningKeys();
+    expect(reconciled.minted, [SigningAlgoType.rsa2048]);
+    expect(reconciled.retired, isEmpty);
+
+    final held =
+        (await keysIo.read(atSign)).signingKeysFor(enrolled.enrollmentId).single;
+    final published = await approver.getRemoteSecondary()!.executeCommand(
+        'llookup:${apskKeyFor(enrolled.enrollmentId)}\n',
+        auth: true);
+    final value = published!.replaceFirst('data:', '').trim();
+
+    expect(value, held.publicKey,
+        reason: 'the record IS the key — the bare form every deployed '
+            'consumer base64-decodes. A one-entry JSON array here is '
+            'fail-closed but service-breaking for anything already running, '
+            'which is the breakage rollout 1 exists to prevent');
+    expect(value, isNot(startsWith('{')),
+        reason: 'stated the other way round, so this cannot pass on a '
+            'serialization that merely contains the key');
   });
 
   test('enroll:listns answers an APKAM connection with the namespace members',

@@ -70,8 +70,8 @@ List<ApskSigningKey> apskEntries({
   return entries;
 }
 
-/// The `_apsk` value for [entries]: the bare public key when they are a single
-/// active `rsa2048` key, and the JSON advertisement otherwise.
+/// The **bare** `_apsk` value for [entries] — the public key itself — or null
+/// when they cannot be said that way and the array is the only form.
 ///
 /// The bare form is kept for the one case everything deployed can read. Every
 /// `_apsk` consumer that predates the array base64-decodes the value as an RSA
@@ -81,11 +81,23 @@ List<ApskSigningKey> apskEntries({
 /// Anything else has to be the array. A bare value says `rsa2048` by convention
 /// and can name only one key, so it cannot express a second algorithm or a
 /// retained entry at all.
-String apskValueOf(List<ApskSigningKey> entries) {
+///
+/// The rule lives here, once, because two publishers need it and they publish
+/// one record. A client with no enrollment writes the value itself
+/// ([apskValueOf]); an enrolled client sends `enroll:update`, where the choice
+/// is which *field* carries the advertisement — `apskLegacy` for the bare
+/// string, `apsk` for the array — and the two are mutually exclusive. A second
+/// copy of the rule is a second chance to describe one record two ways.
+String? bareApskValueOf(List<ApskSigningKey> entries) {
   if (entries.length == 1 &&
       entries.single.alg == SigningAlgoType.rsa2048 &&
       entries.single.status == KeyEntryStatus.active) {
     return entries.single.pub;
   }
-  return jsonEncode(apskAdvertisement(keys: entries));
+  return null;
 }
+
+/// The `_apsk` value for [entries]: the bare public key when
+/// [bareApskValueOf] can say it, and the JSON advertisement otherwise.
+String apskValueOf(List<ApskSigningKey> entries) =>
+    bareApskValueOf(entries) ?? jsonEncode(apskAdvertisement(keys: entries));

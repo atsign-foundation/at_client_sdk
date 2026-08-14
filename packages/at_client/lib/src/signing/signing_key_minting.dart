@@ -9,7 +9,7 @@ import 'package:at_chops/at_chops.dart'
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/signing/apsk_composition.dart'
-    show apskEntries, apskValueOf;
+    show apskEntries, apskValueOf, bareApskValueOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -25,6 +25,23 @@ import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
 /// enrollment record's authority, unlike the APKAM authentication key, whose
 /// replacement the atServer has to accept. The client mints it, advertises it,
 /// and files it.
+///
+/// **This is the heal path, not the only producer.** An enrollment created by
+/// a build that mints at enrollment-request time already holds its signing key
+/// before it is approved, and finds nothing missing here. What reaches this
+/// class is an enrollment created before that — which holds none — and a
+/// client whose in-use set has changed since the last start, which is a stage
+/// transition. Both are repairs to a keyfile that is already in service, which
+/// is why every write here is composed from what the keyfile holds rather than
+/// from what this run happens to know.
+///
+/// ⚠️ **A heal is an `enroll:update`, and the record it rewrites is read by
+/// peers that predate all of this.** The advertisement's *form* therefore
+/// matters as much as its content: a single active `rsa2048` key travels as
+/// the bare string, in `apskLegacy`, because every deployed `_apsk` consumer
+/// base64-decodes the value as an RSA key. This class sent the array
+/// unconditionally until 2026-08-14, which put JSON on exactly the record
+/// rollout 1 exists to keep readable.
 ///
 /// **Publish, then file — in that order, and the order is the design.** Between
 /// the two a client holds a key it has not advertised, or advertises a key it
@@ -238,9 +255,20 @@ class SigningKeyMinting with ApkamSigning {
       await publishPublicSigningKey(value: apskValueOf(entries));
       return;
     }
+    // Which FIELD carries the advertisement is the same question as which
+    // form the value takes, so it is answered by the same rule rather than by
+    // a second one here. A single active rsa2048 key travels as the bare
+    // string every deployed consumer base64-decodes; anything else has to be
+    // the array, which those consumers fail on. Sending the array where the
+    // bare form would do is the breakage rollout 1 exists to prevent, and it
+    // is reachable from here whenever this client heals an enrollment that
+    // was created without a signing key of its own.
+    final bare = bareApskValueOf(entries);
     await _enrollment.update(
         EnrollmentUpdateRequest(
-            enrollmentId: atLookUp!.enrollmentId!, signingKeys: entries),
+            enrollmentId: atLookUp!.enrollmentId!,
+            signingKeys: bare == null ? entries : null,
+            apskLegacy: bare),
         atLookUp);
   }
 

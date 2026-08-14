@@ -2231,9 +2231,19 @@ order leaves the choice undefined for exactly the pair nobody thought about,
 and the pin fails on a new member left unplaced.
 
 When the in-use set names an algorithm the enrollment holds no key for, the
-client mints one at start, **publishes the updated array, and then files it**. A
-signing keypair can be minted unilaterally because it needs no server approval
-and no enrollment-record change — which is the practical payoff of the split.
+client mints one at start, **publishes the updated advertisement, and then
+files it**. A signing keypair can be minted unilaterally because it needs no
+server approval and no enrollment-record change — which is the practical payoff
+of the split.
+
+This start-time mint is the **heal path**, not the primary producer: an
+enrollment created by a current build already holds its signing key before it
+is approved. What reaches it is an enrollment created before that, or a client
+whose in-use set has changed since its last start. It is also the second writer
+of `_apsk`, so it obeys the same bare-versus-array rule as the enrolment
+request — a single active `rsa2048` key travels as the bare string, in
+`apskLegacy`, and anything else as the array. One definition,
+`bareApskValueOf`, answers that for both.
 
 The order is the design, and it is the opposite of the nskey path's. File first
 and the client signs with a key its `_apsk` does not name; envelopes are stored

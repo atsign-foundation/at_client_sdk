@@ -1,4 +1,16 @@
 ## 3.14.1
+- fix: a client healing an enrollment that holds no signing key of its own now
+  advertises a single `rsa2048` key in the **bare** form, as
+  `EnrollmentUpdateRequest.apskLegacy`, instead of always sending the JSON
+  array. Every deployed `_apsk` consumer base64-decodes the value as an RSA
+  key, so the array broke exactly the readers rollout 1 exists to keep working.
+  - The bare-versus-array rule now has one definition, `bareApskValueOf`, used
+    by both publishers: a client with no enrollment writes the value itself,
+    and an enrolled client chooses which *field* carries it.
+  - `SigningKeyMinting` is documented as the **heal path** it became when
+    enrollments started minting their signing key at request time — what
+    reaches it is an enrollment created before that, or a client whose in-use
+    set has changed since the last start.
 - feat!: a client start now **retires** a signing key whose algorithm has left
   `AtClientPreference.inUseSigningAlgorithms`, as well as minting the ones it
   names. `SigningKeyMinting.mintMissing` is renamed `reconcileSigningKeys` and

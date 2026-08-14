@@ -8656,6 +8656,20 @@ signing keys are minted at two sites, and `SigningKeyMinting` at client start
 becomes the **heal path** for enrollments that predate this rather than the
 only producer.
 
+⚠️ **The cost was larger than "two sites": it was two writers of one record,
+and only one of them obeyed [98.1](#981-the-stages).** Measured while building
+row B4, 2026-08-14: the heal path published the **array** unconditionally,
+because it sends `EnrollmentUpdateRequest(signingKeys: …)` with no branch and
+the updater prefers that field over `apskLegacy`. So a rollout-1 client healing
+an enrollment created before this ruling advertised JSON on the one record
+un-upgraded peers base64-decode as an RSA key. Fixed by giving the
+bare-versus-array rule a single definition, `bareApskValueOf`, which both
+publishers consult — the enrolment request already had its own copy in
+`_apskFor`, and a third was what let the two disagree. Whether the atServer
+honours `apskLegacy` on an `enroll:update` at all was a claim about the server
+rather than the client, since it had only ever been sent on an enrolment
+request; it is now measured live in `apsk_server_side_test.dart`.
+
 ⚠️ **AMENDED 2026-08-14, before B3 was built: ruling 4 as written breaks key
 conveyance, because `_apsk` has a second consumer this ruling did not
 account for.** The paragraph above stands; what follows is what it was

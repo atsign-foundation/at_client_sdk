@@ -205,6 +205,33 @@ void main() {
       expect(request.apskLegacy, isNull);
     });
 
+    test('a single rsa2048 key is advertised in the bare form', () async {
+      // What a rollout-1 client healing an enrollment that predates
+      // enrollment-time minting publishes. Every deployed `_apsk` consumer
+      // base64-decodes the value as an RSA key, so a one-entry JSON array
+      // here is fail-closed but service-breaking for anything already
+      // running — the breakage rollout 1 exists to prevent, arriving from
+      // the heal path instead of the request path.
+      when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
+          inUseSigningAlgorithms: const {SigningAlgoType.rsa2048}));
+
+      expect(await mint(), [SigningAlgoType.rsa2048]);
+
+      final request = updates.single;
+      expect(request.signingKeys, isNull,
+          reason: 'the two are mutually exclusive: one enrollment publishes '
+              'one _apsk value, and the atServer refuses a request carrying '
+              'both');
+      expect(
+          request.apskLegacy,
+          (await keysIo.read(atSign))
+              .signingKeysFor(enrollmentId)
+              .single
+              .publicKey,
+          reason: 'the bare form IS the key, and it is the key this client '
+              'just filed — not the APKAM authentication key it used to be');
+    });
+
     test('several algorithms are advertised strongest first', () async {
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
           inUseSigningAlgorithms: const {
