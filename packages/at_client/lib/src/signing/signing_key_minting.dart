@@ -234,11 +234,22 @@ class SigningKeyMinting with ApkamSigning {
   /// package it signed, under rollout 1 — would stop verifying for good.
   ///
   /// Which writer depends on whether there is an enrollment record to carry it.
-  /// An enrolled client sends `enroll:update`, because the atServer is the only
-  /// writer of an enrollment's `_apsk` — one writer for the record's whole
-  /// life, which is what makes a rotation atomic from every reader's view. A
-  /// client with no enrollment publishes the record itself, under `primary`,
-  /// which has no enrollment record for the atServer to compose one from.
+  /// An enrolled client sends `enroll:update`, so that the atServer writes the
+  /// record from the enrollment it already holds. A client with no enrollment
+  /// publishes the record itself, under `primary`, which has no enrollment
+  /// record for the atServer to compose one from.
+  ///
+  /// ⚠️ **This used to say the atServer is the *only* writer of an enrolled
+  /// enrollment's `_apsk`, "one writer for the record's whole life, which is
+  /// what makes a rotation atomic from every reader's view". That is false and
+  /// was corrected 2026-08-14.** [ApkamSigning.publishPublicSigningKey] writes
+  /// the record directly, and two call sites in this package reach it for an
+  /// enrolled client — `KeyPackageRegistration.register` and
+  /// `PublishedNskeyKeyRing`. Both compose through `publicSigningKeyValue`, so
+  /// they agree with this path on *content*; what the sentence claimed and
+  /// nothing establishes is that there is a single writer. Whether the
+  /// plurality costs anything is not measured — see `implementation-plan.md`
+  /// 14.19 item 15.
   Future<void> _publish(List<ApkamSigningKeys> active,
       {required List<ApkamSigningKeys> retiring}) async {
     final entries = apskEntries(
