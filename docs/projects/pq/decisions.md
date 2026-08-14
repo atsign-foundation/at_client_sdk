@@ -8565,9 +8565,13 @@ the bump is not taken here.
 ## 98. Rollout 1 moves the authentication key, not the signing key (2026-08-14)
 
 Ruled by gkc over a fourteen-question walk, prompted by generating a keyfile's
-evolution through the stages
-(`untracked/scratchpad/atkeys_structure/`, machine-local) and finding that the
-stages as built did not say what they were for.
+evolution through the stages and finding that the stages as built did not say
+what they were for. (The generator that produced those keyfiles lived in
+`untracked/scratchpad/atkeys_structure/`, which is **machine-local and not in a
+fresh clone** — nothing below depends on it. The shapes this ruling and
+[99](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
+specify are tracked, as `keyfile-target-rollout1.json` and
+`keyfile-target-rollout2.json` beside this file.)
 
 **The insight the whole section rests on: the two keys have different
 audiences.** Only the **atServer** verifies the APKAM authentication key, and
