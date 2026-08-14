@@ -336,6 +336,46 @@ class AtClientImpl implements AtClient {
   static String instanceKey(String atSign, String? enrollmentId) =>
       enrollmentId == null ? atSign : '$atSign|$enrollmentId';
 
+  /// Throws when [asked] names different rollout axes from the client that is
+  /// already running under [cacheKey] — the posture, the signing rollout, the
+  /// in-use signing set or the legacy-encryption refusal.
+  ///
+  /// Every one of those is final at construction, so a client that already
+  /// exists cannot adopt them; the choice is between refusing and ignoring,
+  /// and ignoring is what this used to do. What that cost is not a flag: after
+  /// the auth/signing split the stage decides which algorithm an enrollment
+  /// authenticates with and which signing key it holds, so a caller whose
+  /// preference was ignored runs on the wrong **key** and finds out when a
+  /// peer cannot verify it.
+  ///
+  /// Static and shared because two paths hand back a client that already
+  /// exists, and only one of them is this class: `AtClientManager`'s
+  /// same-atSign short-circuit returns without calling [create] at all. A
+  /// guard on the cache alone would be loud on the path a caller reaches with
+  /// an override argument and silent on the ordinary one.
+  ///
+  /// An [ArgumentError], not an [AtClientException]: this is a caller
+  /// programming error — two places in one app disagreeing about the stage —
+  /// rather than anything the atServer or the network did.
+  static void refuseChangedRolloutAxes({
+    required AtClientPreference? running,
+    required AtClientPreference asked,
+    required String cacheKey,
+  }) {
+    if (running == null) return;
+    final differences = running.rolloutDifferencesFrom(asked);
+    if (differences.isEmpty) return;
+    throw ArgumentError.value(
+        differences.join('; '),
+        'preference',
+        'the client for $cacheKey is already running under different rollout '
+            'settings, and they are final at construction — it cannot adopt '
+            'these. Stop that client before building one with different '
+            'settings, or give this preference the settings it is running '
+            'under. Ignoring the difference would leave this caller writing, '
+            'signing and enrolling under a stage it thinks it has left');
+  }
+
   static final Finalizer<String> _finalizer = Finalizer((service) {
     _staticLogger.finer('Outgoing $service has been garbage collected');
   });
@@ -413,7 +453,14 @@ class AtClientImpl implements AtClient {
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
-      await atClientImpl!.start();
+      // Before anything is adopted or started: a cached client keeps the
+      // rollout axes it was built under, so a caller handing over a preference
+      // that names different ones is asking for something this cannot give.
+      refuseChangedRolloutAxes(
+          running: atClientImpl!.getPreferences(),
+          asked: preferences,
+          cacheKey: cacheKey);
+      await atClientImpl.start();
       // Re-using a cached AtClient skips _init. Adopt the supplied preference's
       // crypto config so providers (and a changed defaultProviderId) added
       // after first creation take effect; CryptoRuntime resolves against the
@@ -851,7 +898,25 @@ class AtClientImpl implements AtClient {
   }
 
   @override
+  /// Replaces this client's preference — everything except the rollout axes,
+  /// which are **refused** when they differ.
+  ///
+  /// Naming the replacement rather than being handed one does not make the
+  /// change possible: `posture`, `signingRollout`, `inUseSigningAlgorithms`
+  /// and `disallowLegacyEncryption` are final at construction because the
+  /// substrate reads them once, at a startup that has already run by the time
+  /// anyone can call this. Accepting them here would leave the client
+  /// *reporting* a stage it never applied, which is worse than the silent drop
+  /// [create] used to do — there the caller at least kept the stage it was
+  /// running under.
+  ///
+  /// Everything else is replaced as before, `crypto` included.
+  @override
   void setPreferences(AtClientPreference preference) async {
+    refuseChangedRolloutAxes(
+        running: _preference,
+        asked: preference,
+        cacheKey: instanceKey('$_atSign', enrollmentId));
     _preference = preference;
   }
 

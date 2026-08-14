@@ -56,8 +56,11 @@ class AtClientPreference {
   /// algorithm each override the posture's value for that one axis.
   ///
   /// Final at construction, like [disallowLegacyEncryption] and for the same
-  /// reason: what a client writes must not change meaning mid-run. A cached
-  /// client keeps the posture it was built under.
+  /// reason: what a client writes must not change meaning mid-run. A client
+  /// that already exists keeps the posture it was built under, and a caller
+  /// asking for it with a preference naming a different one is **refused** —
+  /// see [rolloutDifferencesFrom]. It used to be ignored, which left the
+  /// caller running on the stage it thought it had left.
   final ReleasePosture posture;
 
   /// Which algorithms this client keeps an **active signing key** for — the
@@ -111,6 +114,66 @@ class AtClientPreference {
         inUseSigningAlgorithms = _signableOrRefuse(inUseSigningAlgorithms ??
             (signingRollout ?? posture.signingRollout)
                 .defaultInUseSigningAlgorithms);
+
+  /// Where [other] would change what a **running** client does — one line per
+  /// differing axis, empty when the two are interchangeable.
+  ///
+  /// This is what a caller asking for a client that already exists is checked
+  /// against. Every axis below is final at construction precisely because what
+  /// a client writes must not change meaning mid-run, so a second preference
+  /// naming a different one cannot be adopted; before this existed it was
+  /// silently ignored, and the caller ran on the stage it thought it had left
+  /// behind. Post-rollout that is not a flag being ignored but a **key**: the
+  /// stage decides which algorithm an enrollment authenticates and signs under.
+  ///
+  /// **Compared by value, never by identity.** Repeated
+  /// `setCurrentAtSign(atSign, namespace, TestPreferences.getPreference(…))`
+  /// calls hand over a fresh, equal preference object every time — an identity
+  /// test would refuse every one of them.
+  ///
+  /// ⚠️ **The posture is compared by what it MEANS, not as an object**, for
+  /// the same reason one step further down: [ReleasePosture] declares no `==`,
+  /// so comparing two of them is an identity test, and a caller writing
+  /// `ReleasePosture.migration()` without `const` gets an instance that is not
+  /// the canonical one. Two behaviourally identical postures would then read as
+  /// a mismatch. What is compared is the pair of posture fields nothing else
+  /// carries — [ReleasePosture.writesPqByDefault] and
+  /// [ReleasePosture.keyExchangeMode] — beside the three effective axes, which
+  /// is the whole of what a posture can change.
+  ///
+  /// [crypto] is deliberately **not** here: it is adopted from the incoming
+  /// preference rather than refused, so that a provider registered after first
+  /// construction takes effect.
+  List<String> rolloutDifferencesFrom(AtClientPreference other) {
+    final differences = <String>[];
+
+    // Each line reads "asked for X, running on Y", since the caller is the one
+    // holding a preference it expected to take effect.
+    void compare(String axis, Object? asked, Object? running) {
+      if (asked != running) differences.add('$axis (asked $asked, running $running)');
+    }
+
+    compare('posture.writesPqByDefault', other.posture.writesPqByDefault,
+        posture.writesPqByDefault);
+    compare('posture.keyExchangeMode', other.posture.keyExchangeMode.name,
+        posture.keyExchangeMode.name);
+    compare('signingRollout', other.signingRollout.name, signingRollout.name);
+    compare('disallowLegacyEncryption', other.disallowLegacyEncryption,
+        disallowLegacyEncryption);
+
+    final asked = other.inUseSigningAlgorithms;
+    final running = inUseSigningAlgorithms;
+    if (asked.length != running.length || !asked.containsAll(running)) {
+      // Rendered strongest-first so both sides read in one order — a Set
+      // iterates in insertion order, so two equal sets built by different
+      // routes would otherwise print differently and read as a difference.
+      String spell(Set<SigningAlgoType> algorithms) =>
+          '{${SigningAlgoType.strongestFirst.where(algorithms.contains).map((a) => a.name).join(', ')}}';
+      differences.add('inUseSigningAlgorithms (asked ${spell(asked)}, '
+          'running ${spell(running)})');
+    }
+    return differences;
+  }
 
   /// [algorithms] unmodifiable, or an [ArgumentError] naming the first member
   /// this build produces no envelope signature for.

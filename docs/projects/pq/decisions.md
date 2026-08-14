@@ -8796,6 +8796,45 @@ because a silently-wrong posture is exactly the failure the dropped-event rule
 says goes unnoticed. `namespace` and `rootDomain` stay out of the comparison —
 re-scoping a client is an existing pattern.
 
+✅ **BUILT 2026-08-14 (row C1), and the ruling named one site where there are
+two.** `AtClientManager.setCurrentAtSign` short-circuits a same-atSign call
+carrying no override argument and **returns without calling
+`AtClientImpl.create` at all** — it is the ordinary path, and the one an app
+switching stage takes, so a guard on the cache alone would have been loud only
+where a caller happens to pass an `atKeysIo`/`atLookUp`/`enrollmentId` and
+silent everywhere else. Both sites now call one static
+`AtClientImpl.refuseChangedRolloutAxes`. Proven by two mutations: removing
+either guard reddens only its own row, so neither is standing in for the other.
+
+Two shapes the build settled that the ruling did not state:
+
+- **The comparison is by VALUE, never identity.** Callers hand over a fresh
+  preference object on every call — the e2e pack builds one per
+  `setCurrentAtSign` — so an identity test would refuse every one of them and
+  this would be a break rather than a check.
+- **The posture is compared by what it MEANS**, not as an object.
+  `ReleasePosture` declares no `==`, so comparing two of them is an identity
+  test, and only `const` instances are canonicalized: a caller writing
+  `ReleasePosture.migration()` without `const` would be refused over a
+  difference that does not exist. What is compared is the two posture fields
+  nothing else carries — `writesPqByDefault` and `keyExchangeMode` — beside the
+  three effective axes, which is the whole of what a posture can change.
+
+The diagnostic names **every** differing axis rather than the first, because
+naming a stage moves the set it derives: asking for `signingRollout: rollout1`
+against a `now` client differs on two axes, and reporting one would send a
+reader looking for a setting nobody wrote.
+
+⚠️ **A third door, found while building and ruled shut by gkc the same day:**
+`AtClient.setPreferences` replaces the whole preference on a running client, so
+leaving it unchecked would have made the other two a check in appearance only.
+Naming the replacement does not make the change possible — these axes are read
+at a startup that has already run by the time anyone can call it, so accepting
+them would leave the client *reporting* a stage it never applied, which is
+worse than the silent drop it replaces: there the caller at least kept the
+stage it was running under. Everything outside the rollout axes is still
+replaced, `crypto` included.
+
 **10. `selfRetrofit`'s "no ML-DSA anywhere" is wrong and the doc is fixed, not
 the gate.** A fully privileged `rsa2048` retrofit files an ML-DSA-65
 `pq_signing_root`, because `mintIfAbsent` gates on privilege and never on the

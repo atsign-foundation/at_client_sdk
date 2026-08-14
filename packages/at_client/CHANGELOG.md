@@ -1,4 +1,25 @@
 ## 3.14.1
+- feat!: asking for a client that already exists with a preference naming
+  different rollout settings — `posture`, `signingRollout`,
+  `inUseSigningAlgorithms` or `disallowLegacyEncryption` — now **throws** an
+  `ArgumentError` naming every differing axis. All four are final at
+  construction, so the choice was between refusing and ignoring, and ignoring
+  left the caller writing, signing and enrolling under a stage it thought it
+  had left. New `AtClientPreference.rolloutDifferencesFrom`.
+  - All three paths that can change a running client's axes check: the
+    `(atSign, enrollmentId)` cache in `AtClientImpl.create`,
+    `AtClientManager.setCurrentAtSign`'s same-atSign short-circuit (which
+    returns without calling `create` at all), and `AtClient.setPreferences`.
+  - `setPreferences` still replaces everything else, `crypto` included.
+    Naming the replacement does not make a stage change possible: these axes
+    are read at a startup that has already run, so accepting one would leave
+    the client reporting a stage it never applied.
+  - Compared by **value**, never identity — callers hand over a fresh
+    preference object on every call. The posture is compared by the two fields
+    nothing else carries rather than as an object, since it declares no `==`
+    and only `const` instances are canonicalized.
+  - `crypto`, `namespace` and `rootDomain` stay out of it: the first is
+    adopted by a re-used client, and re-scoping one is an existing pattern.
 - fix: a client healing an enrollment that holds no signing key of its own now
   advertises a single `rsa2048` key in the **bare** form, as
   `EnrollmentUpdateRequest.apskLegacy`, instead of always sending the JSON

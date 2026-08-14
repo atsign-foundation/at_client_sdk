@@ -137,8 +137,18 @@ class AtClientManager {
       // cached client. The short-circuit skips create(), so adopt it here too —
       // otherwise a same-atSign call carrying a new crypto config silently drops
       // it, surfacing as CryptoProviderNotRegistered on the next put.
+      //
+      // And for the same reason it must apply create()'s refusal: this path
+      // returns a client that already exists, so a preference naming different
+      // rollout axes is being dropped rather than applied. Skipping the check
+      // here would put it on the path a caller reaches only with an override
+      // argument, and leave the ordinary one silent.
       final existing = _currentAtClient;
       if (existing is AtClientImpl) {
+        AtClientImpl.refuseChangedRolloutAxes(
+            running: existing.getPreferences(),
+            asked: preference,
+            cacheKey: AtClientImpl.instanceKey(atSign, existing.enrollmentId));
         existing.getPreferences()?.crypto = preference.crypto;
       }
       _logger
