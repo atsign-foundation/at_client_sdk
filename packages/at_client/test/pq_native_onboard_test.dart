@@ -34,26 +34,68 @@ void main() {
   AtOnboardingRequest request() =>
       AtOnboardingRequest(atSign, rootDomain: AtRootDomain('vip', 64));
 
-  test('the stamped key package verifies against the ML-DSA APKAM key',
-      () async {
-    final (io, public) = await mlDsaKeys();
+  test('the activation carries an rsa2048 signing key of its own', () async {
+    final r = request();
+    makeActivationPqNative(r, atSign: atSign);
+
+    expect(r.signingAlgoType, SigningAlgoType.mldsa65,
+        reason: 'the AUTHENTICATION key goes post-quantum: only the atServer '
+            'verifies it, and that is the operator\'s own infrastructure');
+    expect(r.advertisedSigningKey?.algorithm, SigningAlgoType.rsa2048,
+        reason: 'while the SIGNING key stays classical, because every peer '
+            'verifies it and the fleet is not the operator\'s to upgrade. A '
+            'single active rsa2048 entry is also the one _apsk spelling every '
+            'deployed reader parses');
+  });
+
+  test('the stamped key package verifies against the SIGNING key', () async {
+    // Ruling 98.3 as amended: a peer resolves this enrollment's `_apsk` to
+    // verify its key package before sealing anything to it, and `_apsk` names
+    // the signing key. Signing the package with the APKAM key instead would
+    // activate the atSign successfully and leave it unable to receive a
+    // secret from anyone.
+    final (io, apkamPublic) = await mlDsaKeys();
     final r = request();
     makeActivationPqNative(r, atSign: atSign);
 
     final envelope = SignedEnvelope.fromJson(
         (await r.metadataBuilder!(io))!['keyPackage'] as Map);
 
-    // Verified in the array form this enrollment composed and the atServer
-    // publishes verbatim — a bare value is classified as an RSA key by the
-    // verifier, so the array is what proves the ML-DSA path end to end.
     await verifyEnvelope(envelope,
-        signerPublicKey: jsonEncode(apskAdvertisement(keys: [
-        ApskSigningKey.forPublicKey(
-            alg: SigningAlgoType.mldsa65, pub: public)
-      ])));
+        signerPublicKey: r.advertisedSigningKey!.publicKey);
+
+    // The differential. Without it this passes for a build that never moved
+    // the signer, since a package signed by the APKAM key is still a validly
+    // signed package — it just verifies against the wrong record.
+    await expectLater(
+      () => verifyEnvelope(envelope,
+          signerPublicKey: jsonEncode(apskAdvertisement(keys: [
+            ApskSigningKey.forPublicKey(
+                alg: SigningAlgoType.mldsa65, pub: apkamPublic)
+          ]))),
+      throwsA(isA<Exception>()),
+      reason: 'the ML-DSA APKAM key must NOT verify it: that key '
+          'authenticates connections and signs nothing once the enrollment '
+          'owns a signing key, and _apsk does not name it',
+    );
 
     expect(envelope.signerEnrollmentId, isNull,
         reason: 'an onboard has no enrollment id to stamp: this signs before '
             'the atServer has assigned one');
+  });
+
+  test('the request and the builder carry the SAME keypair', () async {
+    // The failure this function exists to prevent, in its second form: a
+    // record naming one key and a package signed by another verifies against
+    // neither, and nothing says so until a peer silently declines to seal.
+    final (io, _) = await mlDsaKeys();
+    final r = request();
+    makeActivationPqNative(r, atSign: atSign);
+
+    final envelope = SignedEnvelope.fromJson(
+        (await r.metadataBuilder!(io))!['keyPackage'] as Map);
+
+    await verifyEnvelope(envelope,
+        signerPublicKey: r.advertisedSigningKey!.publicKey);
   });
 }

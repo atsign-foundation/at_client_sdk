@@ -93,6 +93,22 @@ class AtOnboardingRequest extends AuthRequest {
   /// again, so onboarding is the only moment a first enrollment can advertise
   /// an encapsulation key at all.
   FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? metadataBuilder;
+
+  /// A signing keypair this atSign's first enrollment owns from birth.
+  ///
+  /// Becomes [EnrollmentRequest.advertisedSigningKey]: `_apsk` advertises it
+  /// instead of the APKAM key, and the activation files it under
+  /// `sign:<algorithm>:<generation>`.
+  ///
+  /// ⚠️ **Whatever signs [metadataBuilder]'s key package must be this key.** A
+  /// peer verifies that package against `_apsk` before sealing any secret to
+  /// the enrollment, so the two disagreeing means a freshly activated atSign
+  /// is never sent anything.
+  ({
+    SigningAlgoType algorithm,
+    String publicKey,
+    String privateKey
+  })? advertisedSigningKey;
 }
 
 class AtAuthRequest extends AuthRequest {

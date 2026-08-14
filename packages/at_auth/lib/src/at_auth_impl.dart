@@ -441,6 +441,7 @@ class AtAuthImpl implements AtAuth {
         deviceName: atOnboardingRequest.deviceName,
         apkamPublicKey: apkamPublicKey,
         signingAlgo: signingAlgo,
+        advertisedSigningKey: atOnboardingRequest.advertisedSigningKey,
         metadataBuilder: atOnboardingRequest.metadataBuilder,
         atKeys: constructionKeys);
 
@@ -462,6 +463,18 @@ class AtAuthImpl implements AtAuth {
     if (constructionKeys != null) {
       _fileFirstEnrollmentMaterial(atAuthKeys, constructionKeys, mint!,
           signingAlgo, enrollmentIdFromServer);
+    }
+    // Filed whether or not there were construction keys: the signing key is
+    // the caller's, not something the builder minted, and an enrollment whose
+    // `_apsk` names a key its keyfile does not hold signs with something else
+    // entirely.
+    final advertisedSigningKey = atOnboardingRequest.advertisedSigningKey;
+    if (advertisedSigningKey != null) {
+      atAuthKeys.fileSigningMaterial(
+          enrollmentId: enrollmentIdFromServer,
+          algorithm: advertisedSigningKey.algorithm.name,
+          publicKey: advertisedSigningKey.publicKey,
+          privateKey: advertisedSigningKey.privateKey);
     }
     return enrollmentIdFromServer;
   }

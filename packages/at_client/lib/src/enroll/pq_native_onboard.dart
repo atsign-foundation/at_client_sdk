@@ -1,5 +1,5 @@
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_chops/at_chops.dart' show RsaKeyPair, SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
     show PqSigningRoot;
@@ -16,18 +16,34 @@ import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('pqNativeOnboard');
 
-/// Stamps [request] with everything that makes an activation **PQ-native**:
-/// an ML-DSA-65 APKAM, and the first enrollment's key package advertised on the
-/// `enroll:request` that creates the record.
+/// Stamps [request] with everything that makes an activation **PQ-native**: an
+/// ML-DSA-65 APKAM authentication key, a fresh RSA-2048 signing key the
+/// enrollment owns from birth, and the first enrollment's key package — all
+/// three on the `enroll:request` that creates the record.
 ///
 /// Exists so that a caller with its own activation flow — `at_onboarding_cli`
 /// builds a request carrying retry options, a keyfile path and its own
-/// completion step — becomes PQ-native by one call rather than by copying three
-/// assignments. Copying them is the failure mode this prevents: setting only
-/// `signingAlgoType` mints an ML-DSA APKAM with **no key package**, and
-/// `metadata.keyPackage` is otherwise written only by the `enroll:request`
-/// that creates the enrollment record — so repairing that atSign would take an
-/// `enroll:update` it must send for itself, and no client sends one yet.
+/// completion step — becomes PQ-native by one call rather than by copying
+/// several assignments. Copying them is the failure mode this prevents, and
+/// there are now two ways to get it wrong:
+///
+/// - setting only `signingAlgoType` mints an ML-DSA APKAM with **no key
+///   package**, and `metadata.keyPackage` is otherwise written only by the
+///   `enroll:request` that creates the enrollment record — so repairing that
+///   atSign would take an `enroll:update` it must send for itself, and no
+///   client sends one yet;
+/// - setting `advertisedSigningKey` without handing the **same** keypair to
+///   the key-package builder publishes a record naming one key and a package
+///   signed by another. A peer verifies the package against `_apsk` before
+///   sealing anything to the enrollment, so the atSign would activate
+///   successfully and then never be sent a secret by anyone.
+///
+/// The signing key is `rsa2048` while the authentication key is ML-DSA, and
+/// the asymmetry is the design: only the **atServer** verifies the
+/// authentication key and it is the operator's own infrastructure, while
+/// **every peer** verifies the signing key and the fleet is not the operator's
+/// to upgrade. A single active `rsa2048` entry is also the one `_apsk`
+/// spelling every deployed reader can parse.
 ///
 /// [keyEstablishmentAlgo] is read from the caller's preference rather than
 /// resolved here, because the builder runs before any client exists. It is
@@ -44,10 +60,28 @@ void makeActivationPqNative(
   required String atSign,
   String keyEstablishmentAlgo = SecretSharingAlgos.xWing,
 }) {
+  // Minted here, before the request, because the enrollment must own it from
+  // its first byte: `_apsk` advertises this key and the key package is signed
+  // with it, so a client start that minted it later would leave a window in
+  // which the record names the ML-DSA authentication key.
+  //
+  // rsa2048, not ML-DSA: a verifier's fleet is not the operator's to upgrade,
+  // and a single active rsa2048 entry is the one `_apsk` spelling every
+  // deployed reader parses. The authentication key goes post-quantum here
+  // precisely because only the atServer verifies it.
+  final pair = RsaKeyPair.generate();
+  final advertisedSigningKey = (
+    algorithm: SigningAlgoType.rsa2048,
+    publicKey: pair.atPublicKey.publicKey,
+    privateKey: pair.atPrivateKey.privateKey,
+  );
+
   request
     ..signingAlgoType = SigningAlgoType.mldsa65
+    ..advertisedSigningKey = advertisedSigningKey
     ..metadataBuilder = enrollmentKeyPackageBuilder(atSign,
         signingAlgo: SigningAlgoType.mldsa65,
+        advertisedSigningKey: advertisedSigningKey,
         keyEstablishmentAlgo: keyEstablishmentAlgo);
 }
 

@@ -8715,11 +8715,11 @@ reddens the signer pin — the last being the one this amendment exists for,
 since a package signed by the wrong key still verifies against *that* key and
 fails only against the record.
 
-⚠️ **The greenfield-onboard half is still owed** — `makeActivationPqNative`
-does not yet mint a signing key, so a PQ-native *activation* still advertises
-its ML-DSA APKAM key. Less urgent than the retrofit was: that path runs at the
-post-quantum posture, where `_apsk` is the array no un-upgraded peer reads
-either way, so it names the wrong key rather than breaking a deployed reader.
+✅ **The greenfield-onboard half followed the same day.**
+`makeActivationPqNative` mints the rsa2048 signing keypair, sets it on the
+onboarding request **and** hands the same pair to the key-package builder — the
+second being the failure this ruling is about, and now the one its dartdoc
+names explicitly as the way to get the call wrong.
 
 **5. Rollout 1 is entered only by a new enrollment.** An existing `now`
 enrollment does not rotate into it; it stays at `now` until it retrofits, and

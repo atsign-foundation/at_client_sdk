@@ -15,8 +15,11 @@
   - Always `rsa2048`, whatever the stage keeps active: the advertisement has
     to stay the bare string an un-upgraded peer can parse. A stage wanting
     ML-DSA reaches it by retiring the RSA key afterwards, not by skipping it.
-  - ⚠️ A PQ-native **activation** (`makeActivationPqNative`) does not mint one
-    yet and still advertises its ML-DSA APKAM key.
+  - A PQ-native **activation** does the same: `makeActivationPqNative` mints
+    the signing keypair, sets it on the onboarding request and hands the same
+    pair to the key-package builder. Its dartdoc now names both ways to get
+    the call wrong by hand — omitting the key package, and advertising one
+    key while signing the package with another.
 - **BREAKING** feat: `ReleasePosture.retrofitSigningAlgo` becomes
   `retrofitAuthenticationAlgo`, and is now **derived** from `signingRollout`
   rather than stored — so both named constructors take one argument fewer.

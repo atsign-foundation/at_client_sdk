@@ -1,4 +1,8 @@
 ## 3.4.0
+- feat: `AtOnboardingRequest.advertisedSigningKey` — the activation-time form
+  of the field below. An atSign's first enrollment owns a signing key from
+  birth, `_apsk` advertises it, and `AtAuthImpl` files it under the id the
+  atServer assigns.
 - feat: `EnrollmentRequest.advertisedSigningKey` — a signing keypair the
   enrollment owns from birth. When supplied, `_apsk` advertises **that key**
   instead of `apkamPublicKey`, and the request files it into the enrollment's
