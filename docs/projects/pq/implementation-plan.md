@@ -3005,7 +3005,39 @@ evidence that any of this landed. Two specific traps are called out at the end.
 
 **The concrete target shapes are `keyfile-target-rollout1.json` and
 `keyfile-target-rollout2.json` beside this file** — tracked, so a fresh clone
-has them. Match them exactly.
+has them. **Match their STRUCTURE exactly**: field names, nesting, which entry
+sits where, keyId grammar, `status` on every part. The *values* are elided
+placeholders (`"<392 chars>"`, `"<the apkam app name>"`) and are not literals to
+reproduce.
+
+#### ⚠️ Six questions this sequence does NOT answer — ask, do not guess
+
+Each of these decides a shape, and guessing wrong builds the wrong thing
+silently. Surfaced 2026-08-14 by a context-free reader asked to build from
+these docs.
+
+1. **Does `AtKeys`' public API gain an enrollment parameter?** Ruling 5 makes
+   identity `(enrollment, keyId)`, but `getKey`, `keysForKeyId`, `retireKey`
+   and `replaceKey` all take a bare keyId today and index a document-wide
+   `_materialsByKeyId`. Two enrollments both holding `auth:mldsa65:1` collide.
+   Composite index internally, or a source-breaking signature change on a
+   package that already owes a version decision?
+2. **What supplies "the enrollment I authenticate as"** once the file-wide
+   single-active-authentication rule stops being a read-time throw? See the
+   note in [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
+   This is the sharpest of the six.
+3. **Is `apkam:` renamed to `auth:` in keyIds**, and do the prefix parsers
+   (`nextApkamGeneration`, `nextSigningGeneration`, `signingKeysFor`) get any
+   read-side tolerance for the old grammar? Ruling 4 gives examples, not a
+   migration.
+4. **Where does `root:mldsa65:1`'s generation come from**, and how does a
+   normalised root id coexist with the losing-pair case that keeps a second
+   root entry (today `pq_signing_root.<n>`)?
+5. **What does a writer put in `namespaces`/`appName`/`deviceName` before the
+   first record fetch?** Nothing in at_auth holds these today, and
+   reconciliation is C2 — later than A1, which builds the container.
+6. **Is `operations` retained at rest?** It is emitted conditionally today and
+   appears in neither target file.
 
 #### Why this order
 
@@ -3017,7 +3049,7 @@ twice. Within each, the reader before the writer.
 |---|------|----------|
 | A1 | `AtKeysMaterial`/`AtKeys` parse+encode move to `enrollments[]` and `atSignKeys[]`; keyIds normalise to `<role>:<algo>:<gen>` and drop the embedded enrollment id; `status` stays explicit; `AtKeysMaterial` keeps `enrollmentId` in memory, populated from the container | Everything else files material. This is the container |
 | A2 | The reader tolerates **many** enrollments and selects the one it authenticates as; an assurance rule refuses to **write** a second | Reader-first. A reader that refuses a second entry makes plurality unenableable later — the `.single` lesson |
-| A3 | Regenerate the spike's dev fixtures and virtualenv keyfiles | They are version-1 *old*-typed and become unreadable at A1. Do this before running any live pack, or the failures look like code |
+| A3 | Delete **runtime-generated** keyfiles left by earlier live runs before re-running any pack — `tests/at_functional_test/test/testData/*.atKeys` written by a previous run, and `test/hive/` | ⚠️ **Corrected 2026-08-14:** an earlier draft of this row said the *tracked* fixtures are version-1 old-typed and become unreadable. **They are not** — `packages/at_auth/test/data/@alice🛠_key.atKeys` and `tests/at_functional_test/test/testData/@alice🛠_key.atKeys` are legacy-flat (no `version`, no `keys`), and `build_test_atkeys.dart` files no typed material. Only keyfiles a *live retrofit* produced carry the old typed shape, and those are generated, not tracked |
 | B1 | `SigningRollout` gains `defaultRetrofitAuthenticationAlgo`; in-use sets become `{}` / `{rsa2048}` / `{mldsa65}`; rename `retrofitSigningAlgo` → `retrofitAuthenticationAlgo` | 98's stages are defined here. Everything downstream reads them |
 | B2 | `apskEntries` implements the ruling-98 `_apsk` rule: advertise the **current signers** plus **retired signing keys**; the auth key appears only while it *is* the signer and is never retained | Must precede any writer that mints a signing key, or rollout 1 publishes an array |
 | B3 | The retrofit and `pq_native_onboard` mint the RSA signing keypair **before** submitting, and `_apskFor` advertises **that key** rather than `apkamPublicKey` | ⚠️ **B3 is one commit, not two.** Splitting it publishes an ML-DSA array at enrollment creation — the breakage rollout 1 exists to prevent, landing on peers who cannot fix it |
@@ -3025,8 +3057,8 @@ twice. Within each, the reader before the writer.
 | B5 | Retire a signing key whose algorithm leaves the in-use set — [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) ruling 12. Nothing does this today | Required before rollout 1 → 2 works at all; not required for rollout 1 |
 | C1 | `AtClientImpl.create` **throws** when a cached `(atSign, enrollmentId)` client is handed a preference differing in `posture`, `signingRollout`, `inUseSigningAlgorithms` or `disallowLegacyEncryption` | Independent of A and B; can land any time. Do it early — it is what makes a mis-wired stage loud instead of silent |
 | C2 | The enrollment record snapshot (`namespaces`/`appName`/`deviceName`) is reconciled on every start, through `WrittenAtKeysIo.update`, logging a changed `namespaces` | ⚠️ Must use the store's atomic verb. This tree has already lost key material to two unawaited start-time writers doing read-mutate-write on this file |
-| D1 | Dartdocs that now contradict a ruling: `SigningRollout.rollout1` ("deliberately identical to `now` in what this client writes"), `selfRetrofit` ("no ML-DSA anywhere"), and `EnrollParams.signingAlgo` (name it as the **authentication** key's algorithm) | These are wrong *today*, in the tree, and a builder reading them will build the old design |
-| D2 | Rewrite UC-G1.14 and its test: a released at_client 3.14.0 reader fetches a rollout-1 sender's `_apsk` and parses it as a bare RSA key | Needs B3 to exist first |
+| D1 | Dartdocs that now contradict a ruling: `SigningRollout.rollout1` ("deliberately identical to `now` in what this client writes"), `selfRetrofit` ("no ML-DSA anywhere"), and `EnrollParams.signingAlgo` (name it as the **authentication** key's algorithm) | These are wrong *today*, in the tree, and a builder reading them will build the old design. ⚠️ `design.md` carries the same two errors and was **already banner-flagged and corrected in place** 2026-08-14 — do not re-do it |
+| D2 | Rewrite **the test only** — `acceptance.md`'s UC-G1.14 row was already rewritten to the 98.6 form on 2026-08-14. `tests/at_functional_test/test/pq_rollout_matrix_test.dart` still asserts byte-identity and must become: a released at_client 3.14.0 reader fetches a rollout-1 sender's `_apsk` and parses it as a bare RSA key | Needs B3 to exist first. ⚠️ Do not "restore" acceptance.md to match the stale test |
 
 #### Two traps a fresh session will otherwise hit
 

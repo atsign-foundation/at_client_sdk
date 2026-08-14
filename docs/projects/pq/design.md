@@ -1,5 +1,23 @@
 # design.md — Detailed designs & implementation steps (by subsystem)
 
+> ⛔ **PARTLY SUPERSEDED, 2026-08-14. Read this before building from any
+> section that names a rollout stage or the `.atKeys` shape.**
+>
+> [`decisions.md` 98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
+> redefined the rollout stages and
+> [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
+> reshaped the at-rest keyfile. **Neither is built**, so this document still
+> describes what the *code* does — and that is exactly the trap: it reads as
+> current because it matches the tree.
+>
+> Two statements in [section 9](#9-subsystem-g--signature-agility-the-authsigning-key-split)
+> are now false, and both are called out in place below: **`rollout1` writes
+> exactly what `now` writes**, and the **file-wide single-active-authentication
+> rule** as the thing that makes the enrollment id derivable.
+>
+> The order to build the replacements in is
+> [`implementation-plan.md` 14.20](implementation-plan.md#1420-building-rulings-98-and-99--the-sequence).
+
 **Status:** working design doc (not plan-of-record). Lives in `docs/`.
 **Purpose:** the detailed per-subsystem design + build-level implementation steps
 (with `file:line` pointers) for the post-quantum crypto work — D1 (the nskey data
@@ -1989,6 +2007,18 @@ is what makes the enrollment id derivable, and it is a throw rather than a
 warning: with one live enrollment per install, a second active authentication
 key is a corrupt keyfile, not a supported state.
 
+⛔ **The file-wide rule does not survive [`decisions.md` 99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
+(2026-08-14), and what replaces its side effect is an OPEN QUESTION.** Ruling 2
+makes the *reader* tolerate several enrollments and select the one it is
+authenticating as, moving the refusal to the write path — at which point this
+rule no longer answers "which enrollment does this keyfile authenticate as",
+and `AtKeys.activeEnrollmentId` has nothing to derive from. Nothing yet says
+what supplies that selection, and the top-level `enrollmentId` is explicitly
+**not** it (99 ruling 7 — it belongs to the legacy block). **Settle this before
+building [14.20](implementation-plan.md#1420-building-rulings-98-and-99--the-sequence)
+row A2**; guessing gets a client that authenticates as the wrong enrollment
+with nothing going red.
+
 `AtKeys.replaceKey(keyId, newMaterial)` retires the named keyId's materials and
 files the replacement in one call. Rotation is never two caller-sequenced
 mutations across a flush.
@@ -2211,7 +2241,14 @@ supplies the default for the one piece of state all three read,
 the stage rather than storing both, because two stored fields are two controls
 over one behaviour.
 
-`rollout1` writes exactly what `now` writes, deliberately. What it carries is
+⛔ **FALSE since [`decisions.md` 98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
+(2026-08-14), and still what the code does because 98 is unbuilt.** Under 98,
+rollout 1 mints an **ML-DSA-65 authentication** keypair and a fresh **RSA-2048
+signing** keypair, and `_apsk` advertises the *signing* key — so rollout 1
+writes something `now` does not, and carries an atServer dependency (ML-DSA
+PKAM) that `now` does not. The paragraph below describes the superseded design:
+
+~~`rollout1` writes exactly what `now` writes, deliberately.~~ What it carries is
 the *fleet's* position — the peers' readers have upgraded — which no client can
 observe for itself and which is the precondition for anyone moving to
 `rollout2`. It is reachable only through `AtClientPreference`, since there are
