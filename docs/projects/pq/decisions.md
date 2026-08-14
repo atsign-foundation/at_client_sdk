@@ -8656,6 +8656,50 @@ signing keys are minted at two sites, and `SigningKeyMinting` at client start
 becomes the **heal path** for enrollments that predate this rather than the
 only producer.
 
+⚠️ **AMENDED 2026-08-14, before B3 was built: ruling 4 as written breaks key
+conveyance, because `_apsk` has a second consumer this ruling did not
+account for.** The paragraph above stands; what follows is what it was
+missing.
+
+`_apsk` is not only what verifies an enrollment's envelopes. It is also what
+verifies its **key package** — `verifyAdvertisedKeyPackage`
+(`enrollment_directory.dart:216`) calls
+`verifyEnvelopeSignature(..., signerEnrollmentId: enrollmentId)`, which
+resolves that enrollment's `_apsk` and checks the package against it. And the
+package is signed with the **APKAM keypair**
+(`enrollment_key_package.dart:133`, which hands `signEnvelope` the
+`apkamPublicKey`/`apkamPrivateKey` the construction keys carry).
+
+So swapping `_apsk` to the signing key while the package is still signed by the
+APKAM key makes every party that seals to this enrollment fetch `_apsk`, fail
+the verification, log *"does not verify against its `_apsk`, so the key it
+offers is only as trustworthy as whatever served it; not sealing to it"* and
+return `rejected`. That is not an approve-time-only failure: the same path runs
+whenever anyone seals a secret to the enrollment, so the enrollment would be
+created and then never receive any conveyed key material.
+
+**Ruled by gkc 2026-08-14: the key package is signed with the SIGNING key.**
+`enrollmentKeyPackageBuilder` hands `signEnvelope` the minted RSA-2048 signing
+keypair rather than the APKAM keypair, so the record and the package agree
+again. This is the coherent reading of the split rather than a patch around it:
+the signing key signs what the enrollment *attests to*, a key package is
+exactly such an attestation, and the APKAM key's job is proving possession on a
+connection. A key package signed by the authentication key **is** the
+conflation this whole ruling exists to remove — `enrollment_key_package.dart`'s
+own dartdoc states it plainly today, that `signingAlgo` "names the algorithm of
+the APKAM keypair the handed `AtKeys` carries, and therefore how the envelope
+is signed".
+
+⚠️ **This ruling records the defect and the intent; it does not yet name a
+working mechanism.** B3's differential test is not green at the time of
+writing, and the sequencing rule for this project is that a ledger entry earns
+the mechanism only after that. Two things the build must settle and report
+back: whether `_apskFor`'s "a key package forces the array" rule can now
+return the **bare** form (it should — 98.1 requires bare RSA at rollout 1, and
+a bare rsa2048 value is exactly what the package's new signer is), and what
+`signingAlgo` on the builder comes to mean once it no longer names the APKAM
+key's algorithm.
+
 **5. Rollout 1 is entered only by a new enrollment.** An existing `now`
 enrollment does not rotate into it; it stays at `now` until it retrofits, and
 the retrofit mints a new enrollment id with both keys. This is what keeps
