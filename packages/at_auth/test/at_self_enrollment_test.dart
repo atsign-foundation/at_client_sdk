@@ -368,4 +368,94 @@ void main() {
         reason: 'this is the atServer\'s verify side: the whole client chain '
             '(keyfile -> AtChops -> pkam dispatch) must be genuinely ML-DSA');
   });
+
+  group('an enrollment that owns a signing key from birth', () {
+    // Ruling 98: rollout 1 moves the AUTHENTICATION key to ML-DSA and mints a
+    // fresh RSA-2048 SIGNING key, which is what `_apsk` advertises. The two
+    // keys have different audiences — only the atServer verifies the auth key
+    // and it is the operator's own, while every peer verifies the signing key
+    // and the fleet is not the operator's to upgrade.
+    final signingPub = b64('minted-rsa-signing-public');
+    final signingPriv = b64('minted-rsa-signing-private');
+    final advertised = (
+      algorithm: SigningAlgoType.rsa2048,
+      publicKey: signingPub,
+      privateKey: signingPriv
+    );
+
+    AtSelfEnrollmentRequest requestWithSigningKey(AtAuthSession session) =>
+        AtSelfEnrollmentRequest(
+            session: session,
+            appName: 'selfapp',
+            deviceName: 'selfdevice',
+            namespaces: {'app_1': 'rw'},
+            advertisedSigningKey: advertised);
+
+    Future<Map<String, dynamic>> submitAndCaptureParams(
+        AtSelfEnrollmentRequest Function(AtAuthSession) build) async {
+      final (_, session) = await sessionWithLegacyKeyfile();
+      final mock = approvingLookUp();
+      await AtEnrollmentImpl().submit(build(session), mock);
+      final command = verify(() => mock.executeCommand(captureAny(),
+          auth: any(named: 'auth'))).captured.single as String;
+      return jsonDecode(command.substring('enroll:request:'.length))
+          as Map<String, dynamic>;
+    }
+
+    test('_apsk advertises the SIGNING key, bare, not the ML-DSA APKAM key',
+        () async {
+      final params = await submitAndCaptureParams(requestWithSigningKey);
+
+      // RAW comparison against the minted key, not against a constant: the
+      // property is which key reached the wire.
+      expect(params['apskLegacy'], signingPub);
+      expect(params['apsk'], isNull,
+          reason: 'bare, not the array. An un-upgraded peer base64-decodes '
+              'this value as an RSA key, and a single active rsa2048 entry is '
+              'the one spelling that survives that');
+      expect(params['apskLegacy'], isNot(params['apkamPublicKey']),
+          reason: 'the APKAM key authenticates connections and signs nothing '
+              'once the enrollment owns a signing key. Advertising it here is '
+              'the breakage rollout 1 exists to prevent — under 98 it is '
+              'ML-DSA, which no deployed reader can parse');
+      expect(params['signingAlgo'], 'mldsa65',
+          reason: 'and the AUTHENTICATION key still moved to ML-DSA: the wire '
+              'field names that key, which is the whole point of the stage');
+    });
+
+    test('without one, _apsk still advertises the APKAM key', () async {
+      // The `now` path, unchanged — a client whose fleet has not upgraded must
+      // keep publishing exactly what every released build publishes.
+      final params = await submitAndCaptureParams(requestFor);
+
+      expect(params['apskLegacy'], isNull);
+      expect(jsonEncode(params['apsk']),
+          contains(params['apkamPublicKey'] as String),
+          reason: 'no signing key of its own, so the APKAM key both '
+              'authenticates and signs, and the record names it');
+    });
+
+    test('the signing key is FILED, not merely advertised', () async {
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write(atSign, legacyKeys());
+      final session = AtAuthSession(
+          atSign: atSign,
+          rootDomain: AtRootDomain.atsignDomain,
+          atKeysIo: keysIo,
+          enrollmentId: 'legacy-1');
+
+      await AtEnrollmentImpl()
+          .submit(requestWithSigningKey(session), approvingLookUp());
+
+      final keys = await keysIo.read(atSign);
+      final held = keys.signingKeysFor('new-123');
+      expect(held, hasLength(1));
+      expect(held.single.algorithm, SigningAlgoType.rsa2048);
+      expect(held.single.publicKey, signingPub);
+      expect(held.single.privateKey, signingPriv,
+          reason: 'advertise-without-file leaves the next start finding the '
+              'in-use algorithm missing, minting a SECOND key and '
+              'republishing — orphaning the key this record already named');
+    });
+  });
 }

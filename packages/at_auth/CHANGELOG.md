@@ -1,4 +1,21 @@
 ## 3.4.0
+- feat: `EnrollmentRequest.advertisedSigningKey` — a signing keypair the
+  enrollment owns from birth. When supplied, `_apsk` advertises **that key**
+  instead of `apkamPublicKey`, and the request files it into the enrollment's
+  key material under `sign:<algorithm>:<generation>`.
+  - Supplied by the caller rather than minted here, because whether an
+    enrollment holds one is a rollout position and at_auth cannot see a
+    preference. Absent, every path behaves exactly as before.
+  - A single active `rsa2048` signing key is advertised in the **bare** form
+    even when a key package rides the same request. A key package used to
+    force the array because the package's signer was the APKAM key, whose
+    algorithm is whatever the enrollment authenticates with — which a bare
+    value, meaning `rsa2048` by convention, cannot state.
+  - ⚠️ **Whatever signs the enrollment's key package must be this key.**
+    `_apsk` is what a peer resolves to verify that package before sealing any
+    secret to the enrollment, so a package signed by the APKAM key while the
+    record names this one verifies against nothing — and the enrollment is
+    created and then receives no conveyed material at all.
 - feat: `AtKeys.retiredSigningKeysFor(enrollmentId)` returns the **public**
   half of every signing keypair that enrollment has retired, strongest
   algorithm first — the entries an `_apsk` advertisement carries as `retired`

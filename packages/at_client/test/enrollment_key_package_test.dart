@@ -162,4 +162,54 @@ void main() {
 
     expect(enrollmentKeyPackageBuilder(atSign)(io), throwsA(isA<StateError>()));
   });
+
+  group('when the enrollment owns a signing key', () {
+    // Ruling 98.3, amended 2026-08-14: `_apsk` verifies the key package as
+    // well as the enrollment's envelopes, so whichever key the record names
+    // must be the key that signed the package. Once the enrollment owns a
+    // signing key, `_apsk` names THAT — so the package has to be signed with
+    // it and not with the APKAM keypair, or every peer refuses to seal to the
+    // enrollment and it receives no conveyed material at all.
+    test('the package is signed by the signing key, not the APKAM key',
+        () async {
+      final (io, _, apkam) = await freshKeys();
+      final signing = RsaKeyPair.generate();
+
+      final metadata = await enrollmentKeyPackageBuilder(atSign,
+          advertisedSigningKey: (
+            algorithm: SigningAlgoType.rsa2048,
+            publicKey: signing.atPublicKey.publicKey,
+            privateKey: signing.atPrivateKey.privateKey
+          ))(io);
+      final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
+
+      // The peer's check with the peer's input: _apsk names the signing key.
+      await verifyEnvelope(envelope,
+          signerPublicKey: signing.atPublicKey.publicKey);
+
+      // The differential. Without it this passes for a build that never
+      // changed signer, because a package signed by the APKAM key is still a
+      // validly signed package — it just verifies against the wrong record.
+      await expectLater(
+        () => verifyEnvelope(envelope,
+            signerPublicKey: apkam.atPublicKey.publicKey),
+        throwsA(isA<Exception>()),
+        reason: 'a package still signed by the APKAM key verifies against '
+            'that key and fails against _apsk, which is the silent conveyance '
+            'break the amendment exists to prevent',
+      );
+    });
+
+    test('without one, the APKAM key still signs it', () async {
+      // The `now` path, unchanged: no signing key of its own means the APKAM
+      // key both authenticates and signs, and _apsk names it.
+      final (io, _, apkam) = await freshKeys();
+
+      final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
+
+      await verifyEnvelope(
+          SignedEnvelope.fromJson(metadata!['keyPackage'] as Map),
+          signerPublicKey: apkam.atPublicKey.publicKey);
+    });
+  });
 }

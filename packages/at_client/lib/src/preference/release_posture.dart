@@ -56,6 +56,21 @@ enum SigningRollout {
         SigningRollout.rollout2 => const {SigningAlgoType.mldsa65},
       };
 
+  /// Whether an enrollment created at this stage owns a signing key from
+  /// birth, minted before it submits and advertised in place of its APKAM
+  /// authentication key.
+  ///
+  /// Derived from [defaultInUseSigningAlgorithms] being non-empty rather than
+  /// listed again: they are one fact — an enrollment that keeps an active
+  /// signing key is one that holds a signing key — and stating it twice is
+  /// two controls over one position.
+  ///
+  /// ⚠️ **What is minted at creation is always `rsa2048`, whatever this stage
+  /// keeps active.** The advertisement has to stay the bare string an
+  /// un-upgraded peer can parse; a stage wanting ML-DSA reaches it by retiring
+  /// the RSA key afterwards, not by skipping it.
+  bool get mintsOwnSigningKey => defaultInUseSigningAlgorithms.isNotEmpty;
+
   /// The algorithm of the **authentication** key a retrofit mints at this
   /// stage — the default for `selfRetrofit`'s `signingAlgo` parameter and,
   /// through it, for the `EnrollParams.signingAlgo` wire field.

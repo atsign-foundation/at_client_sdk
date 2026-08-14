@@ -8690,15 +8690,36 @@ own dartdoc states it plainly today, that `signingAlgo` "names the algorithm of
 the APKAM keypair the handed `AtKeys` carries, and therefore how the envelope
 is signed".
 
-⚠️ **This ruling records the defect and the intent; it does not yet name a
-working mechanism.** B3's differential test is not green at the time of
-writing, and the sequencing rule for this project is that a ledger entry earns
-the mechanism only after that. Two things the build must settle and report
-back: whether `_apskFor`'s "a key package forces the array" rule can now
-return the **bare** form (it should — 98.1 requires bare RSA at rollout 1, and
-a bare rsa2048 value is exactly what the package's new signer is), and what
-`signingAlgo` on the builder comes to mean once it no longer names the APKAM
-key's algorithm.
+✅ **Built and differentially proven the same day (row B3, retrofit half).**
+Both questions this entry left open are answered:
+
+- **`_apskFor`'s "a key package forces the array" rule now yields to the bare
+  form** when an advertised signing key is present. The rule existed because
+  the package's signer was the APKAM key, whose algorithm is whatever the
+  enrollment authenticates with — and a bare value can only say `rsa2048`. A
+  package signed by an rsa2048 *signing* key is exactly what the bare form
+  states, so the two constraints stopped competing.
+- **`signingAlgo` on the builder keeps naming the APKAM key's algorithm**, and
+  is used only when no signing key is supplied. It did not need to change
+  meaning; it needed to stop being the only answer.
+
+The seam is an explicit `EnrollmentRequest.advertisedSigningKey`, supplied by
+the caller rather than minted in at_auth, because whether to hold a signing key
+is a rollout position and at_auth cannot see a preference. Absent, every path
+behaves exactly as before, which is what keeps `now` unmoved.
+
+**Proven by three mutations, each reddening exactly one test**: ignoring the
+advertised key in `_apskFor` reddens the advertisement pin; dropping the filing
+reddens the keyfile pin; and signing the package with the APKAM key again
+reddens the signer pin — the last being the one this amendment exists for,
+since a package signed by the wrong key still verifies against *that* key and
+fails only against the record.
+
+⚠️ **The greenfield-onboard half is still owed** — `makeActivationPqNative`
+does not yet mint a signing key, so a PQ-native *activation* still advertises
+its ML-DSA APKAM key. Less urgent than the retrofit was: that path runs at the
+post-quantum posture, where `_apsk` is the array no un-upgraded peer reads
+either way, so it names the wrong key rather than breaking a deployed reader.
 
 **5. Rollout 1 is entered only by a new enrollment.** An existing `now`
 enrollment does not rotate into it; it stays at `now` until it retrofits, and

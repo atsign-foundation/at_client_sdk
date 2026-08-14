@@ -1,5 +1,5 @@
 import 'package:at_auth/at_auth.dart';
-import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_chops/at_chops.dart' show RsaKeyPair, SigningAlgoType;
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
     show PqSigningRoot;
 import 'package:at_client/src/manager/at_client_manager.dart';
@@ -13,6 +13,20 @@ import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('selfRetrofit');
+
+/// A fresh RSA-2048 signing keypair for an enrollment being created.
+///
+/// `RsaKeyPair.generate()` rather than `AtChopsUtil.generateAtPkamKeyPair()`,
+/// which returns a type at_chops deprecates.
+({SigningAlgoType algorithm, String publicKey, String privateKey})
+    _freshRsaSigningKey() {
+  final pair = RsaKeyPair.generate();
+  return (
+    algorithm: SigningAlgoType.rsa2048,
+    publicKey: pair.atPublicKey.publicKey,
+    privateKey: pair.atPrivateKey.privateKey,
+  );
+}
 
 /// Runs the whole PQ self-retrofit and hands back a manager whose current
 /// client runs under the NEW enrollment.
@@ -101,6 +115,21 @@ Future<AtClientManager> selfRetrofit({
   // rollout-1 client under `now`'s algorithm and never say so.
   final algo =
       signingAlgo ?? preference.signingRollout.defaultRetrofitAuthenticationAlgo;
+
+  // Minted here, before the request, because the enrollment must own it from
+  // its first byte: `_apsk` advertises this key and the key package is signed
+  // with it, so a client start that minted it later would leave a window in
+  // which the record names the authentication key — which no un-upgraded peer
+  // can read once that key is ML-DSA.
+  //
+  // rsa2048 regardless of [algo]: a verifier's fleet is not the operator's to
+  // upgrade, and a single active rsa2048 entry is the one `_apsk` spelling
+  // every deployed reader parses. Moving the signing key to ML-DSA is a later
+  // stage, which retires this one rather than skipping it.
+  final advertisedSigningKey = preference.signingRollout.mintsOwnSigningKey
+      ? _freshRsaSigningKey()
+      : null;
+
   final response = await AtEnrollment.create().submit(
       AtSelfEnrollmentRequest(
           session: session,
@@ -109,8 +138,10 @@ Future<AtClientManager> selfRetrofit({
           namespaces: namespaces,
           apkamKeysExpiryDuration: apkamKeysExpiryDuration,
           signingAlgo: algo,
+          advertisedSigningKey: advertisedSigningKey,
           metadataBuilder: enrollmentKeyPackageBuilder(session.atSign,
               signingAlgo: algo,
+              advertisedSigningKey: advertisedSigningKey,
               keyEstablishmentAlgo: preference.keyEstablishmentAlgo)),
       atLookUp);
 

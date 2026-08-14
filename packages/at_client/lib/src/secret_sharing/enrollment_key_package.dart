@@ -61,6 +61,11 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
   DateTime? createdAt,
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   String keyEstablishmentAlgo = SecretSharingAlgos.xWing,
+  ({
+    SigningAlgoType algorithm,
+    String publicKey,
+    String privateKey
+  })? advertisedSigningKey,
 }) {
   return (AtKeysIo keysIo) async {
     final AtKeys keys = await keysIo.read(atSign);
@@ -134,12 +139,29 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
         payload,
         // One key: this signs a package for an enrollment that does not exist
         // yet, so the only keypair in play is the one just minted for it.
+        //
+        // ⚠️ **Whichever key `_apsk` will advertise must be the one that signs
+        // here.** A peer verifies this package against that record before
+        // sealing any secret to the enrollment, so the two disagreeing means
+        // the enrollment is created and then receives nothing. Once the
+        // enrollment owns a signing key, that is the key on both sides: it is
+        // what signs what the enrollment attests to, and a key package is
+        // exactly such an attestation. The APKAM key signs here only while
+        // the enrollment has no signing key of its own, which is also the only
+        // time `_apsk` names it.
         keys: [
-          ApkamSigningKeys(
-            algorithm: signingAlgo,
-            publicKey: apkamPublicKey.toString(),
-            privateKey: apkamPrivateKey.toString(),
-          )
+          if (advertisedSigningKey case final signing?)
+            ApkamSigningKeys(
+              algorithm: signing.algorithm,
+              publicKey: signing.publicKey,
+              privateKey: signing.privateKey,
+            )
+          else
+            ApkamSigningKeys(
+              algorithm: signingAlgo,
+              publicKey: apkamPublicKey.toString(),
+              privateKey: apkamPrivateKey.toString(),
+            )
         ],
       ).toJson(),
     };

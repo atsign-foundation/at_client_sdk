@@ -336,19 +336,31 @@ void main() {
         reason: 'nothing in this test named an algorithm — the posture is '
             'the only thing that could have chosen ML-DSA');
 
-    // The posture's algorithm also reaches the key package frozen on the
-    // enrollment record — fetched with the fully privileged owner client,
-    // since the scoped retrofit cannot run enroll:list.
+    // The key package frozen on the enrollment record is signed by the
+    // enrollment's SIGNING key, which is rsa2048 — fetched with the fully
+    // privileged owner client, since the scoped retrofit cannot run
+    // enroll:list.
     final record = (await atClient.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == client.enrollmentId);
     final pkg = record.metadata!['keyPackage'] as Map;
     final header = jsonDecode(utf8.decode(base64Decode(base64.normalize(
         ((pkg['signatures'] as List).single as Map)['protected']
             as String)))) as Map;
-    expect(header['alg'], 'ML-DSA-65',
-        reason: 'the package is signed once and frozen in metadata, so an '
-            'RSA signature here means the posture reached the enrollment but '
-            'not the thing it froze');
+    expect(header['alg'], 'RS256',
+        reason: 'a peer verifies this package against this enrollment\'s '
+            '_apsk, and _apsk names its rsa2048 SIGNING key — so the package '
+            'must be signed by that key and not by the ML-DSA authentication '
+            'key. ML-DSA-65 here would mean the record and the package '
+            'disagree, and every peer would refuse to seal a secret to this '
+            'enrollment. This assertion read ML-DSA-65 until 2026-08-14, when '
+            'the enrollment gained a signing key of its own');
+
+    // ⚠️ The posture reaching the enrollment is proven by the AUTHENTICATION
+    // key above, not by this header. Until the enrollment owned a signing key
+    // the header was a second witness for it; now the two keys are
+    // deliberately different algorithms, which is the whole point of the
+    // split, and only the auth key tracks the posture.
+    expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65);
   });
 
   test(

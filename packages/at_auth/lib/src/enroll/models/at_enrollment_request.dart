@@ -52,11 +52,37 @@ abstract class EnrollmentRequest {
   String? apkamPublicKey;
   AtRootDomain rootDomain;
 
+  /// A signing keypair this enrollment owns from birth, which `_apsk`
+  /// advertises **instead of** [apkamPublicKey] and which this request files
+  /// into the enrollment's key material.
+  ///
+  /// Null means the enrollment holds no signing key of its own, so its APKAM
+  /// authentication key both authenticates and signs, and `_apsk` advertises
+  /// that key — which is what every released build does, and what a client
+  /// must keep doing until its fleet's readers have moved.
+  ///
+  /// **Supplied by the caller rather than minted here, because whether to hold
+  /// one is a rollout position and at_auth cannot see a preference.** The
+  /// caller knows where it stands; this package carries what it is given.
+  ///
+  /// ⚠️ **Whatever signs this enrollment's key package must be this key.**
+  /// `_apsk` is what a peer resolves to verify a key package before sealing
+  /// any secret to the enrollment, so a package signed by the APKAM key while
+  /// the record names this one verifies against nothing — and the enrollment
+  /// is created and then never receives any conveyed material. The two move
+  /// together or neither moves.
+  final ({
+    SigningAlgoType algorithm,
+    String publicKey,
+    String privateKey
+  })? advertisedSigningKey;
+
   EnrollmentRequest(
       {required this.atSign,
       required this.appName,
       required this.deviceName,
       this.apkamPublicKey,
+      this.advertisedSigningKey,
       this.rootDomain = const AtRootDomain("root.atsign.org", 64)});
 }
 
@@ -263,6 +289,7 @@ class AtSelfEnrollmentRequest extends EnrollmentRequest {
     required this.namespaces,
     this.apkamKeysExpiryDuration,
     this.metadataBuilder,
+    super.advertisedSigningKey,
     this.signingAlgo = SigningAlgoType.mldsa65,
   }) : super(atSign: session.atSign, rootDomain: session.rootDomain);
 }
@@ -327,6 +354,7 @@ class FirstEnrollmentRequest extends EnrollmentRequest {
       required super.appName,
       required super.deviceName,
       required super.apkamPublicKey,
+      super.advertisedSigningKey,
       this.signingAlgo = SigningAlgoType.rsa2048,
       this.metadataBuilder,
       this.atKeys});

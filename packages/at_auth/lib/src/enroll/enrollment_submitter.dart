@@ -93,7 +93,8 @@ class EnrollmentSubmitter {
     final advertised = _apskFor(
         apkamPublicKey: enrollmentRequest.apkamPublicKey!,
         signingAlgo: enrollmentRequest.signingAlgo,
-        metadata: metadata);
+        metadata: metadata,
+        advertisedSigningKey: enrollmentRequest.advertisedSigningKey);
     enrollVerbBuilder
       ..apsk = advertised.apsk
       ..apskLegacy = advertised.apskLegacy;
@@ -124,31 +125,63 @@ class EnrollmentSubmitter {
   /// enrollment, so the published record is unchanged from the day this moved
   /// client-side.
   ///
-  /// Everything else sends the array: an enrollment advertising a key package
-  /// must, because the approver verifies that package against this value and
-  /// shares no secrets with an enrollment whose package it cannot verify; and
-  /// so must one whose signing algorithm is not the rsa2048 a bare value
-  /// implies, since nothing could read its key otherwise.
+  /// Everything else sends the array: an enrollment whose advertised key's
+  /// algorithm is not the rsa2048 a bare value implies, since nothing could
+  /// read it otherwise; and an APKAM-key-advertising enrollment carrying a key
+  /// package, whose signer's algorithm the bare form cannot state.
+  ///
+  /// **[advertisedSigningKey] is preferred over [apkamPublicKey] whenever it
+  /// is there.** An enrollment that owns a signing key advertises *that*,
+  /// because that is what signs; the APKAM key authenticates connections and
+  /// signs nothing once a signing key exists.
+  ///
+  /// ⚠️ **With a signing key present, a key package no longer forces the
+  /// array.** It forced it while the package was signed by the APKAM key,
+  /// whose algorithm is whatever the enrollment authenticates with — which a
+  /// bare value, meaning `rsa2048` by convention, cannot state. A package
+  /// signed by an rsa2048 *signing* key is exactly what the bare form does
+  /// state, and rollout 1 depends on that: an un-upgraded peer has to
+  /// base64-decode this value as an RSA key, and it is also the value that
+  /// peer verifies the package against.
   ({Map<String, dynamic>? apsk, String? apskLegacy}) _apskFor({
     required String apkamPublicKey,
     required SigningAlgoType signingAlgo,
     required Map<String, dynamic>? metadata,
+    ({
+      SigningAlgoType algorithm,
+      String publicKey,
+      String privateKey
+    })? advertisedSigningKey,
   }) {
-    if (signingAlgo == SigningAlgoType.rsa2048 &&
-        metadata?['keyPackage'] == null) {
-      return (apsk: null, apskLegacy: apkamPublicKey);
+    final alg = advertisedSigningKey?.algorithm ?? signingAlgo;
+    final pub = advertisedSigningKey?.publicKey ?? apkamPublicKey;
+
+    if (alg == SigningAlgoType.rsa2048 &&
+        (advertisedSigningKey != null || metadata?['keyPackage'] == null)) {
+      return (apsk: null, apskLegacy: pub);
     }
-    // One key: at request time the enrollment has just been minted and holds
-    // nothing but this APKAM keypair. A second algorithm's key is added by a
-    // later `enroll:update`, once something has minted one — which is why the
-    // record is an array from its first byte rather than growing into one.
+    // One key: at request time the enrollment holds this one and nothing else.
+    // A second algorithm's key is added by a later `enroll:update`, once
+    // something has minted one — which is why the record is an array from its
+    // first byte rather than growing into one.
     return (
-      apsk: apskAdvertisement(keys: [
-        ApskSigningKey.forPublicKey(alg: signingAlgo, pub: apkamPublicKey)
-      ]),
+      apsk: apskAdvertisement(
+          keys: [ApskSigningKey.forPublicKey(alg: alg, pub: pub)]),
       apskLegacy: null
     );
   }
+
+  /// The keyfile's spelling of [algorithm]. The material tokens equal the
+  /// [SigningAlgoType] member names — both are the wire spelling — so a second
+  /// spelling here would file material the reader skips.
+  static String _materialAlgorithmOf(SigningAlgoType algorithm) =>
+      switch (algorithm) {
+        SigningAlgoType.mldsa65 => KeyAlgorithmType.mlDsa65,
+        SigningAlgoType.rsa2048 => KeyAlgorithmType.rsa2048,
+        _ => throw AtEnrollmentException(
+            'a self-enrollment mints rsa2048 or mldsa65; '
+            '${algorithm.name} has no keyfile material spelling here'),
+      };
 
   /// Runs [AtEnrollmentRequest.metadataBuilder], if the caller supplied one,
   /// over an [AtKeysIo] holding this request's freshly generated keys.
@@ -409,6 +442,7 @@ class EnrollmentSubmitter {
       // one the keyfile arrived with: `_apsk` is per enrollment, and this is a
       // new enrollment id.
       final advertised = _apskFor(
+          advertisedSigningKey: request.advertisedSigningKey,
           apkamPublicKey: apkamPublic,
           signingAlgo: request.signingAlgo,
           metadata: metadata);
@@ -463,6 +497,19 @@ class EnrollmentSubmitter {
           algorithm: materialAlgo,
           publicKey: apkamPublic,
           privateKey: apkamPrivate);
+      // Filed, not merely advertised. An enrollment whose `_apsk` names a key
+      // its keyfile does not hold signs with something else, and the next
+      // start's SigningKeyMinting finds the in-use algorithm missing, mints a
+      // SECOND key and republishes — orphaning the key this record already
+      // published and unverifying whatever was signed against it.
+      final signing = request.advertisedSigningKey;
+      if (signing != null) {
+        existing.fileSigningMaterial(
+            enrollmentId: newEnrollmentId,
+            algorithm: _materialAlgorithmOf(signing.algorithm),
+            publicKey: signing.publicKey,
+            privateKey: signing.privateKey);
+      }
       // Whatever the metadataBuilder filed (the X-Wing key package's two
       // halves), re-tagged with the enrollment id it now belongs to.
       existing.adoptMaterials(constructionKeys.keys,

@@ -1,4 +1,22 @@
 ## 3.14.1
+- feat: a `selfRetrofit` at `SigningRollout.rollout1` or beyond mints a fresh
+  RSA-2048 **signing** keypair before submitting, so the new enrollment owns
+  one from its first byte. `_apsk` advertises that key rather than the APKAM
+  authentication key, and the key package riding the same request is signed
+  with it. `SigningRollout` gains `mintsOwnSigningKey`;
+  `enrollmentKeyPackageBuilder` gains `advertisedSigningKey`.
+  - Minting it at client start instead would leave a window in which the
+    record names the authentication key — which under rollout 1 is ML-DSA,
+    and no un-upgraded peer can read it.
+  - The package must be signed with the same key the record names: `_apsk` is
+    what a peer verifies a key package against before sealing any secret to
+    the enrollment. Signing with the APKAM key while advertising the signing
+    key means the enrollment is created and then receives nothing.
+  - Always `rsa2048`, whatever the stage keeps active: the advertisement has
+    to stay the bare string an un-upgraded peer can parse. A stage wanting
+    ML-DSA reaches it by retiring the RSA key afterwards, not by skipping it.
+  - ⚠️ A PQ-native **activation** (`makeActivationPqNative`) does not mint one
+    yet and still advertises its ML-DSA APKAM key.
 - **BREAKING** feat: `ReleasePosture.retrofitSigningAlgo` becomes
   `retrofitAuthenticationAlgo`, and is now **derived** from `signingRollout`
   rather than stored — so both named constructors take one argument fewer.
