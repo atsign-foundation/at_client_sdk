@@ -752,7 +752,14 @@ record:
   encapsulation/decapsulation, key agreement). The classical/post-quantum/
   hybrid axis is a property of the algorithm token (X-Wing material is
   `xwing` + encapsulation/decapsulation), never a second role axis.
-  `KeyPartStatus` stays an enum (a closed state machine the format owns).
+  ~~`KeyPartStatus` stays an enum (a closed state machine the format owns).~~
+  **Reversed 2026-08-14 — see [97](#97-a-keyfile-status-a-build-has-never-seen-is-read-not-refused-2026-08-14).**
+  It is an open `String` like the two above it. "A closed state machine the
+  format owns" was true of the state machine and false of the *format*: the
+  same paragraph requires unknown tokens to be re-emitted byte-identical, and
+  an enum parsed through a throwing `expectEnum` cannot do that — it refused
+  the whole document. The exception was carved for the field least able to
+  afford it.
   Unknown tokens are accepted, held, and re-emitted byte-identical.
 - **S-1 ships as at_auth 3.3.0.** The 3.2.0 slot was consumed by the
   validateAtServer network-timeout release (published from trunk 2026-07-17),
