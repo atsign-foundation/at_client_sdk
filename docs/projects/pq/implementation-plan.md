@@ -2339,8 +2339,10 @@ than it looks** (both re-verified against the source 2026-08-11):
    ⚠️ **The line numbers below are also stale** — `ApkamSigningKeys` is no
    longer at `envelope_signature.dart:197`, and `signingKeys` is at
    `apkam_signing.dart:124` returning `Future<List<ApkamSigningKeys>>`, not at
-   `:56`. **Only mint-on-demand (step 18) is genuinely still owed from this
-   item** — the in-use signing set landed 2026-08-13 as step 17. The original text is kept below
+   `:56`. **Nothing is owed from this item any more** — the in-use signing set
+   landed 2026-08-13 as step 17, mint-on-demand as step 18, and row B3 moved
+   the mint ahead of the enrollment submission on 2026-08-14. (This line read
+   "only mint-on-demand is genuinely still owed" until that sweep.) The original text is kept below
    because its *reasoning* about why each piece is an inversion rather than an
    addition is still worth reading — but read it as history, and verify every
    claim against the source before acting on it.
@@ -3001,15 +3003,17 @@ and [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-ke
 say **what** and **why**. This says **in what order**, because several of the
 orderings are the difference between a working rollout and a broken fleet.
 
-⚠️ **Rows A1, A2, A3, B2, B1 and D2 are built (2026-08-14) — all of ruling 99,
-plus ruling 98's `_apsk` rule and its stage definitions. Still unbuilt: B3, B4,
-B5, C1, C2, D1.** Rollout 1 now mints and advertises its own RSA-2048 signing
-key at client start, and a released at_client 3.14.0 reader has been measured
-parsing that advertisement. What B3 changes is *when* the key is minted —
-before the enrollment submits, rather than at the next start — and it moves the
-authentication key to ML-DSA.
-Two specific traps are called out at the end, and the sharper one — the
-UC-G1.14 test that must go red once B3 lands — is still armed.
+⚠️ **Rows A1, A2, A3, B2, B1, B3 and D2 are built (2026-08-14) — all of ruling
+99, plus ruling 98's `_apsk` rule, its stage definitions and both of its
+minting sites. Still unbuilt: B4, B5, C1, C2, D1.**
+
+A rollout-1 enrollment — created by a retrofit or by a PQ-native activation —
+now owns an RSA-2048 signing key **before it submits**, advertises that key
+bare in `_apsk`, files it, and signs its key package with it. A released
+at_client 3.14.0 reader has been measured parsing that advertisement.
+
+Both traps this section used to arm have **fired and been discharged**; they
+are kept below as the record of what they cost, not as live warnings.
 
 Until A1 landed this section read "nothing below is built, the code implements
 NONE of rulings 98 or 99", which was true of the whole of 99 as well.
@@ -3075,7 +3079,7 @@ twice. Within each, the reader before the writer.
 | B5 | Retire a signing key whose algorithm leaves the in-use set — [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) ruling 12. Nothing does this today | Required before rollout 1 → 2 works at all; not required for rollout 1 |
 | C1 | `AtClientImpl.create` **throws** when a cached `(atSign, enrollmentId)` client is handed a preference differing in `posture`, `signingRollout`, `inUseSigningAlgorithms` or `disallowLegacyEncryption` | Independent of A and B; can land any time. Do it early — it is what makes a mis-wired stage loud instead of silent |
 | C2 | The enrollment record snapshot (`namespaces`/`appName`/`deviceName`) is reconciled on every start, through `WrittenAtKeysIo.update`, logging a changed `namespaces` | ⚠️ Must use the store's atomic verb. This tree has already lost key material to two unawaited start-time writers doing read-mutate-write on this file |
-| D1 | Dartdocs that now contradict a ruling: `SigningRollout.rollout1` ("deliberately identical to `now` in what this client writes"), `selfRetrofit` ("no ML-DSA anywhere"), and `EnrollParams.signingAlgo` (name it as the **authentication** key's algorithm) | These are wrong *today*, in the tree, and a builder reading them will build the old design. ⚠️ `design.md` carries the same two errors and was **already banner-flagged and corrected in place** 2026-08-14 — do not re-do it |
+| D1 | ⚠️ **MOSTLY DONE 2026-08-14 — one item left.** `SigningRollout.rollout1` ("deliberately identical to `now` in what this client writes") and `selfRetrofit` ("no ML-DSA anywhere") were both corrected in B1's commit, along with the two `ReleasePosture` constructor dartdocs, which carried the same claim in a third form. **Still owed: `EnrollParams.signingAlgo`** (at_commons) — its text is accurate but never says plainly that it names the **authentication** key's algorithm, which is the one thing its name gets wrong. | ⚠️ `design.md` carried the same errors and was banner-flagged 2026-08-14 — but a bare copy of the rollout-1 claim survived two paragraphs above the banner until the doc sweep. One correction does not find the others; grep the claim, not the file |
 | D2 | ✅ **DONE 2026-08-14, in the same commit as B1 — it had to be.** ⚠️ **This row said "needs B3 to exist first" and that was wrong by two rows: the red arrives at B1**, because B1's in-use set is what starts the minting, and B3 only moves *when* the key is minted. The receiver is now `published` throughout: at_client 3.14.0 fetches the sender's `_apsk` through its own `EnvelopeSigning.getApkamPublicKey` and parses it with `RSAPublicKey.fromString` — the exact call at_chops makes verifying a pkam signature. The scenario reaches that mixin by `src/` import deliberately, because a fetch reimplemented in the harness would test the reimplementation; both arms' `EnvelopeSigning` declares the same three members, checked, since one present in only one build would take the whole matrix down rather than this row. **Two positive controls**, both required: rollout 1's value must DIFFER from `now`'s (or the stage is not applied and the row compares a case with itself — which is what it did until today), and rollout 2's must NOT parse as RSA (or the parse discriminates nothing). Both fired green | Needs B1, not B3. ⚠️ Do not "restore" acceptance.md to match the stale test |
 
 #### The ordering re-check over every remaining row (2026-08-14)

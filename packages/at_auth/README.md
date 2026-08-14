@@ -202,13 +202,21 @@ Persistence has three verbs:
 
   ```dart
   await atKeysIo.update(atSign.toAtsign(), (keys) {
-    if (keys.getKey(keyId, CryptographicKeyType.privateDecapsulation) != null) {
+    if (keys.getKey(enrollmentId, keyId,
+            CryptographicKeyType.privateDecapsulation) !=
+        null) {
       return false; // already filed; nothing to write
     }
     keys.addKey(material);
     return true;
   });
   ```
+
+  The lookup takes the enrollment because identity is `(enrollment, keyId)`.
+  For material the **atSign** owns rather than any one enrollment — the
+  signing root, an nskey private — the sibling is `getAtSignKey(keyId, type)`.
+  `addKey` is deliberately not split: a material states its own owner through
+  its `enrollmentId`, and a null one routes it to the atSign's container.
 
 - `flush(atsign, atKeys)` — persist the current in-memory state. If the
   file exists, `flush` first validates that nothing it holds would be lost

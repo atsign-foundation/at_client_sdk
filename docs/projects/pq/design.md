@@ -2043,9 +2043,12 @@ settle this before building row A2" until 2026-08-14; the top-level
 `enrollmentId` is still explicitly **not** the answer — 99 ruling 7, it belongs
 to the legacy block.)
 
-`AtKeys.replaceKey(keyId, newMaterial)` retires the named keyId's materials and
-files the replacement in one call. Rotation is never two caller-sequenced
-mutations across a flush.
+`AtKeys.replaceKey(enrollmentId, keyId, replacements)` retires the named
+keyId's materials and files the replacements in one call. Rotation is never two
+caller-sequenced mutations across a flush. It takes the enrollment because
+identity is `(enrollment, keyId)`; `retireAtSignKey` is the atSign-scope
+sibling. (This read `replaceKey(keyId, newMaterial)` until the 2026-08-14
+sweep — the signature gained its enrollment in row A1.)
 
 Reading, in order of what a file can contain:
 
@@ -2255,8 +2258,19 @@ separate signing keys, publish the array, emit multi-signature envelopes. A
 build doing any one without the others emits something the fleet cannot handle,
 so they do not get independent flags.
 
-Rollout 1 is the reader half only, and is not gated — a reader that understands
-more shapes is always safe.
+⛔ **FALSE since [`decisions.md` 98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14),
+and built out on 2026-08-14 (rows B1 and B3).** ~~Rollout 1 is the reader half
+only, and is not gated — a reader that understands more shapes is always
+safe.~~ Rollout 1 is a **writer** position: the enrollment authenticates with
+ML-DSA-65 and owns a fresh RSA-2048 signing key from before it submits, which
+is what `_apsk` advertises. The reader half needing no gate is still true and
+is why the *advertisement* stays the bare string an un-upgraded peer parses —
+but the key it names changes, and the stage carries an atServer dependency
+(ML-DSA PKAM) that `now` does not.
+
+⚠️ This sentence survived the 2026-08-14 banner two paragraphs below, which
+corrected the same claim in its other form. Corrected in the sweep that
+followed.
 
 **The axis is `SigningRollout`,** on `ReleasePosture.signingRollout` and
 overridable per `AtClientPreference`. It names a position — `now`, `rollout1`,
