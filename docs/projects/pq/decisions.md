@@ -8867,3 +8867,113 @@ where [91.3](#913-the-rulings) ruling 9 says it stops signing and is retained as
 was nothing to retire); **required** under
 [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14),
 which makes that transition a real algorithm retirement. Owed, unbuilt.
+
+## 100. The seven shapes ruling 99 left open (2026-08-14)
+
+[`implementation-plan.md` 14.20](implementation-plan.md#1420-building-rulings-98-and-99--the-sequence)
+listed six questions its build sequence does not answer and said to ask rather
+than guess, because each decides a shape and guessing wrong builds the wrong
+thing silently. A seventh surfaced while checking the six against the tree. All
+seven ruled by gkc, each against the measurement named with it.
+
+Nothing here changes
+[98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
+or [99](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14).
+This is what those two left unstated, and it is what row A1 encodes.
+
+**1. The caller supplies the enrollment a keyfile authenticates as, and
+`AtKeys` stops deriving it.** Measured: `activeEnrollmentId` has no production
+caller — every hit outside its own declaration is a test — and both live
+resolvers already take an explicit id, `AtAuthImpl.authenticate` passing
+`AtAuthRequest.enrollmentId` and `AtClientImpl._createAtChops` passing its own.
+So the derivation 99 ruling 2 breaks was answering a question nothing asks. The
+reader selects the `enrollments[]` entry matching the id it was handed and
+throws when none matches. A null id keeps meaning the flat block, which on a
+retrofitted keyfile is deliberately the legacy enrollment.
+
+A stored pointer field was rejected for the reason `activeEnrollmentId`'s own
+dartdoc gives: a second writer able to disagree with the key material, where
+disagreeing means authenticating as the wrong enrollment.
+
+⚠️ **Amended within the hour, by gkc: "the caller supplies it" alone is a
+chicken and egg.** A cold start holds nothing but the keyfile — the first
+caller has no id to supply, and 99 ruling 7 rules out taking the top-level
+`enrollmentId`, which belongs to the legacy block. So the ruling is *the caller
+supplies the id, and `AtKeys` offers a derivation the caller can ask for*:
+
+- `enrollmentIds` — every enrollment the file holds.
+- `authenticatableEnrollmentIds` — those holding active authentication
+  material, whatever algorithm it names.
+- `resolveAuthenticatingEnrollment()` — the one when there is exactly one,
+  null when there is none, and a **throw naming them all** when there are
+  several.
+
+The difference from what was removed is the difference that matters.
+`activeEnrollmentId` was consulted implicitly and answered `firstOrNull`, so a
+file with two live enrollments picked one silently. This is invoked by name,
+returns an id the caller then passes back in, and refuses to guess. The
+selection stays the caller's, and the file supplies the candidates rather than
+the verdict.
+
+**2. The accessors split by scope.** `getKey`, `keysForKeyId`, `retireKey` and
+`replaceKey` become enrollment-scoped and take the enrollment beside the keyId;
+a separate family addresses `atSignKeys[]`. Measured: outside at_auth there are
+six production call sites and **every one is atSign-scope** — `PqSigningRoot`
+(`getKey`, `keysForKeyId` twice, `retireKey`) and nskey filing (`getKey` three
+times) — while `replaceKey` has no production caller at all. The split moves
+each of them to the atSign family, where a bare keyId is still unique, and none
+can reach an enrollment's keys by accident.
+
+An optional `enrollmentId` parameter and a purely internal composite index were
+both rejected on the same failure: each leaves an atSign-scope caller
+compiling, and searching the wrong container, with nothing red.
+
+**3. `apkam:<enrollmentId>:<n>` becomes `auth:<algo>:<gen>`, with no tolerance
+for the old spelling.** [99.1](#991-the-measurement-that-makes-this-cheap)
+measured that nothing released has ever written a typed keyfile, and 14.20 row
+A3 deletes the ones this spike's live runs generated. A parser accepting
+`apkam:` would therefore be code no file can reach — and dead tolerance reads
+as a supported path.
+
+**4. The generation is the slot.** The signing root is `root:<algo>:<n>`, its
+free slot found by walking generations, its next generation computed
+highest-plus-one exactly as the other roles compute theirs; a dead losing pair
+from a mint race keeps generation 1 and the next mint takes 2. The `.2`/`.3`
+overflow grammar goes, and `_isRootSlot`'s regex with it.
+
+⚠️ The at-rest keyId is free to change and the **record name is not**:
+`public:pq_signing_root@<atSign>` is the wire value, pinned as a raw literal in
+`wire_literal_pins_test.dart`, and it does not move. The pin on
+`PqSigningRoot.keyId` follows the id, because that one is at-rest.
+
+**5. An nskey private lives in `atSignKeys[]`.** It is filed today with no
+enrollment id at all, which is [99](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
+ruling 3's own signal for material that belongs to the atSign — and a namespace
+key is the atSign's. One entry serves every enrollment holding the grant,
+rather than the same seed stored once per enrollment with each copy waiting on
+its own conveyance.
+
+⚠️ **This is not a general rule about KEM material.** The enrollment's key
+package keypair — the bare-kid entry in both target files — stays inside the
+enrollment, because that one really is per-enrollment. Neither target file
+shows an nskey private for the plainest of reasons: the atSign that generated
+them never received one.
+
+**6. `namespaces`, `appName` and `deviceName` are written from the enrollment
+request where one exists, and omitted where none does.**
+`AtEnrollmentRequest` carries all three, so an enrollment-creation writer holds
+them and the keyfile can answer "which device is this?" from birth — which is
+what [99.3](#993-what-each-field-means) ruling 8 says the fields are for. A
+retrofit, or an onboard handed its keys by the caller, has no request: it omits
+the fields, the parse tolerates their absence, and row C2 fills them at the
+first authenticated start.
+
+Placeholders were rejected. An empty `namespaces` map states "no grants", and
+a reader cannot tell that from "not yet known".
+
+**7. `operations` is unchanged** — parsed, round-tripped, and emitted only when
+non-empty. Measured: nothing in production sets it, the only writers being
+at_auth's own copy paths, so its absence from both target files is a missing
+producer rather than a removal. Dropping it would break the lossless-flush
+promise that `KeyAlgorithmType`, `CryptographicKeyType` and `KeyPartStatus`
+each state in their own dartdoc.
