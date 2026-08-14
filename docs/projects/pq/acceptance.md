@@ -1392,6 +1392,15 @@ both sides of a compatibility claim inside one build proves nothing about the
 side nobody wrote — the published arm is the only thing that measures
 "`now` behaves identically to current legacy" rather than asserting it.
 
+It earned that keep before a single cell ran. The arm exists to answer
+questions about the released build with a measurement, and the first one it
+answered contradicted this document: 3.14.0 ships an envelope reader and writer
+after all, and neither build can read the other's envelope
+([16.5](#165-the-rollout-matrix)). **What the published arm proves is therefore
+the data path** — a real notification, multiple puts and gets — which is what a
+released peer and this tree genuinely share. The signed-envelope exchange is a
+`now`/`rollout1`/`rollout2` question.
+
 ### 16.2 The keyfile rows
 
 - **UC-G1.1 · the enrollment id is derived, not stored.**
@@ -1515,25 +1524,67 @@ Sender stage × receiver stage. Every cell runs; the failing cells are asserted
 **by their specific error**, since asserting only "it failed" lets a cell start
 failing for a different reason unnoticed.
 
+The matrix is over the **data path** — a real notification, multiple puts and
+gets, the records a peer actually exchanges. All sixteen cells pass, and that
+is the claim worth measuring: nothing in the auth/signing split changes what a
+peer at any stage can send to or read from a peer at any other.
+
 | Sender ↓ / Receiver → | published | now | rollout 1 | rollout 2 |
 |-----------------------|-----------|-----|-----------|-----------|
 | **published** | pass | pass | pass | pass |
 | **now**       | pass | pass | pass | pass |
 | **rollout 1** | pass | pass | pass | pass |
-| **rollout 2** | **fail** — `IllegalStateException`, `_apsk` value is not a String | **fail** — same error | pass | pass |
-
-The two failing cells are the whole argument for capability-before-active: a
-rollout-2 sender publishes a JSON `_apsk` that a pre-rollout-1 receiver's
-`getApkamPublicKey` refuses to read. Rollout 1 exists to empty that column
-before anything can land in it.
+| **rollout 2** | pass | pass | pass | pass |
 
 **The `published` row and column are the control.** They must behave
-identically to the `now` row and column in every cell — and the
-`rollout 2 → published` cell must fail with the *same* error as
-`rollout 2 → now`. If `published` and `now` ever diverge, the `now` stage is
-not the faithful legacy simulation it claims to be, and every other result in
-the matrix is measured against the wrong baseline. That divergence is the
-finding, not a harness bug to work around.
+identically to the `now` row and column in every cell. If `published` and `now`
+ever diverge on the data path, the `now` stage is not the faithful legacy
+simulation it claims to be, and every other result in the matrix is measured
+against the wrong baseline. That divergence is the finding, not a harness bug
+to work around.
+
+#### The signed-envelope exchange is a 3×3, and why
+
+The envelope exchange runs over `now`/`rollout1`/`rollout2` only, nine cells,
+all passing. **A released client and this tree cannot exchange an envelope in
+either direction, under any stage** — measured 2026-08-14 by cross-feeding each
+build's shape to the other's reader:
+
+| Direction | Result |
+|-----------|--------|
+| this tree → at_client 3.14.0 | `_TypeError: type 'Null' is not a subtype of type 'String' in type cast` |
+| at_client 3.14.0 → this tree | `AtSigningVerificationException: an envelope must carry its payload as a string` |
+
+This is not a rollout-2 effect and no stage avoids it. Step 3 replaced the
+released envelope — a flat
+`{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` map — with RFC
+7515 general serialization, and deleted the envelope as a `ReleasePosture`
+axis, so `now` emits the new shape too.
+
+**It is accepted rather than fixed**, on what the released reader actually is:
+a same-atSign path only (both 3.14.0 call sites pass
+`signerAtSign: getCurrentAtSign()`), reachable only through
+`AtClientSecretSharing.forClient`, which nothing inside at_client 3.14.0
+constructs, which is `@experimental`, and whose own dartdoc opens "⚠ Not yet
+suitable for production secrets". 3.14.0's `AtClientImpl.start()` is a two-line
+no-op, so no post-quantum path starts on its own there. The affected consumer
+is an app that opted into an API documenting itself as unusable for the purpose.
+
+Both errors are pinned as raw literals, in both directions — an incompatibility
+that is accepted has to stay *visible*, and a break nobody asserts is
+indistinguishable from a break that quietly changed shape.
+
+⚠️ This section previously showed two failing cells,
+`rollout 2 → published` and `rollout 2 → now`, both attributed to
+`IllegalStateException`, `_apsk` value is not a String, with the note that they
+were "the whole argument for capability-before-active". Both the cells and the
+error were wrong: `apskValueOf` publishes the array as a JSON **string**, so
+`getApkamPublicKey`'s `av.value is! String` guard never fires on it, and this
+tree's reader is ungated (step 19: "the reader half needs no gate"), so a `now`
+receiver reads the array as readily as a `rollout1` one. The argument for
+capability-before-active is unaffected and lives in
+[`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11);
+what is gone is the claim that this matrix demonstrates it.
 
 - **UC-G1.14 · rollout 1 changes nothing on the wire.**
   *Given* two clients both at rollout 1.

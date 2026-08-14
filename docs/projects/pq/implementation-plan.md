@@ -2584,6 +2584,32 @@ data path; **multiple puts and gets**; and enrollment followed by an
 released at_client and is what makes "`now` is faithful to legacy" a
 measurement rather than a claim — see [`acceptance.md` 16.1](acceptance.md#161-the-harness).
 
+**Where it lives, ruled 2026-08-14** ([`decisions.md` 96](decisions.md#96-the-programme-pair-gets-a-home-outside-the-workspace-2026-08-14)):
+`tests/pq_matrix/` holding `scenario/`, `current/` and `published/` as three
+**standalone** packages — none listed in the root `workspace:`, because
+`packages/at_client` is a workspace member and a member cannot depend on the
+hosted 3.14.0. `published/` pins `at_client: 3.14.0` exactly with its lockfile
+committed; `scenario/` holds the exchange once and each arm supplies only its
+own preference construction, so a published-versus-`now` divergence is
+attributable to at_client rather than to two hand-written programs. The driver
+is a test file in `tests/at_functional_test`, so `runLocal.sh` stays the entry
+point.
+
+⚠️ **The matrix is a data-path matrix, and the two failing cells are gone.**
+Measured 2026-08-14: at_client 3.14.0 and this tree cannot exchange an envelope
+in **either** direction under **any** stage — this tree → 3.14.0 is a
+`_TypeError` null cast, 3.14.0 → this tree refuses with "an envelope must carry
+its payload as a string". Step 3 deleted the envelope as a posture axis, so no
+stage emits the released shape. gkc ruled the break accepted rather than fixed,
+on reachability: the released reader is same-atSign only, hangs off an
+`@experimental` entry point nothing in 3.14.0 constructs, and that entry point's
+dartdoc opens "not yet suitable for production secrets". Both errors are pinned
+as raw literals. The rollout-2 cells previously shown as failing with
+`IllegalStateException` were wrong on both the cells and the error —
+[`acceptance.md` 16.5](acceptance.md#165-the-rollout-matrix) records what it
+used to say, and [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+rulings 2 and 3 are amended in place.
+
 **Stage 5 — the rest of D1. All in scope; none deferred.**
 
 | # | Work | Entry |

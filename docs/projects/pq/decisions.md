@@ -109,7 +109,8 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [92. The spike takes trunk, and two published version numbers move underneath it (2026-08-11)](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11)
 - [93. The D1 remaining-work sequence, and the rollout axis becomes real (2026-08-11)](#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
 - [94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — *sub-ruling 4 amended 2026-08-12: the licence is `@experimental`, not a version baseline*
-- [95. The envelope keeps one shape, and a retained key says so (2026-08-12)](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+- [95. The envelope keeps one shape, and a retained key says so (2026-08-12)](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) — *rulings 2 and 3 amended 2026-08-14: a published envelope reader does exist, and reachability rather than absence carries the decision*
+- [96. The programme pair gets a home outside the workspace (2026-08-14)](#96-the-programme-pair-gets-a-home-outside-the-workspace-2026-08-14)
 
 ---
 
@@ -8267,18 +8268,56 @@ separately.**
 | Reason | Killed by |
 |--------|-----------|
 | The enrollment record's `keyPackage` is write-once, so a bad envelope is frozen for that enrollment's life | `enroll:update` reaches `metadata` ([91](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11) ruling 13) |
-| A published reader crashes on a null cast rather than refusing | nothing released reads an envelope — see ruling 3 |
+| A published reader crashes on a null cast rather than refusing | ~~nothing released reads an envelope — see ruling 3~~ **NOT killed** — amended 2026-08-14, see ruling 3. A published reader exists and the crash is real; what carries the decision is who can reach it, not that nobody reads |
 | Recovery needs an `enroll:update` no client sends yet | only bites if a bad envelope can exist, and none can when one shape is the only shape |
 
-**3. Nothing released reads or writes an envelope.** No release ships
-`lib/src/signing/` — at_client **3.14.0**, the latest on pub.dev, has no such
-directory, and `wrapAndSign` / `verifyEnvelope` / `parseApskValue` appear
-nowhere in it. The released thing in this area is the **bare-string `_apsk`**,
-from `mixins/apkam_signing.dart`, and that is a *record* rather than an
-envelope. So there is no legacy envelope to honour on read, which is why ruling
-1 deletes rather than versions. (The rest of what 3.14.0 ships in this area —
-`secret_sharing/`, the signing mixins — is `@experimental` and free to change;
-see [§91.4](#914-what-is-released-and-therefore-what-must-still-be-read).)
+**3. Nothing released reads or writes an envelope.** ⚠️ **This was wrong, and
+is amended in place 2026-08-14** — the ruling stands, its stated evidence does
+not. What it said: "No release ships `lib/src/signing/` — at_client **3.14.0**,
+the latest on pub.dev, has no such directory, and `wrapAndSign` /
+`verifyEnvelope` / `parseApskValue` appear nowhere in it. The released thing in
+this area is the **bare-string `_apsk`**, from `mixins/apkam_signing.dart`, and
+that is a *record* rather than an envelope. So there is no legacy envelope to
+honour on read, which is why ruling 1 deletes rather than versions."
+
+Two of those are true and one is not. 3.14.0 ships no `lib/src/signing/`, and
+`verifyEnvelope` (the free function) and `parseApskValue` are genuinely absent.
+But **`wrapAndSign` and `verifyEnvelopeSignature` are both in 3.14.0**, in
+`lib/src/mixins/envelope_signing.dart`, and `secret_sharing/pairwise_secret_sharing.dart`
+calls each of them. The released envelope is a flat
+`{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` map. So there
+*is* a legacy envelope, and ruling 1 deletes rather than versions it knowingly.
+
+Measured 2026-08-14 by cross-feeding each build's shape to the other's reader:
+this tree → 3.14.0 gives `_TypeError: type 'Null' is not a subtype of type
+'String' in type cast` — the null-cast crash the table above claimed could not
+happen — and 3.14.0 → this tree gives `AtSigningVerificationException: an
+envelope must carry its payload as a string`. Neither direction works, under
+every stage, because the envelope stopped being a posture axis at ruling 1.
+
+**What carries the decision now is reachability, not absence.** The released
+reader is same-atSign only — both call sites pass
+`signerAtSign: getCurrentAtSign()` — and hangs off
+`AtClientSecretSharing.forClient`, which nothing inside at_client 3.14.0
+constructs, which is `@experimental`, and whose dartdoc opens "⚠ Not yet
+suitable for production secrets". 3.14.0's `AtClientImpl.start()` is a two-line
+no-op, so nothing post-quantum starts there by itself. The exposed consumer is
+an app that reached for an API documenting itself as unusable for the purpose.
+
+gkc ruled 2026-08-14: **accept the break, pin both errors, do not restore an
+envelope axis and do not teach this tree's reader the released shape.** The
+matrix in [`acceptance.md` 16.5](acceptance.md#165-the-rollout-matrix) is
+corrected accordingly — it becomes a data-path matrix, with the envelope
+exchange a `now`/`rollout1`/`rollout2` question.
+
+The lesson is the one [§14.19.1](implementation-plan.md#14191-things-that-look-like-defects-and-are-not)
+keeps relearning from the other side: this claim was checked by grepping the
+released tree for `lib/src/signing/`, which is where *this* tree keeps the
+code. The released build kept it somewhere else. A search for the directory
+answered a question about the directory, and got read as an answer about the
+capability. (The rest of what 3.14.0 ships in this area — `secret_sharing/`,
+the signing mixins — is `@experimental` and free to change; see
+[§91.4](#914-what-is-released-and-therefore-what-must-still-be-read).)
 
 **4. The reversibility hatch is spent, not lost.** `nskeyAdvertisementVersion`'s
 doc calls the version field "the hatch that makes moving the envelope to JWS
@@ -8390,3 +8429,67 @@ that the open already catches and skips, and the message names the mismatch
 ("ML-KEM-1024 secret key must be 3168 bytes: 32"). A check that changes no
 outcome and reads like a security check it is not. Belongs beside
 [14.19.1](implementation-plan.md#14191-things-that-look-like-defects-and-are-not).
+
+## 96. The programme pair gets a home outside the workspace (2026-08-14)
+
+Steps 20–22 of [`implementation-plan.md` 14.18](implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+specify a sender and a receiver taking `--stage published|now|rollout1|rollout2`,
+plus a driver running the matrix. [`acceptance.md` 16.1](acceptance.md#161-the-harness)
+says what the pair must exercise and says the `published` arm runs the last
+released at_client. It does not say where any of it lives, and that turned out
+to be the thing blocking the first line of code rather than a detail to settle
+while writing it. Two facts, verified before asking:
+
+- **There is no home to extend.** No `bin/` anywhere in the workspace holds
+  anything resembling the pair, and `--stage` matches nothing under `packages/`
+  or `tests/`. Wholly greenfield.
+- **The `published` arm cannot live in the workspace.** `packages/at_client` is
+  a member of the root `pubspec.yaml` `workspace:` list, so every workspace
+  member resolves at_client by path. A package inside the workspace cannot
+  depend on the hosted 3.14.0 at all.
+
+gkc ruled all three, 2026-08-14.
+
+**1. `tests/pq_matrix/`, three standalone packages, driver in the existing
+functional pack.** `scenario/` holds the exchange, `current/` and `published/`
+hold a `bin/sender.dart` and `bin/receiver.dart` each, and none of the three is
+listed in the root `workspace:`. The driver is an ordinary test file in
+`tests/at_functional_test`, so `runLocal.sh` stays the one entry point and the
+matrix recycles the virtualenv exactly as every other live row does.
+
+Nesting a standalone package inside this repo is established rather than novel:
+`packages/at_client/example` is one already — no `resolution: workspace`, its
+own `pubspec.lock` and `.dart_tool` — and it sits *inside* a workspace member.
+
+**2. The published arm pins 3.14.0 exactly, with its lockfile committed.** A
+plain hosted `at_client: 3.14.0`, no `dependency_overrides`, and
+`pubspec.lock` in git so the control arm resolves the same transitive set on
+every machine and every run. The alternatives were a package generated into a
+temp directory at run time — nothing committed, resolution free to drift
+between runs, so a changed result could not be attributed — and a git worktree
+of the `v3.14.0` tag, which proves what the tag contains rather than what
+pub.dev ships. A `dependency_overrides` bodge to reach a hosted version from
+inside the workspace is the documented way to break resolution silently, and is
+not on the table.
+
+**3. One shared scenario library; only client construction differs per arm.**
+The exchange is written once, against the API surface both versions have, and
+each arm supplies nothing but its own preference construction — `current/`
+naming a `SigningRollout`, `published/` unable to name one because 3.14.0 has
+no such type. Resolution reaches the shared package transitively, so `current/`
+compiles it against the workspace at_client and `published/` against hosted
+3.14.0, from one source file.
+
+That is what makes a divergence attributable. Two hand-written programs differ
+for two possible reasons — at_client changed, or the programs did — and the
+matrix cannot tell them apart. The rejected middle option was two mirrored
+copies with a test diffing them, where the guard is the part that rots: it
+passes for as long as both copies drift the same way, which is exactly what a
+shared scenario makes impossible rather than merely detectable.
+
+**What this cost on day one, and why it is recorded here.** The pair's first
+finding contradicted the document specifying it — see
+[95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+rulings 2 and 3, amended the same day. The published arm's value is not that it
+runs old code; it is that questions about a released build stop being answered
+from memory of what was in it.
