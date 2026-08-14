@@ -478,8 +478,23 @@ void main() {
         'privateAuthentication',
         'publicAuthentication',
       });
-      expect(KeyPartStatus.values.map((s) => s.name).toList(),
-          ['active', 'retired', 'dead']);
+      // The at-rest tokens, pinned individually as well as as a set. Asserting
+      // only `known` would follow a renamed constant silently, which is the
+      // failure a raw-literal pin exists to stop.
+      expect(KeyPartStatus.active, 'active');
+      expect(KeyPartStatus.retired, 'retired');
+      expect(KeyPartStatus.dead, 'dead');
+      expect(KeyPartStatus.known, {'active', 'retired', 'dead'});
+
+      // And the forward order, which stopped being declaration index when
+      // status became an open String. It is a stated ranking now, so it is
+      // pinned like any other contract.
+      expect(KeyPartStatus.rankOf('active'), 0);
+      expect(KeyPartStatus.rankOf('retired'), 1);
+      expect(KeyPartStatus.rankOf('dead'), 2);
+      expect(KeyPartStatus.rankOf('pending'), isNull,
+          reason: 'a token this build has never seen has no position in the '
+              'forward order, and must not acquire one by accident');
     });
 
     test('the typed keyfile ids APKAM and signing material file under', () {

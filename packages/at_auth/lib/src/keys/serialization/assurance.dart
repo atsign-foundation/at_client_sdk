@@ -315,9 +315,24 @@ class AtKeysAssurance {
       if (material.withStatus(counterpart.status) != counterpart) {
         throw AtKeysAssuranceException('$path changed during AtKeys assurance');
       }
-      if (counterpart.status.index < material.status.index) {
+      final before = KeyPartStatus.rankOf(material.status);
+      final after = KeyPartStatus.rankOf(counterpart.status);
+      if (before == null || after == null) {
+        // At least one side carries a status this build does not know, so it
+        // has no position in the forward order and "moved backward" is not a
+        // question that can be answered. What CAN be checked is the round-trip
+        // promise: such a material must come back unchanged. Requiring
+        // equality is the strictest reading available, and the only one that
+        // cannot silently let an unknown status be rewritten.
+        if (material.status != counterpart.status) {
+          throw AtKeysAssuranceException(
+              '$path status changed to or from a value this build does not '
+              'know (${material.status} → ${counterpart.status}), and an '
+              'unrecognised status must round-trip unmodified');
+        }
+      } else if (after < before) {
         throw AtKeysAssuranceException(
-            '$path status moved backward (${material.status.name} → ${counterpart.status.name})');
+            '$path status moved backward (${material.status} → ${counterpart.status})');
       }
     }
   }

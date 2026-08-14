@@ -1,4 +1,27 @@
 ## 3.4.0
+- **BREAKING** fix: `KeyPartStatus` becomes a constants class and
+  `AtKeysMaterial.status` an open `String`, so a `.atKeys` document carrying a
+  status this build does not recognise is **read and round-tripped unmodified**
+  rather than refused. It was an `enum` parsed through a throwing
+  `expectEnum`, which meant a keyfile written by a newer client was rejected in
+  its entirety — not the entry, the whole document, and the document is the
+  user's key material. Adding a status value was therefore a breaking at-rest
+  change forever, which is how this was found. `keyAlgorithmType` and
+  `keyPartType` beside it were already open Strings for exactly this reason;
+  `status` was the one field that broke the promise their documentation makes
+  for the whole document.
+  - Callers comparing `material.status == KeyPartStatus.active` need no
+    change: the constant is a `String` and the comparison is source-identical.
+    What breaks is code relying on enum-ness — `KeyPartStatus.values`,
+    `status.name`, and `KeyPartStatus` as a type annotation (now `String`),
+    including the `to:` parameter of `retireKey` and `replaceKey`.
+  - `KeyPartStatus.rankOf` is new and states the forward order
+    (`active` → `retired` → `dead`) that declaration index used to supply
+    implicitly. An unrecognised status has **no** rank: it is never selected as
+    active, and a transition involving one is refused rather than assigned a
+    direction, since guessing would let a future value silently reactivate a
+    key its owner withdrew. Reordering the declarations no longer redefines
+    every transition check in the package.
 - feat: add `AtEnrollment.update` — the `enroll:update` caller, with
   `EnrollmentUpdateRequest` and `EnrollmentUpdater` beside the approver. An
   approved enrollment can now amend its own record: the APKAM authentication

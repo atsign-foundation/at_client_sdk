@@ -111,6 +111,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [94. Three records advertise keys, and only one of them speaks the vocabulary (2026-08-11)](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — *sub-ruling 4 amended 2026-08-12: the licence is `@experimental`, not a version baseline*
 - [95. The envelope keeps one shape, and a retained key says so (2026-08-12)](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) — *rulings 2 and 3 amended 2026-08-14: a published envelope reader does exist, and reachability rather than absence carries the decision*
 - [96. The programme pair gets a home outside the workspace (2026-08-14)](#96-the-programme-pair-gets-a-home-outside-the-workspace-2026-08-14)
+- [97. A keyfile status a build has never seen is read, not refused (2026-08-14)](#97-a-keyfile-status-a-build-has-never-seen-is-read-not-refused-2026-08-14)
 
 ---
 
@@ -8493,3 +8494,61 @@ finding contradicted the document specifying it — see
 rulings 2 and 3, amended the same day. The published arm's value is not that it
 runs old code; it is that questions about a released build stop being answered
 from memory of what was in it.
+
+## 97. A keyfile status a build has never seen is read, not refused (2026-08-14)
+
+Settling [14.19 item 11](implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+— where a rotated APKAM keypair is persisted — needed a way to mark a keypair
+as *staged*: filed, but not yet the one that authenticates. gkc ruled the
+**two-phase** shape, staged then promoted on the atServer's acceptance. That
+needs a new status value, and asking for one exposed why none could be added.
+
+**1. `KeyPartStatus` becomes an open `String`, and `AtKeysMaterial.status` with
+it.** `AtKeysMaterial`'s two neighbouring fields, `keyAlgorithmType` and
+`keyPartType`, are open Strings, and `keyAlgorithmType`'s dartdoc states the
+rule for the whole document: *"a reader must accept — and round-trip unmodified
+on flush — values it does not recognise, so a keyfile written by a newer client
+stays readable and losslessly flushable by an older one."* `status` was an
+`enum` parsed through a throwing `expectEnum`, so it was the one field that
+made that sentence false.
+
+The cost was not theoretical. **at_auth 3.3.0 is on pub.dev and ships the same
+three-value enum**, so a keyfile carrying a fourth value is refused *in its
+entirety* by every released build — not the entry, the whole document, and the
+document is the user's key material. Any new status was a breaking at-rest
+change, permanently.
+
+⚠️ **A skip would have been worse than a refusal.** The first design was "skip
+entries whose status is unknown". `AtKeys.toJson` re-encodes from the parsed
+materials, so a skipped entry is *dropped on the next flush*: silently
+destroying key material rather than merely failing to read it. Tolerance on the
+read is only half the promise, and it is the dangerous half on its own.
+
+**2. The forward order becomes a stated ranking.** `retireKey` and the
+assurance rule both enforced "status only moves forward" with `status.index`,
+which an open String does not have — so this was never a mechanical type swap,
+and the audit is what caught it. `KeyPartStatus.rankOf` states the order
+instead. That is the better position regardless: reordering the enum's
+declarations used to silently redefine every transition check in the package.
+
+**3. An unrecognised status has no rank, and that gap is deliberate.** A build
+cannot know whether a token it has never seen sits before or after `retired`,
+so it is never selected as active, and any transition involving one is refused
+rather than assigned a direction. Guessing "newest is furthest forward" would
+let a future value silently reactivate a key its owner withdrew. The assurance
+rule takes the strictest reading available for the same pair: where either side
+is unknown it cannot ask "did this move backward", so it requires the value to
+be *unchanged*, which is exactly the round-trip promise.
+
+**4. This is the reader half, and it ships alone.** gkc chose reader-first over
+accepting the break or overloading `dead`. So `pending` is **not** added here
+and the rotation arm is still unbuilt: a writer may emit a new status only once
+a build carrying this reader is what the fleet is running. What landed is the
+tolerance and its ranking, nothing that uses them.
+
+The consumer sweep found this is source-breaking for nobody: no sibling repo
+under `~/dev/atsign` and no package in `~/.pub-cache` references
+`KeyPartStatus` outside at_auth itself. ⚠️ It is still a **published-surface
+break** — at_auth joins at_chops in owing a major-version decision
+([92](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11));
+the bump is not taken here.

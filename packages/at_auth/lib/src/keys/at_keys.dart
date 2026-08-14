@@ -265,18 +265,36 @@ class AtKeys {
   /// operation. Status only moves forward (active → retired → dead): a
   /// same-status call is a no-op and a backward transition throws, as does
   /// an unknown [keyId] or `to: KeyPartStatus.active`.
-  void retireKey(String keyId, {KeyPartStatus to = KeyPartStatus.retired}) {
+  void retireKey(String keyId, {String to = KeyPartStatus.retired}) {
     if (to == KeyPartStatus.active) {
       throw ArgumentError.value(to, 'to', 'retireKey cannot reactivate a key');
+    }
+    final toRank = KeyPartStatus.rankOf(to);
+    if (toRank == null) {
+      throw ArgumentError.value(
+          to, 'to', 'not a status this build knows how to move a key to');
     }
     final byType = _materialsByKeyId[keyId];
     if (byType == null) {
       throw ArgumentError.value(keyId, 'keyId', 'AtKeys has no such keyId');
     }
     for (final material in byType.values) {
-      if (material.status.index > to.index) {
+      final fromRank = KeyPartStatus.rankOf(material.status);
+      // A status this build has never heard of is not behind or ahead of
+      // anything — it is incomparable, and moving a key off one would be
+      // guessing a direction. Refused rather than treated as position zero,
+      // which is what would let a future value be silently reactivated.
+      if (fromRank == null) {
+        throw ArgumentError.value(
+            to,
+            'to',
+            'keyId "$keyId" holds status "${material.status}", which this '
+                'build does not know: refusing to move a key whose position '
+                'in the forward order it cannot determine');
+      }
+      if (fromRank > toRank) {
         throw ArgumentError.value(to, 'to',
-            'cannot move keyId "$keyId" backward from ${material.status.name}');
+            'cannot move keyId "$keyId" backward from ${material.status}');
       }
     }
     byType.updateAll((_, material) => material.withStatus(to));
@@ -300,7 +318,7 @@ class AtKeys {
   /// [to] is how far the outgoing material moves: `retired` by default,
   /// `dead` when it should no longer be used even to verify history.
   void replaceKey(String keyId, Iterable<AtKeysMaterial> replacements,
-      {KeyPartStatus to = KeyPartStatus.retired}) {
+      {String to = KeyPartStatus.retired}) {
     final outgoing = keysForKeyId(keyId).toList();
     if (outgoing.isEmpty) {
       throw ArgumentError.value(keyId, 'keyId', 'AtKeys has no such keyId');

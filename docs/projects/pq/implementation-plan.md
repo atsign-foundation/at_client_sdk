@@ -2831,6 +2831,23 @@ its own. None blocks anything.
     first. So this item did not move, and the sentence above still names its
     owner rather than describing something done.
 
+    ✅ **The ordering is ruled and its first half has landed, 2026-08-14**
+    ([`decisions.md` 97](decisions.md#97-a-keyfile-status-a-build-has-never-seen-is-read-not-refused-2026-08-14)).
+    gkc chose **two-phase**: the new keypair is filed as *staged* before the
+    round trip and promoted to active only when the atServer accepts it, so a
+    crash at either point is survivable. Asking for a staging status is what
+    exposed the blocker underneath — `KeyPartStatus` was an `enum` whose parse
+    threw, and **at_auth 3.3.0 on pub.dev ships the same three values**, so any
+    new status made a keyfile unreadable to every released build *in its
+    entirety*. gkc chose reader-first over accepting that break, and the
+    tolerant reader is now in: status is an open `String` that round-trips
+    unmodified, with the forward order stated as `KeyPartStatus.rankOf`.
+
+    **What is still owed, in order:** an at_auth release carrying that reader;
+    then the `pending` value; then the rotation arm itself. The staged value is
+    deliberately **not** added yet — a writer may emit one only once the fleet
+    is running a build that can read it.
+
     The `_apsk` and metadata arms carry no such hazard — neither changes what
     authenticates — which is why the advertisement path step 18 needs is
     usable as it stands.

@@ -207,7 +207,7 @@ void main() {
   String fileKeyPackage(
       AtKeys keys, ({Uint8List publicKey, Uint8List secretKey}) pair,
       {required DateTime createdAt,
-      KeyPartStatus status = KeyPartStatus.active}) {
+      String status = KeyPartStatus.active}) {
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
     for (final (part, bytes) in [
       (CryptographicKeyType.publicEncapsulation, pair.publicKey),

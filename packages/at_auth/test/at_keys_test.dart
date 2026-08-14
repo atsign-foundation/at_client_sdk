@@ -687,7 +687,7 @@ void main() {
     AtKeysMaterial authKey(String keyId,
             {required String enrollmentId,
             String value = 'YXV0aA==',
-            KeyPartStatus status = KeyPartStatus.active}) =>
+            String status = KeyPartStatus.active}) =>
         AtKeysMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
@@ -793,7 +793,7 @@ void main() {
 
       AtKeysMaterial part(String keyId, String type, String algo, String value,
               {String? enrollmentId,
-              KeyPartStatus status = KeyPartStatus.active}) =>
+              String status = KeyPartStatus.active}) =>
           AtKeysMaterial(
               keyId: keyId,
               enrollmentId: enrollmentId,
@@ -807,7 +807,7 @@ void main() {
       List<AtKeysMaterial> signingPair(String enrollmentId, String algo,
               {int generation = 1,
               String value = 'a',
-              KeyPartStatus status = KeyPartStatus.active}) =>
+              String status = KeyPartStatus.active}) =>
           [
             part('sign:$enrollmentId:$algo:$generation',
                 CryptographicKeyType.privateSigning, algo, '$value-priv',

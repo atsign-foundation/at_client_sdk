@@ -119,7 +119,61 @@ abstract final class CryptographicKeyType {
   };
 }
 
-enum KeyPartStatus { active, retired, dead }
+/// Whether a key material is in use, withdrawn, or gone.
+///
+/// An **open `String`**, exactly like [KeyAlgorithmType] and
+/// [CryptographicKeyType] beside it, and for the reason
+/// [KeyAlgorithmType]'s own documentation gives: a reader must accept — and
+/// round-trip unmodified on flush — values it does not recognise, so a keyfile
+/// written by a newer client stays readable and losslessly flushable by an
+/// older one.
+///
+/// This was an `enum` until 2026-08-14, which made that promise false for this
+/// one field. The parse ran through a throwing `expectEnum`, so a keyfile
+/// carrying any status a build did not know was refused **in its entirety** —
+/// not the entry, the whole document, and the document is the user's key
+/// material. Adding a value was therefore a breaking at-rest change forever.
+///
+/// **Do not change any existing value below.** They are persisted in `.atKeys`
+/// files already on disk.
+class KeyPartStatus {
+  const KeyPartStatus._();
+
+  /// In use. The default when a document omits the field entirely.
+  static const String active = 'active';
+
+  /// Withdrawn from use, kept because it is what verifies or opens what it
+  /// already produced.
+  static const String retired = 'retired';
+
+  /// Not adopted at all.
+  static const String dead = 'dead';
+
+  /// The tokens this version knows about. For warn-level tooling only —
+  /// never reject a value for not being in this set.
+  static const Set<String> known = {active, retired, dead};
+
+  /// Where [status] sits in the forward order, or null when this build has
+  /// never heard of it.
+  ///
+  /// Status only moves forward. As an enum that order was declaration index,
+  /// which is to say it was implicit and free; an open String has no such
+  /// order, so it is stated here instead. Stating it is the better position
+  /// anyway — reordering the declarations used to silently redefine every
+  /// transition check in the package.
+  ///
+  /// **An unrecognised status has no rank, and that is not a gap to fill.**
+  /// A build cannot know whether a token it has never seen sits before or
+  /// after `retired`, so callers refuse a transition involving one rather
+  /// than guessing a direction. Guessing "newest is furthest forward" would
+  /// let a future value silently reactivate a key its owner withdrew.
+  static int? rankOf(String status) => switch (status) {
+        active => 0,
+        retired => 1,
+        dead => 2,
+        _ => null,
+      };
+}
 
 /// One cryptographic key material — e.g. the public half of an encryption
 /// keypair. This is the object app code interacts with everywhere in
@@ -142,7 +196,10 @@ final class AtKeysMaterial {
   final AtBytes bytes;
   final List<String> operations;
   final DateTime createdAt;
-  final KeyPartStatus status;
+
+  /// Whether this material is in use — see [KeyPartStatus] for the known
+  /// tokens. Unknown values are preserved, never rejected.
+  final String status;
 
   const AtKeysMaterial({
     required this.keyId,
@@ -172,14 +229,19 @@ final class AtKeysMaterial {
       operations:
           assurance.optionalStringList(json['operations'], 'operations'),
       createdAt: assurance.expectDateTime(json['createdAt'], 'createdAt'),
-      status: assurance.expectEnum(json['status'] ?? KeyPartStatus.active.name,
-          KeyPartStatus.values, 'status'),
+      // Deliberately NOT validated against [KeyPartStatus.known]: a token this
+      // build has never seen is carried through and re-emitted by [toJson],
+      // which is what keeps a keyfile written by a newer client readable and
+      // losslessly flushable here. It still has no rank, so it is never
+      // selected as active and no transition may move it.
+      status: assurance.expectNonEmptyString(
+          json['status'] ?? KeyPartStatus.active, 'status'),
     );
     return material;
   }
 
   /// A copy of this material with only [status] replaced.
-  AtKeysMaterial withStatus(KeyPartStatus status) {
+  AtKeysMaterial withStatus(String status) {
     return AtKeysMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
@@ -198,7 +260,9 @@ final class AtKeysMaterial {
       'keyAlgorithmType': keyAlgorithmType,
       if (operations.isNotEmpty) 'operations': operations,
       'createdAt': createdAt.toIso8601String(),
-      'status': status.name,
+      // Verbatim, whatever it is. This is the half of the round-trip promise
+      // that the parse's tolerance would be worthless without.
+      'status': status,
       'bytes': bytes.toString(),
     };
   }

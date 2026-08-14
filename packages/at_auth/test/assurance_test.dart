@@ -498,7 +498,7 @@ Map<String, dynamic> _recordJson({String keyId = 'symmetric'}) {
         'keyPartType': CryptographicKeyType.symmetricEncryption,
         'keyAlgorithmType': KeyAlgorithmType.aes256,
         'createdAt': _createdAt.toIso8601String(),
-        'status': KeyPartStatus.active.name,
+        'status': KeyPartStatus.active,
         'bytes': 'dmFsdWU=',
       },
     ],
