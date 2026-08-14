@@ -160,11 +160,32 @@ three layers, outermost first:
    - **Legacy flat** (no `version` field): a flat JSON object of the
      fields above plus `selfEncryptionKey`, `apkamSymmetricKey`, and
      `enrollmentId`.
-   - **Typed-keys** (`"version": 1`): adds `atSign` and a `keys` array
-     of typed key materials (grouped by `keyId` with their `keyParts`),
-     while the legacy fields stay flat at the top level — a typed-keys
-     file's legacy portion is byte-identical to a legacy-only file, so
-     legacy readers can still use it.
+   - **Typed-keys** (`"version": 1`): adds `atsign` and two containers
+     of typed key materials, while the legacy fields stay flat at the
+     top level — a typed-keys file's legacy portion is byte-identical to
+     a legacy-only file, so legacy readers can still use it.
+     - `enrollments` — one entry per enrollment, carrying its
+       `enrollmentId`, an optional `namespaces`/`appName`/`deviceName`
+       snapshot of its enrollment record, and its own `keys` array.
+     - `atSignKeys` — a `keys` array for material belonging to the
+       atSign rather than to any enrollment: the PQ signing root, an
+       nskey private.
+
+     Both group materials by `keyId` with their `keyParts`. A key entry
+     carries no `enrollmentId` — its container states the owner once — so
+     **a keyId is unique within its container, not across the document**:
+     two enrollments may each hold `auth:mldsa65:1`, and identity is
+     `(enrollment, keyId)`.
+
+     Structured keyIds are `<role>:<algorithm>:<generation>`
+     (`auth:mldsa65:1`, `sign:rsa2048:1`, `root:mldsa65:1`), the
+     generation counted per role and algorithm. An entry addressed by a
+     kid — a key package's, whose id is a digest of the key itself —
+     keeps that kid.
+
+     ⚠️ A `"version": 1` document carrying a top-level `keys` array is an
+     older shape and is **refused**, naming itself, rather than read as a
+     legacy-only file. Nothing released ever wrote one.
 
 In memory, `AtKeys` always holds plaintext; all three layers are applied
 and peeled exclusively by `FileAtKeysIo`.
