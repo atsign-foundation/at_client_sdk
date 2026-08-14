@@ -2011,16 +2011,24 @@ algorithm this build does not know is skipped rather than refused, because the
 rest of a keyfile written by a newer client is still usable.
 
 `AtKeysAssurance.validateKeyMaterials` and `.validateAddKey` gain a status
-filter, and the file-wide single-active-authentication rule. The file-wide rule
-is what makes the enrollment id derivable, and it is a throw rather than a
-warning: with one live enrollment per install, a second active authentication
-key is a corrupt keyfile, not a supported state.
+filter, and `.refuseSecondLiveEnrollment` carries the
+single-active-authentication rule. With one live enrollment per install, a
+second active authentication key is a keyfile this build will not write,
+whatever algorithm it names.
 
-⛔ **The file-wide rule does not survive [`decisions.md` 99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
-(2026-08-14).** Ruling 2 makes the *reader* tolerate several enrollments and
-select the one it is authenticating as, moving the refusal to the write path —
-at which point this rule no longer answers "which enrollment does this keyfile
-authenticate as", and `AtKeys.activeEnrollmentId` has nothing to derive from.
+✅ **The refusal is on the WRITE path only, since 2026-08-14** — [`decisions.md` 99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
+ruling 2, built as 14.20 row A2. `AtKeys.addKey` calls it; the parse files
+through a private path that applies the structural invariants and not this
+one. A reader that refused a second entry would make the plurality
+unenableable — the first build to emit two would break every build that
+predates it, so no build could ever start — and the whole file is somebody's
+key material to lose. The ambiguity surfaces instead at
+`resolveAuthenticatingEnrollment()`, where a caller is asking for the one
+answer that does not exist.
+
+Until then this rule ran on the read path too, and was described here as "what
+makes the enrollment id derivable" — which `AtKeys.activeEnrollmentId` no
+longer is.
 
 **What replaces it: the caller supplies the enrollment id, and `AtKeys` offers
 a derivation the caller can ask for** —

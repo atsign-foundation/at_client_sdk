@@ -345,48 +345,69 @@ void main() {
             createdAt: _createdAt,
           );
 
+      // ⚠️ These moved from validateKeyMaterials (the READ path) to
+      // refuseSecondLiveEnrollment (the WRITE path). The rule did not go away
+      // — one live enrollment per keyfile is still what this build produces —
+      // but a READER that refused a second would make the plurality
+      // unenableable, since the first build to write two would break every
+      // build that predates it. Read tolerance is pinned in
+      // plural_enrollments_test.dart.
       test(
-          'two active authentication keys are refused when both name an '
+          'a second active authentication key is refused when both name an '
           'enrollment', () {
         expect(
-          () => assurance.validateKeyMaterials([
-            authMaterial('apkam:e1:1', enrollmentId: 'e1'),
-            authMaterial('apkam:e2:1', enrollmentId: 'e2'),
-          ]),
-          throwsA(isA<AtKeysEnrollmentException>()),
+          () => assurance.refuseSecondLiveEnrollment(
+            existing: [authMaterial('auth:rsa2048:1', enrollmentId: 'e1')],
+            candidate: authMaterial('auth:rsa2048:1', enrollmentId: 'e2'),
+          ),
+          throwsArgumentError,
         );
       });
 
       test(
-          'two active authentication keys are refused when NEITHER names one',
-          () {
-        // The other arm of the same rule. enrollmentId is optional in the
-        // document, so null is a legitimate value the check must survive —
-        // reading it as "none seen yet" let the second key through, and this
-        // document-wide rule is what makes AtKeys.activeEnrollmentId's answer
-        // unique.
+          'a second active authentication key is refused when NEITHER names '
+          'one', () {
+        // The other arm of the same rule. enrollmentId is optional, so null
+        // is a legitimate value the check must survive — reading it as "none
+        // seen yet" let the second key through.
         expect(
-          () => assurance.validateKeyMaterials([
-            authMaterial('apkam:anon:1'),
-            authMaterial('apkam:anon:2'),
-          ]),
-          throwsA(isA<AtKeysEnrollmentException>()),
+          () => assurance.refuseSecondLiveEnrollment(
+            existing: [authMaterial('auth:rsa2048:1')],
+            candidate: authMaterial('auth:rsa2048:2'),
+          ),
+          throwsArgumentError,
+        );
+      });
+
+      test('and refused for ONE enrollment naming two algorithms', () {
+        // The case the per-(role, algorithm) rule structurally cannot see,
+        // because the two materials do not share an algorithm. An enrollment
+        // holds at most one active authentication pair whatever it is made
+        // of, which is what privateAuthentication's own dartdoc states.
+        expect(
+          () => assurance.refuseSecondLiveEnrollment(
+            existing: [authMaterial('auth:rsa2048:1', enrollmentId: 'e1')],
+            candidate: AtKeysMaterial(
+              keyId: 'auth:mldsa65:1',
+              enrollmentId: 'e1',
+              keyPartType: CryptographicKeyType.privateAuthentication,
+              keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+              bytes: AtBytes.fromString('dmFsdWU='),
+              createdAt: _createdAt,
+            ),
+          ),
+          throwsArgumentError,
         );
       });
 
       test('the refusal says "no enrollment id" rather than naming null', () {
         expect(
-          () => assurance.validateKeyMaterials([
-            authMaterial('apkam:anon:1'),
-            authMaterial('apkam:e2:1', enrollmentId: 'e2'),
-          ]),
-          throwsA(
-            isA<AtKeysEnrollmentException>().having(
-              (e) => e.message,
-              'message',
-              allOf(contains('no enrollment id'), contains('"e2"')),
-            ),
+          () => assurance.refuseSecondLiveEnrollment(
+            existing: [authMaterial('auth:rsa2048:1')],
+            candidate: authMaterial('auth:rsa2048:2', enrollmentId: 'e2'),
           ),
+          throwsA(isA<ArgumentError>().having((e) => e.toString(), 'message',
+              contains('no enrollment id'))),
         );
       });
 

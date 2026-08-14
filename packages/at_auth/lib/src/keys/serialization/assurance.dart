@@ -117,11 +117,20 @@ class AtKeysAssurance {
   // ---- cross-record structural invariants ----
 
   /// An enrollment may not contribute more than one **active** material of
-  /// the same `(CryptographicKeyType, KeyAlgorithmType)`, and the whole
-  /// document may hold only one active
-  /// [CryptographicKeyType.privateAuthentication].
-  /// (Duplicate `keyId`s across document entries are rejected earlier, by
+  /// the same `(CryptographicKeyType, KeyAlgorithmType)`.
+  /// (Duplicate `keyId`s within a container are rejected earlier, by
   /// [parseAtKeysDocument].)
+  ///
+  /// ⚠️ **This is the READ path and it tolerates several live enrollments.**
+  /// One live enrollment per install is what this build *writes*, and
+  /// [refuseSecondLiveEnrollment] is where that is enforced. Refusing a
+  /// second one here as well would make the plurality unenableable: the first
+  /// build to emit two would be unreadable by every build that predates it,
+  /// so no build could ever start emitting them. A document holding two is
+  /// read, and the ambiguity surfaces at
+  /// `AtKeys.resolveAuthenticatingEnrollment()` — the point where a caller
+  /// actually needs one answer — rather than taking the whole keyfile down at
+  /// parse.
   ///
   /// Only active material counts, so retiring a key frees its slot for a
   /// replacement. Counting every status instead would make a same-enrollment
@@ -147,27 +156,9 @@ class AtKeysAssurance {
   /// from here rather than a silently chosen one.
   void validateKeyMaterials(List<AtKeysMaterial> materials) {
     final typesByEnrollment = <String, Set<String>>{};
-    // Whether one has been seen is tracked apart from which one it was:
-    // `enrollmentId` is nullable and optional in the document, so a null is a
-    // legitimate value rather than "none yet". Folding the two together let a
-    // first authentication key with no enrollment id leave the check armed
-    // with null, and the second one through.
-    var activeAuthSeen = false;
-    String? activeAuthEnrollment;
     for (final material in materials) {
       if (material.status != KeyPartStatus.active) {
         continue;
-      }
-      if (material.keyPartType == CryptographicKeyType.privateAuthentication) {
-        if (activeAuthSeen) {
-          throw AtKeysEnrollmentException(
-              'AtKeys holds an active authentication key for both '
-              '${_enrollmentLabel(activeAuthEnrollment)} and '
-              '${_enrollmentLabel(material.enrollmentId)}; only one '
-              'enrollment may be live in a keyfile');
-        }
-        activeAuthSeen = true;
-        activeAuthEnrollment = material.enrollmentId;
       }
       final enrollmentId = material.enrollmentId;
       if (enrollmentId == null) {
@@ -225,18 +216,49 @@ class AtKeysAssurance {
             'Enrollment "${candidate.enrollmentId}" already has an active '
             '${candidate.keyPartType} key material for '
             '${candidate.keyAlgorithmType}');
-      } else if (candidate.status == KeyPartStatus.active &&
-          material.status == KeyPartStatus.active &&
-          candidate.keyPartType ==
-              CryptographicKeyType.privateAuthentication &&
-          material.keyPartType == CryptographicKeyType.privateAuthentication) {
-        // Document-wide, unlike the rule above: two enrollments may each hold
-        // signing keys, but only one may be the enrollment this keyfile
-        // authenticates as.
-        throw ArgumentError.value(candidate.enrollmentId, 'material',
-            'AtKeys already holds an active authentication key, for '
-            '"${material.enrollmentId}"; retire it before filing another');
       }
+    }
+  }
+
+  /// Refuses a **second live enrollment** — a second active
+  /// [CryptographicKeyType.privateAuthentication] anywhere in the document.
+  ///
+  /// The one rule here that is a **policy about what this build writes**
+  /// rather than a structural invariant, which is why it is separate and why
+  /// only `AtKeys.addKey` calls it. One live enrollment per install is the
+  /// model; a writer producing two would be producing a keyfile whose
+  /// authenticating enrollment nothing can determine.
+  ///
+  /// ⚠️ **The parse deliberately does NOT apply this.** A reader that refused
+  /// a second entry would make plurality unenableable — the first build to
+  /// write two breaks every build that predates it, so no build could ever
+  /// start. Reading is tolerant; the ambiguity surfaces at
+  /// `AtKeys.resolveAuthenticatingEnrollment()`, where a caller is asking for
+  /// the one answer that does not exist.
+  void refuseSecondLiveEnrollment({
+    required Iterable<AtKeysMaterial> existing,
+    required AtKeysMaterial candidate,
+  }) {
+    if (candidate.status != KeyPartStatus.active ||
+        candidate.keyPartType != CryptographicKeyType.privateAuthentication) {
+      return;
+    }
+    for (final material in existing) {
+      if (material.status != KeyPartStatus.active ||
+          material.keyPartType !=
+              CryptographicKeyType.privateAuthentication) {
+        continue;
+      }
+      // Whatever the owner, and whatever the algorithm. The same enrollment
+      // filing a second under a different algorithm is refused too: an
+      // enrollment holds at most one active authentication pair, which is
+      // what CryptographicKeyType.privateAuthentication documents and what
+      // the per-(role, algorithm) rule above cannot see, since the two name
+      // different algorithms.
+      throw ArgumentError.value(candidate.enrollmentId, 'material',
+          'AtKeys already holds an active authentication key, for '
+          '${_enrollmentLabel(material.enrollmentId)}; retire it before '
+          'filing another');
     }
   }
 

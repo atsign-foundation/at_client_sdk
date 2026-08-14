@@ -1,4 +1,20 @@
 ## 3.4.0
+- feat: a keyfile holding more than one live enrollment is **read**, and only a
+  writer refuses to create one. The single-active-authentication rule moves off
+  `AtKeysAssurance.validateKeyMaterials` onto a new
+  `.refuseSecondLiveEnrollment`, which only `AtKeys.addKey` calls; the parse
+  files through a path that applies the structural invariants without it.
+  - A reader that refused a second entry would make the plurality
+    unenableable: the first build to write two breaks every build that
+    predates it, so no build could ever start. The ambiguity surfaces at
+    `resolveAuthenticatingEnrollment()` instead — where a caller is asking for
+    the one answer that does not exist — rather than taking a whole keyfile
+    down at parse.
+  - Where it moved to, it got stricter: the refusal is owner- and
+    algorithm-agnostic, so one enrollment holding an active `auth:rsa2048:1`
+    *and* an active `auth:mldsa65:1` is refused. The per-(role, algorithm)
+    rule structurally cannot see that pair, since the two name different
+    algorithms.
 - **BREAKING** feat: the `.atKeys` typed document groups by enrollment. The
   flat document-wide `keys[]` becomes `enrollments[]` — one entry per
   enrollment, carrying its id, its `namespaces`/`appName`/`deviceName`

@@ -119,6 +119,19 @@ class AtKeys {
     }
   }
 
+  /// The parse's own constructor: files [materials] through [_file], so a
+  /// document holding more than one live enrollment is READ rather than
+  /// refused.
+  ///
+  /// The public constructor above is a writer's — app code assembling keys —
+  /// and keeps the write-side policy. Sharing one path is what made the
+  /// reader inherit the writer's refusal, which is the state this replaces.
+  AtKeys._parsed({this.atsign, required List<AtKeysMaterial> materials}) {
+    for (final material in materials) {
+      _file(material);
+    }
+  }
+
   /// What this keyfile records about [enrollmentId] besides its keys, or null
   /// when it holds no such enrollment.
   AtKeysEnrollment? enrollmentInfo(String enrollmentId) =>
@@ -175,7 +188,25 @@ class AtKeys {
 
   /// Files [material] in the container its own `enrollmentId` names — that
   /// enrollment's when it has one, the atSign's when it is null.
+  ///
+  /// This is the **write** path, so it refuses a second live enrollment: one
+  /// per install is what this build produces. Reading does not, and the
+  /// asymmetry is deliberate — see
+  /// [AtKeysAssurance.refuseSecondLiveEnrollment].
   void addKey(AtKeysMaterial material) {
+    const AtKeysAssurance()
+        .refuseSecondLiveEnrollment(existing: keys, candidate: material);
+    _file(material);
+  }
+
+  /// [addKey] without the write-only policy: the structural invariants only.
+  ///
+  /// What the parse files through. A document is evidence of what some build
+  /// wrote, not a request for this one to write something, so the rules that
+  /// apply to it are the ones about whether it is *coherent* — no duplicate
+  /// `(owner, keyId, part)`, no two active keys of one role and algorithm in
+  /// one enrollment — and not the ones about what this build chooses to emit.
+  void _file(AtKeysMaterial material) {
     const AtKeysAssurance().validateAddKey(existing: keys, candidate: material);
     _containerFor(material.enrollmentId)
         .putIfAbsent(material.keyId, () => {})[material.keyPartType] = material;
@@ -637,9 +668,9 @@ class AtKeys {
     };
 
     //form the new AtKeys
-    AtKeys atKeys = AtKeys(
+    AtKeys atKeys = AtKeys._parsed(
       atsign: atsign,
-      keysList: materials,
+      materials: materials,
     );
     // After the materials, so an enrollment carrying a snapshot and no keys
     // still gets its slot, and one carrying keys keeps the snapshot beside
