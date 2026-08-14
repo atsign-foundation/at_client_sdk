@@ -1520,9 +1520,11 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
 
 ### 16.5 The rollout matrix
 
-Sender stage × receiver stage. Every cell runs; the failing cells are asserted
-**by their specific error**, since asserting only "it failed" lets a cell start
-failing for a different reason unnoticed.
+Sender stage × receiver stage. Every cell runs. **No cell fails**, and the
+sentence that used to stand here — "the failing cells are asserted by their
+specific error" — described two cells that were measured out of existence; see
+the note at the end of this section. The principle it states still governs the
+incompatibility pins below, which is where the specific errors now live.
 
 The matrix is over the **data path** — a real notification, multiple puts and
 gets, the records a peer actually exchanges. All sixteen cells pass, and that
@@ -1545,10 +1547,10 @@ to work around.
 
 #### The signed-envelope exchange is a 3×3, and why
 
-The envelope exchange runs over `now`/`rollout1`/`rollout2` only, nine cells,
-all passing. **A released client and this tree cannot exchange an envelope in
-either direction, under any stage** — measured 2026-08-14 by cross-feeding each
-build's shape to the other's reader:
+The envelope exchange is a `now`/`rollout1`/`rollout2` question, because **a
+released client and this tree cannot exchange an envelope in either direction,
+under any stage** — measured 2026-08-14 by cross-feeding each build's shape to
+the other's reader:
 
 | Direction | Result |
 |-----------|--------|
@@ -1570,9 +1572,25 @@ suitable for production secrets". 3.14.0's `AtClientImpl.start()` is a two-line
 no-op, so no post-quantum path starts on its own there. The affected consumer
 is an app that opted into an API documenting itself as unusable for the purpose.
 
-Both errors are pinned as raw literals, in both directions — an incompatibility
-that is accepted has to stay *visible*, and a break nobody asserts is
-indistinguishable from a break that quietly changed shape.
+Both errors are pinned as raw literals, in both directions, in
+`packages/at_client/test/released_envelope_incompatibility_test.dart` — an
+incompatibility that is accepted has to stay *visible*, and a break nobody
+asserts is indistinguishable from a break that quietly changed shape.
+
+⚠️ That sentence stood here for a day before the tests existed, asserting a
+guard nothing provided. It was caught by a context-free reader auditing the
+handoff, who grepped for the two literals and found them in prose only. A
+"pinned" claim is checkable in one grep, and this one was false — which is
+worth more as a recorded near-miss than as a silently corrected line, because
+the accepted-break ruling in
+[`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+rests on exactly this visibility.
+
+**The `now`/`rollout1`/`rollout2` envelope grid is not built.** The functional
+matrix drives the data path only and says so in its own header. The three
+stages emit byte-identical envelopes today — nothing files per-algorithm
+signing material until rollout 2 mints it — so the grid's value is in the
+rollout-2 row, and it is owed rather than done.
 
 ⚠️ This section previously showed two failing cells,
 `rollout 2 → published` and `rollout 2 → now`, both attributed to
