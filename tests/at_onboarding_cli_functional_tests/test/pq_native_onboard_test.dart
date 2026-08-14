@@ -92,7 +92,7 @@ void main() {
     expect(
         mine['apkamPubKey'],
         keys
-            .getKey('apkam:$enrollmentId:1',
+            .getKey(enrollmentId, 'auth:mldsa65:1',
                 CryptographicKeyType.publicAuthentication)!
             .bytes
             .toString(),

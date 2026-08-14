@@ -294,27 +294,49 @@ final class AtKeysMaterial {
       );
 }
 
-/// Parses the typed-keys document's `keys` array into a flat list of
-/// [AtKeysMaterial], validating each entry's `keyParts` (no duplicate
-/// `keyPartType` within one `keyId`) and rejecting a `keyId` that repeats
-/// across separate entries.
-List<AtKeysMaterial> parseAtKeysDocument(List<dynamic> keysJson) {
+/// Parses one container's `keys` array into a flat list of [AtKeysMaterial],
+/// validating each entry's `keyParts` (no duplicate `keyPartType` within one
+/// `keyId`) and rejecting a `keyId` that repeats within this container.
+///
+/// [enrollmentId] is the owner every material in the array is tagged with —
+/// the enclosing `enrollments[]` entry's id, or null for the document's
+/// `atSignKeys[]`. The container states it once and the entries do not carry
+/// it: two stored copies of one fact can disagree with nothing to arbitrate.
+/// An entry that carries one anyway is refused rather than ignored, because
+/// ignoring it would silently file the material under a different owner than
+/// the document says.
+///
+/// ⚠️ **A keyId is unique within its container, not within the document.**
+/// Two enrollments may each hold `auth:mldsa65:1`; identity is
+/// `(enrollment, keyId)`.
+///
+/// [fieldPrefix] names this container in parse diagnostics.
+List<AtKeysMaterial> parseAtKeysDocument(
+  List<dynamic> keysJson, {
+  String? enrollmentId,
+  String fieldPrefix = 'keys',
+}) {
   const assurance = AtKeysAssurance();
   final materials = <AtKeysMaterial>[];
   final seenKeyIds = <String>{};
 
   for (final entry in keysJson.asMap().entries) {
-    final fieldPrefix = 'keys[${entry.key}]';
-    final entryJson = assurance.expectMap(entry.value, fieldPrefix);
+    final entryPrefix = '$fieldPrefix[${entry.key}]';
+    final entryJson = assurance.expectMap(entry.value, entryPrefix);
     final keyId = assurance.expectNonEmptyString(
-        entryJson['keyId'], '$fieldPrefix.keyId');
+        entryJson['keyId'], '$entryPrefix.keyId');
     if (!seenKeyIds.add(keyId)) {
       throw AtKeysValidationException('Duplicate atKeys keyId "$keyId"');
     }
-    final enrollmentId = assurance.optionalString(
-        entryJson['enrollmentId'], '$fieldPrefix.enrollmentId');
+    if (entryJson.containsKey('enrollmentId')) {
+      throw AtKeysValidationException(
+          '$entryPrefix carries an enrollmentId. Key entries state no owner of '
+          'their own — the container states it once. A document written this '
+          'way predates the enrollments[]/atSignKeys[] shape and must be '
+          'regenerated.');
+    }
     final keyPartsJson =
-        assurance.expectList(entryJson['keyParts'], '$fieldPrefix.keyParts');
+        assurance.expectList(entryJson['keyParts'], '$entryPrefix.keyParts');
 
     final seenKeyPartTypes = <String>{};
     for (final part in keyPartsJson.asMap().entries) {
@@ -335,11 +357,15 @@ List<AtKeysMaterial> parseAtKeysDocument(List<dynamic> keysJson) {
   return materials;
 }
 
-/// Encodes a flat list of [AtKeysMaterial] into the typed-keys document's
-/// nested
-/// `keys` shape, grouping materials that share a `keyId` (e.g. the
-/// public+private halves of a keypair) and validating that every material in
-/// a group agrees on `enrollmentId` and doesn't repeat a `keyPartType`.
+/// Encodes one container's materials into its nested `keys` shape, grouping
+/// materials that share a `keyId` (e.g. the public+private halves of a
+/// keypair) and validating that every material in a group agrees on
+/// `enrollmentId` and doesn't repeat a `keyPartType`.
+///
+/// The owner is **not** emitted: the enclosing `enrollments[]` entry states it
+/// once, and `atSignKeys[]` states it by being where it is. The agreement
+/// check stays, because a group whose halves name different owners is a
+/// programming error that would now be encoded as if it had none.
 List<Map<String, dynamic>> encodeAtKeysDocument(
   Iterable<AtKeysMaterial> materials,
 ) {
@@ -364,8 +390,6 @@ List<Map<String, dynamic>> encodeAtKeysDocument(
     final group = entry.value;
     return {
       'keyId': entry.key,
-      if (group.first.enrollmentId != null)
-        'enrollmentId': group.first.enrollmentId,
       'keyParts': group.map((material) => material.toJson()).toList(),
     };
   }).toList();

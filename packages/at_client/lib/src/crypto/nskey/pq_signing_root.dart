@@ -52,15 +52,22 @@ final _logger = AtSignLogger('PqSigningRoot');
 class PqSigningRoot {
   static const String recordName = pqSigningRootRecordName;
 
-  /// The `AtKeys` id the private half is filed under. It carries no namespace
+  /// The `AtKeys` id prefix the private half is filed under, completed by a
+  /// generation: `root:mldsa65:1`, then `:2`, `:3`, … It carries no namespace
   /// — the root is atSign-level, which is exactly what distinguishes it from
-  /// an nskey.
+  /// an nskey — and it lives in the atSign's own container rather than any
+  /// enrollment's.
   ///
-  /// Key material is never removed from `AtKeys`, only retired — so when this
-  /// slot is occupied by the dead remains of a lost create, a later private
-  /// files under `pq_signing_root.2` (then `.3`, …) instead. Readers go
-  /// through [privateHalf], which scans the slots for the one active private.
-  static const String keyId = 'pq_signing_root';
+  /// Key material is never removed from `AtKeys`, only retired, so the
+  /// generation IS the slot: when generation 1 holds the dead remains of a
+  /// lost create, a later private files under 2 rather than over it. Readers
+  /// go through [privateHalf], which scans the generations for the one active
+  /// private.
+  ///
+  /// ⚠️ Not the record name. The published record is
+  /// `public:pq_signing_root@<atSign>` ([recordName]), which is a wire value
+  /// and frozen; this is at-rest, where the document is the only reader.
+  static const String keyIdPrefix = 'root:${KeyAlgorithmType.mlDsa65}:';
 
   /// Reserved [Secret] name the private travels under.
   ///
@@ -196,8 +203,8 @@ class PqSigningRoot {
     }
 
     if (held != null) {
-      final heldPublic =
-          keys!.getKey(held.keyId, CryptographicKeyType.publicVerification);
+      final heldPublic = keys!
+          .getAtSignKey(held.keyId, CryptographicKeyType.publicVerification);
       if (heldPublic != null) {
         // The crash between filing and publishing: finish the publish with
         // the pair already filed.
@@ -614,27 +621,22 @@ class PqSigningRoot {
   static final Uint8List _probe =
       Uint8List.fromList(utf8.encode('pq_signing_root correspondence probe'));
 
-  /// A root-private slot: the canonical [keyId], or the `.2`/`.3`/… overflow
-  /// a slot occupied by retired remains pushes a later private into.
+  /// A root-private slot: [keyIdPrefix] followed by a generation number.
   static bool _isRootSlot(String id) =>
-      id == keyId || RegExp('^${RegExp.escape(keyId)}\\.\\d+\$').hasMatch(id);
+      id.startsWith(keyIdPrefix) &&
+      int.tryParse(id.substring(keyIdPrefix.length)) != null;
 
-  AtKeysMaterial? _activePrivate(AtKeys keys) => keys.keys
+  AtKeysMaterial? _activePrivate(AtKeys keys) => keys.atSignKeys
       .where((m) =>
           m.keyPartType == CryptographicKeyType.privateSigning &&
           m.status == KeyPartStatus.active &&
           _isRootSlot(m.keyId))
       .firstOrNull;
 
-  /// The first root slot with no material at all — retired remains keep
-  /// their slot forever, so a new private lands beside them, never over them.
-  String _freeSlot(AtKeys keys) {
-    if (keys.keysForKeyId(keyId).isEmpty) return keyId;
-    for (var n = 2;; n++) {
-      final candidate = '$keyId.$n';
-      if (keys.keysForKeyId(candidate).isEmpty) return candidate;
-    }
-  }
+  /// The next free root slot — retired remains keep their generation forever,
+  /// so a new private lands beside them, never over them.
+  String _freeSlot(AtKeys keys) =>
+      '$keyIdPrefix${keys.nextAtSignGeneration('root', KeyAlgorithmType.mlDsa65)}';
 
   Future<AtKeys?> _readKeys(String atSign) async {
     final io = keysIo;
@@ -697,7 +699,7 @@ class PqSigningRoot {
     final io = keysIo;
     if (io is! WrittenAtKeysIo) return;
     await io.update(atSign.toAtsign(), (keys) {
-      keys.retireKey(slot, to: KeyPartStatus.dead);
+      keys.retireAtSignKey(slot, to: KeyPartStatus.dead);
       return true;
     });
   }

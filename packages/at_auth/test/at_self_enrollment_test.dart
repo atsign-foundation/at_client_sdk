@@ -103,9 +103,9 @@ void main() {
 
     final after = await keysIo.read(atSign);
     final signing = after.getKey(
-        'apkam:new-123:1', CryptographicKeyType.privateAuthentication);
+        'new-123', 'auth:mldsa65:1', CryptographicKeyType.privateAuthentication);
     final verification = after.getKey(
-        'apkam:new-123:1', CryptographicKeyType.publicAuthentication);
+        'new-123', 'auth:mldsa65:1', CryptographicKeyType.publicAuthentication);
     expect(signing, isNotNull);
     expect(verification, isNotNull);
     expect(signing!.enrollmentId, 'new-123');
@@ -154,8 +154,10 @@ void main() {
               'one-enrollment-one-keypair and the PKAM binding');
 
       final after = await keysIo.read(atSign);
-      final signing =
-          after.getKey('apkam:new-123:1', CryptographicKeyType.privateAuthentication);
+      // The algorithm is in the id now, so an rsa2048 retrofit files under
+      // auth:rsa2048:1 — reading auth:mldsa65:1 here would find nothing.
+      final signing = after.getKey(
+          'new-123', 'auth:rsa2048:1', CryptographicKeyType.privateAuthentication);
       expect(signing!.keyAlgorithmType, KeyAlgorithmType.rsa2048);
       expect(signing.enrollmentId, 'new-123');
     });
@@ -329,7 +331,7 @@ void main() {
 
     final after = await keysIo.read(atSign);
     final filed = after.getKey(
-        'kp-abc123', CryptographicKeyType.privateDecapsulation);
+        'new-123', 'kp-abc123', CryptographicKeyType.privateDecapsulation);
     expect(filed, isNotNull);
     expect(filed!.enrollmentId, 'new-123',
         reason: 'the builder files material before the id exists; the '
@@ -355,7 +357,7 @@ void main() {
       ..signingAlgoType = SigningAlgoType.mldsa65
       ..signingMode = AtSigningMode.pkam);
     final publicKey = after
-        .getKey('apkam:new-123:1', CryptographicKeyType.publicAuthentication)!
+        .getKey('new-123', 'auth:mldsa65:1', CryptographicKeyType.publicAuthentication)!
         .bytes
         .toString();
     final ok = await MlDsa65PureDartAlgo().verifyBytes(

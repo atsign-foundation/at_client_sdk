@@ -5,27 +5,110 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 
+/// What a keyfile records about one enrollment besides its keys — the
+/// snapshot an app reads to say which device a keyfile is for *before*
+/// authenticating, which the atServer cannot answer.
+///
+/// Refreshed from the enrollment record on every authenticated start, so a
+/// value here is what was true at the last one. Fields are null on a keyfile
+/// written where no enrollment request supplied them — a retrofit, or an
+/// onboard handed its keys by the caller — and stay null until that
+/// reconciliation runs. An absent `namespaces` therefore means "not yet
+/// known", which is why it is not written as an empty map: that would state
+/// "no grants".
+final class AtKeysEnrollment {
+  final String enrollmentId;
+  final Map<String, String>? namespaces;
+  final String? appName;
+  final String? deviceName;
+
+  const AtKeysEnrollment({
+    required this.enrollmentId,
+    this.namespaces,
+    this.appName,
+    this.deviceName,
+  });
+}
+
+/// One enrollment's mutable slot in the document: its snapshot, and the
+/// materials it owns keyed by `keyId` then `keyPartType`.
+class _EnrollmentSlot {
+  _EnrollmentSlot(this.enrollmentId);
+
+  final String enrollmentId;
+  Map<String, String>? namespaces;
+  String? appName;
+  String? deviceName;
+  final Map<String, Map<String, AtKeysMaterial>> materialsByKeyId = {};
+
+  AtKeysEnrollment get snapshot => AtKeysEnrollment(
+        enrollmentId: enrollmentId,
+        namespaces: namespaces == null ? null : Map.unmodifiable(namespaces!),
+        appName: appName,
+        deviceName: deviceName,
+      );
+}
+
 /// The in-memory model of an atsign's cryptographic keys.
 ///
 /// An AtKeys instance always holds **plaintext** key material — every
 /// at-rest concern (the passphrase envelope, self-encryption of the legacy
-/// fields) lives in `FileAtKeysIo`, not here. Typed key material
-/// ([AtKeysMaterial]) is added with [addKey], looked up by
-/// `(keyId, keyPartType)` via [getKey] / [keysForKeyId] /
-/// [keysForEnrollment], and retired (never removed) with [retireKey].
+/// fields) lives in `FileAtKeysIo`, not here.
+///
+/// Typed key material ([AtKeysMaterial]) sits in one of two containers, and
+/// which one is a statement about who the material belongs to:
+///
+/// - an **enrollment's** keys — its authentication keypair, its signing keys,
+///   its key package — reached with [getKey] / [keysForKeyId] /
+///   [keysForEnrollment] and retired with [retireKey], all of which take the
+///   enrollment beside the keyId;
+/// - the **atSign's** own keys — the signing root, an nskey private — reached
+///   with [getAtSignKey] / [atSignKeysForKeyId] and retired with
+///   [retireAtSignKey].
+///
+/// ⚠️ **Identity is `(enrollment, keyId)`, not keyId alone.** Two enrollments
+/// may each hold `auth:mldsa65:1`. That is why the lookups are split rather
+/// than defaulted: a caller reaching for atSign-scope material with a bare
+/// keyId would otherwise compile while searching an enrollment, and find
+/// nothing.
+///
+/// [addKey] is not split, because a material states its own owner: its
+/// `enrollmentId` routes it, and a null one means the atSign's container.
 class AtKeys {
   static const supportedVersion = 1;
-  static const _reservedTopLevelKeys = {'version', 'atsign', 'keys'};
+  static const _reservedTopLevelKeys = {
+    'version',
+    'atsign',
+    'enrollments',
+    'atSignKeys',
+  };
 
   //todo: make non-nullable and final in v4
   Atsign? atsign;
 
-  // Inner map keyed by keyPartType (see CryptographicKeyType for the known
-  // tokens; unknown tokens are held too).
-  final Map<String, Map<String, AtKeysMaterial>> _materialsByKeyId = {};
+  final Map<String, _EnrollmentSlot> _enrollments = {};
 
-  Iterable<AtKeysMaterial> get keys =>
-      _materialsByKeyId.values.expand((byType) => byType.values);
+  // Keyed by keyId, then keyPartType (see CryptographicKeyType for the known
+  // tokens; unknown tokens are held too).
+  final Map<String, Map<String, AtKeysMaterial>> _atSignMaterialsByKeyId = {};
+
+  /// Every typed material in the document, both containers, in no particular
+  /// order.
+  Iterable<AtKeysMaterial> get keys => [
+        ..._atSignMaterialsByKeyId.values.expand((byType) => byType.values),
+        ..._enrollments.values.expand(
+            (slot) => slot.materialsByKeyId.values.expand((b) => b.values)),
+      ];
+
+  /// The atSign's own materials — the signing root, nskey privates — with no
+  /// enrollment between them and the document.
+  Iterable<AtKeysMaterial> get atSignKeys =>
+      _atSignMaterialsByKeyId.values.expand((byType) => byType.values);
+
+  /// Every enrollment this keyfile holds. Writers emit one; the reader
+  /// tolerates several so that emitting a second never has to break a build
+  /// that predates it.
+  Iterable<String> get enrollmentIds => _enrollments.keys;
 
   AtKeys({
     this.atsign,
@@ -36,39 +119,88 @@ class AtKeys {
     }
   }
 
-  /// Looks up one material by its `(keyId, keyPartType)` — [type] is a
-  /// [CryptographicKeyType] token.
-  AtKeysMaterial? getKey(String keyId, String type) =>
-      _materialsByKeyId[keyId]?[type];
+  /// What this keyfile records about [enrollmentId] besides its keys, or null
+  /// when it holds no such enrollment.
+  AtKeysEnrollment? enrollmentInfo(String enrollmentId) =>
+      _enrollments[enrollmentId]?.snapshot;
 
-  /// Returns every material sharing [keyId] — e.g. the public+private halves
-  /// of one keypair.
+  /// Records the enrollment record's [namespaces] / [appName] / [deviceName]
+  /// against [enrollmentId], creating the enrollment slot if this is the
+  /// first thing filed for it.
+  ///
+  /// A null argument leaves that field as it was, so a caller holding only
+  /// part of the snapshot does not erase the rest. Writing a field it does
+  /// not have is what an empty-placeholder scheme would do, and an empty
+  /// `namespaces` states "no grants" rather than "not yet known".
+  void recordEnrollmentSnapshot(
+    String enrollmentId, {
+    Map<String, String>? namespaces,
+    String? appName,
+    String? deviceName,
+  }) {
+    final slot = _enrollments.putIfAbsent(
+        enrollmentId, () => _EnrollmentSlot(enrollmentId));
+    if (namespaces != null) slot.namespaces = Map.of(namespaces);
+    if (appName != null) slot.appName = appName;
+    if (deviceName != null) slot.deviceName = deviceName;
+  }
+
+  /// Looks up one of [enrollmentId]'s materials by `(keyId, keyPartType)` —
+  /// [type] is a [CryptographicKeyType] token.
+  AtKeysMaterial? getKey(String enrollmentId, String keyId, String type) =>
+      _enrollments[enrollmentId]?.materialsByKeyId[keyId]?[type];
+
+  /// Looks up one of the atSign's own materials by `(keyId, keyPartType)`.
+  AtKeysMaterial? getAtSignKey(String keyId, String type) =>
+      _atSignMaterialsByKeyId[keyId]?[type];
+
+  /// Every material of [enrollmentId] sharing [keyId] — e.g. the
+  /// public+private halves of one keypair.
   ///
   /// Potentially might only contain a half of a keypair. Typically the public one.
-  Iterable<AtKeysMaterial> keysForKeyId(String keyId) =>
-      _materialsByKeyId[keyId]?.values ?? const [];
+  Iterable<AtKeysMaterial> keysForKeyId(String enrollmentId, String keyId) =>
+      _enrollments[enrollmentId]?.materialsByKeyId[keyId]?.values ?? const [];
+
+  /// Every atSign-scope material sharing [keyId].
+  Iterable<AtKeysMaterial> atSignKeysForKeyId(String keyId) =>
+      _atSignMaterialsByKeyId[keyId]?.values ?? const [];
 
   /// Returns every material tagged with [enrollmentId].
   Iterable<AtKeysMaterial> keysForEnrollment(String enrollmentId) =>
-      keys.where((material) => material.enrollmentId == enrollmentId);
+      _enrollments[enrollmentId]
+          ?.materialsByKeyId
+          .values
+          .expand((byType) => byType.values) ??
+      const [];
 
+  /// Files [material] in the container its own `enrollmentId` names — that
+  /// enrollment's when it has one, the atSign's when it is null.
   void addKey(AtKeysMaterial material) {
     const AtKeysAssurance().validateAddKey(existing: keys, candidate: material);
-    _materialsByKeyId.putIfAbsent(
-        material.keyId, () => {})[material.keyPartType] = material;
+    _containerFor(material.enrollmentId)
+        .putIfAbsent(material.keyId, () => {})[material.keyPartType] = material;
+  }
+
+  Map<String, Map<String, AtKeysMaterial>> _containerFor(String? enrollmentId) {
+    if (enrollmentId == null) return _atSignMaterialsByKeyId;
+    return _enrollments
+        .putIfAbsent(enrollmentId, () => _EnrollmentSlot(enrollmentId))
+        .materialsByKeyId;
   }
 
   /// Files a freshly minted APKAM keypair as an enrollment's
   /// **authentication** material, under the keyId
-  /// `apkam:<enrollmentId>:<generation>`.
+  /// `auth:<algorithm>:<generation>`.
   ///
-  /// This is the one place that id shape is written. The generation suffix is
-  /// what lets one enrollment hold more than one APKAM keypair over its life:
-  /// a rotation retires the previous generation and files the next under the
-  /// same enrollment id, and the retired bytes stay in the file because they
-  /// are still needed to verify what they signed. Without the suffix the map
-  /// key `(keyId, keyPartType)` collides and a second generation cannot be
-  /// filed at all.
+  /// This is the one place that id shape is written. The enrollment is stated
+  /// by the container the material lands in, not by the id: two stored copies
+  /// of one fact can disagree with nothing to arbitrate. The generation suffix
+  /// is what lets one enrollment hold more than one APKAM keypair of an
+  /// algorithm over its life — a rotation retires the previous generation and
+  /// files the next, and the retired bytes stay in the file because they are
+  /// still needed to verify what they signed. The algorithm is in the id
+  /// because an enrollment moving from one to another holds both at once, and
+  /// they must not collide.
   ///
   /// [algorithm] is a [KeyAlgorithmType] token, which is also the enrollment
   /// `signingAlgo` spelling — the keyfile and the wire use the same strings.
@@ -86,7 +218,8 @@ class AtKeys {
     required String privateKey,
   }) {
     final now = DateTime.now().toUtc();
-    final keyId = 'apkam:$enrollmentId:${nextApkamGeneration(enrollmentId)}';
+    final keyId = 'auth:$algorithm:'
+        '${nextAuthenticationGeneration(enrollmentId, algorithm)}';
     addKey(AtKeysMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
@@ -104,32 +237,24 @@ class AtKeys {
   }
 
   /// The generation number [fileApkamMaterial] will use next for
-  /// [enrollmentId] — one past the highest already filed, or 1.
+  /// [enrollmentId]'s [algorithm] — one past the highest already filed, or 1.
   ///
   /// Derived from the keyIds present rather than counted separately, so it
   /// cannot drift from what the file actually holds. An id whose suffix is
   /// not a number is ignored rather than rejected: a keyfile written by a
   /// build that spells generations differently must still be readable.
-  int nextApkamGeneration(String enrollmentId) {
-    final prefix = 'apkam:$enrollmentId:';
-    var highest = 0;
-    for (final keyId in _materialsByKeyId.keys) {
-      if (!keyId.startsWith(prefix)) continue;
-      final generation = int.tryParse(keyId.substring(prefix.length));
-      if (generation != null && generation > highest) {
-        highest = generation;
-      }
-    }
-    return highest + 1;
-  }
+  int nextAuthenticationGeneration(String enrollmentId, String algorithm) =>
+      _nextGeneration(
+          _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
+          'auth:$algorithm:');
 
   /// Files a signing keypair for [enrollmentId] under
-  /// `sign:<enrollmentId>:<algorithm>:<generation>`.
+  /// `sign:<algorithm>:<generation>`.
   ///
-  /// Algorithm leads the id because algorithm is what a verifier selects on:
-  /// an enrollment holds one active signing key per algorithm, and an
-  /// envelope's signature names which one produced it. The generation suffix
-  /// allows rotating a signing key within its algorithm.
+  /// Algorithm leads the suffix because algorithm is what a verifier selects
+  /// on: an enrollment holds one active signing key per algorithm, and an
+  /// envelope's signature names which one produced it. The generation allows
+  /// rotating a signing key within its algorithm.
   void fileSigningMaterial({
     required String enrollmentId,
     required String algorithm,
@@ -137,8 +262,8 @@ class AtKeys {
     required String privateKey,
   }) {
     final now = DateTime.now().toUtc();
-    final keyId = 'sign:$enrollmentId:$algorithm:'
-        '${nextSigningGeneration(enrollmentId, algorithm)}';
+    final keyId =
+        'sign:$algorithm:${nextSigningGeneration(enrollmentId, algorithm)}';
     addKey(AtKeysMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
@@ -157,10 +282,28 @@ class AtKeys {
 
   /// The generation [fileSigningMaterial] will use next for [enrollmentId]'s
   /// [algorithm] — one past the highest already filed, or 1.
-  int nextSigningGeneration(String enrollmentId, String algorithm) {
-    final prefix = 'sign:$enrollmentId:$algorithm:';
+  int nextSigningGeneration(String enrollmentId, String algorithm) =>
+      _nextGeneration(
+          _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
+          'sign:$algorithm:');
+
+  /// The generation an atSign-scope keypair of [role] and [algorithm] should
+  /// be filed under next — one past the highest already there, or 1.
+  ///
+  /// The generation IS the slot. A pair that lost a mint race is retired in
+  /// place and keeps its generation forever, so the next mint lands beside it
+  /// rather than over it; `addKey` refuses a duplicate keyId, which is what
+  /// makes that safe rather than merely tidy.
+  int nextAtSignGeneration(String role, String algorithm) =>
+      _nextGeneration(_atSignMaterialsByKeyId.keys, '$role:$algorithm:');
+
+  /// One past the highest numeric suffix among [keyIds] starting with
+  /// [prefix], or 1. An id whose suffix is not a number is ignored rather
+  /// than rejected: a keyfile written by a build that spells generations
+  /// differently must still be readable.
+  static int _nextGeneration(Iterable<String> keyIds, String prefix) {
     var highest = 0;
-    for (final keyId in _materialsByKeyId.keys) {
+    for (final keyId in keyIds) {
       if (!keyId.startsWith(prefix)) continue;
       final generation = int.tryParse(keyId.substring(prefix.length));
       if (generation != null && generation > highest) {
@@ -175,10 +318,12 @@ class AtKeys {
   /// iterates and what a `_apsk` array is composed from.
   ///
   /// Selected by the keyId shape [fileSigningMaterial] writes, **not** by the
-  /// `privateSigning` role. That role is shared: `PqSigningRoot` files the
-  /// atSign-wide signing root as `privateSigning` too, under its own keyId
-  /// and with no enrollment id at all, so a role filter would hand an
-  /// enrollment a signing key that was never its own.
+  /// `privateSigning` role, which an enrollment can hold for more than one
+  /// reason. The atSign-wide signing root shares that role and is no longer a
+  /// hazard here — it lives in the atSign's own container and this method
+  /// never looks there — but the shape filter is what keeps any future
+  /// `privateSigning` material of an enrollment's from being advertised as a
+  /// signing key it can be asked to produce signatures with.
   ///
   /// Both halves must be present and active. A private with no published
   /// public cannot be verified against anything, and a public with no private
@@ -193,18 +338,20 @@ class AtKeys {
   /// else.
   List<({SigningAlgoType algorithm, String publicKey, String privateKey})>
       signingKeysFor(String enrollmentId) {
-    final prefix = 'sign:$enrollmentId:';
+    const prefix = 'sign:';
     final held =
         <({SigningAlgoType algorithm, String publicKey, String privateKey})>[];
-    for (final keyId in _materialsByKeyId.keys) {
+    for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
+        const <String>[]) {
       if (!keyId.startsWith(prefix)) continue;
-      // `<algo>:<n>` exactly — the same parse [nextSigningGeneration] does, so
-      // an enrollment id that is a prefix of another cannot collect its keys.
+      // `<algo>:<n>` exactly — the same parse [nextSigningGeneration] does.
       final suffix = keyId.substring(prefix.length).split(':');
       if (suffix.length != 2 || int.tryParse(suffix[1]) == null) continue;
 
-      final private = getKey(keyId, CryptographicKeyType.privateSigning);
-      final public = getKey(keyId, CryptographicKeyType.publicVerification);
+      final private =
+          getKey(enrollmentId, keyId, CryptographicKeyType.privateSigning);
+      final public =
+          getKey(enrollmentId, keyId, CryptographicKeyType.publicVerification);
       if (private == null || public == null) continue;
       if (private.status != KeyPartStatus.active ||
           public.status != KeyPartStatus.active) {
@@ -259,13 +406,24 @@ class AtKeys {
     }
   }
 
-  /// Marks every material of [keyId] as [to] ([KeyPartStatus.retired] by
-  /// default). Key material is never removed — retired/dead bytes are still
-  /// needed to decrypt data they protected — so this is the delete
-  /// operation. Status only moves forward (active → retired → dead): a
-  /// same-status call is a no-op and a backward transition throws, as does
-  /// an unknown [keyId] or `to: KeyPartStatus.active`.
-  void retireKey(String keyId, {String to = KeyPartStatus.retired}) {
+  /// Marks every material of [enrollmentId]'s [keyId] as [to]
+  /// ([KeyPartStatus.retired] by default). Key material is never removed —
+  /// retired/dead bytes are still needed to decrypt data they protected — so
+  /// this is the delete operation. Status only moves forward (active →
+  /// retired → dead): a same-status call is a no-op and a backward transition
+  /// throws, as does an unknown [keyId] or `to: KeyPartStatus.active`.
+  void retireKey(String enrollmentId, String keyId,
+          {String to = KeyPartStatus.retired}) =>
+      _retire(_enrollments[enrollmentId]?.materialsByKeyId, keyId, to,
+          'enrollment "$enrollmentId"');
+
+  /// [retireKey] for the atSign's own material — the signing root, an nskey
+  /// private.
+  void retireAtSignKey(String keyId, {String to = KeyPartStatus.retired}) =>
+      _retire(_atSignMaterialsByKeyId, keyId, to, 'the atSign');
+
+  void _retire(Map<String, Map<String, AtKeysMaterial>>? container, String keyId,
+      String to, String ownerLabel) {
     if (to == KeyPartStatus.active) {
       throw ArgumentError.value(to, 'to', 'retireKey cannot reactivate a key');
     }
@@ -274,9 +432,10 @@ class AtKeys {
       throw ArgumentError.value(
           to, 'to', 'not a status this build knows how to move a key to');
     }
-    final byType = _materialsByKeyId[keyId];
+    final byType = container?[keyId];
     if (byType == null) {
-      throw ArgumentError.value(keyId, 'keyId', 'AtKeys has no such keyId');
+      throw ArgumentError.value(
+          keyId, 'keyId', 'AtKeys holds no such keyId for $ownerLabel');
     }
     for (final material in byType.values) {
       final fromRank = KeyPartStatus.rankOf(material.status);
@@ -317,13 +476,20 @@ class AtKeys {
   ///
   /// [to] is how far the outgoing material moves: `retired` by default,
   /// `dead` when it should no longer be used even to verify history.
-  void replaceKey(String keyId, Iterable<AtKeysMaterial> replacements,
+  ///
+  /// Enrollment-scoped only. The atSign's own material has no rotation of
+  /// this shape — the signing root is create-once, and a pair that lost its
+  /// mint race is retired where it stands while the winner is filed under the
+  /// next generation.
+  void replaceKey(String enrollmentId, String keyId,
+      Iterable<AtKeysMaterial> replacements,
       {String to = KeyPartStatus.retired}) {
-    final outgoing = keysForKeyId(keyId).toList();
+    final outgoing = keysForKeyId(enrollmentId, keyId).toList();
     if (outgoing.isEmpty) {
-      throw ArgumentError.value(keyId, 'keyId', 'AtKeys has no such keyId');
+      throw ArgumentError.value(keyId, 'keyId',
+          'AtKeys holds no such keyId for enrollment "$enrollmentId"');
     }
-    retireKey(keyId, to: to);
+    retireKey(enrollmentId, keyId, to: to);
     final filed = <AtKeysMaterial>[];
     try {
       for (final replacement in replacements) {
@@ -332,44 +498,77 @@ class AtKeys {
       }
     } on Object {
       // Undo, so a refused rotation is a no-op rather than a keyfile with the
-      // old key retired and no new one in its place.
+      // old key retired and no new one in its place. Each material is undone
+      // in the container its own enrollmentId names, which is where addKey
+      // put it — a replacement naming a different owner is a caller error,
+      // but it must still be taken back out of wherever it landed.
       for (final material in filed) {
-        _materialsByKeyId[material.keyId]?.remove(material.keyPartType);
-        if (_materialsByKeyId[material.keyId]?.isEmpty ?? false) {
-          _materialsByKeyId.remove(material.keyId);
+        final container = _containerFor(material.enrollmentId);
+        container[material.keyId]?.remove(material.keyPartType);
+        if (container[material.keyId]?.isEmpty ?? false) {
+          container.remove(material.keyId);
         }
       }
+      final container = _containerFor(outgoing.first.enrollmentId);
       for (final material in outgoing) {
-        _materialsByKeyId[material.keyId]![material.keyPartType] = material;
+        container[material.keyId]![material.keyPartType] = material;
       }
       rethrow;
     }
   }
 
-  /// The enrollment this keyfile authenticates as, or null when it holds no
-  /// typed authentication material (a legacy keyfile, whose APKAM keypair
-  /// lives in the flat fields).
+  /// Every enrollment holding active authentication material — the ones this
+  /// keyfile could authenticate as.
   ///
-  /// Derived rather than stored. A pointer field duplicating this would be a
-  /// second writer able to disagree with the material itself, and after a
-  /// retrofit — when the file legitimately holds a capped enrollment's keys
-  /// alongside the live one's — disagreeing means authenticating as the
-  /// wrong enrollment. The document-wide single-active-authentication
-  /// invariant is what makes the answer unique.
-  String? get activeEnrollmentId => keys
-      .where((m) =>
-          m.keyPartType == CryptographicKeyType.privateAuthentication &&
-          m.status == KeyPartStatus.active)
-      .map((m) => m.enrollmentId)
-      .firstOrNull;
+  /// Whatever algorithm it names, including one this build cannot sign with:
+  /// whether an enrollment HAS an authentication key is a different question
+  /// from whether this build can use it, and answering "none" for the second
+  /// would send a caller to the flat fields, which on a retrofitted keyfile
+  /// belong to somebody else.
+  Iterable<String> get authenticatableEnrollmentIds => _enrollments.values
+      .where((slot) => slot.materialsByKeyId.values.any((byType) =>
+          byType[CryptographicKeyType.privateAuthentication]?.status ==
+          KeyPartStatus.active))
+      .map((slot) => slot.enrollmentId);
 
-  /// Decodes the typed-keys document shape (`version`, `atsign`, `keys`,
-  /// plus legacy fields flat at the top level). Json without a `version`
-  /// field is accepted as the legacy flat shape (delegates to
-  /// [_fromLegacyJson]); a `version` other than [supportedVersion] throws
-  /// [AtKeysUnsupportedVersionException]. `keys` entries are parsed and
-  /// validated by [parseAtKeysDocument], which returns the flattened
-  /// [AtKeysMaterial]s that are actually stored.
+  /// The one enrollment this keyfile authenticates as, for a caller that has
+  /// no id of its own to supply — a cold start holding nothing but the file.
+  ///
+  /// Null when the file holds no typed authentication material at all: a
+  /// legacy keyfile, whose APKAM keypair lives in the flat fields, and whose
+  /// enrollment is the flat [enrollmentId].
+  ///
+  /// **Throws when several qualify**, naming them. It is deliberately not a
+  /// first-wins default: a keyfile holding two live enrollments is a state
+  /// the writer refuses to create, so meeting one means something else is
+  /// wrong, and picking one silently is how a client ends up authenticating
+  /// as the wrong principal with nothing to point at. The selection stays the
+  /// caller's — this offers the candidates, not a verdict.
+  String? resolveAuthenticatingEnrollment() {
+    final candidates = authenticatableEnrollmentIds.toList();
+    if (candidates.isEmpty) return null;
+    if (candidates.length > 1) {
+      throw AtKeysEnrollmentException(
+          'This keyfile holds active authentication material for '
+          '${candidates.length} enrollments (${candidates.join(', ')}), so '
+          'which one it authenticates as is not derivable. The caller must '
+          'name the enrollment it means.');
+    }
+    return candidates.single;
+  }
+
+  /// Decodes the typed-keys document shape (`version`, `atsign`,
+  /// `atSignKeys`, `enrollments`, plus legacy fields flat at the top level).
+  /// Json without a `version` field is accepted as the legacy flat shape
+  /// (delegates to [_fromLegacyJson]); a `version` other than
+  /// [supportedVersion] throws [AtKeysUnsupportedVersionException]. Each
+  /// container's entries are parsed and validated by [parseAtKeysDocument],
+  /// which returns the flattened [AtKeysMaterial]s that are actually stored.
+  ///
+  /// Several `enrollments` entries are read, and the caller says which one it
+  /// authenticates as (or asks [resolveAuthenticatingEnrollment]). Writers
+  /// emit one; tolerating more here is what lets a later build emit a second
+  /// without breaking every build that predates it.
   factory AtKeys.fromJson(Map<String, dynamic> json) {
     const assurance = AtKeysAssurance();
     // Legacy files have no version field - accept them as legacy.
@@ -381,12 +580,55 @@ class AtKeys {
       throw AtKeysUnsupportedVersionException(
           'Unsupported atKeys version: $version');
     }
+    // A typed document whose materials sit under a top-level `keys` predates
+    // the enrollments[]/atSignKeys[] split. Refused by name, because the
+    // alternative is silent and much worse: `keys` is no longer a reserved
+    // field, so the whole array would be swept into [metadata] as a legacy
+    // value, the document would read as holding no typed material at all, and
+    // the caller would authenticate from the flat block — as the legacy
+    // enrollment — while the live enrollment's credentials sat unread beside
+    // it.
+    if (json.containsKey('keys')) {
+      throw AtKeysValidationException(
+          'This keyfile carries a top-level "keys" array, the shape that '
+          'preceded enrollments[]/atSignKeys[]. It must be regenerated; '
+          'reading it here would file its key material as legacy metadata '
+          'and authenticate as the wrong enrollment.');
+    }
 
     final atsign =
         assurance.expectNonEmptyString(json['atsign'], 'atsign').toAtsign();
-    final keysJson = assurance.expectList(json['keys'], 'keys');
 
-    final materials = parseAtKeysDocument(keysJson);
+    final materials = <AtKeysMaterial>[];
+    if (json.containsKey('atSignKeys')) {
+      materials.addAll(parseAtKeysDocument(
+          assurance.expectList(json['atSignKeys'], 'atSignKeys'),
+          fieldPrefix: 'atSignKeys'));
+    }
+
+    final snapshots = <AtKeysEnrollment>[];
+    if (json.containsKey('enrollments')) {
+      final enrollmentsJson =
+          assurance.expectList(json['enrollments'], 'enrollments');
+      for (final entry in enrollmentsJson.asMap().entries) {
+        final prefix = 'enrollments[${entry.key}]';
+        final entryJson = assurance.expectMap(entry.value, prefix);
+        final enrollmentId = assurance.expectNonEmptyString(
+            entryJson['enrollmentId'], '$prefix.enrollmentId');
+        snapshots.add(AtKeysEnrollment(
+          enrollmentId: enrollmentId,
+          namespaces: _namespacesOf(entryJson['namespaces'], prefix),
+          appName:
+              assurance.optionalString(entryJson['appName'], '$prefix.appName'),
+          deviceName: assurance.optionalString(
+              entryJson['deviceName'], '$prefix.deviceName'),
+        ));
+        materials.addAll(parseAtKeysDocument(
+            assurance.expectList(entryJson['keys'], '$prefix.keys'),
+            enrollmentId: enrollmentId,
+            fieldPrefix: '$prefix.keys'));
+      }
+    }
     assurance.validateKeyMaterials(materials);
 
     final legacyJson = {
@@ -399,42 +641,87 @@ class AtKeys {
       atsign: atsign,
       keysList: materials,
     );
+    // After the materials, so an enrollment carrying a snapshot and no keys
+    // still gets its slot, and one carrying keys keeps the snapshot beside
+    // them.
+    for (final snapshot in snapshots) {
+      atKeys.recordEnrollmentSnapshot(
+        snapshot.enrollmentId,
+        namespaces: snapshot.namespaces,
+        appName: snapshot.appName,
+        deviceName: snapshot.deviceName,
+      );
+    }
 
     // join them with the legacy format
     return AtKeys._fromLegacyJson(legacyJson, existing: atKeys);
   }
 
+  /// An enrollment's `namespaces` map, or null when it is absent — which
+  /// means "not yet reconciled", a different thing from an empty map's "no
+  /// grants".
+  static Map<String, String>? _namespacesOf(Object? value, String prefix) {
+    if (value == null) return null;
+    const assurance = AtKeysAssurance();
+    final json = assurance.expectMap(value, '$prefix.namespaces');
+    return {
+      for (final entry in json.entries)
+        entry.key: assurance.expectNonEmptyString(
+            entry.value, '$prefix.namespaces.${entry.key}'),
+    };
+  }
+
   /// Encodes this [AtKeys] to the typed-keys document shape. Legacy fields
-  /// merge flatly into the top level alongside `version`/`atsign`/`keys` —
-  /// upgrading a legacy file is additive, not a format swap. Falls back to
-  /// the legacy flat shape (see [_toLegacyJson]) when there's no atsign and
-  /// no typed key material.
+  /// merge flatly into the top level alongside
+  /// `version`/`atsign`/`atSignKeys`/`enrollments` — upgrading a legacy file
+  /// is additive, not a format swap. Falls back to the legacy flat shape (see
+  /// [_toLegacyJson]) when there's no atsign and no typed key material.
   ///
   /// All values are emitted plaintext; at-rest self-encryption of the legacy
   /// portion (and the optional passphrase envelope) is `FileAtKeysIo`'s job.
   Map<String, dynamic> toJson() {
+    // An enrollment slot can exist with a snapshot and no keys yet, so
+    // "carries typed content" is both containers, not just the materials.
+    final hasTypedContent =
+        _enrollments.isNotEmpty || _atSignMaterialsByKeyId.isNotEmpty;
     if (atsign == null) {
-      if (keys.isNotEmpty) {
+      if (hasTypedContent) {
         throw AtKeysValidationException(
             'atsign is required to serialize typed atKeys material');
       }
       return _toLegacyJson();
     }
-    if (keys.isEmpty) {
+    if (!hasTypedContent) {
       // A keyfile holding no typed material comes back exactly as it went in,
       // byte for byte. The version marker describes what the document
-      // CONTAINS, and a `version: 1` document with an empty `keys` array says
-      // nothing a legacy file does not — so emitting one would stamp every
-      // file a new build merely opened, producing a diff on files nobody
-      // meant to change. The marker appears the moment there is typed
-      // material to mark.
+      // CONTAINS, and a `version: 1` document with no enrollments and no
+      // atSign keys says nothing a legacy file does not — so emitting one
+      // would stamp every file a new build merely opened, producing a diff on
+      // files nobody meant to change. The marker appears the moment there is
+      // typed material to mark.
       return _toLegacyJson();
     }
     return {
       ..._toLegacyJson(),
       'version': supportedVersion,
       'atsign': atsign.toString(),
-      'keys': encodeAtKeysDocument(keys),
+      if (_atSignMaterialsByKeyId.isNotEmpty)
+        'atSignKeys': encodeAtKeysDocument(atSignKeys),
+      if (_enrollments.isNotEmpty)
+        'enrollments': [
+          for (final slot in _enrollments.values)
+            {
+              'enrollmentId': slot.enrollmentId,
+              // Omitted rather than emitted empty: absent means "not yet
+              // reconciled from the enrollment record", and an empty
+              // namespaces map would state "no grants" instead.
+              if (slot.namespaces != null) 'namespaces': slot.namespaces,
+              if (slot.appName != null) 'appName': slot.appName,
+              if (slot.deviceName != null) 'deviceName': slot.deviceName,
+              'keys': encodeAtKeysDocument(slot.materialsByKeyId.values
+                  .expand((byType) => byType.values)),
+            },
+        ],
     };
   }
 
@@ -456,13 +743,22 @@ class AtKeys {
 
   /// Order-insensitive: two AtKeys holding the same materials are equal no
   /// matter the order they were added in.
+  ///
+  /// Looked up by owner as well as keyId. Two enrollments may each hold
+  /// `auth:mldsa65:1`, so a keyId-only lookup would answer with whichever
+  /// enrollment's copy it met first and call two different documents equal.
   bool _materialsEqual(AtKeys other) {
     final materials = keys.toList();
     if (materials.length != other.keys.length) {
       return false;
     }
-    return materials.every((material) =>
-        other.getKey(material.keyId, material.keyPartType) == material);
+    return materials.every((material) {
+      final counterpart = material.enrollmentId == null
+          ? other.getAtSignKey(material.keyId, material.keyPartType)
+          : other.getKey(material.enrollmentId!, material.keyId,
+              material.keyPartType);
+      return counterpart == material;
+    });
   }
 
   @override
@@ -571,10 +867,10 @@ class AtKeys {
   /// keyfile's flat encryption and self-encryption keys.
   ///
   /// This is how a second enrollment held in the same keyfile — a
-  /// self-retrofit's, whose APKAM keypair lives in the typed `keys` section
-  /// under its own enrollment id while the flat fields keep carrying the
-  /// original enrollment's — becomes able to authenticate at all;
-  /// [toAtChops] reads only the flat fields and cannot see it.
+  /// self-retrofit's, whose APKAM keypair lives in its own `enrollments[]`
+  /// entry while the flat fields keep carrying the original enrollment's —
+  /// becomes able to authenticate at all; [toAtChops] reads only the flat
+  /// fields and cannot see it.
   ///
   /// The signing keypair rides the String-typed pkam slot as base64 of the
   /// raw key bytes. A caller authenticating over at_lookup must also set

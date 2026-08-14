@@ -150,18 +150,23 @@ List<AtKeysMaterial> keyPackageMaterials(AtKeys keys, {String? enrollmentId}) {
   bool isKeyEstablishment(AtKeysMaterial m) =>
       SecretSharingAlgos.keyAlgoForMaterial(m.keyAlgorithmType) != null;
 
+  // Paired by `(owner, keyId)`, not by keyId alone. A keyId is unique within
+  // its enrollment and not across the document, so a keyId-only set would let
+  // one enrollment's published address vouch for another enrollment's private
+  // half — and this function's whole job is to never hand a client a key its
+  // own enrollment record never advertised.
   final publicIds = {
     for (final m in keys.keys)
       if (m.keyPartType == CryptographicKeyType.publicEncapsulation &&
           isKeyEstablishment(m))
-        m.keyId
+        (m.enrollmentId, m.keyId)
   };
   final candidates = keys.keys
       .where((m) =>
           m.keyPartType == CryptographicKeyType.privateDecapsulation &&
           isKeyEstablishment(m) &&
           m.status != KeyPartStatus.dead &&
-          publicIds.contains(m.keyId) &&
+          publicIds.contains((m.enrollmentId, m.keyId)) &&
           (m.enrollmentId == null || m.enrollmentId == enrollmentId))
       .toList()
     ..sort((a, b) {

@@ -139,7 +139,7 @@ void main() {
               }),
           approvingLookUp());
 
-      final filed = callersKeys.getKey(
+      final filed = callersKeys.getAtSignKey(
           'kpid-1', CryptographicKeyType.privateDecapsulation);
       expect(filed, isNotNull,
           reason: 'the builder must mutate the caller\'s own AtKeys, not a '

@@ -151,7 +151,11 @@ void main() {
       // them, so they freeze the same way wire names do.
       expect(NskeyPrivateFiling.keyIdFor('app_1.my_apps', 'abc123'),
           'nskey.app_1.my_apps.abc123');
-      expect(PqSigningRoot.keyId, 'pq_signing_root');
+      // The at-rest slot prefix, completed by a generation: root:mldsa65:1,
+      // then :2 where a lost mint race left dead remains. NOT the record
+      // name — public:pq_signing_root@<atSign> is the wire value and is
+      // pinned above; this one is only ever read by the keyfile itself.
+      expect(PqSigningRoot.keyIdPrefix, 'root:mldsa65:');
     });
   });
 

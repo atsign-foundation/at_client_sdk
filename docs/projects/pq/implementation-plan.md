@@ -2998,10 +2998,13 @@ and [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-ke
 say **what** and **why**. This says **in what order**, because several of the
 orderings are the difference between a working rollout and a broken fleet.
 
-⚠️ **Nothing below is built. The code implements NONE of rulings 98 or 99.**
-The tree at `5a7b4076a` still has the pre-98 stages and the pre-99 shape, and
-its suites are green against the *old* design — so a green rail here is not
-evidence that any of this landed. Two specific traps are called out at the end.
+⚠️ **Row A1 is built (2026-08-14); everything from A2 down is not.** The tree
+still has the pre-98 stages, so a green rail below A1 is not evidence that any
+of it landed. Two specific traps are called out at the end, and the sharper one
+— the UC-G1.14 test that must go red once B3 lands — is still armed.
+
+Until A1 landed this section read "nothing below is built, the code implements
+NONE of rulings 98 or 99", which was true of the whole of 99 as well.
 
 **The concrete target shapes are `keyfile-target-rollout1.json` and
 `keyfile-target-rollout2.json` beside this file** — tracked, so a fresh clone
@@ -3010,34 +3013,41 @@ sits where, keyId grammar, `status` on every part. The *values* are elided
 placeholders (`"<392 chars>"`, `"<the apkam app name>"`) and are not literals to
 reproduce.
 
-#### ⚠️ Six questions this sequence does NOT answer — ask, do not guess
+#### The seven shapes this sequence does not decide — all ruled 2026-08-14
 
-Each of these decides a shape, and guessing wrong builds the wrong thing
-silently. Surfaced 2026-08-14 by a context-free reader asked to build from
-these docs.
+These were six open questions, each deciding a shape that a wrong guess builds
+silently. A seventh surfaced when they were checked against the tree. **All
+seven are now ruled, in [`decisions.md` 100](decisions.md#100-the-seven-shapes-ruling-99-left-open-2026-08-14),
+which carries the measurement behind each.** Summarised here because they are
+what row A1 encodes:
 
-1. **Does `AtKeys`' public API gain an enrollment parameter?** Ruling 5 makes
-   identity `(enrollment, keyId)`, but `getKey`, `keysForKeyId`, `retireKey`
-   and `replaceKey` all take a bare keyId today and index a document-wide
-   `_materialsByKeyId`. Two enrollments both holding `auth:mldsa65:1` collide.
-   Composite index internally, or a source-breaking signature change on a
-   package that already owes a version decision?
-2. **What supplies "the enrollment I authenticate as"** once the file-wide
-   single-active-authentication rule stops being a read-time throw? See the
-   note in [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
-   This is the sharpest of the six.
-3. **Is `apkam:` renamed to `auth:` in keyIds**, and do the prefix parsers
-   (`nextApkamGeneration`, `nextSigningGeneration`, `signingKeysFor`) get any
-   read-side tolerance for the old grammar? Ruling 4 gives examples, not a
-   migration.
-4. **Where does `root:mldsa65:1`'s generation come from**, and how does a
-   normalised root id coexist with the losing-pair case that keeps a second
-   root entry (today `pq_signing_root.<n>`)?
-5. **What does a writer put in `namespaces`/`appName`/`deviceName` before the
-   first record fetch?** Nothing in at_auth holds these today, and
-   reconciliation is C2 — later than A1, which builds the container.
-6. **Is `operations` retained at rest?** It is emitted conditionally today and
-   appears in neither target file.
+1. **`AtKeys`' accessors split by scope** — `getKey`, `keysForKeyId`,
+   `retireKey` and `replaceKey` become enrollment-scoped and take the
+   enrollment beside the keyId; a separate family addresses `atSignKeys[]`.
+   All six production call sites outside at_auth are atSign-scope and move to
+   that family.
+2. **The caller supplies "the enrollment I authenticate as"**, and `AtKeys`
+   stops deriving it implicitly. `activeEnrollmentId` has no production caller,
+   and both live resolvers already pass an explicit id. ⚠️ Amended the same
+   day: a cold start has no id to supply, so `AtKeys` offers
+   `enrollmentIds` / `authenticatableEnrollmentIds` /
+   `resolveAuthenticatingEnrollment()` — invoked by name, throwing rather than
+   picking when several qualify.
+3. **`apkam:<enrollmentId>:<n>` becomes `auth:<algo>:<gen>`**, with no
+   read-side tolerance for the old grammar — nothing released ever wrote a
+   typed keyfile, and row A3 deletes the generated ones.
+4. **The generation IS the slot** — `root:<algo>:<n>`, next generation
+   highest-plus-one, `.2`/`.3` overflow gone. The frozen `pq_signing_root`
+   literal is the *record* name and does not move.
+5. **`namespaces`/`appName`/`deviceName` come from the enrollment request**
+   where one exists and are omitted where none does; C2 fills them at the
+   first authenticated start. No placeholders.
+6. **`operations` is unchanged** — parsed, round-tripped, emitted when
+   non-empty.
+7. **An nskey private lives in `atSignKeys[]`** (the seventh). It is filed
+   with no enrollment id today, which is ruling 3's signal for atSign-owned
+   material. ⚠️ Not a general rule about KEM material: the enrollment's key
+   package keypair stays in the enrollment.
 
 #### Why this order
 
@@ -3047,9 +3057,9 @@ twice. Within each, the reader before the writer.
 
 | # | Work | Why here |
 |---|------|----------|
-| A1 | `AtKeysMaterial`/`AtKeys` parse+encode move to `enrollments[]` and `atSignKeys[]`; keyIds normalise to `<role>:<algo>:<gen>` and drop the embedded enrollment id; `status` stays explicit; `AtKeysMaterial` keeps `enrollmentId` in memory, populated from the container | Everything else files material. This is the container |
+| A1 | ✅ **DONE 2026-08-14.** `AtKeysMaterial`/`AtKeys` parse+encode moved to `enrollments[]` and `atSignKeys[]`; keyIds normalise to `<role>:<algo>:<gen>` and drop the embedded enrollment id; `status` stays explicit; `AtKeysMaterial` keeps `enrollmentId` in memory, populated from the container. The accessors split by scope per [`decisions.md` 100](decisions.md#100-the-seven-shapes-ruling-99-left-open-2026-08-14) ruling 2 — every one of the six production call sites outside at_auth was atSign-scope. `activeEnrollmentId` is gone, replaced by `enrollmentIds` / `authenticatableEnrollmentIds` / `resolveAuthenticatingEnrollment()`, which throws rather than picking when several qualify. **Two things the suites caught that reading did not:** the key-package pairing collected public halves document-wide, so under `(enrollment, keyId)` one enrollment's published address could vouch for another's private half; and an rsa2048 retrofit files under `auth:rsa2048:1`, which a blanket rename to `auth:mldsa65:1` got wrong. A `version: 1` document carrying a top-level `keys` is now refused **by name** — a judgement this row made, not a ruling: `keys` is no longer reserved, so parsing one would sweep its material into `metadata` and authenticate from the flat block as the legacy enrollment. Rails: at_auth **298/298**, at_client **1265** (2 skipped), acceptance **57** (2 skipped), at_onboarding_cli **39/39** | Everything else files material. This is the container |
 | A2 | The reader tolerates **many** enrollments and selects the one it authenticates as; an assurance rule refuses to **write** a second | Reader-first. A reader that refuses a second entry makes plurality unenableable later — the `.single` lesson |
-| A3 | Delete **runtime-generated** keyfiles left by earlier live runs before re-running any pack — `tests/at_functional_test/test/testData/*.atKeys` written by a previous run, and `test/hive/` | ⚠️ **Corrected 2026-08-14:** an earlier draft of this row said the *tracked* fixtures are version-1 old-typed and become unreadable. **They are not** — `packages/at_auth/test/data/@alice🛠_key.atKeys` and `tests/at_functional_test/test/testData/@alice🛠_key.atKeys` are legacy-flat (no `version`, no `keys`), and `build_test_atkeys.dart` files no typed material. Only keyfiles a *live retrofit* produced carry the old typed shape, and those are generated, not tracked |
+| A3 | ✅ **DONE 2026-08-14.** Seven generated keyfiles carrying the old typed shape were deleted from `tests/at_functional_test/test/testData/` (`@colin`, `@jeremy`, `@xavier`, `rf2b-legacy`, `rf2b-t1`, `rf2b-t5`, `rf2d-posture`); all seven were untracked and regenerable. **The correction below held exactly**: the two tracked fixtures, `@alice🛠_key.atKeys` and `@bob🛠_key.atKeys`, are legacy-flat with no `version` at all and parse unchanged. ⚠️ **Corrected 2026-08-14:** an earlier draft of this row said the *tracked* fixtures are version-1 old-typed and become unreadable. They are not — and `build_test_atkeys.dart` files no typed material. Only keyfiles a *live retrofit* produced carry the old typed shape, and those are generated, not tracked |
 | B1 | `SigningRollout` gains `defaultRetrofitAuthenticationAlgo`; in-use sets become `{}` / `{rsa2048}` / `{mldsa65}`; rename `retrofitSigningAlgo` → `retrofitAuthenticationAlgo` | 98's stages are defined here. Everything downstream reads them |
 | B2 | `apskEntries` implements the ruling-98 `_apsk` rule: advertise the **current signers** plus **retired signing keys**; the auth key appears only while it *is* the signer and is never retained | Must precede any writer that mints a signing key, or rollout 1 publishes an array |
 | B3 | The retrofit and `pq_native_onboard` mint the RSA signing keypair **before** submitting, and `_apskFor` advertises **that key** rather than `apkamPublicKey` | ⚠️ **B3 is one commit, not two.** Splitting it publishes an ML-DSA array at enrollment creation — the breakage rollout 1 exists to prevent, landing on peers who cannot fix it |

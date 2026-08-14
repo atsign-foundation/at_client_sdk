@@ -45,7 +45,7 @@ void main() {
     expect(await filer.file(nskeySecret('kid-one')), isTrue);
 
     final keys = await io.read(atSign);
-    final material = keys.getKey(
+    final material = keys.getAtSignKey(
         NskeyPrivateFiling.keyIdFor(namespace, 'kid-one'),
         CryptographicKeyType.privateDecapsulation);
     expect(material, isNotNull,
@@ -63,11 +63,11 @@ void main() {
 
     final keys = await io.read(atSign);
     expect(
-        keys.getKey(NskeyPrivateFiling.keyIdFor(namespace, 'shared-kid'),
+        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor(namespace, 'shared-kid'),
             CryptographicKeyType.privateDecapsulation),
         isNotNull);
     expect(
-        keys.getKey(NskeyPrivateFiling.keyIdFor('other', 'shared-kid'),
+        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor('other', 'shared-kid'),
             CryptographicKeyType.privateDecapsulation),
         isNotNull,
         reason: 'kids are truncated hashes and are not unique across '
@@ -167,7 +167,7 @@ void main() {
         reason: 'the substrate carries opaque secrets and this only claims its '
             'own — an app secret is none of the crypto layer\'s business');
     expect(
-        keys.getKey(NskeyPrivateFiling.keyIdFor(namespace, 'kid-two'),
+        keys.getAtSignKey(NskeyPrivateFiling.keyIdFor(namespace, 'kid-two'),
             CryptographicKeyType.privateDecapsulation),
         isNotNull);
   });

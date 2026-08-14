@@ -103,7 +103,8 @@ void main() {
 
     expect(publicKey, isNotNull);
     final filed = (await io.read(atSign))
-        .getKey(PqSigningRoot.keyId, CryptographicKeyType.privateSigning);
+        .getAtSignKey(
+            '${PqSigningRoot.keyIdPrefix}1', CryptographicKeyType.privateSigning);
     expect(filed, isNotNull,
         reason: 'the record is immutable and the root never rotates, so a '
             'published root whose private did not survive can never be '
@@ -389,14 +390,14 @@ void main() {
     final keys = await freshIo.read(atSign);
     final createdAt = DateTime.now().toUtc();
     keys.addKey(AtKeysMaterial(
-      keyId: PqSigningRoot.keyId,
+      keyId: '${PqSigningRoot.keyIdPrefix}1',
       keyPartType: CryptographicKeyType.privateSigning,
       keyAlgorithmType: KeyAlgorithmType.mlDsa65,
       bytes: AtBytes(held.secretKey),
       createdAt: createdAt,
     ));
     keys.addKey(AtKeysMaterial(
-      keyId: PqSigningRoot.keyId,
+      keyId: '${PqSigningRoot.keyIdPrefix}1',
       keyPartType: CryptographicKeyType.publicVerification,
       keyAlgorithmType: KeyAlgorithmType.mlDsa65,
       bytes: AtBytes(held.publicKey),

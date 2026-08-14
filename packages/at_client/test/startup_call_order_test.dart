@@ -233,7 +233,7 @@ void main() {
     // Retired: the active private is gone from the keyfile...
     final keysAfter = await inner.read(atSign);
     final active = keysAfter
-        .keysForKeyId(PqSigningRoot.keyId)
+        .atSignKeysForKeyId('${PqSigningRoot.keyIdPrefix}1')
         .where((m) => m.status == KeyPartStatus.active);
     expect(active, isEmpty,
         reason: 'an orphaned root private must be retired, or it blocks its '

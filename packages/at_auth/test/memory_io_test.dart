@@ -53,7 +53,7 @@ void main() {
               keysList: [symmetricKey('flushed')]));
 
       final keys = await io.read('@alice');
-      expect(keys.keysForKeyId('flushed'), isNotEmpty);
+      expect(keys.atSignKeysForKeyId('flushed'), isNotEmpty);
       expect(keys.atsign, '@alice'.toAtsign());
     });
 
@@ -69,8 +69,8 @@ void main() {
       await io.flush('@alice'.toAtsign(), keys);
 
       final reread = await io.read('@alice');
-      expect(reread.keysForKeyId('existing'), isNotEmpty);
-      expect(reread.keysForKeyId('appended'), isNotEmpty);
+      expect(reread.atSignKeysForKeyId('existing'), isNotEmpty);
+      expect(reread.atSignKeysForKeyId('appended'), isNotEmpty);
     });
 
     test('flush and read agree on the normalized atsign', () async {
@@ -83,7 +83,7 @@ void main() {
               keysList: [symmetricKey('flushed')]));
 
       final keys = await io.read('@alice');
-      expect(keys.keysForKeyId('flushed'), isNotEmpty);
+      expect(keys.atSignKeysForKeyId('flushed'), isNotEmpty);
     });
   });
 }

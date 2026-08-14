@@ -15,7 +15,16 @@ class AtKeysAssuranceException extends AtKeysValidationException {
 class AtKeysAssurance {
   const AtKeysAssurance();
 
-  static const _reservedTopLevelKeys = {'version', 'atsign', 'keys'};
+  // Must stay identical to AtKeys._reservedTopLevelKeys: this decides which
+  // fields are "legacy" for the update assurance, and that one decides it for
+  // the parse. Disagreeing means a field one of them treats as structure the
+  // other treats as a legacy value to be preserved verbatim.
+  static const _reservedTopLevelKeys = {
+    'version',
+    'atsign',
+    'enrollments',
+    'atSignKeys',
+  };
 
   // ---- low-level parsing/value primitives, called by the models' fromJson ----
 
@@ -126,11 +135,16 @@ class AtKeysAssurance {
   /// the normal state, and only a second one of the same algorithm is a
   /// duplicate.
   ///
-  /// The document-wide authentication rule is what makes "which enrollment
-  /// does this keyfile authenticate as" answerable without storing a pointer
-  /// to it. It is deliberately NOT per-algorithm: one live enrollment per
-  /// install is the model, so a second active authentication key is a corrupt
-  /// keyfile whatever algorithm it names.
+  /// The document-wide authentication rule is deliberately NOT per-algorithm:
+  /// one live enrollment per install is the model, so a second active
+  /// authentication key is a corrupt keyfile whatever algorithm it names.
+  ///
+  /// ⚠️ It no longer answers "which enrollment does this keyfile authenticate
+  /// as" — that is the caller's to state, with
+  /// `AtKeys.resolveAuthenticatingEnrollment()` there for a cold start that
+  /// has nothing to state it from. This rule is a write-side invariant now,
+  /// and a reader meeting a document with two live enrollments gets a refusal
+  /// from here rather than a silently chosen one.
   void validateKeyMaterials(List<AtKeysMaterial> materials) {
     final typesByEnrollment = <String, Set<String>>{};
     // Whether one has been seen is tracked apart from which one it was:
@@ -176,10 +190,17 @@ class AtKeysAssurance {
       enrollmentId == null ? 'no enrollment id' : '"$enrollmentId"';
 
   /// All of `AtKeys.addKey`'s validation in one place. Rejects, in order:
-  /// a duplicate `(keyId, keyPartType)`, an enrollmentId that disagrees with
-  /// the candidate's keyId group, and a second material of the same
-  /// `keyPartType` for one enrollment across keyIds (the
+  /// a duplicate `(enrollmentId, keyId, keyPartType)`, and a second material
+  /// of the same `keyPartType` for one enrollment across keyIds (the
   /// [validateKeyMaterials] invariant, held incrementally).
+  ///
+  /// ⚠️ **The duplicate check is per owner, not per keyId.** Identity is
+  /// `(enrollment, keyId)`: two enrollments may each hold `auth:mldsa65:1`,
+  /// and they land in separate containers. What used to be a second rule
+  /// here — that every material sharing a keyId must agree on its
+  /// enrollmentId — is what that change removes, not something it relaxes:
+  /// the container states the owner once, so there is no longer a
+  /// document-wide keyId group for them to disagree about.
   ///
   /// Throws [ArgumentError] rather than an [AtKeysValidationException]:
   /// addKey misuse is a caller programming error, not a malformed file.
@@ -188,14 +209,11 @@ class AtKeysAssurance {
     required AtKeysMaterial candidate,
   }) {
     for (final material in existing) {
-      if (material.keyId == candidate.keyId) {
+      if (material.keyId == candidate.keyId &&
+          material.enrollmentId == candidate.enrollmentId) {
         if (material.keyPartType == candidate.keyPartType) {
           throw ArgumentError.value(candidate.keyId, 'material',
               'AtKeys already contains a ${candidate.keyPartType} material for this keyId');
-        }
-        if (material.enrollmentId != candidate.enrollmentId) {
-          throw ArgumentError.value(candidate.keyId, 'material',
-              'enrollmentId "${candidate.enrollmentId}" does not match "${material.enrollmentId}" already on this keyId');
         }
       } else if (candidate.status == KeyPartStatus.active &&
           material.status == KeyPartStatus.active &&
@@ -258,11 +276,31 @@ class AtKeysAssurance {
     _assertMaterialsPreserved(existingMaterials, candidateMaterials);
   }
 
+  /// Both typed containers of [json], flattened — every material carrying the
+  /// owner its container names.
   List<AtKeysMaterial> _decode(Map<String, dynamic> json) {
     if (!json.containsKey('version')) {
       return const [];
     }
-    final materials = parseAtKeysDocument(expectList(json['keys'], 'keys'));
+    final materials = <AtKeysMaterial>[];
+    if (json.containsKey('atSignKeys')) {
+      materials.addAll(parseAtKeysDocument(
+          expectList(json['atSignKeys'], 'atSignKeys'),
+          fieldPrefix: 'atSignKeys'));
+    }
+    if (json.containsKey('enrollments')) {
+      final enrollments = expectList(json['enrollments'], 'enrollments');
+      for (final entry in enrollments.asMap().entries) {
+        final prefix = 'enrollments[${entry.key}]';
+        final entryJson = expectMap(entry.value, prefix);
+        final enrollmentId = expectNonEmptyString(
+            entryJson['enrollmentId'], '$prefix.enrollmentId');
+        materials.addAll(parseAtKeysDocument(
+            expectList(entryJson['keys'], '$prefix.keys'),
+            enrollmentId: enrollmentId,
+            fieldPrefix: '$prefix.keys'));
+      }
+    }
     validateKeyMaterials(materials);
     return materials;
   }
@@ -292,23 +330,30 @@ class AtKeysAssurance {
     }
   }
 
-  /// Every existing `(keyId, keyPartType)` must survive in the candidate with
-  /// identical fields, except `status`, which may move forward
+  /// Every existing `(enrollmentId, keyId, keyPartType)` must survive in the
+  /// candidate with identical fields, except `status`, which may move forward
   /// (active → retired → dead) but never backward. New keyIds — and new parts
   /// on an existing keyId — are additions, not losses, so they pass.
+  ///
+  /// Keyed by owner as well as keyId because identity is
+  /// `(enrollment, keyId)`. Without it, two enrollments each holding
+  /// `auth:mldsa65:1` alias one another in this map, and dropping one
+  /// enrollment's key entirely reads as preserved because the other's answers
+  /// for it.
   void _assertMaterialsPreserved(
     List<AtKeysMaterial> existing,
     List<AtKeysMaterial> candidate,
   ) {
     final candidateByPart = {
       for (final material in candidate)
-        (material.keyId, material.keyPartType): material,
+        (material.enrollmentId, material.keyId, material.keyPartType): material,
     };
 
     for (final material in existing) {
-      final path = 'map.keys.${material.keyId}.${material.keyPartType}';
-      final counterpart =
-          candidateByPart[(material.keyId, material.keyPartType)];
+      final owner = material.enrollmentId ?? 'atSign';
+      final path = 'map.keys.$owner.${material.keyId}.${material.keyPartType}';
+      final counterpart = candidateByPart[
+          (material.enrollmentId, material.keyId, material.keyPartType)];
       if (counterpart == null) {
         throw AtKeysAssuranceException('$path is not preserved');
       }

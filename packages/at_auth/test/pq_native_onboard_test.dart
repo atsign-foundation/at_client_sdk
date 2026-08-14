@@ -124,10 +124,10 @@ void main() {
           SigningAlgoType.mldsa65,
           reason: 'this is what AtAuthImpl.authenticate reads to pick the '
               'signing routine on every later connection');
-      final signing =
-          keys.getKey('apkam:$enrollmentId:1', CryptographicKeyType.privateAuthentication);
-      final verification = keys.getKey(
-          'apkam:$enrollmentId:1', CryptographicKeyType.publicAuthentication);
+      final signing = keys.getKey(enrollmentId, 'auth:mldsa65:1',
+          CryptographicKeyType.privateAuthentication);
+      final verification = keys.getKey(enrollmentId, 'auth:mldsa65:1',
+          CryptographicKeyType.publicAuthentication);
       expect(signing, isNotNull);
       expect(verification, isNotNull);
       // A genuine raw ML-DSA-65 keypair, not a placeholder.
@@ -150,7 +150,7 @@ void main() {
       expect(
           request.apkamPublicKey,
           keys
-              .getKey('apkam:$enrollmentId:1',
+              .getKey(enrollmentId, 'auth:mldsa65:1',
                   CryptographicKeyType.publicAuthentication)!
               .bytes
               .toString(),

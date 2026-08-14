@@ -163,7 +163,7 @@ void main() {
           atSign,
           AtKeys()
             ..addKey(AtKeysMaterial(
-              keyId: PqSigningRoot.keyId,
+              keyId: '${PqSigningRoot.keyIdPrefix}1',
               keyPartType: CryptographicKeyType.privateSigning,
               keyAlgorithmType: KeyAlgorithmType.mlDsa65,
               bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 7))),

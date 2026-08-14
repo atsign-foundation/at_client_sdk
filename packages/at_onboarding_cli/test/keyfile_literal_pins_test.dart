@@ -85,17 +85,18 @@ void main() {
               'selfEncryptionKey, never plaintext');
       expect(json['aesEncryptPrivateKey'],
           isNot(encryptionPair.atPrivateKey.privateKey));
-      // No typed-keys document at all. A `version: 1` document with an empty
-      // `keys` array says nothing a legacy file does not, so emitting one
-      // would stamp every file a new build merely opened — a diff on files
-      // nobody meant to change. The marker appears with the material it
-      // marks, which the next test pins.
+      // No typed-keys document at all. A `version: 1` document carrying no
+      // enrollments and no atSign keys says nothing a legacy file does not,
+      // so emitting one would stamp every file a new build merely opened — a
+      // diff on files nobody meant to change. The marker appears with the
+      // material it marks, which the next test pins.
       expect(json.containsKey('version'), isFalse);
       expect(json.containsKey('atsign'), isFalse);
-      expect(json.containsKey('keys'), isFalse);
+      expect(json.containsKey('enrollments'), isFalse);
+      expect(json.containsKey('atSignKeys'), isFalse);
     });
 
-    test('typed material brings the version/atsign/keys document with it',
+    test('typed material brings the version/atsign/enrollments document with it',
         () async {
       const atsign = '@alice_typed_pins';
       final preference = AtOnboardingPreference()
@@ -119,7 +120,7 @@ void main() {
         ..apkamPrivateKey = AtBytes.fromString(pkamPair.atPrivateKey.privateKey)
         ..apkamSymmetricKey = AtBytes.fromString(service.generateAESKey())
         ..addKey(AtKeysMaterial(
-          keyId: 'apkam:456:1',
+          keyId: 'auth:mldsa65:1',
           enrollmentId: '456',
           keyPartType: CryptographicKeyType.privateAuthentication,
           keyAlgorithmType: KeyAlgorithmType.mlDsa65,
@@ -138,7 +139,12 @@ void main() {
           as Map<String, dynamic>;
       expect(json['version'], 1);
       expect(json['atsign'], atsign);
-      expect(json['keys'], isNotEmpty);
+      // One entry per enrollment, each carrying its own keys — the material
+      // is no longer a flat document-wide `keys` array.
+      final enrollments = json['enrollments'] as List;
+      expect(enrollments, hasLength(1));
+      expect((enrollments.single as Map)['enrollmentId'], '456');
+      expect((enrollments.single as Map)['keys'], isNotEmpty);
     });
 
     test('the store reads back exactly what the CLI wrote', () async {

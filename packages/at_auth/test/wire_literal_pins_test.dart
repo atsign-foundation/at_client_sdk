@@ -508,25 +508,38 @@ void main() {
           algorithm: KeyAlgorithmType.mlDsa65,
           publicKey: 'QUJD',
           privateKey: 'REVG');
-      expect(atKeys.keysForKeyId('apkam:enroll-1:1'), hasLength(2),
-          reason: 'apkam:<enrollmentId>:<generation> is the at-rest id for an '
-              'enrollment authentication keypair');
+      expect(atKeys.keysForKeyId('enroll-1', 'auth:mldsa65:1'), hasLength(2),
+          reason: 'auth:<algorithm>:<generation> is the at-rest id for an '
+              'enrollment authentication keypair. The enrollment is NOT in '
+              'the id — the container states it once, so two enrollments may '
+              'each hold this same id');
 
       atKeys.fileSigningMaterial(
           enrollmentId: 'enroll-1',
           algorithm: KeyAlgorithmType.mlDsa65,
           publicKey: 'R0hJ',
           privateKey: 'SktM');
-      expect(atKeys.keysForKeyId('sign:enroll-1:mldsa65:1'), hasLength(2),
-          reason: 'sign:<enrollmentId>:<algorithm>:<generation> is the '
-              'at-rest id for an enrollment signing keypair');
+      expect(atKeys.keysForKeyId('enroll-1', 'sign:mldsa65:1'), hasLength(2),
+          reason: 'sign:<algorithm>:<generation> is the at-rest id for an '
+              'enrollment signing keypair');
 
       expect(
           atKeys
-              .getKey('apkam:enroll-1:1',
+              .getKey('enroll-1', 'auth:mldsa65:1',
                   CryptographicKeyType.privateAuthentication)!
               .toJson()['keyAlgorithmType'],
           'mldsa65');
+
+      // The generation is per (role, algorithm): an enrollment moving from one
+      // algorithm to another holds both at generation 1, and they must not
+      // collide.
+      atKeys.fileSigningMaterial(
+          enrollmentId: 'enroll-1',
+          algorithm: KeyAlgorithmType.rsa2048,
+          publicKey: 'TU5P',
+          privateKey: 'UFFS');
+      expect(atKeys.keysForKeyId('enroll-1', 'sign:rsa2048:1'), hasLength(2),
+          reason: 'a second algorithm starts at generation 1 of its own');
     });
   });
 }

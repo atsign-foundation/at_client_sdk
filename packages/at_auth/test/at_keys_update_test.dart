@@ -94,12 +94,12 @@ void main() {
       final after = await io.read(atSign);
       expect(
           after
-              .getKey('first', CryptographicKeyType.privateDecapsulation)
+              .getAtSignKey('first', CryptographicKeyType.privateDecapsulation)
               ?.bytes,
           isNotNull);
       expect(
           after
-              .getKey('second', CryptographicKeyType.privateDecapsulation)
+              .getAtSignKey('second', CryptographicKeyType.privateDecapsulation)
               ?.bytes,
           isNotNull,
           reason: 'the second update reads AFTER the first wrote, because the '
@@ -115,7 +115,7 @@ void main() {
 
       var sawFirst = false;
       await io.update(atSign.toAtsign(), (keys) {
-        sawFirst = keys.getKey(
+        sawFirst = keys.getAtSignKey(
                 'first', CryptographicKeyType.privateDecapsulation) !=
             null;
         keys.addKey(keyNamed('second'));
@@ -163,7 +163,7 @@ void main() {
         return true;
       });
       await io.update(atSign.toAtsign(), (keys) {
-        keys.retireKey('first');
+        keys.retireAtSignKey('first');
         return true;
       });
 
@@ -210,7 +210,7 @@ void main() {
 
       expect(
           (await io.read(atSign))
-              .getKey('first', CryptographicKeyType.privateDecapsulation),
+              .getAtSignKey('first', CryptographicKeyType.privateDecapsulation),
           isNotNull);
     });
 

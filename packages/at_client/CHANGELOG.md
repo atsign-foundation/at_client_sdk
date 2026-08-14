@@ -1,4 +1,24 @@
 ## 3.14.1
+- **BREAKING** feat: `PqSigningRoot.keyId` becomes `PqSigningRoot.keyIdPrefix`.
+  The signing root is filed under `root:mldsa65:<generation>` in the keyfile's
+  new atSign-scope container, and the generation IS the slot: a pair that lost
+  a mint race is retired where it stands and keeps its generation, so the next
+  mint lands beside it rather than over it. This replaces the
+  `pq_signing_root` / `pq_signing_root.2` / `.3` overflow grammar. ⚠️ The
+  published **record** name is unaffected —
+  `public:pq_signing_root@<atSign>` is a wire value and stays frozen; only the
+  at-rest id moved.
+- fix: key-package materials are paired by `(owner, keyId)` rather than by
+  keyId alone. A keyId is unique within its enrollment and not across the
+  keyfile, so a keyId-only pairing would let one enrollment's published
+  encapsulation address vouch for another enrollment's private half — and
+  handing a client a key its own enrollment record never advertised is the
+  precise thing that selection exists to prevent.
+- fix: nskey privates and the signing root are read from the keyfile's
+  atSign-scope container. Both are filed with no enrollment id, which is what
+  says they belong to the atSign: one entry serves every enrollment holding
+  the grant, rather than the same seed stored once per enrollment with each
+  copy waiting on its own conveyance.
 - feat: `SigningRollout` — where a build stands in the rollout that separates
   an enrollment's signing keys from its APKAM authentication key: `now`,
   `rollout1`, `rollout2`. It rides `ReleasePosture.signingRollout` and is

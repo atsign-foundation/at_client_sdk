@@ -20,12 +20,12 @@ import 'package:test/test.dart';
 
 void main() {
   // The keyIds and keyPartTypes below are arbitrary PAYLOAD: these pins hold
-  // the document's STRUCTURE — field names, nesting, encoding — and the ids
-  // are just strings passing through it. Do not read them as the canonical
-  // shapes; those are pinned against their writers in wire_literal_pins_test
-  // ('apkam:<enrollmentId>:<generation>' and
-  // 'sign:<enrollmentId>:<algorithm>:<generation>'). Changing them here would
-  // churn a frozen golden string for no gain.
+  // the document's STRUCTURE — field names, nesting, which container an entry
+  // sits in, encoding — and the ids are just strings passing through it. Do
+  // not read them as the canonical shapes; those are pinned against their
+  // writers in wire_literal_pins_test ('auth:<algorithm>:<generation>' and
+  // 'sign:<algorithm>:<generation>'). Changing them here would churn a frozen
+  // golden string for no gain.
   group('the typed keyfile document (at rest, frozen)', () {
     test('a fully populated AtKeys emits the golden document byte-for-byte',
         () {
@@ -39,7 +39,7 @@ void main() {
         ..enrollmentId = 'enroll-1'
         ..metadata['note'] = 'kept'
         ..addKey(AtKeysMaterial(
-          keyId: 'apkam:enroll-2',
+          keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
           keyPartType: CryptographicKeyType.privateSigning,
           keyAlgorithmType: KeyAlgorithmType.mlDsa65,
@@ -47,7 +47,7 @@ void main() {
           createdAt: DateTime.utc(2026, 6, 11),
         ))
         ..addKey(AtKeysMaterial(
-          keyId: 'apkam:enroll-2',
+          keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
           keyPartType: CryptographicKeyType.publicVerification,
           keyAlgorithmType: KeyAlgorithmType.mlDsa65,
@@ -55,6 +55,12 @@ void main() {
           operations: const ['verify'],
           createdAt: DateTime.utc(2026, 6, 11),
         ))
+        ..recordEnrollmentSnapshot('enroll-2',
+            namespaces: const {'buzz': 'rw'},
+            appName: 'wavi',
+            deviceName: 'iphone')
+        // No enrollment id, so it is the atSign's own — an nskey private,
+        // which every enrollment holding the grant reads from one place.
         ..addKey(AtKeysMaterial(
           keyId: 'nskey.buzz.abc123',
           keyPartType: CryptographicKeyType.privateDecapsulation,
@@ -66,8 +72,11 @@ void main() {
 
       // The golden, spelled out: legacy flat fields first (merged, not
       // nested — upgrading a legacy file is additive), then version/atsign,
-      // then the typed materials grouped by keyId. `operations` is omitted
-      // when empty; a group's `enrollmentId` is omitted when null.
+      // then the atSign's own keys, then one entry per enrollment carrying
+      // its snapshot and its keys. `operations` is omitted when empty, and so
+      // is a snapshot field nobody has reconciled yet — absent means "not
+      // known", where an empty namespaces map would state "no grants". A key
+      // entry carries NO enrollmentId: its container says whose it is.
       expect(
           jsonEncode(atKeys.toJson()),
           '{"aesPkamPublicKey":"UEtQVUI=",'
@@ -80,19 +89,25 @@ void main() {
           '"note":"kept",'
           '"version":1,'
           '"atsign":"@alice",'
+          '"atSignKeys":['
+          '{"keyId":"nskey.buzz.abc123","keyParts":['
+          '{"keyPartType":"privateDecapsulation","keyAlgorithmType":"xwing",'
+          '"createdAt":"2026-06-11T00:00:00.000Z","status":"retired",'
+          '"bytes":"U0VFRA=="}]}],'
+          '"enrollments":['
+          '{"enrollmentId":"enroll-2",'
+          '"namespaces":{"buzz":"rw"},'
+          '"appName":"wavi",'
+          '"deviceName":"iphone",'
           '"keys":['
-          '{"keyId":"apkam:enroll-2","enrollmentId":"enroll-2","keyParts":['
+          '{"keyId":"sign:mldsa65:1","keyParts":['
           '{"keyPartType":"privateSigning","keyAlgorithmType":"mldsa65",'
           '"createdAt":"2026-06-11T00:00:00.000Z","status":"active",'
           '"bytes":"UFJJVg=="},'
           '{"keyPartType":"publicVerification","keyAlgorithmType":"mldsa65",'
           '"operations":["verify"],'
           '"createdAt":"2026-06-11T00:00:00.000Z","status":"active",'
-          '"bytes":"UFVC"}]},'
-          '{"keyId":"nskey.buzz.abc123","keyParts":['
-          '{"keyPartType":"privateDecapsulation","keyAlgorithmType":"xwing",'
-          '"createdAt":"2026-06-11T00:00:00.000Z","status":"retired",'
-          '"bytes":"U0VFRA=="}]}]}');
+          '"bytes":"UFVC"}]}]}]}');
     });
 
     test('the golden document reads back as the same AtKeys', () {
@@ -105,7 +120,7 @@ void main() {
         ..apkamSymmetricKey = AtBytes.fromString('QVBLU1lN')
         ..enrollmentId = 'enroll-1'
         ..addKey(AtKeysMaterial(
-          keyId: 'apkam:enroll-2',
+          keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
           keyPartType: CryptographicKeyType.privateSigning,
           keyAlgorithmType: KeyAlgorithmType.mlDsa65,
@@ -119,7 +134,7 @@ void main() {
       expect(reread.apkamPublicKey, golden.apkamPublicKey);
       expect(reread.enrollmentId, golden.enrollmentId);
       final material = reread.getKey(
-          'apkam:enroll-2', CryptographicKeyType.privateSigning);
+          'enroll-2', 'sign:mldsa65:1', CryptographicKeyType.privateSigning);
       expect(material, isNotNull);
       expect(material!.keyAlgorithmType, 'mldsa65');
       expect(material.bytes.toString(), 'UFJJVg==');
@@ -131,7 +146,7 @@ void main() {
       // legacy shape has always carried the full field set.
       final json = (AtKeys(atsign: '@alice'.toAtsign())
             ..addKey(AtKeysMaterial(
-              keyId: 'apkam:enroll-3',
+              keyId: 'sign:mldsa65:1',
               keyPartType: CryptographicKeyType.privateSigning,
               keyAlgorithmType: KeyAlgorithmType.mlDsa65,
               bytes: AtBytes.fromString('QQ=='),
@@ -164,7 +179,8 @@ void main() {
           .toJson();
       expect(json.containsKey('version'), isFalse);
       expect(json.containsKey('atsign'), isFalse);
-      expect(json.containsKey('keys'), isFalse);
+      expect(json.containsKey('enrollments'), isFalse);
+      expect(json.containsKey('atSignKeys'), isFalse);
     });
   });
 }

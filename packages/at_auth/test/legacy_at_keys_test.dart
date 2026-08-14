@@ -80,7 +80,7 @@ void main() {
 
         final readKeys = await fileAtKeysIo.read('@alice');
         expectLegacyAtKeys(readKeys, legacyKeys);
-        expect(readKeys.keysForKeyId('appended'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('appended'), isNotEmpty);
       });
     }
   });

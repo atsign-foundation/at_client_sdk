@@ -198,7 +198,7 @@ class NskeyPrivateFiling {
   Future<NskeyDecapsulationKey?> read(String namespace, String nskeyKid) async {
     try {
       final keys = await keysIo.read(atSign);
-      final material = keys.getKey(keyIdFor(namespace, nskeyKid),
+      final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
           CryptographicKeyType.privateDecapsulation);
       if (material == null) return null;
       final keyAlgo =
@@ -239,7 +239,7 @@ class NskeyPrivateFiling {
   Future<NskeySeed?> readSeed(String namespace, String nskeyKid) async {
     try {
       final keys = await keysIo.read(atSign);
-      final material = keys.getKey(keyIdFor(namespace, nskeyKid),
+      final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
           CryptographicKeyType.privateDecapsulation);
       if (material == null) return null;
       return NskeySeed(Uint8List.fromList(material.bytes.bytes));
@@ -267,7 +267,10 @@ class NskeyPrivateFiling {
       return const {};
     }
     final held = <String, Map<String, NskeySeed>>{};
-    for (final material in keys.keys) {
+    // The atSign's own container: an nskey private is a namespace key, filed
+    // with no enrollment, and every enrollment holding the grant reads the
+    // same entry.
+    for (final material in keys.atSignKeys) {
       if (material.keyPartType != CryptographicKeyType.privateDecapsulation ||
           !material.keyId.startsWith(prefix)) {
         continue;
@@ -297,7 +300,7 @@ class NskeyPrivateFiling {
     try {
       final keys = await keysIo.read(atSign);
       return {
-        for (final material in keys.keys)
+        for (final material in keys.atSignKeys)
           if (material.keyPartType ==
                   CryptographicKeyType.privateDecapsulation &&
               material.keyId.startsWith(prefix))
@@ -356,7 +359,8 @@ class NskeyPrivateFiling {
     var filed = false;
     try {
       await io.update(atSign.toAtsign(), (keys) {
-        if (keys.getKey(keyId, CryptographicKeyType.privateDecapsulation) !=
+        if (keys.getAtSignKey(
+                keyId, CryptographicKeyType.privateDecapsulation) !=
             null) {
           // Re-delivery is expected: the substrate converges by re-sending,
           // and putIfNewer already made arrival idempotent upstream.

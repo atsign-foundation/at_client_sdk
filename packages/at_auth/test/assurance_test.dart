@@ -125,7 +125,7 @@ void main() {
       final candidate = {
         'version': AtKeys.supportedVersion,
         'atsign': '@alice🛠',
-        'keys': [_recordJson()],
+        'atSignKeys': [_recordJson()],
       };
 
       expect(
@@ -229,11 +229,14 @@ void main() {
             _enrollMaterial(operations: const ['sign']),
           ],
         ),
+        // The owner is no longer a field on the material at rest — the
+        // container states it — so changing it means MOVING the material into
+        // another container, and the atSign-scope entry it left is a loss.
         _documentMap(
-          keys: [
-            _wrapperMaterial(),
-            _enrollMaterial(enrollmentId: 'changed-enroll'),
-          ],
+          keys: [_wrapperMaterial()],
+          enrollments: {
+            'changed-enroll': [_enrollMaterial(enrollmentId: 'changed-enroll')],
+          },
         ),
       ];
 
@@ -273,7 +276,7 @@ void main() {
       final candidate = {
         'version': AtKeys.supportedVersion,
         'atsign': '@alice',
-        'keys': [
+        'atSignKeys': [
           _recordJson(keyId: 'duplicate'),
           _recordJson(keyId: 'duplicate'),
         ],
@@ -307,11 +310,11 @@ void main() {
 
     test('rejects map update when a versioned document has a non-list keys',
         () {
-      // A corrupted keys field must not silently skip material preservation.
+      // A corrupted container must not silently skip material preservation.
       final corrupted = {
         'version': AtKeys.supportedVersion,
         'atsign': '@alice',
-        'keys': 'garbage',
+        'atSignKeys': 'garbage',
       };
       final wellFormed = _documentMap(keys: [_symmetricMaterial()]);
 
@@ -456,16 +459,30 @@ AtKeysMaterial _enrollMaterial({
   );
 }
 
+/// A typed document. [keys] are the atSign's own; [enrollments] maps an
+/// enrollment id to the materials filed under it, for the cases where WHICH
+/// container a material sits in is the thing under test.
 Map<String, dynamic> _documentMap({
   required List<AtKeysMaterial> keys,
+  Map<String, List<AtKeysMaterial>> enrollments = const {},
   Map<String, dynamic> legacyJson = const {},
   String atsign = '@alice',
 }) {
+  // Every material these fixtures build is untagged, so it belongs to the
+  // atSign's own container. An enrollment's would sit under enrollments[].
   return {
     ...legacyJson,
     'version': AtKeys.supportedVersion,
     'atsign': atsign,
-    'keys': encodeAtKeysDocument(keys),
+    'atSignKeys': encodeAtKeysDocument(keys),
+    if (enrollments.isNotEmpty)
+      'enrollments': [
+        for (final entry in enrollments.entries)
+          {
+            'enrollmentId': entry.key,
+            'keys': encodeAtKeysDocument(entry.value),
+          },
+      ],
   };
 }
 

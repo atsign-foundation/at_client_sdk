@@ -1,5 +1,4 @@
 import 'package:at_auth/at_auth.dart';
-import 'package:at_commons/atsign.dart';
 import 'package:test/test.dart';
 
 /// A keyfile written by a newer client stays readable, and losslessly
@@ -23,17 +22,21 @@ void main() {
   Map<String, dynamic> documentWith(String status) => {
         'version': AtKeys.supportedVersion,
         'atsign': '@alice',
-        'keys': [
+        'enrollments': [
           {
-            'keyId': 'k1',
             'enrollmentId': 'e1',
-            'keyParts': [
+            'keys': [
               {
-                'keyPartType': CryptographicKeyType.privateAuthentication,
-                'keyAlgorithmType': KeyAlgorithmType.rsa2048,
-                'createdAt': '2026-08-14T00:00:00.000Z',
-                'status': status,
-                'bytes': 'dmFsdWU=',
+                'keyId': 'k1',
+                'keyParts': [
+                  {
+                    'keyPartType': CryptographicKeyType.privateAuthentication,
+                    'keyAlgorithmType': KeyAlgorithmType.rsa2048,
+                    'createdAt': '2026-08-14T00:00:00.000Z',
+                    'status': status,
+                    'bytes': 'dmFsdWU=',
+                  },
+                ],
               },
             ],
           },
@@ -66,7 +69,9 @@ void main() {
       // flush — and the entry is key material.
       final flushed = AtKeys.fromJson(documentWith(unknown)).toJson();
 
-      final part = (flushed['keys'] as List).single['keyParts'].single;
+      final part = ((flushed['enrollments'] as List).single['keys'] as List)
+          .single['keyParts']
+          .single;
       expect(part['status'], unknown);
       expect(part['bytes'], 'dmFsdWU=',
           reason: 'the rest of the entry survives too — a status that '
@@ -76,7 +81,7 @@ void main() {
     test('is never selected as active', () {
       final keys = AtKeys.fromJson(documentWith(unknown));
 
-      expect(keys.activeEnrollmentId, isNull,
+      expect(keys.resolveAuthenticatingEnrollment(), isNull,
           reason: 'an unrecognised status has no rank, so it is not active. '
               'Reading it as active would hand a caller a key whose state '
               'this build cannot interpret');
@@ -84,7 +89,9 @@ void main() {
       // The control, again on the identical document: the selector does find
       // an active material when there is one, so isNull above is the status
       // being skipped rather than the selector being broken.
-      expect(AtKeys.fromJson(documentWith(KeyPartStatus.active)).activeEnrollmentId,
+      expect(
+          AtKeys.fromJson(documentWith(KeyPartStatus.active))
+              .resolveAuthenticatingEnrollment(),
           'e1');
     });
 
@@ -92,7 +99,7 @@ void main() {
       final keys = AtKeys.fromJson(documentWith(unknown));
 
       expect(
-          () => keys.retireKey('k1'),
+          () => keys.retireKey('e1', 'k1'),
           throwsA(isA<ArgumentError>().having((e) => e.toString(), 'message',
               allOf(contains(unknown), contains('forward order')))),
           reason: 'this build cannot tell whether an unknown status sits '
@@ -102,14 +109,14 @@ void main() {
       // The contrast arm: a known status moves, so the refusal above is about
       // the unknown token rather than retireKey being broken outright.
       final known = AtKeys.fromJson(documentWith(KeyPartStatus.active));
-      known.retireKey('k1');
+      known.retireKey('e1', 'k1');
       expect(known.keys.single.status, KeyPartStatus.retired);
     });
 
     test('may not be retired TO, either', () {
       final keys = AtKeys.fromJson(documentWith(KeyPartStatus.active));
       expect(
-          () => keys.retireKey('k1', to: unknown),
+          () => keys.retireKey('e1', 'k1', to: unknown),
           throwsA(isA<ArgumentError>()),
           reason: 'moving a key INTO a status this build does not understand '
               'is the same guess in the other direction');
@@ -133,13 +140,13 @@ void main() {
       // the rank function is broken, the tolerance above was bought by
       // dropping the rule it was meant to preserve.
       final keys = AtKeys.fromJson(documentWith(KeyPartStatus.dead));
-      expect(() => keys.retireKey('k1', to: KeyPartStatus.retired),
+      expect(() => keys.retireKey('e1', 'k1', to: KeyPartStatus.retired),
           throwsA(isA<ArgumentError>()));
     });
 
     test('refuses to reactivate, as before', () {
       final keys = AtKeys.fromJson(documentWith(KeyPartStatus.retired));
-      expect(() => keys.retireKey('k1', to: KeyPartStatus.active),
+      expect(() => keys.retireKey('e1', 'k1', to: KeyPartStatus.active),
           throwsA(isA<ArgumentError>()));
     });
   });
@@ -162,10 +169,13 @@ void main() {
     // that omits the field predates status entirely and its material is in
     // use.
     final document = documentWith(KeyPartStatus.active);
-    (document['keys'] as List).single['keyParts'].single.remove('status');
+    ((document['enrollments'] as List).single['keys'] as List)
+        .single['keyParts']
+        .single
+        .remove('status');
 
     final keys = AtKeys.fromJson(document);
     expect(keys.keys.single.status, KeyPartStatus.active);
-    expect(keys.activeEnrollmentId, 'e1');
+    expect(keys.resolveAuthenticatingEnrollment(), 'e1');
   });
 }

@@ -1,4 +1,38 @@
 ## 3.4.0
+- **BREAKING** feat: the `.atKeys` typed document groups by enrollment. The
+  flat document-wide `keys[]` becomes `enrollments[]` — one entry per
+  enrollment, carrying its id, its `namespaces`/`appName`/`deviceName`
+  snapshot, and its own keys — plus a top-level `atSignKeys[]` for material
+  that belongs to the atSign rather than to any enrollment (the signing root,
+  an nskey private). Key entries no longer carry an `enrollmentId`: the
+  container states it once, and two stored copies of one fact can disagree
+  with nothing to arbitrate.
+  - **Identity is `(enrollment, keyId)`.** A keyId is unique within its
+    container, not across the document, so `getKey`, `keysForKeyId`,
+    `retireKey` and `replaceKey` now take the enrollment beside the keyId, and
+    `getAtSignKey` / `atSignKeysForKeyId` / `retireAtSignKey` address the
+    atSign's own container. Nothing defaults: a caller reaching for atSign
+    material with a bare keyId would otherwise compile while searching an
+    enrollment and find nothing. `addKey` is unchanged — a material states its
+    own owner, and a null `enrollmentId` routes it to the atSign.
+  - Structured keyIds normalise to `<role>:<algo>:<generation>` —
+    `auth:mldsa65:1`, `sign:rsa2048:1`, `root:mldsa65:1` — with the generation
+    counted per `(role, algorithm)`. Kid-addressed entries are unchanged: a kid
+    is a digest of the key and is addressed by value.
+  - `activeEnrollmentId` is replaced by `enrollmentIds`,
+    `authenticatableEnrollmentIds` and `resolveAuthenticatingEnrollment()`.
+    The removed getter answered `firstOrNull`, so a file holding two live
+    enrollments picked one silently; the replacement is invoked by name and
+    **throws** rather than guessing when several qualify.
+  - A `version: 1` document carrying a top-level `keys` is refused by name.
+    `keys` is no longer a reserved field, so parsing one would sweep its whole
+    array into `metadata` as a legacy value — leaving the document reading as
+    untyped and the caller authenticating from the flat block as the legacy
+    enrollment, with the live enrollment's credentials sitting unread beside
+    it.
+  - Nothing released has ever written a typed keyfile, so there is nothing at
+    rest to migrate and `version` stays 1. Keyfiles this project's own live
+    runs generated do carry the old shape and must be regenerated.
 - **BREAKING** fix: `KeyPartStatus` becomes a constants class and
   `AtKeysMaterial.status` an open `String`, so a `.atKeys` document carrying a
   status this build does not recognise is **read and round-tripped unmodified**

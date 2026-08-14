@@ -135,7 +135,7 @@ void main() {
       final reread = await io.read('@alice');
       expect(
         reread
-            .getKey('nskey.wavi', CryptographicKeyType.symmetricEncryption)
+            .getAtSignKey('nskey.wavi', CryptographicKeyType.symmetricEncryption)
             ?.bytes
             .toString(),
         base64Encode(utf8.encode('nskey.wavi')),
@@ -261,7 +261,7 @@ void main() {
     expect(
       (await legacyIo.read(
         '@colinconstable',
-      )).getKey('nskey.wavi', CryptographicKeyType.symmetricEncryption),
+      )).getAtSignKey('nskey.wavi', CryptographicKeyType.symmetricEncryption),
       isNotNull,
       reason: 'and the flushed material is what reads back',
     );

@@ -1972,8 +1972,13 @@ are [`acceptance.md` 16](acceptance.md#16-g1--signature-agility-and-the-rollout-
 
 | Role | Key | Where the private lives | Where the public is advertised | Lifecycle |
 |------|-----|--------------------------|--------------------------------|-----------|
-| Authentication | APKAM keypair | `apkam:<enrollmentId>:<n>`, `privateAuthentication` | the enrollment record's `apkamPublicKey` | one active ever; rotated in place by `enroll:update` |
-| Signing | one keypair per algorithm | `sign:<enrollmentId>:<algo>:<n>`, `privateSigning` | `_apsk`'s `keys` array | several active at once; grows and retires by policy |
+| Authentication | APKAM keypair | `auth:<algo>:<n>`, `privateAuthentication` | the enrollment record's `apkamPublicKey` | one active ever; rotated in place by `enroll:update` |
+| Signing | one keypair per algorithm | `sign:<algo>:<n>`, `privateSigning` | `_apsk`'s `keys` array | several active at once; grows and retires by policy |
+
+⚠️ Neither id carries the enrollment. It is stated once by the `enrollments[]`
+entry the keys sit in ([`decisions.md` 99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
+ruling 5), so identity is `(enrollment, keyId)` and two enrollments may each
+hold `auth:mldsa65:1`.
 
 PKAM verification is record-authoritative, so the atServer reads
 `apkamPublicKey` off the enrollment record and has no use for `_apsk` at all.
@@ -1988,16 +1993,20 @@ already cover what is needed.
 
 `AtKeys.fileApkamMaterial` files under the generation-suffixed id and tags the
 pair `privateAuthentication` / `publicAuthentication`. A new sibling files a
-signing keypair under `sign:<enrollmentId>:<algo>:<n>` as
-`privateSigning` / `publicVerification`.
+signing keypair under `sign:<algo>:<n>` as
+`privateSigning` / `publicVerification`. The generation is per
+`(role, algorithm)`: an enrollment moving between algorithms holds both at
+generation 1.
 
 Reading them back is `AtKeys.signingKeysFor(enrollmentId)`, which selects on
 that **keyId shape** rather than on the `privateSigning` role. The role is not
-unique to an enrollment's signing keys: the atSign-wide `pq_signing_root` is
-filed under it too, with no enrollment id, so selecting by role hands an
-enrollment a key that was never its own — and a signature made with it verifies
-against nothing, since its public half is in no `_apsk`. Both halves must be
-present and active; an
+unique to an enrollment's signing keys. The atSign-wide signing root is filed
+under it too, with no enrollment id — it now lives in the document's own
+`atSignKeys[]`, which `signingKeysFor` never reads, so the confusion the shape
+filter was written for is structural rather than a matter of prefix parsing.
+The filter stays because the role is still shared within an enrollment, and a
+signature made with a key whose public half is in no `_apsk` verifies against
+nothing. Both halves must be present and active; an
 algorithm this build does not know is skipped rather than refused, because the
 rest of a keyfile written by a newer client is still usable.
 
@@ -2008,16 +2017,23 @@ warning: with one live enrollment per install, a second active authentication
 key is a corrupt keyfile, not a supported state.
 
 ⛔ **The file-wide rule does not survive [`decisions.md` 99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
-(2026-08-14), and what replaces its side effect is an OPEN QUESTION.** Ruling 2
-makes the *reader* tolerate several enrollments and select the one it is
-authenticating as, moving the refusal to the write path — at which point this
-rule no longer answers "which enrollment does this keyfile authenticate as",
-and `AtKeys.activeEnrollmentId` has nothing to derive from. Nothing yet says
-what supplies that selection, and the top-level `enrollmentId` is explicitly
-**not** it (99 ruling 7 — it belongs to the legacy block). **Settle this before
-building [14.20](implementation-plan.md#1420-building-rulings-98-and-99--the-sequence)
-row A2**; guessing gets a client that authenticates as the wrong enrollment
-with nothing going red.
+(2026-08-14).** Ruling 2 makes the *reader* tolerate several enrollments and
+select the one it is authenticating as, moving the refusal to the write path —
+at which point this rule no longer answers "which enrollment does this keyfile
+authenticate as", and `AtKeys.activeEnrollmentId` has nothing to derive from.
+
+**What replaces it: the caller supplies the enrollment id, and `AtKeys` offers
+a derivation the caller can ask for** —
+[`decisions.md` 100](decisions.md#100-the-seven-shapes-ruling-99-left-open-2026-08-14)
+ruling 1. `activeEnrollmentId` has no production caller, and both live
+resolvers already pass an explicit id; a cold start with no id to pass calls
+`resolveAuthenticatingEnrollment()`, which answers when exactly one enrollment
+holds active authentication material and throws rather than picking when
+several do. A null id keeps meaning the flat block.
+(This paragraph read "what replaces its side effect is an OPEN QUESTION …
+settle this before building row A2" until 2026-08-14; the top-level
+`enrollmentId` is still explicitly **not** the answer — 99 ruling 7, it belongs
+to the legacy block.)
 
 `AtKeys.replaceKey(keyId, newMaterial)` retires the named keyId's materials and
 files the replacement in one call. Rotation is never two caller-sequenced
@@ -2028,10 +2044,13 @@ Reading, in order of what a file can contain:
 1. no `version` — the legacy flat shape;
 2. `version: 1` with `keys: []` — written by at_auth ≥ 3.3.0 on any flush,
    carrying nothing a legacy file does not;
-3. `version: 1` with materials.
+3. `version: 1` with `enrollments[]` and/or `atSignKeys[]`.
 
 Writing emits (1) when there is no typed material and (3) otherwise. Shape (2)
-is never written again.
+is never written again — and a `version: 1` document carrying a top-level
+`keys` is now **refused by name**: `keys` is no longer reserved, so parsing it
+would sweep the whole array into `metadata` as a legacy value and authenticate
+from the flat block as the wrong enrollment.
 
 ### 9.3 `_apsk`
 

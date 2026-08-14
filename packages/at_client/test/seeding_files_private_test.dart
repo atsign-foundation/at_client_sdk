@@ -97,7 +97,7 @@ void main() {
             SignedEnvelope.fromJson(advertised as Map).payload)
         .nskeyKid;
 
-    final material = (await inner.read(atSign)).getKey(
+    final material = (await inner.read(atSign)).getAtSignKey(
         NskeyPrivateFiling.keyIdFor('buzz', nskeyKid),
         CryptographicKeyType.privateDecapsulation);
     expect(material, isNotNull,
