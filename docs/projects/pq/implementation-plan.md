@@ -3078,6 +3078,43 @@ twice. Within each, the reader before the writer.
 | D1 | Dartdocs that now contradict a ruling: `SigningRollout.rollout1` ("deliberately identical to `now` in what this client writes"), `selfRetrofit` ("no ML-DSA anywhere"), and `EnrollParams.signingAlgo` (name it as the **authentication** key's algorithm) | These are wrong *today*, in the tree, and a builder reading them will build the old design. ⚠️ `design.md` carries the same two errors and was **already banner-flagged and corrected in place** 2026-08-14 — do not re-do it |
 | D2 | ✅ **DONE 2026-08-14, in the same commit as B1 — it had to be.** ⚠️ **This row said "needs B3 to exist first" and that was wrong by two rows: the red arrives at B1**, because B1's in-use set is what starts the minting, and B3 only moves *when* the key is minted. The receiver is now `published` throughout: at_client 3.14.0 fetches the sender's `_apsk` through its own `EnvelopeSigning.getApkamPublicKey` and parses it with `RSAPublicKey.fromString` — the exact call at_chops makes verifying a pkam signature. The scenario reaches that mixin by `src/` import deliberately, because a fetch reimplemented in the harness would test the reimplementation; both arms' `EnvelopeSigning` declares the same three members, checked, since one present in only one build would take the whole matrix down rather than this row. **Two positive controls**, both required: rollout 1's value must DIFFER from `now`'s (or the stage is not applied and the row compares a case with itself — which is what it did until today), and rollout 2's must NOT parse as RSA (or the parse discriminates nothing). Both fired green | Needs B1, not B3. ⚠️ Do not "restore" acceptance.md to match the stale test |
 
+#### The ordering re-check over every remaining row (2026-08-14)
+
+Run after the order had been wrong twice, on gkc's instruction, to stop
+finding the next one by building it. **The question each row is asked is not
+"what does this define" but "what does this route into".** A row that changes
+a default or a set does not announce itself as a writer, and both earlier
+misorderings — and the one below — are that same shape.
+
+⛔ **B1 opened a window B3 has to close, and it is open in the tree right
+now.** MEASURED, not read: submitting a self-enrollment with
+`signingAlgo: mldsa65` builds `apskLegacy: null` and
+
+```json
+{"v":1,"keys":[{"kid":"…","use":"sign","alg":"mldsa65","pub":"<the APKAM authentication key>"}]}
+```
+
+— the probe confirmed `pub` is byte-identical to `apkamPublicKey`. That is the
+exact shape [98.3](decisions.md#983-where-the-signing-key-comes-from) says must
+never be published. `_apskFor` (at_auth,
+`enrollment_submitter.dart:132`) takes its array branch for anything that is
+not `rsa2048`, and B1 made `rollout1` retrofit under `mldsa65` — so a rollout-1
+enrollment now advertises an **ML-DSA array naming its authentication key**
+from creation until the first client start republishes it via `enroll:update`.
+The code path predates B1; what B1 changed is that a rollout-1 preference
+routes into it by default, where before it took an explicit argument or the
+post-quantum posture (under which the array is correct).
+
+**Consequences for the remaining rows, in the order they should now be built:**
+
+| Order | Row | Why it moved, and what it must not miss |
+|---|---|---|
+| 1 | **B3** | ⛔ **Urgent, not merely next** — it closes the window above. ⚠️ It must **mint, advertise AND file** the signing key. Advertising without filing leaves the next start's `mintMissing` finding nothing held, minting a *second* key and republishing — orphaning the key the enrollment record already advertised. ⚠️ It also spans two packages: the mint is at_client (`selfRetrofit`, `pq_native_onboard`) and `_apskFor` is at_auth, so the signing key's public half has to reach the submitter through `AtEnrollmentRequest` |
+| 2 | **B5** | ⚠️ **B1 made this reachable too, and nothing measures it.** Rollout 1 now holds an active `rsa2048` signing key and rollout 2 wants `{mldsa65}`, so a client moving between them mints ML-DSA and leaves RSA **active** — two active signing keys, which means `signingKeys` returns both, every envelope carries a second signature that a verifier passes over, and `_apsk` advertises both as current when [98.1](decisions.md#981-the-stages) says rollout 2 is "mldsa65 active, rsa2048 retired". Invisible to the rails because the matrix copies a fresh keyfile per cell and so never transitions a client between stages. B2 already built the advertisement half, so B5 only has to set the status |
+| 3 | **B4** | No hazard, and smaller than it reads: after B3 a new enrollment already holds its signing key, so `mintMissing` finds nothing missing and is inert by construction. Mostly recording the changed role |
+| 4 | **C1** | **Priority up.** Its own row already said "do it early — it is what makes a mis-wired stage loud instead of silent", and that was written when the stages barely differed. Post-B1 a silently-wrong stage is a silently-wrong *key* |
+| 5 | **C2**, **D1** | Genuinely independent of the B rows. D1 is largely done — B1's commit corrected `SigningRollout.rollout1`, `selfRetrofit` and both posture dartdocs; what remains is `EnrollParams.signingAlgo` in at_commons, whose text is accurate but does not say plainly that it names the **authentication** key's algorithm |
+
 #### Why B2 moved ahead of B1 (2026-08-14)
 
 ⚠️ **This table listed B1 first until 2026-08-14, and that order could not be
