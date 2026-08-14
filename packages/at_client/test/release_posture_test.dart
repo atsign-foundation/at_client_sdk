@@ -18,11 +18,11 @@ void main() {
       expect(p.writesPqByDefault, false);
       expect(p.disallowLegacyEncryption, false);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
-      expect(p.retrofitSigningAlgo, SigningAlgoType.rsa2048);
+      expect(p.retrofitAuthenticationAlgo, SigningAlgoType.rsa2048);
       expect(p.signingRollout, SigningRollout.now);
       expect(p.inUseSigningAlgorithms, isEmpty,
-          reason: 'an enrollment holding a signing key of its own holds two '
-              'keys, and two keys cannot be advertised as the bare public key '
+          reason: 'no signing key of its own: the APKAM authentication key '
+              'signs, and _apsk advertises that key as the bare public key '
               'string every deployed reader understands');
     });
 
@@ -31,7 +31,7 @@ void main() {
       expect(p.writesPqByDefault, true);
       expect(p.disallowLegacyEncryption, true);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
-      expect(p.retrofitSigningAlgo, SigningAlgoType.mldsa65);
+      expect(p.retrofitAuthenticationAlgo, SigningAlgoType.mldsa65);
       expect(p.signingRollout, SigningRollout.rollout2);
       expect(p.inUseSigningAlgorithms, {SigningAlgoType.mldsa65},
           reason: 'ML-DSA alone: a verifier takes the strongest algorithm the '
@@ -77,12 +77,29 @@ void main() {
       // Raw literals: these three are the rollout's contract, and a pin that
       // read them back through the enum would follow an accidental edit.
       expect(SigningRollout.now.defaultInUseSigningAlgorithms, isEmpty);
-      expect(SigningRollout.rollout1.defaultInUseSigningAlgorithms, isEmpty,
-          reason: 'rollout 1 is the reader half, which needs no gate — a '
-              'reader that understands more shapes is safe in any fleet, so '
-              'this stage deliberately writes exactly what "now" writes');
+      expect(SigningRollout.rollout1.defaultInUseSigningAlgorithms,
+          {SigningAlgoType.rsa2048},
+          reason: 'rollout 1 holds one rsa2048 SIGNING key, which is exactly '
+              'what the bare _apsk string can express — so an un-upgraded '
+              'peer reads it unchanged while the AUTHENTICATION key moves to '
+              'ML-DSA underneath');
       expect(SigningRollout.rollout2.defaultInUseSigningAlgorithms,
           {SigningAlgoType.mldsa65});
+    });
+
+    test('each stage names the authentication algorithm a retrofit mints', () {
+      // The other half of the same position. Raw literals for the same
+      // reason, and the member name says AUTHENTICATION where the wire field
+      // it feeds (EnrollParams.signingAlgo) cannot be renamed.
+      expect(SigningRollout.now.defaultRetrofitAuthenticationAlgo,
+          SigningAlgoType.rsa2048);
+      expect(SigningRollout.rollout1.defaultRetrofitAuthenticationAlgo,
+          SigningAlgoType.mldsa65,
+          reason: 'the quantum-forgeable credential moves FIRST: only the '
+              'atServer verifies it, and that is the operator\'s own '
+              'infrastructure, while every peer verifies the signing key');
+      expect(SigningRollout.rollout2.defaultRetrofitAuthenticationAlgo,
+          SigningAlgoType.mldsa65);
     });
 
     test('the posture derives its set from the stage, never storing both', () {
@@ -94,6 +111,11 @@ void main() {
       ]) {
         expect(posture.inUseSigningAlgorithms,
             posture.signingRollout.defaultInUseSigningAlgorithms);
+        expect(posture.retrofitAuthenticationAlgo,
+            posture.signingRollout.defaultRetrofitAuthenticationAlgo,
+            reason: 'the retrofit algorithm derives from the stage too — it '
+                'was a stored field until 2026-08-14, which is two controls '
+                'over one position');
       }
     });
 
@@ -106,8 +128,9 @@ void main() {
           AtClientPreference(signingRollout: SigningRollout.rollout1);
 
       expect(preference.signingRollout, SigningRollout.rollout1);
-      expect(preference.inUseSigningAlgorithms, isEmpty,
-          reason: 'and it changes nothing this client writes');
+      expect(preference.inUseSigningAlgorithms, {SigningAlgoType.rsa2048},
+          reason: 'and the stage supplies its set, so the enrollment holds a '
+              'signing key of its own from birth');
     });
 
     test('an explicit stage beats the posture, and an explicit set beats both',

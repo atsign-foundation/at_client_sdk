@@ -1,4 +1,35 @@
 ## 3.14.1
+- **BREAKING** feat: `ReleasePosture.retrofitSigningAlgo` becomes
+  `retrofitAuthenticationAlgo`, and is now **derived** from `signingRollout`
+  rather than stored — so both named constructors take one argument fewer.
+  `SigningRollout` gains `defaultRetrofitAuthenticationAlgo` beside
+  `defaultInUseSigningAlgorithms`.
+  - It selects the algorithm of the key that **authenticates**, in the one
+    subsystem whose entire premise is that authenticating and signing are
+    different keys. The wire field it feeds (`EnrollParams.signingAlgo`)
+    keeps its name — renaming that is a multi-repo seam against a released
+    atServer, where a stale reader seeing an absent field falls back to
+    `rsa2048`, a silent wrong-algorithm PKAM.
+  - Derived, because two stored fields would be two controls over one
+    position, and an operator who set the stage but forgot the algorithm
+    would land in a state no release defines with nothing to tell them.
+  - fix: `selfRetrofit` read the **posture's** stage, so an app that set
+    `signingRollout` beside a posture would have retrofitted under the
+    posture's algorithm and said nothing. It now reads
+    `AtClientPreference.signingRollout`, which is the effective stage.
+- **BREAKING** feat: `SigningRollout.rollout1`'s default in-use signing set
+  becomes `{rsa2048}`, having been empty. A rollout-1 enrollment now mints,
+  advertises and files an RSA-2048 **signing** key of its own at client start,
+  and its `_apsk` names that key instead of its APKAM authentication key.
+  - The two keys have different audiences, which is the whole reason the
+    stage exists: only the **atServer** verifies the authentication key and
+    it is the operator's own infrastructure, while **every peer** verifies
+    the signing key and the fleet is not the operator's to upgrade.
+  - One active `rsa2048` entry still spells as the bare public-key string, so
+    a released reader cannot tell a rollout-1 sender from a `now` one —
+    measured against at_client 3.14.0 rather than argued.
+  - `ReleasePosture.migration()` and `.postQuantum()` are unaffected: they
+    are `now` and `rollout2`.
 - feat: the published `_apsk` record advertises the keys that sign for an
   enrollment now plus the signing keys it has **retired**. The APKAM
   authentication key appears only while it *is* the signer — an enrollment

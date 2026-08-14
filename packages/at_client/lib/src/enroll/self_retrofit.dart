@@ -52,12 +52,27 @@ final _logger = AtSignLogger('selfRetrofit');
 /// enrollment is live and usable without it, and re-running [selfRetrofit]
 /// (idempotent per keyfile) retries the step.
 ///
-/// [signingAlgo] selects the retrofit mode — one of the rollout axes, a
-/// per-operation parameter rather than a preference. When the caller names
-/// none, [AtClientPreference.posture] decides: `rsa2048` under the migration
-/// posture (the rollout-window mode — a fresh RSA keypair under a new
-/// enrollment id, no ML-DSA anywhere), `mldsa65` under
-/// `ReleasePosture.postQuantum` (the PQ retrofit).
+/// [signingAlgo] is the **authentication** key's algorithm — the APKAM
+/// keypair the new enrollment proves possession of on a connection, not the
+/// key it signs envelopes with. The name is the wire field's
+/// (`EnrollParams.signingAlgo`), which has meant that since before an
+/// enrollment had signing keys of its own; renaming it is a multi-repo seam
+/// against a released atServer, so the name stays and this says what it does.
+///
+/// A per-operation parameter rather than a preference. When the caller names
+/// none, [AtClientPreference.signingRollout] decides via
+/// [SigningRollout.defaultRetrofitAuthenticationAlgo]: `rsa2048` at
+/// [SigningRollout.now], `mldsa65` at `rollout1` and `rollout2`.
+///
+/// ⚠️ **The preference's stage, not the posture's.** An app may set
+/// `signingRollout` beside a posture, and the preference's value is then where
+/// the client stands.
+///
+/// A fully privileged `rsa2048` retrofit still files an ML-DSA-65
+/// `pq_signing_root`: the root is the **atSign's**, not this enrollment's, and
+/// gating it on a per-enrollment algorithm choice would let the first
+/// privileged retrofit decide whether the atSign ever gets a root at all.
+/// "No ML-DSA anywhere" is true only of the enrollment's own keys.
 ///
 /// The new enrollment's KEM comes from
 /// [AtClientPreference.keyEstablishmentAlgo] and is **decided at this call**:
@@ -80,7 +95,12 @@ Future<AtClientManager> selfRetrofit({
         'the self-retrofit submits on the session\'s authenticated AtLookUp');
   }
 
-  final algo = signingAlgo ?? preference.posture.retrofitSigningAlgo;
+  // The preference's stage, not the posture's. An app may set
+  // `signingRollout` beside a posture, and then that value is where the client
+  // actually stands — reading `posture.signingRollout` here would retrofit a
+  // rollout-1 client under `now`'s algorithm and never say so.
+  final algo =
+      signingAlgo ?? preference.signingRollout.defaultRetrofitAuthenticationAlgo;
   final response = await AtEnrollment.create().submit(
       AtSelfEnrollmentRequest(
           session: session,

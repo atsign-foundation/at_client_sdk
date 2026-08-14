@@ -1,3 +1,11 @@
+// `EnvelopeSigning` carries at_client's `@experimental` marker in both builds,
+// and reaching for it anyway is the point rather than a compromise. UC-G1.14's
+// claim is about what a DEPLOYED reader makes of a rollout-1 `_apsk`, and only
+// that reader's own code path can settle it — the marker warns app authors
+// that the API may move, which is a different question from whether this
+// harness may call the exact version it pins.
+// ignore_for_file: experimental_member_use
+
 import 'dart:async' show Completer, StreamSubscription, TimeoutException;
 
 import 'package:at_client/at_client.dart'
@@ -8,6 +16,12 @@ import 'package:at_client/at_client.dart'
         GetRequestOptions,
         NotificationParams,
         PutRequestOptions;
+// ignore: implementation_imports
+import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
+// ignore: implementation_imports
+import 'package:at_client/src/mixins/envelope_signing.dart' show EnvelopeSigning;
+import 'package:at_utils/at_utils.dart' show AtSignLogger;
+import 'package:crypton/crypton.dart' show RSAPublicKey;
 
 import 'protocol.dart';
 
@@ -140,6 +154,66 @@ Future<String?> readApsk(AtClient client) async {
   }
 }
 
+/// What **this build's own reader** makes of [peerAtSign]'s `_apsk` — the
+/// measurement UC-G1.14 turns on.
+///
+/// Reached through at_client's `EnvelopeSigning.getApkamPublicKey` rather than
+/// a lookup written here, and the `src/` import is the point rather than a
+/// shortcut. The property under test is that *a deployed peer* can still read
+/// a rollout-1 sender's advertisement, and only the deployed build's own code
+/// path can settle that — a fetch reimplemented in this file would test the
+/// reimplementation. Both arms compile this, so on the published arm it is
+/// literally at_client 3.14.0 doing the reading.
+///
+/// `RSAPublicKey.fromString` is the call at_chops makes when it verifies a
+/// pkam signature, so `rsa: true` means the value is one a released verifier
+/// could actually have used — not merely that it looked like base64.
+///
+/// Never throws: every outcome is reported, because "the released reader threw"
+/// is the result this row exists to detect and an exception here would be
+/// indistinguishable from the harness failing.
+Future<Map<String, Object?>> readPeerApskAsReleasedReader(
+    AtClient client, String peerAtSign) async {
+  final reader = _ReleasedApskReader(client);
+  String value;
+  try {
+    // 'primary' because these clients have no enrollment record — the same id
+    // the sender publishes under, spelled the same way for the same reason.
+    value = await reader.getApkamPublicKey(peerAtSign, 'primary');
+  } on Object catch (e) {
+    return {'fetched': false, 'rsa': false, 'error': '$e'};
+  }
+
+  try {
+    RSAPublicKey.fromString(value);
+    return {'fetched': true, 'rsa': true, 'value': value};
+  } on Object catch (e) {
+    return {'fetched': true, 'rsa': false, 'value': value, 'error': '$e'};
+  }
+}
+
+/// The smallest thing that can hold [EnvelopeSigning].
+///
+/// Its three members are declared identically in at_client 3.14.0 and in this
+/// tree — checked, because a mixin member present in only one of them would
+/// make this file uncompilable on that arm and take the whole matrix down
+/// rather than the one row.
+class _ReleasedApskReader with ApkamSigning, EnvelopeSigning {
+  _ReleasedApskReader(this.atClient);
+
+  @override
+  final AtClient atClient;
+
+  @override
+  final AtSignLogger logger = AtSignLogger('pqMatrixApskReader');
+
+  /// Null: caching is what would make a second read return the first read's
+  /// answer, and each cell wants the record as it stands now.
+  @override
+  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
+      null;
+}
+
 /// Subscribes, announces readiness, then reads what the sender wrote.
 ///
 /// The subscription is established **before** [MatrixVerb.ready] is emitted and
@@ -189,6 +263,10 @@ Future<void> runReceiver(AtClient client, ExchangeSpec spec) async {
       'atSign': me,
       'read': read,
       'notification': wake.id,
+      // What this build makes of the SENDER's advertisement. On the published
+      // arm this is at_client 3.14.0's own verdict, which is the only thing
+      // that can say a deployed peer is unaffected by the sender's stage.
+      'peerApsk': await readPeerApskAsReleasedReader(client, spec.peerAtSign),
     });
   } finally {
     await subscription.cancel();

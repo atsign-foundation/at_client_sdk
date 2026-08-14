@@ -23,6 +23,12 @@ dependencies:
   at_commons: ">=5.5.0 <6.0.0"
   at_demo_data: ^1.2.0
   at_utils: ">=3.2.0 <4.0.0"
+  # The RSA parse UC-G1.14 turns on. `RSAPublicKey.fromString` is the exact
+  # call at_chops makes when it verifies a pkam signature, so asserting
+  # through it is asserting what a deployed reader does with the value rather
+  # than a re-description of it. Both arms' at_chops already depend on
+  # ^2.2.1, so this pins nothing new.
+  crypton: ^2.2.1
 
 dev_dependencies:
   lints: ^6.0.0

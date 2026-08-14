@@ -2584,9 +2584,11 @@ peer verifies the signing key, so the forgeable-later credential can move first
 while the verification surface stays classical. Consequences that touch rows
 already marked done:
 
-- `SigningRollout`'s in-use sets become `{}` / `{rsa2048}` / `{mldsa65}`, and it
-  gains `defaultRetrofitAuthenticationAlgo`; `retrofitSigningAlgo` is renamed
-  `retrofitAuthenticationAlgo` (step 17/19's landed work, extended).
+- ✅ **DONE 2026-08-14 (row B1).** `SigningRollout`'s in-use sets became `{}` /
+  `{rsa2048}` / `{mldsa65}`, and it gained
+  `defaultRetrofitAuthenticationAlgo`; `retrofitSigningAlgo` is renamed
+  `retrofitAuthenticationAlgo` and is now a derived getter (step 17/19's
+  landed work, extended).
 - `_apskFor` must advertise the **signing** key, not `apkamPublicKey`, and the
   retrofit must mint that key **before** submitting — otherwise a rollout-1
   enrollment publishes an ML-DSA array at creation and breaks every deployed
@@ -2907,7 +2909,8 @@ its own. None blocks anything.
     **Left as is, deliberately**, and recorded so the next reader does not
     re-derive it as a defect: the two SigningAlgoType-valued knobs already on
     the preference — the deprecated `signingAlgoType` and
-    `ReleasePosture.retrofitSigningAlgo` — have always required that import, so
+    `ReleasePosture.retrofitAuthenticationAlgo` (named `retrofitSigningAlgo`
+    until row B1) — have always required that import, so
     exporting it now would be a new inconsistency rather than a fix, and a
     barrel export is public surface that cannot be withdrawn. `SigningRollout`,
     the axis an app is more likely to name, **is** reachable (it lives in
@@ -2998,10 +3001,13 @@ and [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-ke
 say **what** and **why**. This says **in what order**, because several of the
 orderings are the difference between a working rollout and a broken fleet.
 
-⚠️ **Rows A1, A2, A3 and B2 are built (2026-08-14) — all of ruling 99, plus
-ruling 98's `_apsk` rule. Everything from B1 down is not.** The tree still has
-the pre-98 **stages** — B2 changed what an advertisement carries, not what any
-stage does — so a green rail below A is not evidence that the stages landed.
+⚠️ **Rows A1, A2, A3, B2, B1 and D2 are built (2026-08-14) — all of ruling 99,
+plus ruling 98's `_apsk` rule and its stage definitions. Still unbuilt: B3, B4,
+B5, C1, C2, D1.** Rollout 1 now mints and advertises its own RSA-2048 signing
+key at client start, and a released at_client 3.14.0 reader has been measured
+parsing that advertisement. What B3 changes is *when* the key is minted —
+before the enrollment submits, rather than at the next start — and it moves the
+authentication key to ML-DSA.
 Two specific traps are called out at the end, and the sharper one — the
 UC-G1.14 test that must go red once B3 lands — is still armed.
 
@@ -3063,14 +3069,14 @@ twice. Within each, the reader before the writer.
 | A2 | ✅ **DONE 2026-08-14.** The single-active-authentication rule moved from `validateKeyMaterials` (read) to a new `AtKeysAssurance.refuseSecondLiveEnrollment` (write), which only `AtKeys.addKey` calls. **The rule had to be moved, not deleted, and the reason the reader inherited it is worth keeping:** `fromJson` built the document by calling `addKey` for every material, so read and write validation were literally the same code path. A private `AtKeys._parsed` now files through `_file` — the structural invariants without the write-only policy. The refusal also got stricter where it moved: it is owner-agnostic and algorithm-agnostic, so one enrollment holding `auth:rsa2048:1` and `auth:mldsa65:1` both active is refused, which the per-(role, algorithm) rule structurally cannot see. Pinned in `plural_enrollments_test.dart` — reads, round-trips both enrollments on flush, refuses to name one, serves a caller that names its own, and the write path still refuses. **Proven by mutation**: making `_parsed` file through `addKey` again turns exactly the four read-tolerance tests red and leaves the writer-refusal test green. Rails: at_auth **304/304**, at_client **1265** (2 skipped) | Reader-first. A reader that refuses a second entry makes plurality unenableable later — the `.single` lesson |
 | A3 | ✅ **DONE 2026-08-14.** Seven generated keyfiles carrying the old typed shape were deleted from `tests/at_functional_test/test/testData/` (`@colin`, `@jeremy`, `@xavier`, `rf2b-legacy`, `rf2b-t1`, `rf2b-t5`, `rf2d-posture`); all seven were untracked and regenerable. **The correction below held exactly**: the two tracked fixtures, `@alice🛠_key.atKeys` and `@bob🛠_key.atKeys`, are legacy-flat with no `version` at all and parse unchanged. ⚠️ **Corrected 2026-08-14:** an earlier draft of this row said the *tracked* fixtures are version-1 old-typed and become unreadable. They are not — and `build_test_atkeys.dart` files no typed material. Only keyfiles a *live retrofit* produced carry the old typed shape, and those are generated, not tracked. ⚠️ **All seven are back on disk, and that is the proof rather than a regression**: the functional run that followed regenerated them in the NEW shape (`version: 1`, `enrollments[1]`, no top-level `keys`), which is the container being written and read by production code against a real atServer |
 | B2 | ✅ **DONE 2026-08-14 — and it moved ahead of B1, see the note below this table.** `apskEntries` now advertises the active signers plus the enrollment's **retired signing keys**, and the APKAM authentication key only while it *is* the signer — never retained. A new `AtKeys.retiredSigningKeysFor` supplies the retired entries **public-only** (a retired key must never sign again) and does **not** require the private half to still be present, so a build that wipes withdrawn private material cannot silently withdraw the advertisement with it. Selected on exactly `KeyPartStatus.retired`: `dead` was never adopted, and an unknown status is skipped rather than guessed at. Reached through a new `ApkamSigning.retiredSigningKeys`, which — unlike `heldSigningKeys` — is **not** filtered by `canSignEnvelopeWith`, since these entries exist for *other* parties to verify with and dropping one on a fact about the publisher would unverify its envelopes for every reader that could have handled them. `SigningKeyMinting._publish` re-reads them rather than assuming none, because that publish rewrites the whole record. **Proven by two symmetric mutations**: gutting `retiredSigningKeysFor` to empty reddens exactly the two retained-signing-key tests, and removing the dedup reddens exactly the third. Rails: at_auth **304/304**, at_client **1268** (2 skipped), acceptance **57** (2 skipped), functional **163/163** — the last one being the only thing that could say a live advertisement still reads | Must precede any writer that mints a signing key, or rollout 1 publishes an array |
-| B1 | `SigningRollout` gains `defaultRetrofitAuthenticationAlgo`; in-use sets become `{}` / `{rsa2048}` / `{mldsa65}`; `retrofitSigningAlgo` is renamed `retrofitAuthenticationAlgo` **and becomes a DERIVED getter off `signingRollout`, not a stored field**. ⚠️ This row said only "rename" until 2026-08-14, which a builder reads as "keep the stored field". [98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 6 settles it — "two stored fields would be two controls over one position" — and it is the identical reasoning step 19 already applied to `inUseSigningAlgorithms`, which IS a derived getter today (`release_posture.dart:118`) beside `retrofitSigningAlgo`'s stored field (`:105`). Consequence to plan for: `ReleasePosture`'s two named constructors lose an argument, which is a source break | 98's stages are defined here. Everything downstream reads them |
+| B1 | ✅ **DONE 2026-08-14, together with D2 — see below.** `SigningRollout` gained `defaultRetrofitAuthenticationAlgo` (`now` → `rsa2048`, `rollout1`/`rollout2` → `mldsa65`) and its in-use sets became `{}` / `{rsa2048}` / `{mldsa65}`. `retrofitSigningAlgo` is renamed `retrofitAuthenticationAlgo` **and is now a derived getter**, so both named constructors lost an argument — [98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 6, "two stored fields would be two controls over one position". **One defect this surfaced:** `selfRetrofit` read `preference.posture.retrofitSigningAlgo`, i.e. the *posture's* stage, so an app setting `signingRollout: rollout1` beside a migration posture would have retrofitted under `now`'s algorithm and said nothing. It now reads `preference.signingRollout`, which is the effective stage. Rails: at_client **1269** (2 skipped), functional **163/163** | 98's stages are defined here. Everything downstream reads them |
 | B3 | The retrofit and `pq_native_onboard` mint the RSA signing keypair **before** submitting, and `_apskFor` advertises **that key** rather than `apkamPublicKey` | ⚠️ **B3 is one commit, not two.** Splitting it publishes an ML-DSA array at enrollment creation — the breakage rollout 1 exists to prevent, landing on peers who cannot fix it |
 | B4 | `SigningKeyMinting` becomes the heal path for enrollments that predate B3, rather than the only producer | Follows B3 |
 | B5 | Retire a signing key whose algorithm leaves the in-use set — [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) ruling 12. Nothing does this today | Required before rollout 1 → 2 works at all; not required for rollout 1 |
 | C1 | `AtClientImpl.create` **throws** when a cached `(atSign, enrollmentId)` client is handed a preference differing in `posture`, `signingRollout`, `inUseSigningAlgorithms` or `disallowLegacyEncryption` | Independent of A and B; can land any time. Do it early — it is what makes a mis-wired stage loud instead of silent |
 | C2 | The enrollment record snapshot (`namespaces`/`appName`/`deviceName`) is reconciled on every start, through `WrittenAtKeysIo.update`, logging a changed `namespaces` | ⚠️ Must use the store's atomic verb. This tree has already lost key material to two unawaited start-time writers doing read-mutate-write on this file |
 | D1 | Dartdocs that now contradict a ruling: `SigningRollout.rollout1` ("deliberately identical to `now` in what this client writes"), `selfRetrofit` ("no ML-DSA anywhere"), and `EnrollParams.signingAlgo` (name it as the **authentication** key's algorithm) | These are wrong *today*, in the tree, and a builder reading them will build the old design. ⚠️ `design.md` carries the same two errors and was **already banner-flagged and corrected in place** 2026-08-14 — do not re-do it |
-| D2 | Rewrite **the test only** — `acceptance.md`'s UC-G1.14 row was already rewritten to the 98.6 form on 2026-08-14. `tests/at_functional_test/test/pq_rollout_matrix_test.dart` still asserts byte-identity and must become: a released at_client 3.14.0 reader fetches a rollout-1 sender's `_apsk` and parses it as a bare RSA key | Needs B3 to exist first. ⚠️ Do not "restore" acceptance.md to match the stale test |
+| D2 | ✅ **DONE 2026-08-14, in the same commit as B1 — it had to be.** ⚠️ **This row said "needs B3 to exist first" and that was wrong by two rows: the red arrives at B1**, because B1's in-use set is what starts the minting, and B3 only moves *when* the key is minted. The receiver is now `published` throughout: at_client 3.14.0 fetches the sender's `_apsk` through its own `EnvelopeSigning.getApkamPublicKey` and parses it with `RSAPublicKey.fromString` — the exact call at_chops makes verifying a pkam signature. The scenario reaches that mixin by `src/` import deliberately, because a fetch reimplemented in the harness would test the reimplementation; both arms' `EnvelopeSigning` declares the same three members, checked, since one present in only one build would take the whole matrix down rather than this row. **Two positive controls**, both required: rollout 1's value must DIFFER from `now`'s (or the stage is not applied and the row compares a case with itself — which is what it did until today), and rollout 2's must NOT parse as RSA (or the parse discriminates nothing). Both fired green | Needs B1, not B3. ⚠️ Do not "restore" acceptance.md to match the stale test |
 
 #### Why B2 moved ahead of B1 (2026-08-14)
 
@@ -3111,20 +3117,24 @@ carries, so a live run was the only thing that could say whether the
 advertisement still reads — and having the baseline first is what made that
 second run mean one row rather than four.
 
-#### Two traps a fresh session will otherwise hit
+#### Two traps a fresh session will otherwise hit — both now discharged
 
-⚠️ **The landed UC-G1.14 test asserts something ruling 98 says is false, and it
-passes.** `tests/at_functional_test/test/pq_rollout_matrix_test.dart` asserts
-rollout1/rollout1 is byte-identical to now/now. That is true of the *current*
-code and false of the design — under 98 rollout 1 publishes its own signing key
-where `now` publishes its auth key. It goes green today and must go red once B3
-lands. **Do not "fix" it back to green by weakening it; replace it per D2.**
+✅ **The UC-G1.14 trap fired exactly as written, one row earlier than
+predicted.** This section said the byte-identity test "must go red once B3
+lands". It went red at **B1**, measured: 162 passed, that one failed, and the
+two `_apsk` values in the failure output were both bare RSA keys differing from
+offset 44 — rollout 1 publishing its signing key where `now` publishes its auth
+key, exactly as 98.1 specifies. It was replaced per D2 in B1's own commit
+rather than weakened. **The general lesson, twice in one sequence: the row that
+switches a behaviour on is the row whose in-use set changes, not the row that
+looks like the writer.**
 
-⚠️ **`retrofitSigningAlgo` is not what its name says.** It selects the
-**authentication** key's algorithm, and the wire field it feeds
-(`EnrollParams.signingAlgo`) has always meant that too. B1 renames the client
-field; the wire field keeps its name deliberately (a multi-repo seam against a
-released atServer) and only its dartdoc is corrected.
+✅ **`retrofitSigningAlgo` was not what its name said**, and B1 renamed it to
+`retrofitAuthenticationAlgo`. It selects the **authentication** key's
+algorithm, and the wire field it feeds (`EnrollParams.signingAlgo`) has always
+meant that too — the wire field keeps its name deliberately (a multi-repo seam
+against a released atServer) and only its dartdoc is corrected, which is still
+owed by D1.
 
 #### What this does NOT depend on
 

@@ -246,43 +246,66 @@ void main() {
     }
   }
 
-  test('UC-G1.14 · rollout 1 changes nothing on the wire', () async {
-    // Both cells run here rather than reading what the matrix loop left
+  test('UC-G1.14 · rollout 1 is invisible to a deployed peer', () async {
+    // Every cell runs here rather than reading what the matrix loop left
     // behind: a test that depends on another test having run first passes or
     // fails on declaration order, which is not a property of the code.
-    final asNow = await runCell(senderStage: 'now', receiverStage: 'now');
+    //
+    // The receiver is `published` throughout — at_client 3.14.0, resolved from
+    // pub.dev. That is the whole row. The question is not what this tree
+    // believes it published, it is what a build we cannot change makes of it.
+    final asNow = await runCell(senderStage: 'now', receiverStage: 'published');
     final asRollout1 =
-        await runCell(senderStage: 'rollout1', receiverStage: 'rollout1');
+        await runCell(senderStage: 'rollout1', receiverStage: 'published');
+
+    Map<String, Object?> verdict(Map<String, Object?> result) =>
+        (result['peerApsk'] as Map).cast<String, Object?>();
+
+    final nowVerdict = verdict(asNow.result);
+    final rollout1Verdict = verdict(asRollout1.result);
+
+    // The baseline: what a deployed peer does with a `now` sender today.
+    expect(nowVerdict['fetched'], true, reason: '${nowVerdict['error']}');
+    expect(nowVerdict['rsa'], true,
+        reason: 'the released reader must parse a now sender\'s _apsk as an '
+            'RSA public key. If this fails the run says nothing about rollout '
+            '1, because the baseline it is measured against is broken');
+
+    // The row's claim.
+    expect(rollout1Verdict['fetched'], true,
+        reason: '${rollout1Verdict['error']}');
+    expect(rollout1Verdict['rsa'], true,
+        reason: 'a rollout-1 sender advertises its own freshly minted RSA-2048 '
+            'SIGNING key where now advertises its AUTHENTICATION key. Both are '
+            'a single active rsa2048 entry, so both spell as the bare string, '
+            'and at_client 3.14.0 cannot tell the two stages apart');
+
+    // Positive control 1: the stage actually moved the key. Without it every
+    // assertion above passes for a harness in which rollout 1 did nothing at
+    // all — which is what this row asserted, and got, until 2026-08-14.
+    expect(rollout1Verdict['value'], isNot(nowVerdict['value']),
+        reason: 'rollout 1 must publish a DIFFERENT key from now — its signing '
+            'key rather than its authentication key. Byte-identity here means '
+            'the stage is not being applied and this row is comparing a case '
+            'with itself');
+
+    // Positive control 2: `rsa: true` is capable of being false. Rollout 2
+    // advertises the array, which no released reader takes — so the two
+    // assertions above are measuring something rather than always passing.
+    final asRollout2 =
+        await runCell(senderStage: 'rollout2', receiverStage: 'published');
+    final rollout2Verdict = verdict(asRollout2.result);
+    expect(rollout2Verdict['rsa'], false,
+        reason: 'rollout 2 publishes the JSON advertisement, which is the one '
+            'shape a released reader cannot take. If that parses as RSA then '
+            'the parse discriminates nothing and rollout 1\'s green is empty');
 
     File keyfile(String storage) => File('$storage/$senderAtSign.atKeys');
-
-    // The differential this row turns on. `rollout1` is reader capability
-    // only — it says the fleet's peers have upgraded, and changes nothing this
-    // client writes.
-    expect(asRollout1.sent['apsk'], asNow.sent['apsk'],
-        reason: 'rollout 1 must publish the same _apsk as now, byte for byte. '
-            'A difference here means the stage has become a writer gate, '
-            'which is what rollout 2 is for');
-    expect(keyfile(asRollout1.senderStorage).readAsBytesSync(),
-        keyfile(asNow.senderStorage).readAsBytesSync(),
-        reason: 'rollout 1 must mint nothing: its in-use signing set is empty, '
-            'exactly as now\'s is, so the keyfile it leaves behind is the one '
-            'it was given');
-
-    // The positive control. Without it the two assertions above pass for a
-    // harness where no stage does anything at all — which is precisely how a
-    // rollout-2 arm attached without a key source would read.
-    final asRollout2 =
-        await runCell(senderStage: 'rollout2', receiverStage: 'rollout2');
     expect(keyfile(asRollout2.senderStorage).readAsBytesSync(),
         isNot(keyfile(asNow.senderStorage).readAsBytesSync()),
-        reason: 'rollout 2 mints a signing key and files it, so its keyfile '
-            'must differ. If this passes with the two above, the stages are '
-            'not being applied and the whole matrix is comparing a case with '
-            'itself');
-    expect(asRollout2.sent['apsk'], isNot(asNow.sent['apsk']),
-        reason: 'rollout 2 advertises the key it minted beside the retained '
-            'authentication key, so its _apsk cannot be what now publishes');
+        reason: 'and rollout 2 mints a signing key and files it, so its '
+            'keyfile must differ from now\'s — the check that a stage reaches '
+            'the keyfile at all');
   });
 }
 
