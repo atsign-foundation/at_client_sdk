@@ -8678,6 +8678,17 @@ return `rejected`. That is not an approve-time-only failure: the same path runs
 whenever anyone seals a secret to the enrollment, so the enrollment would be
 created and then never receive any conveyed key material.
 
+⛔ **The obvious smaller fix was PUT AND REJECTED, and it is the one to reach
+for, so it is recorded here.** The alternative was to apply ruling 4 *only*
+where no key package rides the request — leaving `_apsk` naming the APKAM key
+whenever one does. Nothing breaks, and the diff is a one-line condition. It was
+rejected because **the retrofit always sends a key package**, so the exception
+swallows the rule: rollout 1 would keep advertising its ML-DSA authentication
+key on the only path that creates a rollout-1 enrollment, which is the precise
+breakage this whole ruling exists to prevent. A future reader hitting this
+tension will find that condition attractive; it guts the stage silently, and
+every rail stays green while it does.
+
 **Ruled by gkc 2026-08-14: the key package is signed with the SIGNING key.**
 `enrollmentKeyPackageBuilder` hands `signEnvelope` the minted RSA-2048 signing
 keypair rather than the APKAM keypair, so the record and the package agree

@@ -2298,12 +2298,24 @@ than it looks** (both re-verified against the source 2026-08-11):
    `at_commons-apsk-1` tag is deleted local and origin (its commit `54ccffdd0`
    is an ancestor of trunk, so nothing was orphaned), and
    [at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744)
-   is open for review. ⚠️ **What this leaves owed:** at_server's head is
-   `5bc3618a`, three commits past the `ab38b884` the 210/210 was measured at —
-   including the async-verify fix, a typed verification boundary and
-   fail-closed handling of a malformed APKAM key or signature. **The functional
-   number is stale twice over** (different code, different at_commons source)
-   and has to be re-earned before it is cited again.
+   **MERGED 2026-08-11** — ⚠️ *this line read "is open for review" until the
+   2026-08-14 wrap-up; verified with `gh pr view 2744 --repo
+   atsign-foundation/at_server`.* ⚠️ **And the `5bc3618a` this paragraph named
+   as at_server's head is long superseded** — it is an ancestor of
+   `origin/trunk` now, i.e. landed. ⚠️ **Do not read a SHA here as "at_server's
+   head" at all:** `6a86fbcc`, cited elsewhere in this plan for the PoP
+   contract, is the tip of the local `gkc-add-apskLegacy-field` branch and is
+   *also* an ancestor of trunk; `origin/trunk` itself was at `fdb78568` on
+   2026-08-14 and moves independently of anything here. Re-derive with
+   `git -C ~/dev/atsign/repos/at_server rev-parse --short origin/trunk`; none
+   of this is visible from inside at_client_sdk, which is how both errors
+   survived.
+
+   **What this still leaves owed:** at_server's own **210/210** was measured at
+   `ab38b884`, several commits back and against a different at_commons source.
+   **That number is stale twice over and has to be re-earned before it is cited
+   again** — it is at_server's pack, not at_client_sdk's, so none of this
+   project's runs discharge it.
 2. ~~**Ruling 7's remaining half: flat → typed.**~~ **DONE 2026-08-13**, and
    narrowed on evidence — see [14.18](#1418-the-remaining-d1-initial-development-sequence)
    step 10 and the amendment in [`decisions.md` 91.3](decisions.md#913-the-rulings)
@@ -2921,6 +2933,31 @@ its own. None blocks anything.
     for exactly this discoverability argument
     ([`decisions.md` 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)).
 
+14. **⚠️ NOT PQ — parked here because this project has no other checked-in
+    owed-work list.** 16 prose uses of the banned "atProtocol" spelling
+    (it is **"Atsign Protocol"**, capital A, capital P, space-separated)
+    survive outside `docs/projects/pq/`, which is clean. Found by the
+    2026-08-14 docs sweep and deliberately not fixed then: they sit in six
+    packages that session never touched, so folding them into a PQ commit
+    would have made the diff cross-package for a spelling change.
+
+    Re-derive the list — do not trust this count, it is a measurement from one
+    moment:
+
+    ```bash
+    grep -rn "atProtocol" --include="*.md" --include="*.dart" . \
+      | grep -v untracked | grep -vE "atProtocol[A-Z]|atProtocol/"
+    ```
+
+    Known homes: `at_policy`, `at_rpc`, `at_commons` (`at_key.dart` dartdocs),
+    `at_cli_commons` (an example), `at_client` (`at_client_telemetry.dart`,
+    a test comment) and `docs/projects/wasm/plan.md`.
+
+    ⚠️ **A further 5 occurrences are IDENTIFIERS, not prose** —
+    `atProtocolEmitted`, `AtServerEvent.atProtocolCategory`, and the
+    `atProtocol/1.0` wire value. The filter above excludes them deliberately:
+    renaming those is a breaking API/wire change, not a docs fix.
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.
@@ -3076,7 +3113,7 @@ twice. Within each, the reader before the writer.
 | B1 | ✅ **DONE 2026-08-14, together with D2 — see below.** `SigningRollout` gained `defaultRetrofitAuthenticationAlgo` (`now` → `rsa2048`, `rollout1`/`rollout2` → `mldsa65`) and its in-use sets became `{}` / `{rsa2048}` / `{mldsa65}`. `retrofitSigningAlgo` is renamed `retrofitAuthenticationAlgo` **and is now a derived getter**, so both named constructors lost an argument — [98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 6, "two stored fields would be two controls over one position". **One defect this surfaced:** `selfRetrofit` read `preference.posture.retrofitSigningAlgo`, i.e. the *posture's* stage, so an app setting `signingRollout: rollout1` beside a migration posture would have retrofitted under `now`'s algorithm and said nothing. It now reads `preference.signingRollout`, which is the effective stage. Rails: at_client **1269** (2 skipped), functional **163/163** | 98's stages are defined here. Everything downstream reads them |
 | B3 | ✅ **DONE 2026-08-14, both halves.** `selfRetrofit` mints a fresh RSA-2048 signing keypair before submitting and hands it to both the request and the key-package builder; at_auth advertises it as `apskLegacy` (bare), files it under `sign:rsa2048:1`, and signs the key package with it per [98.3's amendment](decisions.md#983-where-the-signing-key-comes-from). The seam is an explicit `EnrollmentRequest.advertisedSigningKey`, supplied by the caller because holding a signing key is a rollout position and at_auth cannot see a preference; absent, every path behaves as before, which is what keeps `now` unmoved. `SigningRollout.mintsOwnSigningKey` derives from the in-use set being non-empty rather than being listed again. **The greenfield-onboard half followed the same shape**: `makeActivationPqNative` mints the rsa2048 signing keypair, sets it on `AtOnboardingRequest.advertisedSigningKey` **and** hands the same pair to the key-package builder; `AtAuthImpl` carries it into `FirstEnrollmentRequest` and files it after the atServer assigns an id. **Proven by six mutations in all, each reddening only its own tests**: in the retrofit half, ignoring the advertised key in `_apskFor`, dropping the filing, and signing the package with the APKAM key; in the onboard half, dropping the request field, which reddens all three onboard pins. Rails: at_auth **307**, at_client **1273** (2 skipped), functional **163/163** | ⚠️ **B3 is one commit, not two.** Splitting it publishes an ML-DSA array at enrollment creation — the breakage rollout 1 exists to prevent, landing on peers who cannot fix it |
 | B4 | `SigningKeyMinting` becomes the heal path for enrollments that predate B3, rather than the only producer | Follows B3 |
-| B5 | Retire a signing key whose algorithm leaves the in-use set — [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) ruling 12. Nothing does this today | Required before rollout 1 → 2 works at all; not required for rollout 1 |
+| B5 | Retire a signing key whose algorithm leaves the in-use set — [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) ruling 12. Nothing does this today. ⚠️ **B1 made this reachable and NO RAIL COVERS IT.** Rollout 1 now holds an active `rsa2048` signing key and rollout 2 wants `{mldsa65}`, so a client moving between them mints ML-DSA and leaves RSA **active** — two active signing keys, meaning `signingKeys` returns both, every envelope carries a second signature a verifier passes over, and `_apsk` advertises both as current where [98.1](decisions.md#981-the-stages) says rollout 2 is "mldsa65 active, rsa2048 retired". Invisible to every pack, because the matrix copies a **fresh keyfile per cell** and so never transitions one client between stages. ⚠️ **B5 therefore owes a stage-transition test, not just the status change** — B2 already built the advertisement half (`AtKeys.retiredSigningKeysFor` plus the `retired` entries in `apskEntries`), so the production change itself is small | Required before rollout 1 → 2 works at all; not required for rollout 1 |
 | C1 | `AtClientImpl.create` **throws** when a cached `(atSign, enrollmentId)` client is handed a preference differing in `posture`, `signingRollout`, `inUseSigningAlgorithms` or `disallowLegacyEncryption` | Independent of A and B; can land any time. Do it early — it is what makes a mis-wired stage loud instead of silent |
 | C2 | The enrollment record snapshot (`namespaces`/`appName`/`deviceName`) is reconciled on every start, through `WrittenAtKeysIo.update`, logging a changed `namespaces` | ⚠️ Must use the store's atomic verb. This tree has already lost key material to two unawaited start-time writers doing read-mutate-write on this file |
 | D1 | ⚠️ **MOSTLY DONE 2026-08-14 — one item left.** `SigningRollout.rollout1` ("deliberately identical to `now` in what this client writes") and `selfRetrofit` ("no ML-DSA anywhere") were both corrected in B1's commit, along with the two `ReleasePosture` constructor dartdocs, which carried the same claim in a third form. **Still owed: `EnrollParams.signingAlgo`** (at_commons) — its text is accurate but never says plainly that it names the **authentication** key's algorithm, which is the one thing its name gets wrong. | ⚠️ `design.md` carried the same errors and was banner-flagged 2026-08-14 — but a bare copy of the rollout-1 claim survived two paragraphs above the banner until the doc sweep. One correction does not find the others; grep the claim, not the file |
