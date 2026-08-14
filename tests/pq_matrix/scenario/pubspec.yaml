@@ -1,0 +1,28 @@
+name: pq_matrix_scenario
+publish_to: none
+description: >-
+  The exchange the rollout matrix drives, written once against the API surface
+  at_client 3.14.0 and this tree both have.
+version: 1.0.0
+
+# Deliberately NOT a workspace member. `packages/at_client` is in the root
+# `workspace:` list, so every member resolves at_client by path — and the
+# published arm has to resolve the hosted 3.14.0. See
+# `docs/projects/pq/decisions.md` 96.
+
+environment:
+  sdk: ^3.6.0
+
+dependencies:
+  # The floor is the released version the published arm pins, so this package
+  # cannot compile against anything 3.14.0 lacks. That is the whole contract:
+  # a divergence between the two arms is then attributable to at_client rather
+  # than to two hand-written programs.
+  at_client: ">=3.14.0 <4.0.0"
+  at_chops: ">=3.0.0 <4.0.0"
+  at_commons: ">=5.5.0 <6.0.0"
+  at_demo_data: ^1.2.0
+  at_utils: ">=3.2.0 <4.0.0"
+
+dev_dependencies:
+  lints: ^6.0.0

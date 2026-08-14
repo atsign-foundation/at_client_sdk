@@ -13,6 +13,13 @@ build/
 pubspec.lock
 pubspec_overrides.yaml
 
+# ...with one exception. The rollout matrix's control arm pins the last
+# released at_client, and a control that re-resolves its transitive set on
+# every machine is not a control: a changed result could be a finding or a
+# different at_commons, with no way to tell which. Its lockfile is the pin.
+# See docs/projects/pq/decisions.md 96 ruling 2.
+!/tests/pq_matrix/published/pubspec.lock
+
 # Avoid committing generated Javascript files:
 *.dart.js
 *.info.json      # Produced by the --dump-info flag.
