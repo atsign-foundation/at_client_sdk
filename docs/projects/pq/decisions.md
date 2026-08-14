@@ -113,6 +113,7 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [96. The programme pair gets a home outside the workspace (2026-08-14)](#96-the-programme-pair-gets-a-home-outside-the-workspace-2026-08-14)
 - [97. A keyfile status a build has never seen is read, not refused (2026-08-14)](#97-a-keyfile-status-a-build-has-never-seen-is-read-not-refused-2026-08-14)
 - [98. Rollout 1 moves the authentication key, not the signing key (2026-08-14)](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) — *supersedes [91.3](#913-the-rulings) ruling 10; the auth key is never retained in `_apsk`*
+- [99. The keyfile groups by enrollment, and the atSign's own keys move out (2026-08-14)](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) — *the at-rest shape; nothing released has ever written a typed keyfile, so there is nothing to migrate*
 
 ---
 
@@ -8724,3 +8725,141 @@ writer. The property worth protecting is that a deployed peer is unaffected,
 and the published arm can measure exactly that — an at_client 3.14.0 client
 fetching the record and base64-decoding it as an RSA key, the same as it does
 for a `now` sender.
+
+## 99. The keyfile groups by enrollment, and the atSign's own keys move out (2026-08-14)
+
+The at-rest `.atKeys` shape, ruled by gkc over a grilling session against a
+target document he wrote. Prompted by generating a real keyfile's evolution
+through the stages and reading what it actually contains. Builds on
+[98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14),
+which changed *which* keys exist; this changes *how they are arranged*.
+
+### 99.1 The measurement that makes this cheap
+
+**Nothing released has ever written a typed keyfile — not even an empty one.**
+Measured 2026-08-14 with a positive control (40 `AtKeys` hits in at_auth
+3.3.0's `at_keys.dart`; 1 for `class AtClientImpl` in at_client 3.14.0):
+
+| Checked | Result |
+|---------|--------|
+| Callers of `addKey` / `file*Material` / `replaceKey` in at_auth 3.3.0 | none outside the declarations |
+| Same in at_client 3.14.0 | none |
+| Same across every package in `~/.pub-cache` | none (one hit, `analyzer`'s unrelated `_errorsRequestedFiles.addKey`) |
+| Anywhere released code sets `AtKeys.atsign` outside `fromJson` | none |
+
+The last row decides it. `atsign` is public and settable, but every released
+construction site is a bare `AtKeys()` — including `at_enrollment_impl.dart:121`,
+which builds the keys an enrollment response persists. With `atsign` null,
+`toJson` returns `_toLegacyJson()`: flat fields only, no `version`, no `keys`.
+
+⚠️ **It nearly went the other way.** Released `toJson` emits
+`version`/`atsign`/`keys` whenever `atsign` is set, **even for an empty
+`keys`** — the `keys.isEmpty` short-circuit that avoids stamping a version
+marker onto a legacy file is a spike change, absent from 3.3.0. Had any
+released writer set `atsign`, the field would hold `{"version":1,"keys":[]}`
+documents and every ruling below would need a migration.
+
+So: **there is nothing at rest to migrate**, and the shape is free to change.
+
+### 99.2 The shape
+
+**1. `keys[]` becomes `enrollments[]`** — an array of enrollment objects, each
+carrying `enrollmentId`, the record snapshot, and its own `keys[]`. Key entries
+no longer carry an `enrollmentId`; the container states it once.
+
+**2. One entry today, plural by design, and the READER ships tolerant first.**
+Writers emit exactly one and an assurance rule refuses a second. The *reader*
+accepts many from day one and selects the enrollment it is authenticating as,
+skipping the rest. This is the rule this tree wrote after a `.single` shipped
+on a widened collection: a reader that refuses a second entry makes the feature
+unenableable, because the first writer to emit one breaks every build that
+predates it.
+
+**3. Material that belongs to the atSign moves to a top-level `atSignKeys[]`.**
+The signing root is the atSign's, not the enrollment's — the document already
+said so by *omitting* `enrollmentId` from that entry, and nesting it inside an
+enrollment would override that signal with a structural claim that it belongs
+there. It also retires a workaround: `signingKeysFor` selects on the `sign:`
+keyId prefix rather than the `privateSigning` role **specifically because** the
+root shares that role. At atSign scope the two cannot be confused by
+construction. `atSignKeys` is genuinely plural — a losing pair from a mint race
+is retired to `dead` and kept.
+
+**4. Structured keyIds normalise to `<role>:<algo>:<generation>`** —
+`auth:mldsa65:1`, `sign:mldsa65:1`, `root:mldsa65:1`. Three grammars become
+one, and the algorithm is visible in every id, which matters now that an
+enrollment holds keys of two algorithms at once. The kid-addressed KEM entry
+(`cb84bc741ec5b268`) is unchanged: a kid is a digest of the key and is
+addressed by value rather than by name.
+
+**5. The enrollment id leaves the keyId.** The container states it; two stored
+copies of one fact can disagree with nothing to arbitrate. ⚠️ **The
+consequence is that keyIds are unique per enrollment, not per document** —
+identity becomes `(enrollment, keyId)`, the same lesson as `(owner, id)`
+elsewhere in this tree, and any code holding a bare keyId now needs the
+enrollment beside it.
+
+**6. `version` stays 1.** No `version: 1` typed document has ever been written,
+so redefining what it names costs nothing observable. ⚠️ The cost that *is*
+real: the spike's own dev keyfiles and virtualenv fixtures are version-1
+old-typed and become unreadable, so they need regenerating. A bump to 2 was
+recommended and declined.
+
+### 99.3 What each field means
+
+**7. The top-level `enrollmentId` belongs to the legacy block.** It names the
+enrollment `aesPkamPrivateKey` authenticates as — frozen when typed material
+appears, exactly as the key material beside it is. It is not the document's
+enrollment id and never was. It is still needed: the legacy APKAM key keeps
+authenticating until the atServer's expiry cap retires it, and a client using
+it has to know as whom. Together with [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)'s
+ruling that the flat block is permanent, this makes the whole flat group one
+coherent thing — legacy key material and the id it belongs to.
+
+**8. `namespaces`, `appName` and `deviceName` are a snapshot, reconciled on
+every start.** They exist so an app can say which device a keyfile is for
+*before* authenticating, which the atServer cannot answer. On authentication
+the record is fetched and the copy refreshed; a changed `namespaces` is logged,
+because that is a grant change the user may care about. ⚠️ **That writer must
+go through `WrittenAtKeysIo.update`** — this tree has already lost key material
+to two unawaited start-time writers doing read-mutate-write on this file.
+
+**9. `status` stays explicit at rest, on every part, including `active`.** The
+keyfile is the store of record and has no byte-identity constraint; `_apsk`
+omits it when active only so a never-rotated advertisement stays byte-identical
+to what the pre-split composer wrote. The parse still tolerates its absence, so
+the rule is "write it, tolerate its absence".
+
+**10. `AtKeysMaterial` keeps `enrollmentId` in memory and never serializes
+it.** It already works this way and the question of removing it dissolved on
+inspection: `AtKeysMaterial.toJson()` emits neither `keyId` nor
+`enrollmentId` — `encodeAtKeysDocument` hoists them to the entry level, and
+`fromJson` takes them as named parameters from the enclosing scope. So the
+field is already container-derived rather than stored, and the duplication that
+prompted the question lives only in the *entry-level* output, which ruling 1
+removes. Keeping it becomes more necessary under ruling 5, not less: with
+keyIds unique only within an enrollment, a bare material without it is an
+incomplete address. It also makes gkc's intended guard possible —
+`material.enrollmentId` against the client's, checkable at any boundary.
+
+### 99.4 Released readers, and a gap this exposes
+
+**11. A released build handed a new-shape keyfile refuses it, and that is the
+right failure.** `expectList(json['keys'], 'keys')` throws when `keys` is
+absent, so the document is rejected loudly rather than parsed as legacy-only.
+The alternative is worse: authenticating from the flat block as the *legacy*
+enrollment while the typed one it cannot see is the current identity. Since no
+released writer produces typed material, this can only arise from a downgrade
+on a machine a new build already touched. Emitting a vestigial `keys: []` to
+keep old readers parsing was rejected for exactly that reason.
+
+⚠️ **12. Nothing retires a superseded signing key** — found while projecting
+the target. `SigningKeyMinting.mintMissing` computes only *wanted − held*,
+mints that, and republishes **all held keys as active**; `retireKey`'s sole
+production caller is the signing root's losing-pair path. So the rollout-1→2
+transition as coded would leave `rsa2048` active and sign every envelope twice,
+where [91.3](#913-the-rulings) ruling 9 says it stops signing and is retained as
+`retired`. Latent under the old stages (rollout 1 held no signing key, so there
+was nothing to retire); **required** under
+[98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14),
+which makes that transition a real algorithm retirement. Owed, unbuilt.
