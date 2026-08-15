@@ -1793,9 +1793,11 @@ They are kept here rather than deleted because each names a hatch the wire now
 depends on, and a reader asking "why can the construction change without a flag
 day" needs to find the answer where the question was recorded.
 
-**Thirteen are live:** 14.6 (both halves built; a caller that re-advertises a
-key package is owed), 14.7, 14.8, 14.11, 14.12, 14.14, 14.15, 14.16, 14.17,
-14.18, 14.19, 14.20 and 14.22.
+**Twelve are live:** 14.6 (both halves built; a caller that re-advertises a
+key package is owed), 14.7, 14.11, 14.12, 14.14, 14.15, 14.16, 14.17,
+14.18, 14.19, 14.20 and 14.22. ⚠️ **14.8 left this list 2026-08-15** when step
+27 landed; 14.22 is complete but is kept here because its section carries the
+detail of what it built.
 
 ⚠️ **Re-derived 2026-08-15 by reading each subsection's own state marker**, and
 all three of this paragraph's claims were wrong: it counted four done rather
@@ -1872,7 +1874,8 @@ as a second shape beside the tagged one, behind a version flag —
 [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 ruling 1, which deleted both earlier shapes and the flag: the envelope is RFC
 7515 **general** serialization and nothing else, with `alg`, `kid` and `v` all
-inside the protected header. Adjudicated by two third-party verifiers
+inside the protected header — joined by `typ` on 2026-08-15
+([`decisions.md` 103](decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15)). Adjudicated by two third-party verifiers
 (jose for RS256, OpenSSL 3.6 for ML-DSA-65 — decisions 60.4), with committed
 vectors at `packages/at_client/test/vectors/jws_envelope.json`. Its
 prerequisite 14.2 landed in `3c2eddbe6`; the staged plan it was executed from
@@ -1987,6 +1990,19 @@ build — is void: `signedEnvelopeVersion` is deleted by
 [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 ruling 1, and nothing released writes an envelope. Nothing external constrains
 this now; it lands with the one-shape work.
+
+✅ **DONE 2026-08-15 —
+[`decisions.md` 103](decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15).**
+Per-use `EnvelopeType` in the protected header, `expecting` on both verify
+entry points, `at-root-link:` on the root link's signed bytes, and
+`publishOwnRootLink` re-anchoring a link that no longer holds — without which
+changing those bytes would have stranded every root link already published.
+
+⚠️ **The row understated its own scope, the eighth time on this branch.** It
+named the `from:` challenge; the reachable confusion was between the envelope's
+**five** production uses, which a signature could be moved between freely
+because nothing said what a document was signed *as*. Read 103.2 before citing
+this section for what step 27 was about.
 
 ### 14.9 A revoked enrollment can still authenticate, briefly
 
@@ -2709,7 +2725,7 @@ rulings 2 and 3 are amended in place.
 | 24 | A client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) |
 | 25 | A `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) |
 | 26 | *(closed)* revocation visibility — an `EnrollmentManager` cache race, fixed in at_server `16dd457f`. ⚠️ This cell said "a proven test-instrument failure" until 2026-08-15; that was the 2026-08-11 ruling the root-cause overturned | [14.9](#149-a-revoked-enrollment-can-still-authenticate-briefly) |
-| 27 | Domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) |
+| 27 | ✅ **DONE 2026-08-15** — domain separation on the signed envelope, per-use `typ` plus a root-link prefix ([`decisions.md` 103](decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15)) | [14.8](#148-domain-separation-on-the-signed-envelope) |
 | 28 | NoPorts' own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) |
 | 29 | The four audit residuals — perf ceiling on a real low-end device, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
 | 30 | `deprecated_member_use` findings across the workspace (340 at_client, 183 at_onboarding_cli, 110 at_auth, 28 at_lookup) | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
@@ -3748,11 +3764,11 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | # | What is owed | Owner | State |
 |---|---|---|---|
-| 1 | ✅ **14.22 is COMPLETE — all seven rows landed 2026-08-15** | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | Row 6 made the record mutable behind `_rootlock@<atSign>` and generalised `NskeyMintLock` into `MintLock`; row 7 proved the boundary and needed no new mechanism, only the composite scenario. **`decisions.md` 101 is fully built.** Nothing in this row is owed. ⚠️ **The next D1 action is NOT simply "row 2" — row 2 is blocked.** It is **step 27** (row 5 here, [14.8](#148-domain-separation-on-the-signed-envelope)): it changes the signed bytes, so it must land on this branch and before more signatures exist, and nothing external constrains it any more |
+| 1 | ✅ **14.22 is COMPLETE — all seven rows landed 2026-08-15** | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | Row 6 made the record mutable behind `_rootlock@<atSign>` and generalised `NskeyMintLock` into `MintLock`; row 7 proved the boundary and needed no new mechanism, only the composite scenario. **`decisions.md` 101 is fully built.** Nothing in this row is owed. ⚠️ **Step 27 (row 5) has since landed too**, 2026-08-15, and it was the right one to take first for the reason recorded there: it changed the signed bytes, so everything signed after it is signed under the shape that stays |
 | 2 | **Step 20's rotation arm** — enrollment then an `enroll:update` APKAM rotation mid-run | [14.18](#1418-the-remaining-d1-initial-development-sequence) step 20 | ⛔ Blocked on an **at_auth release** carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | 3 | **Step 24** — a client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | Open; **wants a ruling** on whether an owner-keys client belongs in the enrollment trust model |
 | 4 | **Step 25** — a `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | Open. Gates the stop-release: closing it means public-record signing moves to the ML-DSA root and self data moves off `selfEncryptionKey` |
-| 5 | **Step 27** — domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) | Open. Changes signed bytes, so it belongs on this branch |
+| 5 | ✅ **Step 27 — DONE 2026-08-15.** Domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) | Landed: per-use `EnvelopeType` in the protected header, `expecting` at both verify entry points, `at-root-link:` on the root link's signed bytes, and the re-anchor that change forced. [`decisions.md` 103](decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15) |
 | 6 | **Step 28** — NoPorts carries its own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | Open. A separately-owned second migration to *name*, not to fix here |
 | 7 | **Step 29** — four audit residuals | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Open: perf ceiling on real low-end hardware, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift |
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |

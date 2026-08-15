@@ -2133,9 +2133,9 @@ ruling 12.
 {
   "payload": "<base64url(JSON)>",
   "signatures": [
-    {"protected": "<base64url({\"alg\":\"ML-DSA-65\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
+    {"protected": "<base64url({\"alg\":\"ML-DSA-65\",\"typ\":\"<type>\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
      "signature": "<base64url>"},
-    {"protected": "<base64url({\"alg\":\"RS256\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
+    {"protected": "<base64url({\"alg\":\"RS256\",\"typ\":\"<type>\",\"kid\":\"<enrollmentId>\",\"v\":1})>",
      "signature": "<base64url>"}
   ]
 }
@@ -2146,6 +2146,15 @@ unpadded base64url. `alg` uses the **JOSE** names — `RS256`, and ML-DSA-65 per
 RFC 9964 — not the `_apsk` array's `mldsa65`/`rsa2048` spelling; the two
 vocabularies meet in one mapping function, as at_chops' `SigningAlgoType`
 already meets the keyfile's.
+
+`typ` says what the envelope was signed **for**, and a verifier is handed the
+type it expects rather than reading this one — added 2026-08-15 by
+[`decisions.md` 103](decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15).
+One of `at-app+jws`, `at-chain-link+jws`, `at-key-package+jws`,
+`at-nskey-ring+jws`, `at-secret-envelope+jws`; every entry of one envelope
+carries the same value, and an envelope naming none is refused. Without it a
+signature over one document meant the same thing in every context that read
+it — five uses of this shape are signed by one key.
 
 There is no top-level `v` or `enrollmentId`: both live **inside** each
 `protected` header, as `v` and `kid`, where the signature covers them. A

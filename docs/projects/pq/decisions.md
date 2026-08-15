@@ -4845,6 +4845,18 @@ Domain separation on the envelope side would make the two disjoint by
 construction; it needs the `signedEnvelopeVersion` hatch, so it lands with the
 PQ work rather than on trunk.
 
+⚠️ **BUILT 2026-08-15 as [ruling 103](#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15),
+and this section's premise was re-measured first rather than inherited.** It
+still holds: the challenge and an envelope are signed by one key at the default
+posture, because `signingKeys` falls back to the APKAM authentication keypair
+whenever the enrollment holds no signing material of its own. What building it
+found is that the nearer confusion was not challenge-versus-envelope at all —
+it was envelope-versus-envelope, five production uses of one shape signed by
+one key and told apart only by their payload's field names. The last sentence
+above is also stale twice over: `signedEnvelopeVersion` was deleted by
+[ruling 95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+ruling 1, and no hatch was needed.
+
 ## 52. ON-1: a greenfield atSign starts where a retrofit ends (2026-08-08)
 
 ON-1's client half is built. `pqNativeOnboard` CRAM-activates a brand-new
@@ -8358,7 +8370,9 @@ all.
 **1. One envelope shape, and it is RFC 7515 general serialization.**
 `{payload, signatures:[{protected, signature}]}`, one entry per active signing
 key, each `protected` header carrying `{alg, kid, v}` — `kid` being the signing
-enrollment id. Everything else goes: `signedEnvelopeVersion` (the tagged v1
+enrollment id. (⚠️ **`typ` joined them 2026-08-15**,
+[ruling 103](#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15);
+this paragraph records what 95 ruled, so it is annotated rather than rewritten.) Everything else goes: `signedEnvelopeVersion` (the tagged v1
 shape), `jwsEnvelopeVersion` (RFC 7515 **Flattened**), `envelopeVersionOf`'s
 dispatch, the `wrapperFields` ternary in `ApkamSignedAdvertisedKeys.verify`, and
 `envelopeVersion` as a `ReleasePosture` axis.
@@ -9483,3 +9497,128 @@ divergence between the two composers stays (benign — same kids, same pubs, sam
 statuses, and readers select by algorithm). Nor is the race itself measured;
 the bootstrap awaits its steps in order and cannot interleave them, so reaching
 it needs an application call racing the unawaited `startup()`.
+
+## 103. An envelope says what it is for, and a verifier says what it wants (2026-08-15)
+
+Step 27, [`implementation-plan.md` 14.8](implementation-plan.md#148-domain-separation-on-the-signed-envelope).
+[Ruling 51](#51-the-from-challenge-and-a-signed-envelope-must-never-share-a-shape-2026-08-08)
+asked for domain separation between the `from:` challenge and a signed
+envelope. Building it turned up a second, nearer confusion, and the ruling
+below closes both.
+
+### 103.1 Ruling 51's premise was re-measured before anything was built
+
+It says the challenge and the envelope are signed by the same key, which
+[ruling 98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)'s
+authentication/signing split could have made stale. It has not.
+`ApkamSigning.signingKeys` returns `[authenticationSigningKey!]` whenever the
+enrollment holds no signing material, and that key is
+`atChops.atChopsKeys.atPkamKeyPair` — the keypair PKAM signs the challenge
+with. At the default posture the two are one key, and they separate only once
+an enrollment mints signing material. So ruling 51 describes the majority case,
+not a legacy one.
+
+Three things that one key signs today: the challenge `_<uuid><atSign>:<uuid>`,
+the `enroll:update` possession proof
+`<enrollmentId>|<apkamPublicKey>|<signingAlgo>`, and an envelope's
+`<protectedB64>.<payloadB64>`. They are disjoint by character set, which is
+what "by coincidence of two formats" meant.
+
+### 103.2 The confusion that was nearer, and reachable
+
+The envelope had **five** production uses — a chain link, an nskey
+advertisement, a key package (signed at `enroll:request` and again when
+registered), a sealed pairwise secret — plus whatever an application passes to
+`wrapAndSign`. All signed by one key, and told apart only by which field names
+their payload happened to carry.
+
+`PqSigningChain._checkChainLink` accepts a link on three checks: the signature
+verifies against the signer's `_apsk`, the payload names this enrollment, and
+it names the published key. Nothing asserted the envelope was signed **as a
+link**. So an envelope from any other use, over a payload carrying
+`childEnrollmentId` and `apkamPublicKey`, was a valid chain link from that
+signer — and `wrapAndSign` is the application-facing verb, whose payload is the
+application's input. An enrollment that got a privileged client's app to sign
+attacker-shaped data could have had itself vouched for.
+
+**Stated plainly: this was a shape, not a live exploit.** `verifyChain` has no
+production consumer — only tests, as
+[ruling 96](#96-the-programme-pair-gets-a-home-outside-the-workspace-2026-08-14)'s
+neighbourhood already recorded — so nothing acted on the verdict. It is closed before
+something does.
+
+### 103.3 What was built
+
+**gkc ruled: a per-use `typ`, and the reserved default for applications.**
+
+1. `EnvelopeType` — `at-app+jws`, `at-chain-link+jws`, `at-key-package+jws`,
+   `at-nskey-ring+jws`, `at-secret-envelope+jws` — stamped into the protected
+   header, where the signature covers it. JOSE's convention (a media type with
+   `application/` dropped) and what RFC 8725 §3.11 asks explicit typing to look
+   like.
+2. `signEnvelope` **requires** the type. A default would be whichever use was
+   written first, and every other use would sign under it silently — the state
+   this replaces. The required parameter is also what swept the tree: 60
+   call sites, every one an analyzer error.
+3. `verifyEnvelope` and `verifyEnvelopeSignature` take `expecting`, and refuse
+   an envelope typed anything else **before** checking the signature.
+   Dispatching on the envelope's own `typ` instead would let the document
+   choose which checks run, which is the confusion rather than a cure for it.
+4. `wrapAndSign` defaults to `EnvelopeType.app` — a type no verifier inside the
+   library accepts. An application that signs data someone else influenced
+   cannot be walked into producing any of the four internal documents.
+5. `SignedEnvelope.fromJson` refuses entries that disagree about the type, for
+   the reason it already refuses entries that disagree about `kid`: the entry a
+   verifier resolves is chosen by **algorithm**, so entries that disagree would
+   let the checked entry and the declared purpose be different entries.
+
+**The shape stays RFC 7515.** That was the argument for `typ` over a prefix on
+the signing input, and it is checked rather than claimed: the regenerated
+vectors verify under panva's `jose` (RS256, with its tamper arm) and under
+OpenSSL 3.6.3 for ML-DSA-65, the latter with a negative control that fails.
+
+### 103.4 The root link is not a JWS, so it gets a prefix
+
+`PqSigningChain.rootLinkDomain` — `at-root-link:` — ahead of the payload in the
+bytes the signature covers, via one codec, `rootLinkSignableBytes`, used by the
+signer and both verifiers.
+
+**A prefix rather than a field in `payload`, and that is forced.** The payload
+is shared verbatim with the chain link, which is what lets one signer vouch for
+the same fact either way; the `kid` field's own dartdoc had already recorded
+why a root-only member cannot go in there. So a field naming the flavour would
+either change what a chain link signs or make the two payloads differ. The
+prefix leaves the document alone.
+
+### 103.5 The re-anchor this forced, which the row did not name
+
+`publishOwnRootLink` skipped on **presence** — `_fieldFrom(current,
+rootLinkField) != null`. Changing the bytes a root link signs would therefore
+have stranded every root link already published, permanently: nothing else can
+replace one, because the conveyance path publishes what an approver sends and
+no approver sends a root link to an enrollment that already holds the private.
+
+It now asks whether the link still **holds** — describes the key the record
+publishes, and verifies under a root the atSign still advertises — and
+re-anchors when it definitely does not. An unreadable root record answers
+"holds": that is a fact about the read, not about the link, and rewriting a
+good link on a transient failure would replace one valid anchor with another
+for nothing.
+
+### 103.6 Proven by mutation, because all of it passed first run
+
+- Remove the `typ` check from `verifyEnvelope` → **3 red**, the three tests
+  that exist for it, nothing else.
+- Drop the domain tag from `rootLinkSignableBytes` → **4 red**: the two new
+  root-link tests, the re-anchor (its old-shape signature becomes valid again),
+  and the pre-existing anchoring test, which now spells the prefix literally.
+- Restore the presence check in `publishOwnRootLink` → **1 red**, the re-anchor
+  test alone.
+
+at_client 1327 → **1336** (2 skipped): 2 pins, 4 envelope, 3 chain.
+
+⚠️ **What this does NOT do.** The possession proof and the `from:` challenge are
+untouched — they are not JWS and carry no room for a type, and their
+disjointness from each other and from the envelope is still the character-set
+argument of 103.1. Nothing here makes the challenge self-describing;
+`at_lookup` 3.6.1's `validatedFromChallenge` remains the assertion on that side.
