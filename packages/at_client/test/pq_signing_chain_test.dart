@@ -484,6 +484,105 @@ void main() {
               'only one. Reason if not: ${result.reason}');
     });
 
+    test('D1 boundary: a keyfile and a record both carrying two root entries',
+        () async {
+      // ⚠️ THE ROW THAT MAKES D1's CLAIM FALSIFIABLE
+      // (`decisions.md` 101 requirement 5). Every mechanism below is already
+      // covered somewhere — the record half by the sibling rows in this group,
+      // the keyfile half by `pq_signing_root_test.dart`'s "a record
+      // advertising a successor beside a retired predecessor" group — but each
+      // in its own file against its own fixture. D1 claims the two hold
+      // TOGETHER: that a second root is representable, publishable and
+      // verifiable end to end, so that rotation is a later operation over a
+      // structure that already works. This drives both halves in one scenario,
+      // through the real APIs, with no rotation machinery anywhere.
+      final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final successor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final holderClient = client('priv-1');
+      await registered(holderClient);
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      // (1) The world before: one root, and the holder's keyfile has it.
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      final holderRoot = PqSigningRoot(holderClient, keysIo: io);
+      expect(
+          await holderRoot.store(atSign, predecessor.secretKey,
+              public: predecessor.publicKey),
+          isTrue);
+
+      // (2) A link signed then, by the only root there was.
+      final oldLink = await PqSigningChain(holderClient)
+          .signRootLinkFor('child-1', rootPrivate: predecessor.secretKey);
+      expect(oldLink, isNotNull);
+
+      // (3) The record moves on: successor active, predecessor RETIRED beside
+      // it. Written by hand — minting a successor is the rotation D1 does not
+      // build, and needing it here would be the boundary failing.
+      await publishRotatedRoot(
+          active: successor.publicKey, retired: predecessor.publicKey);
+
+      // (4) The successor reaches the holder the way a rotation would deliver
+      // it — over the substrate, through the ordinary filing path.
+      expect(
+          await holderRoot.file(
+              atSign,
+              Secret(
+                namespace: 'buzz',
+                name: PqSigningRoot.secretName,
+                value: base64Encode(successor.secretKey),
+              )),
+          isTrue);
+
+      // (5) THE KEYFILE HALF: two root entries at rest, in two slots, one
+      // active and one retired — and the retired one keeps its bytes, because
+      // they are what verifies what it signed.
+      final keys = await io.read(atSign);
+      final rootPrivates = keys.atSignKeys
+          .where((m) =>
+              m.keyPartType == CryptographicKeyType.privateSigning &&
+              AtKeys.isRoleKeyId(m.keyId, PqSigningRoot.keyIdRole))
+          .toList();
+      expect(rootPrivates, hasLength(2),
+          reason: 'the generation IS the slot: a successor files beside its '
+              'predecessor, never over it');
+      expect(rootPrivates.map((m) => m.keyId).toSet(), hasLength(2),
+          reason: 'two slots, not one slot written twice');
+      expect(
+          {for (final m in rootPrivates) m.status},
+          {KeyPartStatus.active, KeyPartStatus.retired},
+          reason: 'exactly one of them answers "what do I sign with"');
+
+      // (6) SIGNING SELECTS THE SUCCESSOR, and stamps ITS kid — read off the
+      // public half filed beside it, never off the record.
+      expect(
+          await PqSigningChain(holderClient).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: io),
+          isTrue);
+      expect(
+          (await PqSigningChain(holderClient).readRootLink('priv-1'))![
+              PqSigningChain.rootLinkKidField],
+          publicKeyKidOfBase64(base64Encode(successor.publicKey)),
+          reason: 'the ACTIVE root signs. A client that went on signing with '
+              'the predecessor would publish anchors that a peer narrowing on '
+              'the kid would reject');
+
+      // (7) AND THE LINK SIGNED UNDER THE RETIRED ROOT STILL VERIFIES —
+      // through both verifiers, against the same two-entry record. This is the
+      // half that makes a retired entry worth advertising at all: without it,
+      // every anchor written before the rotation becomes `broken`, which reads
+      // as tampering.
+      await conveyRoot(child, oldLink!);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue,
+          reason: 'the conveyance verifier stamps it');
+      final result =
+          await PqSigningChain(childClient).verifyChain(child, 'child-1');
+      expect(result.verdict, ChainVerdict.anchored,
+          reason: 'and the chain verifier walks to the same conclusion. '
+              'Reason if not: ${result.reason}');
+    });
+
     test('a link signed under a root the record never advertised is broken',
         () async {
       // The differential: same code path, same two-entry record, a signer the

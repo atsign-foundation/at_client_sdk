@@ -367,6 +367,29 @@ void main() {
       );
     });
 
+    test('a second signing root is representable, publishable and verifiable',
+        () {
+      // D1's own claim about itself, and the only thing that makes it
+      // falsifiable rather than an intention
+      // (`decisions.md` 101 requirement 5): D1 builds the root's
+      // ROTATABILITY, not the rotation. A keyfile and a record each carrying
+      // two root entries — one active, one retired — with a link signed under
+      // the RETIRED one still verifying, and no rotation machinery anywhere.
+      // Once that holds, rotation is a later operation over a structure that
+      // already works.
+      provenIn(
+        'packages/at_client/test/pq_signing_chain_test.dart',
+        'D1 boundary: a keyfile and a record both carrying two root entries',
+        proves: 'one scenario drives both halves through the real APIs: the '
+            'successor arrives over the ordinary filing path and lands in its '
+            'own slot beside the retired predecessor, signing selects the '
+            'active root and stamps its kid, and the link signed earlier '
+            'under the retired one still verifies through both verifiers. '
+            'Isolated by mutation — filing the successor over its '
+            "predecessor's slot reddens this row and nothing else",
+      );
+    });
+
     test('a published nskey is fetchable but not enumerable', () {
       // public:__nskey.<ns>@owner resolves on an exact plookup, cross-atSign, and
       // appears in NO scan — with or without showhidden, authenticated or not.

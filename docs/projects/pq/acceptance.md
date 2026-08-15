@@ -1169,6 +1169,13 @@ These invariants are testable against **every** UC above:
   the APKAM signature over the advertised envelope, not the write mode. A lock is a
   protocol with a window where a refused create was absolute, and what covers the
   difference is reconciliation on every start, not the write mode either.
+- **A second signing root is representable, publishable and verifiable.** A
+  keyfile and the record each carry two root entries — one active, one retired
+  — a link signed under the **retired** one still verifies, and signing selects
+  the active one. This is D1's boundary
+  ([`decisions.md` 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+  requirement 5): D1 builds the root's rotat*ability* and not the rotation, so
+  the two-entry state is written by hand rather than reached by rotating.
 - **Published nskeys are fetchable but not enumerable.** `public:__nskey.<ns>@owner`
   resolves on an exact `plookup`, cross-atSign, and appears in **no** scan — with or
   without `showhidden`, authenticated or not. This is a guaranteed protocol property
