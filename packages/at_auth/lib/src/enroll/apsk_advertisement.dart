@@ -115,7 +115,10 @@ class ApskSigningKey {
 /// envelopes, and the keys an enrollment has retired are precisely the ones
 /// that signed its older ones. Filtering here would retroactively unverify
 /// them. It is a caller *choosing a key to sign with* that must exclude them,
-/// and that caller does not exist yet.
+/// and such callers now exist: at_client's `PqSigningRoot.publishedPublicKey`
+/// takes the active entry for signing and correspondence, while
+/// `publishedRoots` takes the whole list for verifying and for judging whether
+/// a held private is one the record still vouches for.
 ///
 /// `kid` is required, like every other field: an entry without one is skipped.
 /// The atServer stores this document verbatim and forms no opinion on it, so a

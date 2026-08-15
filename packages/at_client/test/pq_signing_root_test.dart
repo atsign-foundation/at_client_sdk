@@ -16,16 +16,24 @@ import 'test_utils/mocks.dart';
 class MockAtClient extends Mock implements AtClient {
 }
 
+/// Generation 1 of a root filed under the algorithm this build mints.
+final rootSlot1 =
+    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
+
+bool _bytesEqual(Uint8List a, Uint8List b) {
+  if (a.length != b.length) return false;
+  for (var i = 0; i < a.length; i++) {
+    if (a[i] != b[i]) return false;
+  }
+  return true;
+}
+
 /// The atSign's root of trust.
 ///
 /// Every property here is about the same thing: the record is immutable and
 /// the root never rotates, so a mistake at mint is permanent. There is no
 /// second attempt, no rotation to recover with, and two roots would leave half
 /// an atSign's enrollments chaining to one the other half rejects.
-/// Generation 1 of a root filed under the algorithm this build mints.
-final rootSlot1 =
-    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
-
 void main() {
   const atSign = '@alice';
 
@@ -38,7 +46,15 @@ void main() {
       {bool createRefused = false,
       String? enrollmentId = 'enrollment-1',
       Uint8List? publishedRoot,
+      List<({Uint8List key, KeyEntryStatus status})>? publishedRoots,
       bool rootUnreadable = false}) {
+    // One entry or several. `publishedRoots` is what a record mid-rotation
+    // looks like — a successor active beside its retired predecessor — and
+    // `publishedRoot` stays as the one-entry shorthand every other test uses.
+    final entries = publishedRoots ??
+        (publishedRoot == null
+            ? null
+            : [(key: publishedRoot, status: KeyEntryStatus.active)]);
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     // The signing-root pull reads the enrollment id off the lookup to tell an
@@ -56,13 +72,16 @@ void main() {
       if (rootUnreadable) {
         throw AtLookUpException('AT0011', 'the record cannot be read');
       }
-      if (publishedRoot == null) {
+      if (entries == null) {
         throw KeyNotFoundException('public:pq_signing_root$atSign not found');
       }
       return Future.value(AtValue()
         ..value = jsonEncode(apskAdvertisement(keys: [
-          ApskSigningKey.forPublicKey(
-              alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(publishedRoot))
+          for (final entry in entries)
+            ApskSigningKey.forPublicKey(
+                alg: PqSigningRoot.rootKeyAlgo,
+                pub: base64Encode(entry.key),
+                status: entry.status)
         ])));
     });
     when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
@@ -492,6 +511,157 @@ void main() {
         2);
     expect(keys.nextAtSignGeneration(PqSigningRoot.keyIdRole, 'another-algo'),
         1);
+  });
+
+  group('a record advertising a successor beside a retired predecessor', () {
+    // The state a rotation passes through, staged directly: the record carries
+    // both entries, and this client still holds the predecessor's private.
+    // Every path below asks the same question — "is the private I am looking
+    // at the root's?" — and D1's claim is that the answer is about the SET the
+    // record advertises, not about its one active entry.
+    late ({Uint8List publicKey, Uint8List secretKey}) predecessor;
+    late ({Uint8List publicKey, Uint8List secretKey}) successor;
+
+    setUp(() async {
+      predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
+      successor = await MlDsa65PureDartAlgo().generateKeyPair();
+    });
+
+    ({MockAtClient client, List<UpdateVerbBuilder> published}) rotating() =>
+        client(publishedRoots: [
+          (key: successor.publicKey, status: KeyEntryStatus.active),
+          (key: predecessor.publicKey, status: KeyEntryStatus.retired),
+        ]);
+
+    test('both entries are read back, active first', () async {
+      final c = rotating();
+
+      final all = await PqSigningRoot.publishedPublicKeys(c.client, atSign);
+      expect(all, [successor.publicKey, predecessor.publicKey]);
+      expect(await PqSigningRoot.publishedPublicKey(c.client, atSign),
+          successor.publicKey,
+          reason: 'the singular one means the ACTIVE root, which is what a '
+              'signer and a correspondence check want');
+    });
+
+    test('a held predecessor private is not treated as poison', () async {
+      final c = rotating();
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      expect(await root.store(atSign, predecessor.secretKey), isTrue);
+
+      final retired = await root.reconcileHeldPrivate(atSign);
+
+      expect(retired, isFalse,
+          reason: 'the predecessor is advertised — retired, but advertised. '
+              'Retiring it locally as if it corresponded to nothing published '
+              'is the heal for a poisoned keyfile, and this keyfile is not '
+              'poisoned');
+      expect(await root.privateHalf(atSign), predecessor.secretKey);
+    });
+
+    test('a successor conveyed to a holder of the predecessor is filed',
+        () async {
+      final c = rotating();
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      expect(await root.store(atSign, predecessor.secretKey), isTrue);
+
+      final filed = await root.file(
+          atSign,
+          Secret(
+            namespace: 'ns',
+            name: PqSigningRoot.secretName,
+            value: base64Encode(successor.secretKey),
+          ));
+
+      expect(filed, isTrue,
+          reason: 'a client already holding the predecessor is exactly the '
+              'client a rotation has to reach; refusing the successor here '
+              'leaves it signing with a key that is no longer active');
+      expect(await root.privateHalf(atSign), successor.secretKey,
+          reason: 'the active private is the successor once it is filed');
+      final keys = await io.read(atSign);
+      final predecessorSlot = keys.atSignKeys.firstWhere((m) =>
+          m.keyPartType == CryptographicKeyType.privateSigning &&
+          _bytesEqual(m.bytes.bytes, predecessor.secretKey));
+      expect(predecessorSlot.status, KeyPartStatus.retired,
+          reason: 'the predecessor keeps its slot and its bytes — they are '
+              'still what verifies what it signed — but stops being active, '
+              'so exactly one private answers "what do I sign with"');
+    });
+
+    test('a late predecessor never displaces the held successor', () async {
+      // The supersede has a direction, and the record decides it — not which
+      // private arrived last. A holder that has not yet healed can convey the
+      // predecessor to a client already holding the successor, and the answer
+      // is to keep what is active.
+      //
+      // It is *recognised* rather than discarded as poison — the record
+      // advertises it — but it is not filed beside the successor: a retired
+      // key's private signs nothing, so a second slot for it would be dead
+      // material that every later reader has to reason about.
+      final c = rotating();
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      expect(await root.store(atSign, successor.secretKey), isTrue);
+      final before = (await io.read(atSign)).atSignKeys.length;
+
+      final filed = await root.file(
+          atSign,
+          Secret(
+            namespace: 'ns',
+            name: PqSigningRoot.secretName,
+            value: base64Encode(predecessor.secretKey),
+          ));
+
+      expect(filed, isFalse);
+      expect(await root.privateHalf(atSign), successor.secretKey);
+      expect((await io.read(atSign)).atSignKeys.length, before,
+          reason: 'no slot is spent on a private that can sign nothing');
+    });
+
+    test('a poisoned leftover does not survive the real key arriving',
+        () async {
+      // A private corresponding to no advertised entry is the leftover of a
+      // lost create. Filing the real key beside it and leaving it active would
+      // let it go on winning "what do I sign with" — the arriving key would be
+      // held and still not used, which is the worst of both.
+      final c = rotating();
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      final poison = await MlDsa65PureDartAlgo().generateKeyPair();
+      expect(await root.store(atSign, poison.secretKey), isTrue);
+
+      final filed = await root.file(
+          atSign,
+          Secret(
+            namespace: 'ns',
+            name: PqSigningRoot.secretName,
+            value: base64Encode(successor.secretKey),
+          ));
+
+      expect(filed, isTrue);
+      expect(await root.privateHalf(atSign), successor.secretKey,
+          reason: 'the leftover is retired as the real key is filed, so the '
+              'active private is the one the record calls active');
+    });
+
+    test('storing a private already held reports success and adds no slot',
+        () async {
+      final c = rotating();
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      expect(await root.store(atSign, successor.secretKey), isTrue);
+      final before = (await io.read(atSign)).atSignKeys.length;
+
+      expect(await root.store(atSign, successor.secretKey), isTrue,
+          reason: 'the question store answers is "is THIS private held", and '
+              'it is');
+      expect((await io.read(atSign)).atSignKeys.length, before,
+          reason: 'filing the same bytes under a second slot would leave two '
+              'actives no reader could tell apart');
+    });
   });
 
   group('reconciling a held private against the published root', () {

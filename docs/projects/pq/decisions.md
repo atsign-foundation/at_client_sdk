@@ -3746,6 +3746,14 @@ refuses on mismatch (safe: the keyfile stays empty, so the next start asks
 again and a correct answer heals it). Two shapes of wrong key are covered — a
 garbage buffer and a well-formed ML-DSA key that simply is not this one.
 
+⚠️ **Amended 2026-08-15 by [101](#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+row 4: "the published root" is now "any root the record advertises".** The
+check itself is unchanged and so is its purpose; what changed is the set it
+checks against, because a record mid-rotation advertises a retired predecessor
+beside the active successor and both are the atSign's own key. Judging against
+the single active entry made a legitimate predecessor indistinguishable from
+the garbage this ruling was written to refuse.
+
 ### 45.6 A create-race loser kept a private that corresponded to nothing
 
 The mint files its private *before* publishing, deliberately. But the loser of

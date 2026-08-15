@@ -1,4 +1,38 @@
 ## 3.14.1
+- fix!: `PqSigningRoot.store` reported success for a private it discarded.
+  It returned `true` whenever the keyfile update completed, whatever the
+  update decided, so a root private conveyed to a client that already held a
+  different one was dropped while `file` logged "Filed the signing root
+  private". It now answers about **the private passed in**, re-read from the
+  store rather than assumed from the callback.
+- feat!: the signing root's heal paths judge a held or arriving private
+  against **every** root the record advertises, not against its one active
+  entry.
+  - A record carrying a successor beside its retired predecessor advertises
+    two of the atSign's own keys. Judging against the active one alone
+    declared the predecessor poison: `reconcileHeldPrivate` retired it and
+    `file` discarded an arriving copy, so a client mid-rotation lost a key the
+    record still vouched for.
+  - `store` gains `heldCorrespondence`, supplied only when the arriving
+    private has been established as the root the record calls **active**. It
+    retires every held active private as the new one is filed — one matching
+    an entry matches a retired one, and one matching nothing is the leftover
+    of a lost create, so neither can be what this client signs with — and it
+    names which was which in the log, at `warning` for the leftover.
+  - A private matching only a **retired** entry supersedes nothing and is not
+    filed beside an active one. It is recognised rather than discarded as
+    poison, but a retired key's private signs nothing, so a slot for it would
+    be dead material. A late-arriving predecessor therefore never displaces
+    the held successor, whichever arrived last.
+- feat: `PqSigningRoot.publishedRoots` — the advertised entries themselves,
+  active first, where `publishedPublicKeys` gives only their bytes. Checking a
+  private against an entry needs that entry's algorithm, and a caller handed
+  bare bytes has to assume one.
+- feat: `PqSigningRoot.verifiableRootAlgos` — the algorithms this build can
+  **check** a root under, separate from `rootKeyAlgo`, which is the one it
+  **mints**. A verifier has to keep working across a change of minting
+  algorithm, so the two questions no longer share a constant; an advertised
+  entry outside the set is skipped rather than refused.
 - feat!: `PqSigningRoot.keyIdPrefix` is replaced by `PqSigningRoot.keyIdRole`
   (`'root'`) and `PqSigningRoot.keyIdPrefixFor(algorithm)`. The at-rest slot a
   root is filed under is `root:<algorithm>:<generation>`, and the algorithm is

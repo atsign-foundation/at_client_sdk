@@ -120,6 +120,24 @@ class PqSigningRoot {
   /// way past.
   static String get rootKeyAlgoToken => rootKeyAlgo.name;
 
+  /// The algorithms this build can **check** a root signature under.
+  ///
+  /// Deliberately separate from [rootKeyAlgo], which is the one this build
+  /// *mints*. A verifier has to keep working across a change of minting
+  /// algorithm — that is what makes the root replaceable at all — so the two
+  /// questions cannot share one constant. Widening this set is how a second
+  /// algorithm becomes readable; widening [rootKeyAlgo] is how it becomes the
+  /// one new roots are minted under, and those are separate decisions taken at
+  /// separate times.
+  ///
+  /// An advertised entry outside this set is **skipped**, not refused: a
+  /// record may legitimately carry a root this build has no code for, and
+  /// refusing the whole record over it would make every future algorithm a
+  /// breaking change for every client that predates it.
+  static const Set<SigningAlgoType> verifiableRootAlgos = {
+    SigningAlgoType.mldsa65,
+  };
+
   final AtClient atClient;
   final AtKeysIo? keysIo;
 
@@ -157,6 +175,23 @@ class PqSigningRoot {
     AtClient atClient,
     String atSign, {
     bool activeOnly = false,
+  }) async =>
+      [
+        for (final root
+            in await publishedRoots(atClient, atSign, activeOnly: activeOnly))
+          base64Decode(root.pub)
+      ];
+
+  /// The advertised root entries themselves — active first, then retired.
+  ///
+  /// What [publishedPublicKeys] decodes, kept whole for callers that need more
+  /// than the bytes. Checking a private against an entry needs the entry's
+  /// **algorithm**, and a caller handed a bare `Uint8List` has to assume one —
+  /// which is the assumption that pins an atSign to a single algorithm.
+  static Future<List<ApskSigningKey>> publishedRoots(
+    AtClient atClient,
+    String atSign, {
+    bool activeOnly = false,
   }) async {
     final AtValue value;
     try {
@@ -170,10 +205,10 @@ class PqSigningRoot {
       return const [];
     }
     final record = jsonDecode(value.value as String) as Map<String, dynamic>;
-    return _publicKeysFrom(record, activeOnly: activeOnly);
+    return _rootsFrom(record, activeOnly: activeOnly);
   }
 
-  /// The root public keys in [record], read with the same codec `_apsk` uses.
+  /// The root entries in [record], read with the same codec `_apsk` uses.
   ///
   /// [apskSigningKeys] is the reader, not a copy of it: the root is an
   /// ordinary signing key and two parsers for one vocabulary are two chances
@@ -182,23 +217,26 @@ class PqSigningRoot {
   /// algorithms without breaking readers that predate the second — and it
   /// keeps retired entries, because they are what verify what they signed.
   ///
+  /// Filtered to [verifiableRootAlgos] rather than to [rootKeyAlgo]: what this
+  /// build *mints* and what it can *check* are different questions, and using
+  /// the minting constant for both is what would drop a root of a second
+  /// algorithm on the floor the day one is published.
+  ///
   /// Active entries come first regardless of published order, so a caller
   /// taking the head gets the current key rather than the earliest one.
-  static List<Uint8List> _publicKeysFrom(
+  static List<ApskSigningKey> _rootsFrom(
     Map<String, dynamic> record, {
     bool activeOnly = false,
-  }) {
-    final entries = apskSigningKeys(record)
-        .where((e) => e.alg == rootKeyAlgo)
-        .where((e) => !activeOnly || e.status == KeyEntryStatus.active)
-        .toList()
-      ..sort((a, b) => a.status == b.status
-          ? 0
-          : a.status == KeyEntryStatus.active
-              ? -1
-              : 1);
-    return [for (final entry in entries) base64Decode(entry.pub)];
-  }
+  }) =>
+      apskSigningKeys(record)
+          .where((e) => verifiableRootAlgos.contains(e.alg))
+          .where((e) => !activeOnly || e.status == KeyEntryStatus.active)
+          .toList()
+        ..sort((a, b) => a.status == b.status
+            ? 0
+            : a.status == KeyEntryStatus.active
+                ? -1
+                : 1);
 
   /// Mints and publishes the root if this atSign has none, filing both halves
   /// of the pair first. Returns the public half, or null when this client did
@@ -230,20 +268,23 @@ class PqSigningRoot {
 
     // Confirmed-absent or throws; an unreadable record must abort the mint
     // rather than risk a second root.
-    final published = await publishedPublicKey(atClient, atSign);
+    final roots = await publishedRoots(atClient, atSign);
 
     final AtKeys? keys = await _readKeys(atSign);
     final held = keys == null ? null : _activePrivate(keys);
 
-    if (published != null) {
+    if (roots.isNotEmpty) {
       // Someone already minted. Reconcile what this keyfile holds against the
-      // record: an active private that does not correspond is the poisoned
-      // leftover of a lost create recorded before losers retired their pair,
-      // and while it stays active the pull's "already holding it" check can
-      // never fire — the one heal such an enrollment has.
+      // record: an active private that corresponds to no ADVERTISED entry is
+      // the poisoned leftover of a lost create recorded before losers retired
+      // their pair, and while it stays active the pull's "already holding it"
+      // check can never fire — the one heal such an enrollment has. A private
+      // matching a retired entry is not that: it is a predecessor the record
+      // still vouches for.
       if (held != null &&
-          !await _corresponds(
-              Uint8List.fromList(held.bytes.bytes), published)) {
+          await _correspondingRoot(
+                  Uint8List.fromList(held.bytes.bytes), roots) ==
+              null) {
         await _retireSlot(atSign, held.keyId);
         _logger.warning('Retired a signing root private held for $atSign '
             'that does not correspond to the published root; the real '
@@ -395,24 +436,65 @@ class PqSigningRoot {
     return true;
   }
 
-  /// Files [private] into `AtKeys`, leaving an existing **active** one alone.
-  /// Returns whether an active private is durably held afterwards.
-  Future<bool> store(String atSign, Uint8List private) async {
+  /// Files [private] into `AtKeys`. Returns whether **this** private is
+  /// durably held and active afterwards.
+  ///
+  /// ⚠️ The return value is about the private that was passed in, not about
+  /// whether *some* root private is held. It used to be the latter, and the
+  /// difference was invisible: a conveyed successor handed to a client already
+  /// holding a predecessor was dropped by the guard, and `store` reported
+  /// success anyway because the update itself had completed — so [file] logged
+  /// "Filed the signing root private" for a key it had discarded.
+  ///
+  /// [heldCorrespondence] is supplied only when [private] has been established
+  /// as the root the record calls **active**, and it names, per keyId, the
+  /// advertised entry each already-held active private corresponds to.
+  ///
+  /// Supplying it retires **every** held active private as [private] is filed,
+  /// because none of them can be the active root: one that matches an entry
+  /// matches a retired one, and one that matches nothing is the poisoned
+  /// leftover of a lost create. Both stop being active the moment the real key
+  /// is in hand, and the map is what lets the log say which it was. Leaving
+  /// either active would let it go on winning the "what do I sign with"
+  /// question against the key that actually signs.
+  Future<bool> store(
+    String atSign,
+    Uint8List private, {
+    Map<String, ApskSigningKey>? heldCorrespondence,
+  }) async {
     final io = keysIo;
     if (io == null) return false;
     if (io is! WrittenAtKeysIo) {
       _logger.severe('Filed the signing root for $atSign in memory only — '
-          'this AtKeysIo cannot persist, and an immutable root cannot be '
-          'minted again');
+          'this AtKeysIo cannot persist, and a root private that does not '
+          'survive the process is no root at all');
       return false;
     }
+    final superseded = <({String keyId, bool wasAdvertised})>[];
     try {
       // One read-mutate-write, not three steps: a client's start fires this
       // and the namespace-key seeding as sibling unawaited tasks, and two
       // read-then-flush pairs on one keyfile lose whichever addition flushes
       // first.
       await io.update(atSign.toAtsign(), (keys) {
-        if (_activePrivate(keys) != null) return false;
+        final active = _activePrivates(keys).toList();
+        // Already filed. Not an error and not a second slot: filing the same
+        // bytes twice would leave two actives that no later reader can tell
+        // apart.
+        if (active.any((m) => _sameBytes(m.bytes.bytes, private))) return false;
+
+        if (heldCorrespondence == null && active.isNotEmpty) return false;
+
+        if (heldCorrespondence != null) {
+          for (final material in active) {
+            keys.retireAtSignKey(material.keyId);
+            superseded.add((
+              keyId: material.keyId,
+              wasAdvertised: heldCorrespondence.containsKey(material.keyId),
+            ));
+          }
+        }
+
         keys.addKey(AtKeysMaterial(
           keyId: _freeSlot(keys, rootKeyAlgoToken),
           keyPartType: CryptographicKeyType.privateSigning,
@@ -422,11 +504,28 @@ class PqSigningRoot {
         ));
         return true;
       });
-      return true;
     } catch (e) {
       _logger.severe('Cannot store the signing root private for $atSign: $e');
       return false;
     }
+    for (final entry in superseded) {
+      final because = entry.wasAdvertised
+          ? 'the record advertises it as retired'
+          : 'it corresponds to no root the record advertises, so it is the '
+              'leftover of a lost create';
+      // Warning for the unadvertised case: a private nothing vouches for was
+      // being offered to other enrollments and signing links no verifier
+      // would accept, and that is worth seeing rather than inferring.
+      final message = 'Retired the signing root private in ${entry.keyId} for '
+          '$atSign: $because, and the private just filed corresponds to the '
+          'active entry';
+      entry.wasAdvertised ? _logger.info(message) : _logger.warning(message);
+    }
+    // Re-read rather than trusting the callback: the update may have refused
+    // the addition, and "is this private held" is a question about the store.
+    final keys = await _readKeys(atSign);
+    return keys != null &&
+        _activePrivates(keys).any((m) => _sameBytes(m.bytes.bytes, private));
   }
 
   /// The root private this client holds, or null if it has none.
@@ -460,31 +559,60 @@ class PqSigningRoot {
       return false;
     }
 
-    final Uint8List? published;
+    final List<ApskSigningKey> roots;
     try {
-      published = await publishedPublicKey(atClient, atSign);
+      roots = await publishedRoots(atClient, atSign);
     } catch (e) {
       _logger.info('Cannot read the published signing root for $atSign right '
           'now, so the arriving private is not filed; it is re-requested at '
           'a later start: $e');
       return false;
     }
-    if (published == null) {
+    if (roots.isEmpty) {
       _logger.warning('Discarding a signing root private conveyed to $atSign: '
           'the atSign publishes no root for it to correspond to');
       return false;
     }
-    if (!await _corresponds(private, published)) {
+    final matched = await _correspondingRoot(private, roots);
+    if (matched == null) {
       _logger.warning('Discarding a signing root private conveyed to $atSign: '
-          'it does not correspond to the published root');
+          'it corresponds to no root the record advertises');
       return false;
     }
 
-    final stored = await store(atSign, private);
+    // A private matching the ACTIVE entry supersedes everything held: that is
+    // the keyfile catching up with the record, not a rotation being performed
+    // here. A private matching only a RETIRED entry supersedes nothing and is
+    // not filed beside an active one — it can sign nothing, so a slot for it
+    // would be dead material; it is recognised rather than discarded as
+    // poison, which is the whole difference this row makes.
+    final stored = await store(atSign, private,
+        heldCorrespondence: matched.status == KeyEntryStatus.active
+            ? await _correspondenceByKeyId(atSign, roots)
+            : null);
     if (stored) {
       _logger.info('Filed the signing root private for $atSign');
     }
     return stored;
+  }
+
+  /// For each active root slot this keyfile holds, the advertised entry it
+  /// corresponds to — absent from the map when it corresponds to none.
+  ///
+  /// Read before the store update rather than inside it: correspondence is a
+  /// signature probe and the update's callback is synchronous, so the verdict
+  /// has to be computed first and carried in.
+  Future<Map<String, ApskSigningKey>> _correspondenceByKeyId(
+      String atSign, Iterable<ApskSigningKey> roots) async {
+    final keys = await _readKeys(atSign);
+    if (keys == null) return const {};
+    final verdict = <String, ApskSigningKey>{};
+    for (final material in _activePrivates(keys)) {
+      final matched = await _correspondingRoot(
+          Uint8List.fromList(material.bytes.bytes), roots);
+      if (matched != null) verdict[material.keyId] = matched;
+    }
+    return verdict;
   }
 
   /// Asks the atSign's other enrollments for the root private, when this one
@@ -583,16 +711,18 @@ class PqSigningRoot {
     final held = _activePrivate(keys);
     if (held == null) return false;
 
-    final Uint8List? published;
+    final List<ApskSigningKey> roots;
     try {
-      published = await publishedPublicKey(atClient, atSign);
+      roots = await publishedRoots(atClient, atSign);
     } catch (e) {
       _logger.info('Cannot check the signing root private held for $atSign '
           'against the published record right now: $e');
       return false;
     }
-    if (published == null) return false;
-    if (await _corresponds(Uint8List.fromList(held.bytes.bytes), published)) {
+    if (roots.isEmpty) return false;
+    if (await _correspondingRoot(
+            Uint8List.fromList(held.bytes.bytes), roots) !=
+        null) {
       return false;
     }
 
@@ -657,21 +787,50 @@ class PqSigningRoot {
     return file(atSign, secret);
   }
 
-  /// Whether [private] signs something [published] verifies — settles "is
-  /// this THE root private" without trusting whoever supplied it. Bytes of
-  /// the wrong shape cannot be the root private, so a throwing sign or
-  /// verify is simply false.
+  /// Whether [private] is the private half of any of [roots] — settles "is
+  /// this A root private for this atSign" without trusting whoever supplied
+  /// it.
+  ///
+  /// **Any**, not "the active one". A record mid-rotation advertises the
+  /// successor beside its retired predecessor, and both are the atSign's own
+  /// root keys; a client holding either is holding something real, so judging
+  /// a private against the single active entry declares a legitimate key
+  /// poison. Which of them may *sign* is a separate question, answered where
+  /// the signing happens.
+  static Future<ApskSigningKey?> _correspondingRoot(
+      Uint8List private, Iterable<ApskSigningKey> roots) async {
+    for (final root in roots) {
+      if (await _corresponds(private, root)) return root;
+    }
+    return null;
+  }
+
+  /// Whether [private] signs something [root] verifies. Bytes of the wrong
+  /// shape cannot be that root's private, so a throwing sign or verify is
+  /// simply false.
+  ///
+  /// The algorithm comes from the entry, never from [rootKeyAlgo]: checking a
+  /// root of one algorithm with another's verifier answers a question nobody
+  /// asked, and answers it "no" — which reads exactly like poison.
   static Future<bool> _corresponds(
-      Uint8List private, Uint8List published) async {
+      Uint8List private, ApskSigningKey root) async {
+    final algo = _verifierFor(root.alg);
+    if (algo == null) return false;
     try {
-      final algo = MlDsa65PureDartAlgo();
       final signature = await algo.signBytes(_probe, secretKey: private);
       return await algo.verifyBytes(_probe,
-          signature: signature, publicKey: published);
+          signature: signature, publicKey: base64Decode(root.pub));
     } catch (e) {
       return false;
     }
   }
+
+  /// The signer/verifier for [alg], or null when this build has none.
+  ///
+  /// The one place [verifiableRootAlgos] is turned into code, so the set and
+  /// the switch cannot disagree about what is supported.
+  static MlDsa65PureDartAlgo? _verifierFor(SigningAlgoType alg) =>
+      alg == SigningAlgoType.mldsa65 ? MlDsa65PureDartAlgo() : null;
 
   static final Uint8List _probe =
       Uint8List.fromList(utf8.encode('pq_signing_root correspondence probe'));
@@ -682,12 +841,21 @@ class PqSigningRoot {
   /// one home, rather than a parse here that has to agree with a writer there.
   static bool _isRootSlot(String id) => AtKeys.isRoleKeyId(id, keyIdRole);
 
-  AtKeysMaterial? _activePrivate(AtKeys keys) => keys.atSignKeys
-      .where((m) =>
+  /// Every active root private this keyfile holds, in filed order.
+  ///
+  /// Plural because a keyfile can legitimately hold more than one: a client
+  /// mid-rotation is handed the successor while it still holds the
+  /// predecessor, and the predecessor is not retired until something
+  /// establishes that the record has moved on. Callers that need *the* one to
+  /// sign with go through [_activePrivate].
+  Iterable<AtKeysMaterial> _activePrivates(AtKeys keys) =>
+      keys.atSignKeys.where((m) =>
           m.keyPartType == CryptographicKeyType.privateSigning &&
           m.status == KeyPartStatus.active &&
-          _isRootSlot(m.keyId))
-      .firstOrNull;
+          _isRootSlot(m.keyId));
+
+  AtKeysMaterial? _activePrivate(AtKeys keys) =>
+      _activePrivates(keys).firstOrNull;
 
   /// The next free slot for a root of [algorithm] — retired remains keep their
   /// generation forever, so a new private lands beside them, never over them.
