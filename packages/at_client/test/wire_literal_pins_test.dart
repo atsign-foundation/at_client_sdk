@@ -581,12 +581,16 @@ void main() {
       expect(SecretSharingAlgos.keyAlgoForMaterial('rsa2048'), isNull);
     });
 
-    test('two spellings of ML-DSA-65 coexist, and BOTH are frozen', () {
-      // The immutable root record says 'ml-dsa-65' (hyphenated, matching the
-      // advertised-key vocabulary); the root link and everything
-      // pkam/enroll/keyfile say 'mldsa65'. Records already published carry
-      // both — a harmonising refactor would break verification of one side.
-      expect(PqSigningRoot.rootKeyAlgo, 'ml-dsa-65');
+    test('ML-DSA-65 has ONE spelling on the wire: mldsa65', () {
+      // This test used to be "two spellings coexist, and BOTH are frozen":
+      // the root record said the hyphenated 'ml-dsa-65' (the
+      // key-ESTABLISHMENT vocabulary, which a signer has no part in) while
+      // the root link and everything pkam/enroll/keyfile said 'mldsa65'.
+      // Nothing was ever released carrying either, so "frozen" was the
+      // greenfield rule re-litigated; decisions 101 harmonised them when the
+      // root became an ordinary signing key advertised through `_apsk`.
+      expect(PqSigningRoot.rootKeyAlgo, SigningAlgoType.mldsa65);
+      expect(PqSigningRoot.rootKeyAlgo.name, 'mldsa65');
       expect(PqSigningChain.rootLinkAlgo, 'mldsa65');
       expect(SigningAlgoType.mldsa65.name, 'mldsa65');
     });

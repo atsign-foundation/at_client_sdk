@@ -155,13 +155,11 @@ void main() {
     await PqSigningRoot(MockAtClient(), keysIo: inner)
         .store(atSign, pair.secretKey);
     // The published record, in the fixture shape pq_signing_root_test pins.
-    remoteData['public:pq_signing_root$atSign'] = jsonEncode({
-      'v': 1,
-      'keys': [
-        {'alg': 'ml-dsa-65', 'pub': base64Encode(pair.publicKey)}
-      ],
-      'successor': null,
-    });
+    remoteData['public:pq_signing_root$atSign'] =
+        jsonEncode(apskAdvertisement(keys: [
+      ApskSigningKey.forPublicKey(
+          alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+    ]));
 
     final keysIo = _RecordingAtKeysIo(inner, events);
     await startClient(keysIo);
@@ -215,11 +213,11 @@ void main() {
     await PqSigningRoot(MockAtClient(), keysIo: inner)
         .store(atSign, held.secretKey);
     remoteData['public:pq_signing_root$atSign'] = jsonEncode({
-      'v': 1,
-      'keys': [
-        {'alg': 'ml-dsa-65', 'pub': base64Encode(published.publicKey)}
-      ],
-      'successor': null,
+      ...apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo,
+            pub: base64Encode(published.publicKey))
+      ]),
     });
 
     final keysIo = _RecordingAtKeysIo(inner, events);

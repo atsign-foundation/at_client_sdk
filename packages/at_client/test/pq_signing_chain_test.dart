@@ -430,11 +430,11 @@ void main() {
 
     Future<({Uint8List publicKey, Uint8List secretKey})> publishRoot() async {
       final pair = await MlDsa65PureDartAlgo().generateKeyPair();
-      remoteData['public:${PqSigningRoot.recordName}$atSign'] = jsonEncode({
-        'v': 1,
-        'keys': [base64Encode(pair.publicKey)],
-        'successor': null
-      });
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+      ]));
       return pair;
     }
 
@@ -496,11 +496,11 @@ void main() {
     /// Publishes the atSign's signing root and returns its key pair.
     Future<({Uint8List publicKey, Uint8List secretKey})> publishRoot() async {
       final pair = await MlDsa65PureDartAlgo().generateKeyPair();
-      remoteData['public:${PqSigningRoot.recordName}$atSign'] = jsonEncode({
-        'v': 1,
-        'keys': [base64Encode(pair.publicKey)],
-        'successor': null
-      });
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+      ]));
       return pair;
     }
 

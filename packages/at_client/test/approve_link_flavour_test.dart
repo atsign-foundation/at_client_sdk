@@ -6,6 +6,8 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart'
     show
+        apskAdvertisement,
+        ApskSigningKey,
         AtKeys,
         AtKeysMaterial,
         CryptographicKeyType,
@@ -92,16 +94,10 @@ void main() {
             createdAt: DateTime.now().toUtc(),
           )));
     when(() => client.atKeysIo).thenReturn(io);
-    remoteData['public:${PqSigningRoot.recordName}$atSign'] = jsonEncode({
-      'v': PqSigningRoot.currentVersion,
-      'keys': [
-        {
-          'alg': PqSigningRoot.rootKeyAlgo,
-          'pub': base64Encode(pair.publicKey),
-        }
-      ],
-      'successor': null,
-    });
+    remoteData['public:${PqSigningRoot.recordName}$atSign'] = jsonEncode(apskAdvertisement(keys: [
+      ApskSigningKey.forPublicKey(
+          alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
+    ]));
   }
 
   /// A registered enrollee plus the [Enrollment] record its approval reads.

@@ -138,7 +138,7 @@ void main() {
     // "plookup did not work here" — the identical call returns a root on the
     // PQ-native side.
     expect(await plookupOrNull(pqClient, 'pq_signing_root$pqNative'),
-        contains('ml-dsa-65'),
+        contains('mldsa65'),
         reason: 'the PQ-native activation creates the atSign-level signing '
             'root');
     expect(await plookupOrNull(legacyClient, 'pq_signing_root$legacyPeer'),

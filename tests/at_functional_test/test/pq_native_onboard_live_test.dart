@@ -101,12 +101,12 @@ void main() {
     final rootValue = await client.getRemoteSecondary()!.executeCommand(
         'plookup:pq_signing_root$atSign\n',
         auth: true);
-    expect(rootValue, contains('ml-dsa-65'));
+    expect(rootValue, contains('mldsa65'));
     final rootJson = jsonDecode(
             rootValue!.replaceFirst('data:', '').trim())
         as Map<String, dynamic>;
     expect(rootJson['v'], 1);
-    expect((rootJson['keys'] as List).single['alg'], 'ml-dsa-65');
+    expect((rootJson['keys'] as List).single['alg'], 'mldsa65');
     expect(rootJson['successor'], isNull);
 
     // Immutable: the create-once property is what stops two privileged

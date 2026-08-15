@@ -103,14 +103,14 @@ void main() {
     final root = await client
         .getRemoteSecondary()!
         .executeCommand('plookup:pq_signing_root$atSign\n', auth: true);
-    expect(root, contains('ml-dsa-65'),
+    expect(root, contains('mldsa65'),
         reason: 'the CLI mints the atSign-level signing root after activation, '
             'while it still holds the first enrollment — the one the atServer '
             'grants __manage, which is what entitles it to create the root');
     final rootJson =
         jsonDecode(root!.replaceFirst('data:', '').trim())
             as Map<String, dynamic>;
-    expect((rootJson['keys'] as List).single['alg'], 'ml-dsa-65');
+    expect((rootJson['keys'] as List).single['alg'], 'mldsa65');
 
     // --- and legacy material is still cut and published, BY DEFAULT --------
     expect(keys.defaultEncryptionPublicKey, isNotNull);

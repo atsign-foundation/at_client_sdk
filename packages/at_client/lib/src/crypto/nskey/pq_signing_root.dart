@@ -4,14 +4,19 @@ import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
     show
+        ApskSigningKey,
         AtKeys,
         AtKeysIo,
         AtKeysMaterial,
         CryptographicKeyType,
         KeyAlgorithmType,
+        KeyEntryStatus,
         KeyPartStatus,
-        WrittenAtKeysIo;
-import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
+        WrittenAtKeysIo,
+        apskAdvertisement,
+        apskSigningKeys;
+import 'package:at_chops/at_chops.dart'
+    show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
@@ -82,17 +87,18 @@ class PqSigningRoot {
   /// one rather than guessed at.
   static const int currentVersion = 1;
 
-  /// The algorithm a root key is published under, in the hyphenated form the
-  /// rest of the advertised-key vocabulary uses (`x-wing`, `ml-kem-1024`).
+  /// The algorithm a root key is published under.
   ///
-  /// Not in `SecretSharingAlgos`: that registry names key-*establishment*
-  /// algorithms, and the root is a signing key that nothing ever encapsulates
-  /// to.
+  /// `SigningAlgoType.mldsa65`, whose `.name` is what `_apsk` advertises — the
+  /// root is an ordinary signing key and says so in the same word every other
+  /// signing key uses. It now agrees with [PqSigningChain.rootLinkAlgo], which
+  /// has always spelled it this way.
   ///
-  /// The chain's root *links* spell the same algorithm `mldsa65`
-  /// ([PqSigningChain.rootLinkAlgo]) — the pkam/enrollment/keyfile
-  /// vocabulary. Both forms are frozen on records already published.
-  static const String rootKeyAlgo = 'ml-dsa-65';
+  /// ⚠️ It used to be the hyphenated `'ml-dsa-65'`, chosen to match the
+  /// key-*establishment* vocabulary (`x-wing`, `ml-kem-1024`) that the root
+  /// has no part in — nothing is ever encapsulated to a signer. Two spellings
+  /// for one algorithm across two records was the accident, not the design.
+  static const SigningAlgoType rootKeyAlgo = SigningAlgoType.mldsa65;
 
   final AtClient atClient;
   final AtKeysIo? keysIo;
@@ -101,15 +107,37 @@ class PqSigningRoot {
 
   AtKey keyFor(String atSign) => pqSigningRootKey(atSign);
 
-  /// The published root record's current public key.
+  /// The **active** root public key the record advertises, or null when the
+  /// atServer confirms there is no root.
   ///
-  /// Returns null only when the atServer **confirms** no root exists. A record
-  /// that cannot be read or decoded right now throws instead — absent and
-  /// unreadable are different answers, and a caller that mints or retires on
-  /// this answer must not be allowed to guess with an immutable record at
-  /// stake.
+  /// Singular on purpose, and it is not "the first entry": it is the one entry
+  /// whose `status` is active. Once the record can carry a retired predecessor
+  /// beside its successor, "the first" and "the current" stop being the same
+  /// key, and every caller here wants the current one — what to *sign* with,
+  /// and what a freshly minted pair must correspond to.
+  ///
+  /// Verification wants [publishedPublicKeys] instead: a signature made before
+  /// a rotation verifies under the retired key, which is exactly why a retired
+  /// entry stays advertised.
+  ///
+  /// A record that cannot be read or decoded right now **throws** — absent and
+  /// unreadable are different answers, and a caller that mints on this must
+  /// not be allowed to guess.
   static Future<Uint8List?> publishedPublicKey(
-      AtClient atClient, String atSign) async {
+          AtClient atClient, String atSign) async =>
+      (await publishedPublicKeys(atClient, atSign, activeOnly: true))
+          .firstOrNull;
+
+  /// Every root public key the record advertises that this build can verify
+  /// with — active first, then retired, in published order.
+  ///
+  /// Empty when the atServer confirms there is no root. [activeOnly] drops
+  /// retired entries, which is what a signer or a correspondence check wants.
+  static Future<List<Uint8List>> publishedPublicKeys(
+    AtClient atClient,
+    String atSign, {
+    bool activeOnly = false,
+  }) async {
     final AtValue value;
     try {
       value = await atClient.get(
@@ -117,35 +145,39 @@ class PqSigningRoot {
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
       );
     } on KeyNotFoundException {
-      return null;
+      return const [];
     } on AtKeyNotFoundException {
-      return null;
+      return const [];
     }
-    final record = jsonDecode(value.value as String) as Map;
-    return _publicKeyFrom(record);
+    final record = jsonDecode(value.value as String) as Map<String, dynamic>;
+    return _publicKeysFrom(record, activeOnly: activeOnly);
   }
 
-  /// The root's public half, from either shape of `keys[]`.
+  /// The root public keys in [record], read with the same codec `_apsk` uses.
   ///
-  /// A v1 root is `[{"alg":"ml-dsa-65","pub":"<base64>"}]`. Bare-base64
-  /// entries are read too, because roots in that form were published before
-  /// the shape was settled and the record can never be rewritten — a reader
-  /// that refused them would permanently lock those atSigns out of their own
-  /// signing root. Nothing writes the bare form any more.
+  /// [apskSigningKeys] is the reader, not a copy of it: the root is an
+  /// ordinary signing key and two parsers for one vocabulary are two chances
+  /// to disagree. It already skips an entry whose `use` or `alg` this build
+  /// has no code for — which is what lets a root be published under two
+  /// algorithms without breaking readers that predate the second — and it
+  /// keeps retired entries, because they are what verify what they signed.
   ///
-  /// An entry naming an algorithm this build cannot verify with is skipped
-  /// rather than returned: handing back bytes that will be verified under the
-  /// wrong routine fails later, further away, and looks like a bad signature.
-  static Uint8List? _publicKeyFrom(Map record) {
-    final entries = record['keys'];
-    if (entries is! List) return null;
-    for (final entry in entries) {
-      if (entry is String) return base64Decode(entry);
-      if (entry is Map && entry['alg'] == rootKeyAlgo) {
-        return base64Decode(entry['pub'] as String);
-      }
-    }
-    return null;
+  /// Active entries come first regardless of published order, so a caller
+  /// taking the head gets the current key rather than the earliest one.
+  static List<Uint8List> _publicKeysFrom(
+    Map<String, dynamic> record, {
+    bool activeOnly = false,
+  }) {
+    final entries = apskSigningKeys(record)
+        .where((e) => e.alg == rootKeyAlgo)
+        .where((e) => !activeOnly || e.status == KeyEntryStatus.active)
+        .toList()
+      ..sort((a, b) => a.status == b.status
+          ? 0
+          : a.status == KeyEntryStatus.active
+              ? -1
+              : 1);
+    return [for (final entry in entries) base64Decode(entry.pub)];
   }
 
   /// Mints and publishes the root if this atSign has none, filing both halves
@@ -245,19 +277,22 @@ class PqSigningRoot {
       await atClient.getRemoteSecondary()!.executeVerb(
           UpdateVerbBuilder()
             ..atKey = keyFor(atSign)
-            ..value = jsonEncode({
-              'v': currentVersion,
-              // Tagged rather than bare base64: this record is immutable
-              // create-once and `successor` is unimplemented, so the shape is
-              // permanent on every atSign that keeps a root. Naming the
-              // algorithm is what every other advertised key here does
-              // (`_apsk`, the key package), and it is the only form that can
-              // ever carry a second one.
-              'keys': [
-                {'alg': rootKeyAlgo, 'pub': base64Encode(publicKey)}
-              ],
-              'successor': null,
-            }),
+            // The `_apsk` advertisement composer, not a shape of its own: the
+            // root is an ordinary signing key, so it is advertised in the
+            // vocabulary every other signing key uses — `{kid, use, alg, pub}`
+            // with `status` appearing only once a key is retired. `kid` is
+            // derived from the key material rather than supplied, so a writer
+            // cannot address one key and name another.
+            //
+            // `successor` is gone. It was reserved for a rotation pointer and
+            // could never have held one: it was stamped null at mint inside a
+            // record nothing rewrote, so it could only be written at a moment
+            // when there was nothing to point at. A rotation adds an entry
+            // here instead, exactly as `_apsk` already does.
+            ..value = jsonEncode(apskAdvertisement(keys: [
+              ApskSigningKey.forPublicKey(
+                  alg: rootKeyAlgo, pub: base64Encode(publicKey))
+            ])),
           sync: true);
     } catch (e) {
       // A throw here says the call failed, NOT what the atServer did. It is

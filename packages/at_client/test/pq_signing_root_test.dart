@@ -34,12 +34,7 @@ void main() {
       {bool createRefused = false,
       String? enrollmentId = 'enrollment-1',
       Uint8List? publishedRoot,
-      bool rootUnreadable = false,
-      // The tagged form is what every root published from now on carries, so
-      // it is what the fixture serves. Roots minted before the shape was
-      // settled carry bare base64 and can never be rewritten, which is the
-      // arm `bareLegacyRootShape` covers.
-      bool bareLegacyRootShape = false}) {
+      bool rootUnreadable = false}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     // The signing-root pull reads the enrollment id off the lookup to tell an
@@ -61,19 +56,10 @@ void main() {
         throw KeyNotFoundException('public:pq_signing_root$atSign not found');
       }
       return Future.value(AtValue()
-        ..value = jsonEncode({
-          'v': 1,
-          'keys': [
-            if (bareLegacyRootShape)
-              base64Encode(publishedRoot)
-            else
-              {
-                'alg': PqSigningRoot.rootKeyAlgo,
-                'pub': base64Encode(publishedRoot)
-              }
-          ],
-          'successor': null,
-        }));
+        ..value = jsonEncode(apskAdvertisement(keys: [
+          ApskSigningKey.forPublicKey(
+              alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(publishedRoot))
+        ])));
     });
     when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((inv) async {
@@ -134,15 +120,28 @@ void main() {
     final record = c.published.single;
     expect(record.atKey.toString(), 'public:pq_signing_root@alice');
     final body = jsonDecode(record.value!) as Map<String, dynamic>;
-    expect(body.keys.toList(), ['v', 'keys', 'successor']);
+    expect(body.keys.toList(), ['v', 'keys'],
+        reason: 'no `successor`: it was reserved for a rotation pointer and '
+            'could never hold one, so decisions 101 deleted it rather than '
+            'implementing it');
     expect(body['v'], 1);
-    expect(body['successor'], isNull);
     final entry = (body['keys'] as List).single as Map<String, dynamic>;
-    expect(entry.keys.toList(), ['alg', 'pub']);
-    expect(entry['alg'], 'ml-dsa-65',
-        reason: 'hyphenated — the advertised-key vocabulary, deliberately NOT '
-            'the "mldsa65" the root link and pkam wire use; both spellings '
-            'are frozen on already-published records');
+    expect(entry.keys.toList(), ['kid', 'use', 'alg', 'pub'],
+        reason: 'the `_apsk` entry shape, because the root IS an ordinary '
+            'signing key. `status` is absent while the key is active and '
+            'appears only once one is retired');
+    expect(entry['use'], 'sign',
+        reason: 'accurate rather than ceremonial — nothing is ever '
+            'encapsulated to the signing root');
+    expect(entry['alg'], 'mldsa65',
+        reason: 'ONE spelling now. This asserted the hyphenated "ml-dsa-65" '
+            'until decisions 101; nothing was released carrying either, so '
+            'the two-spellings-are-frozen argument was the greenfield rule '
+            'in disguise');
+    expect(entry['kid'], isA<String>(),
+        reason: 'derived from the key material by the composer, never '
+            'supplied — the key identifier a root link needs in order to say '
+            'WHICH root signed it');
     expect(base64Decode(entry['pub'] as String), hasLength(1952),
         reason: 'a raw ML-DSA-65 public key, not PEM');
   });
@@ -309,25 +308,11 @@ void main() {
     expect((await io.read(atSign)).keys, isEmpty);
   });
 
-  test('a root published before the shape was settled is still read',
-      () async {
-    // The bare-base64 form was what shipped before the tagged shape was
-    // ruled. The record is immutable create-once and `successor` is
-    // unimplemented, so those roots can never be rewritten — a reader that
-    // stopped accepting them would lock those atSigns out of their own root
-    // permanently.
-    final pair = await MlDsa65PureDartAlgo().generateKeyPair();
-    final c = client(publishedRoot: pair.publicKey, bareLegacyRootShape: true);
-    final io = await keysIo();
-
-    expect(
-        await PqSigningRoot(c.client, keysIo: io)
-            .mintIfAbsent(isFullyPrivileged: true),
-        isNull,
-        reason: 'the bare root was found, so nothing is minted — reading it '
-            'as absent would mint a SECOND root for an atSign that has one');
-    expect(c.published, isEmpty);
-  });
+  // DELETED 2026-08-15: 'a root published before the shape was settled is
+  // still read'. It asserted the bare-base64 reader, which decisions 101
+  // removed. Its premise — that already-published roots can never be
+  // rewritten and so must be tolerated forever — was the greenfield rule in
+  // disguise: nothing is released, so every atSign holding a root is ours.
 
   test('an unreadable root record aborts the mint rather than racing it',
       () async {
@@ -414,11 +399,14 @@ void main() {
             'key to, permanently. The held pair is the only safe thing to '
             'publish');
     final record = jsonDecode(c.published.single.value!) as Map;
-    expect((record['keys'] as List).single,
-        {'alg': PqSigningRoot.rootKeyAlgo, 'pub': base64Encode(held.publicKey)},
-        reason: 'the published shape is tagged, not bare base64: this record '
-            'is immutable create-once, so the form is permanent on every '
-            'atSign that keeps a root');
+    final entry = (record['keys'] as List).single as Map;
+    expect(entry['pub'], base64Encode(held.publicKey),
+        reason: 'recovery republishes the HELD public half, not a fresh one');
+    expect(entry['alg'], PqSigningRoot.rootKeyAlgo.name);
+    expect(entry['use'], 'sign');
+    expect(entry['kid'], isNotNull,
+        reason: 'composed through the `_apsk` advertisement codec, which '
+            'derives the kid from the key material');
     expect((await freshIo.read(atSign)).keys, hasLength(2),
         reason: 'recovery publishes what is already filed — it must not '
             'add or replace material');
