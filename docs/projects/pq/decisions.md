@@ -2156,6 +2156,13 @@ un-grilled.
 [at_server 0016b3e8](https://github.com/atsign-foundation/at_server), at_auth `84f93af70`,
 at_client `910288065`.
 
+> ⚠️ **"Built" is not "merged", re-derived 2026-08-15.** at_server `0016b3e8` is
+> **not an ancestor of `origin/trunk`** — it sits on the branch
+> `gkc-pq-ss3-signing-algo`. Its siblings in this same status line, `16dd457f`
+> and `6a86fbcc`, both ARE merged, which is precisely why the row reads as
+> though all three landed. Re-derive rather than trust:
+> `git -C ~/dev/atsign/repos/at_server merge-base --is-ancestor 0016b3e8 origin/trunk`.
+
 ### 23.1 What A2.1 actually objected to
 
 The enrollee generated `apkamSymmetricKey`, RSA-encrypted it to the atSign's long-lived
@@ -5324,6 +5331,12 @@ layer can read it without a cycle. The classes keep their public members
 `NskeyPrivateFiling.keyIdFor`, …) as one-line reads of the canonical
 definitions, so no call site and no pin moved.
 
+> ⚠️ **`NskeyMintLock.keyFor` no longer exists (2026-08-15).** Ruling 101 row 6
+> generalised the class into `MintLock`, which takes the lock's `AtKey` rather
+> than composing one, so the composer is `nskeyMintLockKey(owner, namespace)`
+> in `nskey_records.dart` and the wire pin calls it directly. The sentence
+> above is left as it was ruled; only this note is new.
+
 Surface ruling: of the vocabulary, only `nskeyAdvertisementKey` is exported —
 readers and tests address the published record — while the name constants and
 the other builders stay internal. Payload version constants deliberately stay
@@ -7690,7 +7703,11 @@ already drives the real lever (`rotateNamespaceKey` → `ring.rotate`) and uses
   generation and keeps the old private"*, asserting rotation's whole contract
   without ever calling `rotate`.
 - `pq_signing_root_create_once_test.dart` — the deliberate control for the
-  create-once row, proving the published nskey record is mutable.
+  create-once row, proving the published nskey record is mutable. ⚠️ **That
+  file is now `pq_signing_root_mint_lock_test.dart`** (renamed 2026-08-15 by
+  ruling 101 row 6, which made the root record mutable too, so the contrast
+  the control drew no longer exists); the nskey row survives the rename
+  unchanged.
 
 Both now seed with `mintAndPublish` and take the second generation from
 `ring.rotate`, which is the sequence production runs.

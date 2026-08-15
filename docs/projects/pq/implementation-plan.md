@@ -3119,8 +3119,11 @@ its own. None blocks anything.
     ⚠️ **That last failure is worth more than the guard would have been: the
     demotion rule has no meaning on a record with no single owner.** It can be
     stated for an *enrollment's* `_apsk`; it cannot be stated for `primary`.
-    Any re-scoping starts there, and the untried option — accept and document,
-    since the state heals at the next start — is still open.
+    Any re-scoping would start there. ✅ **gkc then ruled the window ACCEPTED
+    AND DOCUMENTED** (`decisions.md` 102) — the state heals at the next start,
+    verification reads the record live, and the mechanism plus the three
+    refused guards are written into `SigningKeyMinting._publish`'s dartdoc.
+    **This item is CLOSED.**
 
     ⚠️ **Both arms were run.** The same tree with the guard stashed is
     **165/165**, so the guard is the cause rather than the environment. And
@@ -3138,6 +3141,31 @@ its own. None blocks anything.
     attempts — the guard and its tests are reverted — so this entry is the
     only record that they were tried.
 
+16. **`LocalSecondary`'s enrollment cache can never hit, and its write is never
+    read.** `_getEnrollmentDetails` reads
+    `local:<enrollmentId><atSign>` (`local_secondary.dart:898`) and, on a miss,
+    writes the fetched record to
+    `<enrollmentId>.new.enrollments.__manage<atSign>` (`:935`) — a *different*
+    key. Measured 2026-08-15 across all 16 `local:` occurrences in at_client's
+    `lib/` and every one in at_auth's: **nothing anywhere writes the key the
+    read looks for.** So every client instance pays one `enroll:fetch`, and the
+    "cache it in local secondary" write is dead. Pre-existing and outside the PQ
+    path; found while asking what C2 routed into. Harmless today — an in-memory
+    memo on the same object means one fetch per client, not per call — so this
+    is a cleanup, not a defect. ⚠️ **Whichever way it is fixed, decide
+    deliberately whether the cache SHOULD hit:** C2 wants a fresh record on
+    every start precisely so a changed grant is noticed, and making the cache
+    work would silently defeat that.
+17. **`Enrollment.metadata`'s dartdoc claims a field `enroll:fetch` does not
+    return.** It says the metadata is "stored verbatim by the atServer and
+    returned here", but `_fetchEnrollmentInfoById` (at_server `6a86fbcc`,
+    merged to trunk) returns exactly
+    `{appName, deviceName, namespace, encryptedAPKAMSymmetricKey, status}` —
+    no `metadata`. The field is presumably populated on a different response
+    (`enroll:list`), so the type is fine and the *sentence* is wrong where it
+    sits. Worth correcting before someone reads a key package off a `fetch`
+    result and gets null. Also note `Enrollment.namespace` is singular in name
+    and holds the whole grants **map**.
 18. **`MintLock` releases a lock it may no longer own — raised 2026-08-15,
     while building [14.22](#1422-making-the-signing-root-rotatable--decisions-101)
     row 6.** `_release` force-deletes the lock key unconditionally, so a holder
@@ -3154,6 +3182,25 @@ its own. None blocks anything.
     `reconcileHeldPrivate` on every start retires a private the record does
     not advertise, so the loser heals — and that argument is about the ROOT.
     Whether the nskey path has an equivalent is **not measured**.
+19. **`tests/at_onboarding_cli_functional_tests` analyzes with 6 warnings, all
+    in one file nobody touched — noticed 2026-08-15.** Every one is an
+    `unused_import` in `test/ecc_secure_element_mock_test.dart`; `dart analyze
+    test` exits **2** for that package as a result. Not PQ and not caused by
+    this branch (`git status` shows the file unmodified), but it means the
+    package has no clean analyze rail, so a real finding there would arrive
+    inside a red that everyone already ignores. Re-derive:
+    `cd tests/at_onboarding_cli_functional_tests && dart analyze test`.
+20. **`PqSigningRoot` and `PublishedNskeyKeyRing` both take a constructor
+    parameter whose TYPE the barrel does not export — examined 2026-08-15 and
+    deliberately left.** `PqSigningRoot(atClient, {keysIo, MintLock? mintLock})`
+    is exported through `crypto.dart`; `MintLock` is not, so a caller outside
+    the package cannot name the argument. Row 6 added the second instance of a
+    shape `PublishedNskeyKeyRing` already had (`NskeyMintLock? mintLock`), and
+    `crypto.dart`'s own comment records the same class of miss being fixed for
+    `NskeyKeyRing`. **Left as is** because both parameters exist for tests, the
+    surface is `@experimental`, and widening the barrel is a public-API
+    decision rather than a tidy-up. Recorded so it is not re-derived as a
+    defect, and so that whoever DOES widen the barrel finds both sites at once.
 
 #### 14.19.1 Things that LOOK like defects and are not
 
@@ -3604,7 +3651,10 @@ rest on them:
 
   `tests/at_functional_test/`: `pq_signing_root_create_once_test.dart` (asserts
   the create-once property row 6 removes, so it is rewritten rather than
-  broken), `signing_root_pull_test.dart`,
+  broken — ⚠️ **row 6 did exactly that and the file is now
+  `pq_signing_root_mint_lock_test.dart`**; the `git grep` above is still the
+  way to re-derive this list, and it will show the new name),
+  `signing_root_pull_test.dart`,
   `signing_root_pull_two_enrollments_test.dart`,
   `enrollment_chain_link_live_test.dart`, `pq_legacy_interop_live_test.dart`,
   `pq_native_onboard_live_test.dart`.
@@ -3698,7 +3748,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | # | What is owed | Owner | State |
 |---|---|---|---|
-| 1 | ✅ **14.22 is COMPLETE — all seven rows landed 2026-08-15** | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | Row 6 made the record mutable behind `_rootlock@<atSign>` and generalised `NskeyMintLock` into `MintLock`; row 7 proved the boundary and needed no new mechanism, only the composite scenario. **`decisions.md` 101 is fully built.** Nothing in this row is owed; the next D1 action is row 2 or below in this table |
+| 1 | ✅ **14.22 is COMPLETE — all seven rows landed 2026-08-15** | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | Row 6 made the record mutable behind `_rootlock@<atSign>` and generalised `NskeyMintLock` into `MintLock`; row 7 proved the boundary and needed no new mechanism, only the composite scenario. **`decisions.md` 101 is fully built.** Nothing in this row is owed. ⚠️ **The next D1 action is NOT simply "row 2" — row 2 is blocked.** It is **step 27** (row 5 here, [14.8](#148-domain-separation-on-the-signed-envelope)): it changes the signed bytes, so it must land on this branch and before more signatures exist, and nothing external constrains it any more |
 | 2 | **Step 20's rotation arm** — enrollment then an `enroll:update` APKAM rotation mid-run | [14.18](#1418-the-remaining-d1-initial-development-sequence) step 20 | ⛔ Blocked on an **at_auth release** carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | 3 | **Step 24** — a client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | Open; **wants a ruling** on whether an owner-keys client belongs in the enrollment trust model |
 | 4 | **Step 25** — a `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | Open. Gates the stop-release: closing it means public-record signing moves to the ML-DSA root and self data moves off `selfEncryptionKey` |
@@ -3708,7 +3758,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | **D1's tail** — `EnrollParams.signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Open. One paragraph: the text is accurate but never says plainly that the field names the **authentication** key's algorithm |
-| 11 | **14.19's open small items** — 13 of them, and ⚠️ **item 15 is one gkc explicitly asked to pick up next** (2026-08-14): the `_apsk` third writer | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 16 unstruck, of which item 15 is resolved and kept only for its findings.** ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
 **Not owed, and worth stating so nobody re-opens them:** step 11 is labelled
@@ -3747,9 +3797,13 @@ grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 
 # rails, all four packages
 cd packages/at_auth           && dart test --concurrency=1   # 312
-cd packages/at_client         && dart test --concurrency=1   # 1301 (2 skipped)
+cd packages/at_client         && dart test --concurrency=1   # 1327 (2 skipped)
+cd packages/at_client         && dart test test/acceptance --concurrency=1  # 58 (2)
 cd packages/at_onboarding_cli && dart test --concurrency=1   # 39
-cd tests/at_functional_test   && ./runLocal.sh               # 164/164
+cd tests/at_functional_test   && ./runLocal.sh               # 165/165
+# measured at 7c6b3e7f2 (2026-08-15). Every figure in this project has been
+# wrong at least once by being carried forward — the COMMAND is the value
+# here, not the number beside it.
 ```
 
 ### 15.3 After D1
