@@ -1,4 +1,24 @@
 ## 3.14.1
+- feat: `PqSigningRoot.privateHalf` returns the root private the **record**
+  says may sign, rather than the first active one the keyfile happens to hold.
+  - With two active privates the keyfile's insertion order decided which one
+    signed root links, was conveyed to new enrollments, and was offered to
+    pullers. The record's advertised entries are now the outer loop, so the
+    record decides and filed order does not.
+  - **The record is read only when there is a choice to make.** With at most
+    one active private nothing remote happens: four production call sites reach
+    this through `privateHalf` and document it as the cheap local check taken
+    *before* a round trip, one of them on the approval path.
+  - A record that cannot be read, or that advertises no root this build can
+    verify, leaves the keyfile's first as the answer — an unreadable record is
+    no evidence. A record that IS readable and calls every root it advertises
+    retired is evidence, and the answer is then nothing: a retired key signs
+    nothing, and answering with one would publish an anchor verifiers reject.
+- fix: the signing-root heal retired only the first unadvertised private.
+  A second one stayed active and went on answering "do I hold the root" with
+  bytes no verifier accepts — the state the heal exists to clear, surviving the
+  heal. Both `reconcileHeldPrivate` and the mint's reconciliation now go
+  through one helper that retires every one of them.
 - fix: the signing-root mint could leave two active root privates, and pick
   the wrong one.
   - `mintIfAbsent` establishes that it holds no active private and then awaits

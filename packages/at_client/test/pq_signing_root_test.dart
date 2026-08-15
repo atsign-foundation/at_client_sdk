@@ -746,6 +746,117 @@ void main() {
     });
   });
 
+  group('choosing between two active root privates', () {
+    // Two actives are writable and survive a keyfile round trip: at_auth's
+    // single-active-per-algorithm rule is enrollment-scoped, and root material
+    // is atSign-scope. Filed directly here, because the mint no longer produces
+    // the state and staging it through the API would prove only that.
+    late ({Uint8List publicKey, Uint8List secretKey}) first;
+    late ({Uint8List publicKey, Uint8List secretKey}) second;
+
+    setUp(() async {
+      first = await MlDsa65PureDartAlgo().generateKeyPair();
+      second = await MlDsa65PureDartAlgo().generateKeyPair();
+    });
+
+    Future<InMemoryAtKeysIo> keysHolding(
+        List<({Uint8List publicKey, Uint8List secretKey})> pairs) async {
+      final io = await keysIo();
+      final keys = await io.read(atSign);
+      for (var i = 0; i < pairs.length; i++) {
+        keys.addKey(AtKeysMaterial(
+          keyId: '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}${i + 1}',
+          keyPartType: CryptographicKeyType.privateSigning,
+          keyAlgorithmType: PqSigningRoot.rootKeyAlgoToken,
+          bytes: AtBytes(pairs[i].secretKey),
+          createdAt: DateTime.now().toUtc(),
+        ));
+      }
+      await io.flush(atSign.toAtsign(), keys);
+      return io;
+    }
+
+    test('the record decides, not the order the keyfile filed them', () async {
+      // `first` is filed first, so anything taking the head of the keyfile
+      // returns it. The record says the OTHER one is active.
+      final c = client(publishedRoots: [
+        (key: second.publicKey, status: KeyEntryStatus.active),
+        (key: first.publicKey, status: KeyEntryStatus.retired),
+      ]);
+      final io = await keysHolding([first, second]);
+
+      expect(await PqSigningRoot(c.client, keysIo: io).privateHalf(atSign),
+          second.secretKey,
+          reason: 'the private that may sign is the one the record calls '
+              'active; filed order is not evidence of anything');
+    });
+
+    test('a single held private is answered without reading the record',
+        () async {
+      // The property four production call sites document as the reason they
+      // check possession BEFORE paying for a round trip — one of them on the
+      // approval path. A selector that consults the record unconditionally
+      // would break all four silently, since they would still be correct, just
+      // no longer cheap.
+      final c = client(publishedRoots: [
+        (key: first.publicKey, status: KeyEntryStatus.active),
+      ]);
+      final io = await keysHolding([first]);
+
+      expect(await PqSigningRoot(c.client, keysIo: io).privateHalf(atSign),
+          first.secretKey);
+      verifyNever(() => c.client
+          .get(any(), getRequestOptions: any(named: 'getRequestOptions')));
+    });
+
+    test('an unreadable record leaves the first filed as the answer', () async {
+      final c = client(rootUnreadable: true);
+      final io = await keysHolding([first, second]);
+
+      expect(await PqSigningRoot(c.client, keysIo: io).privateHalf(atSign),
+          first.secretKey,
+          reason: 'an unreadable record is no evidence. A client that stopped '
+              'anchoring and started broadcasting for a key it already held '
+              'every time the atServer hiccupped is the worse failure');
+    });
+
+    test('none corresponding to an active entry signs nothing', () async {
+      final c = client(publishedRoots: [
+        (key: first.publicKey, status: KeyEntryStatus.retired),
+        (key: second.publicKey, status: KeyEntryStatus.retired),
+      ]);
+      final io = await keysHolding([first, second]);
+
+      expect(await PqSigningRoot(c.client, keysIo: io).privateHalf(atSign),
+          isNull,
+          reason: 'both are advertised, so neither is poison — but a retired '
+              'key signs nothing, and answering with one would publish an '
+              'anchor every verifier rejects');
+    });
+
+    test('every unadvertised private is retired, not just the first', () async {
+      // The heal used to judge one private chosen by filed order, so a second
+      // unadvertised one stayed active and went on answering "do I hold the
+      // root" with bytes no verifier accepts — the state the heal exists to
+      // clear, surviving the heal.
+      final real = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(publishedRoots: [
+        (key: real.publicKey, status: KeyEntryStatus.active),
+      ]);
+      final io = await keysHolding([first, second]);
+
+      final retired =
+          await PqSigningRoot(c.client, keysIo: io).reconcileHeldPrivate(atSign);
+
+      expect(retired, isTrue);
+      final actives = (await io.read(atSign)).atSignKeys.where((m) =>
+          m.keyPartType == CryptographicKeyType.privateSigning &&
+          m.status == KeyPartStatus.active);
+      expect(actives, isEmpty,
+          reason: 'both correspond to nothing advertised, so both go');
+    });
+  });
+
   group('reconciling a held private against the published root', () {
     test('a private that corresponds to nothing published is retired',
         () async {
