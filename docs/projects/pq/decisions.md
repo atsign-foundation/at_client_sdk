@@ -9617,6 +9617,31 @@ for nothing.
 
 at_client 1327 → **1336** (2 skipped): 2 pins, 4 envelope, 3 chain.
 
+### 103.7 What was considered and rejected
+
+Recorded because nothing in the code says a thing was weighed, and each of
+these is a simplification the next reader would otherwise propose as an
+improvement.
+
+- **One blanket `typ` meaning "an envelope this build signed", rather than one
+  per use.** Smaller diff, no per-caller argument, and it would still stop a
+  foreign JWS being replayed as ours. **Rejected because it does not close the
+  gap that was actually measured**: the five uses stay mutually substitutable
+  under a single value, so the chain-link confusion of 103.2 survives it
+  untouched and step 27 would have needed a successor row. A `typ` that every
+  document shares distinguishes nothing.
+- **Requiring every caller — applications included — to name the type.** Most
+  explicit, and it would make a signer who never considered domain separation
+  stop and choose. **Rejected** because it is a source break on a public
+  `@experimental` API that hands application authors a decision they have no
+  basis to make; the reserved default is refused by every internal verifier,
+  which is the protection they actually need.
+- **A domain prefix on the envelope's signing input**, as the root link got.
+  Structurally stronger — the signed bytes could then be nothing else.
+  **Rejected because it leaves RFC 7515**, so an off-the-shelf JWS verifier
+  could no longer check our envelopes, and that adjudication by two outside
+  implementations is a property this shape was deliberately chosen for.
+
 ⚠️ **What this does NOT do.** The possession proof and the `from:` challenge are
 untouched — they are not JWS and carry no room for a type, and their
 disjointness from each other and from the envelope is still the character-set

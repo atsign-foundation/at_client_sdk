@@ -1185,8 +1185,8 @@ These invariants are testable against **every** UC above:
   published `nskey` public half — is an **APKAM-signed
   envelope** produced by the generating enrollment (`wrapAndSign`). A fetcher verifies
   it against that enrollment's `_apsk` **the same way same-atSign and cross-atSign**
-  (fetch `public:_apsk.<eid>.a.__e@owner`, verify using the envelope's `signingAlgo` /
-  `hashingAlgo`) **before** encapsulating to it; a **tampered, unsigned, or
+  (fetch `public:_apsk.<eid>.a.__e@owner`, resolve the strongest algorithm the
+  envelope and that `_apsk` share, and verify under the `typ` the reader expects) **before** encapsulating to it; a **tampered, unsigned, or
   wrong-signer** advertised key is **rejected**. The atServer keeps every approved
   enrollment's `_apsk` **present** (fetchable without a client publish) and
   **write-restricted** (a cross-enrollment overwrite is refused). *(Holds today for **both**: the

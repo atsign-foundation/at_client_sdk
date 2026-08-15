@@ -3218,6 +3218,29 @@ its own. None blocks anything.
     decision rather than a tidy-up. Recorded so it is not re-derived as a
     defect, and so that whoever DOES widen the barrel finds both sites at once.
 
+21. **`publishOwnRootLink` now costs one extra atServer read per start for a
+    root-private holder — accepted 2026-08-15, recorded so it is not
+    rediscovered as a regression.** Its guard changed from "is a root link
+    present" to "does the root link still hold"
+    ([decisions 103.5](decisions.md#1035-the-re-anchor-this-forced-which-the-row-did-not-name)),
+    and answering the second question means reading
+    `public:pq_signing_root@<atSign>` through `_rootCandidates`. It is
+    proportionate — the same method already spends a privilege round trip and
+    an `_apsk` read before reaching it, and only enrollments holding the root
+    private get that far — but it is a real added cost and it was chosen, not
+    overlooked. If it ever matters, the fix is to cache the advertised roots
+    for the life of the start rather than to go back to a presence check.
+
+22. **`decisions.md` carries one broken intra-document anchor,
+    `#1-subsystem-a-…` — pre-existing, found 2026-08-15, deliberately not
+    folded into an unrelated commit.** Its anchor text contains an ellipsis,
+    which GFM strips when it slugs the heading, so no heading can ever match
+    it. Confirmed pre-existing by stashing the session's doc edits and
+    re-grepping. Every other intra-doc anchor in `decisions.md`,
+    `implementation-plan.md` and `design.md` resolves — 785 checked, this the
+    only failure — so this is a one-line fix whenever someone is editing that
+    section for another reason.
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.
@@ -3775,7 +3798,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 16 unstruck, of which item 15 is resolved and kept only for its findings.** ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 18 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
 **Not owed, and worth stating so nobody re-opens them:** step 11 is labelled
