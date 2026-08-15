@@ -1757,10 +1757,13 @@ and revisited in
 [decisions 48](decisions.md#48-the-standards-question-reopened-and-what-the-check-found-2026-08-06);
 tracked here so they are visible from the plan.
 
-**Two have deadlines, and neither is a date.** 14.1 freezes the first time a
+**Three have deadlines, and none is a date.** 14.1 freezes the first time a
 signing root lands on an atSign nobody recycles. 14.6 freezes per enrollment,
 the first time one is created that matters — and 14.3 has to be settled before
-that, because the shape it rules is the one 14.6 freezes.
+that, because the shape it rules is the one 14.6 freezes. 14.21's obstacle 2 is
+a *reader*, so it freezes on release: once clients that read only the first
+entry of the signing root's `keys[]` are in the field, no second entry can be
+adopted while they live.
 
 The rest are cheap while at_java has no PQ code and expensive afterwards, which
 as of 2026-08-06 has not started.
@@ -3255,3 +3258,105 @@ Rollout 1 needs no APKAM rotation, so none of A, B, C or D waits on
 [14.19 item 11](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)'s
 rotation arm or on the at_auth release that arm waits on. Those gate step 20's
 remaining half only.
+
+### 14.21 The signing root cannot be rotated — raised 2026-08-15
+
+The atSign's root signing key is persisted in two places, and only one of them
+can ever change.
+
+- **At rest**, in the keyfile's `atSignKeys[]`: keyId `root:mldsa65:<generation>`
+  with both halves filed under it as `privateSigning` + `publicVerification`
+  materials, each carrying `keyAlgorithmType`, `createdAt`, `status` and
+  `bytes`. It sits in the atSign's own container — `enrollmentId` null — not in
+  any enrollment's.
+- **Published**, at `public:pq_signing_root@<atSign>`:
+  `{"v":1,"keys":[{"alg":"ml-dsa-65","pub":"<base64>"}],"successor":null}`,
+  written with `immutable = true` (`nskey_records.dart:101-106`).
+
+**The immutability is deliberate, and it is doing a second job.**
+The record is immutable so that several `__manage` apps cannot each find no
+root and each mint one, leaving two chains with no way to reconcile them
+([decisions 18.2](decisions.md#182-custody));
+[decisions 46.5](decisions.md#465-the-signing-root-is-the-only-one-way-door)
+records it as "the only one-way door". A dozen comments in
+`pq_signing_root.dart` reason *from* "the root never rotates" — the mint path,
+the crash-recovery republish, the lost-create retirement and the pull backstop
+each cite it. Rotation has to unpick that reasoning and put something else in
+place of the create-once race control, not merely add a code path.
+
+**Four concrete obstacles beyond the immutability itself.**
+
+1. **`successor` cannot do the job it was reserved for.** It is stamped `null`
+   at mint and nothing reads it — the only hits in the tree are the write site
+   and tests asserting it is null. Because the record cannot be rewritten it
+   can never be filled in afterwards, so as shaped it is a forward pointer
+   writable only at a moment when there is nothing to point at.
+   [decisions 18.3](decisions.md#183-shape) reserved it for the revocation
+   chain; the slot exists and is unusable where it sits.
+2. **Verifiers hold exactly one root key.** `_publicKeyFrom`
+   (`pq_signing_root.dart:139-149`) returns the first entry whose `alg` matches
+   and stops, so `PqSigningChain._rootPublicKey` and the root-link check behind
+   it see one key however many `keys[]` carries. The field was made a list on
+   purpose — mint time being the only moment a root can be made verifiable
+   under more than one algorithm — and the reader forecloses it. ⚠️ **This one
+   carries an ordering property the others do not.** It is a *reader*, any peer
+   verifies against the atSign's root, so a released client that only ever
+   reads `keys[0]` is what would stop a second entry — or a successor root —
+   from being adopted, for as long as such clients are in the field. Widening
+   it is a prerequisite of every scheme, it has to ship before any writer, and
+   its deadline is [14.1](#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep)'s
+   shape rather than a date: at_client's GA minor.
+3. **Root links carry no key identifier.** The shape is
+   `{v, alg, payload:{enrollmentId, apkamPublicKey}, signature}`
+   (`PqSigningChain.linkPayload` / `_rootLinkOver`), so a verifier holding two
+   root keys cannot tell which one signed a link and must try each. Workable at
+   one or two roots; it is not a selection mechanism, and it is not what a
+   revocation would need in order to say *which* root is repudiated.
+4. **Three heal paths actively destroy a private that does not match the
+   published root.** `reconcileHeldPrivate` retires it (`:525-549`), `file()`
+   refuses to file it (`:398-433`), and `store()` drops it (`:359-360`). All
+   three are correct today — together they are the repair for a keyfile
+   poisoned by a lost create — and all three would treat a *successor* private
+   as poison for as long as the record it corresponds to is not the published
+   one. A rotation therefore cannot stage its private ahead of its record,
+   which is the ordering every other key in this design uses.
+
+**At rest, none of this applies — rotation is already representable there**, so
+the problem is the published half and the client code that reads it, not the
+keyfile. `atSignKeys[]` files the root as `root:mldsa65:<generation>` with both
+halves under one keyId, the generation *is* the slot (retired material is never
+removed, so a new private lands beside its predecessor rather than over it),
+and at_auth's single-active-per-`(role, algorithm)` rule is **enrollment-scoped
+only** — `validateAddKey` requires `candidate.enrollmentId != null`
+(`assurance.dart:209-219`) — so two active root generations may legally coexist
+in one keyfile today. Two client-side details would still have to move:
+`_activePrivate` takes `.firstOrNull` over the active root slots
+(`pq_signing_root.dart:629-634`), so an overlap resolves by iteration order
+rather than against the published record, and `keyIdPrefix` hardcodes
+`mldsa65` (`:70`), so a root under a different algorithm has no slot naming.
+
+**One inherited claim wants a probe before more design rests on it.**
+[decisions 46.5](decisions.md#465-the-signing-root-is-the-only-one-way-door)
+says "nobody can *replace* one" and calls `successor` the only migration path.
+`Metadata.immutable`'s own dartdoc says something weaker: immutable records
+**may not be changed** but *can be deleted*, with `force:` on the delete verb
+(`at_commons` `lib/src/keystore/at_key.dart:524-526`), and `delete:force:` is
+in the grammar (`delete_verb_builder.dart:36`, `syntax.dart:86`). What the
+atServer actually does with `delete:force:` against a public immutable record
+is **not measured** — one functional probe settles it, and until it is run the
+door stays recorded as closed. Even if it opens, delete-and-recreate gives up
+the create-once race control the immutability exists for and leaves a window in
+which any privileged enrollment's `mintIfAbsent` mints a fresh root, so it is a
+mechanism to be designed rather than an escape hatch to be used.
+
+**What is deliberately not settled here.** Whether the root should rotate at
+all, and by what mechanism — delete-and-recreate, a successor record under a
+second name, or a reserve key published as a second `keys[]` entry at mint —
+is a ruling nobody has made. This is recorded as one item rather than five so
+the obstacles are read together: fixing any one of them alone still leaves the
+root un-rotatable, and obstacle 1 cannot be fixed in place at all.
+
+**Not claimed for D1.** It is not on
+[14.18](#1418-the-remaining-d1-initial-development-sequence)'s stage-5 list.
+Obstacle 2 is the one with a release-ordering argument for landing before
+at_client's GA minor; the rest can follow a ruling at any time.
