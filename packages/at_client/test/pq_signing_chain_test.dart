@@ -507,6 +507,64 @@ void main() {
               'every root');
     });
 
+    test('a kid naming nothing advertised is broken, not retried broadly',
+        () async {
+      // The kid has to be a claim, not decoration. If an unknown kid fell back
+      // to trying every candidate, the field would pass whenever ANY
+      // advertised key happened to verify — which is exactly the case it
+      // exists to distinguish.
+      final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final successor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final holder = client('priv-1');
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link = await PqSigningChain(holder).signRootLinkFor('child-1',
+          rootPrivate: predecessor.secretKey);
+      await publishRotatedRoot(
+          active: successor.publicKey, retired: predecessor.publicKey);
+
+      // The same link, relabelled to name a key the record does not carry. Its
+      // SIGNATURE is still good against the retired entry, so without strict
+      // narrowing this verifies and the kid means nothing.
+      final mislabelled = {...link!, PqSigningChain.rootLinkKidField: 'nope'};
+      await conveyRoot(child, mislabelled);
+
+      expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
+          reason: 'differential guard: the very same bytes verify when the '
+              'kid is absent, which the test below asserts — so this arm '
+              'isolates the kid and nothing else');
+
+      await conveyRoot(child, link);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue,
+          reason: 'the other arm: unlabelled, the same signature is accepted');
+    });
+
+    test('a self-published root link names the key that signed it', () async {
+      final pair = await publishRoot();
+      final selfClient = client('priv-1');
+      await registered(selfClient);
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      expect(
+          await PqSigningRoot(selfClient, keysIo: io)
+              .store(atSign, pair.secretKey, public: pair.publicKey),
+          isTrue);
+
+      expect(
+          await PqSigningChain(selfClient)
+              .publishOwnRootLink(isFullyPrivileged: () async => true,
+                  keysIo: io),
+          isTrue);
+
+      final link = await PqSigningChain(selfClient).readRootLink('priv-1');
+      expect(link![PqSigningChain.rootLinkKidField],
+          publicKeyKidOfBase64(base64Encode(pair.publicKey)),
+          reason: 'the kid names the key the signer actually held, derived '
+              'from the public half filed beside it — never from the record, '
+              'which can legitimately disagree with what a client holds');
+    });
+
     test('publishes a conveyed root link, and not the same one twice',
         () async {
       final pair = await publishRoot();

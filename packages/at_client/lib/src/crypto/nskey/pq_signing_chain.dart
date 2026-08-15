@@ -139,6 +139,21 @@ class PqSigningChain {
   /// they are checking against, not on this field.
   static const String rootLinkAlgo = 'mldsa65';
 
+  /// Top-level field naming the advertised root entry that signed the link.
+  ///
+  /// **Top level, beside `alg`, never inside `payload`.** `payload` is the
+  /// signed region and it is shared verbatim with the chain link
+  /// ([linkPayload]); putting a root-only field in there would change what a
+  /// chain link signs. It is also not something the signature needs to cover:
+  /// a tampered kid narrows to the wrong key or to none, and the signature
+  /// then fails on its own.
+  ///
+  /// **Optional, and absent rather than null when unknown.** A link whose
+  /// signer could not name its own key is byte-identical to one written before
+  /// this field existed, which matters because `_sameLink` compares whole
+  /// documents to decide whether a republish is needed.
+  static const String rootLinkKidField = 'kid';
+
   /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
   /// APKAM public key lives, and the one record its own connection may write.
   static String apskUri(String atSign, String enrollmentId) =>
@@ -209,9 +224,15 @@ class PqSigningChain {
   /// Reads the child's key from the record the **atServer** published,
   /// exactly as [signLinkFor] does and for the same reason. Returns null
   /// when the child's `_apsk` is not readable.
+  /// [rootKid] names the advertised root entry [rootPrivate] is, when the
+  /// signer knows it. Passed together with the private rather than derived
+  /// here: the kid must name the key that actually signed, and a verifier
+  /// reading the record's active entry instead would disagree with the
+  /// signature whenever a holder has not yet healed.
   Future<Map<String, Object?>?> signRootLinkFor(
     String childEnrollmentId, {
     required Uint8List rootPrivate,
+    String? rootKid,
   }) async {
     final atSign = _atClient.getCurrentAtSign()!;
     final String childKey;
@@ -233,6 +254,7 @@ class PqSigningChain {
         childApkamPublicKey: childKey,
       ),
       rootPrivate,
+      kid: rootKid,
     );
   }
 
@@ -240,8 +262,9 @@ class PqSigningChain {
   /// [publishOwnRootLink], [signRootLinkFor] and [_checkRootLink] agree on.
   static Future<Map<String, Object?>> _rootLinkOver(
     Map<String, Object?> payload,
-    Uint8List rootPrivate,
-  ) async {
+    Uint8List rootPrivate, {
+    String? kid,
+  }) async {
     final signature = await MlDsa65PureDartAlgo().signBytes(
       Uint8List.fromList(utf8.encode(signableTextOf(payload))),
       secretKey: rootPrivate,
@@ -249,6 +272,11 @@ class PqSigningChain {
     return {
       'v': 1,
       'alg': rootLinkAlgo,
+      // Omitted, never null and never empty, when the signer cannot name its
+      // own key: an absent field means "try every advertised root", and a
+      // present-but-empty one would have to mean the same thing in every
+      // reader that ever touches this document.
+      if (kid != null && kid.isNotEmpty) rootLinkKidField: kid,
       'payload': payload,
       'signature': base64Encode(signature),
     };
@@ -389,9 +417,9 @@ class PqSigningChain {
     // establishing privilege costs a round trip. An enrollment holding no root
     // private cannot anchor itself whatever its privileges, so the cheap gate
     // is also the one that eliminates almost every client at start.
-    final private =
-        await PqSigningRoot(_atClient, keysIo: keysIo).privateHalf(atSign);
-    if (private == null) return false;
+    final signer =
+        await PqSigningRoot(_atClient, keysIo: keysIo).signingKey(atSign);
+    if (signer == null) return false;
 
     if (!await isFullyPrivileged()) {
       _logger.warning('This enrollment holds the signing root private but is '
@@ -419,7 +447,8 @@ class PqSigningChain {
         childEnrollmentId: enrollmentId,
         childApkamPublicKey: current.value as String,
       ),
-      private,
+      signer.private,
+      kid: signer.kid,
     );
 
     await _publishInto(enrollmentId, rootLinkField, link, current: current);
@@ -504,7 +533,7 @@ class PqSigningChain {
         Uint8List.fromList(
             utf8.encode(signableTextOf(payload.cast<String, Object?>()))),
         link['signature'] as String,
-        candidates,
+        _narrowedTo(link, candidates),
       );
     } catch (e) {
       _logger.warning('Conveyed root link could not be checked; not '
@@ -764,7 +793,7 @@ class PqSigningChain {
       ok = await _verifiesUnderAny(
         Uint8List.fromList(utf8.encode(signableTextOf(payload))),
         link['signature'] as String,
-        candidates,
+        _narrowedTo(link, candidates),
       );
     } catch (e) {
       return ChainResult(ChainVerdict.broken, path,
@@ -810,6 +839,27 @@ class PqSigningChain {
       _logger.info('No readable signing root for $atSign: $e');
       return const [];
     }
+  }
+
+  /// The candidates a link narrows itself to.
+  ///
+  /// A link carrying a [rootLinkKidField] names the key that signed it, so
+  /// only that entry is tried. **An unmatched kid narrows to nothing and the
+  /// link fails** — it does not fall back to trying everything, because a kid
+  /// that could be ignored whenever it named something unknown would pass
+  /// whenever any advertised key happened to verify, which makes the field
+  /// decoration rather than a claim.
+  ///
+  /// A link with no kid is tried against every candidate. That is what a link
+  /// written before this field existed looks like, and what a link from a peer
+  /// build that does not emit it looks like.
+  static Iterable<ApskSigningKey> _narrowedTo(
+    Map<String, Object?> link,
+    Iterable<ApskSigningKey> candidates,
+  ) {
+    final kid = link[rootLinkKidField];
+    if (kid is! String || kid.isEmpty) return candidates;
+    return candidates.where((c) => c.kid == kid);
   }
 
   /// Whether [signature] over [signable] verifies under any of [candidates].

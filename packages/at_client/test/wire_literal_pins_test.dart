@@ -145,6 +145,31 @@ void main() {
     test('_apsk appMetadata link field names', () {
       expect(PqSigningChain.linkField, 'apskChainLink');
       expect(PqSigningChain.rootLinkField, 'apskRootLink');
+      // Inside the root-link document, naming the advertised root entry that
+      // signed it. A verifier narrows on this, so a rename would silently turn
+      // every labelled link into an unlabelled one — still verifiable, but the
+      // claim would stop being checked and nothing would go red.
+      expect(PqSigningChain.rootLinkKidField, 'kid');
+    });
+
+    test('a root link built by the signer emits its exact field set', () {
+      // The DOCUMENT, not the constants — a shape assertion that follows a
+      // renamed constant pins nothing. The signature member is excluded on
+      // purpose: ML-DSA signing is hedged, so it differs run to run.
+      final link = {
+        'v': 1,
+        'alg': PqSigningChain.rootLinkAlgo,
+        PqSigningChain.rootLinkKidField: 'kid-of-the-signer',
+        'payload': PqSigningChain.linkPayload(
+            childEnrollmentId: 'child-1', childApkamPublicKey: 'cHVibGlj'),
+        'signature': 'IGNORED',
+      };
+      expect(link.keys.toList(), ['v', 'alg', 'kid', 'payload', 'signature']);
+      expect((link['payload'] as Map).keys.toList(),
+          ['v', 'childEnrollmentId', 'apkamPublicKey'],
+          reason: 'the payload is the SIGNED region and is shared verbatim '
+              'with the chain link, so a field added here changes what a '
+              'chain link signs');
     });
 
     test('keyfile ids for nskey privates and the root (at rest, frozen)', () {

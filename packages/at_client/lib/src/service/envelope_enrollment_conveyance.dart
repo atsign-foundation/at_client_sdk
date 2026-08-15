@@ -123,12 +123,13 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     // that is a far better outcome than failing an approval that has already
     // happened on the atServer.
     final root = PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo);
-    final rootPrivate = await root.privateHalf(atSign);
+    final rootSigner = await root.signingKey(atSign);
+    final rootPrivate = rootSigner?.private;
     if (await _privilege.isFullyPrivileged()) {
       if (rootPrivate != null) {
         final link = await PqSigningChain(_atClient)
             .signRootLinkFor(enrollment.enrollmentId!,
-                rootPrivate: rootPrivate);
+                rootPrivate: rootPrivate, rootKid: rootSigner!.kid);
         if (link != null) {
           await sharing.shareSecretWith(
               keyPackage,
@@ -238,10 +239,10 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     // AtKeys read where the fetch costs a round trip — and without the
     // private there is nothing this sweep may sign.
     final atSign = _atClient.getCurrentAtSign()!;
-    final rootPrivate =
+    final rootSigner =
         await PqSigningRoot(_atClient, keysIo: _atClient.atKeysIo)
-            .privateHalf(atSign);
-    if (rootPrivate == null) {
+            .signingKey(atSign);
+    if (rootSigner == null) {
       _logger.warning('Not sweeping root links: this client holds no '
           'signing-root private yet; the pull at its next start heals '
           'possession first');
@@ -280,7 +281,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
           continue;
         }
 
-        final link = await chain.signRootLinkFor(id, rootPrivate: rootPrivate);
+        final link = await chain.signRootLinkFor(id,
+            rootPrivate: rootSigner.private, rootKid: rootSigner.kid);
         if (link == null) continue;
         await sharing.shareSecretWith(
             keyPackage,

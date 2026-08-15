@@ -13,7 +13,8 @@ import 'package:at_auth/at_auth.dart'
         KeyPartStatus,
         WrittenAtKeysIo,
         apskAdvertisement,
-        apskSigningKeys;
+        apskSigningKeys,
+        publicKeyKid;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
@@ -466,9 +467,15 @@ class PqSigningRoot {
   /// is in hand, and the map is what lets the log say which it was. Leaving
   /// either active would let it go on winning the "what do I sign with"
   /// question against the key that actually signs.
+  /// [public] is the corresponding public half when the caller has it — a
+  /// conveyed private arrives alone, but the advertised entry it was matched
+  /// against carries the public bytes. Filing it lets this client name the key
+  /// it signs with (see [signingKey]) without deriving it, which ML-DSA does
+  /// not permit, and without re-reading the record on every signature.
   Future<bool> store(
     String atSign,
     Uint8List private, {
+    Uint8List? public,
     Map<String, ApskSigningKey>? heldCorrespondence,
   }) async {
     final io = keysIo;
@@ -504,13 +511,27 @@ class PqSigningRoot {
           }
         }
 
+        final slot = _freeSlot(keys, rootKeyAlgoToken);
+        final createdAt = DateTime.now().toUtc();
         keys.addKey(AtKeysMaterial(
-          keyId: _freeSlot(keys, rootKeyAlgoToken),
+          keyId: slot,
           keyPartType: CryptographicKeyType.privateSigning,
           keyAlgorithmType: rootKeyAlgoToken,
           bytes: AtBytes(private),
-          createdAt: DateTime.now().toUtc(),
+          createdAt: createdAt,
         ));
+        // Filed in the SAME update, never as a follow-on write: two halves of
+        // one key arriving under two locks is how a keyfile ends up holding a
+        // private whose public half a crash left behind.
+        if (public != null) {
+          keys.addKey(AtKeysMaterial(
+            keyId: slot,
+            keyPartType: CryptographicKeyType.publicVerification,
+            keyAlgorithmType: rootKeyAlgoToken,
+            bytes: AtBytes(public),
+            createdAt: createdAt,
+          ));
+        }
         return true;
       });
     } catch (e) {
@@ -543,12 +564,36 @@ class PqSigningRoot {
   /// link with, what do I convey to a new enrollment, what do I offer a puller,
   /// and may I skip the pull because I already have it — so the answer is the
   /// one key that may sign, never merely the first one filed.
-  Future<Uint8List?> privateHalf(String atSign) async {
+  Future<Uint8List?> privateHalf(String atSign) async =>
+      (await signingKey(atSign))?.private;
+
+  /// The root private this client signs with, together with the `kid` naming
+  /// which advertised key it is — null when this client holds none.
+  ///
+  /// The kid comes from the **public half filed beside the private**, never
+  /// from the record's notion of which entry is active. Those can legitimately
+  /// disagree: a client whose record has moved on still holds the predecessor,
+  /// and a link stamped with the successor's kid over the predecessor's
+  /// signature would fail a strict `kid` selection — a link that names one key
+  /// and is signed by another reads as tampering, which is strictly worse than
+  /// naming nothing.
+  ///
+  /// `kid` is null for a private filed before its public half was kept, which
+  /// is why the link's field is optional and its absence means "try them all"
+  /// rather than "reject".
+  Future<({Uint8List private, String? kid})?> signingKey(String atSign) async {
     final AtKeys? keys = await _readKeys(atSign);
     if (keys == null) return null;
     final material = await _signingPrivate(atSign, keys);
     if (material == null) return null;
-    return Uint8List.fromList(material.bytes.bytes);
+    final public =
+        keys.getAtSignKey(material.keyId, CryptographicKeyType.publicVerification);
+    return (
+      private: Uint8List.fromList(material.bytes.bytes),
+      kid: public == null
+          ? null
+          : publicKeyKid(Uint8List.fromList(public.bytes.bytes)),
+    );
   }
 
   /// Files a root private that arrived over the substrate, first checking it
@@ -618,6 +663,7 @@ class PqSigningRoot {
     // the keyfile catching up with the record, not a rotation being performed
     // here.
     final stored = await store(atSign, private,
+        public: base64Decode(matched.pub),
         heldCorrespondence: await _correspondenceByKeyId(atSign, roots));
     if (stored) {
       _logger.info('Filed the signing root private for $atSign');

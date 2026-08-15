@@ -1,4 +1,25 @@
 ## 3.14.1
+- feat: a root link names the root key that signed it, in an optional
+  top-level `kid` (`PqSigningChain.rootLinkKidField`).
+  - A link carrying one narrows verification to that entry. **A kid naming
+    nothing advertised fails** rather than falling back to trying everything:
+    a kid that could be ignored whenever it named something unknown would pass
+    whenever any advertised key happened to verify, which makes it decoration.
+  - A link with no kid is tried against every candidate — that is what a link
+    written before the field existed looks like, and what a peer build that
+    does not emit it produces. The field is **omitted**, never null or empty,
+    when the signer cannot name its own key.
+  - Top level, beside `alg`, never inside `payload`: the payload is the signed
+    region and is shared verbatim with the chain link, so a root-only field
+    there would change what a chain link signs.
+- feat: `PqSigningRoot.signingKey` returns the signing private together with
+  the `kid` naming which advertised key it is, and `store` gained `public` so
+  the public half is filed beside the private **in the same store update**.
+  The kid is derived from that filed public half, never from the record's
+  notion of which entry is active: those legitimately disagree while a holder
+  is unhealed, and a link naming one key but signed by another reads as
+  tampering — strictly worse than naming nothing. ML-DSA offers no
+  public-from-private derivation, so filing it is the only way to know it.
 - feat: a root link is verified against **every** root the record advertises,
   active and retired, rather than against its one active entry.
   - A retired entry stays advertised precisely so that what it signed goes on
