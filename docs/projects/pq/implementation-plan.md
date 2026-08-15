@@ -32,6 +32,7 @@ given/when/then here.
 - [12. Open decisions pointer & verification provenance](#12-open-decisions-pointer--verification-provenance)
 - [13. Phase IS — inter-server PQ authentication (IS-1)](#13-phase-is--inter-server-pq-authentication-is-1)
 - [14. Backlog — carried items with no owning project](#14-backlog--carried-items-with-no-owning-project)
+- [15. D1 burn-down — the single index of what D1 owes](#15-d1-burn-down--the-single-index-of-what-d1-owes) — *start here for "what is left"; every row carries the command that re-derives it*
 
 ---
 
@@ -3546,6 +3547,95 @@ land they describe what is actually built:
 
 ⚠️ **Apply [14.20](#1420-building-rulings-98-and-99--the-sequence)'s question to
 every row before building it:** what does the row *route into*, not what does it
-define. On this plan that question has been the answer five times running, and
+define. On this plan that question has been the answer six times running, and
 rows 2, 3, 4 and 6 each carry a routing note found by asking it rather than by
 reading the row.
+
+---
+
+## 15. D1 burn-down — the single index of what D1 owes
+
+**Why this exists.** There was no one place to answer "what is left for D1".
+The work is spread across [14.18](#1418-the-remaining-d1-initial-development-sequence)'s
+sequence, its stage-5 table, [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)'s
+small items, [14.22](#1422-making-the-signing-root-rotatable--decisions-101), and
+GitHub — and 14.19 item 14 admits the gap in its own text, having been parked
+there "because this project has no other checked-in owed-work list". A
+context-free reader asked to find the owed work on 2026-08-15 found four
+locations and said it could not have assembled them unaided.
+
+⚠️ **This is an INDEX, not a second source of truth.** Every row points at the
+entry that owns the detail, and carries the command that re-derives its state.
+**If a row here and its owning entry disagree, the entry wins and this row is
+stale** — that is the failure mode every "current state" table in this project
+has had, so it is stated rather than hoped for. Re-derive before acting; do not
+cite this table as evidence.
+
+**D1 initial development ends at step 34** — the spike carved into stacked PRs
+and merged. Publishing and R-2 follow it and are not D1.
+
+### 15.1 Open work, 2026-08-15
+
+| # | What is owed | Owner | State |
+|---|---|---|---|
+| 1 | **14.22 rows 1–7** — the signing root becomes an ordinary, rotatable signing key | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | Unbuilt. **Row 1 is the next action**; rows 2–7 block behind it, and row 1 is the only D1 item with a deadline of its own (a *reader*, due before the GA minor) |
+| 2 | **Step 20's rotation arm** — enrollment then an `enroll:update` APKAM rotation mid-run | [14.18](#1418-the-remaining-d1-initial-development-sequence) step 20 | ⛔ Blocked on an **at_auth release** carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
+| 3 | **Step 24** — a client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | Open; **wants a ruling** on whether an owner-keys client belongs in the enrollment trust model |
+| 4 | **Step 25** — a `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | Open. Gates the stop-release: closing it means public-record signing moves to the ML-DSA root and self data moves off `selfEncryptionKey` |
+| 5 | **Step 27** — domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) | Open. Changes signed bytes, so it belongs on this branch |
+| 6 | **Step 28** — NoPorts carries its own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | Open. A separately-owned second migration to *name*, not to fix here |
+| 7 | **Step 29** — four audit residuals | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Open: perf ceiling on real low-end hardware, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift |
+| 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
+| 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
+| 10 | **D1's tail** — `EnrollParams.signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Open. One paragraph: the text is accurate but never says plainly that the field names the **authentication** key's algorithm |
+| 11 | **14.19's open small items** — 13 of them | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 12 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
+
+**Not owed, and worth stating so nobody re-opens them:** step 11 is labelled
+`PARTLY DONE` but its own cell closes with `✅ DONE 2026-08-13, with step 12` —
+the **label** is stale, not the work. Step 23 folded into the rollout axis.
+Step 26 closed when the atServer cache race was fixed (`16dd457f`, merged).
+Acceptance's two skipped scenarios are blocked on the **KE-2 project**, not
+owed a test.
+
+### 15.2 Re-derive every row above
+
+Run these rather than trusting the table. Each answers one row.
+
+```bash
+# rows 1: has 14.22 row 1 landed? (empty = unbuilt)
+git grep -l "apskAdvertisement\|apskSigningKeys" -- packages/at_client/lib/src/crypto/nskey/
+
+# row 11: which 14.19 items are still open? (~~struck~~ ones are done)
+awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \
+  | grep -E "^[0-9]+\. \*\*"
+
+# rows 3-9: the stage-5 table, which owns steps 23-31
+awk '/^\*\*Stage 5/,/^\*\*Stage 6/' docs/projects/pq/implementation-plan.md
+
+# acceptance: what is skipped, and on which blocker.
+# Anchor on "}, skip:" — a bare "skip:" also matches catalogue_test.dart's and
+# manifest.dart's prose ABOUT skips and reports 5 where the answer is 2.
+grep -rn "}, skip:" packages/at_client/test/acceptance/*_test.dart
+grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
+
+# row 2 and row 12: the external gates. The at_auth release is a pub.dev
+# question; the atServer image gate is gkc's call and is NOT to be checked
+# against atsigncompany/virtualenv:vip (ruled 2026-08-13).
+
+# rails, all four packages
+cd packages/at_auth           && dart test --concurrency=1   # 312
+cd packages/at_client         && dart test --concurrency=1   # 1302 (2 skipped)
+cd packages/at_onboarding_cli && dart test --concurrency=1   # 39
+cd tests/at_functional_test   && ./runLocal.sh               # 164/164
+```
+
+### 15.3 After D1
+
+The release programme, in order, and **not** part of D1 initial development:
+publish **at_chops 3.6.0** → **at_commons 5.16.0** → **at_auth 3.4.0** →
+**at_client's GA minor** → **R-2**, the 4.0.0 posture flip (a pure
+default-flip: 4.0 is identical to final-3.x *code*).
+
+⚠️ Check pub.dev against every touched pubspec before acting on that ladder —
+a same-value version bump merges silently.
