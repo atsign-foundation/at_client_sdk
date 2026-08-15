@@ -41,6 +41,10 @@ class _FakePrivilege implements EnrollmentPrivilegeResolver {
 /// privilege: the fully privileged class (`rw` on `*` and `__manage`) signs
 /// root links — one hop, verified against the published signing root — and
 /// only a non-privileged approver leaves the provisional chain link.
+/// Generation 1 of a root filed under the algorithm this build mints.
+final rootSlot1 =
+    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
+
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'scoped-1';
@@ -87,7 +91,7 @@ void main() {
         atSign,
         AtKeys()
           ..addKey(AtKeysMaterial(
-            keyId: '${PqSigningRoot.keyIdPrefix}1',
+            keyId: rootSlot1,
             keyPartType: CryptographicKeyType.privateSigning,
             keyAlgorithmType: KeyAlgorithmType.mlDsa65,
             bytes: AtBytes(pair.secretKey),

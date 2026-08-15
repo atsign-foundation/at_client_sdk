@@ -34,6 +34,10 @@ import 'test_utils/remote_backed_client.dart';
 /// parent (which could sign nothing), and any enrollment carrying only a
 /// provisional chain link — root-anchored is the terminal state, and the
 /// sweep is what makes it every enrollment's state.
+/// Generation 1 of a root filed under the algorithm this build mints.
+final rootSlot1 =
+    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
+
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'scoped-1';
@@ -81,7 +85,7 @@ void main() {
         atSign,
         AtKeys()
           ..addKey(AtKeysMaterial(
-            keyId: '${PqSigningRoot.keyIdPrefix}1',
+            keyId: rootSlot1,
             keyPartType: CryptographicKeyType.privateSigning,
             keyAlgorithmType: KeyAlgorithmType.mlDsa65,
             bytes: AtBytes(pair.secretKey),

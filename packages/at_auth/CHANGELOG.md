@@ -1,4 +1,19 @@
 ## 3.4.0
+- feat: `AtKeys.keyIdPrefix(role, algorithm)` and
+  `AtKeys.isRoleKeyId(keyId, role)` — the `<role>:<algorithm>:<generation>`
+  keyId grammar, composed and parsed in one place.
+  - Every id this class writes now goes through `keyIdPrefix`, and the parse
+    that used to be private (`sign:` only) reads back exactly what it writes.
+    A caller assembling the string itself held a second copy of a shape that
+    has to agree with this one, and at_client was doing that for the atSign's
+    signing root.
+  - `isRoleKeyId` matches the **shape**, not the material's part type, which is
+    ambiguous both ways: an enrollment can hold `privateSigning` material under
+    more than one keyId, and the atSign's signing root is `privateSigning` too
+    while belonging to no enrollment. It deliberately does not match the
+    algorithm — a caller asking "is this a root slot" wants every generation of
+    every algorithm, which is what makes a key of one algorithm replaceable by
+    a key of another.
 - feat: `AtKeys.retireSigningKeys(enrollmentId, algorithm)` — withdraws every
   active signing keypair an enrollment holds for one algorithm, returning the
   keyIds it moved. Both halves move to `retired` and nothing is removed, so

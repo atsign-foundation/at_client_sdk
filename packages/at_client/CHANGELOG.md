@@ -1,4 +1,22 @@
 ## 3.14.1
+- feat!: `PqSigningRoot.keyIdPrefix` is replaced by `PqSigningRoot.keyIdRole`
+  (`'root'`) and `PqSigningRoot.keyIdPrefixFor(algorithm)`. The at-rest slot a
+  root is filed under is `root:<algorithm>:<generation>`, and the algorithm is
+  no longer baked into a constant.
+  - A build that only composes `root:mldsa65:` can file no successor that is
+    not also ML-DSA-65, and a reader matching that prefix finds no root of any
+    other algorithm — so the atSign would have been pinned to one algorithm by
+    accident of its reader rather than by any decision, and silently, since
+    such a keyfile simply reads as holding no root.
+  - Finding a slot now matches the **role** through `AtKeys.isRoleKeyId`, which
+    is algorithm-blind; composing one names the algorithm explicitly.
+    Generations count per algorithm, so a root of a later algorithm starts at
+    `:1` in its own line rather than inheriting a counter.
+- feat: `PqSigningRoot.rootKeyAlgoToken` — `rootKeyAlgo` in the vocabulary
+  `AtKeys` files material under. Slot ids are composed from the enum and
+  material is matched by at_auth's `KeyAlgorithmType` constant; the two are
+  separate declarations that agree today, and are now pinned against each
+  other so a drift cannot leave roots filed under an id no reader assembles.
 - feat: the PQ startup records what the atServer's enrollment record says
   about this enrollment — its `namespaces`, `appName` and `deviceName` — onto
   the keyfile, through `WrittenAtKeysIo.update`. It runs on every start,

@@ -9,7 +9,6 @@ import 'package:at_auth/at_auth.dart'
         AtKeysIo,
         AtKeysMaterial,
         CryptographicKeyType,
-        KeyAlgorithmType,
         KeyEntryStatus,
         KeyPartStatus,
         WrittenAtKeysIo,
@@ -57,11 +56,11 @@ final _logger = AtSignLogger('PqSigningRoot');
 class PqSigningRoot {
   static const String recordName = pqSigningRootRecordName;
 
-  /// The `AtKeys` id prefix the private half is filed under, completed by a
-  /// generation: `root:mldsa65:1`, then `:2`, `:3`, … It carries no namespace
-  /// — the root is atSign-level, which is exactly what distinguishes it from
-  /// an nskey — and it lives in the atSign's own container rather than any
-  /// enrollment's.
+  /// The `AtKeys` role every root keypair is filed under, completed by an
+  /// algorithm and a generation: `root:mldsa65:1`, then `:2`, `:3`, … It
+  /// carries no namespace — the root is atSign-level, which is exactly what
+  /// distinguishes it from an nskey — and it lives in the atSign's own
+  /// container rather than any enrollment's.
   ///
   /// Key material is never removed from `AtKeys`, only retired, so the
   /// generation IS the slot: when generation 1 holds the dead remains of a
@@ -72,7 +71,18 @@ class PqSigningRoot {
   /// ⚠️ Not the record name. The published record is
   /// `public:pq_signing_root@<atSign>` ([recordName]), which is a wire value
   /// and frozen; this is at-rest, where the document is the only reader.
-  static const String keyIdPrefix = 'root:${KeyAlgorithmType.mlDsa65}:';
+  static const String keyIdRole = 'root';
+
+  /// The `AtKeys` id prefix a root of [algorithm] is filed under.
+  ///
+  /// Parameterised rather than a constant because the algorithm is part of the
+  /// id, and a root of one algorithm must be replaceable by a root of another:
+  /// a build that only ever composes `root:mldsa65:` can file no successor
+  /// that is not also ML-DSA-65. What *finds* a slot is [keyIdRole] alone —
+  /// `AtKeys.isRoleKeyId` matches every algorithm, so a reader is never the
+  /// thing that pins the atSign to one.
+  static String keyIdPrefixFor(String algorithm) =>
+      AtKeys.keyIdPrefix(keyIdRole, algorithm);
 
   /// Reserved [Secret] name the private travels under.
   ///
@@ -99,6 +109,16 @@ class PqSigningRoot {
   /// has no part in — nothing is ever encapsulated to a signer. Two spellings
   /// for one algorithm across two records was the accident, not the design.
   static const SigningAlgoType rootKeyAlgo = SigningAlgoType.mldsa65;
+
+  /// [rootKeyAlgo] in the vocabulary `AtKeys` files material under — the same
+  /// word, and the one this class composes slot ids from.
+  ///
+  /// Pinned against `KeyAlgorithmType.mlDsa65` rather than written as it,
+  /// because the enum and that constant are separate declarations that agree
+  /// today: an id composed from one and material filed under the other would
+  /// stop matching the moment either moved, and nothing would go red on the
+  /// way past.
+  static String get rootKeyAlgoToken => rootKeyAlgo.name;
 
   final AtClient atClient;
   final AtKeysIo? keysIo;
@@ -394,9 +414,9 @@ class PqSigningRoot {
       await io.update(atSign.toAtsign(), (keys) {
         if (_activePrivate(keys) != null) return false;
         keys.addKey(AtKeysMaterial(
-          keyId: _freeSlot(keys),
+          keyId: _freeSlot(keys, rootKeyAlgoToken),
           keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          keyAlgorithmType: rootKeyAlgoToken,
           bytes: AtBytes(private),
           createdAt: DateTime.now().toUtc(),
         ));
@@ -656,10 +676,11 @@ class PqSigningRoot {
   static final Uint8List _probe =
       Uint8List.fromList(utf8.encode('pq_signing_root correspondence probe'));
 
-  /// A root-private slot: [keyIdPrefix] followed by a generation number.
-  static bool _isRootSlot(String id) =>
-      id.startsWith(keyIdPrefix) &&
-      int.tryParse(id.substring(keyIdPrefix.length)) != null;
+  /// A root slot: [keyIdRole], any algorithm, then a generation number.
+  ///
+  /// Delegated to `AtKeys`, which composes every such id — one grammar with
+  /// one home, rather than a parse here that has to agree with a writer there.
+  static bool _isRootSlot(String id) => AtKeys.isRoleKeyId(id, keyIdRole);
 
   AtKeysMaterial? _activePrivate(AtKeys keys) => keys.atSignKeys
       .where((m) =>
@@ -668,10 +689,15 @@ class PqSigningRoot {
           _isRootSlot(m.keyId))
       .firstOrNull;
 
-  /// The next free root slot — retired remains keep their generation forever,
-  /// so a new private lands beside them, never over them.
-  String _freeSlot(AtKeys keys) =>
-      '$keyIdPrefix${keys.nextAtSignGeneration('root', KeyAlgorithmType.mlDsa65)}';
+  /// The next free slot for a root of [algorithm] — retired remains keep their
+  /// generation forever, so a new private lands beside them, never over them.
+  ///
+  /// Generations count per algorithm, so an ML-DSA-65 root and a root of some
+  /// later algorithm are each `:1` in their own line rather than competing for
+  /// one counter.
+  String _freeSlot(AtKeys keys, String algorithm) =>
+      '${keyIdPrefixFor(algorithm)}'
+      '${keys.nextAtSignGeneration(keyIdRole, algorithm)}';
 
   Future<AtKeys?> _readKeys(String atSign) async {
     final io = keysIo;
@@ -702,19 +728,19 @@ class PqSigningRoot {
       // take the same free slot, and `addKey` refuses a duplicate keyId.
       String? slot;
       await io.update(atSign.toAtsign(), (keys) {
-        slot = _freeSlot(keys);
+        slot = _freeSlot(keys, rootKeyAlgoToken);
         final createdAt = DateTime.now().toUtc();
         keys.addKey(AtKeysMaterial(
           keyId: slot!,
           keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          keyAlgorithmType: rootKeyAlgoToken,
           bytes: AtBytes(pair.secretKey),
           createdAt: createdAt,
         ));
         keys.addKey(AtKeysMaterial(
           keyId: slot!,
           keyPartType: CryptographicKeyType.publicVerification,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          keyAlgorithmType: rootKeyAlgoToken,
           bytes: AtBytes(pair.publicKey),
           createdAt: createdAt,
         ));

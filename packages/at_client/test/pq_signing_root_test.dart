@@ -22,6 +22,10 @@ class MockAtClient extends Mock implements AtClient {
 /// the root never rotates, so a mistake at mint is permanent. There is no
 /// second attempt, no rotation to recover with, and two roots would leave half
 /// an atSign's enrollments chaining to one the other half rejects.
+/// Generation 1 of a root filed under the algorithm this build mints.
+final rootSlot1 =
+    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
+
 void main() {
   const atSign = '@alice';
 
@@ -90,7 +94,7 @@ void main() {
     expect(publicKey, isNotNull);
     final filed = (await io.read(atSign))
         .getAtSignKey(
-            '${PqSigningRoot.keyIdPrefix}1', CryptographicKeyType.privateSigning);
+            rootSlot1, CryptographicKeyType.privateSigning);
     expect(filed, isNotNull,
         reason: 'the record is immutable and the root never rotates, so a '
             'published root whose private did not survive can never be '
@@ -375,14 +379,14 @@ void main() {
     final keys = await freshIo.read(atSign);
     final createdAt = DateTime.now().toUtc();
     keys.addKey(AtKeysMaterial(
-      keyId: '${PqSigningRoot.keyIdPrefix}1',
+      keyId: rootSlot1,
       keyPartType: CryptographicKeyType.privateSigning,
       keyAlgorithmType: KeyAlgorithmType.mlDsa65,
       bytes: AtBytes(held.secretKey),
       createdAt: createdAt,
     ));
     keys.addKey(AtKeysMaterial(
-      keyId: '${PqSigningRoot.keyIdPrefix}1',
+      keyId: rootSlot1,
       keyPartType: CryptographicKeyType.publicVerification,
       keyAlgorithmType: KeyAlgorithmType.mlDsa65,
       bytes: AtBytes(held.publicKey),
@@ -434,6 +438,60 @@ void main() {
     final active = await root.privateHalf(atSign);
     expect(active, isNotNull);
     expect(active, isNot(orphan.secretKey));
+  });
+
+  test('a root slot of another algorithm is still a root slot', () async {
+    // What rotatability rests on, and it is the READER half: a slot is
+    // recognised by its role, never by one algorithm. A build that only
+    // matches `root:mldsa65:` can find no successor of any other algorithm,
+    // which would pin the atSign to ML-DSA-65 by accident of its reader rather
+    // than by any decision — and would do it silently, since a keyfile holding
+    // such a slot simply reads as holding no root at all.
+    //
+    // The token is deliberately one this build knows nothing about:
+    // `KeyAlgorithmType.known` exists for warn-level tooling and explicitly
+    // does not gate what may be filed, so a reader that recognised only known
+    // tokens would be a second, undocumented gate.
+    const laterAlgo = 'some-later-signing-algo';
+    final c = client();
+    final io = await keysIo();
+    final keys = await io.read(atSign);
+    final held = Uint8List.fromList([7, 8, 9]);
+    keys.addKey(AtKeysMaterial(
+      keyId: '${PqSigningRoot.keyIdPrefixFor(laterAlgo)}1',
+      keyPartType: CryptographicKeyType.privateSigning,
+      keyAlgorithmType: laterAlgo,
+      bytes: AtBytes(held),
+      createdAt: DateTime.now().toUtc(),
+    ));
+    await io.flush(atSign.toAtsign(), keys);
+
+    expect(await PqSigningRoot(c.client, keysIo: io).privateHalf(atSign), held,
+        reason: 'the slot is root:<any algorithm>:<generation>, so a private '
+            'filed under a later algorithm is the root private');
+  });
+
+  test('generations count per algorithm, so a successor starts at 1', () async {
+    // The counter is per `root:<algo>:`, not per role: two algorithms each
+    // begin at generation 1 rather than the second one inheriting the first's
+    // count. Filed in the same document so the two lines are visibly
+    // independent.
+    final io = await keysIo();
+    final keys = await io.read(atSign);
+    keys.addKey(AtKeysMaterial(
+      keyId: '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1',
+      keyPartType: CryptographicKeyType.privateSigning,
+      keyAlgorithmType: PqSigningRoot.rootKeyAlgoToken,
+      bytes: AtBytes(Uint8List.fromList([1])),
+      createdAt: DateTime.now().toUtc(),
+    ));
+
+    expect(
+        keys.nextAtSignGeneration(
+            PqSigningRoot.keyIdRole, PqSigningRoot.rootKeyAlgoToken),
+        2);
+    expect(keys.nextAtSignGeneration(PqSigningRoot.keyIdRole, 'another-algo'),
+        1);
   });
 
   group('reconciling a held private against the published root', () {

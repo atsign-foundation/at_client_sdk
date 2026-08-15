@@ -42,6 +42,10 @@ class _RecordingAtEnrollment extends Mock implements AtEnrollment {
 /// called` from inside the substrate, thrown *after* the enrollment had
 /// already been approved — so the device was live and would never receive its
 /// key, and the message said nothing about either fact.
+/// Generation 1 of a root filed under the algorithm this build mints.
+final rootSlot1 =
+    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
+
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'enrollee-1';
@@ -163,7 +167,7 @@ void main() {
           atSign,
           AtKeys()
             ..addKey(AtKeysMaterial(
-              keyId: '${PqSigningRoot.keyIdPrefix}1',
+              keyId: rootSlot1,
               keyPartType: CryptographicKeyType.privateSigning,
               keyAlgorithmType: KeyAlgorithmType.mlDsa65,
               bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 7))),

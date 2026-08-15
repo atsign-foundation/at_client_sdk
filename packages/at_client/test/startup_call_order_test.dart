@@ -77,6 +77,10 @@ class _RecordingAtKeysIo extends WrittenAtKeysIo {
   }
 }
 
+/// Generation 1 of a root filed under the algorithm this build mints.
+final rootSlot1 =
+    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
+
 void main() {
   const atSign = '@alice';
   const storageDir = 'test/hive/startup_order';
@@ -231,7 +235,7 @@ void main() {
     // Retired: the active private is gone from the keyfile...
     final keysAfter = await inner.read(atSign);
     final active = keysAfter
-        .atSignKeysForKeyId('${PqSigningRoot.keyIdPrefix}1')
+        .atSignKeysForKeyId(rootSlot1)
         .where((m) => m.status == KeyPartStatus.active);
     expect(active, isEmpty,
         reason: 'an orphaned root private must be retired, or it blocks its '

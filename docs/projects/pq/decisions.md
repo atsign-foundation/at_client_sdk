@@ -9300,13 +9300,18 @@ against it, retire a pair that corresponds to nothing. It was written for a
 lost immutable create and answers the same question here.
 
 **4. At rest, `root:<algo>:<n>` in `atSignKeys[]` — already ruled, and only
-partly built.** [100](#100-the-seven-shapes-ruling-99-left-open-2026-08-14)
-ruling 4 ruled that the generation is the slot and the algorithm is part of the
-id. The code pins the algorithm anyway: `PqSigningRoot.keyIdPrefix` is
+partly built.** ✅ **BUILT 2026-08-15 by 14.22 row 2.** This paragraph read
+"The code pins the algorithm anyway: `PqSigningRoot.keyIdPrefix` is
 `'root:${KeyAlgorithmType.mlDsa65}:'` and `_isRootSlot` requires that exact
-prefix, so a root under any other algorithm has no slot and no reader.
-Selection moves to the role `root` with any algorithm, mirroring how
-`signingKeysFor` selects `sign:<algo>:<n>`. The container does **not** move:
+prefix, so a root under any other algorithm has no slot and no reader" — that
+is no longer the code. The role is `PqSigningRoot.keyIdRole`, composition is
+`keyIdPrefixFor(algorithm)`, and the parse moved down to
+`AtKeys.isRoleKeyId(keyId, role)`, which is algorithm-blind and is the same
+one `signingKeysFor` uses to select `sign:<algo>:<n>` — one grammar with one
+home rather than a parse in at_client that had to agree with a writer in
+at_auth. [100](#100-the-seven-shapes-ruling-99-left-open-2026-08-14)
+ruling 4 ruled that the generation is the slot and the algorithm is part of the
+id. The container does **not** move:
 the root is the atSign's own key, and `atSignKeys[]` is where
 [99](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
 ruling 3 puts the atSign's material.

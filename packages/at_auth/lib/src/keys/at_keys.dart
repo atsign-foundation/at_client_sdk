@@ -249,7 +249,7 @@ class AtKeys {
     required String privateKey,
   }) {
     final now = DateTime.now().toUtc();
-    final keyId = 'auth:$algorithm:'
+    final keyId = keyIdPrefix('auth', algorithm) +
         '${nextAuthenticationGeneration(enrollmentId, algorithm)}';
     addKey(AtKeysMaterial(
         keyId: keyId,
@@ -277,7 +277,7 @@ class AtKeys {
   int nextAuthenticationGeneration(String enrollmentId, String algorithm) =>
       _nextGeneration(
           _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
-          'auth:$algorithm:');
+          keyIdPrefix('auth', algorithm));
 
   /// Files a signing keypair for [enrollmentId] under
   /// `sign:<algorithm>:<generation>`.
@@ -293,8 +293,8 @@ class AtKeys {
     required String privateKey,
   }) {
     final now = DateTime.now().toUtc();
-    final keyId =
-        'sign:$algorithm:${nextSigningGeneration(enrollmentId, algorithm)}';
+    final keyId = keyIdPrefix('sign', algorithm) +
+        '${nextSigningGeneration(enrollmentId, algorithm)}';
     addKey(AtKeysMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
@@ -316,7 +316,7 @@ class AtKeys {
   int nextSigningGeneration(String enrollmentId, String algorithm) =>
       _nextGeneration(
           _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
-          'sign:$algorithm:');
+          keyIdPrefix('sign', algorithm));
 
   /// The generation an atSign-scope keypair of [role] and [algorithm] should
   /// be filed under next — one past the highest already there, or 1.
@@ -326,7 +326,41 @@ class AtKeys {
   /// rather than over it; `addKey` refuses a duplicate keyId, which is what
   /// makes that safe rather than merely tidy.
   int nextAtSignGeneration(String role, String algorithm) =>
-      _nextGeneration(_atSignMaterialsByKeyId.keys, '$role:$algorithm:');
+      _nextGeneration(
+          _atSignMaterialsByKeyId.keys, keyIdPrefix(role, algorithm));
+
+  /// The keyId prefix a [role]/[algorithm] pair is filed under —
+  /// `<role>:<algorithm>:`, completed by a generation number.
+  ///
+  /// The grammar has one definition, here, because a keyId is composed in one
+  /// place and parsed in another: [isRoleKeyId] reads exactly what this
+  /// writes, and a caller assembling the string itself would be holding a
+  /// second copy of a shape that has to agree with this one.
+  ///
+  /// Roles in use: `auth` (an enrollment's APKAM keypair), `sign` (its own
+  /// signing keypair) and `root` (the atSign's signing root, filed by
+  /// at_client — atSign-scope material rather than an enrollment's).
+  static String keyIdPrefix(String role, String algorithm) =>
+      '$role:$algorithm:';
+
+  /// Whether [keyId] names a keypair of [role] — `<role>:<algo>:<generation>`
+  /// exactly, the shape [keyIdPrefix] composes and every generation parse
+  /// reads.
+  ///
+  /// The **shape** is the filter, not the material's part type, which is
+  /// ambiguous in both directions: an enrollment can hold `privateSigning`
+  /// material under more than one keyId, and the atSign's signing root is
+  /// `privateSigning` too while belonging to no enrollment.
+  ///
+  /// The algorithm is not matched. A caller asking "is this a root slot"
+  /// wants every generation of every algorithm, because that is what makes a
+  /// key of one algorithm replaceable by a key of another.
+  static bool isRoleKeyId(String keyId, String role) {
+    final prefix = '$role:';
+    if (!keyId.startsWith(prefix)) return false;
+    final suffix = keyId.substring(prefix.length).split(':');
+    return suffix.length == 2 && int.tryParse(suffix[1]) != null;
+  }
 
   /// One past the highest numeric suffix among [keyIds] starting with
   /// [prefix], or 1. An id whose suffix is not a number is ignored rather
@@ -373,7 +407,7 @@ class AtKeys {
         <({SigningAlgoType algorithm, String publicKey, String privateKey})>[];
     for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
         const <String>[]) {
-      if (!_isSigningKeyId(keyId)) continue;
+      if (!isRoleKeyId(keyId, 'sign')) continue;
 
       final private =
           getKey(enrollmentId, keyId, CryptographicKeyType.privateSigning);
@@ -435,7 +469,7 @@ class AtKeys {
     final retired = <({SigningAlgoType algorithm, String publicKey})>[];
     for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
         const <String>[]) {
-      if (!_isSigningKeyId(keyId)) continue;
+      if (!isRoleKeyId(keyId, 'sign')) continue;
 
       final public =
           getKey(enrollmentId, keyId, CryptographicKeyType.publicVerification);
@@ -483,7 +517,7 @@ class AtKeys {
         _enrollments[enrollmentId]?.materialsByKeyId ?? const {};
     final keyIds = [
       for (final entry in byKeyId.entries)
-        if (_isSigningKeyId(entry.key) &&
+        if (isRoleKeyId(entry.key, 'sign') &&
             entry.value.values.any((material) =>
                 material.status == KeyPartStatus.active &&
                 material.keyAlgorithmType == algorithm))
@@ -493,19 +527,6 @@ class AtKeys {
       retireKey(enrollmentId, keyId, to: to);
     }
     return keyIds;
-  }
-
-  /// Whether [keyId] names an enrollment's own signing keypair —
-  /// `sign:<algo>:<n>` exactly, the shape [fileSigningMaterial] writes and the
-  /// same parse [nextSigningGeneration] does.
-  ///
-  /// The shape is the filter, **not** the `privateSigning` role, which an
-  /// enrollment can hold material for under more than one keyId.
-  static bool _isSigningKeyId(String keyId) {
-    const prefix = 'sign:';
-    if (!keyId.startsWith(prefix)) return false;
-    final suffix = keyId.substring(prefix.length).split(':');
-    return suffix.length == 2 && int.tryParse(suffix[1]) != null;
   }
 
   static int _strongestFirst(SigningAlgoType a, SigningAlgoType b) =>

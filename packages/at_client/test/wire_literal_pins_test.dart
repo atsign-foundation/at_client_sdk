@@ -27,6 +27,7 @@ import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
 import 'package:at_client/src/crypto/nskey/nskey_mint_lock.dart';
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
+import 'package:at_auth/at_auth.dart' show KeyAlgorithmType;
 import 'package:at_chops/at_chops.dart'
     show
         AESKey,
@@ -155,7 +156,26 @@ void main() {
       // then :2 where a lost mint race left dead remains. NOT the record
       // name — public:pq_signing_root@<atSign> is the wire value and is
       // pinned above; this one is only ever read by the keyfile itself.
-      expect(PqSigningRoot.keyIdPrefix, 'root:mldsa65:');
+      //
+      // The role is frozen, the algorithm is not: a root of a later algorithm
+      // files under root:<that>:1, which is what makes the atSign's root
+      // replaceable at all. So the pin is on what the composition PRODUCES for
+      // today's algorithm, not on the composition being a constant.
+      expect(PqSigningRoot.keyIdRole, 'root');
+      expect(PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken),
+          'root:mldsa65:');
+      expect(PqSigningRoot.keyIdPrefixFor('some-later-algo'),
+          'root:some-later-algo:');
+    });
+
+    test('the root algorithm has one spelling across both vocabularies', () {
+      // SigningAlgoType.mldsa65 is what the _apsk advertisement carries;
+      // KeyAlgorithmType.mlDsa65 is what AtKeys files material under. Slot ids
+      // are composed from the first and material is matched by the second, so
+      // a drift between them would leave every root filed under an id no
+      // reader assembles — with nothing to go red on the way past.
+      expect(PqSigningRoot.rootKeyAlgoToken, 'mldsa65');
+      expect(PqSigningRoot.rootKeyAlgoToken, KeyAlgorithmType.mlDsa65);
     });
   });
 
