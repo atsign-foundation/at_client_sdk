@@ -5422,10 +5422,16 @@ Ruled rather than "fixed", because the fix that suggests itself — one spelling
 — is impossible: records already published carry every form, several
 immutably. The vocabularies and where each applies:
 
-- **Wire / advertised-key ids** (hyphenated): `x-wing`, `ml-kem-1024`,
-  `ml-dsa-65` — nskey advertisements' `alg`, key-package `keys[].alg`, suite
-  ids, and the immutable root record's `keys[].alg`
-  (`PqSigningRoot.rootKeyAlgo`).
+- **Wire / advertised-key ids** (hyphenated): `x-wing`, `ml-kem-1024` — nskey
+  advertisements' `alg`, key-package `keys[].alg`, suite ids. ⚠️ **Amended
+  2026-08-15 by [101](#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+  row 1: `ml-dsa-65` is no longer on this list, and the root record is no
+  longer on it either.** This entry read "…`ml-dsa-65` — … and the immutable
+  root record's `keys[].alg` (`PqSigningRoot.rootKeyAlgo`)". The root became
+  an ordinary signing key advertised in the `_apsk` vocabulary, so it spells
+  its algorithm the compact way every other signing key does; `rootKeyAlgo` is
+  `SigningAlgoType.mldsa65`. ML-DSA-65 now has ONE spelling on the wire, and
+  `wire_literal_pins_test.dart` pins that rather than the split.
 - **Keyfile / pkam tokens** (compact): `xwing`, `mlkem1024`, `mldsa65`,
   `rsa2048` — `AtKeysMaterial.keyAlgorithmType`, the signed-envelope
   `signingAlgo` field, the tagged `_apsk` value, and root links

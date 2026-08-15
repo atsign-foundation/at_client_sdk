@@ -729,6 +729,38 @@ void main() {
               'active private is the one the record calls active');
     });
 
+    test('a retired-only private is refused even by an empty keyfile',
+        () async {
+      // The gap the "not filed beside an active one" rule left: with nothing
+      // active to sit beside, `store`'s guard does not fire and `AtKeysMaterial`
+      // defaults to active — so the predecessor became the keyfile's sole
+      // ACTIVE private, and the single-private short circuit then hands it back
+      // without ever reading the record. The client would sign root links with
+      // a key the record calls retired.
+      //
+      // Production-shaped: a holder that has not yet healed conveys the only
+      // private it has to a freshly approved privileged enrollment.
+      final c = rotating();
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+
+      final filed = await root.file(
+          atSign,
+          Secret(
+            namespace: 'ns',
+            name: PqSigningRoot.secretName,
+            value: base64Encode(predecessor.secretKey),
+          ));
+
+      expect(filed, isFalse,
+          reason: 'a retired key signs nothing, whether or not something '
+              'active is already held');
+      expect(await root.privateHalf(atSign), isNull);
+      expect((await io.read(atSign)).atSignKeys, isEmpty,
+          reason: 'no slot is spent on it, so the pull asks again and a '
+              'holder with the successor can heal this client');
+    });
+
     test('storing a private already held reports success and adds no slot',
         () async {
       final c = rotating();

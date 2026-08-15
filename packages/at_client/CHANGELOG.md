@@ -1,4 +1,27 @@
 ## 3.14.1
+- feat: a root link is verified against **every** root the record advertises,
+  active and retired, rather than against its one active entry.
+  - A retired entry stays advertised precisely so that what it signed goes on
+    verifying. Checking only the active one would turn every link written
+    before a rotation into `broken` — reported as tampering — the moment a
+    successor appeared.
+  - **Both** root-link verifiers move: `PqSigningChain._checkRootLink` and the
+    conveyance check inside `_publishPendingRootLink`, which refuses to stamp a
+    link it cannot verify. Fixing only the first would have left a conveyed
+    link rejected while a directly-read one passed.
+  - An advertised entry whose algorithm this build cannot check is **skipped**,
+    not failed. Both verifiers now dispatch through
+    `PqSigningRoot.verifierFor`, which is public for that reason: its dartdoc
+    claimed to be the one place `verifiableRootAlgos` becomes code, and
+    `PqSigningChain` was constructing its own ML-DSA verifier at two sites, so
+    there were three places and only one consulted the set.
+- fix: a root private matching only a **retired** advertised entry was filed as
+  the keyfile's *active* private when the keyfile held nothing. `store`'s guard
+  refuses a second active, so "not filed beside an active one" was the whole
+  rule only while something active was there to sit beside; with nothing held
+  the guard did not fire and the material defaulted to active. The client would
+  then sign root links with a key the record calls retired. `file` now refuses
+  it outright, so the pull asks again and a holder of the active root answers.
 - feat: `PqSigningRoot.privateHalf` returns the root private the **record**
   says may sign, rather than the first active one the keyfile happens to hold.
   - With two active privates the keyfile's insertion order decided which one

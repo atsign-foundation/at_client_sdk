@@ -7,7 +7,7 @@ import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
+import 'package:at_auth/at_auth.dart' show ApskSigningKey, AtKeysIo;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/src/mixins/envelope_signing.dart'
     show EnvelopeSigning;
@@ -124,14 +124,19 @@ class PqSigningChain {
   static const String rootLinkSecretName =
       '${PairwiseSecretSharing.perEnrollmentSecretPrefix}apskRootLink';
 
-  /// Signature algorithm marker on a root link: the compact
-  /// pkam/enrollment/keyfile spelling, not the hyphenated `ml-dsa-65` the
-  /// immutable root *record* carries ([PqSigningRoot.rootKeyAlgo]).
+  /// Signature algorithm marker on a root link — the same `mldsa65` the root
+  /// record and the keyfile use.
   ///
-  /// Both spellings are frozen — published records carry both, the root
-  /// record immutably — so a harmonising rename on either side would break
-  /// verification of everything already written. The pins in
-  /// `test/wire_literal_pins_test.dart` hold the two apart on purpose.
+  /// ⚠️ This said the record carried a hyphenated `ml-dsa-65` and that "both
+  /// spellings are frozen … the pins hold the two apart on purpose". That
+  /// stopped being true when the root record adopted the `_apsk` vocabulary:
+  /// [PqSigningRoot.rootKeyAlgo] is `SigningAlgoType.mldsa65`, and the pin in
+  /// `test/wire_literal_pins_test.dart` now asserts the opposite of what this
+  /// paragraph claimed it asserted — ML-DSA-65 has ONE spelling on the wire.
+  ///
+  /// Write-only today: both root-link verifiers dispatch through
+  /// `PqSigningRoot.verifierFor` on the algorithm of the *advertised entry*
+  /// they are checking against, not on this field.
   static const String rootLinkAlgo = 'mldsa65';
 
   /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
@@ -486,8 +491,8 @@ class PqSigningChain {
       return false;
     }
 
-    final rootKey = await _rootPublicKey(atSign);
-    if (rootKey == null) {
+    final candidates = await _rootCandidates(atSign);
+    if (candidates.isEmpty) {
       _logger.warning('A root link was conveyed but $atSign publishes no '
           'signing root to verify it against; not publishing an unverifiable '
           'link');
@@ -495,11 +500,11 @@ class PqSigningChain {
     }
     final bool verifies;
     try {
-      verifies = await MlDsa65PureDartAlgo().verifyBytes(
+      verifies = await _verifiesUnderAny(
         Uint8List.fromList(
             utf8.encode(signableTextOf(payload.cast<String, Object?>()))),
-        signature: base64Decode(link['signature'] as String),
-        publicKey: rootKey,
+        link['signature'] as String,
+        candidates,
       );
     } catch (e) {
       _logger.warning('Conveyed root link could not be checked; not '
@@ -735,8 +740,8 @@ class PqSigningChain {
     Map<String, Object?> link,
     List<String> path,
   ) async {
-    final rootKey = await _rootPublicKey(atSign);
-    if (rootKey == null) {
+    final candidates = await _rootCandidates(atSign);
+    if (candidates.isEmpty) {
       return ChainResult(
           ChainVerdict.broken,
           path,
@@ -756,10 +761,10 @@ class PqSigningChain {
     }
     final bool ok;
     try {
-      ok = await MlDsa65PureDartAlgo().verifyBytes(
+      ok = await _verifiesUnderAny(
         Uint8List.fromList(utf8.encode(signableTextOf(payload))),
-        signature: base64Decode(link['signature'] as String),
-        publicKey: rootKey,
+        link['signature'] as String,
+        candidates,
       );
     } catch (e) {
       return ChainResult(ChainVerdict.broken, path,
@@ -786,16 +791,48 @@ class PqSigningChain {
     }
   }
 
-  Future<Uint8List?> _rootPublicKey(String atSign) async {
+  /// Every root the record advertises that this build can check a signature
+  /// with — active first, then retired.
+  ///
+  /// **Retired entries are candidates.** A root link is verified long after it
+  /// was signed, and the whole point of keeping a retired entry advertised is
+  /// that what it signed goes on verifying. Checking only the active entry
+  /// would turn every superseded link into `broken` — reported as tampering —
+  /// the moment a successor appeared.
+  ///
+  /// Empty for absent and unreadable alike: verification wants one answer,
+  /// "nothing to check against", and the distinction matters only to code that
+  /// mints or retires on it.
+  Future<List<ApskSigningKey>> _rootCandidates(String atSign) async {
     try {
-      return await PqSigningRoot.publishedPublicKey(_atClient, atSign);
+      return await PqSigningRoot.publishedRoots(_atClient, atSign);
     } catch (e) {
-      // Verification wants one answer — "nothing to check against" — for
-      // absent and unreadable alike; the distinction matters only to code
-      // that mints or retires on it.
       _logger.info('No readable signing root for $atSign: $e');
-      return null;
+      return const [];
     }
+  }
+
+  /// Whether [signature] over [signable] verifies under any of [candidates].
+  ///
+  /// An entry whose algorithm this build has no verifier for is **skipped**,
+  /// not failed: `PqSigningRoot.verifierFor` is the one place
+  /// `verifiableRootAlgos` becomes code, and a record may legitimately carry a
+  /// root a client predating that algorithm cannot check.
+  static Future<bool> _verifiesUnderAny(
+    Uint8List signable,
+    String signature,
+    Iterable<ApskSigningKey> candidates,
+  ) async {
+    final bytes = base64Decode(signature);
+    for (final candidate in candidates) {
+      final algo = PqSigningRoot.verifierFor(candidate.alg);
+      if (algo == null) continue;
+      if (await algo.verifyBytes(signable,
+          signature: bytes, publicKey: base64Decode(candidate.pub))) {
+        return true;
+      }
+    }
+    return false;
   }
 
   /// Decodes a link that arrived over the substrate as a [Secret] value.

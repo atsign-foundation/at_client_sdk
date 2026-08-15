@@ -438,6 +438,75 @@ void main() {
       return pair;
     }
 
+    /// Publishes a record advertising [active] beside a retired [retired].
+    Future<void> publishRotatedRoot({
+      required Uint8List active,
+      required Uint8List retired,
+    }) async {
+      remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+          jsonEncode(apskAdvertisement(keys: [
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(active)),
+        ApskSigningKey.forPublicKey(
+            alg: PqSigningRoot.rootKeyAlgo,
+            pub: base64Encode(retired),
+            status: KeyEntryStatus.retired),
+      ]));
+    }
+
+    test('a link signed under a RETIRED root still verifies', () async {
+      // The whole reason a retired entry stays advertised: what it signed goes
+      // on verifying. Checking only the active entry would turn every link
+      // written before a rotation into `broken` — reported as tampering — the
+      // moment a successor appeared.
+      final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final successor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final holder = client('priv-1');
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      // Signed while the predecessor was the only root, then the record moves
+      // on: the successor is active and the predecessor is retired beside it.
+      final link = await PqSigningChain(holder)
+          .signRootLinkFor('child-1', rootPrivate: predecessor.secretKey);
+      await publishRotatedRoot(
+          active: successor.publicKey, retired: predecessor.publicKey);
+      await conveyRoot(child, link!);
+
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue,
+          reason: 'the conveyance verifier tries every advertised root, so a '
+              'link signed under the retired one is still stamped');
+      final result =
+          await PqSigningChain(childClient).verifyChain(child, 'child-1');
+      expect(result.verdict, ChainVerdict.anchored,
+          reason: 'and the chain verifier reaches the same conclusion — these '
+              'are two separate verifiers of one shape, and the plan row named '
+              'only one. Reason if not: ${result.reason}');
+    });
+
+    test('a link signed under a root the record never advertised is broken',
+        () async {
+      // The differential: same code path, same two-entry record, a signer the
+      // record does not vouch for. Without this, "tries every advertised root"
+      // and "accepts anything" look identical.
+      final stranger = await MlDsa65PureDartAlgo().generateKeyPair();
+      final successor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final holder = client('priv-1');
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link = await PqSigningChain(holder)
+          .signRootLinkFor('child-1', rootPrivate: stranger.secretKey);
+      await publishRotatedRoot(
+          active: successor.publicKey, retired: predecessor.publicKey);
+      await conveyRoot(child, link!);
+
+      expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
+          reason: 'trying every advertised root is not the same as trying '
+              'every root');
+    });
+
     test('publishes a conveyed root link, and not the same one twice',
         () async {
       final pair = await publishRoot();

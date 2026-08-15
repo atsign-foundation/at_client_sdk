@@ -594,16 +594,31 @@ class PqSigningRoot {
       return false;
     }
 
+    // A retired key signs nothing, so a private matching only a retired entry
+    // is not filed AT ALL — not beside an active one, and not into an empty
+    // keyfile either.
+    //
+    // ⚠️ The empty case is the one that bit: `store`'s guard refuses a second
+    // active, so "not filed beside an active one" was the whole rule only for
+    // as long as something active was there to sit beside. With nothing held,
+    // the guard did not fire and `AtKeysMaterial` defaults to active — the
+    // predecessor became this keyfile's sole ACTIVE private, and the
+    // single-private short circuit in [_signingPrivate] then returned it
+    // without reading the record. The client signed root links with a key the
+    // record calls retired. Refusing here rather than in `store` keeps the
+    // "may this key sign" judgement in the one place that has the record.
+    if (matched.status != KeyEntryStatus.active) {
+      _logger.info('Not filing a signing root private conveyed to $atSign: the '
+          'record advertises it as retired, so it can sign nothing. The pull '
+          'asks again and a holder of the active root can answer');
+      return false;
+    }
+
     // A private matching the ACTIVE entry supersedes everything held: that is
     // the keyfile catching up with the record, not a rotation being performed
-    // here. A private matching only a RETIRED entry supersedes nothing and is
-    // not filed beside an active one — it can sign nothing, so a slot for it
-    // would be dead material; it is recognised rather than discarded as
-    // poison, which is the whole difference this row makes.
+    // here.
     final stored = await store(atSign, private,
-        heldCorrespondence: matched.status == KeyEntryStatus.active
-            ? await _correspondenceByKeyId(atSign, roots)
-            : null);
+        heldCorrespondence: await _correspondenceByKeyId(atSign, roots));
     if (stored) {
       _logger.info('Filed the signing root private for $atSign');
     }
@@ -854,7 +869,7 @@ class PqSigningRoot {
   /// asked, and answers it "no" — which reads exactly like poison.
   static Future<bool> _corresponds(
       Uint8List private, ApskSigningKey root) async {
-    final algo = _verifierFor(root.alg);
+    final algo = verifierFor(root.alg);
     if (algo == null) return false;
     try {
       final signature = await algo.signBytes(_probe, secretKey: private);
@@ -868,8 +883,12 @@ class PqSigningRoot {
   /// The signer/verifier for [alg], or null when this build has none.
   ///
   /// The one place [verifiableRootAlgos] is turned into code, so the set and
-  /// the switch cannot disagree about what is supported.
-  static MlDsa65PureDartAlgo? _verifierFor(SigningAlgoType alg) =>
+  /// the switch cannot disagree about what is supported. ⚠️ That sentence was
+  /// false when it was written: `PqSigningChain` constructed its own
+  /// `MlDsa65PureDartAlgo` at both root-link verifiers, so there were three
+  /// places and only this one consulted the set. Both now come here, which is
+  /// what makes the claim true rather than aspirational.
+  static MlDsa65PureDartAlgo? verifierFor(SigningAlgoType alg) =>
       alg == SigningAlgoType.mldsa65 ? MlDsa65PureDartAlgo() : null;
 
   static final Uint8List _probe =
