@@ -1,3 +1,4 @@
+import 'dart:async' show FutureOr;
 import 'dart:convert';
 import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo;
@@ -19,6 +20,34 @@ class MockAtClient extends Mock implements AtClient {
 /// Generation 1 of a root filed under the algorithm this build mints.
 final rootSlot1 =
     '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
+
+/// An [InMemoryAtKeysIo] that runs [beforeUpdate] once, immediately before the
+/// nth [update] opens.
+///
+/// The mint's read-decide-write spans three awaits, and the sibling that can
+/// invalidate its decision is the client's own PQ start, fired unawaited. There
+/// is no way to make that interleaving happen on demand from outside, so the
+/// hook stages it exactly: the private lands in the instant between the mint
+/// deciding it holds nothing and the store opening for the write.
+class _RacingAtKeysIo extends InMemoryAtKeysIo {
+  _RacingAtKeysIo({required this.atUpdate, required this.beforeUpdate});
+
+  final int atUpdate;
+  final Future<void> Function(InMemoryAtKeysIo io) beforeUpdate;
+  int _updates = 0;
+  bool _fired = false;
+
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    _updates++;
+    if (_updates == atUpdate && !_fired) {
+      _fired = true;
+      await beforeUpdate(this);
+    }
+    return super.update(atsign, mutate);
+  }
+}
 
 bool _bytesEqual(Uint8List a, Uint8List b) {
   if (a.length != b.length) return false;
@@ -457,6 +486,59 @@ void main() {
     final active = await root.privateHalf(atSign);
     expect(active, isNotNull);
     expect(active, isNot(orphan.secretKey));
+  });
+
+  test('a private arriving mid-mint is kept, and the minted pair discarded',
+      () async {
+    // The mint decides it holds nothing, then awaits three times — the record
+    // fetch, a retire, and an ML-DSA keygen — before it writes. The client's
+    // own PQ start runs unawaited beside it and files whatever a peer conveyed
+    // in that window, so the decision is taken against a snapshot that is
+    // already stale by the time it is acted on.
+    //
+    // Nothing below refuses the second key either: at_auth's
+    // single-active-per-algorithm rule is enrollment-scoped, and root material
+    // is atSign-scope with a null enrollment id. Two active root privates were
+    // therefore writable AND survived a keyfile round trip, with `.firstOrNull`
+    // returning the EARLIEST filed — the losing pair, not the conveyed key
+    // every other enrollment can verify against.
+    final arrived = await MlDsa65PureDartAlgo().generateKeyPair();
+    final c = client();
+    final io = _RacingAtKeysIo(
+      // The mint's first update is _storeFreshPair's own: the record is absent,
+      // so the poison heal and the orphan retire above it never run.
+      atUpdate: 1,
+      beforeUpdate: (io) async {
+        final keys = await io.read(atSign);
+        keys.addKey(AtKeysMaterial(
+          keyId: rootSlot1,
+          keyPartType: CryptographicKeyType.privateSigning,
+          keyAlgorithmType: PqSigningRoot.rootKeyAlgoToken,
+          bytes: AtBytes(arrived.secretKey),
+          createdAt: DateTime.now().toUtc(),
+        ));
+        await io.flush(atSign.toAtsign(), keys);
+      },
+    );
+    await io.write(atSign, AtKeys());
+
+    final minted = await PqSigningRoot(c.client, keysIo: io)
+        .mintIfAbsent(isFullyPrivileged: true);
+
+    expect(minted, isNull,
+        reason: 'the mint is abandoned rather than completed: the private that '
+            'arrived is the one a peer conveyed, and publishing over it would '
+            'strand every enrollment that already has it');
+    expect(c.published, isEmpty,
+        reason: 'nothing is published for a pair that was never filed');
+    final keys = await io.read(atSign);
+    final actives = keys.atSignKeys.where((m) =>
+        m.keyPartType == CryptographicKeyType.privateSigning &&
+        m.status == KeyPartStatus.active);
+    expect(actives, hasLength(1),
+        reason: 'two active root privates make "what do I sign with" a '
+            'question answered by insertion order');
+    expect(actives.single.bytes.bytes, arrived.secretKey);
   });
 
   test('a root slot of another algorithm is still a root slot', () async {

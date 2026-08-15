@@ -319,7 +319,19 @@ class PqSigningRoot {
     // Durable before published, for the same reason minting an nskey is: a
     // published root whose private did not survive can never be replaced,
     // because the record is immutable and the root does not rotate.
-    final slot = await _storeFreshPair(atSign, pair);
+    final stored = await _storeFreshPair(atSign, pair);
+    if (stored.overtaken) {
+      // `held` was read before this method awaited three times — the record
+      // fetch, the retire above, and the keygen — and this client's own PQ
+      // start runs unawaited beside it, filing whatever a peer conveys. The
+      // freshly minted pair is discarded rather than filed: nothing was
+      // published for it, so no verifier ever saw it.
+      _logger.info('Abandoned the signing root mint for $atSign: a root '
+          'private arrived while this mint was generating, and it is the one '
+          'a peer conveyed rather than the one this client just made');
+      return null;
+    }
+    final slot = stored.slot;
     if (slot == null) {
       throw StateError(
           'could not store the signing root private for $atSign, so it is '
@@ -879,23 +891,43 @@ class PqSigningRoot {
   }
 
   /// Files both halves of a freshly minted pair under one slot, durably.
-  /// Returns the slot, or null when the pair could not be persisted.
-  Future<String?> _storeFreshPair(
+  ///
+  /// Returns the slot; a null slot means the pair could not be persisted, and
+  /// `overtaken` means an active root private appeared while the mint was
+  /// deciding, so nothing was filed.
+  ///
+  /// ⚠️ **The overtaken check has to be here, not in the caller.**
+  /// [mintIfAbsent] establishes that it holds no active private, then awaits
+  /// three times — the record fetch, a retire, and an ML-DSA keygen — before
+  /// reaching this method. Its decision is therefore taken against a snapshot
+  /// that a sibling can invalidate: `AtClientImpl` fires the PQ start
+  /// unawaited, and that start files whatever private a peer has conveyed. The
+  /// keyfile lock spans one `update`, never a read-decide-write across it, and
+  /// nothing below refuses the second active either — at_auth's
+  /// single-active-per-algorithm rule is **enrollment-scoped**, and the root is
+  /// atSign-scope material with a null enrollment id. So the only place the
+  /// question can be asked and answered atomically is inside this update.
+  Future<({String? slot, bool overtaken})> _storeFreshPair(
       String atSign, ({Uint8List publicKey, Uint8List secretKey}) pair) async {
     final io = keysIo;
-    if (io == null) return null;
+    if (io == null) return (slot: null, overtaken: false);
     if (io is! WrittenAtKeysIo) {
       _logger.severe('Filed the signing root for $atSign in memory only — '
           'this AtKeysIo cannot persist, and an immutable root cannot be '
           'minted again');
-      return null;
+      return (slot: null, overtaken: false);
     }
     try {
       // The slot is chosen inside the update, under whatever the store holds
       // across it: picking it from a snapshot read outside would let a sibling
       // take the same free slot, and `addKey` refuses a duplicate keyId.
       String? slot;
+      var overtaken = false;
       await io.update(atSign.toAtsign(), (keys) {
+        if (_activePrivates(keys).isNotEmpty) {
+          overtaken = true;
+          return false;
+        }
         slot = _freeSlot(keys, rootKeyAlgoToken);
         final createdAt = DateTime.now().toUtc();
         keys.addKey(AtKeysMaterial(
@@ -914,10 +946,10 @@ class PqSigningRoot {
         ));
         return true;
       });
-      return slot;
+      return (slot: slot, overtaken: overtaken);
     } catch (e) {
       _logger.severe('Cannot store the signing root pair for $atSign: $e');
-      return null;
+      return (slot: null, overtaken: false);
     }
   }
 

@@ -1,4 +1,19 @@
 ## 3.14.1
+- fix: the signing-root mint could leave two active root privates, and pick
+  the wrong one.
+  - `mintIfAbsent` establishes that it holds no active private and then awaits
+    three times — the record fetch, a retire, and an ML-DSA keygen — before it
+    writes, while the PQ start runs unawaited beside it and files whatever
+    private a peer conveyed. The decision was acted on against a snapshot that
+    was already stale, and `_storeFreshPair` checked nothing of its own.
+  - Nothing below refused the second key: at_auth's
+    single-active-per-algorithm rule is enrollment-scoped, and root material is
+    atSign-scope with a null enrollment id. So two actives were writable and
+    survived a keyfile round trip, with selection falling to insertion order —
+    the losing pair, not the conveyed key other enrollments can verify against.
+  - The check moves inside `_storeFreshPair`'s own store update, the only place
+    it can be asked and answered atomically. A mint that finds itself overtaken
+    is abandoned and its pair discarded unpublished.
 - fix!: `PqSigningRoot.store` reported success for a private it discarded.
   It returned `true` whenever the keyfile update completed, whatever the
   update decided, so a root private conveyed to a client that already held a
