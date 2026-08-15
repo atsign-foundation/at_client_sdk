@@ -3037,6 +3037,79 @@ its own. None blocks anything.
     whether any of the three can publish a *different* composition than the
     others, since a rotation that is atomic only when one writer runs is a
     property nobody has stated, let alone tested.
+
+    ✅ **THE EXAMINATION RAN 2026-08-15. The answer is yes — narrowly at rest,
+    and sharply inside one window.** Measured with a throwaway probe over
+    `signing_key_minting_test.dart`'s harness (built, run, deleted), which
+    captured what W2 would compose at each point of a mint and compared it
+    against the value the record ends up holding, composed the way the
+    atServer does it (`enroll_verb_handler.dart:977-985`).
+
+    - **At rest the two agree** for `{rsa2048}` from nothing, `{mldsa65}` from
+      nothing, and the `rsa2048` → `mldsa65` stage transition: byte-identical.
+    - **The one at-rest divergence is ORDER, and it is benign.** With two
+      retired generations of one algorithm, W1 lists the just-retiring key
+      ahead of the keyfile's retired set while `AtKeys.retiredSigningKeysFor`
+      sorts by algorithm only, so within an algorithm it returns slot order.
+      Same kids, same pubs, same statuses; readers select by algorithm across
+      every entry, so nothing mis-verifies. It costs one extra write — W2's
+      `published == value` check fails, W2 rewrites in its own order, and it
+      settles, because W1 does not republish at rest (`:146` returns early
+      when nothing is missing or superseded).
+    - ⚠️ **Inside the publish-before-file window the concurrent writer does
+      not write "the old advertisement". It writes the APKAM AUTHENTICATION
+      key.** `_publish` runs before anything is filed, so `heldSigningKeys` is
+      still empty and `apskEntries` takes its auth-key fallback
+      (`apsk_composition.dart:58-61`). Measured: a PQ-native enrollment's
+      ML-DSA array replaced by a **bare RSA string** — which also inverts the
+      bare-versus-array form rule `bareApskValueOf` exists to protect. In the
+      stage-transition case the record ends up naming the OUTGOING key as
+      active with the newly minted one absent.
+
+    **Reachability is NOT measured, and the bootstrap alone cannot do it.**
+    `PqClientBootstrap` awaits its steps in order and `_collectConveyedKeys`
+    — the only in-package `register()`, hence the only in-package W2 trigger
+    on that path — runs *before* `_mintInUseSigningKeys`. An interleaving
+    needs an application call racing the **unawaited** `startup()` at
+    `at_client_impl.dart:623`, and both W2 triggers are publicly exported
+    (`AtClientSecretSharing.register`, and `NskeyRotation` reaching
+    `PublishedNskeyKeyRing:391`). So the compositions are measured; the race
+    is a hypothesis.
+
+    **And it heals.** W2 composes from the keyfile, so its next invocation
+    publishes the correct value, and `register()` → `publishPublicSigningKey`
+    runs on every start. Verification reads the record live, so envelopes
+    signed during the window verify again once it heals. The exposure is one
+    process lifetime of refused envelopes and refused key-package
+    verification — not permanent unverifiability, which is what this item
+    feared.
+
+    ⚠️ **Three things this item's own framing got wrong, corrected here
+    rather than silently:**
+    1. **W1 does not compose purely from handed-in arguments** — its retired
+       half is read from the keyfile at `signing_key_minting.dart:260`,
+       exactly as W2's is. That mix, in-memory active half plus keyfile
+       retired half, is precisely what makes the order case diverge; a
+       purely-handed-in W1 would not have.
+    2. **There are FOUR producers, not three.** The atServer writes the record
+       at approval from what the enrollee sent on `enroll:request`
+       (`enroll_verb_handler.dart:1013-1019`), and W1's own no-enrollment arm
+       delegates to W2 with an explicit value (`signing_key_minting.dart:266`).
+    3. **`heldSigningKeys`' `canSignEnvelopeWith` filter is not a divergence
+       source**, though it looks like one beside W1's in-use-set filter:
+       `AtClientPreference` already runs the in-use set through
+       `_signableOrRefuse` on the same predicate, so the set cannot name an
+       algorithm the filter would drop.
+
+    ⛔ **What is owed now is a RULING, not a fix.** The obvious repairs — file
+    before publishing, or have W2 stand down while a mint is in flight — both
+    change an ordering that exists for a stated reason: *"a minter publishes
+    first precisely so that no envelope is ever signed under a key the
+    advertisement does not name"* (`apkam_signing.dart:47-49`). Reversing it
+    trades a window where the advertisement is stale for a window where it is
+    ahead of the keyfile, and which of those is worse is a judgement about
+    what a peer does with each. Recording the measurement without picking is
+    deliberate.
 16. **`LocalSecondary`'s enrollment cache can never hit, and its write is never
     read.** `_getEnrollmentDetails` reads
     `local:<enrollmentId><atSign>` (`local_secondary.dart:898`) and, on a miss,
