@@ -20,6 +20,13 @@ class EnrollParams {
   /// The signing algorithm of [apkamPublicKey] — `rsa2048` (legacy default) or
   /// `mldsa65` (PQ). Recorded on the enrollment so PKAM verification is
   /// record-authoritative.
+  ///
+  /// ⚠️ **This names the APKAM *authentication* key's algorithm — the key that
+  /// signs the `from:` challenge — and not the algorithm the enrollment signs
+  /// documents with.** The name invites the second reading and the two are
+  /// deliberately different: an enrollment holds a separate signing key whose
+  /// algorithm is advertised in [apsk], and a rollout-1 client authenticates
+  /// with ML-DSA while signing with RSA-2048. Nothing here describes that key.
   String? signingAlgo;
 
   /// The value to publish as this enrollment's APKAM public signing key at

@@ -44,6 +44,11 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
 
   /// The signing algorithm of [apkamPublicKey] — `rsa2048` or `mldsa65`.
   /// Recorded on the enrollment so PKAM verification is record-authoritative.
+  ///
+  /// ⚠️ **The APKAM *authentication* key's algorithm, not the algorithm the
+  /// enrollment signs documents with** — see `EnrollParams.signingAlgo`, which
+  /// this copies onto the wire. The two keys are deliberately different from
+  /// rollout 1 onward.
   String? signingAlgo;
 
   /// Opaque, additive metadata stored verbatim on the enrollment record and

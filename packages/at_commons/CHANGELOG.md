@@ -1,5 +1,12 @@
 ## 5.16.0
 
+- docs: `signingAlgo` says plainly that it names the APKAM **authentication**
+  key's algorithm — the key that signs the `from:` challenge — and not the
+  algorithm an enrollment signs documents with. The name invites the second
+  reading and the two are deliberately different algorithms from rollout 1
+  onward. Stated on `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`,
+  which all declare the field and previously said this in two forms and none.
+
 - feat: add `EnrollVerbBuilder.apkamPublicKeySignature`, threading the existing
   `EnrollParams.apkamPublicKeySignature` through to the built command. The field
   had no route to the wire, so an `enroll:update` could not carry the proof of
