@@ -77,7 +77,7 @@ void main() {
       final json = untyped.toJson();
       expect(json.containsKey('version'), false);
       expect(json.containsKey('enrollments'), false);
-      expect(json.containsKey('atSignKeys'), false);
+      expect(json.containsKey('atsignKeys'), false);
       expect(json['enrollmentId'], encryptedAtKeysMap['enrollmentId']);
 
       // The control: the marker DOES appear as soon as there is typed
@@ -86,7 +86,7 @@ void main() {
       untyped.addKey(symmetricKey('now-typed'));
       final typed = untyped.toJson();
       expect(typed['version'], AtKeys.supportedVersion);
-      expect(typed['atSignKeys'], hasLength(1));
+      expect(typed['atsignKeys'], hasLength(1));
     });
 
     test('a legacy document round-trips byte-identically through a new build',

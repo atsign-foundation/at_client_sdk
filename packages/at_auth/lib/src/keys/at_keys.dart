@@ -80,7 +80,7 @@ class AtKeys {
     'version',
     'atsign',
     'enrollments',
-    'atSignKeys',
+    'atsignKeys',
   };
 
   //todo: make non-nullable and final in v4
@@ -687,7 +687,7 @@ class AtKeys {
   }
 
   /// Decodes the typed-keys document shape (`version`, `atsign`,
-  /// `atSignKeys`, `enrollments`, plus legacy fields flat at the top level).
+  /// `atsignKeys`, `enrollments`, plus legacy fields flat at the top level).
   /// Json without a `version` field is accepted as the legacy flat shape
   /// (delegates to [_fromLegacyJson]); a `version` other than
   /// [supportedVersion] throws [AtKeysUnsupportedVersionException]. Each
@@ -710,7 +710,7 @@ class AtKeys {
           'Unsupported atKeys version: $version');
     }
     // A typed document whose materials sit under a top-level `keys` predates
-    // the enrollments[]/atSignKeys[] split. Refused by name, because the
+    // the enrollments[]/atsignKeys[] split. Refused by name, because the
     // alternative is silent and much worse: `keys` is no longer a reserved
     // field, so the whole array would be swept into [metadata] as a legacy
     // value, the document would read as holding no typed material at all, and
@@ -720,7 +720,7 @@ class AtKeys {
     if (json.containsKey('keys')) {
       throw AtKeysValidationException(
           'This keyfile carries a top-level "keys" array, the shape that '
-          'preceded enrollments[]/atSignKeys[]. It must be regenerated; '
+          'preceded enrollments[]/atsignKeys[]. It must be regenerated; '
           'reading it here would file its key material as legacy metadata '
           'and authenticate as the wrong enrollment.');
     }
@@ -729,10 +729,10 @@ class AtKeys {
         assurance.expectNonEmptyString(json['atsign'], 'atsign').toAtsign();
 
     final materials = <AtKeysMaterial>[];
-    if (json.containsKey('atSignKeys')) {
+    if (json.containsKey('atsignKeys')) {
       materials.addAll(parseAtKeysDocument(
-          assurance.expectList(json['atSignKeys'], 'atSignKeys'),
-          fieldPrefix: 'atSignKeys'));
+          assurance.expectList(json['atsignKeys'], 'atsignKeys'),
+          fieldPrefix: 'atsignKeys'));
     }
 
     final snapshots = <AtKeysEnrollment>[];
@@ -802,7 +802,7 @@ class AtKeys {
 
   /// Encodes this [AtKeys] to the typed-keys document shape. Legacy fields
   /// merge flatly into the top level alongside
-  /// `version`/`atsign`/`atSignKeys`/`enrollments` — upgrading a legacy file
+  /// `version`/`atsign`/`atsignKeys`/`enrollments` — upgrading a legacy file
   /// is additive, not a format swap. Falls back to the legacy flat shape (see
   /// [_toLegacyJson]) when there's no atsign and no typed key material.
   ///
@@ -835,7 +835,7 @@ class AtKeys {
       'version': supportedVersion,
       'atsign': atsign.toString(),
       if (_atSignMaterialsByKeyId.isNotEmpty)
-        'atSignKeys': encodeAtKeysDocument(atSignKeys),
+        'atsignKeys': encodeAtKeysDocument(atSignKeys),
       if (_enrollments.isNotEmpty)
         'enrollments': [
           for (final slot in _enrollments.values)

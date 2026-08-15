@@ -23,7 +23,7 @@ class AtKeysAssurance {
     'version',
     'atsign',
     'enrollments',
-    'atSignKeys',
+    'atsignKeys',
   };
 
   // ---- low-level parsing/value primitives, called by the models' fromJson ----
@@ -305,10 +305,10 @@ class AtKeysAssurance {
       return const [];
     }
     final materials = <AtKeysMaterial>[];
-    if (json.containsKey('atSignKeys')) {
+    if (json.containsKey('atsignKeys')) {
       materials.addAll(parseAtKeysDocument(
-          expectList(json['atSignKeys'], 'atSignKeys'),
-          fieldPrefix: 'atSignKeys'));
+          expectList(json['atsignKeys'], 'atsignKeys'),
+          fieldPrefix: 'atsignKeys'));
     }
     if (json.containsKey('enrollments')) {
       final enrollments = expectList(json['enrollments'], 'enrollments');

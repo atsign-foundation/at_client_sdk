@@ -64,7 +64,7 @@
 - **BREAKING** feat: the `.atKeys` typed document groups by enrollment. The
   flat document-wide `keys[]` becomes `enrollments[]` — one entry per
   enrollment, carrying its id, its `namespaces`/`appName`/`deviceName`
-  snapshot, and its own keys — plus a top-level `atSignKeys[]` for material
+  snapshot, and its own keys — plus a top-level `atsignKeys[]` for material
   that belongs to the atSign rather than to any enrollment (the signing root,
   an nskey private). Key entries no longer carry an `enrollmentId`: the
   container states it once, and two stored copies of one fact can disagree

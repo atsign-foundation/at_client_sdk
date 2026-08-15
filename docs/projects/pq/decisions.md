@@ -8989,6 +8989,18 @@ on a widened collection: a reader that refuses a second entry makes the feature
 unenableable, because the first writer to emit one breaks every build that
 predates it.
 
+> **Renamed 2026-08-15 — the at-rest field is `atsignKeys`, not `atSignKeys`.**
+> gkc's call, to match its sibling `atsign` in the same document. This ruling
+> and the two below it are left saying `atSignKeys` because that is what was
+> ruled; only the spelling of the persisted key changed, and nothing else about
+> them. **The Dart members keep their casing** — `atSignKeys`,
+> `atSignKeysForKeyId`, `getAtSignKey`, `retireAtSignKey` — because the tree's
+> naming rule is to preserve `atSign` capitalisation in code, and the lowercase
+> form exists only to match a legacy field name in the document. Measured
+> before renaming: **no released at_auth ships `atSignKeys` at all** (zero
+> matches across all ten versions in the pub cache, with `class AtKeys` as the
+> positive control), so nothing outside this tree reads either spelling.
+
 **3. Material that belongs to the atSign moves to a top-level `atSignKeys[]`.**
 The signing root is the atSign's, not the enrollment's — the document already
 said so by *omitting* `enrollmentId` from that entry, and nesting it inside an

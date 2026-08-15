@@ -89,7 +89,7 @@ void main() {
           '"note":"kept",'
           '"version":1,'
           '"atsign":"@alice",'
-          '"atSignKeys":['
+          '"atsignKeys":['
           '{"keyId":"nskey.buzz.abc123","keyParts":['
           '{"keyPartType":"privateDecapsulation","keyAlgorithmType":"xwing",'
           '"createdAt":"2026-06-11T00:00:00.000Z","status":"retired",'
@@ -180,7 +180,7 @@ void main() {
       expect(json.containsKey('version'), isFalse);
       expect(json.containsKey('atsign'), isFalse);
       expect(json.containsKey('enrollments'), isFalse);
-      expect(json.containsKey('atSignKeys'), isFalse);
+      expect(json.containsKey('atsignKeys'), isFalse);
     });
   });
 }

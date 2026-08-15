@@ -300,7 +300,7 @@ final class AtKeysMaterial {
 ///
 /// [enrollmentId] is the owner every material in the array is tagged with —
 /// the enclosing `enrollments[]` entry's id, or null for the document's
-/// `atSignKeys[]`. The container states it once and the entries do not carry
+/// `atsignKeys[]`. The container states it once and the entries do not carry
 /// it: two stored copies of one fact can disagree with nothing to arbitrate.
 /// An entry that carries one anyway is refused rather than ignored, because
 /// ignoring it would silently file the material under a different owner than
@@ -332,7 +332,7 @@ List<AtKeysMaterial> parseAtKeysDocument(
       throw AtKeysValidationException(
           '$entryPrefix carries an enrollmentId. Key entries state no owner of '
           'their own — the container states it once. A document written this '
-          'way predates the enrollments[]/atSignKeys[] shape and must be '
+          'way predates the enrollments[]/atsignKeys[] shape and must be '
           'regenerated.');
     }
     final keyPartsJson =
@@ -363,7 +363,7 @@ List<AtKeysMaterial> parseAtKeysDocument(
 /// `enrollmentId` and doesn't repeat a `keyPartType`.
 ///
 /// The owner is **not** emitted: the enclosing `enrollments[]` entry states it
-/// once, and `atSignKeys[]` states it by being where it is. The agreement
+/// once, and `atsignKeys[]` states it by being where it is. The agreement
 /// check stays, because a group whose halves name different owners is a
 /// programming error that would now be encoded as if it had none.
 List<Map<String, dynamic>> encodeAtKeysDocument(

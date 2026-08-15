@@ -93,7 +93,7 @@ void main() {
       expect(json.containsKey('version'), isFalse);
       expect(json.containsKey('atsign'), isFalse);
       expect(json.containsKey('enrollments'), isFalse);
-      expect(json.containsKey('atSignKeys'), isFalse);
+      expect(json.containsKey('atsignKeys'), isFalse);
     });
 
     test('typed material brings the version/atsign/enrollments document with it',

@@ -8,7 +8,7 @@
   "enrollmentId": "33fe17a2-47e4-41b3-a545-b8270c0fd29d",
   "version": 1,
   "atsign": "@alice🛠",
-  "atSignKeys": [
+  "atsignKeys": [
     {
       "keyId": "root:mldsa65:1",
       "keyParts": [

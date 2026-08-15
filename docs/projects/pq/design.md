@@ -2002,7 +2002,7 @@ Reading them back is `AtKeys.signingKeysFor(enrollmentId)`, which selects on
 that **keyId shape** rather than on the `privateSigning` role. The role is not
 unique to an enrollment's signing keys. The atSign-wide signing root is filed
 under it too, with no enrollment id — it now lives in the document's own
-`atSignKeys[]`, which `signingKeysFor` never reads, so the confusion the shape
+`atsignKeys[]`, which `signingKeysFor` never reads, so the confusion the shape
 filter was written for is structural rather than a matter of prefix parsing.
 The filter stays because the role is still shared within an enrollment, and a
 signature made with a key whose public half is in no `_apsk` verifies against
@@ -2058,7 +2058,7 @@ Reading, in order of what a file can contain:
 1. no `version` — the legacy flat shape;
 2. `version: 1` with `keys: []` — written by at_auth ≥ 3.3.0 on any flush,
    carrying nothing a legacy file does not;
-3. `version: 1` with `enrollments[]` and/or `atSignKeys[]`.
+3. `version: 1` with `enrollments[]` and/or `atsignKeys[]`.
 
 Writing emits (1) when there is no typed material and (3) otherwise. Shape (2)
 is never written again — and a `version: 1` document carrying a top-level

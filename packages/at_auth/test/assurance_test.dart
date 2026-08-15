@@ -125,7 +125,7 @@ void main() {
       final candidate = {
         'version': AtKeys.supportedVersion,
         'atsign': '@alice🛠',
-        'atSignKeys': [_recordJson()],
+        'atsignKeys': [_recordJson()],
       };
 
       expect(
@@ -276,7 +276,7 @@ void main() {
       final candidate = {
         'version': AtKeys.supportedVersion,
         'atsign': '@alice',
-        'atSignKeys': [
+        'atsignKeys': [
           _recordJson(keyId: 'duplicate'),
           _recordJson(keyId: 'duplicate'),
         ],
@@ -314,7 +314,7 @@ void main() {
       final corrupted = {
         'version': AtKeys.supportedVersion,
         'atsign': '@alice',
-        'atSignKeys': 'garbage',
+        'atsignKeys': 'garbage',
       };
       final wellFormed = _documentMap(keys: [_symmetricMaterial()]);
 
@@ -495,7 +495,7 @@ Map<String, dynamic> _documentMap({
     ...legacyJson,
     'version': AtKeys.supportedVersion,
     'atsign': atsign,
-    'atSignKeys': encodeAtKeysDocument(keys),
+    'atsignKeys': encodeAtKeysDocument(keys),
     if (enrollments.isNotEmpty)
       'enrollments': [
         for (final entry in enrollments.entries)

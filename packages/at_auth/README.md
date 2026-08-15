@@ -167,7 +167,7 @@ three layers, outermost first:
      - `enrollments` — one entry per enrollment, carrying its
        `enrollmentId`, an optional `namespaces`/`appName`/`deviceName`
        snapshot of its enrollment record, and its own `keys` array.
-     - `atSignKeys` — a `keys` array for material belonging to the
+     - `atsignKeys` — a `keys` array for material belonging to the
        atSign rather than to any enrollment: the PQ signing root, an
        nskey private.
 
