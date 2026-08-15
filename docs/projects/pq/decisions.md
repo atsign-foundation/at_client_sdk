@@ -8990,10 +8990,16 @@ unenableable, because the first writer to emit one breaks every build that
 predates it.
 
 > **Renamed 2026-08-15 — the at-rest field is `atsignKeys`, not `atSignKeys`.**
-> gkc's call, to match its sibling `atsign` in the same document. This ruling
-> and the two below it are left saying `atSignKeys` because that is what was
-> ruled; only the spelling of the persisted key changed, and nothing else about
-> them. **The Dart members keep their casing** — `atSignKeys`,
+> gkc's call, to match its sibling `atsign` in the same document. **Every
+> ruling in this ledger that says `atSignKeys` — this one, 100, and 101 — is
+> left saying it, because that is what was ruled**; only the spelling of the
+> persisted key changed, and nothing else about them. ⚠️ **101 is the one to
+> watch**: it was written the same day but a few hours *before* the rename, so
+> unlike 99 and 100 it is a **currently-active** ruling carrying the old
+> spelling, and `implementation-plan.md` 14.21/14.22 describe the same field as
+> `atsignKeys`. They are the same field. (This note originally scoped itself to
+> "this ruling and the two below it", which left 101 outside it — found by a
+> cold reader the same day.) **The Dart members keep their casing** — `atSignKeys`,
 > `atSignKeysForKeyId`, `getAtSignKey`, `retireAtSignKey` — because the tree's
 > naming rule is to preserve `atSign` capitalisation in code, and the lowercase
 > form exists only to match a legacy field name in the document. Measured

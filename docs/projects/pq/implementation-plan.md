@@ -1296,7 +1296,10 @@ passthrough it complements).
 **Ruled → [decisions 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)**
 (eight rulings, the verb's shape, and the site-by-site receiver change list).
 **Deliverables — server half: BUILT** on at_server `gkc-apsk-auto-publish` (`ab38b884`), 919/919 unit and
-210/210 functional. One alternation entry on `syntax.dart`'s `enroll` pattern (verified not to disturb
+210/210 functional. ✅ **Re-derived 2026-08-15: that branch and that SHA are both MERGED to
+at_server's `origin/trunk`** — naming a branch here reads as work still in flight, and it is not.
+Re-derive rather than trust:
+`git -C ~/dev/atsign/repos/at_server merge-base --is-ancestor ab38b884 origin/trunk && echo MERGED`. One alternation entry on `syntax.dart`'s `enroll` pattern (verified not to disturb
 `force`/`listNamespace` or the `request`/`listns` captures); a `case 'update'` handler that is
 **self-only** (the connection's `enrollmentId` must equal the target — an explicit exception to
 `isAuthorized`'s "no enrollmentId ⇒ full permissions" default, so an owner or legacy-PKAM connection is
@@ -1802,6 +1805,17 @@ exactly its last re-derivation date, which is why this one now carries one.
 
 ### 14.1 The signing root's `keys[]` shape — DEADLINE: the first root we keep
 
+> ⛔ **SUPERSEDED 2026-08-15 by [decisions 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+> and [14.22](#1422-making-the-signing-root-rotatable--decisions-101) — read
+> those before acting on anything below.** This item is kept for the reasoning
+> that produced its ruling, and two of its conclusions are now **false**: the
+> bare-base64 reader is **deleted** rather than kept, and the shape is **not**
+> permanent — the record becomes mutable behind a mint lock. The premise both
+> rested on ("roots already published can never be rewritten") was the
+> greenfield rule re-litigated in a new costume: nothing is released, so every
+> atSign holding a root is ours. Its line references (`:208-211`, `:108`) are
+> also stale; the code is at `:248-259` and `:139-149`.
+>
 > **RULED 2026-08-08 — tagged. Closed.** ON-1 was the state this deadline named — every atSign activated from
 here keeps a root — and ON-1's live test walked straight into it. The **tagged**
 > form won: `pq_signing_root.dart` now publishes
@@ -3022,6 +3036,31 @@ its own. None blocks anything.
     whether any of the three can publish a *different* composition than the
     others, since a rotation that is atomic only when one writer runs is a
     property nobody has stated, let alone tested.
+16. **`LocalSecondary`'s enrollment cache can never hit, and its write is never
+    read.** `_getEnrollmentDetails` reads
+    `local:<enrollmentId><atSign>` (`local_secondary.dart:898`) and, on a miss,
+    writes the fetched record to
+    `<enrollmentId>.new.enrollments.__manage<atSign>` (`:935`) — a *different*
+    key. Measured 2026-08-15 across all 16 `local:` occurrences in at_client's
+    `lib/` and every one in at_auth's: **nothing anywhere writes the key the
+    read looks for.** So every client instance pays one `enroll:fetch`, and the
+    "cache it in local secondary" write is dead. Pre-existing and outside the PQ
+    path; found while asking what C2 routed into. Harmless today — an in-memory
+    memo on the same object means one fetch per client, not per call — so this
+    is a cleanup, not a defect. ⚠️ **Whichever way it is fixed, decide
+    deliberately whether the cache SHOULD hit:** C2 wants a fresh record on
+    every start precisely so a changed grant is noticed, and making the cache
+    work would silently defeat that.
+17. **`Enrollment.metadata`'s dartdoc claims a field `enroll:fetch` does not
+    return.** It says the metadata is "stored verbatim by the atServer and
+    returned here", but `_fetchEnrollmentInfoById` (at_server `6a86fbcc`,
+    merged to trunk) returns exactly
+    `{appName, deviceName, namespace, encryptedAPKAMSymmetricKey, status}` —
+    no `metadata`. The field is presumably populated on a different response
+    (`enroll:list`), so the type is fine and the *sentence* is wrong where it
+    sits. Worth correcting before someone reads a key package off a `fetch`
+    result and gets null. Also note `Enrollment.namespace` is singular in name
+    and holds the whole grants **map**.
 
 #### 14.19.1 Things that LOOK like defects and are not
 
@@ -3033,6 +3072,19 @@ later, so do not read this list as scoped to one ruling. **Add to it rather
 than re-litigating an entry**, and if an entry is genuinely wrong, amend it in
 place with what it used to say.
 
+0. **Do NOT add a "refuse a document carrying a top-level `atSignKeys` by
+   name" guard.** Proposed 2026-08-15 while renaming that field to
+   `atsignKeys`, on the precedent of A1's refusal of a stale top-level `keys`
+   (which is a real guard and stays). ⚠️ **The two cases are not alike, and
+   the difference is who holds the stale document.** A1's `keys` guard protects
+   against a shape *this tree itself wrote and shipped through several of its
+   own commits*, so a stale file could plausibly be sitting on a machine that
+   matters. `atSignKeys` existed only between A1 and this rename, was never
+   released — zero matches across all ten at_auth versions in the pub cache,
+   with `class AtKeys` as the positive control — and the only files carrying it
+   are ones our own functional runs generate and regenerate. gkc ruled it out
+   the same day. A guard here would be code no reachable file can trigger,
+   which reads as a supported migration path that does not exist.
 1. **A corrupt-base64 pairwise envelope is NOT misclassified as transient.**
    It is tempting to read `sweepOnce`'s broad `catch` arm as the "retry
    forever" path and the `received == null` arm as the "deterministic skip"
@@ -3105,9 +3157,13 @@ and [99](decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-ke
 say **what** and **why**. This says **in what order**, because several of the
 orderings are the difference between a working rollout and a broken fleet.
 
-⚠️ **Rows A1, A2, A3, B2, B1, B3, B4, B5, C1 and D2 are built (2026-08-14) —
-all of ruling 99, plus ruling 98's `_apsk` rule, its stage definitions and both
-of its minting sites. Still unbuilt: C2, D1's tail.**
+⚠️ **EVERY row of 14.20 is now built. Rows A1, A2, A3, B2, B1, B3, B4, B5, C1
+and D2 landed 2026-08-14; C2 landed 2026-08-15 in `e74a68ce2`. The only thing
+this ruling pair still owes is D1's tail — `EnrollParams.signingAlgo`'s dartdoc
+in at_commons.** (This banner read "Still unbuilt: C2, D1's tail" until
+2026-08-15, while the C2 row below it already said DONE. **Third time a summary
+line here has outlived the rows it summarises** — when a row moves, grep this
+section for the banner rather than editing only the row.)
 
 A rollout-1 enrollment — created by a retrofit or by a PQ-native activation —
 now owns an RSA-2048 signing key **before it submits**, advertises that key
@@ -3422,10 +3478,41 @@ rest on them:
   to three sites in the same tree, so the search reaches it. `tests/pq_matrix/published/`
   therefore cannot see a root-record change, and no row here owes the matrix a
   cell.
-- **Three functional files drive this subsystem** —
-  `pq_signing_root_create_once_test.dart`, `signing_root_pull_test.dart` and
-  `signing_root_pull_two_enrollments_test.dart`. The first asserts the property
-  row 6 removes, so it is rewritten rather than broken.
+- **NINE test files across THREE separate test packages exercise this
+  subsystem**, and row 1 breaks assertions in all three. ⚠️ **This entry said
+  "three functional files" until 2026-08-15 and that was WRONG** — it came from
+  listing `tests/at_functional_test/test/` for filenames *containing*
+  `signing_root`, which finds files **named** for the root rather than files
+  that **use** it, and looks in one package of three. Re-derive with, and only
+  with:
+
+  ```
+  git grep -l "pq_signing_root\|PqSigningRoot" -- 'tests/*'
+  ```
+
+  `tests/at_functional_test/`: `pq_signing_root_create_once_test.dart` (asserts
+  the create-once property row 6 removes, so it is rewritten rather than
+  broken), `signing_root_pull_test.dart`,
+  `signing_root_pull_two_enrollments_test.dart`,
+  `enrollment_chain_link_live_test.dart`, `pq_legacy_interop_live_test.dart`,
+  `pq_native_onboard_live_test.dart`.
+  `tests/at_onboarding_cli_functional_tests/`: `pq_native_onboard_test.dart`.
+  `tests/at_end2end_test/test/pq/`: `legacy_server_abort_test.dart`,
+  `retrofit_e2e_test.dart`.
+
+  ⚠️ **The `.single['alg']` assertions are the landmine, and they are in two
+  packages at_client's own analyze and test cannot see** —
+  `pq_native_onboard_live_test.dart:109` and
+  `pq_native_onboard_test.dart:113` both assert
+  `(rootJson['keys'] as List).single['alg'] == 'ml-dsa-65'`. Row 1 changes that
+  spelling to `mldsa65` **and** makes `keys` a list that may hold more than one
+  entry, so `.single` is exactly the `.first`-family trap this tree has a
+  standing rule about. Four more sites assert the `'ml-dsa-65'` literal
+  (`pq_legacy_interop_live_test.dart:141`,
+  `pq_native_onboard_live_test.dart:104`,
+  `pq_native_onboard_test.dart:106`, and `wire_literal_pins_test.dart:589`,
+  which is at_client's own pin on `rootKeyAlgo` — row **1**'s business, not
+  row 2's, even though row 2's note is where the pins are discussed).
 
 | # | Row | Why here |
 |---|-----|----------|
