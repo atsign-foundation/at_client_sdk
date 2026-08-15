@@ -4769,6 +4769,12 @@ does not weaken [47](#47-b-2-lands-two-levers-and-the-difference-between-excludi
 ruling that the revoke is the enforcement; it bounds how quickly that
 enforcement becomes visible.
 
+> **Resolved 2026-08-12, and this section called it correctly.** "The property
+> is the atServer's" was right, and the look on the server side found an
+> `EnrollmentManager` cache invalidated *before* the write rather than after —
+> fixed in at_server `16dd457f`. Noted here because 93 ruling 5 later closed
+> the same question the other way, on a serial test; the amendment sits there.
+
 ### 50.7 What this cost, and what it did not
 
 Landed with rails green at every commit boundary: at_client **1012** unit,
@@ -8030,6 +8036,39 @@ cause. The test discarded the revoke ACK and left the revoked client running
 through the poll; both were fixed and the suite went green. Carrying it as an
 open unknown invited someone to go looking for a server bug that is not there.
 
+> **OVERTURNED 2026-08-12 — the server bug was there, and this ruling told
+> people not to look for it.** `EnrollmentManager` invalidated its read-through
+> `atDataCache` **before** writing the record: `remove(ek)` →
+> `await movePerEnrollmentData(...)` (a whole-keystore walk, many suspension
+> points) → `await keyStore.put(...)`. Any other connection reaching
+> `getEnrollmentByFullKey` inside that window missed, read the **pre-revoke**
+> record and re-cached `approved` permanently, because nothing invalidated
+> after the write — and that cache is what
+> `PkamVerbHandler.verifyEnrollmentIsActive` reads. Fixed in at_server
+> `16dd457f`: mutate first, invalidate second, with no `await` between the
+> write landing and the eviction. 12 of 12 clean full-suite runs after, against
+> 5 failures in 13 before — a rate, not a proof of kind.
+>
+> **Why the conclusion did not follow from its evidence.** The test it rested
+> on is serial — one client, no competing reader — so it never opens the
+> window, and a passing serial test cannot exclude a concurrency race. The
+> harness faults it found were real and worth fixing; fixing an instrument does
+> not establish that the instrument was the cause. The tell was in the data and
+> was read as noise: the row failed only inside the **full suite**, never
+> standalone. "Passes alone, fails in the suite" was attributed to leftover
+> state; it was concurrency, which is the other thing that phrase means.
+>
+> The ruling is kept above verbatim as the record of what was believed. Its
+> closing sentence is the part worth remembering: a wrongly closed ruling does
+> not merely record the wrong answer, it withdraws the question.
+>
+> ⚠️ **This amendment is three days late.** The root cause was established
+> 2026-08-12 and reached
+> [14.9](implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly),
+> but no ruling here was amended, so the ledger asserted the opposite of a
+> measured fix until 2026-08-15. A root cause that lands in the plan and not in
+> the ledger leaves the ledger arguing against it.
+
 **6. D1 initial development ends when the PRs are carved and merged** — not at
 a green matrix, and not at R-2. Publishing (at_chops 3.6.0 → at_commons 5.15.0
 → at_auth 3.4.0 → at_client) and the 4.0.0 posture flip are the release
@@ -8044,6 +8083,24 @@ and 14.16's four residuals are all in scope, as are S-3's completion, B-3
 > when it was written down and stayed on the list. **at_lookup 3.6.1 needs no
 > merging** — PR #2127 merged 2026-08-08 and 3.6.1 is published on pub.dev.
 > The rest of the item list is unchanged.
+
+> **Amended again 2026-08-15 — the enumeration, re-derived.** The principle
+> stands; its list of backlog items was a snapshot of 2026-08-11 and stopped
+> tracking the backlog that day. Reading each subsection's own state marker
+> gives **thirteen** live items where this ruling names six: 14.6 (both halves
+> of `enroll:update` are built; what is owed is a caller that re-advertises a
+> key package), 14.7, 14.8, 14.11, 14.12, 14.14, 14.15, 14.16, 14.17, 14.18,
+> 14.19, 14.20 and 14.21. Eight are closed — 14.1, 14.2, 14.3, 14.4, 14.5, 14.9
+> with 14.9a, 14.10 and 14.13. The split and its re-derivation date now live at
+> the head of
+> [`implementation-plan.md` §14](implementation-plan.md#14-backlog--carried-items-with-no-owning-project),
+> which is the copy to read; repeating it here is what produced two stale lists.
+>
+> ⚠️ **One item is deliberately outside this ruling's scope claim.** 14.21 (the
+> signing root cannot be rotated) was raised 2026-08-15, after "everything open
+> is in D1" was written, and its own entry does **not** claim D1 — only its
+> obstacle 2 carries a release-ordering argument, and that is an argument, not a
+> ruling. Whether the no-deferrals principle extends to it is unruled.
 
 The ordered sequence these rulings produce is
 [14.18](implementation-plan.md#1418-the-remaining-d1-initial-development-sequence).
