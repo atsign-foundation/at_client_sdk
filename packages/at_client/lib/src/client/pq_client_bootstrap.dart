@@ -1,6 +1,7 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart' show AtKeysIo;
+import 'package:at_auth/at_auth.dart'
+    show AtKeys, AtKeysEnrollment, AtKeysIo, WrittenAtKeysIo;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart'
     show collectConveyedKeyMaterial;
@@ -19,6 +20,7 @@ import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
+import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
@@ -241,6 +243,7 @@ class PqClientBootstrap {
         _publishRootLink,
         _publishChainLink,
         _sweepUnanchoredEnrollments,
+        _reconcileEnrollmentSnapshot,
       ]) {
         if (_stopped) {
           _logger.info('PQ startup stopped for $_atSign; the remaining '
@@ -450,6 +453,126 @@ class PqClientBootstrap {
     }
   }
 
+  /// Records what the atServer's enrollment record says about this
+  /// enrollment — its `namespaces`, `appName` and `deviceName` — on the
+  /// keyfile.
+  ///
+  /// An enrollment created from an `enroll:request` carries all three from
+  /// birth, because the writer held the request. A retrofit, or an onboard
+  /// handed its keys by the caller, has no request and omits them, and this
+  /// is where those files get them. It runs on **every** start rather than
+  /// once, because a grant can change after the file was written — the
+  /// keyfile's copy would otherwise keep describing an enrollment the
+  /// atServer has since re-scoped.
+  ///
+  /// Last in the order deliberately: nothing else reads the snapshot, so it
+  /// can only delay steps that heal key material, never enable one.
+  ///
+  /// ⚠️ **Only for an enrollment the keyfile already holds.** Recording a
+  /// snapshot *creates* the slot when it is missing, and an enrollment slot
+  /// is typed content ([AtKeys.toJson] treats a non-empty `enrollments` as
+  /// exactly that) — so doing this for an enrollment with no material would
+  /// rewrite a legacy-flat keyfile as a version 1 document purely as a side
+  /// effect of having opened it. Filling in a snapshot is this step's job;
+  /// converting a keyfile is not.
+  ///
+  /// Through [WrittenAtKeysIo.update], the store's atomic verb, because this
+  /// is a start-time writer on the one file that several start-time writers
+  /// share: a hand-rolled read → mutate → flush loses whichever flushes
+  /// second, and this tree has lost key material exactly that way.
+  Future<void> _reconcileEnrollmentSnapshot() async {
+    final keysIo = _keysIo;
+    if (keysIo is! WrittenAtKeysIo) return;
+
+    // No enrollment id means this client authenticates with the atSign's own
+    // keys. There is no enrollment record to read, and `enroll:fetch` would
+    // be answered for whatever id it was handed rather than refused.
+    final enrollmentId = _atClient.enrollmentId;
+    if (enrollmentId == null) return;
+
+    try {
+      // Shared with the authorization path rather than fetched again: one
+      // record described by two readers is two chances to disagree about it.
+      final record =
+          await _atClient.getLocalSecondary()?.getEnrollmentDetails();
+      if (record == null) return;
+
+      final namespaces = _namespaceGrantsOf(record.namespace);
+      await keysIo.update(_atSign.toAtsign(), (keys) {
+        if (!keys.enrollmentIds.contains(enrollmentId)) {
+          _logger.finer('Not recording an enrollment snapshot for '
+              '$enrollmentId: this keyfile holds no material for it, and '
+              'creating a slot would make a legacy file a typed one');
+          return false;
+        }
+        final held = keys.enrollmentInfo(enrollmentId);
+        if (_snapshotAgrees(held, namespaces, record.appName,
+            record.deviceName)) {
+          return false;
+        }
+        // A grant change is something the user may care about, so it is said
+        // out loud — but only when there was a previous value to differ from.
+        // The first reconciliation of a retrofit's keyfile is a fill, not a
+        // change, and logging it as one would cry wolf on every such file.
+        if (held?.namespaces != null &&
+            namespaces != null &&
+            !_sameGrants(held!.namespaces!, namespaces)) {
+          _logger.warning(
+              'The grants on enrollment $enrollmentId have changed: this '
+              'keyfile recorded ${held.namespaces}, and the atServer now '
+              'says $namespaces');
+        }
+        keys.recordEnrollmentSnapshot(
+          enrollmentId,
+          namespaces: namespaces,
+          appName: record.appName,
+          deviceName: record.deviceName,
+        );
+        return true;
+      });
+    } catch (e, st) {
+      _logger.warning('Could not reconcile the enrollment snapshot for '
+          '$_atSign; the keyfile keeps whatever it already recorded and the '
+          'next start retries: $e, $st');
+    }
+  }
+
+  /// The enrollment record's namespace grants as the keyfile stores them.
+  ///
+  /// The wire field is `Map<String, dynamic>` and the atServer fills it from
+  /// its own `Map<String, String>`, so every value should already be a
+  /// string. An entry whose value is not one is **skipped rather than
+  /// stringified**: `'null'` or `'{}'` recorded as an access level reads as a
+  /// grant, and a missing entry reads as what it is.
+  static Map<String, String>? _namespaceGrantsOf(Map<String, dynamic>? wire) {
+    if (wire == null) return null;
+    return {
+      for (final entry in wire.entries)
+        if (entry.value is String) entry.key: entry.value as String
+    };
+  }
+
+  static bool _snapshotAgrees(AtKeysEnrollment? held,
+      Map<String, String>? namespaces, String? appName, String? deviceName) {
+    if (held == null) return false;
+    // A null incoming field leaves the held one alone, so it cannot disagree.
+    if (appName != null && held.appName != appName) return false;
+    if (deviceName != null && held.deviceName != deviceName) return false;
+    if (namespaces != null &&
+        (held.namespaces == null || !_sameGrants(held.namespaces!, namespaces))) {
+      return false;
+    }
+    return true;
+  }
+
+  static bool _sameGrants(Map<String, String> a, Map<String, String> b) {
+    if (a.length != b.length) return false;
+    for (final entry in a.entries) {
+      if (b[entry.key] != entry.value) return false;
+    }
+    return true;
+  }
+
   /// The step names in run order, for tests that pin the ordering contract.
   @visibleForTesting
   static const List<String> stepNamesInOrder = [
@@ -462,5 +585,6 @@ class PqClientBootstrap {
     'publishRootLink',
     'publishChainLink',
     'sweepUnanchoredEnrollments',
+    'reconcileEnrollmentSnapshot',
   ];
 }

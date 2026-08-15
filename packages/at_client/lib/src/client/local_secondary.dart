@@ -848,7 +848,7 @@ class LocalSecondary implements Secondary {
       return true;
     }
     // if there is no enrollment, return true
-    enrollment ??= await _getEnrollmentDetails();
+    await getEnrollmentDetails();
     if (_atClient.enrollmentId == null ||
         enrollment == null ||
         _shouldSkipKeyFromEnrollmentAuthorization(key)) {
@@ -885,6 +885,18 @@ class LocalSecondary implements Secondary {
     return _isReadAllowed(verbBuilder, access) ||
         _isWriteAllowed(verbBuilder, access);
   }
+
+  /// The enrollment record for the enrollment this client authenticates as,
+  /// memoised for the life of this object. Null when the client holds no
+  /// enrollment id — it is authenticating with the atSign's own keys, and
+  /// there is no enrollment record to read.
+  ///
+  /// Public because the PQ startup reconciles the keyfile's own snapshot of
+  /// `namespaces`/`appName`/`deviceName` against this record. Two readers of
+  /// one record are two chances to describe it differently, so the second
+  /// caller shares this one rather than issuing its own `enroll:fetch`.
+  Future<Enrollment?> getEnrollmentDetails() async =>
+      enrollment ??= await _getEnrollmentDetails();
 
   Future<Enrollment?> _getEnrollmentDetails() async {
     if (_atClient.enrollmentId == null) {

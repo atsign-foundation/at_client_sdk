@@ -1,8 +1,16 @@
 import 'dart:async';
 
-import 'package:at_auth/at_auth.dart' show WrittenAtKeysIo;
+import 'package:at_auth/at_auth.dart'
+    show
+        AtKeys,
+        AtKeysIo,
+        InMemoryAtKeysIo,
+        KeyAlgorithmType,
+        WrittenAtKeysIo;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/response/enrollment.dart' show Enrollment;
+import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
@@ -202,6 +210,130 @@ void main() {
     });
   });
 
+  group('the enrollment snapshot', () {
+    const atSign = '@bootstrap🛠';
+    const enrollmentId = 'enroll-1';
+
+    /// A keyfile holding APKAM material for [id], so the enrollment slot
+    /// exists — which is the precondition the reconciliation requires.
+    Future<InMemoryAtKeysIo> keyfileHolding(String id) async {
+      final io = InMemoryAtKeysIo();
+      final keys = AtKeys(atsign: atSign.toAtsign())
+        ..fileApkamMaterial(
+          enrollmentId: id,
+          algorithm: KeyAlgorithmType.rsa2048,
+          // AtBytes.fromString base64-decodes, so these have to be valid
+          // base64 rather than readable placeholders.
+          publicKey: 'cHVibGlj',
+          privateKey: 'cHJpdmF0ZQ==',
+        );
+      await io.write(atSign, keys);
+      return io;
+    }
+
+    MockLocalSecondary localSecondaryReturning(Enrollment? record) {
+      final local = MockLocalSecondary();
+      when(() => local.getEnrollmentDetails()).thenAnswer((_) async => record);
+      return local;
+    }
+
+    Enrollment recordWith({
+      Map<String, dynamic>? namespace,
+      String? appName,
+      String? deviceName,
+    }) =>
+        Enrollment()
+          ..appName = appName
+          ..deviceName = deviceName
+          ..namespace = namespace;
+
+    Future<void> runStartup(AtKeysIo io, MockLocalSecondary local) async {
+      when(() => client.enrollmentId).thenReturn(enrollmentId);
+      when(() => client.getLocalSecondary()).thenReturn(local);
+      await PqClientBootstrap(
+        client,
+        keysIo: io,
+        privilege: _FakePrivilege(false),
+        sweepUnanchoredEnrollments: () async => 0,
+      ).startup();
+    }
+
+    test('is filled in from the enrollment record on a keyfile that has none',
+        () async {
+      final io = await keyfileHolding(enrollmentId);
+      await runStartup(
+          io,
+          localSecondaryReturning(recordWith(
+            namespace: {'buzz': 'rw'},
+            appName: 'wavi',
+            deviceName: 'pixel',
+          )));
+
+      final held = (await io.read(atSign)).enrollmentInfo(enrollmentId)!;
+      expect(held.namespaces, {'buzz': 'rw'});
+      expect(held.appName, 'wavi');
+      expect(held.deviceName, 'pixel');
+    });
+
+    test('is NOT created for an enrollment the keyfile holds no material for',
+        () async {
+      // The slot would be typed content, so creating one here rewrites a
+      // legacy-flat keyfile as a version 1 document as a side effect of
+      // merely opening it.
+      final io = await keyfileHolding('some-other-enrollment');
+      await runStartup(
+          io, localSecondaryReturning(recordWith(namespace: {'buzz': 'rw'})));
+
+      expect((await io.read(atSign)).enrollmentInfo(enrollmentId), isNull);
+    });
+
+    test('a changed grant is recorded, and said out loud', () async {
+      final io = await keyfileHolding(enrollmentId);
+      await io.update(atSign.toAtsign(), (keys) {
+        keys.recordEnrollmentSnapshot(enrollmentId,
+            namespaces: {'buzz': 'rw'}, appName: 'wavi');
+        return true;
+      });
+
+      await runStartup(io,
+          localSecondaryReturning(recordWith(namespace: {'buzz': 'r'})));
+
+      expect((await io.read(atSign)).enrollmentInfo(enrollmentId)!.namespaces,
+          {'buzz': 'r'},
+          reason: 'the atServer is the authority on what this enrollment '
+              'may reach');
+    });
+
+    test('a client authenticating with the atSign\'s own keys records nothing',
+        () async {
+      final io = await keyfileHolding(enrollmentId);
+      final local = localSecondaryReturning(recordWith(appName: 'wavi'));
+      when(() => client.enrollmentId).thenReturn(null);
+      when(() => client.getLocalSecondary()).thenReturn(local);
+      await PqClientBootstrap(
+        client,
+        keysIo: io,
+        privilege: _FakePrivilege(false),
+        sweepUnanchoredEnrollments: () async => 0,
+      ).startup();
+
+      verifyNever(() => local.getEnrollmentDetails());
+    });
+
+    test('a non-String grant value is skipped rather than stringified',
+        () async {
+      final io = await keyfileHolding(enrollmentId);
+      await runStartup(
+          io,
+          localSecondaryReturning(
+              recordWith(namespace: {'buzz': 'rw', 'broken': 42})));
+
+      expect((await io.read(atSign)).enrollmentInfo(enrollmentId)!.namespaces,
+          {'buzz': 'rw'},
+          reason: "'42' recorded as an access level would read as a grant");
+    });
+  });
+
   test('the step order is the documented one', () {
     expect(PqClientBootstrap.stepNamesInOrder, const [
       'hydrateHeldSecrets',
@@ -217,6 +349,9 @@ void main() {
       'publishRootLink',
       'publishChainLink',
       'sweepUnanchoredEnrollments',
+      // Last: nothing reads the enrollment snapshot, so this step can only
+      // delay a step that heals key material, never enable one.
+      'reconcileEnrollmentSnapshot',
     ]);
   });
 }
