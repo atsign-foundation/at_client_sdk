@@ -9375,3 +9375,94 @@ readers *are* in the field, and a reader that takes the first entry is what
 would stop a second one from ever being adopted. Building it in D1 is what
 keeps rotation a decision later rather than a release-train problem, and that
 is the whole of requirement 2.
+
+## 102. An `_apsk` fallback value never replaces a real advertisement (2026-08-15)
+
+From the examination
+[`implementation-plan.md` 14.19 item 15](implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+asked for: can the record's several writers publish different compositions?
+Measured answer — at rest they agree, and inside one window they do not.
+
+**The window, and what it actually costs.** `SigningKeyMinting` publishes
+before it files, deliberately: *"a minter publishes first precisely so that no
+envelope is ever signed under a key the advertisement does not name"*. Between
+that publish and the last file, the keyfile does not yet hold what was
+advertised — so `ApkamSigning.publicSigningKeyValue`, which composes from the
+keyfile, sees `heldSigningKeys` empty and takes `apskEntries`' authentication-key
+fallback. `publishPublicSigningKey` then compares, finds a difference, and
+**overwrites**: measured, a PQ-native enrollment's ML-DSA array replaced by a
+bare RSA string. That also inverts the bare-versus-array form rule
+`bareApskValueOf` exists to protect.
+
+**gkc ruled: the fallback stops being able to do that.** A value composed from
+the authentication key is what a client publishes when it has no signing key of
+its own; it is not a statement that a signing key it can see has gone away. So
+`publishPublicSigningKey` should refuse to replace a record that already
+advertises a real signing key with one that advertises only the authentication
+key.
+
+⛔ **NOT BUILT, and deliberately so.** Three implementations were attempted on
+2026-08-15 and the live pack refused all three, each for a different and
+instructive reason. gkc then ruled the window **accepted and documented**
+rather than guarded — see the end of this entry. The refusal is recorded
+because the shape of each failure is what makes the acceptance an informed
+choice rather than a shrug.
+
+1. **Guard on what this client HOLDS** — refuse when the composed value is the
+   authentication-key fallback. Too wide by one case: an enrollment whose
+   `_apsk` the atServer wrote **at approval** also holds no signing key of its
+   own and must republish with what it does hold. Measured: 160/165, with the
+   approval conveyance timing out (*"the enrollment is approved but cannot
+   decrypt anything without it"*) and UC-G1.14's control failing.
+2. **Guard on the published SHAPE** — refuse only when the published value is
+   the array form. Still too wide: a PQ-native enrollment's authentication key
+   is ML-DSA, so its ordinary fallback is *also* an array. Measured: 162/165,
+   the same conveyance failures.
+3. **Guard on CONTENT** — refuse a write that would drop a kid the published
+   record advertises. The most defensible statement of the rule, and it fails
+   on the record the rule cannot be stated over: `public:_apsk.primary.a.__e`.
+   A `primary` record belongs to no single client — every non-enrolled client
+   of the atSign publishes its own key there and overwriting is the norm — so
+   "never drop an advertised key" makes the *first* client to be refused leave
+   another client's key standing. Measured: 160/165, and the guard fired
+   exactly **once** in the whole run to do it.
+
+⚠️ **What that last one actually establishes, and it is worth more than the
+guard would have been: the demotion rule has no meaning on a record with no
+single owner.** It could be stated for an *enrollment's* `_apsk`, which one
+enrollment writes; it cannot be stated for `primary`. Any re-scoping starts
+there.
+
+⚠️ **A control arm was run**, per the both-arms rule: the same tree with the
+guard stashed is **165/165**. So the guard is the cause, not the environment.
+And the first diagnosis of run 2 — "the guard never fired, so it is not the
+cause" — was wrong for a reason worth recording: `logger.warning` sits below
+what the functional log surfaces, so the absence was a claim about the log
+LEVEL, not about the code. Run 3 raised it to `severe` and the line appeared.
+
+**Why not the alternatives.** Reversing the publish/file ordering trades a
+window where the advertisement is stale for one where it is ahead of the
+keyfile, which is the failure publish-before-file was chosen to avoid.
+Serialising the writers closes the window only inside one process, and both
+triggers are publicly exported, so it would read as a guarantee it could not
+give. Accepting it was available all along, and after three failed attempts **gkc
+ruled it 2026-08-15**: the window is accepted and documented rather than
+guarded. The state heals at the next start — `publishPublicSigningKey`
+composes from the keyfile, which by then holds the post-mint state, and
+`register()` runs on every start — and verification reads the record live, so
+envelopes signed during the window verify again once it heals. The cost is one
+process lifetime of refused envelopes and refused key-package verification, on
+a race that is itself unmeasured.
+
+**What "documented" means concretely**, since a window nobody can find again is
+not documented: the mechanism is written into `SigningKeyMinting._publish`'s
+dartdoc where the publish-before-file ordering is chosen, and this ruling is
+the reference. The three refused implementations stay recorded above, because
+the next person to notice the window will reach for the first of them.
+
+⚠️ **What this does NOT do.** It does not close the window: a concurrent writer
+can still publish a *different real* composition, and the order-only at-rest
+divergence between the two composers stays (benign — same kids, same pubs, same
+statuses, and readers select by algorithm). Nor is the race itself measured;
+the bootstrap awaits its steps in order and cannot interleave them, so reaching
+it needs an application call racing the unawaited `startup()`.

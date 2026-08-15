@@ -247,9 +247,30 @@ class SigningKeyMinting with ApkamSigning {
   /// enrolled client — `KeyPackageRegistration.register` and
   /// `PublishedNskeyKeyRing`. Both compose through `publicSigningKeyValue`, so
   /// they agree with this path on *content*; what the sentence claimed and
-  /// nothing establishes is that there is a single writer. Whether the
-  /// plurality costs anything is not measured — see `implementation-plan.md`
-  /// 14.19 item 15.
+  /// nothing establishes is that there is a single writer.
+  ///
+  /// ⚠️ **The plurality has one measured cost, and it is ACCEPTED rather than
+  /// guarded (`docs/projects/pq/decisions.md` 102).** The caller publishes
+  /// before it files, deliberately, so that no envelope is ever signed under a
+  /// key the advertisement does not name. Between the two the keyfile does not
+  /// yet hold what was advertised, so a concurrent
+  /// `publishPublicSigningKey` — which composes from the keyfile — sees no
+  /// signing key, falls back to the APKAM **authentication** key, and
+  /// overwrites: measured, a PQ-native enrollment's ML-DSA array replaced by a
+  /// bare RSA string.
+  ///
+  /// It heals. That getter composes from the keyfile, which by the next call
+  /// holds the post-mint state, and `KeyPackageRegistration.register` reaches
+  /// it on every start; verification reads the record live, so envelopes
+  /// signed in the window verify again once it heals. The exposure is one
+  /// process lifetime of refused envelopes.
+  ///
+  /// ⚠️ **Three guards against it were built and all three broke the live
+  /// enrollment path** — ruling 102 records what each measured. The one that
+  /// matters for anyone tempted to try a fourth: the rule "never drop an
+  /// advertised key" cannot be stated over `public:_apsk.primary.a.__e`,
+  /// which no single client owns and which non-enrolled clients overwrite in
+  /// turn by design.
   Future<void> _publish(List<ApkamSigningKeys> active,
       {required List<ApkamSigningKeys> retiring}) async {
     final entries = apskEntries(

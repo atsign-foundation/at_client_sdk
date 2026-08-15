@@ -3101,40 +3101,43 @@ its own. None blocks anything.
        `_signableOrRefuse` on the same predicate, so the set cannot name an
        algorithm the filter would drop.
 
-    ⛔ **What is owed now is a RULING, not a fix.** The obvious repairs — file
-    before publishing, or have W2 stand down while a mint is in flight — both
-    change an ordering that exists for a stated reason: *"a minter publishes
-    first precisely so that no envelope is ever signed under a key the
-    advertisement does not name"* (`apkam_signing.dart:47-49`). Reversing it
-    trades a window where the advertisement is stale for a window where it is
-    ahead of the keyfile, and which of those is worse is a judgement about
-    what a peer does with each. Recording the measurement without picking is
-    deliberate.
-16. **`LocalSecondary`'s enrollment cache can never hit, and its write is never
-    read.** `_getEnrollmentDetails` reads
-    `local:<enrollmentId><atSign>` (`local_secondary.dart:898`) and, on a miss,
-    writes the fetched record to
-    `<enrollmentId>.new.enrollments.__manage<atSign>` (`:935`) — a *different*
-    key. Measured 2026-08-15 across all 16 `local:` occurrences in at_client's
-    `lib/` and every one in at_auth's: **nothing anywhere writes the key the
-    read looks for.** So every client instance pays one `enroll:fetch`, and the
-    "cache it in local secondary" write is dead. Pre-existing and outside the PQ
-    path; found while asking what C2 routed into. Harmless today — an in-memory
-    memo on the same object means one fetch per client, not per call — so this
-    is a cleanup, not a defect. ⚠️ **Whichever way it is fixed, decide
-    deliberately whether the cache SHOULD hit:** C2 wants a fresh record on
-    every start precisely so a changed grant is noticed, and making the cache
-    work would silently defeat that.
-17. **`Enrollment.metadata`'s dartdoc claims a field `enroll:fetch` does not
-    return.** It says the metadata is "stored verbatim by the atServer and
-    returned here", but `_fetchEnrollmentInfoById` (at_server `6a86fbcc`,
-    merged to trunk) returns exactly
-    `{appName, deviceName, namespace, encryptedAPKAMSymmetricKey, status}` —
-    no `metadata`. The field is presumably populated on a different response
-    (`enroll:list`), so the type is fine and the *sentence* is wrong where it
-    sits. Worth correcting before someone reads a key package off a `fetch`
-    result and gets null. Also note `Enrollment.namespace` is singular in name
-    and holds the whole grants **map**.
+    ⚠️ **RULED 2026-08-15, NOT BUILT —
+    [`decisions.md` 102](decisions.md#102-an-_apsk-fallback-value-never-replaces-a-real-advertisement-2026-08-15).**
+    gkc chose "the fallback never replaces a real advertisement" over the
+    other three options. **Three implementations were attempted and the live
+    pack refused all three**, each for a different reason: guarding on what
+    the client HOLDS is too wide (an enrollment whose `_apsk` the atServer
+    wrote at approval also holds no signing key and must republish — 160/165,
+    approval conveyance timing out); guarding on the published SHAPE is still
+    too wide (a PQ-native enrollment's authentication key is ML-DSA, so its
+    ordinary fallback is an array too — 162/165); and guarding on CONTENT,
+    the most defensible form, fails on `public:_apsk.primary.a.__e`, a record
+    **no single client owns** — every non-enrolled client publishes its own
+    key there and overwriting is the norm, so the first client refused leaves
+    another's key standing (160/165, the guard firing exactly once to do it).
+
+    ⚠️ **That last failure is worth more than the guard would have been: the
+    demotion rule has no meaning on a record with no single owner.** It can be
+    stated for an *enrollment's* `_apsk`; it cannot be stated for `primary`.
+    Any re-scoping starts there, and the untried option — accept and document,
+    since the state heals at the next start — is still open.
+
+    ⚠️ **Both arms were run.** The same tree with the guard stashed is
+    **165/165**, so the guard is the cause rather than the environment. And
+    the first diagnosis of run 2 — *"the guard never fired, so it is not the
+    cause"* — was wrong because `logger.warning` sits below what the
+    functional log surfaces: the absence was a claim about the log LEVEL, not
+    about the code. Raising it to `severe` made the line appear, and it named
+    the record in one line.
+
+    ⚠️ **And a unit test read as a mismatch was the specification.**
+    `apkam_signing_keys_test.dart`'s *"republishes when the published value is
+    not what it holds"* holds NO signing key while its comment talks about
+    rotation. Attempt 1 re-fixtured it on that reading; the live pack showed
+    the fixture was right. Nothing is left in the tree from any of the three
+    attempts — the guard and its tests are reverted — so this entry is the
+    only record that they were tried.
+
 18. **`MintLock` releases a lock it may no longer own — raised 2026-08-15,
     while building [14.22](#1422-making-the-signing-root-rotatable--decisions-101)
     row 6.** `_release` force-deletes the lock key unconditionally, so a holder
