@@ -9313,6 +9313,32 @@ reconciliation, which stays: read the published record, compare what is held
 against it, retire a pair that corresponds to nothing. It was written for a
 lost immutable create and answers the same question here.
 
+> ✅ **BUILT 2026-08-15 by [14.22](implementation-plan.md#1422-making-the-signing-root-rotatable--decisions-101)
+> row 6, with three amendments this ruling did not anticipate.**
+> (1) `NskeyMintLock` is now **`MintLock`** and takes the lock's `AtKey`, so
+> one implementation serves `_nskeylock.<ns>@<owner>` and the new
+> `_rootlock@<atSign>`; this ruling's "`NskeyMintLock` is built" named the
+> class as it stood.
+> (2) The window is **two** windows, not one: the ttl can expire while the
+> holder is still inside the critical section, and `_release` force-deletes
+> without checking it still owns the lock, so a late holder can delete a
+> successor's. The second is pre-existing and applies to the nskey path too;
+> it is [`implementation-plan.md` 14.19](implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+> item 18. The reconciliation this paragraph names covers both **for the
+> root**; whether the nskey path has an equivalent is not measured.
+> (3) The mint reads the record **twice** — the second read under the lock —
+> which this ruling does not mention and without which the lock closes
+> nothing: the first read happens before the lock is taken, so a winner that
+> published in between is invisible to it, and a mutable record would then be
+> overwritten.
+> ⚠️ And one fact about the atServer that changes the scope of "the record
+> becomes mutable": `immutable` is **sticky** at rest. `at_metadata_builder`
+> preserves `immutable == true` from stored metadata whatever an update asks,
+> so this makes roots minted from here on mutable and leaves any root already
+> written with the flag permanently unrewritable. Immaterial under the
+> greenfield premise above — every atSign carrying one is ours — but it is the
+> reason the change cannot be described as "existing roots become mutable".
+
 **4. At rest, `root:<algo>:<n>` in `atSignKeys[]` — already ruled, and only
 partly built.** ✅ **BUILT 2026-08-15 by 14.22 row 2.** This paragraph read
 "The code pins the algorithm anyway: `PqSigningRoot.keyIdPrefix` is

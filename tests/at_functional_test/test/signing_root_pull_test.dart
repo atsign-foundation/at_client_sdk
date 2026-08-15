@@ -15,8 +15,8 @@ import 'test_utils.dart';
 ///
 /// The pull is the only route left to an enrollment that was offline when it
 /// was approved: the root is atSign-level and carries no namespace, so it
-/// never rides the `enroll:listns` fan-out, and it is immutable and never
-/// rotates, so nothing can mint a replacement. `requestPrivateIfAbsent` is the
+/// never rides the `enroll:listns` fan-out, and nothing re-mints a root that
+/// is already published. `requestPrivateIfAbsent` is the
 /// initiator that was missing — before it, `requestSecret` had zero call sites
 /// in `lib/`.
 ///

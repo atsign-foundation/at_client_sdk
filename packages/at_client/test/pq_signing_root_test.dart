@@ -6,6 +6,8 @@ import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show pqSigningRootMintLockRecordName;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_builders.dart';
@@ -59,10 +61,12 @@ bool _bytesEqual(Uint8List a, Uint8List b) {
 
 /// The atSign's root of trust.
 ///
-/// Every property here is about the same thing: the record is immutable and
-/// the root never rotates, so a mistake at mint is permanent. There is no
-/// second attempt, no rotation to recover with, and two roots would leave half
-/// an atSign's enrollments chaining to one the other half rejects.
+/// Every property here is about the same thing: two roots would leave half an
+/// atSign's enrollments chaining to one the other half rejects, and D1 builds
+/// no rotation able to reconcile that. The record itself is mutable — a
+/// successor has to be advertised beside its retired predecessor — so what
+/// keeps there being one root is `_rootlock@<atSign>` plus the reconciliation
+/// that retires a private the record does not advertise.
 void main() {
   const atSign = '@alice';
 
@@ -71,8 +75,18 @@ void main() {
     registerFallbackValue(FakeAtKey());
   });
 
-  ({MockAtClient client, List<UpdateVerbBuilder> published}) client(
-      {bool createRefused = false,
+  /// [published] holds only the writes to the ROOT RECORD; [verbs] holds every
+  /// verb in order, so a test can say what was taken before what was written.
+  /// Separated because the mint now issues a lock take and a lock release
+  /// around the publish, and a bare list would make `.single` mean something
+  /// different in every test.
+  ({
+    MockAtClient client,
+    List<UpdateVerbBuilder> published,
+    List<VerbBuilder> verbs
+  }) client(
+      {bool lockHeldElsewhere = false,
+      bool publishFails = false,
       String? enrollmentId = 'enrollment-1',
       Uint8List? publishedRoot,
       List<({Uint8List key, KeyEntryStatus status})>? publishedRoots,
@@ -92,6 +106,7 @@ void main() {
     when(() => secondary.atLookUp).thenReturn(lookup);
     when(() => lookup.enrollmentId).thenReturn(enrollmentId);
     final published = <UpdateVerbBuilder>[];
+    final verbs = <VerbBuilder>[];
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     // The published-record read: confirmed absent unless the fixture holds
@@ -115,15 +130,28 @@ void main() {
     });
     when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((inv) async {
-      final builder = inv.positionalArguments[0] as UpdateVerbBuilder;
-      published.add(builder);
-      if (createRefused) {
-        throw AtLookUpException(
-            'AT0023', 'Immutable records may not be updated');
+      // Type-tested, never cast: the lock release is a DeleteVerbBuilder, and a
+      // cast would throw inside the mock where MintLock's own catch swallows
+      // it — a release that never happened, reported as one that did.
+      final builder = inv.positionalArguments[0] as VerbBuilder;
+      verbs.add(builder);
+      if (builder is UpdateVerbBuilder) {
+        if (builder.atKey.key == pqSigningRootMintLockRecordName) {
+          if (lockHeldElsewhere) {
+            // What the atServer says to the loser of the race.
+            throw AtLookUpException(
+                'AT0023', 'Immutable records may not be updated');
+          }
+          return 'data:1';
+        }
+        published.add(builder);
+        if (publishFails) {
+          throw AtLookUpException('AT0011', 'connection closed');
+        }
       }
       return 'data:1';
     });
-    return (client: atClient, published: published);
+    return (client: atClient, published: published, verbs: verbs);
   }
 
   Future<InMemoryAtKeysIo> keysIo() async {
@@ -144,26 +172,41 @@ void main() {
         .getAtSignKey(
             rootSlot1, CryptographicKeyType.privateSigning);
     expect(filed, isNotNull,
-        reason: 'the record is immutable and the root never rotates, so a '
-            'published root whose private did not survive can never be '
-            'replaced');
+        reason: 'a published root whose private did not survive strands every '
+            'enrollment on the atSign, and D1 builds no rotation to replace '
+            'it with');
     expect(filed!.keyAlgorithmType, KeyAlgorithmType.mlDsa65);
 
     final record = c.published.single;
     expect(record.atKey.key, PqSigningRoot.recordName);
-    expect(record.atKey.metadata.immutable, isTrue,
-        reason: 'create-once is what guarantees exactly one root exists — two '
-            'would be unrecoverable, not merely untidy');
+    expect(record.atKey.metadata.immutable, isFalse,
+        reason: 'the record is an advertisement of signing keys, and a '
+            'successor has to be added beside its retired predecessor — which '
+            'an immutable record makes unimplementable. The interlock is '
+            '_rootlock, asserted below');
     expect(record.atKey.metadata.isPublic, isTrue);
     expect(jsonDecode(record.value!)['keys'], hasLength(1));
+
+    // The lock, in order: taken before anything is generated, released after.
+    expect(c.verbs.first, isA<UpdateVerbBuilder>());
+    expect((c.verbs.first as UpdateVerbBuilder).atKey.key,
+        pqSigningRootMintLockRecordName,
+        reason: 'the lock is what stops two privileged enrollments each '
+            'finding no root and each minting one, so it has to be taken '
+            'before the record is re-read, not after');
+    expect(c.verbs.last, isA<DeleteVerbBuilder>(),
+        reason: 'and released, or the atSign waits out the ttl before it can '
+            'republish a mint that crashed');
+    expect((c.verbs.last as DeleteVerbBuilder).force, isTrue,
+        reason: 'deleting an immutable record needs the force flag');
   });
 
   test('the published record emits its exact wire shape — raw literals',
       () async {
-    // Emitter pin (frozen forever): the record is immutable create-once and
-    // the root never rotates, so this byte shape is permanent on every atSign
-    // that holds one. Raw strings deliberately — the sibling tests assert
-    // through PqSigningRoot's own constants, which follow a changed value.
+    // Emitter pin (frozen forever): this is what a reader in the field parses,
+    // and after the GA minor those readers exist. Raw strings deliberately —
+    // the sibling tests assert through PqSigningRoot's own constants, which
+    // follow a changed value.
     final c = client();
 
     await PqSigningRoot(c.client, keysIo: await keysIo())
@@ -209,6 +252,11 @@ void main() {
     expect(c.published, isEmpty,
         reason: 'an enrollment restricted to one namespace has no business '
             'minting the key that vouches for every other enrollment');
+    expect(c.verbs, isEmpty,
+        reason: 'and it must not take the mint lock either — a lock taken '
+            'before the privilege check would let a scoped enrollment block '
+            'every privileged one on the atSign for the ttl, which is the '
+            'inverse of what the lock is for');
     expect((await io.read(atSign)).keys, isEmpty);
   });
 
@@ -221,35 +269,32 @@ void main() {
             .mintIfAbsent(isFullyPrivileged: true),
         throwsA(isA<StateError>()));
     expect(c.published, isEmpty,
-        reason: 'an immutable record cannot be retried with a different key, '
-            'so publishing before the private is safe would burn the one '
-            'chance this atSign gets');
+        reason: 'a root whose private nobody holds cannot be replaced without '
+            'a rotation, and D1 builds none — so publishing before the '
+            'private is durable is not a retryable mistake');
   });
 
-  test('losing the create is not an error, and retires the losing pair',
-      () async {
-    final c = client(createRefused: true);
+  test('losing the mint lock generates nothing and files nothing', () async {
+    final c = client(lockHeldElsewhere: true);
     final io = await keysIo();
     final root = PqSigningRoot(c.client, keysIo: io);
 
     expect(await root.mintIfAbsent(isFullyPrivileged: true), isNull,
-        reason: 'the atServer refusing a second create IS the create-once '
-            'guarantee working — this client waits to be given the root '
-            'rather than treating it as a failure');
+        reason: 'another of this atSign\'s enrollments is minting; this one '
+            'waits to be given the root rather than treating it as a failure');
 
-    expect(await root.privateHalf(atSign), isNull,
-        reason: 'the losing pair corresponds to nothing any verifier ever '
-            'saw. Left active it would read as "already holding the root" '
-            'forever — the pull\'s cheapest guard — and block the one heal '
-            'a loser has');
-    final materials = (await io.read(atSign)).keys;
-    expect(materials, isNotEmpty,
-        reason: 'key material is never removed, only retired — the losing '
-            'bytes stay in the file, marked dead');
-    expect(materials.map((m) => m.status).toSet(), {KeyPartStatus.dead});
+    expect(c.published, isEmpty,
+        reason: 'and it must not have written the record. With the record '
+            'mutable, a loser that published anyway would OVERWRITE the '
+            'winner\'s root rather than be refused by the atServer');
+    expect((await io.read(atSign)).keys, isEmpty,
+        reason: 'nothing was generated either. This is what the lock buys '
+            'over a refused create: the loser never mints a keypair, so '
+            'there is no losing pair to retire and no window in which it '
+            'reads as holding the root');
 
-    // The heal the retirement re-opens: with nothing active held, the pull
-    // asks the namespace again.
+    // The heal that never having filed anything leaves open: with nothing
+    // active held, the pull asks the namespace.
     final broadcast = _RecordingSharing();
     final asked = await root.requestPrivateIfAbsent(
       isFullyPrivileged: () async => true,
@@ -257,17 +302,78 @@ void main() {
       namespace: 'buzz',
     );
     expect(asked, greaterThan(0),
-        reason: 'this is what the rollback exists for: a loser that still '
-            'reads as holding the root never asks, and the root is immutable '
-            'and never rotates, so nothing else would ever repair it');
+        reason: 'a loser that read as holding the root would never ask, and '
+            'nothing else repairs it — D1 builds no rotation that could mint '
+            'a replacement');
+  });
+
+  test('a root published while the lock was being taken is not overwritten',
+      () async {
+    // The window the lock alone does not close: the absence check runs BEFORE
+    // the lock, so a winner that published in between is invisible to it. With
+    // an immutable record the atServer refused the second write; with a
+    // mutable one, nothing but the re-read under the lock stops this mint
+    // overwriting the root it thought was missing.
+    final winner = await MlDsa65PureDartAlgo().generateKeyPair();
+    final atClient = MockAtClient();
+    final secondary = MockRemoteSecondary();
+    final lookup = MockAtLookUp();
+    when(() => secondary.atLookUp).thenReturn(lookup);
+    when(() => lookup.enrollmentId).thenReturn('enrollment-1');
+    when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
+    when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
+    final verbs = <VerbBuilder>[];
+    var reads = 0;
+    when(() => atClient.get(any(),
+        getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+      reads++;
+      // Absent to the check outside the lock; published by the time the mint
+      // re-reads under it.
+      if (reads == 1) throw KeyNotFoundException('not found');
+      return Future.value(AtValue()
+        ..value = jsonEncode(apskAdvertisement(keys: [
+          ApskSigningKey.forPublicKey(
+              alg: PqSigningRoot.rootKeyAlgo,
+              pub: base64Encode(winner.publicKey))
+        ])));
+    });
+    when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
+        .thenAnswer((inv) async {
+      verbs.add(inv.positionalArguments[0] as VerbBuilder);
+      return 'data:1';
+    });
+
+    final io = await keysIo();
+    final minted =
+        await PqSigningRoot(atClient, keysIo: io).mintIfAbsent(
+            isFullyPrivileged: true);
+
+    expect(minted, isNull);
+    expect(reads, greaterThan(1),
+        reason: 'the record must be read a SECOND time under the lock, or '
+            'this test proves nothing about the window it exists to close');
+    final rootWrites = verbs
+        .whereType<UpdateVerbBuilder>()
+        .where((b) => b.atKey.key == PqSigningRoot.recordName);
+    expect(rootWrites, isEmpty,
+        reason: 'the winner\'s root stands. This is the one outcome the '
+            'interlock exists to prevent, and dropping `immutable` is what '
+            'made it possible at all');
+    expect((await io.read(atSign)).keys, isEmpty,
+        reason: 'and the re-read happens before the keygen, so nothing was '
+            'generated either');
   });
 
   group('when the publish call fails but its outcome is unknown', () {
-    // The refusal of a second create and a dropped connection on a write that
-    // LANDED throw the same way, and they need opposite handling. Getting the
-    // second one wrong is unrecoverable: retiring the pair for a root this
-    // client did publish leaves the atSign with an immutable, non-rotating
-    // record whose private nobody holds.
+    // A failed write and a write that LANDED and was not reported throw the
+    // same way, and they need opposite handling. Getting the second one wrong
+    // is the expensive mistake: retiring the pair for a root this client did
+    // publish leaves every enrollment on the atSign chaining to a key nobody
+    // holds, and D1 builds no rotation to replace it with.
+    //
+    // "The atServer refused a second create" is no longer one of the cases —
+    // the record is mutable and the write goes out under the lock — so the
+    // third case is the one the lock cannot exclude: a peer published anyway.
 
     test('a create that actually landed is kept, not retired', () async {
       // The record the failed call wrote is whatever key this mint generates,
@@ -282,8 +388,14 @@ void main() {
       String? publishedValue;
       when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
           .thenAnswer((inv) async {
-        publishedValue =
-            (inv.positionalArguments[0] as UpdateVerbBuilder).value;
+        final builder = inv.positionalArguments[0] as VerbBuilder;
+        // The lock is taken and released normally; only the record write is
+        // the one whose outcome is unknown.
+        if (builder is! UpdateVerbBuilder ||
+            builder.atKey.key == pqSigningRootMintLockRecordName) {
+          return 'data:1';
+        }
+        publishedValue = builder.value;
         // Landed, then the connection died before the ack.
         throw AtLookUpException('AT0011', 'connection closed');
       });
@@ -305,8 +417,9 @@ void main() {
               'so it is the minter — reporting a loss here would tell the '
               'caller the opposite of what happened');
       expect(await root.privateHalf(atSign), isNotNull,
-          reason: 'and the private must survive: the root is immutable and '
-              'never rotates, so retiring it would brick the atSign for good');
+          reason: 'and the private must survive: nothing re-mints a published '
+              'root, so retiring it would leave the atSign advertising a key '
+              'no enrollment holds');
     });
 
     test('an unreadable record after a failed publish keeps the pair',
@@ -322,14 +435,21 @@ void main() {
       when(() => atClient.get(any(),
           getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
         reads++;
-        // The absence check at the start of the mint succeeds; the
-        // reconciliation read after the failed publish does not.
-        if (reads == 1) throw KeyNotFoundException('not found');
+        // Two absence checks now — one outside the mint lock and one under it
+        // — and both must answer "no root". It is the reconciliation read
+        // after the failed publish that cannot be served.
+        if (reads <= 2) throw KeyNotFoundException('not found');
         throw AtLookUpException('AT0011', 'cannot read');
       });
       when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
-          .thenAnswer((_) async =>
-              throw AtLookUpException('AT0011', 'connection closed'));
+          .thenAnswer((inv) async {
+        final builder = inv.positionalArguments[0] as VerbBuilder;
+        if (builder is! UpdateVerbBuilder ||
+            builder.atKey.key == pqSigningRootMintLockRecordName) {
+          return 'data:1';
+        }
+        throw AtLookUpException('AT0011', 'connection closed');
+      });
 
       final io = await keysIo();
       final root = PqSigningRoot(atClient, keysIo: io);
@@ -340,6 +460,42 @@ void main() {
           reason: 'but it must NOT retire on an unknown outcome: a later '
               'start reconciles the held pair against the record, and '
               'retiring a private whose record landed cannot be undone');
+    });
+
+    test('a write that failed with nothing published retires the pair',
+        () async {
+      // ⚠️ The branch the mutable record TEMPTS you to change, and must not.
+      // "There is no one chance to burn any more, so keep the pair and let a
+      // later start republish it" is true about the record and false about
+      // this codebase: nothing on a start path mints. `mintIfAbsent` runs at
+      // activation and at retrofit only — `pq_client_bootstrap.dart` says so
+      // in as many words, "a mint is once per keyfile while a start is every
+      // time" — so a kept pair is permanent, blocks the pull that is the one
+      // heal that DOES run every start, and gets a root link signed with it
+      // that nothing ever rewrites.
+      final c = client(publishFails: true);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+
+      expect(await root.mintIfAbsent(isFullyPrivileged: true), isNull,
+          reason: 'nothing was published, so nothing is claimed');
+      expect(await root.privateHalf(atSign), isNull,
+          reason: 'the pair is retired, so this enrollment stops reading as a '
+              'holder of the root');
+      final materials = (await io.read(atSign)).keys;
+      expect(materials, isNotEmpty,
+          reason: 'key material is never removed, only retired — the bytes '
+              'stay in the file, marked dead');
+      expect(materials.map((m) => m.status).toSet(), {KeyPartStatus.dead});
+
+      // The heal the retirement re-opens, and the reason it has to be re-opened
+      // here rather than at a later mint: this is the only one that runs again.
+      final asked = await root.requestPrivateIfAbsent(
+        isFullyPrivileged: () async => true,
+        sharing: _RecordingSharing(),
+        namespace: 'buzz',
+      );
+      expect(asked, greaterThan(0));
     });
   });
 
@@ -353,10 +509,12 @@ void main() {
         await PqSigningRoot(c.client, keysIo: io)
             .mintIfAbsent(isFullyPrivileged: true),
         isNull);
-    expect(c.published, isEmpty,
-        reason: 'a create against an existing immutable record would be '
-            'refused anyway; checking first keeps the common late-arrival '
-            'case from filing a pair only to retire it');
+    expect(c.published, isEmpty);
+    expect(c.verbs, isEmpty,
+        reason: 'the cheap read settles it, so the ordinary case — an atSign '
+            'that already has a root — costs no remote WRITE at all. Taking '
+            'the lock first would put one on every activation and every '
+            'retrofit, for nothing');
     expect((await io.read(atSign)).keys, isEmpty);
   });
 
@@ -375,10 +533,13 @@ void main() {
         PqSigningRoot(c.client, keysIo: io)
             .mintIfAbsent(isFullyPrivileged: true),
         throwsA(isA<AtLookUpException>()),
-        reason: 'absent and unreadable are different answers, and with an '
-            'immutable record at stake a client that cannot tell them apart '
-            'must not guess');
+        reason: 'absent and unreadable are different answers, and a client '
+            'that cannot tell them apart would overwrite the root it failed '
+            'to read');
     expect(c.published, isEmpty);
+    expect(c.verbs, isEmpty,
+        reason: 'and it aborts BEFORE taking the lock, so a run of unreadable '
+            'records cannot leave the atSign locked out of minting');
     expect((await io.read(atSign)).keys, isEmpty);
   });
 
@@ -447,9 +608,8 @@ void main() {
 
     expect(republished, held.publicKey,
         reason: 'minting a fresh pair here would publish a public whose '
-            'private was discarded — an immutable record nobody holds the '
-            'key to, permanently. The held pair is the only safe thing to '
-            'publish');
+            'private was discarded, leaving a root nobody holds the key to. '
+            'The held pair is the only safe thing to publish');
     final record = jsonDecode(c.published.single.value!) as Map;
     final entry = (record['keys'] as List).single as Map;
     expect(entry['pub'], base64Encode(held.publicKey),
@@ -609,7 +769,11 @@ void main() {
       successor = await MlDsa65PureDartAlgo().generateKeyPair();
     });
 
-    ({MockAtClient client, List<UpdateVerbBuilder> published}) rotating() =>
+    ({
+      MockAtClient client,
+      List<UpdateVerbBuilder> published,
+      List<VerbBuilder> verbs
+    }) rotating() =>
         client(publishedRoots: [
           (key: successor.publicKey, status: KeyEntryStatus.active),
           (key: predecessor.publicKey, status: KeyEntryStatus.retired),
@@ -974,9 +1138,9 @@ void main() {
                   name: PqSigningRoot.secretName,
                   value: base64Encode(List<int>.filled(32, 7)))),
           isFalse,
-          reason: 'the root is immutable and never rotates, so filing the '
-              'wrong bytes sticks forever — and a 32-byte buffer cannot '
-              'sign anything the published root verifies');
+          reason: 'nothing re-mints a published root, so filing the wrong '
+              'bytes sticks until a holder answers the pull — and a 32-byte '
+              'buffer cannot sign anything the published root verifies');
       expect((await io.read(atSign)).keys, isEmpty);
     });
 

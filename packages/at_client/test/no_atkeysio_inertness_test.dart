@@ -5,9 +5,10 @@
 /// pack's non-PQ tests build clients through `setCurrentAtSign` with no
 /// `AtKeysIo`, and the split between PQ and non-PQ test files is sufficient
 /// on its own ONLY because such a client writes nothing PQ — no signing-root
-/// mint, no `_apsk` publish, no advertisement, no envelope. An immutable root
-/// or a published nskey on a real atSign is permanent, so a regression here
-/// poisons infrastructure, not a test run.
+/// mint, no `_apsk` publish, no advertisement, no envelope. A signing root or
+/// a published nskey on a real atSign outlives the run that wrote it — nothing
+/// in D1 rotates a root back out — so a regression here poisons
+/// infrastructure, not a test run.
 ///
 /// The read half matters equally: inert does not mean blind. A client with no
 /// key source must still ROUTE records other clients wrote — the era default
@@ -119,8 +120,9 @@ void main() {
 
     expect(events.where((e) => e.startsWith('update:')), isEmpty,
         reason: 'a keyless client minted or published PQ state at startup — '
-            'on a long-lived atSign an immutable root or a published nskey '
-            'is permanent. Events:\n${events.join('\n')}');
+            'on a long-lived atSign a signing root or a published nskey '
+            'outlives the run, and this would also catch a mint lock taken '
+            'where no mint belongs. Events:\n${events.join('\n')}');
     expect(events.where((e) => e.startsWith('delete:')), isEmpty,
         reason: 'a keyless client deleted remote state at startup. '
             'Events:\n${events.join('\n')}');

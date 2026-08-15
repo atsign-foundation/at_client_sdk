@@ -119,6 +119,56 @@ void main() {
             'than an in-memory copy. Reason if not: ${result.reason}');
   });
 
+  test('the enrollment that loses the race does not mint a second root',
+      () async {
+    // Here rather than in `pq_signing_root_mint_lock_test.dart` because this
+    // file is the one that legitimately mints the root on this atSign — the
+    // row above does it, into a keyfile it keeps — so the precondition is
+    // established by construction rather than by seeding a root whose private
+    // nobody holds. A file that seeded one took three rows of THIS file down
+    // on 2026-08-15, which is why the row lives here now.
+    //
+    // What a losing CLIENT does is the half the atServer cannot show: it must
+    // return empty-handed AND hold nothing, so its caller knows to request the
+    // root from a holder. With the record mutable, a loser that minted anyway
+    // would OVERWRITE the winner's root rather than be refused — which is the
+    // outcome the whole interlock exists to prevent — and one that kept a
+    // filed private would read as "already holding the root" forever and
+    // never ask.
+    //
+    // Against an atSign whose root is already published the loss is met at the
+    // absence check: nothing reaches the atServer and nothing is filed. The
+    // narrower race, where two mints both find the record absent and one is
+    // refused the lock, is unit-covered; the refusal itself is what
+    // `pq_signing_root_mint_lock_test.dart` watches the live atServer issue.
+    final published = await PqSigningRoot.publishedPublicKey(atClient, atSign);
+    expect(published, isNotNull,
+        reason: 'the row above minted it, so this call is the LOSER by '
+            'construction — that is the case under test');
+
+    final loserKeys = InMemoryAtKeysIo();
+    await loserKeys.write(atSign, AtKeys());
+    final loser = PqSigningRoot(atClient, keysIo: loserKeys);
+
+    expect(await loser.mintIfAbsent(isFullyPrivileged: true), isNull,
+        reason: 'a non-null return here says "I published the root", and its '
+            'caller would anchor every later signature to a key the atSign '
+            'never accepted');
+    expect(await PqSigningRoot.publishedPublicKey(atClient, atSign), published,
+        reason: 'and it must not have disturbed the published record — now a '
+            'property of the client\'s own check rather than of the atServer '
+            'refusing the write');
+    expect(await loser.privateHalf(atSign), isNull,
+        reason: 'the loser must hold nothing afterwards: an active private '
+            'here would satisfy the pull\'s "already holding it" guard, and '
+            'the one heal a loser has — being given the real private by a '
+            'holder — would never fire');
+
+    // A namespace-scoped enrollment must not even attempt it — the root
+    // vouches for every enrollment, so minting it is not a scoped operation.
+    expect(await loser.mintIfAbsent(isFullyPrivileged: false), isNull);
+  });
+
   /// Enrols and approves with [namespaces], returning the kpid it advertised
   /// and the number of envelopes sealed to it.
   Future<({String kpid, int envelopes, Map<String, dynamic>? granted})>

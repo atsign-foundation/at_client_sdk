@@ -20,8 +20,12 @@ import 'package:at_chops/at_chops.dart'
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
+import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
-    show pqSigningRootKey, pqSigningRootRecordName;
+    show
+        pqSigningRootKey,
+        pqSigningRootMintLockKey,
+        pqSigningRootRecordName;
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show PqSigningChain;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -42,12 +46,22 @@ final _logger = AtSignLogger('PqSigningRoot');
 /// anchors the chain that vouches for enrollment signing keys, so that a
 /// verifier is not left trusting whatever served the record.
 ///
-/// **Create-once, and that matters more here than anywhere else.** The record
-/// is written immutable, so the atServer refuses a second create and exactly
-/// one root is ever published. The root never rotates, so two roots would be
-/// unrecoverable rather than merely untidy — one half of the atSign's
-/// enrollments would chain to a root the other half rejected, with no later
-/// event able to reconcile them.
+/// **One root per atSign, and the interlock is a lock rather than the
+/// record.** The record is mutable — it is an advertisement of signing keys,
+/// and retiring one entry beside its successor is a rewrite, which an
+/// immutable record makes unimplementable. What immutability was actually
+/// doing is stopping two privileged enrollments each finding no root and each
+/// minting one, and that job now sits on `_rootlock@<atSign>`, a short-ttl
+/// immutable self key ([MintLock]).
+///
+/// ⚠️ **A lock is a protocol, not a guarantee.** A refused second create was
+/// an absolute answer from the atServer; a lock is a window narrowed to its
+/// ttl. What covers the difference is the reconciliation that was already
+/// here for a lost create and is unchanged: read the published record, judge
+/// what is held against it, retire a private that corresponds to nothing it
+/// advertises ([reconcileHeldPrivate]). Two roots would still be
+/// unrecoverable — one half of the atSign's enrollments chaining to a root the
+/// other half rejected — so nothing here trusts the lock alone.
 ///
 /// Only a **fully privileged** enrollment mints it — `rw` on `*` *and*
 /// `__manage`. A namespace-restricted enrollment has no business minting the
@@ -142,7 +156,15 @@ class PqSigningRoot {
   final AtClient atClient;
   final AtKeysIo? keysIo;
 
-  PqSigningRoot(this.atClient, {this.keysIo});
+  /// Serialises minting between this atSign's own privileged enrollments, now
+  /// that the record itself no longer refuses a second create.
+  ///
+  /// Injectable so a test can stage contention without a live atServer; null
+  /// wires the real one.
+  final MintLock mintLock;
+
+  PqSigningRoot(this.atClient, {this.keysIo, MintLock? mintLock})
+      : mintLock = mintLock ?? MintLock(atClient);
 
   AtKey keyFor(String atSign) => pqSigningRootKey(atSign);
 
@@ -241,8 +263,8 @@ class PqSigningRoot {
 
   /// Mints and publishes the root if this atSign has none, filing both halves
   /// of the pair first. Returns the public half, or null when this client did
-  /// not mint (it is not privileged, one is already published, or it lost the
-  /// create).
+  /// not mint (it is not privileged, one is already published, or another of
+  /// this atSign's enrollments holds the mint lock).
   ///
   /// Both halves are filed, not just the private: recovery from a crash
   /// between filing and publishing needs the public bytes to republish, and
@@ -251,11 +273,28 @@ class PqSigningRoot {
   /// public is republished rather than a fresh pair minted — publishing a new
   /// pair would strand the filed private against a record it never matched.
   ///
-  /// A loser of the create does **not** mint a second root — its just-filed
-  /// pair is retired (it corresponds to nothing any verifier ever saw), so
-  /// the every-start pull can be given the real private by a privileged
-  /// enrollment that holds it. Left active, the losing pair would read as
-  /// "already holding the root" forever and block that heal.
+  /// **The record is read twice, and that is the point of the lock.** The
+  /// first read is outside it, so an atSign that already has a root never
+  /// takes a lock at all — which is the second and later retrofit of one
+  /// atSign, not a per-start saving: nothing on a client start calls this. The
+  /// read is then repeated *under* the lock, because a winner that published
+  /// between the two is invisible to the first one, and with a mutable record
+  /// nothing else would stop this mint overwriting it.
+  ///
+  /// A client that cannot take the lock mints nothing and files nothing —
+  /// there is no losing pair to retire, because it never generated one. The
+  /// every-start pull is how it gets the private from the winner.
+  ///
+  /// ⚠️ **Two windows the lock does not close, stated rather than implied.**
+  /// The ttl can expire while the holder is still inside the critical section,
+  /// which lets a second minter in; and [MintLock] releases by force-deleting
+  /// the lock key without checking it still owns it, so a holder finishing
+  /// late can delete a successor's lock. Both end with one root overwriting
+  /// another, and what covers them is not the lock: it is
+  /// [reconcileHeldPrivate] on every start, which retires a private the record
+  /// does not advertise so the pull can heal that enrollment. Anchoring is
+  /// deliberately outside the lock to keep the critical section down to a
+  /// re-read, a keygen, a keyfile write and one publish.
   Future<Uint8List?> mintIfAbsent({required bool isFullyPrivileged}) async {
     final atSign = atClient.getCurrentAtSign()?.toAtsign();
     if (atSign == null) return null;
@@ -271,26 +310,61 @@ class PqSigningRoot {
     // rather than risk a second root.
     final roots = await publishedRoots(atClient, atSign);
 
-    final AtKeys? keys = await _readKeys(atSign);
-
     if (roots.isNotEmpty) {
-      // Someone already minted. Reconcile what this keyfile holds against the
-      // record: an active private that corresponds to no ADVERTISED entry is
-      // the poisoned leftover of a lost create recorded before losers retired
-      // their pair, and while it stays active the pull's "already holding it"
-      // check can never fire — the one heal such an enrollment has. A private
-      // matching a retired entry is not that: it is a predecessor the record
-      // still vouches for.
-      if (keys != null) await _retireUnadvertised(atSign, keys, roots);
+      await _reconcileAgainstPublished(atSign, roots);
       _logger.info(
           'Not minting a signing root for $atSign: one is already published');
       return null;
+    }
+
+    final outcome = await mintLock.withLock(
+        pqSigningRootMintLockKey(atSign), () => _mintUnderLock(atSign));
+    if (outcome == null) {
+      // Deliberately not a wait. The winner ends with a root published, so a
+      // later start reads it; and this enrollment's route to the private is
+      // the pull, which does not depend on having minted anything.
+      _logger.info('Not minting a signing root for $atSign: another of this '
+          'atSign\'s enrollments holds the mint lock');
+      return null;
+    }
+    final publicKey = outcome.publicKey;
+    if (publicKey == null) return null;
+
+    // Outside the lock on purpose. Anchoring is this enrollment's own business
+    // — it writes `_apsk`, not the root record — so it needs no interlock, and
+    // every round trip left inside the critical section is one the ttl has to
+    // cover.
+    await _anchorSelf(atSign);
+    return publicKey;
+  }
+
+  /// Mints, or finishes publishing a pair a crash left filed, with the mint
+  /// lock held. A null `publicKey` means this client published nothing.
+  ///
+  /// Returns a record rather than a bare `Uint8List?` so that [MintLock]'s own
+  /// null — "somebody else holds the lock" — stays distinguishable from "I
+  /// held the lock and did not publish". Collapsing the two would report a
+  /// lost lock as a completed mint that produced nothing, and the log would
+  /// name the wrong reason on the one path where the reason is the finding.
+  Future<({Uint8List? publicKey})> _mintUnderLock(String atSign) async {
+    // The absence check in [mintIfAbsent] ran BEFORE the lock was taken, so a
+    // winner that published in that window is invisible to it. Re-reading here
+    // is what closes it: with a mutable record, minting on a stale absence
+    // overwrites the root it thought was missing, which is the one outcome the
+    // interlock exists to prevent.
+    final roots = await publishedRoots(atClient, atSign);
+    if (roots.isNotEmpty) {
+      await _reconcileAgainstPublished(atSign, roots);
+      _logger.info('Not minting a signing root for $atSign: one was published '
+          'between the absence check and this mint taking the lock');
+      return (publicKey: null);
     }
 
     // Below here the record is ABSENT, so correspondence is undefined by
     // construction — there is nothing to correspond to. The question is the
     // crash-recovery one, "is there a pair I must finish publishing rather
     // than mint over", and the keyfile alone answers it.
+    final AtKeys? keys = await _readKeys(atSign);
     final held = keys == null ? null : _activePrivates(keys).firstOrNull;
 
     if (held != null) {
@@ -299,8 +373,10 @@ class PqSigningRoot {
       if (heldPublic != null) {
         // The crash between filing and publishing: finish the publish with
         // the pair already filed.
-        return await _publishAndAnchor(
-            atSign, held.keyId, Uint8List.fromList(heldPublic.bytes.bytes));
+        return (
+          publicKey: await _publish(
+              atSign, held.keyId, Uint8List.fromList(heldPublic.bytes.bytes))
+        );
       }
       // A private with no public half to republish predates pairs being
       // filed whole. Nothing was ever published for it, so no verifier ever
@@ -315,34 +391,57 @@ class PqSigningRoot {
     final pair = await MlDsa65PureDartAlgo().generateKeyPair();
 
     // Durable before published, for the same reason minting an nskey is: a
-    // published root whose private did not survive can never be replaced,
-    // because the record is immutable and the root does not rotate.
+    // published root whose private did not survive strands every enrollment on
+    // the atSign against a key nobody holds. The record being mutable makes
+    // that repairable in principle and D1 builds no rotation to repair it
+    // with, so the ordering stands.
     final stored = await _storeFreshPair(atSign, pair);
     if (stored.overtaken) {
-      // `held` was read before this method awaited three times — the record
-      // fetch, the retire above, and the keygen — and this client's own PQ
-      // start runs unawaited beside it, filing whatever a peer conveys. The
-      // freshly minted pair is discarded rather than filed: nothing was
-      // published for it, so no verifier ever saw it.
+      // The mint lock serialises this atSign's ENROLLMENTS; it does not
+      // serialise two tasks inside this client. `held` was read before an
+      // ML-DSA keygen — and before a retire, on the orphan path — and
+      // `AtClientImpl` fires the PQ start unawaited beside this, filing
+      // whatever a peer conveys. The freshly minted pair is discarded rather
+      // than filed: nothing was published for it, so no verifier ever saw it.
       _logger.info('Abandoned the signing root mint for $atSign: a root '
           'private arrived while this mint was generating, and it is the one '
           'a peer conveyed rather than the one this client just made');
-      return null;
+      return (publicKey: null);
     }
     final slot = stored.slot;
     if (slot == null) {
       throw StateError(
           'could not store the signing root private for $atSign, so it is '
-          'deliberately not published — an immutable record cannot be retried '
-          'with a different key');
+          'deliberately not published — a root whose private nobody holds '
+          'cannot be replaced without a rotation, which is not built');
     }
-    return await _publishAndAnchor(atSign, slot, pair.publicKey);
+    return (publicKey: await _publish(atSign, slot, pair.publicKey));
   }
 
-  /// Publishes [publicKey] as the root record and anchors this enrollment to
-  /// it. When the create did not land — another privileged enrollment got
-  /// there first — retires the pair under [slot] and returns null.
-  Future<Uint8List?> _publishAndAnchor(
+  /// Reconciles what this keyfile holds against a record that turned out to be
+  /// published after all.
+  ///
+  /// An active private that corresponds to no ADVERTISED entry is the poisoned
+  /// leftover of a mint that lost, and while it stays active the pull's
+  /// "already holding it" check can never fire — the one heal such an
+  /// enrollment has. A private matching a retired entry is not that: it is a
+  /// predecessor the record still vouches for.
+  Future<void> _reconcileAgainstPublished(
+      String atSign, List<ApskSigningKey> roots) async {
+    final keys = await _readKeys(atSign);
+    if (keys != null) await _retireUnadvertised(atSign, keys, roots);
+  }
+
+  /// Publishes [publicKey] as the root record, with the mint lock held.
+  /// Returns [publicKey] when it is what the record ends up advertising, and
+  /// null when nothing was published.
+  ///
+  /// The pair under [slot] is retired whenever the record does not come back
+  /// naming this client's key — the write failed, or somebody else won a race
+  /// the lock was meant to settle. It is **kept** only when the record cannot
+  /// be read at all, because retiring a private whose write did land cannot be
+  /// undone.
+  Future<Uint8List?> _publish(
       String atSign, String slot, Uint8List publicKey) async {
     try {
       await atClient.getRemoteSecondary()!.executeVerb(
@@ -366,18 +465,25 @@ class PqSigningRoot {
             ])),
           sync: true);
     } catch (e) {
-      // A throw here says the call failed, NOT what the atServer did. It is
-      // usually the refusal of a second create — the create-once guarantee
-      // working — but it is equally a dropped connection on a write that
-      // landed. Those two need opposite handling and cannot be told apart
-      // from the exception, so ask the record.
+      // A throw here says the call failed, NOT what the atServer did — and the
+      // pair of cases this had to tell apart has CHANGED. "The atServer
+      // refused a second create" is gone: the record is mutable and the write
+      // went out under the mint lock. What is left is three states, and only
+      // the record can say which one happened.
       //
-      // Getting this wrong in the second case is unrecoverable: retiring the
-      // pair for a root this client DID publish leaves the atSign with an
-      // immutable, non-rotating record whose private nobody holds.
-      final Uint8List? published;
+      // Getting the landed case wrong is still the expensive one: retiring the
+      // pair for a root this client DID publish leaves every enrollment on the
+      // atSign chaining to a key nobody holds, and D1 builds no rotation to
+      // replace it with.
+      //
+      // Judged against EVERY advertised entry rather than the active one:
+      // "did my write land" is a question about the record naming my key at
+      // all, and an active-only read would answer no for a record that had
+      // already moved on — which is a lost create, not a failed write, and
+      // needs the other branch.
+      final List<Uint8List> published;
       try {
-        published = await publishedPublicKey(atClient, atSign);
+        published = await publishedPublicKeys(atClient, atSign);
       } catch (e2) {
         _logger.severe('Could not publish the signing root for $atSign and '
             'cannot read the record to find out whether the write landed, so '
@@ -387,33 +493,49 @@ class PqSigningRoot {
         return null;
       }
 
-      if (published != null && _sameBytes(published, publicKey)) {
+      if (published.any((p) => _sameBytes(p, publicKey))) {
         // The write landed and the failure was in reporting it. This client
         // holds the matching private, so it is the minter.
-        _logger.warning('The signing root create for $atSign reported a '
+        _logger.warning('The signing root write for $atSign reported a '
             'failure but the published record is this client\'s key, so the '
             'write landed: $e');
-        await _anchorSelf(atSign);
         return publicKey;
       }
 
-      // Either somebody else's root is published, or none is and the write
-      // genuinely failed. Both mean this pair corresponds to nothing any
-      // verifier ever saw, so retiring it is safe — and necessary, or the
-      // pull that heals this enrollment never fires.
+      // Either the write failed outright, or somebody else's root is
+      // published — which the mint lock was supposed to prevent, so it expired
+      // under this mint or the winner does not take one. Both mean this pair
+      // corresponds to nothing any verifier ever saw, and it is RETIRED.
+      //
+      // ⚠️ It is tempting to keep it instead, on the reasoning that a mutable
+      // record has no one chance to burn and a later start could republish.
+      // Nothing would: [mintIfAbsent] runs at activation and at retrofit,
+      // never on a start — `PqClientBootstrap` runs the reconcile, the pull
+      // and the anchor, and no mint. A kept pair would therefore be permanent,
+      // and it is not inert: it satisfies [requestPrivateIfAbsent]'s cheapest
+      // guard so this enrollment never asks for the real root;
+      // [reconcileHeldPrivate] cannot clear it, because that heal is silent
+      // while nothing is published; and the start's anchor step signs a root
+      // link with it, which `PqSigningChain.publishOwnRootLink` never rewrites.
+      // Retiring re-opens the pull, which is the one heal that does run every
+      // start.
       try {
         await _retireSlot(atSign, slot);
       } catch (e2) {
-        _logger.severe('Lost the signing root create for $atSign and could '
-            'not retire the losing pair; until a later start retires it, '
-            'this enrollment wrongly reads as holding the root: $e2');
+        _logger.severe('Lost the signing root for $atSign and could not retire '
+            'the losing pair; until a later start retires it, this enrollment '
+            'wrongly reads as holding the root: $e2');
       }
-      _logger.info('Did not publish a signing root for $atSign; one likely '
-          'exists already: $e');
+      _logger.warning(published.isEmpty
+          ? 'Did not publish a signing root for $atSign: the write failed and '
+              'no root is published, so the minted pair is retired and this '
+              'enrollment pulls the root from whoever mints it. $e'
+          : 'Did not publish a signing root for $atSign: the record advertises '
+              'a root this client did not mint, despite this mint holding the '
+              'lock. $e');
       return null;
     }
 
-    await _anchorSelf(atSign);
     return publicKey;
   }
 
@@ -604,8 +726,8 @@ class PqSigningRoot {
   ///
   /// The correspondence check is what stops a compromised or buggy holder
   /// handing this enrollment a key that signs links no verifier will ever
-  /// accept — with the root immutable and non-rotating, filing the wrong
-  /// bytes here would otherwise stick. A refused or unverifiable private is
+  /// accept — and with no rotation built, filing the wrong bytes here sticks
+  /// until a holder answers the pull. A refused or unverifiable private is
   /// not filed; the keyfile stays without one, so the every-start pull asks
   /// again and a correct answer heals it.
   Future<bool> file(String atSign, Secret secret) async {
@@ -697,9 +819,9 @@ class PqSigningRoot {
   /// **This is the only route left for an enrollment that missed the
   /// approval-time conveyance.** The root is atSign-level and carries no
   /// namespace, so it is excluded from the `enroll:listns` fan-out by
-  /// construction; and it is immutable and never rotates, so no later event
-  /// can mint a replacement. Without a pull, such an enrollment stays without
-  /// it forever.
+  /// construction; and nothing mints a replacement, because D1 builds the
+  /// root's rotatability and not the rotation. Without a pull, such an
+  /// enrollment stays without it forever.
   ///
   /// **Broadcast, not a wait.** This deliberately does not block on an answer.
   /// It runs during client start, where a timeout would be paid by every
@@ -778,8 +900,7 @@ class PqSigningRoot {
   /// publishing an anchor that verifies as tampering; and [hydrateStore]
   /// offers it to other enrollments, whose own correspondence check rejects
   /// the bytes *after* their broadcast is spent. Nothing about that state
-  /// decays on its own, and the record is immutable, so without this it is
-  /// permanent.
+  /// decays on its own, so without this it is permanent.
   ///
   /// Deliberately silent when the atSign publishes no root, or when the
   /// record cannot be read: a private held before its record is published is
@@ -873,8 +994,9 @@ class PqSigningRoot {
   /// The private has to reach `AtKeys`, not merely the secret store: that
   /// store is a transit buffer and in-memory by design, so a restart would
   /// leave a privileged enrollment holding nothing and unable to anchor
-  /// itself — and the root, being immutable and non-rotating, cannot be minted
-  /// again to recover.
+  /// itself. A root already published is not minted again to recover — the
+  /// mint stands down the moment it reads one — so the private has to survive
+  /// the process or be pulled from a holder.
   ///
   /// A store check rather than a subscription, matching
   /// `PqSigningChain.publishPendingLink`: it needs no lifecycle to own and no
@@ -1069,8 +1191,8 @@ class PqSigningRoot {
     if (io == null) return (slot: null, overtaken: false);
     if (io is! WrittenAtKeysIo) {
       _logger.severe('Filed the signing root for $atSign in memory only — '
-          'this AtKeysIo cannot persist, and an immutable root cannot be '
-          'minted again');
+          'this AtKeysIo cannot persist, and a root private that does not '
+          'survive the process is no root at all');
       return (slot: null, overtaken: false);
     }
     try {

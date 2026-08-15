@@ -24,7 +24,8 @@ import 'dart:typed_data';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
-import 'package:at_client/src/crypto/nskey/nskey_mint_lock.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyMintLockKey, pqSigningRootMintLockKey;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_auth/at_auth.dart' show KeyAlgorithmType;
@@ -59,14 +60,31 @@ void main() {
           'public:__nskey.app_1.my_apps@alice');
     });
 
-    test('the mint lock is _nskeylock.<ns>@<owner>, immutable, 2-minute ttl',
-        () {
-      final key = NskeyMintLock(atClient).keyFor('@alice', 'app_1.my_apps');
+    test('the nskey mint lock is _nskeylock.<ns>@<owner>, immutable, 2-minute '
+        'ttl', () {
+      final key = nskeyMintLockKey('@alice', 'app_1.my_apps');
       expect(key.toString(), '_nskeylock.app_1.my_apps@alice');
       // The atServer's second-immutable-create refusal IS the interlock, so
       // the metadata is contract, not tuning.
       expect(key.metadata.immutable, isTrue);
       expect(key.metadata.ttl, 120000);
+    });
+
+    test('the signing-root mint lock is _rootlock@<atSign>, immutable, '
+        '2-minute ttl', () {
+      final key = pqSigningRootMintLockKey('@alice');
+      // No namespace: the root is atSign-level, which is what distinguishes it
+      // from an nskey. Single underscore, so it is hidden from every scan and
+      // written outside the commit log — it is taken and released remotely and
+      // must never ride sync.
+      expect(key.toString(), '_rootlock@alice');
+      expect(key.metadata.immutable, isTrue,
+          reason: 'the refusal of a second immutable create is the whole '
+              'interlock now that the root record itself is mutable');
+      expect(key.metadata.ttl, 120000);
+      expect(key.metadata.isPublic, isFalse,
+          reason: 'a self key — nobody but the owner writes the owner\'s '
+              'records, so there is nothing to share');
     });
 
     test('the current-CK pointer strips the destination owner\'s @', () {
@@ -105,8 +123,14 @@ void main() {
     test('the signing root is public:pq_signing_root@<atSign>, no namespace',
         () {
       expect(PqSigningRoot.recordName, 'pq_signing_root');
-      expect(PqSigningRoot(atClient).keyFor('@alice').toString(),
-          'public:pq_signing_root@alice');
+      final key = PqSigningRoot(atClient).keyFor('@alice');
+      expect(key.toString(), 'public:pq_signing_root@alice');
+      expect(key.metadata.immutable, isFalse,
+          reason: 'the root is an ordinary signing key and rotating it means '
+              'rewriting this record, which an immutable one makes '
+              'unimplementable. What immutability was doing — stopping two '
+              'privileged enrollments each minting a root — moved to '
+              '_rootlock@<atSign>, pinned above');
     });
 
     test('the _apsk URI is public:_apsk.<enrollmentId>.a.__e@<atSign>', () {

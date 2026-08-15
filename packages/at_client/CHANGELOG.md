@@ -1,4 +1,31 @@
 ## 3.14.1
+- feat!: `public:pq_signing_root@<atSign>` is **mutable**, and what keeps one
+  root per atSign moves to `_rootlock@<atSign>` — a short-ttl immutable self
+  key taken remote-first (`MintLock`).
+  - The root is an ordinary signing key, so retiring one entry beside its
+    successor is a rewrite of the record. An immutable record makes that
+    unimplementable, which is the same finding that made the nskey
+    advertisement mutable.
+  - The mint reads the record **twice**: once before the lock, so an atSign
+    that already has a root never takes one, and again under it, because a
+    winner that published between the two is invisible to the first read and a
+    mutable record would let the mint overwrite it.
+  - A client refused the lock generates no keypair and files nothing, so there
+    is no losing pair to retire. `_publishAndAnchor` became `_publish` and
+    anchoring moved outside the lock, leaving the critical section a re-read, a
+    keygen, a keyfile write and one publish.
+  - ⚠️ **A lock is a protocol, not a guarantee** — it has a ttl window, and the
+    release does not check it still owns the lock. What covers that is the
+    every-start reconciliation, unchanged: a held private corresponding to no
+    advertised entry is retired and the pull heals that enrollment.
+  - ⚠️ The atServer makes `immutable` **sticky** (`at_metadata_builder`
+    preserves `immutable == true` from stored metadata whatever an update
+    asks), so this affects roots minted from here on; one already written with
+    the flag can never be rewritten by anyone.
+- refactor!: `NskeyMintLock` became `MintLock`, taking the lock's `AtKey`
+  rather than an `(owner, namespace)` pair. One implementation now serves both
+  records; two copies would have been two chances for one to gain a fix the
+  other lacked. Lock ttl is the shared `mintLockTtl`.
 - feat: a root link names the root key that signed it, in an optional
   top-level `kid` (`PqSigningChain.rootLinkKidField`).
   - A link carrying one narrows verification to that entry. **A kid naming
@@ -1363,7 +1390,7 @@
   rather than as a bad key. With no lookup supplied, or one that throws, the
   private is filed on the signature alone rather than refused.
 - feat: minting a namespace key takes a lock and makes its private durable
-  before publishing. `NskeyMintLock` is a short-ttl immutable self key taken
+  before publishing. `MintLock` is a short-ttl immutable self key taken
   **remote-first** — the atomicity is the atServer refusing a second immutable
   create, so a local-first put would let two of an atSign's enrollments each
   believe they had won and collide only at sync. The loser does not wait: it

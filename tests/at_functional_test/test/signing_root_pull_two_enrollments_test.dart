@@ -21,8 +21,8 @@ import 'test_utils.dart';
 ///
 /// This is the route an enrollment takes when it was offline during the wave
 /// that conveyed the root: the root is atSign-level and carries no namespace,
-/// so it never rides the `enroll:listns` fan-out, and it is immutable and
-/// never rotates, so nothing can mint a replacement.
+/// so it never rides the `enroll:listns` fan-out, and nothing re-mints a root
+/// that is already published, so no later event can produce a replacement.
 ///
 /// It needs two genuine enrollments and nothing less. The pull authenticates
 /// on **both** sides — the requester to enumerate holders, the responder to
@@ -174,7 +174,7 @@ void main() {
     // The part that matters most: it reaches the KEYFILE, not just the secret
     // store. That store is a transit buffer and in-memory by design, so a
     // private stopping there would be gone at the next start — and the root,
-    // being immutable and non-rotating, cannot be re-minted to recover.
+    // already published, is never re-minted to recover.
     expect(
         await seekerRoot.filePendingPrivate(
             atSign, seekerSharing.secretStore.listSecrets()),
@@ -234,8 +234,9 @@ void main() {
       () async {
     // What a compromised or buggy holder might serve. Before the
     // correspondence check, exactly this buffer was filed byte-for-byte and
-    // read back as "the root private" — with the record immutable and the
-    // root never rotating, permanently.
+    // read back as "the root private" — permanently, since nothing re-mints
+    // a published root and the heal that clears it needs a correct answer to
+    // arrive first.
     final fake =
         Uint8List.fromList(List<int>.generate(32, (i) => (i * 7 + 11) % 256));
 

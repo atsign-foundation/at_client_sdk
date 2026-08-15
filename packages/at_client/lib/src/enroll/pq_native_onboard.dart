@@ -131,8 +131,9 @@ Future<void> mintSigningRootAfterActivation(
 ///   reaches `metadata.keyPackage` afterwards, so this is effectively the
 ///   moment its KEM is set, at whatever
 ///   [AtClientPreference.keyEstablishmentAlgo] says now;
-/// - the atSign-level **ML-DSA-65 signing root**, immutable-created at
-///   `public:pq_signing_root@<atSign>`. A first enrollment is fully privileged
+/// - the atSign-level **ML-DSA-65 signing root**, published at
+///   `public:pq_signing_root@<atSign>` under the `_rootlock` mint lock. A
+///   first enrollment is fully privileged
 ///   by construction — the atServer grants it `__manage` — which is what
 ///   entitles it to create the root at all;
 /// - the **legacy** RSA encryption keypair, `selfEncryptionKey` and

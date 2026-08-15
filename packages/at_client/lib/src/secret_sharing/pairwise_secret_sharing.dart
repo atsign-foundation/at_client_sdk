@@ -756,8 +756,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// it happens to run in. Two privileged enrollments of one atSign
   /// belonging to different apps therefore never match — the holder primed
   /// under its namespace, the requester asks in its own — and the pull that
-  /// is the only route to an unrotatable, immutable key would silently never
-  /// be answered. Named secrets only: a prefix or bare request still cannot
+  /// is the only route to a key nothing re-mints would silently never be
+  /// answered. Named secrets only: a prefix or bare request still cannot
   /// sweep another namespace's material.
   ///
   /// Widening the search does not widen who is served: the privilege gate

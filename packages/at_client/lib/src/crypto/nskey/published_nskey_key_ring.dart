@@ -4,7 +4,7 @@ import 'dart:convert' show jsonDecode;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
-import 'package:at_client/src/crypto/nskey/nskey_mint_lock.dart';
+import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -200,12 +200,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     AdvertisedKeyVerifier? verifier,
     this.advertisementTtl = const Duration(minutes: 15),
     this.advertisementStaleGrace = const Duration(minutes: 15),
-    NskeyMintLock? mintLock,
+    MintLock? mintLock,
     this.privateFiling,
     Future<void> Function(String namespace, String secretName)?
         requestConveyance,
   })  : verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
-        mintLock = mintLock ?? NskeyMintLock(_atClient),
+        mintLock = mintLock ?? MintLock(_atClient),
         _requestConveyance = requestConveyance,
         _signer = AtClientEnvelopeSigner(_atClient);
 
@@ -233,7 +233,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   final Set<String> _askedConveyance = {};
 
   /// Serialises minting between this atSign's own enrollments.
-  final NskeyMintLock mintLock;
+  final MintLock mintLock;
 
   /// Where a minted private is made durable **before** its public half is
   /// published. Null keeps privates in memory only — a fixture posture, since
@@ -279,7 +279,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   Future<NskeyAdvertisement> mintAndPublish(String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
     final minted = await mintLock.withLock(
-        owner, namespace, () => _mint(owner, namespace));
+        nskeyMintLockKey(owner, namespace), () => _mint(owner, namespace));
     if (minted != null) return minted;
 
     // Another enrollment is minting. Re-read rather than wait: whatever it is
@@ -324,7 +324,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     }
 
     final rotated = await mintLock.withLock(
-        owner, namespace, () => _mint(owner, namespace));
+        nskeyMintLockKey(owner, namespace), () => _mint(owner, namespace));
     if (rotated == null) {
       throw StateError(
           'another enrollment holds the mint lock for $owner:$namespace, so '

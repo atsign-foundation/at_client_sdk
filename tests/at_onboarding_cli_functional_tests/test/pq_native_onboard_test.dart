@@ -110,7 +110,15 @@ void main() {
     final rootJson =
         jsonDecode(root!.replaceFirst('data:', '').trim())
             as Map<String, dynamic>;
-    expect((rootJson['keys'] as List).single['alg'], 'mldsa65');
+    // Not `.single`: the record is a list of signing keys precisely so a
+    // successor can sit beside a retired predecessor, and a reader taking the
+    // only element is what would stop that ever being adopted. One entry is
+    // what a fresh activation has, and the assertion says so without
+    // requiring it forever.
+    final entries = rootJson['keys'] as List;
+    expect(entries, hasLength(1),
+        reason: 'a fresh activation mints exactly one root');
+    expect((entries.first as Map)['alg'], 'mldsa65');
 
     // --- and legacy material is still cut and published, BY DEFAULT --------
     expect(keys.defaultEncryptionPublicKey, isNotNull);

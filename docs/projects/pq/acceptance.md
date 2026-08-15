@@ -101,19 +101,22 @@ per keyfile/install):
 | atSign        | `legacy` · `pq-native` · `mixed`                                                                      |
 | `aS`          | atServer: `pq` (new verbs) · `legacy`                                                                 |
 | `publickey`   | legacy RSA encryption pubkey published?                                                               |
-| `pq_signing_root` | atSign-level user-owned **signing** root published (immutable)?                                   |
+| `pq_signing_root` | atSign-level user-owned **signing** root published (mutable, minted under `_rootlock@owner`)?     |
 | `nskey.ns`    | namespace `ns` nskey state: `—` (never used, so no nskey) · `<kid>` (minted and published at `public:__nskey.<ns>@owner`; the kid names the current generation) |
 | `stage`       | The **app's release stage** for the namespace ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)): `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes legacy) · `active` (writes PQ). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
 
 **Key objects** (shapes defined in `design.md`; named here for test wiring):
 
 - `public:pq_signing_root@alice` — the atSign-level, **user-owned signing root**
-  (ML-DSA-65); no namespace; **immutable** once written, which is what stops two
-  privileged enrollments minting two roots. It signs and verifies only, and never
+  (ML-DSA-65); no namespace; **mutable**, with the short-ttl immutable lock
+  `_rootlock@alice` — not the record — stopping two privileged enrollments minting
+  two roots. It signs and verifies only, and never
   appears in a key-transport path. Value is
-  `{"v": 1, "keys": [{"alg": "ml-dsa-65", "pub": "<base64>"}], "successor": null}`;
-  `keys` is a list because the record cannot be updated, and `successor` reserves a
-  revocation chain that D1 does not implement. Only an enrollment with `rw` on `*`
+  `{"v": 1, "keys": [{"kid": "<hex>", "use": "sign", "alg": "mldsa65", "pub": "<base64>"}]}`
+  — the `_apsk` advertisement vocabulary verbatim, because the root **is** an
+  ordinary signing key ([`decisions.md` 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+  requirement 1). A retired entry carries `"status": "retired"`, which is what
+  keeps every root link it ever signed verifiable. Only an enrollment with `rw` on `*`
   and `__manage` may create it; the private rides that app's `.atKeys` and is
   conveyed to the other fully privileged enrollments over the substrate. Published
   plain (not `_`-hidden) because it is meant to be found and audited. See
@@ -193,9 +196,9 @@ once in `design.md`; UCs below reference them by name.
   1. CRAM-authenticate with the activation secret.
   2. Mint the **PQ APKAM** keypair (ML-DSA / `mldsa65`); register its public half
      as enrollment E1's single `apkamPublicKey` + `signingAlgo = mldsa65`.
-  3. Mint the atSign-level **ML-DSA-65 signing root**; **immutable-create**
-     `public:pq_signing_root@alice` carrying
-     `{"v": 1, "keys": [{"alg": "ml-dsa-65", "pub": "…"}], "successor": null}`;
+  3. Mint the atSign-level **ML-DSA-65 signing root** under the `_rootlock@alice`
+     mint lock; publish `public:pq_signing_root@alice` carrying
+     `{"v": 1, "keys": [{"kid": "…", "use": "sign", "alg": "mldsa65", "pub": "…"}]}`;
      hold the private half locally. E1 is a first enrollment and so fully
      privileged, which is what entitles it to create the root at all.
   4. Mint E1's **X-Wing key package** and register it in E1's enrollment record
@@ -212,9 +215,9 @@ once in `design.md`; UCs below reference them by name.
 - **Then:**
   - `alice1.APKAM = pq` and it authenticates via PQ APKAM; no RSA APKAM key
     required *for auth*.
-  - `public:pq_signing_root@alice` exists, is immutable (a second create is
-    **rejected**, which is what prevents two privileged enrollments minting two
-    roots), and `alice1.root⁻¹ = ✓`.
+  - `public:pq_signing_root@alice` exists and is **mutable** — what prevents two
+    privileged enrollments minting two roots is `_rootlock@alice`, whose second
+    create the atServer rejects — and `alice1.root⁻¹ = ✓`.
   - The root is a **signing** key. Nothing encapsulates to it, at onboarding or
     ever.
   - `alice1.KP = ✓`, registered in E1's record (not published; discoverable only via
@@ -864,8 +867,8 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
      on the authenticated connection. The server validates the namespace subset,
      **auto-approves**, copies the old expiry, and caps the old (legacy) enrollment.
   4. **Verify** PQ APKAM auth succeeds (record-authoritative `signingAlgo`).
-  5. If this enrollment is **fully privileged** (`rw` on `*` and `__manage`),
-     generate the ML-DSA-65 root keypair and **immutable-create**
+  5. If this enrollment is **fully privileged** (`rw` on `*` and `__manage`), take
+     `_rootlock@alice`, generate the ML-DSA-65 root keypair and publish
      `public:pq_signing_root@alice` → **wins** → hold the private and convey it to the
      other fully privileged enrollments. A namespace-scoped enrollment skips this step
      entirely and proceeds without a root ([UC-B5.3](#123-uc-b53--two-enrollments-race-to-create-pq_signing_root)).
@@ -1108,13 +1111,14 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 
 ### 12.3 UC-B5.3 — Two enrollments race to create `pq_signing_root`
 
-- **Given:** `alice1` and `alice3` both reach the create step with `pq_signing_root` absent.
-- **When:** both attempt the immutable create.
-- **Then:** exactly one wins; the other gets "already exists" and falls through to
-  *request*, discarding the key material it generated rather than retrying the create.
-  No orphaned data (nothing was written under the discarded key). The root never rotates, so a split
-  root would be unrecoverable — immutability is what makes this a benign race rather
-  than a permanent fork of the trust chain.
+- **Given:** `alice1` and `alice3` both reach the mint step with `pq_signing_root` absent.
+- **When:** both attempt to take the `_rootlock@alice` mint lock.
+- **Then:** exactly one takes it, re-reads the record under it and publishes. The loser
+  is refused the lock and falls through to *request* — it generates no keypair and
+  files nothing, so there is no orphaned data and nothing to discard. A split root
+  would still be unrecoverable, since D1 builds the root's rotat*ability* and not a
+  rotation that could reconcile one; what makes this a benign race is the lock, plus
+  the reconciliation that retires a held private the record does not advertise.
 
 - **Cross-ref:** `design.md` (push/pull duality — substrate facts stated once there).
 - **Impl/verify:** **RF-1** (`requestSecret` confirm) + **B-1** (provider routing).
@@ -1155,12 +1159,16 @@ These invariants are testable against **every** UC above:
   (`rsa2048` | `mldsa65`) — `_getSigningAlgoType` reads the record, never the
   client-supplied wire value (at_chops `mldsa65` verify branch + at_commons pkam
   `signingAlgo` literal).
-- **Immutability, and where it does *not* apply.** `pq_signing_root` is create-once: a
-  second create is rejected, never an overwrite — it is the root and never rotates.
-  `public:__nskey.<ns>@owner` is **mutable by design**, because nskey-keypair rotation
-  has to overwrite it; what stops two of the owner's enrollments racing is the
-  short-ttl immutable lock `_nskeylock.<ns>@owner`, and what stops substitution is the
-  APKAM signature over the advertised envelope, not the write mode.
+- **Immutability, and where it applies.** Neither key record is immutable, and both
+  are minted behind one. `public:__nskey.<ns>@owner` is mutable because nskey-keypair
+  rotation has to overwrite it; `public:pq_signing_root@owner` is mutable because
+  advertising a successor beside a retired predecessor is the same rewrite
+  ([`decisions.md` 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)).
+  What stops two of the owner's enrollments racing is a short-ttl **immutable** lock
+  key — `_nskeylock.<ns>@owner` and `_rootlock@owner` — and what stops substitution is
+  the APKAM signature over the advertised envelope, not the write mode. A lock is a
+  protocol with a window where a refused create was absolute, and what covers the
+  difference is reconciliation on every start, not the write mode either.
 - **Published nskeys are fetchable but not enumerable.** `public:__nskey.<ns>@owner`
   resolves on an exact `plookup`, cross-atSign, and appears in **no** scan — with or
   without `showhidden`, authenticated or not. This is a guaranteed protocol property

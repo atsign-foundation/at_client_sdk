@@ -332,30 +332,38 @@ void main() {
       );
     });
 
-    test('pq_signing_root is create-once; the published nskey is not', () {
-      // A second public:pq_signing_root@<atSign> create is rejected, never an
-      // overwrite — it is the root and never rotates, so two enrollments
-      // minting two roots would be unrecoverable. public:__nskey.<ns>@owner is
-      // mutable BY DESIGN,
-      // because nskey-keypair rotation has to overwrite it; two of the owner's
-      // enrollments are kept apart by the short-ttl immutable lock
-      // _nskeylock.<ns>@owner, and substitution is prevented by the APKAM
+    test('neither key record is immutable; the lock that mints them is', () {
+      // public:pq_signing_root@<atSign> and public:__nskey.<ns>@owner are both
+      // mutable, and for the same reason: rotation has to overwrite the
+      // advertisement, and the root's rotation is a successor entry beside a
+      // retired predecessor. Two of the owner's enrollments are kept apart by
+      // a short-ttl IMMUTABLE lock key — _rootlock@owner and
+      // _nskeylock.<ns>@owner — and substitution is prevented by the APKAM
       // signature over the advertised envelope, not by the write mode.
       provenIn(
-        'tests/at_functional_test/test/pq_signing_root_create_once_test.dart',
-        'a second signing-root create is refused, and changes nothing',
-        proves: 'the atServer refuses the second create WITH the immutability '
-            'error, the stored value is byte-identical afterwards, and a '
-            'mutable public key written twice by the same client is the '
-            'control that the refusal is about immutability',
+        'tests/at_functional_test/test/pq_signing_root_mint_lock_test.dart',
+        'the metadata the signing root is written with is mutable on the ',
+        proves: 'the metadata pqSigningRootKey produces is written twice to a '
+            'live atServer and the second write lands, and what the atServer '
+            'stored carries no immutable flag. Proved on a SCRATCH record '
+            'rather than the root: a probe that landed would replace the '
+            'atSign\'s root for the rest of the run, which it did once',
       );
       provenIn(
-        'tests/at_functional_test/test/pq_signing_root_create_once_test.dart',
+        'tests/at_functional_test/test/pq_signing_root_mint_lock_test.dart',
+        'a second signing-root mint lock create is refused',
+        proves: 'the atServer refuses the second _rootlock create WITH the '
+            'immutability error — the interlock the record used to carry — '
+            'and the same take succeeds once the lock is released, which is '
+            'the control that the refusal is about immutability',
+      );
+      provenIn(
+        'tests/at_functional_test/test/pq_signing_root_mint_lock_test.dart',
         'the published nskey is mutable, because rotation depends on it',
         proves: 'a second mintAndPublish on one namespace produces a new '
-            'nskeyKid and the advertisement resolves to it — the opposite '
-            'requirement, on the same atSign, so "immutable" landing on the '
-            'wrong record of the two would fail here',
+            'nskeyKid and the advertisement resolves to it — the same '
+            'requirement as the root, on the same atSign, so "immutable" '
+            'landing back on either record would fail here',
       );
     });
 

@@ -112,18 +112,19 @@ void main() {
     });
 
     test('UC-B5.3 · two enrollments race to create the signing root', () {
-      // GIVEN alice1 and alice3 both reach the create step with pq_signing_root
+      // GIVEN alice1 and alice3 both reach the mint step with pq_signing_root
       //       absent.
-      // WHEN  both attempt the immutable create.
-      // THEN  exactly one wins; the other gets "already exists" and falls
-      //       through to REQUEST. No orphaned data (nothing was written under
-      //       the discarded key).
+      // WHEN  both attempt to take the _rootlock@alice mint lock.
+      // THEN  exactly one takes it and publishes; the other is refused the
+      //       lock and falls through to REQUEST, having generated no keypair
+      //       and filed nothing, so there is no orphaned data to discard.
       provenIn(
-        'tests/at_functional_test/test/pq_signing_root_create_once_test.dart',
-        'the enrollment that loses the create does not mint a second root',
+        'tests/at_functional_test/test/enrollment_chain_link_live_test.dart',
+        'the enrollment that loses the race does not mint a second root',
         proves: 'the loser returns null rather than publishing or retrying, '
-            'leaves the published record untouched, and a namespace-scoped '
-            'enrollment declines to attempt the mint at all',
+            'leaves the published record untouched — which is now its own '
+            'check rather than the atServer refusing it — and a '
+            'namespace-scoped enrollment declines to attempt the mint at all',
       );
     });
   });

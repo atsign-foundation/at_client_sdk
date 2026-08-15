@@ -177,6 +177,7 @@ content-key kids. Working names marked.
 |---|---|---|---|---|
 | **nskey** | `public:__nskey.app_1.my_apps@alice` — written at mint, **mutable**, APKAM-signed `{v, createdAt, keys:[{use, alg, pub, kid, status?}], suites}` | published from mint; **hidden from scan** (double `_` — revealed only by `scan showhidden:true`; a single `_` would never sync) but served on an exact `plookup`, cross-atSign | Alice's authorised clients (private conveyed via substrate) | Alice encapsulates **her own** CKs to it; external senders encapsulate CKs to it |
 | **nskey mint/rotate lock** *(working)* | `_nskeylock.app_1.my_apps@alice` (self key, immutable create, short ttl) | no | n/a | serialises create and rotate between the owner's own enrollments |
+| **signing-root mint lock** *(working)* | `_rootlock@alice` (self key, immutable create, short ttl — no namespace, matching the record it guards) | no | n/a | serialises minting the signing root between the owner's own privileged enrollments |
 | **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `pqSeal(ck)` to the nskey named by `nskeyKid`, under the KEM that nskey's `alg` names |
 | **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
 | **substrate envelope** *(working)* | `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice` (self key) | no | n/a | Layer-1 plumbing: `pqSeal(nskey private)` to key package `kp` |
@@ -286,8 +287,11 @@ of the owner's enrollments creating or rotating at once, so that job moves to an
 explicit **short-ttl immutable lock key**, `_nskeylock.<ns>@<atSign>` — a self key,
 since no one else can write the owner's records. Take the lock, mint, write the
 advertisement, convey the private, release (or let the ttl expire). The loser of the
-race backs off and re-reads. The root `public:pq_signing_root@<atSign>` is different:
-it never rotates, so it stays immutable create-once.
+race backs off and re-reads. The root `public:pq_signing_root@<atSign>` now follows
+exactly the same pattern, behind `_rootlock@<atSign>`
+([`decisions.md` 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)):
+it is an ordinary signing key, and advertising a successor beside a retired
+predecessor is a rewrite, which an immutable record makes unimplementable.
 
 **The private half** is the sensitive part: it cannot ride the RSA-tainted
 self-encryption-key chain, so it is conveyed PQ-safely per-APKAM as a `Secret` over
@@ -295,8 +299,8 @@ the substrate. A client gets the public by `plookup` and the private from the
 substrate.
 
 **The signing root.** `public:pq_signing_root@alice` is the atSign-level,
-user-owned root of trust: ML-DSA-65, no namespace, **immutable** once written, and
-destined for a key-transparency log. It signs and verifies. Nothing is ever
+user-owned root of trust: ML-DSA-65, no namespace, **mutable** behind
+`_rootlock@<atSign>`, and destined for a key-transparency log. It signs and verifies. Nothing is ever
 encapsulated to it, so it is **not** a cold-start recipient and there is no
 `recipientKind` for it.
 
@@ -315,12 +319,16 @@ again. Once they mint, the sender's next re-`plookup`
 
 **Naming.** The root carries no namespace suffix — `pq_signing_root`, not
 `publickey.pq`, since a `.pq` suffix would land it *in* a namespace called `pq`. Its
-value is a JSON structure, `{v, keys[], successor}`, so the algorithm can evolve
-without a second record: `keys` is a list because the record cannot be updated, and
-`successor` reserves a revocation chain D1 does not implement. Only an enrollment with
+value is a JSON structure, `{v, keys[]}` in the `_apsk` advertisement vocabulary —
+`{kid, use, alg, pub, status?}` per entry — so the algorithm can evolve without a
+second record and a retired root stays advertised for what it signed
+([`decisions.md` 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)).
+Only an enrollment with
 `rw` on `*` and `__manage` may create it; the private rides that app's `.atKeys` and
-reaches the other privileged enrollments over the substrate. Immutability is what stops
-two of them minting two roots — unrecoverable, since the root never rotates. Lifecycle
+reaches the other privileged enrollments over the substrate. The `_rootlock@<atSign>`
+mint lock is what stops two of them minting two roots, which would still be
+unrecoverable: D1 builds the root's rotat*ability*, not a rotation that could
+reconcile a split. Lifecycle
 in [§2.5](#25-the-authenticated-self-retrofit-flow-fresh-auto-approved-enrollment).
 
 **One key per advertisement, and the assumption that rests on.** The record
@@ -1122,16 +1130,19 @@ the pre-PQ credential. (Per-APKAM auth revocation of a *live* PQ enrollment is t
 existing `enroll:revoke`; per-APKAM future-data revocation is nskey-keypair rotation
 excluding it, [§1.7](#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation).)
 
-**`pq_signing_root` lifecycle.** Immutable **create-once** (`Metadata.immutable` — a
-long-standing atServer feature, already live; no server change), and restricted to a
-fully privileged enrollment (`rw` on `*` **and** `__manage`). The creator wins the
-create, generates the ML-DSA-65 keypair, stores the private half in its own `.atKeys`,
-seeds it as the conveyable root secret, and serves it on request **to the other fully
-privileged enrollments only**. A loser's create is rejected → it **pulls** the private
-half ([§2.2](#22-secretstore-push--pull-primitives)), verifies public/private
-correspondence, and stores. Because the immutable write is atomic, exactly one root is
-ever published — which matters more here than anywhere else, since the root never
-rotates and two roots would be unrecoverable. Two populations **never** run this
+**`pq_signing_root` lifecycle.** **Mutable, minted under a lock**: the interlock is
+`_rootlock@<atSign>`, a short-ttl immutable self key (`Metadata.immutable` — a
+long-standing atServer feature, already live; no server change), and minting is
+restricted to a fully privileged enrollment (`rw` on `*` **and** `__manage`). The
+winner of the lock re-reads the record under it, generates the ML-DSA-65 keypair,
+stores the private half in its own `.atKeys`, seeds it as the conveyable root secret,
+and serves it on request **to the other fully privileged enrollments only**. A loser
+of the lock mints nothing and files nothing → it **pulls** the private half
+([§2.2](#22-secretstore-push--pull-primitives)), verifies public/private
+correspondence, and stores. A lock is a protocol rather than the atServer's absolute
+refusal, so what backs it is the reconciliation on every start: a held private that
+corresponds to no advertised entry is retired, and the pull asks again. Two roots
+would still be unrecoverable, since D1 builds no rotation able to reconcile a split. Two populations **never** run this
 retrofit: a new atSign is PQ-native at onboarding; a new (post-PQ) privileged
 enrollment receives the root *pushed* by the approver. F-section build detail (F1–F6) in [§6](#6-implementation-notes--file-level-pointers-consolidated).
 

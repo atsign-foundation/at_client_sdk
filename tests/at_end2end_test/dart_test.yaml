@@ -3,9 +3,9 @@
 # This suite's atSigns are LONG-LIVED. `config/config23.yaml` and
 # `config/config14.yaml` point at @ce2e1..@ce2e4 on root.atsign.wtf, real
 # atServers that are never recycled. Anything written there is written for
-# good — a post-quantum signing root is immutable and create-once, and a
-# published namespace key, an `_apsk` record or a retrofitted enrollment
-# outlives the run that made it. While the PQ design is still being settled,
+# good — a post-quantum signing root, a published namespace key, an `_apsk`
+# record or a retrofitted enrollment all outlive the run that made them, and
+# nothing in D1 rotates a root back out. While the PQ design is still being settled,
 # none of that may be written to those atSigns.
 #
 # So the list below is an ALLOWLIST, not an exclusion, and that direction is

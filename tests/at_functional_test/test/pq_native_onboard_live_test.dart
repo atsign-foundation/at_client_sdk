@@ -21,7 +21,7 @@ import 'test_utils.dart';
 ///
 /// Drives [pqNativeOnboard] against a live atServer and asserts the four
 /// things the catalogue asks for: the APKAM is ML-DSA and actually
-/// authenticates, the signing root is created and immutable, the first
+/// authenticates, the signing root is created and mutable, the first
 /// enrollment's key package is registered on its record, and legacy material
 /// is still cut and published by default.
 ///
@@ -97,7 +97,7 @@ void main() {
         reason: 'no RSA APKAM exists anywhere, so this can only have '
             'succeeded by ML-DSA');
 
-    // --- the signing root exists, and a second create is refused -----------
+    // --- the signing root exists, and is mutable ---------------------------
     final rootValue = await client.getRemoteSecondary()!.executeCommand(
         'plookup:pq_signing_root$atSign\n',
         auth: true);
@@ -106,21 +106,34 @@ void main() {
             rootValue!.replaceFirst('data:', '').trim())
         as Map<String, dynamic>;
     expect(rootJson['v'], 1);
-    expect((rootJson['keys'] as List).single['alg'], 'mldsa65');
-    expect(rootJson['successor'], isNull);
+    expect(rootJson.containsKey('successor'), isFalse,
+        reason: 'decisions 101 deleted the field. Asserted as ABSENT rather '
+            'than null, which a missing key satisfies for free');
+    final entries = rootJson['keys'] as List;
+    // Not `.single`: the record is a list of signing keys precisely so a
+    // successor can sit beside a retired predecessor, and a reader that takes
+    // the only element is what would stop that ever being adopted. One entry
+    // is what a freshly onboarded atSign has, and the assertion says so
+    // without requiring it forever.
+    expect(entries, hasLength(1),
+        reason: 'a fresh onboard mints exactly one root');
+    expect((entries.first as Map)['alg'], 'mldsa65');
 
-    // Immutable: the create-once property is what stops two privileged
-    // enrollments minting two roots for one atSign. The atServer REFUSES the
-    // write — it does not return an error string, it throws — so the
-    // assertion is that the call fails, and with that reason.
-    await expectLater(
-        client.getRemoteSecondary()!.executeCommand(
-            'update:public:pq_signing_root$atSign {"v":1,"keys":[],"successor":null}\n',
-            auth: true),
-        throwsA(predicate((e) =>
-            e.toString().contains('Immutable records may not be updated'))),
-        reason: 'the root is immutable-created; a second write must be '
-            'rejected by the atServer, not merely avoided by the client');
+    // Mutable, read off the metadata rather than attempted by writing: a
+    // second write would LAND and replace this atSign's root. What stops two
+    // privileged enrollments each minting one is `_rootlock@<atSign>`, whose
+    // refusal `pq_signing_root_mint_lock_test.dart` watches the atServer
+    // issue.
+    final rootMeta = await client.getRemoteSecondary()!.executeCommand(
+        'llookup:meta:public:pq_signing_root$atSign\n',
+        auth: true);
+    expect(
+        (jsonDecode(rootMeta!.replaceFirst('data:', '').trim())
+            as Map<String, dynamic>)['immutable'],
+        isNot(true),
+        reason: 'the atServer makes immutability sticky, so a root created '
+            'with the flag could never advertise a successor — rotation would '
+            'be unimplementable on every atSign onboarded by this build');
 
     // --- the key package is on the enrollment record, not published --------
     // The first enrollment holds __manage, whose grant carries `*: rw`, so it

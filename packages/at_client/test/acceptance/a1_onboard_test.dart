@@ -14,9 +14,9 @@ void main() {
       //       no keys exist.
       // WHEN  alice1 runs CRAM onboarding.
       // THEN  alice1.APKAM = pq and authenticates via PQ APKAM (no RSA APKAM
-      //       needed for auth); public:pq_signing_root@alice exists and is
-      //       immutable (a second create is rejected) and alice1 holds its
-      //       private; alice1.KP registered in E1's record but not published
+      //       needed for auth); public:pq_signing_root@alice exists, is
+      //       MUTABLE (what is create-once is _rootlock@alice, the mint lock)
+      //       and alice1 holds its private; alice1.KP registered in E1's record but not published
       //       (discoverable only via enroll:listns). Legacy material is STILL
       //       cut and published BY DEFAULT (decisions 37, reversing the old
       //       Decision #1): the RSA encryption keypair + selfEncryptionKey are
@@ -32,8 +32,9 @@ void main() {
             'anywhere, so the atServer can only have verified an ML-DSA PKAM '
             'signature against the enrollment activation created. The APKAM '
             'is filed as typed material with the flat fields left empty, the '
-            'signing root is created and a second create is refused by the '
-            'atServer, metadata.keyPackage is on the enrollment record via '
+            'signing root is created and the record the atServer stored for '
+            'it does not carry immutable, metadata.keyPackage is on the '
+            'enrollment record via '
             'enroll:listns, and the legacy encryption keypair, '
             'selfEncryptionKey and public:publickey are all present by '
             'default.',

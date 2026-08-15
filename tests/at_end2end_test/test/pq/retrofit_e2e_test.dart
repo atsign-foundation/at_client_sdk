@@ -47,10 +47,10 @@ import 'package:test/test.dart';
 ///   the 1:1:1 rule, which is a property of two files and a server, and
 ///   cannot be seen from one.
 ///
-/// **Recycle the virtualenv before believing a run.** The signing root is an
-/// immutable create-once record: it survives a re-run against the same
-/// container while the private that matched it died with the last run's
-/// process. The precondition below fails loudly rather than skipping, since a
+/// **Recycle the virtualenv before believing a run.** The signing root
+/// survives a re-run against the same container — nothing deletes it, and the
+/// mint stands down the moment it reads one — while the private that matched
+/// it died with the last run's process. The precondition below fails loudly rather than skipping, since a
 /// silently-skipped root step is exactly what this file exists to catch.
 void main() {
   late String atSign;
@@ -149,8 +149,8 @@ void main() {
     expect(await publishedRoot(owner), isNull,
         reason: 'this row is about the root being CREATED by the retrofit. A '
             'root already published means the virtualenv was not recycled — '
-            'the record is immutable and survives a re-run while the private '
-            'that matched it did not');
+            'the record survives a re-run while the private that matched it '
+            'did not');
 
     await mintLegacyEnrollment(
         label: 'e1', namespaces: {'*': 'rw', '__manage': 'rw'});
@@ -203,8 +203,9 @@ void main() {
         await PqSigningRoot(client, keysIo: session.atKeysIo).privateHalf(atSign);
     expect(held, isNotNull,
         reason: 'the private is filed before the record is published — a '
-            'published root whose private did not survive can never be '
-            'replaced, because the record is immutable and never rotates');
+            'published root whose private did not survive strands every '
+            'enrollment on the atSign, and D1 builds no rotation to replace '
+            'it with');
 
     // Anchored, verified against the published record rather than an
     // in-memory copy of it.
@@ -266,7 +267,7 @@ void main() {
     expect(await publishedRoot(clone), rootBefore,
         reason: 'byte-identical. Two roots would be unrecoverable rather '
             'than untidy — half this atSign\'s enrollments would chain to a '
-            'root the other half rejected, and the root never rotates');
+            'root the other half rejected, and nothing reconciles that');
 
     // And its own keyfile has no root private of its own to show for it.
     final cloneRoot = PqSigningRoot(clone, keysIo: cloneSession.atKeysIo);
@@ -332,8 +333,8 @@ void main() {
     expect(filed, isNotNull,
         reason: 'it must reach the KEYFILE, not just the transit store: that '
             'store is in-memory by design, so a private stopping there would '
-            'be gone at the next start — and the root, being immutable and '
-            'non-rotating, cannot be re-minted to recover');
+            'be gone at the next start — and a root already published is '
+            'never re-minted, so the only recovery is another pull');
     expect(filed, await holderRoot.privateHalf(atSign),
         reason: 'byte-for-byte the holder\'s. Filing verifies the arriving '
             'private against the published root before storing it, so this '

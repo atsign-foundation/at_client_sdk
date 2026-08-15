@@ -628,9 +628,10 @@ class AtKeys {
   /// `dead` when it should no longer be used even to verify history.
   ///
   /// Enrollment-scoped only. The atSign's own material has no rotation of
-  /// this shape — the signing root is create-once, and a pair that lost its
-  /// mint race is retired where it stands while the winner is filed under the
-  /// next generation.
+  /// this shape: a signing-root pair that lost its mint race is retired where
+  /// it stands while the winner is filed under the next generation, and a
+  /// successor root is added beside its retired predecessor rather than
+  /// replacing it — the predecessor is what verifies everything it signed.
   void replaceKey(String enrollmentId, String keyId,
       Iterable<AtKeysMaterial> replacements,
       {String to = KeyPartStatus.retired}) {

@@ -164,8 +164,9 @@ void main() {
 
     // (5) no partial state on the server.
     expect(await PqSigningRoot.publishedPublicKey(owner, atSign), isNull,
-        reason: 'an immutable create-once record must not be left behind by a '
-            'failed upgrade — it could never be rewritten');
+        reason: 'a root must not be left behind by a failed upgrade — every '
+            'enrollment on the atSign would chain to it, and D1 builds no '
+            'rotation able to replace it');
     expect(await enrollmentsWithStatus(EnrollmentStatus.pending, 'b01-priv-rf-'),
         0,
         reason: 'the enrollment the abort created must not be left pending: '

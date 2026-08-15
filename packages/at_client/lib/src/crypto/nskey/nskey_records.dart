@@ -12,16 +12,17 @@
 /// | record             | shape                                          |
 /// |--------------------|------------------------------------------------|
 /// | advertisement      | `public:__nskey.<ns>@<owner>`                  |
-/// | mint lock          | `_nskeylock.<ns>@<owner>`                      |
+/// | nskey mint lock    | `_nskeylock.<ns>@<owner>`                      |
 /// | CK conveyance      | `[@<recipient>:]<ckKid>.__ck.<ckNs>@<sender>`  |
 /// | current-CK pointer | `__ckcur.<destination>.<ckNs>@<atSign>`        |
 /// | signing root       | `public:pq_signing_root@<atSign>`              |
+/// | root mint lock     | `_rootlock@<atSign>`                           |
 ///
 /// At-rest ids freeze the same way — existing keyfiles hold them and scans
 /// match on them: the `nskey.<ns>.<kid>` AtKeys id and the `__nskey.<kid>`
-/// substrate secret name (both below), plus `PqSigningRoot.keyId`'s
-/// `pq_signing_root` slot family, which stays beside the class's
-/// slot-overflow logic.
+/// substrate secret name (both below), plus the root's `root:<algo>:<n>` slot
+/// family, whose grammar lives in `AtKeys.keyIdPrefix`/`AtKeys.isRoleKeyId`
+/// with `PqSigningRoot.keyIdRole` naming the role.
 ///
 /// Deliberately absent: each payload's version constant stays beside its
 /// codec (`nskeyAdvertisementVersion`, `PqSigningRoot.currentVersion`, the
@@ -57,10 +58,11 @@ const String nskeyMintLockRecordName = '_nskeylock';
 ///
 /// The metadata is contract, not tuning: the atServer's refusal of a second
 /// **immutable** create is the interlock itself, and the [ttl] is the crash
-/// backstop that stops a dead holder blocking its own atSign forever. The
-/// design lives on `NskeyMintLock`.
+/// backstop that stops a dead holder blocking its own atSign forever — long
+/// enough that an ordinary mint never races its own expiry. The design lives
+/// on `MintLock`.
 AtKey nskeyMintLockKey(String owner, String namespace,
-        {required Duration ttl}) =>
+        {Duration ttl = mintLockTtl}) =>
     AtKey()
       ..key = nskeyMintLockRecordName
       ..namespace = namespace
@@ -68,6 +70,14 @@ AtKey nskeyMintLockKey(String owner, String namespace,
       ..metadata = (Metadata()
         ..immutable = true
         ..ttl = ttl.inMilliseconds);
+
+/// How long a mint lock survives unreleased.
+///
+/// A crash backstop, not a budget: a holder that dies mid-mint must not block
+/// its own atSign forever. One value for every lock, because the thing it is
+/// sized against — how long a mint can legitimately take — does not vary by
+/// which record is being minted.
+const Duration mintLockTtl = Duration(minutes: 2);
 
 /// The leading segment of the current-CK pointer record:
 /// `__ckcur.<destination>.<ckNs>@<atSign>`.
@@ -95,15 +105,39 @@ const String pqSigningRootRecordName = 'pq_signing_root';
 
 /// The at-key the signing root is published under.
 ///
-/// **Immutable** is the create-once property itself — the atServer refusing a
-/// second create is what guarantees exactly one root is ever published; see
-/// `PqSigningRoot` for why two would be unrecoverable.
+/// **Mutable**, like the nskey advertisement beside it. The root is an
+/// ordinary signing key (`docs/projects/pq/decisions.md` 101), so retiring one
+/// entry and advertising its successor is a rewrite of this record — which an
+/// immutable record makes unimplementable. What immutability
+/// was actually doing here is stopping two of the owner's privileged
+/// enrollments each minting a root, and that job moves to
+/// [pqSigningRootMintLockKey].
 AtKey pqSigningRootKey(String atSign) => AtKey()
   ..key = pqSigningRootRecordName
   ..sharedBy = atSign
-  ..metadata = (Metadata()
-    ..isPublic = true
-    ..immutable = true);
+  ..metadata = (Metadata()..isPublic = true);
+
+/// The record name of the signing root's mint interlock: `_rootlock@<atSign>`.
+const String pqSigningRootMintLockRecordName = '_rootlock';
+
+/// The at-key of the signing root's mint interlock.
+///
+/// A self key with **no namespace**, matching the record it guards: the root
+/// is atSign-level, which is exactly what distinguishes it from an nskey. The
+/// single underscore hides it from every scan and keeps it out of the commit
+/// log, which is right for a record whose only reader is the atServer's own
+/// refusal — it is taken and released remotely and must never ride sync.
+///
+/// The metadata is contract, not tuning, for the same reason
+/// [nskeyMintLockKey]'s is: the refusal of a second **immutable** create is
+/// the interlock, and [ttl] is the crash backstop.
+AtKey pqSigningRootMintLockKey(String atSign, {Duration ttl = mintLockTtl}) =>
+    AtKey()
+      ..key = pqSigningRootMintLockRecordName
+      ..sharedBy = atSign
+      ..metadata = (Metadata()
+        ..immutable = true
+        ..ttl = ttl.inMilliseconds);
 
 /// The record-name segment of a CK conveyance, between the `ckKid` and the
 /// namespace the content key lives in.

@@ -55,9 +55,11 @@ is how far we've got.
 >    written first: the B-1 harness had been run when it was built, but its
 >    numbers were never recorded, so the row was asking for a budget that
 >    existed nowhere a reader could find it. Then UC-A3.4 and UC-B5.2 as unit
->    rows, and two more proven live once a functional test for the immutable
->    signing-root create existed: the cross-cutting create-once invariant and
->    UC-B5.3's race. UC-A3.2 followed once its catalogue text was corrected —
+>    rows, and two more proven live once a functional test for the
+>    signing-root mint existed: the cross-cutting write-mode invariant and
+>    UC-B5.3's race. (That test asserted an immutable create until
+>    `decisions.md` 101 made the record mutable behind `_rootlock@owner`; it
+>    now asserts the lock.) UC-A3.2 followed once its catalogue text was corrected —
 >    it had described a mint trigger that was never built — and then UC-A2.2
 >    and UC-A2.3, the latter proven at two layers at once because the row
 >    insists the namespace boundary holds at the atServer and not by a
