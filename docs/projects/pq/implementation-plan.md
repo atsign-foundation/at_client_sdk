@@ -3578,7 +3578,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | # | What is owed | Owner | State |
 |---|---|---|---|
-| 1 | **14.22 rows 1–7** — the signing root becomes an ordinary, rotatable signing key | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | Unbuilt. **Row 1 is the next action**; rows 2–7 block behind it, and row 1 is the only D1 item with a deadline of its own (a *reader*, due before the GA minor) |
+| 1 | **14.22 rows 2–7** — the signing root becomes an ordinary, rotatable signing key | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | **Row 1 landed 2026-08-15 in `19a31d51b`** — the reader, which was the only D1 item with a deadline of its own (due before the GA minor). **Row 2 is the next action**; rows 3–7 block behind it |
 | 2 | **Step 20's rotation arm** — enrollment then an `enroll:update` APKAM rotation mid-run | [14.18](#1418-the-remaining-d1-initial-development-sequence) step 20 | ⛔ Blocked on an **at_auth release** carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | 3 | **Step 24** — a client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | Open; **wants a ruling** on whether an owner-keys client belongs in the enrollment trust model |
 | 4 | **Step 25** — a `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | Open. Gates the stop-release: closing it means public-record signing moves to the ML-DSA root and self data moves off `selfEncryptionKey` |
@@ -3603,8 +3603,10 @@ owed a test.
 Run these rather than trusting the table. Each answers one row.
 
 ```bash
-# rows 1: has 14.22 row 1 landed? (empty = unbuilt)
-git grep -l "apskAdvertisement\|apskSigningKeys" -- packages/at_client/lib/src/crypto/nskey/
+# row 1: which 14.22 rows have landed? Row 1 landed when this file started
+# composing apskAdvertisement; row 2 is unbuilt for as long as the prefix
+# still names one algorithm.
+git grep -n "keyIdPrefix =\|apskAdvertisement" -- packages/at_client/lib/src/crypto/nskey/
 
 # row 11: which 14.19 items are still open? (~~struck~~ ones are done)
 awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \
@@ -3625,7 +3627,7 @@ grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 
 # rails, all four packages
 cd packages/at_auth           && dart test --concurrency=1   # 312
-cd packages/at_client         && dart test --concurrency=1   # 1302 (2 skipped)
+cd packages/at_client         && dart test --concurrency=1   # 1301 (2 skipped)
 cd packages/at_onboarding_cli && dart test --concurrency=1   # 39
 cd tests/at_functional_test   && ./runLocal.sh               # 164/164
 ```
