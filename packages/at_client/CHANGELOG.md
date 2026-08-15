@@ -1,4 +1,16 @@
 ## 3.14.1
+- feat: the PQ startup records what the atServer's enrollment record says
+  about this enrollment — its `namespaces`, `appName` and `deviceName` — onto
+  the keyfile, through `WrittenAtKeysIo.update`. It runs on every start,
+  because a grant can change after the file was written. Only for an
+  enrollment the keyfile already holds: recording a snapshot creates the slot,
+  and a slot is typed content, so doing it for an enrollment with no material
+  would rewrite a legacy-flat keyfile as a version 1 document purely as a side
+  effect of opening it.
+- feat: `LocalSecondary.getEnrollmentDetails()` is now public — the memoised
+  read of this client's own enrollment record, previously private. The startup
+  reconciliation shares it rather than issuing a second `enroll:fetch`, since
+  one record with two readers is two chances to describe it differently.
 - feat!: asking for a client that already exists with a preference naming
   different rollout settings — `posture`, `signingRollout`,
   `inUseSigningAlgorithms` or `disallowLegacyEncryption` — now **throws** an
