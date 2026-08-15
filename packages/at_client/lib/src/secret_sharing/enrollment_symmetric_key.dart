@@ -19,7 +19,7 @@ import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
 import 'package:at_client/src/secret_sharing/secret_envelope.dart'
     show SecretEnvelope;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show apskUri, SignedEnvelope, verifyEnvelope;
+    show apskUri, EnvelopeType, SignedEnvelope, verifyEnvelope;
 import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
@@ -281,5 +281,6 @@ Future<void> _verifyAgainstApsk(
         'No _apsk published for $atSign enrollment $claimed, so its signature '
         'cannot be checked');
   }
-  await verifyEnvelope(signedEnvelope, signerPublicKey: publicKey);
+  await verifyEnvelope(signedEnvelope,
+      signerPublicKey: publicKey, expecting: EnvelopeType.secretEnvelope);
 }

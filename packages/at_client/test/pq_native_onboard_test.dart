@@ -5,7 +5,7 @@ import 'package:at_chops/at_chops.dart'
     show MlDsa65PureDartAlgo, SigningAlgoType;
 import 'package:at_client/at_client_mixins.dart' show makeActivationPqNative;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope, verifyEnvelope;
+    show EnvelopeType, SignedEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart' show AtBytes, AtRootDomain;
 import 'package:test/test.dart';
 
@@ -62,7 +62,8 @@ void main() {
         (await r.metadataBuilder!(io))!['keyPackage'] as Map);
 
     await verifyEnvelope(envelope,
-        signerPublicKey: r.advertisedSigningKey!.publicKey);
+        signerPublicKey: r.advertisedSigningKey!.publicKey,
+        expecting: EnvelopeType.keyPackage);
 
     // The differential. Without it this passes for a build that never moved
     // the signer, since a package signed by the APKAM key is still a validly
@@ -72,7 +73,8 @@ void main() {
           signerPublicKey: jsonEncode(apskAdvertisement(keys: [
             ApskSigningKey.forPublicKey(
                 alg: SigningAlgoType.mldsa65, pub: apkamPublic)
-          ]))),
+          ])),
+          expecting: EnvelopeType.keyPackage),
       throwsA(isA<Exception>()),
       reason: 'the ML-DSA APKAM key must NOT verify it: that key '
           'authenticates connections and signs nothing once the enrollment '
@@ -96,6 +98,7 @@ void main() {
         (await r.metadataBuilder!(io))!['keyPackage'] as Map);
 
     await verifyEnvelope(envelope,
-        signerPublicKey: r.advertisedSigningKey!.publicKey);
+        signerPublicKey: r.advertisedSigningKey!.publicKey,
+        expecting: EnvelopeType.keyPackage);
   });
 }

@@ -146,7 +146,8 @@ void main() {
         keys: [ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
             publicKey: rsaPair.atPublicKey.publicKey,
-            privateKey: rsaPair.atPrivateKey.privateKey)]);
+            privateKey: rsaPair.atPrivateKey.privateKey)],
+                type: EnvelopeType.app);
 
     /// What a 4.x enrollment's signer produces: the same envelope shape,
     /// signed ML-DSA-65, naming that algorithm in its protected header.
@@ -155,7 +156,7 @@ void main() {
             algorithm: SigningAlgoType.mldsa65,
             publicKey: base64Encode(mlDsaPair.publicKey),
             privateKey: base64Encode(mlDsaPair.secretKey))],
-        enrollmentId: 'enroll-pq');
+        enrollmentId: 'enroll-pq', type: EnvelopeType.app);
 
     /// [envelope] with its protected header replaced, so a test can make the
     /// envelope claim an algorithm its key does not match. The header is
@@ -174,14 +175,16 @@ void main() {
     test('a bare RSA _apsk verifies an RSA envelope — today\'s traffic',
         () async {
       await verifyEnvelope(rsaEnvelope(),
-          signerPublicKey: rsaPair.atPublicKey.publicKey);
+          signerPublicKey: rsaPair.atPublicKey.publicKey,
+              expecting: EnvelopeType.app);
     });
 
     test('an array ML-DSA _apsk verifies an ML-DSA envelope', () async {
       // The whole approval path in one assertion: this is the value the
       // atServer publishes from what the enrolling client composed, and the
       // approver verifies the advertised key package against exactly it.
-      await verifyEnvelope(mlDsaEnvelope(), signerPublicKey: mlDsaApsk());
+      await verifyEnvelope(mlDsaEnvelope(), signerPublicKey: mlDsaApsk(),
+          expecting: EnvelopeType.app);
     });
 
     test('an array RSA _apsk refuses an envelope claiming ML-DSA-65', () async {
@@ -191,7 +194,8 @@ void main() {
       ]));
       final envelope = claimingAlg(rsaEnvelope(), 'ML-DSA-65');
 
-      await expectLater(() => verifyEnvelope(envelope, signerPublicKey: apsk),
+      await expectLater(() => verifyEnvelope(envelope, signerPublicKey: apsk,
+          expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()),
           reason: 'the array carries the algorithm explicitly, so the claim '
               'cannot select a routine the published key does not call for');
@@ -204,7 +208,7 @@ void main() {
               algorithm: SigningAlgoType.mldsa65,
               publicKey: base64Encode(mlDsaPair.publicKey),
               privateKey: base64Encode(mlDsaPair.secretKey))],
-          enrollmentId: 'enroll-pq');
+          enrollmentId: 'enroll-pq', type: EnvelopeType.app);
       final entry = envelope.signature;
       expect(entry.alg, 'ML-DSA-65');
       expect(base64Decode(base64.normalize(entry.signature)).length, 3309,
@@ -213,11 +217,12 @@ void main() {
               'the keys name');
 
       final apsk = mlDsaApsk();
-      await verifyEnvelope(envelope, signerPublicKey: apsk);
+      await verifyEnvelope(envelope, signerPublicKey: apsk,
+          expecting: EnvelopeType.app);
 
       await expectLater(
           () => verifyEnvelope(envelope.withPayloadJson('a different text'),
-              signerPublicKey: apsk),
+              signerPublicKey: apsk, expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
     });
 
@@ -227,7 +232,7 @@ void main() {
               keys: [ApkamSigningKeys(
                   algorithm: SigningAlgoType.ecc_secp256r1,
                   publicKey: 'x',
-                  privateKey: 'y')]),
+                  privateKey: 'y')], type: EnvelopeType.app),
           throwsA(isA<ArgumentError>()));
     });
 
@@ -235,7 +240,8 @@ void main() {
       final apsk = mlDsaApsk();
       final envelope = mlDsaEnvelope().withPayloadJson('a different text');
 
-      await expectLater(() => verifyEnvelope(envelope, signerPublicKey: apsk),
+      await expectLater(() => verifyEnvelope(envelope, signerPublicKey: apsk,
+          expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()),
           reason: 'control: the ML-DSA branch must actually verify, or the '
               'happy path above proves routing and nothing else');
@@ -247,7 +253,8 @@ void main() {
       final apsk = mlDsaApsk();
 
       await expectLater(
-          () => verifyEnvelope(rsaEnvelope(), signerPublicKey: apsk),
+          () => verifyEnvelope(rsaEnvelope(), signerPublicKey: apsk,
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()),
           reason: 'the key\'s declaration is authoritative — the claim cannot '
               'select a weaker routine than the published key calls for');
@@ -259,7 +266,8 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+                  expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()),
           reason: 'a bare key is RSA by definition; an envelope claiming '
               'otherwise is lying about something, and the lie fails');

@@ -5,7 +5,7 @@ import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show apskUri, SignedEnvelope, signEnvelope, verifyEnvelope;
+    show apskUri, EnvelopeType, SignedEnvelope, signEnvelope, verifyEnvelope;
 import 'package:at_commons/at_commons.dart'
     show AtKey, AtSigningVerificationException, AtValue, IllegalStateException;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -39,9 +39,17 @@ mixin EnvelopeSigning on ApkamSigning {
   /// [payload] must be a String or a json-encodable object.
   /// [toEncodable] is passed directly to [jsonEncode].
   /// Read the [jsonEncode] docs to learn how to use it.
+  ///
+  /// [type] says what the envelope is for, and applications leave it alone.
+  /// Its default, [EnvelopeType.app], is a type **no** verifier inside this
+  /// library accepts — so an application that signs data someone else
+  /// influenced cannot be walked into producing a chain link, a key package or
+  /// an advertisement, however closely the payload it was handed resembles
+  /// one. The uses inside this library each pass their own.
   Future<SignedEnvelope> wrapAndSign(
     Object? payload, {
     Object? Function(Object? nonEncodable)? toEncodable,
+    EnvelopeType type = EnvelopeType.app,
   }) async {
     // Resolved before the try, not inside it: that catch reports a payload
     // that could not be encoded, and a keyfile read that fails is not one.
@@ -62,6 +70,7 @@ mixin EnvelopeSigning on ApkamSigning {
       return signEnvelope(
         payload,
         keys: keys,
+        type: type,
         enrollmentId: enrollmentId,
         toEncodable: toEncodable,
       );
@@ -78,8 +87,10 @@ mixin EnvelopeSigning on ApkamSigning {
   FutureOr<String> wrapAndSignAndJsonEncode(
     Object? payload, {
     Object? Function(Object? nonEncodable)? toEncodable,
+    EnvelopeType type = EnvelopeType.app,
   }) async {
-    final envelope = await wrapAndSign(payload, toEncodable: toEncodable);
+    final envelope =
+        await wrapAndSign(payload, toEncodable: toEncodable, type: type);
     // No toEncodable here: the payload was already encoded into base64url by
     // the signing, and what is left is strings.
     return jsonEncode(envelope.toJson());
@@ -101,10 +112,16 @@ mixin EnvelopeSigning on ApkamSigning {
   /// claim. A key package signed before its enrollment existed is exactly
   /// that: the atServer had not assigned an id yet, so there was nothing
   /// truthful to stamp.
+  ///
+  /// [expecting] is what the caller is verifying, and an envelope signed for
+  /// anything else is refused before its signature is checked. It defaults to
+  /// [EnvelopeType.app] to pair with [wrapAndSign]'s default, so an
+  /// application verifies what an application signed and nothing else.
   Future<void> verifyEnvelopeSignature(
     SignedEnvelope envelope, {
     required String signerAtSign,
     String? signerEnrollmentId,
+    EnvelopeType expecting = EnvelopeType.app,
   }) async {
     final String? id = signerEnrollmentId ?? envelope.signerEnrollmentId;
     if (id == null) {
@@ -115,11 +132,16 @@ mixin EnvelopeSigning on ApkamSigning {
 
     final pk = await getApkamPublicKey(signerAtSign, id);
     try {
-      await verifyEnvelope(envelope, signerPublicKey: pk);
-    } on AtSigningVerificationException {
+      await verifyEnvelope(envelope, signerPublicKey: pk, expecting: expecting);
+    } on AtSigningVerificationException catch (e) {
+      // The cause travels with the refusal. Without it every reason arrives as
+      // "verification failed using public key", which sends a reader after a
+      // key that is fine — an envelope signed for something else, or under a
+      // version this build does not read, fails here too and neither is a
+      // question about $pk.
       throw AtSigningVerificationException(
           'Signature verification failed using public key for '
-          '$signerAtSign enrollment $id : $pk');
+          '$signerAtSign enrollment $id : $pk — ${e.message}');
     }
   }
 

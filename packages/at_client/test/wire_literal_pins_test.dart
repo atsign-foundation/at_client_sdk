@@ -728,6 +728,25 @@ void main() {
       expect(envelopeVersion, 1);
     });
 
+    test('every envelope type, spelled out', () {
+      // What each envelope was signed FOR, inside the protected header where
+      // the signature covers it. Raw literals: a verifier is handed the type
+      // it expects, so these strings are what two implementations have to
+      // agree on, and changing one silently re-types every envelope a build
+      // signs while leaving every reader looking for the old spelling.
+      expect(EnvelopeType.app.typ, 'at-app+jws');
+      expect(EnvelopeType.chainLink.typ, 'at-chain-link+jws');
+      expect(EnvelopeType.keyPackage.typ, 'at-key-package+jws');
+      expect(EnvelopeType.nskeyRing.typ, 'at-nskey-ring+jws');
+      expect(EnvelopeType.secretEnvelope.typ, 'at-secret-envelope+jws');
+
+      // Every value is distinct — the whole mechanism is that two uses cannot
+      // be confused, and two enum entries sharing a spelling would confuse
+      // exactly the pair that shared it, silently.
+      expect({for (final t in EnvelopeType.values) t.typ}.length,
+          EnvelopeType.values.length);
+    });
+
     test('the envelope members, their order, and unpadded base64url', () {
       final pair = AtChopsUtil.generateAtPkamKeyPair();
       final envelope = signEnvelope(
@@ -736,8 +755,7 @@ void main() {
             algorithm: SigningAlgoType.rsa2048,
             publicKey: pair.atPublicKey.publicKey,
             privateKey: pair.atPrivateKey.privateKey)],
-        enrollmentId: 'e1',
-      );
+        enrollmentId: 'e1', type: EnvelopeType.app);
 
       expect(envelope.toJson().keys.toList(), ['payload', 'signatures'],
           reason: 'exactly RFC 7515 general serialization — a member of our '
@@ -775,8 +793,8 @@ void main() {
                   algorithm: SigningAlgoType.rsa2048,
                   publicKey: rsaPair.atPublicKey.publicKey,
                   privateKey: rsaPair.atPrivateKey.privateKey)],
-              enrollmentId: 'e1')),
-          '{"alg":"RS256","kid":"e1","v":1}',
+              enrollmentId: 'e1', type: EnvelopeType.app)),
+          '{"alg":"RS256","typ":"at-app+jws","kid":"e1","v":1}',
           reason: 'RS256, not rsa2048: the JOSE registered name, and SHA-256 '
               'by definition — which is why the envelope names no hash');
 
@@ -787,8 +805,8 @@ void main() {
                   algorithm: SigningAlgoType.mldsa65,
                   publicKey: base64Encode(mlDsaPair.publicKey),
                   privateKey: base64Encode(mlDsaPair.secretKey))],
-              enrollmentId: 'e1')),
-          '{"alg":"ML-DSA-65","kid":"e1","v":1}',
+              enrollmentId: 'e1', type: EnvelopeType.app)),
+          '{"alg":"ML-DSA-65","typ":"at-app+jws","kid":"e1","v":1}',
           reason: 'ML-DSA-65 is the RFC 9964 registered JOSE name');
     });
 
@@ -799,12 +817,11 @@ void main() {
         keys: [ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
             publicKey: pair.atPublicKey.publicKey,
-            privateKey: pair.atPrivateKey.privateKey)],
-      );
+            privateKey: pair.atPrivateKey.privateKey)], type: EnvelopeType.app);
       expect(
           utf8.decode(
               base64Decode(base64.normalize(envelope.signature.protected))),
-          '{"alg":"RS256","v":1}',
+          '{"alg":"RS256","typ":"at-app+jws","v":1}',
           reason: 'the key-package path signs before the atServer assigns an '
               'id, and a guessed or sentinel value would be frozen inside the '
               'signature where nobody could correct it');

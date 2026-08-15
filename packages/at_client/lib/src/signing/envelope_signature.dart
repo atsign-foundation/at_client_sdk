@@ -60,6 +60,55 @@ String apskUri(String atSign, String enrollmentId) =>
 /// rely on.
 const int envelopeVersion = 1;
 
+/// What an envelope was signed **for**, stamped into the protected header as
+/// the JOSE `typ` and required by the verifier that reads it.
+///
+/// Every use below is signed by one key — an enrollment's signing key, or the
+/// APKAM authentication key it falls back to — and before this existed the
+/// only thing telling two of them apart was which field names their payload
+/// happened to carry. Nothing said "this was signed as a chain link", so an
+/// envelope produced by any other use whose payload carried
+/// `childEnrollmentId` and `apkamPublicKey` was a chain link from that signer.
+/// The signature was never the weak part: it was that a signature over one
+/// document meant the same thing in every context that read it.
+///
+/// A verifier is handed the type it expects rather than reading the envelope's
+/// and dispatching on it. Reading it would let the document choose which
+/// checks run, which is the confusion this closes rather than a cure for it.
+///
+/// The wire values are frozen and pinned in `test/wire_literal_pins_test.dart`.
+/// They follow the JOSE convention of a media type with the `application/`
+/// prefix dropped, which is what RFC 8725 asks explicit typing to look like.
+enum EnvelopeType {
+  /// Whatever an application passes to `EnvelopeSigning.wrapAndSign`.
+  ///
+  /// The default, and deliberately a type **no** internal verifier accepts: an
+  /// app that signs data someone else influenced cannot be walked into
+  /// producing a chain link, a key package or an advertisement, whatever the
+  /// payload it was handed looks like.
+  app('at-app+jws'),
+
+  /// A parent enrollment vouching for a child's APKAM key —
+  /// `PqSigningChain.signLinkFor`.
+  chainLink('at-chain-link+jws'),
+
+  /// An enrollment's public encapsulation key package, signed either at
+  /// `enroll:request` time or when registered afterwards. One type for both:
+  /// they are the same document, read by the same verifier.
+  keyPackage('at-key-package+jws'),
+
+  /// A published nskey key ring advertisement.
+  nskeyRing('at-nskey-ring+jws'),
+
+  /// A sealed secret addressed to one enrollment's key package.
+  secretEnvelope('at-secret-envelope+jws');
+
+  const EnvelopeType(this.typ);
+
+  /// The `typ` value on the wire.
+  final String typ;
+}
+
 /// The JOSE `alg` names the JWS shape signs under, keyed by the signing
 /// algorithm. RSA is `RS256` exactly: nothing anywhere produces an RSA
 /// envelope under any hash but SHA-256, so no other RSA mapping exists until
@@ -123,6 +172,12 @@ class EnvelopeSignature {
 
   /// The signer's enrollment-id claim, or null when it makes none.
   String? get kid => header['kid'] is String ? header['kid'] as String : null;
+
+  /// What this signature was made **for** — the [EnvelopeType.typ] the signer
+  /// stamped. Null when the header names none, which [verifyEnvelope] refuses:
+  /// an envelope that declares no purpose is one a verifier would have to
+  /// assume a purpose for, and assuming is what typing replaced.
+  String? get typ => header['typ'] is String ? header['typ'] as String : null;
 
   /// The envelope-shape version this entry was signed under.
   Object? get version => header['v'];
@@ -272,6 +327,20 @@ class SignedEnvelope {
           '${kids.map((k) => '"$k"').join(', ')} — refusing rather than '
           'verifying under one of them and reporting another');
     }
+    // Every entry signs one document, so every entry must say the document is
+    // for the same thing. Refused here for the reason the kid check above is:
+    // the entry a verifier resolves is chosen by algorithm, so entries that
+    // disagree would let the checked entry and the declared purpose be
+    // different entries — append one under a stronger algorithm claiming
+    // another type, and the type the verifier enforced is not the one the
+    // envelope was read as.
+    final types = {for (final s in parsed) s.typ};
+    if (types.length > 1) {
+      throw AtSigningVerificationException(
+          'an envelope is signed for one purpose, and this one is typed '
+          '${types.map((t) => '"$t"').join(', ')} — refusing rather than '
+          'enforcing one of them and being read as another');
+    }
     return SignedEnvelope._(payload, parsed);
   }
 
@@ -351,6 +420,13 @@ String signableTextOf(
 /// Wraps [payload] in an envelope signed by [keys], verifiable by
 /// [verifyEnvelope].
 ///
+/// [type] says what the envelope is for and is stamped into every protected
+/// header, where the signature covers it. It is required rather than defaulted
+/// because a default would be whichever use was written first, and every other
+/// use would then be signing under it silently — which is the state this
+/// replaced. `EnvelopeSigning.wrapAndSign` defaults it for applications,
+/// deliberately to a type no internal verifier accepts.
+///
 /// [enrollmentId] is stamped only when supplied. It is deliberately omitted
 /// rather than defaulted when the signer has no enrollment yet: at
 /// `enroll:request` time the atServer has not assigned one, and a guessed or
@@ -381,6 +457,7 @@ String signableTextOf(
 SignedEnvelope signEnvelope(
   Object? payload, {
   required List<ApkamSigningKeys> keys,
+  required EnvelopeType type,
   String? enrollmentId,
   Object? Function(Object? nonEncodable)? toEncodable,
 }) {
@@ -399,7 +476,8 @@ SignedEnvelope signEnvelope(
     'payload': payloadB64,
     'signatures': [
       for (final key in keys)
-        _signatureOver(payloadB64, keys: key, enrollmentId: enrollmentId)
+        _signatureOver(payloadB64,
+            keys: key, type: type, enrollmentId: enrollmentId)
     ],
   });
 }
@@ -409,6 +487,7 @@ SignedEnvelope signEnvelope(
 Map<String, String> _signatureOver(
   String payloadB64, {
   required ApkamSigningKeys keys,
+  required EnvelopeType type,
   String? enrollmentId,
 }) {
   final SigningAlgoType signingAlgo = keys.algorithm;
@@ -420,6 +499,7 @@ Map<String, String> _signatureOver(
 
   final protectedB64 = _base64UrlUnpadded(utf8.encode(jsonEncode({
     'alg': alg,
+    'typ': type.typ,
     if (enrollmentId != null) 'kid': enrollmentId,
     'v': envelopeVersion,
   })));
@@ -573,6 +653,14 @@ ParsedApsk parseApskValue(String value) {
 /// [signerPublicKey] — the `_apsk` value the signer's enrollment published,
 /// in either its bare or its array form.
 ///
+/// **[expecting] is the caller's, never the envelope's.** The reader states
+/// what it is verifying and an envelope typed anything else is refused, so a
+/// signature made over one document cannot be presented as another — the
+/// enrollment's signing key signs chain links, key packages, advertisements,
+/// sealed secrets and whatever an application hands it, and the payloads of
+/// two of those can be made to look alike. Dispatching on the envelope's own
+/// `typ` instead would let the document pick which checks run.
+///
 /// **The key's own declaration is authoritative** over the envelope's `alg`
 /// claim, matching PKAM's record-authoritative rule
 /// (`docs/projects/pq/decisions.md` 34): the published key names its algorithm
@@ -594,6 +682,7 @@ ParsedApsk parseApskValue(String value) {
 Future<void> verifyEnvelope(
   SignedEnvelope envelope, {
   required String signerPublicKey,
+  required EnvelopeType expecting,
 }) async {
   final parsed = parseApskValue(signerPublicKey);
 
@@ -618,6 +707,18 @@ Future<void> verifyEnvelope(
   final candidates = parsed.keysFor(algo);
   final jose = _joseAlgFor(algo)!;
   final entry = envelope.signatures.firstWhere((s) => s.alg == jose);
+
+  // Before the version, because "this document is not for you" is the more
+  // useful answer about a document that is not for you.
+  if (entry.typ != expecting.typ) {
+    throw AtSigningVerificationException(
+        'the envelope is typed '
+        '${entry.typ == null ? 'nothing' : '"${entry.typ}"'} and this reader '
+        'verifies "${expecting.typ}" — refusing rather than '
+        'checking a signature that was made over a document meant for '
+        'something else. The signature may well be valid; what it attests to '
+        'is not what is being asked here');
+  }
 
   if (entry.version != envelopeVersion) {
     throw AtSigningVerificationException(

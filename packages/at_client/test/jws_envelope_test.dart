@@ -52,10 +52,12 @@ void main() {
       ]));
 
   SignedEnvelope rsaEnvelope({String? enrollmentId = 'enroll-1'}) =>
-      signEnvelope(payload, keys: [rsaKeys()], enrollmentId: enrollmentId);
+      signEnvelope(payload, keys: [rsaKeys()], enrollmentId: enrollmentId,
+          type: EnvelopeType.app);
 
   SignedEnvelope mlDsaEnvelope() =>
-      signEnvelope(payload, keys: [mlDsaKeys()], enrollmentId: 'enroll-pq');
+      signEnvelope(payload, keys: [mlDsaKeys()], enrollmentId: 'enroll-pq',
+          type: EnvelopeType.app);
 
   group('the envelope shape, RSA arm', () {
     test('signs, verifies, and survives the base64 padding trap', () async {
@@ -83,14 +85,15 @@ void main() {
               'to cover has moved');
 
       await verifyEnvelope(envelope,
-          signerPublicKey: rsaPair.atPublicKey.publicKey);
+          signerPublicKey: rsaPair.atPublicKey.publicKey,
+              expecting: EnvelopeType.app);
     });
 
     test('the protected header is exactly the pinned bytes', () {
       // Raw literal, not built from constants: the signature covers these
       // bytes, so the member ORDER is cryptographically bound.
       expect(unb64u(rsaEnvelope().signature.protected),
-          '{"alg":"RS256","kid":"enroll-1","v":1}');
+          '{"alg":"RS256","typ":"at-app+jws","kid":"enroll-1","v":1}');
     });
 
     test('a tampered payload fails', () async {
@@ -99,7 +102,8 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+                  expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
     });
 
@@ -111,7 +115,8 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+                  expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
     });
 
@@ -125,7 +130,8 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+                  expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
               'message', contains('no algorithm in common'))));
     });
@@ -138,7 +144,8 @@ void main() {
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+                  expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
     });
   });
@@ -169,7 +176,8 @@ void main() {
     /// of the fixture: it would have gone on passing against a writer that
     /// could not emit two signatures at all.
     SignedEnvelope bothSigned() => signEnvelope(payload,
-        keys: [rsaKeys(), mlDsaKeys()], enrollmentId: 'enroll-1');
+        keys: [rsaKeys(), mlDsaKeys()], enrollmentId: 'enroll-1',
+            type: EnvelopeType.app);
 
     test('the writer emits one signature per key, over one payload', () async {
       final envelope = bothSigned();
@@ -199,7 +207,8 @@ void main() {
     });
 
     test('the control arm: both signatures valid, and it verifies', () async {
-      await verifyEnvelope(bothSigned(), signerPublicKey: bothApsk());
+      await verifyEnvelope(bothSigned(), signerPublicKey: bothApsk(),
+          expecting: EnvelopeType.app);
     });
 
     test('a valid RSA signature does NOT rescue a corrupt ML-DSA one',
@@ -222,7 +231,8 @@ void main() {
       });
 
       await expectLater(
-          () => verifyEnvelope(corrupted, signerPublicKey: bothApsk()),
+          () => verifyEnvelope(corrupted, signerPublicKey: bothApsk(),
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
               'message', contains('mldsa65 signature does not verify'))),
           reason: 'the refusal must name ML-DSA — a message naming RSA would '
@@ -242,7 +252,8 @@ void main() {
         ],
       });
 
-      await verifyEnvelope(reordered, signerPublicKey: bothApsk());
+      await verifyEnvelope(reordered, signerPublicKey: bothApsk(),
+          expecting: EnvelopeType.app);
 
       // Corrupt the RSA entry in each ordering: the verdict must not change,
       // because RSA is never the entry checked when ML-DSA is on offer.
@@ -267,7 +278,7 @@ void main() {
                     other.toJson()
               ],
             }),
-            signerPublicKey: bothApsk());
+            signerPublicKey: bothApsk(), expecting: EnvelopeType.app);
       }
     });
 
@@ -278,7 +289,10 @@ void main() {
       // makes a caller act on a signer whose signature was never checked.
       final both = bothSigned();
       final impostor =
-          signEnvelope(payload, keys: [mlDsaKeys()], enrollmentId: 'someone-else');
+          signEnvelope(payload,
+              keys: [mlDsaKeys()],
+              enrollmentId: 'someone-else',
+              type: EnvelopeType.app);
 
       expect(
           () => SignedEnvelope.fromJson({
@@ -304,9 +318,10 @@ void main() {
               'normalisation; that is what the RSA arm is for');
       expect(signature.contains('='), isFalse);
       expect(unb64u(envelope.signature.protected),
-          '{"alg":"ML-DSA-65","kid":"enroll-pq","v":1}');
+          '{"alg":"ML-DSA-65","typ":"at-app+jws","kid":"enroll-pq","v":1}');
 
-      await verifyEnvelope(envelope, signerPublicKey: mlDsaApsk());
+      await verifyEnvelope(envelope, signerPublicKey: mlDsaApsk(),
+          expecting: EnvelopeType.app);
     });
 
     test('a tampered payload fails', () async {
@@ -314,7 +329,8 @@ void main() {
           mlDsaEnvelope().withPayloadJson({'hello': 'universe', 'n': 1});
 
       await expectLater(
-          () => verifyEnvelope(envelope, signerPublicKey: mlDsaApsk()),
+          () => verifyEnvelope(envelope, signerPublicKey: mlDsaApsk(),
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>()));
     });
   });
@@ -344,13 +360,15 @@ void main() {
       final envelope = rsaEnvelope(enrollmentId: null);
 
       expect(envelope.signerEnrollmentId, isNull);
-      expect(unb64u(envelope.signature.protected), '{"alg":"RS256","v":1}',
+      expect(unb64u(envelope.signature.protected),
+          '{"alg":"RS256","typ":"at-app+jws","v":1}',
           reason: 'a guessed or sentinel id would be frozen inside the '
               'signature where nobody could correct it');
     });
 
     test('a String payload becomes JSON, so decoding is unconditional', () {
-      expect(signEnvelope('just text', keys: [rsaKeys()]).payload, 'just text',
+      expect(signEnvelope('just text', keys: [rsaKeys()],
+          type: EnvelopeType.app).payload, 'just text',
           reason: 'what comes out of base64url is JSON, whatever went in');
     });
 
@@ -430,11 +448,20 @@ void main() {
       // — it is what stops a future shape being read as this one by a build
       // that has no code for it.
       final envelope =
-          rsaEnvelope().claiming({'alg': 'RS256', 'kid': 'enroll-1', 'v': 2});
+          rsaEnvelope().claiming({
+        'alg': 'RS256',
+        // Carried, so the version is what this refusal is about: the type is
+        // checked first, and a header that dropped it would be refused before
+        // the version was ever read.
+        'typ': 'at-app+jws',
+        'kid': 'enroll-1',
+        'v': 2
+      });
 
       await expectLater(
           () => verifyEnvelope(envelope,
-              signerPublicKey: rsaPair.atPublicKey.publicKey),
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+                  expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
               'message', contains('claims envelope version'))));
     });
@@ -445,7 +472,7 @@ void main() {
               keys: [ApkamSigningKeys(
                   algorithm: SigningAlgoType.ed25519,
                   publicKey: rsaKeys().publicKey,
-                  privateKey: rsaKeys().privateKey)]),
+                  privateKey: rsaKeys().privateKey)], type: EnvelopeType.app),
           throwsA(isA<ArgumentError>()),
           reason: 'no envelope signs under Ed25519, and a shape that guessed '
               'an alg name for it would freeze the guess inside a signature');
@@ -486,15 +513,16 @@ void main() {
                 publicKey: base64Encode(retiredPair.publicKey),
                 privateKey: base64Encode(retiredPair.secretKey))
           ],
-          enrollmentId: 'enroll-pq');
+          enrollmentId: 'enroll-pq', type: EnvelopeType.app);
 
-      await verifyEnvelope(envelope, signerPublicKey: apskWithRetained());
+      await verifyEnvelope(envelope, signerPublicKey: apskWithRetained(),
+          expecting: EnvelopeType.app);
     });
 
     test('and one signed by the current key verifies on the first attempt',
         () async {
       await verifyEnvelope(mlDsaEnvelope(),
-          signerPublicKey: apskWithRetained());
+          signerPublicKey: apskWithRetained(), expecting: EnvelopeType.app);
     });
 
     test('a signature under neither key is still refused', () async {
@@ -509,14 +537,92 @@ void main() {
                 publicKey: base64Encode(stranger.publicKey),
                 privateKey: base64Encode(stranger.secretKey))
           ],
-          enrollmentId: 'enroll-pq');
+          enrollmentId: 'enroll-pq', type: EnvelopeType.app);
 
       await expectLater(
-          () => verifyEnvelope(envelope, signerPublicKey: apskWithRetained()),
+          () => verifyEnvelope(envelope, signerPublicKey: apskWithRetained(),
+              expecting: EnvelopeType.app),
           throwsA(isA<AtSigningVerificationException>().having(
               (e) => e.message,
               'message',
               contains('does not verify against any of the 2 mldsa65 key(s)'))));
+    });
+  });
+
+  group('domain separation: an envelope says what it is for', () {
+    test('the type is inside the protected header, under the signature', () {
+      final envelope =
+          signEnvelope(payload, keys: [rsaKeys()],
+              type: EnvelopeType.chainLink);
+
+      expect(envelope.signature.typ, 'at-chain-link+jws');
+      expect(unb64u(envelope.signature.protected),
+          contains('"typ":"at-chain-link+jws"'));
+      expect(envelope.toJson().keys, isNot(contains('typ')),
+          reason: 'a type outside the signature is a claim an attacker can '
+              'edit, which is what the version already taught us');
+    });
+
+    test('a reader verifying one type refuses an envelope signed for another',
+        () async {
+      // The signature is perfectly good. That is the point: what fails is the
+      // claim that this document is the thing being asked for.
+      final envelope =
+          signEnvelope(payload, keys: [rsaKeys()], type: EnvelopeType.app);
+
+      await expectLater(
+          () => verifyEnvelope(envelope,
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+              expecting: EnvelopeType.chainLink),
+          throwsA(isA<AtSigningVerificationException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains('"at-app+jws"'),
+                  contains('"at-chain-link+jws"')))));
+
+      // Same bytes, same key, asked the right question: it verifies. Without
+      // this arm the refusal above would also pass for an envelope that was
+      // simply broken.
+      await verifyEnvelope(envelope,
+          signerPublicKey: rsaPair.atPublicKey.publicKey,
+          expecting: EnvelopeType.app);
+    });
+
+    test('an untyped header is refused rather than assumed', () async {
+      // What an envelope written before this existed looks like. There is no
+      // tolerant reading available: assuming a type is the confusion, so the
+      // absence has to fail.
+      final envelope = rsaEnvelope()
+          .claiming({'alg': 'RS256', 'kid': 'enroll-1', 'v': envelopeVersion});
+
+      await expectLater(
+          () => verifyEnvelope(envelope,
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+              expecting: EnvelopeType.app),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((e) => e.message, 'message', contains('typed nothing'))));
+    });
+
+    test('entries that disagree about the type are refused at the boundary',
+        () async {
+      // Two entries over one payload, typed differently: the entry a verifier
+      // resolves is chosen by ALGORITHM, so this document would have the
+      // checked entry and the declared purpose be different entries.
+      final chainLink = signEnvelope(payload,
+          keys: [rsaKeys()], enrollmentId: 'e1', type: EnvelopeType.chainLink);
+      final app = signEnvelope(payload,
+          keys: [mlDsaKeys()], enrollmentId: 'e1', type: EnvelopeType.app);
+
+      expect(
+          () => SignedEnvelope.fromJson({
+                'payload': chainLink.payloadB64,
+                'signatures': [
+                  chainLink.signature.toJson(),
+                  app.signature.toJson(),
+                ],
+              }),
+          throwsA(isA<AtSigningVerificationException>().having((e) => e.message,
+              'message', contains('signed for one purpose'))));
     });
   });
 }

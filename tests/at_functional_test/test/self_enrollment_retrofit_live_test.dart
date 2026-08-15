@@ -12,7 +12,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show parseApskValue, verifyEnvelope;
+    show EnvelopeType, parseApskValue, verifyEnvelope;
 import 'package:at_demo_data/at_demo_data.dart' show aesKeyMap, encryptionPrivateKeyMap;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -299,7 +299,8 @@ void main() {
             'llookup:public:_apsk.${client.enrollmentId}.a.__e$atSign\n',
             auth: true))!
         .replaceFirst('data:', '');
-    await verifyEnvelope(envelope, signerPublicKey: apsk);
+    await verifyEnvelope(envelope,
+        signerPublicKey: apsk, expecting: EnvelopeType.app);
   });
 
   test(

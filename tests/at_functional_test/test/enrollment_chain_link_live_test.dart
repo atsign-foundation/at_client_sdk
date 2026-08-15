@@ -5,7 +5,7 @@
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
+    show EnvelopeType, SignedEnvelope;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -55,10 +55,17 @@ void main() {
     final before = await atClient.get(AtKey.fromString(uri),
         getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
 
-    final link = await sharing.wrapAndSign(PqSigningChain.linkPayload(
-      childEnrollmentId: enrollmentId,
-      childApkamPublicKey: before.value as String,
-    ));
+    final link = await sharing.wrapAndSign(
+      PqSigningChain.linkPayload(
+        childEnrollmentId: enrollmentId,
+        childApkamPublicKey: before.value as String,
+      ),
+      // Typed as a link because that is what is being published. Signed as
+      // anything else it is not one, which is the whole point of the type —
+      // and the file publishes it by hand rather than through signLinkFor,
+      // so nothing else here would have said so.
+      type: EnvelopeType.chainLink,
+    );
 
     await PqSigningChain(atClient).publishLink(enrollmentId, link);
 
@@ -85,7 +92,8 @@ void main() {
         await PqSigningChain(atClient).readLink(sharing.enrollmentId);
 
     await expectLater(
-        sharing.verifyEnvelopeSignature(read!, signerAtSign: atSign),
+        sharing.verifyEnvelopeSignature(read!,
+            signerAtSign: atSign, expecting: EnvelopeType.chainLink),
         completes,
         reason: 'verification resolves the signer\'s _apsk from the atServer, '
             'so this exercises the published record rather than an in-memory '

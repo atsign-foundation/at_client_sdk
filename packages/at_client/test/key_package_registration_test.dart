@@ -659,7 +659,8 @@ void main() {
       // anyone with their own key can do, and which is exactly why the claim
       // is worth nothing until it is checked against enroll-b's own _apsk.
       final forged = signEnvelope(d.myKeyPackage.toJson(),
-          keys: [(await d.signingKeys).first], enrollmentId: 'enroll-b');
+          keys: [(await d.signingKeys).first], enrollmentId: 'enroll-b',
+              type: EnvelopeType.keyPackage);
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [record('enroll-b', forged)]);
 
@@ -710,7 +711,7 @@ void main() {
             'enroll-future',
             signEnvelope({'shape': 'from a later version'},
                 keys: [(await future.signingKeys).first],
-                enrollmentId: 'enroll-future')),
+                enrollmentId: 'enroll-future', type: EnvelopeType.keyPackage)),
       ]);
 
       final byId = {
@@ -753,7 +754,8 @@ void main() {
         record(
             'enroll-b',
             signEnvelope(b.myKeyPackage.toJson(),
-                keys: [(await b.signingKeys).first], enrollmentId: null)),
+                keys: [(await b.signingKeys).first], enrollmentId: null,
+                    type: EnvelopeType.keyPackage)),
       ]);
 
       final member =
@@ -796,7 +798,8 @@ void main() {
       // an entry whose header cannot be read is not an entry, which is the
       // property under test one layer down.
       final signed = signEnvelope(b.myKeyPackage.toJson(),
-          keys: [(await b.signingKeys).first], enrollmentId: 'enroll-b');
+          keys: [(await b.signingKeys).first], enrollmentId: 'enroll-b',
+              type: EnvelopeType.keyPackage);
       final envelope = {
         ...signed.toJson(),
         'signatures': [

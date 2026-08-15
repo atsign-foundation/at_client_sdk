@@ -13,7 +13,7 @@ import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyEntryStatus;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
+    show EnvelopeType, SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
@@ -79,7 +79,8 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
           'served it: ${e.message}');
     }
 
-    await _signer.verifyEnvelopeSignature(envelope, signerAtSign: owner);
+    await _signer.verifyEnvelopeSignature(envelope,
+        signerAtSign: owner, expecting: EnvelopeType.nskeyRing);
 
     final NskeyAdvertisement advertisement;
     try {
@@ -395,7 +396,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     // without which a new one could only ever arrive by upgrading every reader
     // first — release-ordering agility rather than negotiated agility.
     final payload =
-        await _signer.wrapAndSignAndJsonEncode(advertisement.toPayload());
+        await _signer.wrapAndSignAndJsonEncode(advertisement.toPayload(),
+            type: EnvelopeType.nskeyRing);
 
     // Straight to the atServer first: an advertisement is only useful once a
     // *peer* can fetch it, and going through the local-first put would leave it

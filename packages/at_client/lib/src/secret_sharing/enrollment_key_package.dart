@@ -14,7 +14,7 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart'
 import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyPackage, PackageKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show ApkamSigningKeys, signEnvelope;
+    show ApkamSigningKeys, EnvelopeType, signEnvelope;
 import 'package:meta/meta.dart' show experimental;
 
 /// Builds the signed key package that rides an `enroll:request`, and records
@@ -137,6 +137,7 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
       // reader as something they cannot index.
       'keyPackage': signEnvelope(
         payload,
+        type: EnvelopeType.keyPackage,
         // One key: this signs a package for an enrollment that does not exist
         // yet, so the only keypair in play is the one just minted for it.
         //

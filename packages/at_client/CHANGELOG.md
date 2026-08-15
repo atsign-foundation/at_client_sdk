@@ -1,4 +1,28 @@
 ## 3.14.1
+- feat!: every signed envelope names what it was signed **for**, and every
+  verifier names what it wants. New `EnvelopeType` — `at-app+jws`,
+  `at-chain-link+jws`, `at-key-package+jws`, `at-nskey-ring+jws`,
+  `at-secret-envelope+jws` — stamped as the JOSE `typ` inside the protected
+  header, where the signature covers it.
+  - `signEnvelope` **requires** the type and `verifyEnvelope` /
+    `verifyEnvelopeSignature` require `expecting`, which refuses a
+    differently-typed envelope before checking its signature. Dispatching on
+    the envelope's own `typ` would let the document choose which checks run.
+  - `EnvelopeSigning.wrapAndSign` defaults to `EnvelopeType.app`, a type no
+    verifier inside this library accepts, so an application signing data
+    someone else influenced cannot be walked into producing a chain link, a key
+    package or an advertisement.
+  - The envelope had five production uses telling each other apart only by
+    which fields their payload carried, so a signature meant the same thing in
+    every context that read it. `PqSigningChain` accepted as a chain link any
+    envelope naming an enrollment and its published key.
+  - `SignedEnvelope.fromJson` refuses entries that disagree about the type, as
+    it already refuses entries that disagree about `kid`.
+  - Still RFC 7515: the regenerated vectors verify under panva's `jose` and,
+    for ML-DSA-65, under the OpenSSL 3.6.3 CLI.
+- fix: `verifyEnvelopeSignature`'s refusal carries the cause, instead of
+  reporting every reason as "verification failed using public key" and sending
+  a reader after a key that is fine.
 - feat!: `public:pq_signing_root@<atSign>` is **mutable**, and what keeps one
   root per atSign moves to `_rootlock@<atSign>` — a short-ttl immutable self
   key taken remote-first (`MintLock`).

@@ -34,13 +34,15 @@ void main() {
     final envelope = SignedEnvelope.fromJson(arm['envelope'] as Map);
 
     await verifyEnvelope(envelope,
-        signerPublicKey: arm['apskPublicKey'] as String);
+        signerPublicKey: arm['apskPublicKey'] as String,
+            expecting: EnvelopeType.app);
     expect(envelope.payload, vectors['payload']);
     expect(envelope.signerEnrollmentId, 'vector-1');
 
     await expectLater(
         () => verifyEnvelope(envelope.withPayloadJson({'doc': 'tampered'}),
-            signerPublicKey: arm['apskPublicKey'] as String),
+            signerPublicKey: arm['apskPublicKey'] as String,
+                expecting: EnvelopeType.app),
         throwsA(isA<AtSigningVerificationException>()));
   });
 
@@ -52,7 +54,7 @@ void main() {
             algorithm: SigningAlgoType.rsa2048,
             publicKey: arm['apskPublicKey'] as String,
             privateKey: arm['privateKey'] as String)],
-        enrollmentId: 'vector-1');
+        enrollmentId: 'vector-1', type: EnvelopeType.app);
 
     expect(resigned.toJson(), arm['envelope'],
         reason: 'PKCS#1 v1.5 is deterministic, so any byte of producer '
@@ -68,12 +70,13 @@ void main() {
             alg: SigningAlgoType.mldsa65, pub: arm['publicKey'] as String)
       ]));
 
-    await verifyEnvelope(envelope, signerPublicKey: apsk);
+    await verifyEnvelope(envelope, signerPublicKey: apsk,
+        expecting: EnvelopeType.app);
     expect(envelope.payload, vectors['payload']);
 
     await expectLater(
         () => verifyEnvelope(envelope.withPayloadJson({'doc': 'tampered'}),
-            signerPublicKey: apsk),
+            signerPublicKey: apsk, expecting: EnvelopeType.app),
         throwsA(isA<AtSigningVerificationException>()));
   });
 }

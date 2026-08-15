@@ -14,7 +14,7 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show ApkamSigningKeys, signEnvelope, verifyEnvelope;
+    show ApkamSigningKeys, EnvelopeType, signEnvelope, verifyEnvelope;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
 import 'package:mocktail/mocktail.dart';
@@ -510,8 +510,9 @@ void main() {
             algorithm: rollout1Key.algorithm,
             publicKey: rollout1Key.publicKey,
             privateKey: rollout1Key.privateKey)
-      ]);
-      await verifyEnvelope(envelope, signerPublicKey: published.single);
+      ], type: EnvelopeType.app);
+      await verifyEnvelope(envelope, signerPublicKey: published.single,
+          expecting: EnvelopeType.app);
 
       inUse({SigningAlgoType.mldsa65});
       await minter().reconcileSigningKeys();
@@ -520,7 +521,8 @@ void main() {
           reason: 'the record moved, so it was rewritten — a client that '
               'skipped the publish would leave the withdrawn key advertised '
               'as current');
-      await verifyEnvelope(envelope, signerPublicKey: published.last);
+      await verifyEnvelope(envelope, signerPublicKey: published.last,
+          expecting: EnvelopeType.app);
     });
   });
 

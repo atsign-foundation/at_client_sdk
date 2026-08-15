@@ -4,7 +4,7 @@ import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
+    show EnvelopeType, SignedEnvelope;
 import 'package:at_commons/at_commons.dart'
     show AtSigningVerificationException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -257,7 +257,9 @@ Future<(KeyPackage?, KeyPackageStatus)> verifyAdvertisedKeyPackage(
 
   try {
     await signer.verifyEnvelopeSignature(envelope,
-        signerAtSign: signerAtSign, signerEnrollmentId: enrollmentId);
+        signerAtSign: signerAtSign,
+        signerEnrollmentId: enrollmentId,
+        expecting: EnvelopeType.keyPackage);
   } catch (e) {
     _logger.severe('the key package advertised by enrollment $enrollmentId '
         'does not verify against its _apsk, so the key it offers is only as '

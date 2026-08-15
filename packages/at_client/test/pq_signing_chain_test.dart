@@ -9,7 +9,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope, signableTextOf;
+    show EnvelopeType, SignedEnvelope, signableTextOf;
 import 'package:at_client/at_client_mixins.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -139,7 +139,8 @@ void main() {
     // claim and checks against that enrollment's published _apsk.
     final verifier = AtClientSecretSharing.forClient(client('verifier-1'));
     await expectLater(
-        verifier.verifyEnvelopeSignature(read!, signerAtSign: atSign),
+        verifier.verifyEnvelopeSignature(read!,
+            signerAtSign: atSign, expecting: EnvelopeType.chainLink),
         completes);
   });
 
@@ -861,6 +862,47 @@ void main() {
               'partly controls, so a ring is an input to expect');
       expect(result.reason, contains('revisits'));
     });
+
+    test('an envelope signed for anything else is not a chain link', () async {
+      // The shape this closes. A chain link used to be told from every other
+      // envelope by which fields its payload carried — so an envelope signed
+      // by a parent for some ORDINARY purpose, over a payload naming a child
+      // and that child's published key, walked as a link from that parent.
+      // An application signing data it was handed is the reachable version:
+      // wrapAndSign is the app-facing verb and its payload is the app's input.
+      final pair = await publishRoot();
+      final parentClient = await anchored('priv-1', pair.secretKey);
+      final parent = AtClientSecretSharing.forClient(parentClient);
+      final childClient = client('child-1');
+      await registered(childClient);
+
+      final notALink = await parent.wrapAndSign(PqSigningChain.linkPayload(
+        childEnrollmentId: 'child-1',
+        childApkamPublicKey:
+            remoteData[PqSigningChain.apskUri(atSign, 'child-1')]!,
+      ));
+      await PqSigningChain(childClient).publishLink('child-1', notALink);
+
+      final result =
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'child-1');
+
+      expect(result.verdict, ChainVerdict.broken,
+          reason: 'every other check passes — the signature is genuinely the '
+              'parent\'s, the payload names this child, and it names the key '
+              'actually published. Only the type refuses it');
+      expect(result.reason, contains('at-app+jws'));
+
+      // The differential: the same parent, the same child, the same payload,
+      // signed AS a link — anchored. Without this arm the refusal above would
+      // also pass for a build whose chain walk was simply broken.
+      final realLink =
+          await PqSigningChain(parentClient).signLinkFor(parent, 'child-1');
+      await PqSigningChain(childClient).publishLink('child-1', realLink!);
+      final again =
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'child-1');
+      expect(again.verdict, ChainVerdict.anchored);
+    });
+
   });
 
   test('a link forged onto another enrollment fails verification', () async {
@@ -881,7 +923,8 @@ void main() {
 
     final verifier = AtClientSecretSharing.forClient(client('verifier-1'));
     await expectLater(
-        verifier.verifyEnvelopeSignature(forged, signerAtSign: atSign),
+        verifier.verifyEnvelopeSignature(forged,
+            signerAtSign: atSign, expecting: EnvelopeType.chainLink),
         throwsA(isA<Exception>()),
         reason: 'a claimed parent is checked against that parent\'s own '
             'published key, and the claim is under the signature besides — '

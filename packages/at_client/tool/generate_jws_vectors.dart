@@ -23,6 +23,7 @@ Future<void> main() async {
           algorithm: SigningAlgoType.rsa2048,
           publicKey: rsaPair.atPublicKey.publicKey,
           privateKey: rsaPair.atPrivateKey.privateKey)],
+      type: EnvelopeType.app,
       enrollmentId: 'vector-1');
 
   final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
@@ -31,12 +32,15 @@ Future<void> main() async {
           algorithm: SigningAlgoType.mldsa65,
           publicKey: base64Encode(mlDsaPair.publicKey),
           privateKey: base64Encode(mlDsaPair.secretKey))],
+      type: EnvelopeType.app,
       enrollmentId: 'vector-1');
 
   final out = const JsonEncoder.withIndent('  ').convert({
     'comment': 'JWS signed-envelope vectors, RFC 7515 general JSON '
-        'serialization. Test fixtures only — the keys exist for this file '
-        'alone. See docs/projects/pq/decisions.md 60.4.',
+        'serialization. Each protected header carries a `typ` naming what the '
+        'envelope was signed for, and a verifier is handed the type it '
+        'expects rather than reading this one. Test fixtures only — the keys '
+        'exist for this file alone. See docs/projects/pq/decisions.md 60.4.',
     'payload': payload,
     'rs256': {
       'envelope': rsaEnvelope,

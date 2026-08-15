@@ -4,7 +4,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show ApkamSigningKeys, envelopeVersion, signEnvelope;
+    show ApkamSigningKeys, EnvelopeType, envelopeVersion, signEnvelope;
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -73,8 +73,9 @@ void main() {
 
   Future<String> signedPayloadFor(XWingKeyPair pair,
           {List<String>? suites}) async =>
-      bobSigner
-          .wrapAndSignAndJsonEncode(advertisementPayload(pair, suites: suites));
+      bobSigner.wrapAndSignAndJsonEncode(
+          advertisementPayload(pair, suites: suites),
+          type: EnvelopeType.nskeyRing);
 
   String bobsApskPublicKey() =>
       bobChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
@@ -247,7 +248,7 @@ void main() {
               algorithm: SigningAlgoType.rsa2048,
               publicKey: pair.atPublicKey.publicKey,
               privateKey: pair.atPrivateKey.privateKey)],
-          enrollmentId: 'enroll-bob');
+          enrollmentId: 'enroll-bob', type: EnvelopeType.nskeyRing);
       final c = client(payload: jsonEncode(envelope));
 
       final advertised =
@@ -295,7 +296,8 @@ void main() {
       for (final missing in ['v', 'createdAt', 'keys', 'suites']) {
         final c = client(
             payload: await bobSigner.wrapAndSignAndJsonEncode(
-                Map.of(advertisementPayload(bobKey))..remove(missing)));
+                Map.of(advertisementPayload(bobKey))..remove(missing),
+                    type: EnvelopeType.nskeyRing));
 
         await expectLater(
             PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -312,7 +314,8 @@ void main() {
         final payload = advertisementPayload(bobKey);
         ((payload['keys'] as List).first as Map).remove(missing);
         final c =
-            client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+            client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+                type: EnvelopeType.nskeyRing));
 
         await expectLater(
             PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -325,7 +328,9 @@ void main() {
       // loops above are failing on the removal rather than on the fixture.
       final c = client(
           payload:
-              await bobSigner.wrapAndSignAndJsonEncode(advertisementPayload(bobKey)));
+              await bobSigner.wrapAndSignAndJsonEncode(
+                  advertisementPayload(bobKey),
+                  type: EnvelopeType.nskeyRing));
       expect(
           (await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace))
               ?.publicKey,
@@ -339,7 +344,8 @@ void main() {
       // The envelope's own version rides INSIDE the protected header, where
       // the signature covers it — a version outside the signature is a claim
       // an attacker can edit.
-      final envelope = await bobSigner.wrapAndSign({'v': 99, 'anything': 1});
+      final envelope = await bobSigner.wrapAndSign({'v': 99, 'anything': 1},
+          type: EnvelopeType.nskeyRing);
 
       expect(envelope.toJson().containsKey('v'), isFalse);
       expect(envelope.signature.version, envelopeVersion);
@@ -355,7 +361,8 @@ void main() {
       final c = client(
           payload: await bobSigner.wrapAndSignAndJsonEncode(
               advertisementPayload(bobKey)
-                ..['v'] = nskeyAdvertisementVersion + 1));
+                ..['v'] = nskeyAdvertisementVersion + 1,
+                    type: EnvelopeType.nskeyRing));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -390,7 +397,8 @@ void main() {
       final payload = advertisementPayload(bobKey);
       (payload['keys'] as List).insert(0, unusableEntry());
       final c =
-          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
 
       final advertised =
           await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
@@ -407,7 +415,8 @@ void main() {
         ..clear()
         ..add(unusableEntry());
       final c =
-          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -441,7 +450,8 @@ void main() {
         'pub': base64Encode(pair.publicKey),
       });
       final c =
-          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
 
       final advertised =
           await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
@@ -466,7 +476,8 @@ void main() {
         'status': 'retired',
       });
       final c =
-          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -481,7 +492,8 @@ void main() {
         (entry as Map)['status'] = 'retired';
       }
       final c =
-          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -506,7 +518,8 @@ void main() {
         'pub': base64Encode(pair.publicKey.sublist(0, 100)),
       });
       final c =
-          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -526,7 +539,8 @@ void main() {
       entry['pub'] = base64Encode(truncated);
       entry['kid'] = nskeyKidOf(truncated);
       final c =
-          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),
@@ -546,7 +560,8 @@ void main() {
       ((payload['keys'] as List).first as Map)['kid'] =
           nskeyKidOf(otherKey.publicKeyBytes);
       final c =
-          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload));
+          client(payload: await bobSigner.wrapAndSignAndJsonEncode(payload,
+              type: EnvelopeType.nskeyRing));
 
       await expectLater(
           PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace),

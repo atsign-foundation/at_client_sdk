@@ -109,7 +109,8 @@ void main() {
     // _apsk is populated by the atServer from the record's apkamPublicKey, so
     // this is the key a verifier will actually check against.
     await verifyEnvelope(envelope,
-        signerPublicKey: apkam.atPublicKey.publicKey);
+        signerPublicKey: apkam.atPublicKey.publicKey,
+            expecting: EnvelopeType.keyPackage);
   });
 
   test('a tampered package fails that verification', () async {
@@ -133,7 +134,8 @@ void main() {
 
     await expectLater(
       () => verifyEnvelope(envelope.withPayloadJson(payload),
-          signerPublicKey: apkam.atPublicKey.publicKey),
+          signerPublicKey: apkam.atPublicKey.publicKey,
+              expecting: EnvelopeType.keyPackage),
       throwsA(isA<AtSigningVerificationException>()),
     );
   });
@@ -185,14 +187,16 @@ void main() {
 
       // The peer's check with the peer's input: _apsk names the signing key.
       await verifyEnvelope(envelope,
-          signerPublicKey: signing.atPublicKey.publicKey);
+          signerPublicKey: signing.atPublicKey.publicKey,
+              expecting: EnvelopeType.keyPackage);
 
       // The differential. Without it this passes for a build that never
       // changed signer, because a package signed by the APKAM key is still a
       // validly signed package — it just verifies against the wrong record.
       await expectLater(
         () => verifyEnvelope(envelope,
-            signerPublicKey: apkam.atPublicKey.publicKey),
+            signerPublicKey: apkam.atPublicKey.publicKey,
+                expecting: EnvelopeType.keyPackage),
         throwsA(isA<Exception>()),
         reason: 'a package still signed by the APKAM key verifies against '
             'that key and fails against _apsk, which is the silent conveyance '
@@ -209,7 +213,8 @@ void main() {
 
       await verifyEnvelope(
           SignedEnvelope.fromJson(metadata!['keyPackage'] as Map),
-          signerPublicKey: apkam.atPublicKey.publicKey);
+          signerPublicKey: apkam.atPublicKey.publicKey,
+              expecting: EnvelopeType.keyPackage);
     });
   });
 }

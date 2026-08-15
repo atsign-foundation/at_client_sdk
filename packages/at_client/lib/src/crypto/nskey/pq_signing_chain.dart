@@ -14,7 +14,7 @@ import 'package:at_client/src/mixins/envelope_signing.dart'
 import 'package:at_client/src/signing/envelope_signature.dart'
     as envelope_signature show apskUri;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope, signableTextOf;
+    show EnvelopeType, SignedEnvelope, signableTextOf;
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -203,10 +203,13 @@ class PqSigningChain {
       return null;
     }
 
-    return await signer.wrapAndSign(linkPayload(
-      childEnrollmentId: childEnrollmentId,
-      childApkamPublicKey: childKey,
-    ));
+    return await signer.wrapAndSign(
+      linkPayload(
+        childEnrollmentId: childEnrollmentId,
+        childApkamPublicKey: childKey,
+      ),
+      type: EnvelopeType.chainLink,
+    );
   }
 
   /// Signs a **root** link vouching for [childEnrollmentId], for a fully
@@ -617,7 +620,8 @@ class PqSigningChain {
     }
 
     try {
-      await sharing.verifyEnvelopeSignature(link, signerAtSign: atSign);
+      await sharing.verifyEnvelopeSignature(link,
+          signerAtSign: atSign, expecting: EnvelopeType.chainLink);
     } catch (e) {
       _logger.warning('Conveyed chain link does not verify against the '
           'enrollment it names as signer, so publishing it would advertise a '
@@ -741,7 +745,8 @@ class PqSigningChain {
     SignedEnvelope link,
   ) async {
     try {
-      await verifier.verifyEnvelopeSignature(link, signerAtSign: atSign);
+      await verifier.verifyEnvelopeSignature(link,
+          signerAtSign: atSign, expecting: EnvelopeType.chainLink);
     } catch (e) {
       return 'the link on $enrollmentId does not verify against the '
           'enrollment it names as signer: $e';
