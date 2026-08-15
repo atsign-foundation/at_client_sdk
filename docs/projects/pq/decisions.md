@@ -114,6 +114,8 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [97. A keyfile status a build has never seen is read, not refused (2026-08-14)](#97-a-keyfile-status-a-build-has-never-seen-is-read-not-refused-2026-08-14)
 - [98. Rollout 1 moves the authentication key, not the signing key (2026-08-14)](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) — *supersedes [91.3](#913-the-rulings) ruling 10; the auth key is never retained in `_apsk`*
 - [99. The keyfile groups by enrollment, and the atSign's own keys move out (2026-08-14)](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) — *the at-rest shape; nothing released has ever written a typed keyfile, so there is nothing to migrate*
+- [100. The seven shapes ruling 99 left open (2026-08-14)](#100-the-seven-shapes-ruling-99-left-open-2026-08-14) — *what 98 and 99 left unstated, and what row A1 encodes*
+- [101. The signing root becomes an ordinary signing key, and rotatable (2026-08-15)](#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15) — *the root adopts the `_apsk` vocabulary and the record becomes mutable; D1 builds rotatability, not rotation*
 
 ---
 
@@ -1536,6 +1538,17 @@ slot ships anyway: the whole fleet mints roots during the 3.x rollout and publis
 so the shape is fixed for every atSign from that moment. A root that can neither rotate
 nor be revoked has no answer to compromise at all, and transparency gives detection
 rather than recovery.
+
+> **Amended 2026-08-15 by
+> [101](#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15).**
+> The `keys` list stands and gets stronger — it becomes the `_apsk` entry shape,
+> `{kid, use, alg, pub, status?}`, so the root is advertised in the same
+> vocabulary as every other signing key. **`successor` is deleted rather than
+> implemented:** stamped `null` at mint inside a record nothing rewrites, it
+> could only ever have been a forward pointer writable when there was nothing to
+> point at. What replaces it is the record becoming mutable, so a rotation adds
+> an entry the way `_apsk` already does. The paragraph above also assumed the
+> shape freezes fleet-wide at rollout; nothing is released, so it does not.
 
 ### 18.4 Cold-start, and the two-release upgrade path
 
@@ -4022,6 +4035,17 @@ package, and the key-package format is what at_java is about to fix in a second
 implementation.
 
 ### 46.5 The signing root is the only one-way door
+
+> **SUPERSEDED 2026-08-15 by
+> [101](#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+> — the door gets a hinge.** The record becomes mutable behind an explicit mint
+> lock, exactly as [13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)
+> did for the nskey, and `successor` is deleted rather than implemented. Two
+> claims below are worth keeping as the record of how they were reached and are
+> no longer true: that `successor` is the only migration path, and that nobody
+> can replace a published root. The second also overstated the constraint —
+> `Metadata.immutable`'s own dartdoc permits a delete with `force:`, and more
+> to the point nothing is released, so every atSign carrying a root is ours.
 
 `public:pq_signing_root@<atSign>` is immutable and never rotates. Its value
 carries `v: 1` and a reserved `successor`, but the record cannot be rewritten,
@@ -9190,3 +9214,101 @@ at_auth's own copy paths, so its absence from both target files is a missing
 producer rather than a removal. Dropping it would break the lossless-flush
 promise that `KeyAlgorithmType`, `CryptographicKeyType` and `KeyPartStatus`
 each state in their own dartdoc.
+
+## 101. The signing root becomes an ordinary signing key, and rotatable (2026-08-15)
+
+From a question gkc asked while reading the at-rest shape: what is persisted for
+the atSign's root signing key, and can it be rotated later. The answer was no —
+for four reasons beyond the record's immutability, stated at
+[`implementation-plan.md` 14.21](implementation-plan.md#1421-the-signing-root-cannot-be-rotated--raised-2026-08-15).
+gkc set two requirements, and between them they settle it: the root is
+persisted like every other signing key, and D1 does everything that makes
+rotation possible **without building the rotation**.
+
+**The premise that shortens all of it.** Nothing is released, so no client
+outside this tree mints a root — every atSign carrying one is ours, to delete
+or recycle. *Immutable*, *frozen* and *one-way door* describe a constraint on
+rewriting **one record**; none of them constrains the shape we choose. This is
+the licence [100](#100-the-seven-shapes-ruling-99-left-open-2026-08-14) ruling
+3 used to refuse a parser for the old `apkam:` spelling, and it applies here
+for the same reason. ⚠️ It was re-litigated once on the way to this ruling, in
+a new costume — "records already published on live atSigns" rather than "the
+package is published" — and cost a round trip.
+
+**1. The record adopts the `_apsk` advertisement vocabulary, verbatim.**
+`{v: 1, keys: [{kid, use: 'sign', alg, pub, status?}]}` — the shape
+`apskAdvertisement` emits and `apskSigningKeys` reads. Measured gap: the root
+publishes `{alg, pub}`, and spells its algorithm `ml-dsa-65` where `_apsk` uses
+`SigningAlgoType.name`, `mldsa65`. That difference *is* requirement 1, and
+there is no argument left for it: two records advertising signing keys in two
+vocabularies is
+[94](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)'s
+finding, not a design.
+
+None of the fields is decoration:
+
+- **`kid`**, derived by the existing `publicKeyKidOfBase64`, is the key
+  identifier a root link lacks today. It turns "try every published root" into
+  a selection.
+- **`status`** is what lets a rotated-out root stay advertised. That is
+  [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)'s
+  `_apsk` rule — a key is retained for what it signed — and the root needs it
+  more than any enrollment key does, because every root link ever issued was
+  signed with it.
+- **`use: 'sign'`** is accurate rather than ceremonial: nothing is ever
+  encapsulated to the root.
+
+**2. `successor` and the bare-base64 reader are deleted.** Both exist only to
+accommodate records already written, which under the premise above are ours
+alone. `successor` could not have worked in any case: it is stamped `null` at
+mint inside a record nothing rewrites, so it is a forward pointer writable only
+at a moment when there is nothing to point at. Dead tolerance reads as a
+supported path.
+
+**3. The record becomes mutable, and the interlock moves to an explicit mint
+lock.** [13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)
+already made this exact move for `public:__nskey.<ns>@<owner>`, on the finding
+that immutability there was "a concurrency control, not a confidentiality one"
+and that it made rotation unimplementable as specified. The root is the record
+that never got the treatment. `NskeyMintLock` is built — a short-ttl immutable
+self key, written remote-first because the atomicity has to be the atServer's
+and a local-first put would let both enrollments believe they had won.
+
+⚠️ **What this gives up, stated rather than glossed.** A refused second create
+is an absolute guarantee from the atServer; a lock is a protocol, and a
+protocol has a window. What covers it is the mint path's existing
+reconciliation, which stays: read the published record, compare what is held
+against it, retire a pair that corresponds to nothing. It was written for a
+lost immutable create and answers the same question here.
+
+**4. At rest, `root:<algo>:<n>` in `atSignKeys[]` — already ruled, and only
+partly built.** [100](#100-the-seven-shapes-ruling-99-left-open-2026-08-14)
+ruling 4 ruled that the generation is the slot and the algorithm is part of the
+id. The code pins the algorithm anyway: `PqSigningRoot.keyIdPrefix` is
+`'root:${KeyAlgorithmType.mlDsa65}:'` and `_isRootSlot` requires that exact
+prefix, so a root under any other algorithm has no slot and no reader.
+Selection moves to the role `root` with any algorithm, mirroring how
+`signingKeysFor` selects `sign:<algo>:<n>`. The container does **not** move:
+the root is the atSign's own key, and `atSignKeys[]` is where
+[99](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
+ruling 3 puts the atSign's material.
+
+**5. D1 builds rotatability; D1 does not build rotation.** In scope: the record
+shape, the readers, the writers, the verifiers and the signers, such that a
+second root is representable, publishable and verifiable end to end. Out of
+scope: the rotation operation itself — mint a successor, publish it, retire the
+predecessor, re-anchor — and revocation.
+
+The boundary is testable, which is what makes it real rather than an intention:
+**a keyfile and a record each carrying two root entries, one active and one
+retired, with a root link signed under the retired one still verifying.** That
+is buildable with no rotation machinery anywhere, and once it passes, rotation
+is a later operation over a structure that already holds.
+
+**6. The reader lands before the writer, and the reason is prospective.** No
+client in the field reads these records today, so this is not the usual
+ships-first compatibility ordering. It is that after the GA minor ships,
+readers *are* in the field, and a reader that takes the first entry is what
+would stop a second one from ever being adopted. Building it in D1 is what
+keeps rotation a decision later rather than a release-train problem, and that
+is the whole of requirement 2.

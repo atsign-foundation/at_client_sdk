@@ -1757,10 +1757,12 @@ and revisited in
 [decisions 48](decisions.md#48-the-standards-question-reopened-and-what-the-check-found-2026-08-06);
 tracked here so they are visible from the plan.
 
-**One deadline is live, and it is not a date.** 14.21's obstacle 2 is a
-*reader*, so it freezes on release: once clients that read only the first entry
-of the signing root's `keys[]` are in the field, no second entry can be adopted
-while they live.
+**One deadline is live, and it is prospective rather than a date.**
+[14.22](#1422-making-the-signing-root-rotatable--decisions-101) is a *reader*
+change, and no client in the field reads the signing root today — nothing is
+released. The deadline is the GA minor: once it ships readers that take the
+first entry of the root's `keys[]`, those are what would stop a second entry
+ever being adopted. That is the reason the work is in D1 rather than after it.
 
 The three this paragraph used to name have all passed, which is worth stating
 rather than deleting — each is a shape now frozen. **14.1** froze when ON-1 made
@@ -1772,21 +1774,24 @@ by its owner, so what remains there is a caller, not a freeze.
 The rest are cheap while at_java has no PQ code and expensive afterwards, which
 as of 2026-08-06 has not started.
 
-**Eight are closed** — 14.2, 14.4 and 14.5, all absorbed by **KE-1**
+**Nine are closed** — 14.2, 14.4 and 14.5, all absorbed by **KE-1**
 ([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07));
 **14.1**, ruled by **ON-1**
 ([decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08));
 **14.3**, ruled 2026-08-06, landed 2026-08-09 and since superseded into a single
 envelope shape; **14.9** with **14.9a**, root-caused as an `EnrollmentManager`
 cache race and fixed in at_server `16dd457f`; **14.10**, resolved by a
-release-pinned pre-PQ image; and **14.13**, folded into the rollout axis.
+release-pinned pre-PQ image; **14.13**, folded into the rollout axis; and
+**14.21**, ruled the day it was raised by
+[decisions 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15),
+with its work carried by 14.22.
 They are kept here rather than deleted because each names a hatch the wire now
 depends on, and a reader asking "why can the construction change without a flag
 day" needs to find the answer where the question was recorded.
 
 **Thirteen are live:** 14.6 (both halves built; a caller that re-advertises a
 key package is owed), 14.7, 14.8, 14.11, 14.12, 14.14, 14.15, 14.16, 14.17,
-14.18, 14.19, 14.20 and 14.21.
+14.18, 14.19, 14.20 and 14.22.
 
 ⚠️ **Re-derived 2026-08-15 by reading each subsection's own state marker**, and
 all three of this paragraph's claims were wrong: it counted four done rather
@@ -3286,6 +3291,20 @@ remaining half only.
 
 ### 14.21 The signing root cannot be rotated — raised 2026-08-15
 
+> **RULED 2026-08-15 the same day — [decisions 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15).
+> The root becomes an ordinary signing key and D1 makes it rotatable without
+> building the rotation.** The rest of this item is the statement of the
+> problem, kept because the ruling is only legible against it.
+>
+> ⚠️ **One premise below is false, and the ruling overturns it: that records
+> already published on live atSigns constrain the design.** They do not.
+> Nothing is released, so no client outside this tree mints a root — every
+> atSign carrying one is ours, to delete or recycle. *Immutable*, *frozen* and
+> *one-way door* describe a constraint on rewriting **one record**, never a
+> constraint on choosing the shape. The text below is left as written, because
+> the four obstacles it enumerates are what the ruling answers; where it reasons
+> from permanence, the ruling is what holds.
+
 The atSign's root signing key is persisted in two places, and only one of them
 can ever change.
 
@@ -3324,13 +3343,14 @@ place of the create-once race control, not merely add a code path.
    it see one key however many `keys[]` carries. The field was made a list on
    purpose — mint time being the only moment a root can be made verifiable
    under more than one algorithm — and the reader forecloses it. ⚠️ **This one
-   carries an ordering property the others do not.** It is a *reader*, any peer
-   verifies against the atSign's root, so a released client that only ever
-   reads `keys[0]` is what would stop a second entry — or a successor root —
-   from being adopted, for as long as such clients are in the field. Widening
-   it is a prerequisite of every scheme, it has to ship before any writer, and
-   its deadline is [14.1](#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep)'s
-   shape rather than a date: at_client's GA minor.
+   carries an ordering property the others do not**, and it is *prospective*
+   rather than a compatibility debt. No client in the field reads these records
+   today. But any peer verifies against the atSign's root, so once the GA minor
+   ships readers that take `keys[0]`, those are what would stop a second entry
+   ever being adopted. Widening it is a prerequisite of every scheme and has to
+   land before any writer — the deadline is the GA minor, which is why
+   [decisions 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+   ruling 6 puts it in D1.
 3. **Root links carry no key identifier.** The shape is
    `{v, alg, payload:{enrollmentId, apkamPublicKey}, signature}`
    (`PqSigningChain.linkPayload` / `_rootLinkOver`), so a verifier holding two
@@ -3381,7 +3401,64 @@ is a ruling nobody has made. This is recorded as one item rather than five so
 the obstacles are read together: fixing any one of them alone still leaves the
 root un-rotatable, and obstacle 1 cannot be fixed in place at all.
 
-**Not claimed for D1.** It is not on
-[14.18](#1418-the-remaining-d1-initial-development-sequence)'s stage-5 list.
-Obstacle 2 is the one with a release-ordering argument for landing before
-at_client's GA minor; the rest can follow a ruling at any time.
+**Claimed for D1 as of the ruling.** This paragraph said "not claimed for D1"
+when the item was raised, hours before
+[decisions 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+put the rotatability work in scope — the rotation *machinery* is what stays
+out. The rows are [14.22](#1422-making-the-signing-root-rotatable--decisions-101).
+
+### 14.22 Making the signing root rotatable — decisions 101
+
+[decisions 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+rules the shape and the scope; this is the order. **D1 builds rotatability, not
+rotation** — row 7 is the boundary, and nothing here mints a successor.
+
+**Two things measured before sequencing**, because rows below would otherwise
+rest on them:
+
+- **at_client 3.14.0 has no signing-root reader at all.** Zero matches for
+  `pq_signing_root` or `PqSigningRoot` anywhere in its `lib/`, and it ships no
+  `lib/src/crypto/nskey/` directory. Positive control: `wrapAndSign` resolves
+  to three sites in the same tree, so the search reaches it. `tests/pq_matrix/published/`
+  therefore cannot see a root-record change, and no row here owes the matrix a
+  cell.
+- **Three functional files drive this subsystem** —
+  `pq_signing_root_create_once_test.dart`, `signing_root_pull_test.dart` and
+  `signing_root_pull_two_enrollments_test.dart`. The first asserts the property
+  row 6 removes, so it is rewritten rather than broken.
+
+| # | Row | Why here |
+|---|-----|----------|
+| 1 | **The record adopts `apskAdvertisement` / `apskSigningKeys`**, and `successor` plus the bare-base64 reader are deleted. Reader and writer in one commit — nothing outside this tree reads the record, so a tolerance window would be dead code the day it landed | First, because every row below addresses entries by `kid` or `status` and neither exists until this lands |
+| 2 | **The algorithm comes out of the keyId prefix.** `keyIdPrefix` and `_isRootSlot` generalise to the role `root` with any algorithm — what [decisions 100](decisions.md#100-the-seven-shapes-ruling-99-left-open-2026-08-14) ruling 4 already ruled and the code does not do | ⚠️ Routes into `_freeSlot`, `nextAtSignGeneration('root', …)` and the `PqSigningRoot.keyIdPrefix` pin in `wire_literal_pins_test.dart`. That pin is **at-rest** so it moves with the id; the record-*name* pin beside it does not move |
+| 3 | **The private selector stops guessing.** `_activePrivate` returns the active private whose public half corresponds to an advertised entry, rather than `.firstOrNull` over the root slots | ⚠️ Four callers ask "do I hold the root" through it — `privateHalf`, `store`'s already-held guard, `requestPrivateIfAbsent`'s cheapest check and `hydrateStore`. With two generations that question has an answer *per entry*, and `.firstOrNull` answers it by iteration order |
+| 4 | **The heal paths judge against the set**, not against the one published key: `reconcileHeldPrivate` and `file()` accept a private corresponding to **any** advertised root | ⚠️ This row decides whether a successor private can exist at all. Today all three paths treat non-correspondence as poison — retire, refuse, drop — so without it a second root private cannot be filed even by hand |
+| 5 | **Root links name their signer.** The link gains `kid`; `_checkRootLink` selects by it and falls back to trying each advertised root when it is absent. Signing selects the **active** root, never a retired one | Needs row 1 for `kid` and row 4 for a second private to exist at all. The fallback is what keeps links written before this row verifiable |
+| 6 | **The record becomes mutable behind a mint lock** modelled on `NskeyMintLock`; `pqSigningRootKey` drops `immutable = true` | ⚠️ Routes into `_publishAndAnchor`'s entire catch block, which exists to tell "the atServer refused a second create" from "a write that landed and was not reported". With a mutable record those stop being the two cases, so it is re-reasoned rather than carried |
+| 7 | **The differential test that proves the boundary:** a keyfile and a record each carrying two root entries, one active and one retired, with a root link signed under the **retired** one still verifying | Buildable with no rotation machinery anywhere. If it passes, rotation is a later operation over a structure that already holds — which is the whole claim D1 is making |
+
+**Out of scope, deliberately:** the rotation operation — mint a successor,
+publish it, retire the predecessor, re-anchor the enrollments — and revocation.
+
+**The doc sweep each row owes, located now so it is not rediscovered later.**
+These read as the contract, so they assert the old shape exactly as a stale
+test would — and they are **not** corrected in advance, because until the rows
+land they describe what is actually built:
+
+- **Row 1** owes `design.md:290` ("it never rotates, so it stays immutable
+  create-once") and `acceptance.md:1115` ("The root never rotates, so a split
+  …").
+- **Row 6** owes `design.md:323` ("two of them minting two roots —
+  unrecoverable, since the root never rotates") and `acceptance.md:1159` ("a
+  second create is rejected, never an overwrite — it is the root and never
+  rotates"). ⚠️ That acceptance line is the assertion row 6 inverts, and
+  `acceptance.md` is a **build input** for `test/acceptance/catalogue_test.dart`
+  — prose inside a row is safe to edit, a `###` UC heading is not.
+- `decisions.md` is a ledger and is **amended in place**, not rewritten: 18.3
+  and 46.5 already carry pointers to 101.
+
+⚠️ **Apply [14.20](#1420-building-rulings-98-and-99--the-sequence)'s question to
+every row before building it:** what does the row *route into*, not what does it
+define. On this plan that question has been the answer five times running, and
+rows 2, 3, 4 and 6 each carry a routing note found by asking it rather than by
+reading the row.
