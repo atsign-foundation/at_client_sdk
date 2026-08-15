@@ -3353,6 +3353,25 @@ remaining half only.
 > building the rotation.** The rest of this item is the statement of the
 > problem, kept because the ruling is only legible against it.
 >
+> 📌 **CONVENTION, established here 2026-08-15: a section kept deliberately as a
+> snapshot still needs a STATUS banner saying which of its items are now
+> closed.** "The text below is left as written" preserves the reasoning, which
+> is right — but a reader meets the items as a list of live problems, and a
+> closed obstacle read as open is how merged work gets rebuilt. Keep the prose,
+> date the banner, name the row that closed each item. A cold read of this file
+> found exactly that failure here.
+>
+> ✅ **STATUS 2026-08-15 — obstacles 2 and 3 are CLOSED; do not read them as live
+> work.** Obstacle 2 ("verifiers hold exactly one root key") was closed by
+> **row 5**: both root-link verifiers now try every advertised root, active and
+> retired. Obstacle 3 ("root links carry no key identifier") was closed by the
+> same row — the link gained an optional top-level `kid`. Obstacle 1 (the
+> record is immutable) is **row 6**, unbuilt. Obstacle 4 (the heal paths treat
+> a successor as poison) was closed by **row 4**.
+> ⚠️ The symbol `_publicKeyFrom` cited under obstacle 2 no longer exists —
+> row 1 deleted it. Re-derive with `git grep _publicKeyFrom -- packages/`
+> (zero hits) rather than looking for it.
+>
 > ⚠️ **One premise below is false, and the ruling overturns it: that records
 > already published on live atSigns constrain the design.** They do not.
 > Nothing is released, so no client outside this tree mints a root — every
@@ -3409,7 +3428,7 @@ place of the create-once race control, not merely add a code path.
    [decisions 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
    ruling 6 puts it in D1.
 3. **Root links carry no key identifier.** The shape is
-   `{v, alg, payload:{enrollmentId, apkamPublicKey}, signature}`
+   `{v, alg, payload:{childEnrollmentId, apkamPublicKey}, signature}`
    (`PqSigningChain.linkPayload` / `_rootLinkOver`), so a verifier holding two
    root keys cannot tell which one signed a link and must try each. Workable at
    one or two roots; it is not a selection mechanism, and it is not what a
@@ -3583,7 +3602,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | # | What is owed | Owner | State |
 |---|---|---|---|
-| 1 | **14.22 rows 6, 7** — the signing root becomes an ordinary, rotatable signing key | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | **Rows 1, 2, 3 and 4 landed 2026-08-15**, plus a mint-race fix an adversarial review turned up. Row 1 was the reader, the only D1 item with a deadline of its own — due before the GA minor. **Row 6 is the next action**: the record becomes mutable behind a mint lock modelled on `NskeyMintLock`, and `pqSigningRootKey` drops `immutable = true`. ⚠️ It routes into `_publishAndAnchor`'s whole catch block, which exists to tell "the atServer refused a second create" from "a write that landed and was not reported" — with a mutable record those stop being the two cases. It also inverts an assertion in `acceptance.md`, a **build input** for `catalogue_test.dart`: prose inside a row is editable, a `###` UC heading is not |
+| 1 | **14.22 rows 6, 7** — the signing root becomes an ordinary, rotatable signing key | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | **Rows 1, 2, 3, 4 AND 5 landed 2026-08-15**, plus a mint-race fix an adversarial review turned up. Row 1 was the reader, the only D1 item with a deadline of its own — due before the GA minor. **Row 6 is the next action**: the record becomes mutable behind a mint lock modelled on `NskeyMintLock`, and `pqSigningRootKey` drops `immutable = true`. ⚠️ It routes into `_publishAndAnchor`'s whole catch block, which exists to tell "the atServer refused a second create" from "a write that landed and was not reported" — with a mutable record those stop being the two cases. It also inverts an assertion in `acceptance.md`, a **build input** for `catalogue_test.dart`: prose inside a row is editable, a `###` UC heading is not |
 | 2 | **Step 20's rotation arm** — enrollment then an `enroll:update` APKAM rotation mid-run | [14.18](#1418-the-remaining-d1-initial-development-sequence) step 20 | ⛔ Blocked on an **at_auth release** carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | 3 | **Step 24** — a client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | Open; **wants a ruling** on whether an owner-keys client belongs in the enrollment trust model |
 | 4 | **Step 25** — a `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | Open. Gates the stop-release: closing it means public-record signing moves to the ML-DSA root and self data moves off `selfEncryptionKey` |
@@ -3593,7 +3612,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | **D1's tail** — `EnrollParams.signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Open. One paragraph: the text is accurate but never says plainly that the field names the **authentication** key's algorithm |
-| 11 | **14.19's open small items** — 13 of them | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items** — 13 of them, and ⚠️ **item 15 is one gkc explicitly asked to pick up next** (2026-08-14): the `_apsk` third writer | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
 **Not owed, and worth stating so nobody re-opens them:** step 11 is labelled
