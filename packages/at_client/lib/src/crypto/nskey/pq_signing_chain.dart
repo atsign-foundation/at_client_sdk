@@ -154,6 +154,34 @@ class PqSigningChain {
   /// documents to decide whether a republish is needed.
   static const String rootLinkKidField = 'kid';
 
+  /// The domain tag a root link's signature covers, ahead of the payload.
+  ///
+  /// **A prefix on the signed bytes, not a field in `payload`.** The payload is
+  /// shared verbatim with the chain link ([linkPayload]) — that is what lets
+  /// one signer vouch for the same fact either way — so a field naming the
+  /// flavour could not go in there without either changing what a chain link
+  /// signs or making the two payloads differ. The prefix leaves the document
+  /// alone and still puts the flavour inside the signature.
+  ///
+  /// What it buys: a root-link signature is bytes no other thing this build
+  /// signs can produce, so it cannot be presented as one of them and none of
+  /// them can be presented as a root link. The chain link gets the same
+  /// property from [EnvelopeType.chainLink] in its protected header; the two
+  /// mechanisms differ because the documents do — one is a JWS with a header
+  /// to put it in, and the other is bare compact JSON.
+  ///
+  /// Frozen, and pinned in `test/wire_literal_pins_test.dart`.
+  static const String rootLinkDomain = 'at-root-link:';
+
+  /// The exact bytes a root link's signature covers.
+  ///
+  /// One definition for the signer and both verifiers, because the three
+  /// agreeing is the whole contract and three copies of a string concatenation
+  /// is three chances for them to stop.
+  static Uint8List rootLinkSignableBytes(Map<String, Object?> payload) =>
+      Uint8List.fromList(
+          utf8.encode('$rootLinkDomain${signableTextOf(payload)}'));
+
   /// `public:_apsk.<enrollmentId>.a.__e@<atSign>` — where an enrollment's
   /// APKAM public key lives, and the one record its own connection may write.
   static String apskUri(String atSign, String enrollmentId) =>
@@ -269,7 +297,7 @@ class PqSigningChain {
     String? kid,
   }) async {
     final signature = await MlDsa65PureDartAlgo().signBytes(
-      Uint8List.fromList(utf8.encode(signableTextOf(payload))),
+      rootLinkSignableBytes(payload),
       secretKey: rootPrivate,
     );
     return {
@@ -443,7 +471,15 @@ class PqSigningChain {
       return false;
     }
 
-    if (_fieldFrom(current, rootLinkField) != null) return false;
+    final existing = _fieldFrom(current, rootLinkField);
+    if (existing != null &&
+        await _rootLinkStillHolds(atSign, enrollmentId, existing, current)) {
+      return false;
+    }
+    if (existing != null) {
+      _logger.warning('The root link on $enrollmentId no longer holds, so this '
+          'enrollment is re-anchoring itself');
+    }
 
     final link = await _rootLinkOver(
       linkPayload(
@@ -457,6 +493,52 @@ class PqSigningChain {
     await _publishInto(enrollmentId, rootLinkField, link, current: current);
     _logger.info('Anchored $enrollmentId to the signing root');
     return true;
+  }
+
+  /// Whether the root link already on this enrollment's record is one a
+  /// verifier can still follow: it describes the key [current] publishes, and
+  /// its signature checks out under a root the atSign still advertises.
+  ///
+  /// **Presence was the old question and it was the wrong one.** A link stops
+  /// holding when the root that signed it leaves the record, when the key it
+  /// vouches for is replaced, and when it was signed under a shape this build
+  /// no longer verifies — and in every one of those the record advertises an
+  /// anchor no verifier can follow, reported as `broken`, which reads as
+  /// tampering. This client is the only party that can put it right: the
+  /// conveyance path publishes what an approver sends, and no approver sends a
+  /// root link to an enrollment that already holds the private.
+  ///
+  /// **Only a definite failure re-anchors.** An unreadable root record answers
+  /// "holds", not "broken": it is a fact about this read rather than about the
+  /// link, and rewriting a good link on a transient failure would replace one
+  /// valid anchor with another for no reason.
+  Future<bool> _rootLinkStillHolds(
+    String atSign,
+    String enrollmentId,
+    Map<String, Object?> link,
+    AtValue current,
+  ) async {
+    final payload = link['payload'];
+    if (payload is! Map ||
+        payload['childEnrollmentId'] != enrollmentId ||
+        payload['apkamPublicKey'] != current.value) {
+      return false;
+    }
+
+    final candidates = await _rootCandidates(atSign);
+    if (candidates.isEmpty) return true;
+
+    try {
+      return await _verifiesUnderAny(
+        rootLinkSignableBytes(payload.cast<String, Object?>()),
+        link['signature'] as String,
+        _narrowedTo(link, candidates),
+      );
+    } catch (e) {
+      _logger.info('Could not check the root link already on $enrollmentId, so '
+          'leaving it alone: $e');
+      return true;
+    }
   }
 
   /// The root link an enrollment has published, or null if it has none.
@@ -533,8 +615,7 @@ class PqSigningChain {
     final bool verifies;
     try {
       verifies = await _verifiesUnderAny(
-        Uint8List.fromList(
-            utf8.encode(signableTextOf(payload.cast<String, Object?>()))),
+        rootLinkSignableBytes(payload.cast<String, Object?>()),
         link['signature'] as String,
         _narrowedTo(link, candidates),
       );
@@ -796,7 +877,7 @@ class PqSigningChain {
     final bool ok;
     try {
       ok = await _verifiesUnderAny(
-        Uint8List.fromList(utf8.encode(signableTextOf(payload))),
+        rootLinkSignableBytes(payload.cast<String, Object?>()),
         link['signature'] as String,
         _narrowedTo(link, candidates),
       );

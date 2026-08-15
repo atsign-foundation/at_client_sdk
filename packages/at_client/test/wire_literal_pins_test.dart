@@ -747,6 +747,20 @@ void main() {
           EnvelopeType.values.length);
     });
 
+    test('the root link signs under its own domain tag', () {
+      // The root link is not a JWS and has no header to carry a type, so its
+      // flavour is a prefix on the signed bytes. Pinned as a raw literal for
+      // the same reason the header spellings are: the signer and both
+      // verifiers are the same build today and need not be tomorrow.
+      expect(PqSigningChain.rootLinkDomain, 'at-root-link:');
+      expect(
+          utf8.decode(PqSigningChain.rootLinkSignableBytes(
+              PqSigningChain.linkPayload(
+                  childEnrollmentId: 'c1', childApkamPublicKey: 'PK'))),
+          'at-root-link:'
+          '{"v":1,"childEnrollmentId":"c1","apkamPublicKey":"PK"}');
+    });
+
     test('the envelope members, their order, and unpadded base64url', () {
       final pair = AtChopsUtil.generateAtPkamKeyPair();
       final envelope = signEnvelope(

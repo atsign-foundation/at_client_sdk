@@ -20,6 +20,17 @@
     it already refuses entries that disagree about `kid`.
   - Still RFC 7515: the regenerated vectors verify under panva's `jose` and,
     for ML-DSA-65, under the OpenSSL 3.6.3 CLI.
+- feat!: a root link signs under the `at-root-link:` domain tag
+  (`PqSigningChain.rootLinkDomain`), through one codec `rootLinkSignableBytes`
+  shared by the signer and both verifiers. A prefix rather than a payload
+  field, because the payload is shared verbatim with the chain link.
+- fix: `publishOwnRootLink` re-anchors a root link that no longer **holds** —
+  one describing a key the record no longer publishes, or signed under a shape
+  this build does not verify — where it previously skipped on the link's mere
+  presence. Nothing else can replace such a link: the conveyance path publishes
+  what an approver sends, and no approver sends a root link to an enrollment
+  that already holds the private. An unreadable root record leaves the link
+  alone, being a fact about the read rather than about the link.
 - fix: `verifyEnvelopeSignature`'s refusal carries the cause, instead of
   reporting every reason as "verification failed using public key" and sending
   a reader after a key that is fine.

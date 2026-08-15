@@ -334,7 +334,11 @@ void main() {
       // checked against the root's public half rather than merely present.
       expect(
           await MlDsa65PureDartAlgo().verifyBytes(
-            Uint8List.fromList(utf8.encode(signableTextOf(link['payload']))),
+            // The domain tag spelled out rather than read from the
+            // constant: this rebuilds the bytes the way an independent
+            // implementation would, so it pins the prefix too.
+            Uint8List.fromList(utf8
+                .encode('at-root-link:${signableTextOf(link['payload'])}')),
             signature: base64Decode(link['signature'] as String),
             publicKey: pair.publicKey,
           ),
@@ -903,6 +907,66 @@ void main() {
       expect(again.verdict, ChainVerdict.anchored);
     });
 
+    test('a root link signed without the domain tag does not verify', () async {
+      // What a root link written before the tag existed looks like: signed by
+      // the real root, over the real payload, and one prefix short. It has to
+      // fail, or the tag is decoration.
+      final pair = await publishRoot();
+      final c = await anchored('priv-1', pair.secretKey);
+
+      final link = (await PqSigningChain(c).readRootLink('priv-1'))!;
+      final undomained = await MlDsa65PureDartAlgo().signBytes(
+        Uint8List.fromList(utf8.encode(
+            signableTextOf(link['payload'] as Map<String, Object?>))),
+        secretKey: pair.secretKey,
+      );
+      writeRootLink(remoteMetadata, atSign, 'priv-1',
+          {...link, 'signature': base64Encode(undomained)});
+
+      final result =
+          await PqSigningChain(verifierClient).verifyChain(verifier, 'priv-1');
+
+      expect(result.verdict, ChainVerdict.broken);
+    });
+
+    test('an entitled enrollment re-anchors a root link that stopped holding',
+        () async {
+      // Presence used to be the whole question, so a link that no longer
+      // verified stayed on the record for good: nothing else can replace it,
+      // because the conveyance path publishes what an approver sends and no
+      // approver sends a root link to an enrollment already holding the
+      // private.
+      final pair = await publishRoot();
+      final c = await anchored('priv-1', pair.secretKey);
+
+      final link = (await PqSigningChain(c).readRootLink('priv-1'))!;
+      final undomained = await MlDsa65PureDartAlgo().signBytes(
+        Uint8List.fromList(utf8.encode(
+            signableTextOf(link['payload'] as Map<String, Object?>))),
+        secretKey: pair.secretKey,
+      );
+      writeRootLink(remoteMetadata, atSign, 'priv-1',
+          {...link, 'signature': base64Encode(undomained)});
+
+      expect(
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
+          isTrue,
+          reason: 'the link on the record is one no verifier can follow, and '
+              'this client is the only party that can put it right');
+
+      expect(
+          (await PqSigningChain(verifierClient).verifyChain(verifier, 'priv-1'))
+              .verdict,
+          ChainVerdict.anchored);
+
+      expect(
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
+          isFalse,
+          reason: 'and having healed it, the next start writes nothing — the '
+              'check is whether the link holds, not whether it was rewritten');
+    });
   });
 
   test('a link forged onto another enrollment fails verification', () async {
@@ -930,6 +994,27 @@ void main() {
             'published key, and the claim is under the signature besides — '
             'otherwise any enrollment could name any other as its approver');
   });
+}
+
+/// Writes [link] into [enrollmentId]'s published `_apsk` as its root link,
+/// straight into the fixture's record store.
+///
+/// Reaching past the production writer on purpose: what these tests need to
+/// set up is a record carrying a link production would never write — one from
+/// an older shape, or one whose root has moved on — and going through the
+/// writer could only ever produce a link this build considers current.
+void writeRootLink(Map<String, Metadata> remoteMetadata, String atSign,
+    String enrollmentId, Map<String, Object?> link) {
+  final uri = PqSigningChain.apskUri(atSign, enrollmentId);
+  final metadata = remoteMetadata[uri]!;
+  metadata.appMetadata = AppMetadata(
+    providerId:
+        metadata.appMetadata?.providerId ?? CryptoRuntime.legacyProviderId,
+    additional: {
+      ...?metadata.appMetadata?.additional,
+      PqSigningChain.rootLinkField: link,
+    },
+  );
 }
 
 /// How many of [c]'s remote gets fetched [enrollmentId]'s own `_apsk`.
