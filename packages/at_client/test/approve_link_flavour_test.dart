@@ -37,14 +37,14 @@ class _FakePrivilege implements EnrollmentPrivilegeResolver {
       answer;
 }
 
-/// Which link flavour an approval conveys is decided by the APPROVER's
-/// privilege: the fully privileged class (`rw` on `*` and `__manage`) signs
-/// root links — one hop, verified against the published signing root — and
-/// only a non-privileged approver leaves the provisional chain link.
 /// Generation 1 of a root filed under the algorithm this build mints.
 final rootSlot1 =
     '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
 
+/// Which link flavour an approval conveys is decided by the APPROVER's
+/// privilege: the fully privileged class (`rw` on `*` and `__manage`) signs
+/// root links — one hop, verified against the published signing root — and
+/// only a non-privileged approver leaves the provisional chain link.
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'scoped-1';

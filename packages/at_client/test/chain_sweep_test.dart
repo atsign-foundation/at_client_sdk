@@ -25,6 +25,10 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
 
+/// Generation 1 of a root filed under the algorithm this build mints.
+final rootSlot1 =
+    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
+
 /// The sweep anchors enrollments to the signing root.
 ///
 /// The sweeper only runs when fully privileged (`rw` on `*` and `__manage`),
@@ -34,10 +38,6 @@ import 'test_utils/remote_backed_client.dart';
 /// parent (which could sign nothing), and any enrollment carrying only a
 /// provisional chain link — root-anchored is the terminal state, and the
 /// sweep is what makes it every enrollment's state.
-/// Generation 1 of a root filed under the algorithm this build mints.
-final rootSlot1 =
-    '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1';
-
 void main() {
   const atSign = '@alice';
   const enrolleeId = 'scoped-1';
