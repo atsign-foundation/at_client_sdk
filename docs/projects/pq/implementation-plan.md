@@ -1757,25 +1757,43 @@ and revisited in
 [decisions 48](decisions.md#48-the-standards-question-reopened-and-what-the-check-found-2026-08-06);
 tracked here so they are visible from the plan.
 
-**Three have deadlines, and none is a date.** 14.1 freezes the first time a
-signing root lands on an atSign nobody recycles. 14.6 freezes per enrollment,
-the first time one is created that matters — and 14.3 has to be settled before
-that, because the shape it rules is the one 14.6 freezes. 14.21's obstacle 2 is
-a *reader*, so it freezes on release: once clients that read only the first
-entry of the signing root's `keys[]` are in the field, no second entry can be
-adopted while they live.
+**One deadline is live, and it is not a date.** 14.21's obstacle 2 is a
+*reader*, so it freezes on release: once clients that read only the first entry
+of the signing root's `keys[]` are in the field, no second entry can be adopted
+while they live.
+
+The three this paragraph used to name have all passed, which is worth stating
+rather than deleting — each is a shape now frozen. **14.1** froze when ON-1 made
+every activated atSign keep its root, and was ruled the same day. **14.3** was
+settled, so the wrapper shape 14.6 depended on is fixed. **14.6**'s own deadline
+was retired deliberately: `enroll:update` makes the enrollment record rewritable
+by its owner, so what remains there is a caller, not a freeze.
 
 The rest are cheap while at_java has no PQ code and expensive afterwards, which
 as of 2026-08-06 has not started.
 
-**Four are now DONE** — 14.2, 14.4 and 14.5, all absorbed by **KE-1**
-([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)),
-and **14.1**, ruled by **ON-1**
-([decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08)).
+**Eight are closed** — 14.2, 14.4 and 14.5, all absorbed by **KE-1**
+([decisions 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07));
+**14.1**, ruled by **ON-1**
+([decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08));
+**14.3**, ruled 2026-08-06, landed 2026-08-09 and since superseded into a single
+envelope shape; **14.9** with **14.9a**, root-caused as an `EnrollmentManager`
+cache race and fixed in at_server `16dd457f`; **14.10**, resolved by a
+release-pinned pre-PQ image; and **14.13**, folded into the rollout axis.
 They are kept here rather than deleted because each names a hatch the wire now
 depends on, and a reader asking "why can the construction change without a flag
-day" needs to find the answer where the question was recorded. The live items
-are 14.3, 14.6, 14.7 and 14.8-14.11.
+day" needs to find the answer where the question was recorded.
+
+**Thirteen are live:** 14.6 (both halves built; a caller that re-advertises a
+key package is owed), 14.7, 14.8, 14.11, 14.12, 14.14, 14.15, 14.16, 14.17,
+14.18, 14.19, 14.20 and 14.21.
+
+⚠️ **Re-derived 2026-08-15 by reading each subsection's own state marker**, and
+all three of this paragraph's claims were wrong: it counted four done rather
+than eight, it listed **14.3** as live when 14.3's own heading has said DONE
+since 2026-08-09, and its range stopped at 14.11 — written before 14.12 existed
+and never revisited across nine further items. A list of current state is worth
+exactly its last re-derivation date, which is why this one now carries one.
 
 ### 14.1 The signing root's `keys[]` shape — DEADLINE: the first root we keep
 
@@ -2048,6 +2066,13 @@ edited:** a test that throws away a response cannot distinguish "the thing did
 not happen" from "the thing happened and is not visible yet" — and the second
 is the more interesting story, so that is the one that gets written down. Assert
 the acknowledgement.
+
+⚠️ **Superseded 2026-08-12 — read 14.9's opening blockquote, not this.** "Treat
+it as open rather than as a known server defect" was right on the evidence
+available on 2026-08-08 and is wrong now: the race was found in
+`EnrollmentManager` and fixed in at_server `16dd457f`. This section stays as the
+record of a correct challenge to a wrong attribution; it is no longer the
+current state.
 
 ### 14.10 UC-B0.1 needed a legacy atServer image — RESOLVED 2026-08-08
 
@@ -2663,7 +2688,7 @@ rulings 2 and 3 are amended in place.
 | 23 | *(folded away)* passive-by-default **is** the axis's `now` position | [14.13](#1413-a-passive-by-default-flag-surveyed-not-built) |
 | 24 | A client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) |
 | 25 | A `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) |
-| 26 | *(closed)* revocation visibility — a proven test-instrument failure | [14.9](#149-a-revoked-enrollment-can-still-authenticate-briefly) |
+| 26 | *(closed)* revocation visibility — an `EnrollmentManager` cache race, fixed in at_server `16dd457f`. ⚠️ This cell said "a proven test-instrument failure" until 2026-08-15; that was the 2026-08-11 ruling the root-cause overturned | [14.9](#149-a-revoked-enrollment-can-still-authenticate-briefly) |
 | 27 | Domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) |
 | 28 | NoPorts' own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) |
 | 29 | The four audit residuals — perf ceiling on a real low-end device, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
