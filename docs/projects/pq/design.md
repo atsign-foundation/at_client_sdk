@@ -533,7 +533,7 @@ envelope → convey the new nskey private **per-APKAM over the substrate** (`__s
 envelopes sealed to each authorised APKAM keypair's key package, pushed via
 `enroll:listns` + the pull backstop —
 [§2](#2-subsystem-b--the-secret-sharing-substrate-wp-ss)), **excluding** any revoked
-keypairs (`excludeEnrollmentIds`) → release the lock.
+keypairs (`excludeEnrollmentIds`) → leave the lock to expire.
 
 **Earlier generations are retained, not discarded.** A client keeps every nskey
 private it has held, keyed by `nskeyKid`, so retained `__ck` records sealed to a prior

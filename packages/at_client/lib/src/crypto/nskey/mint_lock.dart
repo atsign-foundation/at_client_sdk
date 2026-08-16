@@ -1,11 +1,42 @@
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_commons/at_commons.dart' show AtKey;
-import 'package:at_commons/at_builders.dart'
-    show DeleteVerbBuilder, UpdateVerbBuilder;
+import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('MintLock');
+
+/// The window in which the winner of an election may still act.
+///
+/// The winner carries this into its critical section and refuses to publish
+/// once it is spent. Without it the "only one enrollment eventually mints"
+/// requirement fails even with everything else correct: the election bounds
+/// when the enrollments *attempt*, not how long the winner *takes*, so a
+/// holder that overran the ttl would publish on top of the enrollment that
+/// legitimately won the next one.
+class MintLease {
+  /// When this lease stops being valid.
+  ///
+  /// Stamped from **before** the take was issued, never after. The atServer
+  /// starts the ttl when it stores the record, which is at or after the moment
+  /// this client sent the request — so a deadline taken from the send makes
+  /// the client give up slightly EARLY, while one taken from the reply would
+  /// have it believe it still held a lock the atServer had already released.
+  /// Only one of those errs safely.
+  ///
+  /// Not a clock comparison between two machines: the client stamps and reads
+  /// this against its own clock throughout, and the atServer's ttl is the
+  /// separate, authoritative bound.
+  final DateTime expiresAt;
+
+  const MintLease(this.expiresAt);
+
+  /// Whether the lease has run out, so nothing further may be published under
+  /// it.
+  bool get isSpent => !DateTime.now().isBefore(expiresAt);
+
+  Duration get remaining => expiresAt.difference(DateTime.now());
+}
 
 /// Serialises minting a key record between an atSign's own enrollments.
 ///
@@ -23,9 +54,8 @@ final _logger = AtSignLogger('MintLock');
 ///
 /// **One mechanism, and the key says what is locked.** Each record composes
 /// its own lock key — `nskeyMintLockKey`, `pqSigningRootMintLockKey` — and
-/// hands it here, ttl and all. The take/release is identical for both, and
-/// two copies of it would be two chances for one to gain a fix the other
-/// lacks.
+/// hands it here, ttl and all. The take is identical for both, and two copies
+/// of it would be two chances for one to gain a fix the other lacks.
 ///
 /// ⚠️ **A lock is a protocol, not a guarantee.** A refused immutable create is
 /// an absolute answer from the atServer about one record; this is a window
@@ -48,17 +78,39 @@ class MintLock {
   /// ends with a record published, so re-reading is both cheaper and more
   /// useful than queueing behind it — and if the winner has crashed, waiting
   /// would mean waiting out the ttl for nothing.
-  Future<T?> withLock<T>(AtKey lockKey, Future<T> Function() mint) async {
+  ///
+  /// **The winner does not release the lock; the ttl does.** Holding it for
+  /// the full ttl means "an election happened recently, do not hold another
+  /// one" — the only case where a second election is wanted inside that window
+  /// is the winner having failed, which is exactly what the ttl bounds, so in
+  /// the success case the cooldown costs nothing. Deleting on the way out cost
+  /// something real: a holder finishing late deleted its *successor's* lock,
+  /// because the delete forced past an immutable record without checking it
+  /// still owned the one it was removing. There is no such window to close now
+  /// — there is no delete.
+  ///
+  /// ⚠️ Correct only against an atServer that stops refusing a create once the
+  /// record has expired; an older one keeps refusing well past the ttl, which
+  /// would make the cooldown effectively permanent.
+  Future<T?> withLock<T>(
+      AtKey lockKey, Future<T> Function(MintLease lease) mint) async {
+    final ttlMillis = lockKey.metadata.ttl;
+    if (ttlMillis == null || ttlMillis <= 0) {
+      // Refused rather than defaulted. Nothing deletes this record now, so a
+      // lock with no ttl is not a lock that releases late — it is one that
+      // never releases, and it would block its atSign's minting for good.
+      throw ArgumentError.value(ttlMillis, 'lockKey.metadata.ttl',
+          'a mint lock needs a ttl: it is released by expiry and by nothing '
+          'else, so without one $lockKey would block minting permanently');
+    }
+    // Stamped before the request goes out — see [MintLease.expiresAt].
+    final leaseFrom = DateTime.now();
     if (!await _take(lockKey)) {
       _logger.info('Another enrollment holds $lockKey; re-reading rather than '
           'waiting for it');
       return null;
     }
-    try {
-      return await mint();
-    } finally {
-      await _release(lockKey);
-    }
+    return mint(MintLease(leaseFrom.add(Duration(milliseconds: ttlMillis))));
   }
 
   Future<bool> _take(AtKey lockKey) async {
@@ -75,23 +127,6 @@ class MintLock {
       // the lock is equally a reason not to mint.
       _logger.finer('Could not take $lockKey: $e');
       return false;
-    }
-  }
-
-  Future<void> _release(AtKey lockKey) async {
-    try {
-      // Deleting an immutable record needs the force flag — the same property
-      // that makes the lock an interlock also stops it being cleared by
-      // accident.
-      await atClient.getRemoteSecondary()!.executeVerb(
-          DeleteVerbBuilder()
-            ..atKey = lockKey
-            ..force = true,
-          sync: false);
-    } catch (e) {
-      // The ttl is the backstop, so a failed release costs a delay before the
-      // next mint, never a lost key.
-      _logger.info('Could not release $lockKey; it will expire on its own: $e');
     }
   }
 }

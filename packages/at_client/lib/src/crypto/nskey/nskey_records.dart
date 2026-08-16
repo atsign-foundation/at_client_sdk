@@ -57,10 +57,10 @@ const String nskeyMintLockRecordName = '_nskeylock';
 /// The at-key of the mint/rotate interlock for `(owner, namespace)`.
 ///
 /// The metadata is contract, not tuning: the atServer's refusal of a second
-/// **immutable** create is the interlock itself, and the [ttl] is the crash
-/// backstop that stops a dead holder blocking its own atSign forever — long
-/// enough that an ordinary mint never races its own expiry. The design lives
-/// on `MintLock`.
+/// **immutable** create is the interlock itself, and the [ttl] is what
+/// releases it — nothing deletes this record — so it doubles as the cooldown
+/// before another election may be held. Long enough that an ordinary mint
+/// never races its own expiry. The design lives on `MintLock`.
 AtKey nskeyMintLockKey(String owner, String namespace,
         {Duration ttl = mintLockTtl}) =>
     AtKey()
@@ -71,12 +71,21 @@ AtKey nskeyMintLockKey(String owner, String namespace,
         ..immutable = true
         ..ttl = ttl.inMilliseconds);
 
-/// How long a mint lock survives unreleased.
+/// How long a mint lock is held.
 ///
-/// A crash backstop, not a budget: a holder that dies mid-mint must not block
-/// its own atSign forever. One value for every lock, because the thing it is
-/// sized against — how long a mint can legitimately take — does not vary by
-/// which record is being minted.
+/// **The only thing that releases a lock**, since the winner deliberately does
+/// not delete it — so this is a cooldown on holding another election, not the
+/// crash backstop it was described as while a successful mint cleared the lock
+/// on its way out. It is still what stops a holder that dies mid-mint blocking
+/// its own atSign forever; it is simply no longer the exceptional path.
+///
+/// It is also the winner's own budget: a holder carries the matching
+/// [MintLease] and refuses to publish once this has elapsed, so an overrunning
+/// mint abandons rather than writing over the enrollment that won the next
+/// election.
+///
+/// One value for every lock, because the thing it is sized against — how long
+/// a mint can legitimately take — does not vary by which record is minted.
 const Duration mintLockTtl = Duration(minutes: 2);
 
 /// The leading segment of the current-CK pointer record:
@@ -126,11 +135,11 @@ const String pqSigningRootMintLockRecordName = '_rootlock';
 /// is atSign-level, which is exactly what distinguishes it from an nskey. The
 /// single underscore hides it from every scan and keeps it out of the commit
 /// log, which is right for a record whose only reader is the atServer's own
-/// refusal — it is taken and released remotely and must never ride sync.
+/// refusal — it is taken remotely, expires remotely, and must never ride sync.
 ///
 /// The metadata is contract, not tuning, for the same reason
 /// [nskeyMintLockKey]'s is: the refusal of a second **immutable** create is
-/// the interlock, and [ttl] is the crash backstop.
+/// the interlock, and [ttl] is what releases it.
 AtKey pqSigningRootMintLockKey(String atSign, {Duration ttl = mintLockTtl}) =>
     AtKey()
       ..key = pqSigningRootMintLockRecordName

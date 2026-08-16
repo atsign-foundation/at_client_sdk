@@ -3222,9 +3222,10 @@ its own. None blocks anything.
     sits. Worth correcting before someone reads a key package off a `fetch`
     result and gets null. Also note `Enrollment.namespace` is singular in name
     and holds the whole grants **map**.
-18. **`MintLock` releases a lock it may no longer own — raised 2026-08-15,
+18. ~~**`MintLock` releases a lock it may no longer own — raised 2026-08-15,
     while building [14.22](#1422-making-the-signing-root-rotatable--decisions-101)
-    row 6.** `_release` force-deletes the lock key unconditionally, so a holder
+    row 6.**~~ **CLOSED 2026-08-16 — the release itself is gone; see the ✅
+    below.** `_release` force-deleted the lock key unconditionally, so a holder
     that overran the ttl deletes whatever lock is there — including a
     *successor's*, freshly taken by another enrollment. A third enrollment can
     then take it and mint concurrently with the second, and mutual exclusion
@@ -3271,11 +3272,18 @@ its own. None blocks anything.
     **So the better shape is available: the winner never deletes the lock and
     the ttl releases it.** No release means no *stolen* release, which is this
     entire item. Do not build the nonce-and-read-back fence described above
-    unless that shape is rejected. ⚠️ Two things still owed either way:
-    `mintLockTtl`'s dartdoc says "a crash backstop, not a budget", which was
-    **false as written** and is only true once the server fix is merged; and a
+    unless that shape is rejected.
+    ✅ **CLOSED 2026-08-16 — it disappeared rather than being fixed.**
+    [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) row 3 removed
+    `MintLock._release` outright, so there is no delete to steal and no fencing
+    token to build. `mintLockTtl`'s dartdoc no longer calls itself a crash
+    backstop (row 6), and `withLock` now refuses a lock key with no ttl,
+    because with nothing deleting the record a missing ttl means it is never
+    released at all. ⚠️ The remaining caveat stands and is not this item's: a
     client relying on ttl-only release is correct **only** against an atServer
-    carrying that fix, which is not yet merged.
+    carrying the expired-immutable fix, which is on
+    [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) and
+    not yet merged. `at_virtual_env:local` runs it.
 19. **`tests/at_onboarding_cli_functional_tests` analyzes with 6 warnings, all
     in one file nobody touched — noticed 2026-08-15.** Every one is an
     `unused_import` in `test/ecc_secure_element_mock_test.dart`; `dart analyze

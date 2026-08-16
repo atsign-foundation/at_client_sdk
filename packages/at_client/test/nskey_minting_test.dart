@@ -5,6 +5,8 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
+import 'package:at_client/src/crypto/nskey/mint_lock.dart'
+    show MintLease, MintLock;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
@@ -14,6 +16,21 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {
+}
+
+/// A lock that is taken successfully and hands out a lease that has already
+/// run out — the slow-winner case, without waiting for a real ttl.
+///
+/// Overriding [withLock] rather than stubbing the wire keeps the ttl out of
+/// the ring's constructor: the lease is what the mint is supposed to honour,
+/// and this hands it one it cannot.
+class _SpentLeaseLock extends MintLock {
+  const _SpentLeaseLock(super.atClient);
+
+  @override
+  Future<T?> withLock<T>(
+          AtKey lockKey, Future<T> Function(MintLease lease) mint) =>
+      mint(MintLease(DateTime.now().subtract(const Duration(seconds: 1))));
 }
 
 /// Minting a namespace key: the interlock between an atSign's own
@@ -40,6 +57,7 @@ void main() {
   ({
     MockAtClient client,
     List<AtKey> verbs,
+    List<Object> builders,
     Map<String, String?> values,
     Map<String, String> advertised,
     List<GetRequestOptions?> advertisementReads,
@@ -48,6 +66,10 @@ void main() {
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookUp();
     final verbs = <AtKey>[];
+    // Every builder, not only the updates: "the lock is never deleted" is a
+    // claim about a verb that must not appear, and a recorder that only keeps
+    // updates cannot tell an absent delete from an unrecorded one.
+    final builders = <Object>[];
     final values = <String, String?>{};
     // The atServer's copy of `public:__nskey.<ns>@alice`, by namespace. A test
     // writes into it to stand for another enrollment having published.
@@ -88,7 +110,8 @@ void main() {
 
     when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((inv) async {
-      final builder = inv.positionalArguments[0];
+      final builder = inv.positionalArguments[0] as Object;
+      builders.add(builder);
       if (builder is UpdateVerbBuilder) {
         verbs.add(builder.atKey);
         values[builder.atKey.key] = builder.value;
@@ -106,6 +129,7 @@ void main() {
     return (
       client: atClient,
       verbs: verbs,
+      builders: builders,
       values: values,
       advertised: advertised,
       advertisementReads: advertisementReads,
@@ -206,6 +230,80 @@ void main() {
     expect(c.verbs.first.metadata.ttl, isNotNull,
         reason: 'a holder that dies mid-mint must not block its atSign for '
             'good');
+  });
+
+  test('the winner does not release the lock — the ttl does', () async {
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await ring.mintAndPublish(namespace);
+
+    expect(c.builders.whereType<DeleteVerbBuilder>(), isEmpty,
+        reason: 'the lock is an election token with a cooldown, not a mutex. '
+            'Deleting it on the way out is how a holder finishing late removed '
+            'its SUCCESSOR\'s lock — the delete forced past the immutable '
+            'record without checking it still owned the one it removed');
+    expect(c.verbs.where((k) => k.key == '_nskeylock'), hasLength(1));
+    expect(c.verbs.first.metadata.ttl, isNotNull,
+        reason: 'and with nothing deleting it, the ttl is the only thing that '
+            'ever frees it — a lock without one would block minting for good');
+  });
+
+  test('a lock key with no ttl is refused outright', () async {
+    // The invariant the never-release change creates. While a successful mint
+    // deleted its lock, a missing ttl only meant "no crash backstop"; now it
+    // means the record has nothing that will ever remove it, so taking one
+    // would block this atSign's minting permanently.
+    final c = client();
+
+    await expectLater(
+        MintLock(c.client).withLock(
+            AtKey()
+              ..key = '_nskeylock'
+              ..sharedBy = atSign
+              ..metadata = (Metadata()..immutable = true),
+            (_) async => 'minted'),
+        throwsA(isA<ArgumentError>()),
+        reason: 'nothing else releases it, so a lock without a ttl is not a '
+            'lock held too long — it is one held for good');
+    expect(c.verbs, isEmpty,
+        reason: 'and it is refused before the take goes out, so the '
+            'unreleasable record is never created in the first place');
+  });
+
+  test('a loser with nothing published fails rather than minting', () async {
+    // Row 4's other arm. The adopt case is below; this is the one where there
+    // is nothing to adopt, and the loser still must not mint — two enrollments
+    // minting is exactly what the election exists to prevent.
+    final c = client(lockAlreadyHeld: true);
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await expectLater(
+        ring.mintAndPublish(namespace),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            allOf(contains('holds the mint lock'), contains('must not mint')))),
+        reason: 'a put waiting on a namespace key fails loudly rather than '
+            'hanging on another device that may have crashed mid-mint');
+    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty);
+  });
+
+  test('a mint that overruns its lease publishes nothing', () async {
+    // Row 5. The election bounds when the enrollments ATTEMPT, not how long
+    // the winner TAKES, so without this the requirement fails with every other
+    // part correct: a slow winner publishes over the enrollment that
+    // legitimately won the next election.
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client,
+        mintLock: _SpentLeaseLock(c.client), privateFiling: await filing());
+
+    await expectLater(
+        ring.mintAndPublish(namespace),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            contains('expired while this client was minting'))));
+    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty,
+        reason: 'the advertisement is what another enrollment would be '
+            'overwritten by, so a holder whose lease has run out must not '
+            'write it');
   });
 
   /// The winner's advertisement as it sits **on the atServer** — signed, so it

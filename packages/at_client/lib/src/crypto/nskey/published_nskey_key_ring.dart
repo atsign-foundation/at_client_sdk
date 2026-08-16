@@ -282,18 +282,27 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   Future<NskeyAdvertisement> mintAndPublish(String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
     final minted = await mintLock.withLock(nskeyMintLockKey(owner, namespace),
-        () => _mintUnlessPublished(owner, namespace));
+        (lease) => _mintUnlessPublished(owner, namespace, lease));
     if (minted != null) return minted;
 
-    // Another enrollment is minting. Re-read rather than wait: whatever it is
-    // doing ends with an advertisement published, and this client needs that
+    // Another enrollment won the election. Re-read once rather than wait: the
+    // winner ends with an advertisement published, and this client needs that
     // one — minting a second would rotate the first out from under any peer
     // that had already fetched it.
     final published = await publishedAdvertisement(owner, namespace);
     if (published != null) return published;
+
+    // Nothing published, and this client may not mint: the loser of an
+    // election never does, or the election bought nothing. Failing here is
+    // deliberate — a `put` waiting on a namespace key fails loudly instead of
+    // hanging on another device that may have crashed mid-mint, and the retry
+    // is the next client start, which is where minting is triggered from
+    // anyway.
     throw StateError(
-        'another enrollment holds the mint lock for $owner:$namespace but has '
-        'published no advertisement yet');
+        'another enrollment holds the mint lock for $owner:$namespace and has '
+        'published no advertisement yet, so this client has no namespace key '
+        'to seal to and must not mint a second one; retry after the lock\'s '
+        'ttl elapses');
   }
 
   /// [_mint], unless a sibling enrollment published while this client was
@@ -313,9 +322,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   /// what it found would have rotated nothing while reporting success, and
   /// rotation is the revocation lever.
   Future<NskeyAdvertisement> _mintUnlessPublished(
-      String owner, String namespace) async {
+      String owner, String namespace, MintLease lease) async {
     final published = await publishedAdvertisement(owner, namespace);
-    if (published == null) return _mint(owner, namespace);
+    if (published == null) return _mint(owner, namespace, lease);
     _logger.info(
         'Not minting an nskey for $owner:$namespace: ${published.nskeyKid} was '
         'published between the decision to mint and this client taking the '
@@ -360,12 +369,12 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
           'there, so this is a cold-start mint rather than a rotation');
     }
 
-    final rotated = await mintLock.withLock(
-        nskeyMintLockKey(owner, namespace), () => _mint(owner, namespace));
+    final rotated = await mintLock.withLock(nskeyMintLockKey(owner, namespace),
+        (lease) => _mint(owner, namespace, lease));
     if (rotated == null) {
       throw StateError(
           'another enrollment holds the mint lock for $owner:$namespace, so '
-          'this rotation did not happen; retry once it releases. Reporting '
+          'this rotation did not happen; retry once its ttl elapses. Reporting '
           'success here would leave the excluded enrollment holding the live '
           'generation');
     }
@@ -375,7 +384,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     return (rotated: rotated, superseded: superseded);
   }
 
-  Future<NskeyAdvertisement> _mint(String owner, String namespace) async {
+  Future<NskeyAdvertisement> _mint(
+      String owner, String namespace, MintLease lease) async {
     final String keyAlgo =
         _atClient.getPreferences()?.keyEstablishmentAlgo ??
             SecretSharingAlgos.xWing;
@@ -434,6 +444,26 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     final payload =
         await _signer.wrapAndSignAndJsonEncode(advertisement.toPayload(),
             type: EnvelopeType.nskeyRing);
+
+    // The last thing before the write, and deliberately not earlier: what
+    // matters is whether the lease is still good at the moment of publishing,
+    // and everything above it — a keygen, a keyfile write, a signature — can
+    // take arbitrarily long on a suspended or loaded device.
+    //
+    // A slow winner whose lease has run out has to abandon rather than publish,
+    // because by then another enrollment has legitimately won the next election
+    // and is minting. The election bounds when enrollments *attempt*, not how
+    // long the winner *takes*, so without this the "only one eventually mints"
+    // requirement fails with every other part correct. The private that was
+    // just filed is harmless: nothing points at it, and the next mint files its
+    // own.
+    if (lease.isSpent) {
+      throw StateError(
+          'the mint lock for $owner:$namespace expired while this client was '
+          'minting, so its advertisement is deliberately not published — '
+          'another enrollment may already hold the lock and be publishing its '
+          'own. Retry: the next attempt takes a fresh lock');
+    }
 
     // Straight to the atServer first: an advertisement is only useful once a
     // *peer* can fetch it, and going through the local-first put would leave it

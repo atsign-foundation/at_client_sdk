@@ -32,10 +32,10 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | The nskey mint elects a winner — rows 1 and 2 are **built**; 3–7 remain | Rows 3 and 5 need at_server [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) merged **and** deployed atServers running it. Rows 4, 6 and 7 need nothing |
+| [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | The nskey mint elects a winner — **all seven rows built** on unit rails; the live-atServer proof is owed | Nothing. Development and testing run against `at_virtual_env:local`, which carries the fix (gkc, 2026-08-16). What still waits on at_server [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) is **release**: ttl-only release is correct only against an atServer running it |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
-| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | 18 open small items — the items are in `detail/`, none of them blocking | Item 8 is the only one waiting on a ruling. Items 20–22 are examined-and-left, not work |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | 17 open small items — the items are in `detail/`, none of them blocking | Item 8 is the only one waiting on a ruling. Items 20–22 are examined-and-left, not work. Item 18 closed 2026-08-16 by ceasing to exist |
 | [14.17](#1417-signature-agility--what-is-built-and-what-is-owed) | Signature agility — the owed half | — |
 | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Four audit residuals | — |
 | [14.15](#1415-pre-pr-rails-checklist) | Pre-PR rails checklist | — |
@@ -110,9 +110,15 @@ earlier argument about the lock was about mechanisms with no agreed property to
 hold them to, which is why "is 14.19 item 18 worth fixing" stayed unanswerable
 for two sessions.
 
-**⛔ Rows 3 and 5 depend on an at_server change that is OPEN, NOT MERGED:
+**All seven rows are built.** What is owed is the live-atServer proof: the
+unit rails pin the behaviour against mocks, and nothing has yet run the
+three-enrollment race against a real atServer.
+
+**Rows 3 and 5 depend on an at_server change that is OPEN, NOT MERGED:
 [at_server PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)**,
-branch `gkc-expired-immutable-blocks-create`. **gkc owns that PR.**
+branch `gkc-expired-immutable-blocks-create`. **gkc owns that PR.** That is a
+**release** gate, not a development one — gkc ruled 2026-08-16 that the work
+runs against the locally built `at_virtual_env:local`, which carries the fix.
 
 ⚠️ **Cite the PR, not a SHA.** This block named `b5654bfd`; gkc rewrote the
 commits before pushing, so that SHA no longer exists anywhere. The branch now
@@ -133,11 +139,11 @@ release is incorrect against an atServer without it.
 |---|---|---|
 | 1 | ~~A **remote-only** read of the published advertisement for the mint path. ⚠️ **NOT by changing `currentPublic`** — that is also the sender path, reached from `CkManager.ensureCurrent` on *every* put, so making it remote puts a round trip on the write path and breaks offline writes. A separate read, always remote, skipping both caches — the shape `PqSigningRoot.publishedRoots` already has | a sibling enrollment publishes; this client's pre-check sees it without waiting for sync. ⚠️ **Scope: `published_nskey_key_ring.dart:450` is the read to change, but it is NOT the only optionless read in the subsystem** — `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are optionless too. Those two are **content-key conveyance** reads rather than advertisement reads and are plausibly correct as local-first, so they are out of scope *by argument, not by absence*. Re-derive before believing either way: `git grep -n -A3 "atClient\.get(" -- packages/at_client/lib/src/crypto/nskey/`~~ ✅ **BUILT.** `PublishedNskeyKeyRing.publishedAdvertisement` is the new read; `currentPublic` is untouched. Three mint-path call sites use it — `mintAndPublish`'s post-loss read, `rotate`'s precondition, and `NskeySeeding.seed`'s pre-check |
 | 2 | ~~The **winner's re-check under the lock**, which the nskey path has never had. `_mintUnderLock` (root) re-reads; `_mint` (nskey) does not~~ ✅ **BUILT** as `_mintUnlessPublished`, which wraps `_mint` on the `mintAndPublish` path only — `rotate` still runs `_mint` directly, because a rotation that adopted what it found would have rotated nothing while reporting success | a winner that published between the pre-check and this client taking the lock is adopted, not overwritten |
-| 3 | `withLock` **stops releasing** — the ttl is the release. ⛔ Needs the at_server fix | a holder that finishes does not free the lock; a second enrollment is refused until the ttl elapses. This is what makes [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18 disappear rather than be fixed |
-| 4 | The **loser**: re-read once, adopt a published generation, otherwise **fail** with a reason. The `StateError` at `published_nskey_key_ring.dart:292` is rewritten, not deleted — the loser must not mint | lock held + a generation published → adopts. Lock held + nothing published → fails naming the contention, and a waiting `put` fails loudly rather than hanging on another device's crash |
-| 5 | The **lease self-abort**: the holder carries its lease and refuses to publish once it is spent, so a slow winner abandons rather than racing the enrollment that legitimately took the lock next. ⛔ Depends on row 3's timing | a mint that overruns the ttl publishes nothing. Without it the requirement fails even with everything else correct, because the bounded window bounds when the three *attempt*, not how long the winner *takes* |
-| 6 | The "crash backstop" claim is **false as written** and true only against an atServer carrying the fix. ⚠️ **TWO sites, and neither is in `mint_lock.dart` where a reader would look**: `nskey_records.dart:76` (`mintLockTtl`'s own dartdoc) and `nskey_records.dart:133` (`pqSigningRootMintLockKey`, "and [ttl] is the crash backstop"). Re-derive: `grep -n "crash backstop" packages/at_client/lib/src/crypto/nskey/nskey_records.dart` | none — a doc correction, but it must land in whichever commit first touches this path, and it must hit both sites |
-| 7 | Docs and acceptance sweep | `catalogue_test.dart` going red is the check. Four acceptance scenarios name `_nskeylock` (`a3_self_data_test`, `a5_rotation_test`, `b5_edge_cases_test`, `cross_cutting_test`), plus `design.md` §1.3 and `wire_literal_pins_test.dart` |
+| 3 | ~~`withLock` **stops releasing** — the ttl is the release~~ ✅ **BUILT.** `MintLock._release` is deleted, and `withLock` now **refuses a lock key with no ttl** — with nothing deleting the record, a missing ttl means it is never released at all rather than released late | a holder that finishes does not free the lock; a second enrollment is refused until the ttl elapses. This is what made [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18 disappear rather than be fixed |
+| 4 | ~~The **loser**: re-read once, adopt a published generation, otherwise **fail** with a reason~~ ✅ **BUILT.** Both arms now have a test; the `StateError` says why the loser must not mint and that the retry is the next client start | lock held + a generation published → adopts. Lock held + nothing published → fails naming the contention, and a waiting `put` fails loudly rather than hanging on another device's crash |
+| 5 | ~~The **lease self-abort**~~ ✅ **BUILT** as `MintLease`, which `withLock` hands to the mint. ⚠️ Its deadline is stamped **before** the take goes out, never after: the atServer starts the ttl at or after the send, so stamping from the reply would have the client believe it still held a lock the atServer had released. Checked immediately before each publish, so a keygen or a suspend cannot happen after the check | a mint that overruns the ttl publishes nothing. Without it the requirement fails with everything else correct, because the bounded window bounds when the three *attempt*, not how long the winner *takes* |
+| 6 | ~~The "crash backstop" claim is **false as written**~~ ✅ **BUILT** — both sites in `nskey_records.dart` now say the ttl is what releases the lock, and `mintLockTtl` says it is also the winner's own budget | none — a doc correction |
+| 7 | ~~Docs and acceptance sweep~~ ✅ **BUILT.** `acceptance.md` steps A3.2 and B6 said the holder "releases"; `design.md` §1.3 and the B5b sequence said the same. All now say the ttl releases it, and §1.3 states the winner's re-read | `catalogue_test.dart` and `docs_structure_test.dart` staying green is the check |
 
 **Two things found while checking the protocol against the tree, which the rows
 above assume.**
@@ -328,7 +334,7 @@ ladder — a same-value version bump merges silently.)
 
 ### 14.19 Small items, raised 2026-08-12 and not yet acted on
 
-**18 open, 4 struck.** Each is real and verified at the time of writing, and
+**17 open, 5 struck.** Each is real and verified at the time of writing, and
 each is too small to be a step of its own. **None blocks anything** — which is
 why the items themselves live in
 [`detail/implementation-plan.md`](detail/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)

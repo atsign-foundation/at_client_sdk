@@ -20,7 +20,8 @@ import 'package:at_chops/at_chops.dart'
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
-import 'package:at_client/src/crypto/nskey/mint_lock.dart' show MintLock;
+import 'package:at_client/src/crypto/nskey/mint_lock.dart'
+    show MintLease, MintLock;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
         pqSigningRootKey,
@@ -285,12 +286,15 @@ class PqSigningRoot {
   /// there is no losing pair to retire, because it never generated one. The
   /// every-start pull is how it gets the private from the winner.
   ///
-  /// ⚠️ **Two windows the lock does not close, stated rather than implied.**
-  /// The ttl can expire while the holder is still inside the critical section,
-  /// which lets a second minter in; and [MintLock] releases by force-deleting
-  /// the lock key without checking it still owns it, so a holder finishing
-  /// late can delete a successor's lock. Both end with one root overwriting
-  /// another, and what covers them is not the lock: it is
+  /// ⚠️ **The window the lock leaves open, stated rather than implied.** The
+  /// ttl can expire while the holder is still inside the critical section,
+  /// which lets a second minter in — so the holder carries its [MintLease] and
+  /// refuses to publish once it is spent. That turns "two roots" into "one
+  /// root, by whoever won the next election", which is the property wanted.
+  /// The second window, a late holder deleting its successor's lock, is gone
+  /// with the delete itself: nothing releases a lock now but its ttl.
+  ///
+  /// What covers a publish that still slips through is not the lock: it is
   /// [reconcileHeldPrivate] on every start, which retires a private the record
   /// does not advertise so the pull can heal that enrollment. Anchoring is
   /// deliberately outside the lock to keep the critical section down to a
@@ -317,8 +321,8 @@ class PqSigningRoot {
       return null;
     }
 
-    final outcome = await mintLock.withLock(
-        pqSigningRootMintLockKey(atSign), () => _mintUnderLock(atSign));
+    final outcome = await mintLock.withLock(pqSigningRootMintLockKey(atSign),
+        (lease) => _mintUnderLock(atSign, lease));
     if (outcome == null) {
       // Deliberately not a wait. The winner ends with a root published, so a
       // later start reads it; and this enrollment's route to the private is
@@ -346,7 +350,8 @@ class PqSigningRoot {
   /// held the lock and did not publish". Collapsing the two would report a
   /// lost lock as a completed mint that produced nothing, and the log would
   /// name the wrong reason on the one path where the reason is the finding.
-  Future<({Uint8List? publicKey})> _mintUnderLock(String atSign) async {
+  Future<({Uint8List? publicKey})> _mintUnderLock(
+      String atSign, MintLease lease) async {
     // The absence check in [mintIfAbsent] ran BEFORE the lock was taken, so a
     // winner that published in that window is invisible to it. Re-reading here
     // is what closes it: with a mutable record, minting on a stale absence
@@ -374,8 +379,8 @@ class PqSigningRoot {
         // The crash between filing and publishing: finish the publish with
         // the pair already filed.
         return (
-          publicKey: await _publish(
-              atSign, held.keyId, Uint8List.fromList(heldPublic.bytes.bytes))
+          publicKey: await _publish(atSign, held.keyId,
+              Uint8List.fromList(heldPublic.bytes.bytes), lease)
         );
       }
       // A private with no public half to republish predates pairs being
@@ -415,7 +420,7 @@ class PqSigningRoot {
           'deliberately not published — a root whose private nobody holds '
           'cannot be replaced without a rotation, which is not built');
     }
-    return (publicKey: await _publish(atSign, slot, pair.publicKey));
+    return (publicKey: await _publish(atSign, slot, pair.publicKey, lease));
   }
 
   /// Reconciles what this keyfile holds against a record that turned out to be
@@ -441,8 +446,27 @@ class PqSigningRoot {
   /// the lock was meant to settle. It is **kept** only when the record cannot
   /// be read at all, because retiring a private whose write did land cannot be
   /// undone.
+  ///
+  /// A spent [lease] stops the write before it is attempted. The check lives
+  /// here rather than at the call sites because this is the write: everything
+  /// upstream — an ML-DSA keygen, a keyfile store, a retire — can take
+  /// arbitrarily long on a suspended device, and a holder that overran its ttl
+  /// is publishing on top of whichever enrollment legitimately took the lock
+  /// next.
   Future<Uint8List?> _publish(
-      String atSign, String slot, Uint8List publicKey) async {
+      String atSign, String slot, Uint8List publicKey, MintLease lease) async {
+    if (lease.isSpent) {
+      // Retired for the same reason the failed-write path retires: nothing was
+      // published under this pair, so no verifier ever accepted anything
+      // against it, and leaving it active would stop the pull's
+      // "already holding it" check from ever firing for this enrollment.
+      await _retireSlot(atSign, slot);
+      _logger.warning('Abandoned the signing root mint for $atSign: the mint '
+          'lock expired while this client was minting, so its root is '
+          'deliberately not published and the private is retired — another '
+          'enrollment may already hold the lock and be publishing its own');
+      return null;
+    }
     try {
       await atClient.getRemoteSecondary()!.executeVerb(
           UpdateVerbBuilder()

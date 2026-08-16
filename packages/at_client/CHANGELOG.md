@@ -1,4 +1,26 @@
 ## 3.14.1
+- fix!: a mint lock is an **election token with a cooldown**, not a mutex. The
+  winner no longer deletes it — the ttl is what releases it — which removes the
+  window where a holder finishing late deleted its *successor's* lock, because
+  the delete forced past the immutable record without checking it still owned
+  the one it was removing.
+  - **Breaking:** `MintLock.withLock` takes `Future<T> Function(MintLease)`
+    rather than `Future<T> Function()`, and `MintLock` no longer deletes the
+    lock key at all.
+  - New `MintLease`, which the winner carries into its critical section and
+    checks immediately before publishing. A mint that overruns its ttl
+    publishes nothing: the election bounds when enrollments *attempt*, not how
+    long the winner *takes*, so without this a slow winner writes over the
+    enrollment that legitimately won the next one. The deadline is stamped
+    before the take goes out, never after — the atServer starts the ttl at or
+    after the send, so the other choice would have a client believe it still
+    held a lock the atServer had released.
+  - `withLock` now **refuses a lock key with no ttl**. Nothing deletes the
+    record any more, so a missing ttl no longer means "no crash backstop" — it
+    means the lock is never released and that atSign can never mint again.
+  - ⚠️ Correct only against an atServer that stops refusing a create once the
+    record has expired. An older one keeps refusing well past the ttl, which
+    would make the cooldown effectively permanent.
 - fix!: the nskey mint path reads the **atServer**, not local storage or a
   cache. A sibling enrollment's publication is not in local storage until sync
   catches up, and reading that absence as a cold start publishes a second key

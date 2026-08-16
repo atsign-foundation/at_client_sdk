@@ -187,18 +187,26 @@ void main() {
     expect(record.atKey.metadata.isPublic, isTrue);
     expect(jsonDecode(record.value!)['keys'], hasLength(1));
 
-    // The lock, in order: taken before anything is generated, released after.
+    // The lock, in order: taken before anything is generated, and never
+    // deleted.
     expect(c.verbs.first, isA<UpdateVerbBuilder>());
     expect((c.verbs.first as UpdateVerbBuilder).atKey.key,
         pqSigningRootMintLockRecordName,
         reason: 'the lock is what stops two privileged enrollments each '
             'finding no root and each minting one, so it has to be taken '
             'before the record is re-read, not after');
-    expect(c.verbs.last, isA<DeleteVerbBuilder>(),
-        reason: 'and released, or the atSign waits out the ttl before it can '
-            'republish a mint that crashed');
-    expect((c.verbs.last as DeleteVerbBuilder).force, isTrue,
-        reason: 'deleting an immutable record needs the force flag');
+    expect(c.verbs.whereType<DeleteVerbBuilder>(), isEmpty,
+        reason: 'the winner does not release the lock — the ttl does. It is an '
+            'election token with a cooldown, not a mutex, and deleting it was '
+            'how a holder finishing late removed its SUCCESSOR\'s lock: the '
+            'delete forced past the immutable record without checking it still '
+            'owned the one it was removing');
+    expect(
+        c.verbs.whereType<UpdateVerbBuilder>().where(
+            (v) => v.atKey.key == pqSigningRootMintLockRecordName),
+        hasLength(1),
+        reason: 'and it is taken exactly once — a second take inside one mint '
+            'would be refused by the atServer anyway');
   });
 
   test('the published record emits its exact wire shape — raw literals',

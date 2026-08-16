@@ -530,10 +530,14 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   enrollment record; a legacy PKAM client has exactly one, its `preference.namespace`.
 - **Steps:**
   1. `alice1` takes the `_nskeylock.app_1.my_apps@alice` lock (short-ttl, immutable
-     create — so a concurrent enrollment loses and re-reads), mints the **one**
-     `app_1.my_apps` nskey X-Wing keypair, publishes its public half **immediately**
-     as the APKAM-signed `public:__nskey.app_1.my_apps@alice` carrying
-     `{v, createdAt, keys:[…], suites}`, holds the private, and releases.
+     create — so a concurrent enrollment loses and re-reads), **re-reads the
+     advertisement under the lock** in case a sibling published while it was
+     racing, mints the **one** `app_1.my_apps` nskey X-Wing keypair, publishes its
+     public half **immediately** as the APKAM-signed
+     `public:__nskey.app_1.my_apps@alice` carrying `{v, createdAt, keys:[…],
+     suites}`, and holds the private. It does **not** release the lock: the ttl
+     does, which is what makes it an election token with a cooldown rather than a
+     mutex.
   2. Convey the CK once via the nskey data path (as A3.1): seal the CK to the nskey
      (`recipientKind: nskey`) in an `at/nskey` record; write the data under
      `at/symmetric/AES/GCM`.
@@ -830,7 +834,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   revoked enrollment**, **overwrites** `public:__nskey.app_1.my_apps@alice` with the new
   APKAM-signed advertisement, pushes the successor private to the surviving
   enrollments — seal to each surviving key package via `__ssenv`, dropping the revoked
-  one — and releases the lock.
+  one. The lock is left to expire rather than deleted, and a rotation that finds the
+  lock held **fails** instead of adopting what is there: adopting would have rotated
+  nothing while reporting success, leaving the revoked enrollment on the live
+  generation.
 - **Then (b):** new CKs are sealed to the successor nskey and their conveyances carry
   the new `nskeyKid`; each surviving enrollment **retains** the prior private, so
   retained history still opens. A peer notices at its next `ensureCurrent`: it
