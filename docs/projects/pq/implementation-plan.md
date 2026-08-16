@@ -42,31 +42,33 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
-| [14.25](#1425-three-projects-state-partial-completion-and-six-state-none) | Reconcile nine project entries whose stated status and the burn-down disagree | — |
+| [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
 
-### 14.25 Three projects state partial completion, and six state none
+### 14.29 The residuals 14.25 surfaced
 
-Raised 2026-08-16 by the restructure that produced this file, and **not yet
-investigated** — this row records a discrepancy, not a diagnosis.
+Three project entries owe work that the D1 burn-down never listed, found
+2026-08-16 by reading all nine against the tree ([14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)).
+They are collected here because a residual left inside a project entry is
+invisible to anyone working the TODO table.
 
-**Three project entries state that they are incomplete**, and none of them
-appears in the D1 burn-down this section replaces:
+- **SS-2 — the atServer's `__ssenv` behaviour.** It does not exist server-side
+  at all, so DEP4's update-put auto-notify is unbuilt. ⚠️ Needs parity across
+  every atServer implementation in the same sweep. Re-derive:
+  `git -C ~/dev/atsign/repos/at_server grep -n "__ssenv"` (zero today).
+- **B-1 — three.** Everything beyond envelope delivery (`pushSecretToNames…`);
+  a unit fixture that backs local storage and the atServer with **one map**, so
+  it structurally cannot see a local-first-vs-remote-first defect on the read
+  side; and UC-A3.4's self direction, owed rather than blocked since
+  `ConcurrentClients` landed ([#2093](https://github.com/atsign-foundation/at_client_sdk/issues/2093)).
+- **S-3 — three, all small.** A migration test on a v(N-1) fixture; a keychain
+  round-trip on a real device, **blocked** because this repo has no
+  `integration_test` harness and at_client_flutter's tests mock the platform
+  channel; and `LocalKeystoreAtKeysIo`, still "not needed at this time".
 
-- **S-3** — `PARTLY LANDED 2026-08-08`
-- **SS-1c** — `PARSER + VERIFY LANDED on gkc-pq-d1-spike; live drive still owed`
-- **SS-4** — `ABOUT HALF LANDED on gkc-pq-d1-spike`
-
-**Six state no status at all** — P-3, SS-2, B-1, RF-1, RF-SRV, RF-2c. They sit
-under DONE below because the burn-down does not list them as owed, which is an
-inference from an absence rather than an observation of the tree.
-
-So either the burn-down under-counted what D1 owes, or those residuals were
-absorbed by later work and the headings are stale. Both are plausible and
-neither has been checked. Read each entry in
-[`detail/implementation-plan.md`](detail/implementation-plan.md) against the
-tree, then either add a TODO row or correct the record. Do not assume the
-burn-down was right because it is newer: it was maintained by hand, and this
-project has been bitten by exactly that before.
+⚠️ **None of these blocks D1's remaining sequence**, which is why they were
+survivable as residuals. The B-1 fixture item is the one with teeth: a fake
+that cannot distinguish local from remote is exactly the shape that let the
+nskey mint read local storage for months.
 
 ### 14.18 The remaining D1 initial-development sequence
 
@@ -754,6 +756,7 @@ measured — see [14.25](#1425-three-projects-state-partial-completion-and-six-s
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.25  | Nine project entries reconciled against the tree | DONE 2026-08-16 — burn-down right about 4, headings stale for SS-1c and SS-4, real residuals in SS-2/B-1/S-3 (now [14.29](#1429-the-residuals-1425-surfaced)). Detail: [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
 | 14.28  | Live PQ proofs that no use case names | DONE 2026-08-16 — 9 uncited PQ live files ruled on: 5 became UC-B5.8–B5.12, 4 were already covered. Detail: [14.28](detail/implementation-plan.md#1428-live-pq-proofs-that-no-use-case-names) |
 | 14.27  | The ledger's append-only rot, corrected | DONE 2026-08-16 — 11 rulings amended in the body and LIVE in the index, both citation debts discharged, and a test now asserts each. Detail: [14.27](detail/implementation-plan.md#1427-the-ledgers-remaining-append-only-rot) |
 | 14.24  | The nskey mint elects a winner; the lock became an election token with a cooldown | DONE 2026-08-16 — seven rows, proven live at functional **166/166 `EXIT=0`**. Detail: [14.24](detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) |

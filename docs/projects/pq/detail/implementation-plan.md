@@ -590,14 +590,16 @@ the same release as the client**; check the enroll-record value-size limit accom
 blob; downstream client obligation = SS-1c.
 **coversD1:** D1-F DEP1 (server) + DEP2.
 
-### SS-1c — wire at_client to the live verbs + flattened parser · at_client, tests · M — [#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084) — **PARSER + VERIFY LANDED on `gkc-pq-d1-spike`; live drive still owed**
+### SS-1c — wire at_client to the live verbs + flattened parser · at_client, tests · M — [#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084) — **LANDED**
 **Goal:** drive the live verbs and parse the flat shape.
 **Landed:** the flat `listns` parser, and the advertised-key verification for **both**
 keys — the published `nskey` (`ApkamSignedAdvertisedKeys`, proven cross-atSign live) and
 the **key package** (`KeyPackageRegistration.signedKeyPackagePayload` /
-`VerbEnrollmentDirectory`, unit-only). **Still owed:** no production call site issues
-`enroll:listns`, so the key-package half has never met a live verb — that arrives with
-SS-2's wiring.
+`VerbEnrollmentDirectory`, unit-only). ✅ **The live drive landed** (checked 2026-08-16, plan 14.25).
+`VerbEnrollmentDirectory` issues `enroll:listns:<ns>` at
+`enrollment_directory.dart:143`, from **four production call sites** in
+`pairwise_secret_sharing.dart`, and two live functional tests drive it —
+`apsk_server_side_test.dart` and `nskey_rotation_live_test.dart`.
 **Builds on:** SS-0 (substrate baseline on trunk) + SS-1b.
 **Deliverables → [design.md](../design.md)** (`enroll:listns` client parser): rewrite
 `VerbEnrollmentDirectory.listForNamespace` for the **flat** `[{enrollmentId, access, apkamPubKey, metadata}]`
@@ -671,12 +673,16 @@ package rides inside `EnrollDataStoreValue.metadata`, which SS-1b already stores
 client-only** and runs against today's atServer unchanged.
 What the atServer genuinely still lacks is **behaviour, not shape**, and it is the smaller half:
 (1) **`__ssenv` does not exist server-side at all** — the only occurrence in `at_server` is a comment in
-`enroll_verb_handler.dart`, so DEP4's update-put auto-notify is unbuilt; (2) `_getSigningAlgoType`
-(`pkam_verb_handler.dart`) branches on **ecc and rsa2048 only** and falls through to `rsa2048` for anything
-else, `mldsa65` included — so a PQ-APKAM would be verified as RSA and fail. Note that method also reads
-`verbParams[atPkamSigningAlgo]`, i.e. the *client-supplied* algo, not the stored record; making it
-record-authoritative is SS-3's, and both server changes need parity across every atServer
-implementation in the same sweep.
+`enroll_verb_handler.dart` — ⚠️ **checked 2026-08-16: even that comment is gone, so it is now zero
+occurrences.** DEP4's update-put auto-notify remains unbuilt.
+
+⛔ **The second item was FIXED and this entry did not say so.** It read: `_getSigningAlgoType`
+(`pkam_verb_handler.dart`) branches on ecc and rsa2048 only, so a PQ-APKAM would be verified as RSA
+and fail. That method **no longer exists**. `ApkamSignatureVerifier`
+(`packages/at_secondary_server/lib/src/utils/apkam_signature_verifier.dart`) handles `mldsa65`,
+verifies against the key **recorded on the enrollment** rather than the client-supplied token, and
+carries its own test. That it was still written here as owed is why ML-DSA PKAM working live and
+this paragraph could both be true at once and nobody reconciled them.
 Also: ~1KB blob size limit; listener-before-trigger for the wake-up subscription.
 **DEP4 is now deferred, not owed by SS-2** (ruled 2026-08-03). Investigating whether the
 client-side wake-up is sufficient turned up the reason it *wasn't*: `sendEnvelope` put the
@@ -732,7 +738,7 @@ rsa2048; both functional + e2e.
 by SS-1a.
 **coversD1:** D1-F DEP3 (single-key + signingAlgo).
 
-### SS-4 — nskey minting + signing-root lifecycle + correspondence check · at_client · L — [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087) — **ABOUT HALF LANDED on `gkc-pq-d1-spike`**
+### SS-4 — nskey minting + signing-root lifecycle + correspondence check · at_client · L — [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087) — **LANDED, less key-transparency publication (scoped out by ruling 24.4)**
 
 ⚠️ **Re-scoped by [decisions.md 22](decisions.md#22-ss-4-when-a-namespace-key-is-minted-and-what-must-be-true-first-2026-08-03).** Read that first; the deliverables below
 predate it and describe `pqpublickey` as a KEM, which [decisions.md 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03) already replaced.
@@ -4266,3 +4272,45 @@ every one citing a proof that already existed:
 **The B5 cluster is now "edge cases", not "retrofit edge cases"** — neither the
 mint election nor these are retrofit, and the label was already false when
 UC-B5.4 landed.
+
+---
+
+### 14.25 Three projects state partial completion, and six state none
+
+Raised and settled 2026-08-16. The row recorded a discrepancy without a
+diagnosis; each of the nine has now been read against the tree. **The burn-down
+was right about four, the headings were stale for two, and two entries under
+DONE genuinely owe work.**
+
+**The three that stated incompleteness:**
+
+| entry | said | is |
+|-------|------|-----|
+| **SS-1c** | live drive still owed | ✅ **discharged.** `enroll:listns:<ns>` is issued at `enrollment_directory.dart:143`, from **4 production call sites** in `pairwise_secret_sharing.dart`, driven by 2 live functional tests |
+| **SS-4** | ABOUT HALF LANDED | ✅ **stale.** Three of its four owed items are struck; the fourth, key-transparency publication, is scoped out by [ruling 24.4](decisions.md#244-built-since-and-what-is-still-owed) |
+| **S-3** | PARTLY LANDED | ⚠️ **stands.** Three small items: a migration test on a v(N-1) fixture, a keychain round-trip on a real device (**blocked** — no `integration_test` harness in this repo), and `LocalKeystoreAtKeysIo`, still "not needed at this time". The self-encryption re-wrap is a recorded decision, not a debt |
+
+**The six that stated nothing:** P-3, RF-1 and RF-SRV carry no owed language,
+and RF-2c says outright *"still owed against this project: nothing"* — the
+burn-down was right about all four. Two were not:
+
+- **SS-2** owes the atServer's `__ssenv` behaviour, so DEP4's update-put
+  auto-notify is unbuilt. ⛔ **Its second owed item was already fixed and the
+  entry never said so** — it claimed `_getSigningAlgoType` branches on ecc and
+  rsa2048 only, so a PQ-APKAM "would be verified as RSA and fail". That method
+  no longer exists; `ApkamSignatureVerifier` handles `mldsa65` against the key
+  **recorded on the enrollment**. ML-DSA PKAM has been passing live for days
+  against `at_virtual_env:local` while this paragraph said it could not work,
+  and nobody reconciled the two.
+- **B-1** owes everything beyond envelope delivery (`pushSecretToNames…`), a
+  unit fixture that backs local storage and the atServer with **one map** so it
+  cannot see a local-first-vs-remote-first defect on the read side, and
+  UC-A3.4's self direction — owed rather than blocked since `ConcurrentClients`
+  landed ([#2093](https://github.com/atsign-foundation/at_client_sdk/issues/2093)).
+
+**The general finding, which is why this is worth a body.** Every wrong entry
+was wrong in the *safe-looking* direction: three claimed work was owed that had
+since been done. A stale "owed" reads as conservative and costs a rebuild;
+`_getSigningAlgoType` is the sharp case, because the tree contradicted it
+loudly — a passing live suite — and the contradiction sat unexamined because
+nothing reads a project entry when a test goes green.
