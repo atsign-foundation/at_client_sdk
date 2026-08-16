@@ -175,13 +175,21 @@ void main() {
     // immutable lock; if "immutable" ever migrated back onto either record,
     // rotation would stop working on that one and nothing else would say so.
     final ns = 'rot${DateTime.now().microsecondsSinceEpoch}.$namespace';
-    final ring = PublishedNskeyKeyRing(atClient);
+    // Nothing releases a mint lock but its ttl, so the mint below holds it and
+    // the rotation that follows is refused until it lapses. Shortened here
+    // because the production `mintLockTtl` would make this test wait two
+    // minutes; the refusal itself is asserted in nskey_rotation_live_test.
+    const lockTtl = Duration(seconds: 5);
+    final ring = PublishedNskeyKeyRing(atClient, lockTtl: lockTtl);
 
     // Seed, then rotate: the second write goes through the rotation lever
     // rather than a second mint, so what proves the record mutable is the
     // operation that actually depends on it being mutable.
     final first = await ring.mintAndPublish(ns);
-    final second = await ring.rotate(ns);
+    // A second past the ttl: the atServer starts counting when it stores the
+    // record, after this client sent it.
+    await Future.delayed(lockTtl + const Duration(seconds: 1));
+    final second = (await ring.rotate(ns)).rotated;
 
     expect(second.nskeyKid, isNot(first.nskeyKid),
         reason: 'a rotation mints a NEW generation; if these match, the second '

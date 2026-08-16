@@ -204,6 +204,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     this.advertisementTtl = const Duration(minutes: 15),
     this.advertisementStaleGrace = const Duration(minutes: 15),
     MintLock? mintLock,
+    this.lockTtl = mintLockTtl,
     this.privateFiling,
     Future<void> Function(String namespace, String secretName)?
         requestConveyance,
@@ -237,6 +238,21 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
 
   /// Serialises minting between this atSign's own enrollments.
   final MintLock mintLock;
+
+  /// How long this ring holds a namespace's mint lock once it has taken it.
+  ///
+  /// Expiry is the only thing that releases the lock, so this is the **cooldown
+  /// before another election may be held for the same namespace** — and a
+  /// rotation attempted inside it is refused rather than queued. That is the
+  /// intended behaviour, not a window to tune away: a rotation that adopted
+  /// what it found would have rotated nothing while reporting success.
+  ///
+  /// A parameter rather than the bare constant because the value is a policy
+  /// about how long an election may take, and a caller with a different one —
+  /// a live test that cannot wait [mintLockTtl] between a mint and the rotation
+  /// it is exercising, an operator on a very slow device — should be able to
+  /// state it rather than fork the composer.
+  final Duration lockTtl;
 
   /// Where a minted private is made durable **before** its public half is
   /// published. Null keeps privates in memory only — a fixture posture, since
@@ -281,7 +297,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   /// difference is the one that matters.
   Future<NskeyAdvertisement> mintAndPublish(String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
-    final minted = await mintLock.withLock(nskeyMintLockKey(owner, namespace),
+    final minted = await mintLock.withLock(
+        nskeyMintLockKey(owner, namespace, ttl: lockTtl),
         (lease) => _mintUnlessPublished(owner, namespace, lease));
     if (minted != null) return minted;
 
@@ -369,7 +386,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
           'there, so this is a cold-start mint rather than a rotation');
     }
 
-    final rotated = await mintLock.withLock(nskeyMintLockKey(owner, namespace),
+    final rotated = await mintLock.withLock(
+        nskeyMintLockKey(owner, namespace, ttl: lockTtl),
         (lease) => _mint(owner, namespace, lease));
     if (rotated == null) {
       throw StateError(

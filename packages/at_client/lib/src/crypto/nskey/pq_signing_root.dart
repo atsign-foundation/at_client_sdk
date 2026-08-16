@@ -25,6 +25,7 @@ import 'package:at_client/src/crypto/nskey/mint_lock.dart'
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
         pqSigningRootKey,
+        mintLockTtl,
         pqSigningRootMintLockKey,
         pqSigningRootRecordName;
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
@@ -164,8 +165,19 @@ class PqSigningRoot {
   /// wires the real one.
   final MintLock mintLock;
 
-  PqSigningRoot(this.atClient, {this.keysIo, MintLock? mintLock})
+  PqSigningRoot(this.atClient,
+      {this.keysIo, MintLock? mintLock, this.lockTtl = mintLockTtl})
       : mintLock = mintLock ?? MintLock(atClient);
+
+  /// How long this client holds the root's mint lock once it has taken it.
+  ///
+  /// Expiry is the only thing that releases it, so this is the cooldown before
+  /// another election may be held for the root — and it is also the winner's
+  /// own budget, since a holder that overruns it abandons rather than
+  /// publishing. A parameter for the same reason
+  /// `PublishedNskeyKeyRing.lockTtl` is: a caller whose tolerance differs from
+  /// the protocol default should state it rather than fork the composer.
+  final Duration lockTtl;
 
   AtKey keyFor(String atSign) => pqSigningRootKey(atSign);
 
@@ -321,7 +333,8 @@ class PqSigningRoot {
       return null;
     }
 
-    final outcome = await mintLock.withLock(pqSigningRootMintLockKey(atSign),
+    final outcome = await mintLock.withLock(
+        pqSigningRootMintLockKey(atSign, ttl: lockTtl),
         (lease) => _mintUnderLock(atSign, lease));
     if (outcome == null) {
       // Deliberately not a wait. The winner ends with a root published, so a

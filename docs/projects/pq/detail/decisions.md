@@ -10094,3 +10094,40 @@ client exists, which is why the decision is deferred rather than argued.
 ⚠️ **`mintLockTtl`'s dartdoc is false as written** — "a crash backstop, not a
 budget" — and is corrected in whichever commit first touches this path,
 regardless of which model wins.
+
+### 105.6 Built, and the cooldown applies to ROTATION too (2026-08-16)
+
+All seven rows of plan 14.24 are built. The live run found the consequence the
+protocol implies and nobody had written down.
+
+**The finding.** With the winner no longer deleting the lock, a rotation of a
+namespace that was minted or rotated within `mintLockTtl` is **refused** — the
+lock is still held. Four functional tests failed on it:
+
+```
+Bad state: another enrollment holds the mint lock for @bob🛠:buzz,
+so this rotation did not happen; retry once its ttl elapses
+```
+
+⚠️ **No unit test can find this, and every unit test of the path is green.**
+The interlock *is* the atServer refusing a second create of an immutable
+record; a mocked `executeVerb` accepts the second take happily. The cooldown is
+invisible to mocks by construction, which is why it took the live run.
+
+**gkc ruled: accept it.** Step 6 stands as specified and applies to rotation as
+well as to the mint election. Two things follow, both built:
+
+- **`mintLockTtl` is injectable** — `PublishedNskeyKeyRing.lockTtl` and
+  `PqSigningRoot.lockTtl`, defaulting to the constant. Without it every live
+  rotation test would wait two minutes between its mint and its rotation.
+- **`revokeEnrollmentAndRotate`'s partial state is documented rather than
+  retried.** It revokes first, so a rotation refused by the cooldown leaves the
+  enrollment cut off from the atServer while still holding the live generation.
+  It already caught per namespace and logged `severe`; the message now names
+  the cooldown as the likely cause and says the retry has to wait the ttl out,
+  because that is the one thing a caller can act on.
+
+**The cooldown itself is now pinned live** (`nskey_rotation_live_test.dart`, *a
+rotation inside the mint lock's cooldown is refused*), with the control that
+makes the refusal mean something: the same client, same namespace, same call,
+accepted once the ttl has lapsed.

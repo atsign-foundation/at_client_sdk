@@ -303,9 +303,15 @@ class NskeyRotation {
         // abandoning the remaining namespaces would leave the atSign in the
         // worst of both states — an enrollment cut off from the server but
         // still holding every live namespace key it ever had.
+        //
+        // **The likeliest cause is the mint lock's cooldown**, and it is the
+        // one a caller can act on: nothing releases that lock but its ttl, so
+        // a namespace minted or rotated within `mintLockTtl` refuses this
+        // rotation. The retry is not immediate — it has to wait the ttl out.
         _logger.severe('Revoked $enrollmentId but could not rotate '
             '$namespace, so it still holds that namespace\'s live generation '
-            'and can open data written under it; rotate it explicitly: $e');
+            'and can open data written under it. Rotate it explicitly, after '
+            'the mint lock\'s ttl if that is what refused: $e');
       }
     }
     return outcomes;

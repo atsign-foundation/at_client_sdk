@@ -18,6 +18,15 @@
   - `withLock` now **refuses a lock key with no ttl**. Nothing deletes the
     record any more, so a missing ttl no longer means "no crash backstop" — it
     means the lock is never released and that atSign can never mint again.
+  - **The cooldown applies to rotation too.** A rotation of a namespace minted
+    or rotated within `mintLockTtl` is refused, because the lock is still held.
+    It fails rather than adopting what it finds — adopting would have rotated
+    nothing while reporting success. `revokeEnrollmentAndRotate` revokes first,
+    so a rotation refused this way leaves the enrollment cut off but still
+    holding the live generation; it already logged that per namespace, and the
+    message now names the cooldown and says the retry must wait the ttl out.
+  - `PublishedNskeyKeyRing.lockTtl` and `PqSigningRoot.lockTtl` state how long
+    the lock is held, defaulting to `mintLockTtl`.
   - ⚠️ Correct only against an atServer that stops refusing a create once the
     record has expired. An older one keeps refusing well past the ttl, which
     would make the cooldown effectively permanent.

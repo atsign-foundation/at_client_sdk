@@ -32,7 +32,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | The nskey mint elects a winner — **all seven rows built** on unit rails; the live-atServer proof is owed | Nothing. Development and testing run against `at_virtual_env:local`, which carries the fix (gkc, 2026-08-16). What still waits on at_server [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) is **release**: ttl-only release is correct only against an atServer running it |
+| ~~[14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105)~~ | ✅ **DONE** — all seven rows built and proven live: functional **166/166 `EXIT=0`** against the rebuilt `at_virtual_env:local` | Nothing outstanding here. What waits on at_server [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) is **release**: ttl-only release is correct only against an atServer running the expired-immutable fix |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | 17 open small items — the items are in `detail/`, none of them blocking | Item 8 is the only one waiting on a ruling. Items 20–22 are examined-and-left, not work. Item 18 closed 2026-08-16 by ceasing to exist |
@@ -110,9 +110,26 @@ earlier argument about the lock was about mechanisms with no agreed property to
 hold them to, which is why "is 14.19 item 18 worth fixing" stayed unanswerable
 for two sessions.
 
-**All seven rows are built.** What is owed is the live-atServer proof: the
-unit rails pin the behaviour against mocks, and nothing has yet run the
-three-enrollment race against a real atServer.
+✅ **DONE 2026-08-16.** All seven rows are built and proven against a live
+atServer: `tests/at_functional_test` runs **166/166, `EXIT=0`** on the rebuilt
+`at_virtual_env:local`.
+
+The live run found what the protocol implies
+and nobody had written down: **the cooldown binds rotation too.** A rotation of
+a namespace minted or rotated within `mintLockTtl` is refused, because nothing
+releases the lock but its ttl. Four functional tests failed on it.
+
+⚠️ **No unit test can find this.** The interlock *is* the atServer refusing a
+second create of an immutable record, and a mocked `executeVerb` accepts the
+second take happily — so every unit test of this path is green whether or not
+the cooldown exists. gkc ruled 2026-08-16 to **accept** it
+([decisions 105.6](detail/decisions.md#1056-built-and-the-cooldown-applies-to-rotation-too-2026-08-16)):
+`mintLockTtl` became injectable (`PublishedNskeyKeyRing.lockTtl`,
+`PqSigningRoot.lockTtl`) so a live test need not wait two minutes between its
+mint and its rotation, and `revokeEnrollmentAndRotate`'s partial state — it
+revokes first, so a refused rotation leaves the enrollment cut off but still
+holding the live generation — is named in its own `severe` log rather than
+retried.
 
 **Rows 3 and 5 depend on an at_server change that is OPEN, NOT MERGED:
 [at_server PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)**,
@@ -888,15 +905,18 @@ grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 # rails, all four packages. EACH FIGURE CARRIES THE COMMIT IT WAS MEASURED AT —
 # a block with one date at the bottom invites reading every number as current,
 # and three of these five were re-measured 15 commits after the other two.
-cd packages/at_client         && dart analyze lib test       # exit 0, 351 info  @92e859e52
-cd packages/at_client         && dart test --concurrency=1   # 1344 (2 skipped)  @92e859e52
-cd packages/at_client         && dart test test/acceptance --concurrency=1  # 66 (2)  @92e859e52
+cd packages/at_client         && dart analyze lib test       # exit 0, 351 info  @9debd5a01+14.24
+cd packages/at_client         && dart test --concurrency=1   # 1350 (2 skipped)  @9debd5a01+14.24
+cd packages/at_client         && dart test test/acceptance --concurrency=1  # 66 (2)  @9debd5a01+14.24
 cd packages/at_auth           && dart test --concurrency=1   # 312              @7c6b3e7f2
 cd packages/at_onboarding_cli && dart test --concurrency=1   # 39               @7c6b3e7f2
-cd tests/at_functional_test   && ./runLocal.sh               # 165/165          @7c6b3e7f2
-# ⚠️ The functional 165/165 was measured against the virtualenv image as it
-# was BEFORE `at_virtual_env:local` was rebuilt, so it is not a claim about the
-# image on this machine now. Rebuild-and-re-run before treating it as current.
+cd tests/at_functional_test   && bash runLocal.sh            # 166/166 EXIT=0   @9debd5a01+14.24
+# ✅ The functional figure is now measured against the REBUILT
+# `at_virtual_env:local` (2026-08-16), which the previous 165/165 was not — that
+# one predated the rebuild and was never a claim about the image on this
+# machine. 166 is 165 plus the cooldown row 14.24 added.
+# ⚠️ at_auth and at_onboarding_cli were NOT re-measured here and still carry
+# @7c6b3e7f2. Do not read the block as one date.
 # Every figure in this project has been wrong at least once by being carried
 # forward — the COMMAND is the value here, not the number beside it.
 ```

@@ -306,7 +306,16 @@ that absence as a cold start is what publishes a second key over the first. The
 winner's re-read is what closes the window between deciding to mint and holding the
 lock — the record is mutable, so minting on a stale absence overwrites a generation
 peers already hold. A cold-start mint that finds one adopts it; a **rotation** that
-found one would have rotated nothing while reporting success, so it does not adopt. The root `public:pq_signing_root@<atSign>` now follows
+found one would have rotated nothing while reporting success, so it does not adopt.
+
+**The ttl is the only release, so it is a cooldown — and it binds rotation as well
+as minting.** A rotation of a namespace minted or rotated within `mintLockTtl` is
+refused rather than queued. That is the protocol rather than a defect: the only case
+where a second election is wanted inside the window is the winner having failed,
+which is what the ttl bounds. It has one operational consequence worth stating,
+because `revokeEnrollmentAndRotate` **revokes first**: a rotation the cooldown
+refuses leaves that enrollment cut off from the atServer while still holding the
+live generation, until the caller retries after the ttl. The root `public:pq_signing_root@<atSign>` now follows
 exactly the same pattern, behind `_rootlock@<atSign>`
 ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)):
 it is an ordinary signing key, and advertising a successor beside a retired

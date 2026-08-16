@@ -152,7 +152,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [102] | An `_apsk` fallback value never replaces a real advertisement                               | 2026-08-15 | LIVE                      |
 | [103] | An envelope says what it is for, and a verifier says what it wants                          | 2026-08-15 | LIVE                      |
 | [104] | ~~The nskey mint stops needing a winner~~                                                   | 2026-08-16 | HELD — see [105]          |
-| [105] | The nskey mint elects a winner, and an atServer defect blocks the clean shape               | 2026-08-16 | LIVE                      |
+| [105] | The nskey mint elects a winner; built, and the cooldown binds rotation too                   | 2026-08-16 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted

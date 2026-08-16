@@ -75,7 +75,12 @@ void main() {
   test('a rotation publishes a new generation and keeps the old private',
       () async {
     final ns = uniqueNs();
-    final ring = PublishedNskeyKeyRing(atClient);
+    // A short cooldown, because nothing releases a mint lock but its ttl: the
+    // cold-start mint below holds it, and the rotation that follows is refused
+    // until it lapses. At the production `mintLockTtl` this test would sit for
+    // two minutes. The refusal itself is asserted in nskey_rotation_live_test.
+    const lockTtl = Duration(seconds: 5);
+    final ring = PublishedNskeyKeyRing(atClient, lockTtl: lockTtl);
     // Seed with the cold-start mint, then rotate with the rotation lever —
     // the sequence production runs. Minting twice also reaches a second
     // generation, but it is not what rotation does: on a lost mint lock it
@@ -83,7 +88,10 @@ void main() {
     // asserts rotation's contract against a method that cannot fail the way
     // rotation fails.
     final first = await ring.mintAndPublish(ns);
-    final second = await ring.rotate(ns);
+    // A second past the ttl: the atServer starts counting when it stores the
+    // record, after this client sent it.
+    await Future.delayed(lockTtl + const Duration(seconds: 1));
+    final second = (await ring.rotate(ns)).rotated;
 
     expect(second.nskeyKid, isNot(first.nskeyKid),
         reason: 'a rotation is a new generation, not an edit of the old one');

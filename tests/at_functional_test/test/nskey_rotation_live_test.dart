@@ -54,6 +54,28 @@ void main() {
   // pass on a fresh virtualenv and collide on the second run against it.
   final runId = DateTime.now().microsecondsSinceEpoch;
 
+  /// The mint lock's ttl for these tests, and it is not a speed-up.
+  ///
+  /// Nothing releases a mint lock but expiry, so the ttl is a **cooldown**:
+  /// after a cold-start mint takes the lock, a rotation of the same namespace
+  /// is refused until it lapses. That is the protocol, not a defect — but it
+  /// means every rotation test here mints and then rotates inside the window,
+  /// and at the production `mintLockTtl` each would sit for two minutes.
+  ///
+  /// Long enough that no mint here races its own expiry (a keygen, a keyfile
+  /// write, a signature and two round trips), short enough to wait out. What
+  /// the cooldown itself does is asserted separately, at this same ttl, in
+  /// `a rotation inside the mint lock's cooldown is refused`.
+  const shortLockTtl = Duration(seconds: 5);
+
+  /// Waits until the lock a mint just took has expired.
+  ///
+  /// A second past the ttl, because the atServer starts counting when it
+  /// stores the record — after this client sent it — so waiting exactly the
+  /// ttl can land a moment early.
+  Future<void> pastTheCooldown() =>
+      Future.delayed(shortLockTtl + const Duration(seconds: 1));
+
   Future<EnrolledClient> enrol(String device,
           {AtKeysIo? atKeysIo, Map<String, String>? namespaces}) =>
       enrolAndAuthenticate(
@@ -96,7 +118,8 @@ void main() {
       io: io,
       sharing: sharing,
       filing: filing,
-      ring: PublishedNskeyKeyRing(enrolled.client, privateFiling: filing),
+      ring: PublishedNskeyKeyRing(enrolled.client,
+          privateFiling: filing, lockTtl: shortLockTtl),
     );
   }
 
@@ -125,6 +148,11 @@ void main() {
       privateFiling: rotator.filing,
       sharing: rotator.sharing,
     );
+
+    // The mint above took the lock and did not release it, so the rotation
+    // has to wait the cooldown out. Not a sleep to make a flake go away: the
+    // refusal inside this window is asserted deliberately further down.
+    await pastTheCooldown();
 
     final outcome = await rotation.rotateNamespaceKey(namespace,
         excludeEnrollmentIds: {excluded.enrolled.enrollmentId});
@@ -199,6 +227,36 @@ void main() {
     expect(await rotator.filing.read(namespace, first.nskeyKid), firstPrivate);
     expect(await rotator.ring.privateHalf(atSign, namespace, first.nskeyKid),
         isNotNull);
+  });
+
+  test('a rotation inside the mint lock\'s cooldown is refused', () async {
+    // The consequence of the winner never releasing the lock, asserted rather
+    // than discovered. It cannot be a unit test: the interlock IS the
+    // atServer refusing a second create of an immutable record, and a mocked
+    // executeVerb accepts the second take happily — so every unit test of this
+    // path is green whether or not the cooldown exists.
+    final ns = 'cooldown$runId.$namespace';
+    final owner = await holder('cooldown-owner');
+
+    final minted = await owner.ring.mintAndPublish(ns);
+
+    await expectLater(
+        owner.ring.rotate(ns),
+        throwsA(isA<StateError>().having((e) => e.message, 'message',
+            contains('holds the mint lock'))),
+        reason: 'the ttl is the only release, so an election held moments ago '
+            'is still in its cooldown. A rotation must fail here rather than '
+            'adopt: adopting would have rotated nothing while reporting '
+            'success, leaving the enrollment being rotated away from on the '
+            'live generation');
+
+    // The control, and it is what makes the refusal mean something: the same
+    // client, the same namespace, the same call, accepted once the cooldown
+    // has lapsed. Without it the failure above could be this enrollment being
+    // unable to rotate at all.
+    await pastTheCooldown();
+    final rotated = (await owner.ring.rotate(ns)).rotated;
+    expect(rotated.nskeyKid, isNot(minted.nskeyKid));
   });
 
   test(
@@ -491,10 +549,29 @@ void main() {
   test(
       'UC-A5.3 · revokeEnrollmentAndRotate revokes first, then supersedes the '
       'generation the revoked enrollment held', () async {
+    // Its OWN namespace, because this test needs a genuine cold start: it
+    // asserts that the owner retains the private for the superseded
+    // generation, which is only true if the owner minted it. `buzz` is already
+    // warm by now — UC-A5.1(b) above minted and rotated it — so a
+    // `mintAndPublish` here ADOPTS that generation and files nothing, and the
+    // retention assertion has nothing to find. It passed before only because
+    // the mint used to overwrite the sibling test's key rather than adopt it,
+    // which is exactly the overwrite the under-lock re-read now prevents.
+    //
+    // A sub-namespace of `buzz`, so the atServer's write gate is satisfied by
+    // the same grant; the target is granted it explicitly, because
+    // revokeEnrollmentAndRotate rotates what the TARGET's enrollment names.
+    final ns = 'cmp$runId.$namespace';
     final owner = await holder('cmp-owner', namespaces: operatorGrants);
-    final target = await holder('cmp-target');
+    final target = await holder('cmp-target', namespaces: {ns: 'rw'});
 
-    final before = await owner.ring.mintAndPublish(namespace);
+    final before = await owner.ring.mintAndPublish(ns);
+
+    // Same cooldown as above — and here it matters more, because
+    // revokeEnrollmentAndRotate revokes FIRST: a rotation refused by the
+    // cooldown would leave the enrollment cut off but still holding the live
+    // generation, which is the partial state its own severe log names.
+    await pastTheCooldown();
 
     final outcomes = await NskeyRotation(
       atClient: owner.enrolled.client,
@@ -503,12 +580,12 @@ void main() {
       sharing: owner.sharing,
     ).revokeEnrollmentAndRotate(target.enrolled.enrollmentId);
 
-    expect(outcomes.map((o) => o.namespace), contains(namespace));
-    final rotated = outcomes.firstWhere((o) => o.namespace == namespace);
+    expect(outcomes.map((o) => o.namespace), contains(ns));
+    final rotated = outcomes.firstWhere((o) => o.namespace == ns);
     expect(rotated.supersededKid, before.nskeyKid);
     expect(rotated.excluded, {target.enrolled.enrollmentId});
 
-    expect((await owner.ring.currentPublic(atSign, namespace))?.nskeyKid,
+    expect((await owner.ring.currentPublic(atSign, ns))?.nskeyKid,
         rotated.advertisement.nskeyKid);
     // The pull gets its chance and still comes up empty. That is the whole
     // difference from a bare exclusion: the revoke has already dropped this
@@ -518,12 +595,12 @@ void main() {
     await owner.sharing.sweepOnce(fromRemote: true);
     await NskeyPrivateFiling(keysIo: target.io, atSign: atSign)
         .filePending(target.sharing.secretStore.listSecrets());
-    expect(await target.filing.read(namespace, rotated.advertisement.nskeyKid),
+    expect(await target.filing.read(ns, rotated.advertisement.nskeyKid),
         isNull,
         reason: 'the revoked enrollment keeps what it already held — the '
             'rotation denies it NEW data, and denying it the old data is the '
             'content-key lever\'s job, not this one\'s');
-    expect(await owner.filing.read(namespace, before.nskeyKid), isNotNull,
+    expect(await owner.filing.read(ns, before.nskeyKid), isNotNull,
         reason: 'while the owner still opens everything sealed to the '
             'superseded generation');
   });
