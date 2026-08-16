@@ -7436,11 +7436,13 @@ calls and prose, and seven across `implementation-plan.md`, `design.md` and
 one citation turned `a3_self_data_test` red with "that file is gone", and it was
 restored.
 
-**`decisions.md` was deliberately left alone.** Two earlier rulings cite the old
-filenames. Rulings are append-only: they record what was true when they were
-made, and rewriting one to match a later tree turns the ledger into a moving
-account of the present rather than a record of decisions. This section is the
-mapping a reader needs.
+**`decisions.md` was left alone at the time**, on the reasoning that rulings are
+append-only records of what was true when they were made. ⛔ **That reasoning
+was overruled 2026-08-16** — see the conventions in
+[`decisions.md`](../decisions.md): a ruling's heading and its claims state what
+it means *now*, and stale citations are corrected rather than mapped. The two
+earlier rulings that still cite the old filenames are owed that correction; the
+mapping below is what a reader needs until they get it.
 
 The runner globs (`dart test --concurrency=1 -r expanded`), so nothing
 enumerates these files by name and no harness config changed.
@@ -7694,8 +7696,9 @@ one job, and the ruling follows the split rather than the total.
 
 ### What the 187 actually were
 
-- **74 in `decisions.md`.** Rulings are append-only; their text is a record of
-  what was written when it was written. Left alone.
+- **74 in `decisions.md`.** Left alone at the time, on the append-only
+  reasoning ⛔ **overruled 2026-08-16** — see the conventions in
+  [`decisions.md`](../decisions.md). They are owed the conversion.
 - **68 outline labels.** `design.md`'s table of contents reads
   `**[Subsystem A — …](#1-subsystem-a-…)** (§1) — the three layers`. The `(§1)`
   is a label beside a link to that exact heading. Converting it produces a

@@ -44,6 +44,34 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.25](#1425-three-projects-state-partial-completion-and-six-state-none) | Reconcile nine project entries whose stated status and the burn-down disagree | — |
 | [14.26](#1426-a-comment-in-at_server-is-now-false) | A comment in at_server says a branch never runs; the PR #2751 fix makes it run | **Lands in at_server**, not here. ⛔ It missed its ride — #2751 merged 2026-08-16 without it, so it is a standalone change off `trunk` now |
+| [14.27](#1427-the-ledgers-remaining-append-only-rot) | 103 rulings unaudited for stale claims under `LIVE` headings; two known citation debts from 84 and 89 | — |
+
+### 14.27 The ledger's remaining append-only rot
+
+Raised 2026-08-16 when gkc ruled that a heading states a ruling's *current*
+outcome and that falsified claims are replaced, not layered over. Rulings 104
+and 105 were corrected, the doctrine sentences at
+[84](detail/decisions.md#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
+and [89](detail/decisions.md#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
+were marked overruled, and [46] moved to `PARTLY SUPERSEDED by [48]`.
+
+⚠️ **The other 103 rulings were NOT audited.** A scan flagged 41 whose body
+records a falsified claim while the index says `LIVE`; reading the summaries,
+most are healthy — they say "was wrong" about *another* ruling or about a
+correction already made in place. Which of the 41 are real is unmeasured. Two
+concrete items are already known:
+
+- **Ruling 84 left two earlier rulings citing renamed test files**, and 89 left
+  74 section-symbol citations unconverted. Both were deferred on the
+  now-overruled reasoning, so both are owed.
+- The scan is `heading_truth.py` in the session scratchpad — rebuild it rather
+  than trusting this row's numbers:
+
+```bash
+# rulings whose body admits a falsified claim while the index still says LIVE
+grep -rnP "(left alone|as written|no longer true|was wrong|append-only)" \
+  docs/projects/pq/detail/decisions.md | wc -l
+```
 
 ### 14.26 A comment in at_server is now false
 

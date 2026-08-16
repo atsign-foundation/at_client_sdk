@@ -15,11 +15,23 @@
 /// - no ruling body creeps back into the live ledger;
 /// - each live file stays under a stated ceiling, so the way to add is to
 ///   demote something rather than to append;
-/// - the catalogue's status table keeps saying what the scenarios do.
+/// - the catalogue's status table keeps saying what the scenarios do;
+/// - no doc licenses itself to leave a falsified claim standing.
 ///
 /// **A ceiling breach is not a failure of this test.** It means the file has
 /// earned a demotion — move the finished part to `detail/`. Raising a ceiling
 /// is legitimate and deliberate, and the edit is the review.
+///
+/// ⚠️ **Correctness outranks every structural rule here, and only the
+/// structural ones can be asserted.** Nothing in this file can tell whether a
+/// paragraph is true, so the rails go red for a broken link, a ceiling breach
+/// or a missing row, and stay green for a sentence the tree falsified three
+/// commits ago. That asymmetry taught exactly the wrong lesson once: rulings
+/// 104 and 105 were edited at every step, always by appending a layer under
+/// prose that had stopped being true, until a cold read of the doc set
+/// reported a settled design as an open question. The last group below is the
+/// only part of that which is mechanically checkable — a doc may not write
+/// down a rule permitting it.
 library;
 
 import 'dart:io';
@@ -220,6 +232,81 @@ void main() {
               'rather than editing the row. A hand-maintained status column '
               'is the "current state" table this project has been wrong about '
               'before');
+    });
+  });
+
+  group('no doc licenses itself to leave a falsified claim standing', () {
+    /// Phrases that assert a *rule* permitting stale prose, rather than
+    /// describing one document's history.
+    ///
+    /// Each was in the tree on 2026-08-16 and each had done real damage. They
+    /// are banned rather than discouraged because their whole effect is to
+    /// pre-authorise the next stale paragraph: once a doc says rulings are
+    /// append-only, correcting one reads as a violation.
+    ///
+    /// ⚠️ **This is a check on doctrine, not on truth.** It cannot tell that a
+    /// paragraph went stale — only that a doc claimed the right to let it. The
+    /// heuristics that tried for truth were measured and dropped: flagging a
+    /// section that claims something is both missing and done scored 23 hits
+    /// before the 104/105 correction and 23 after, because it keys on tense
+    /// rather than fact.
+    /// ⚠️ Each pattern names the DOCUMENT it licenses, because the bare words
+    /// are ordinary technical vocabulary here — `design.md` describes a Key
+    /// Transparency log as append-only, which is correct and unrelated. A ban
+    /// on the word alone went red on that paragraph the first time it ran.
+    final banned = <RegExp, String>{
+      RegExp(r'(rulings?|entries|the ledger|this (doc|file|section))\s+'
+              r'(are|is)\s+append-only',
+          caseSensitive: false):
+          'a ledger whose rulings are "append-only" cannot be corrected, so '
+              'every falsified claim stays and the heading becomes the stalest '
+              'line in the file',
+      // "left as written" is deliberately NOT banned. Measured against the doc
+      // set it hit three passages, all three legitimate: each keeps superseded
+      // prose *and* carries a dated banner naming what closed, which is the
+      // opposite of licensing rot. A pattern wrong on every occurrence in the
+      // corpus does not earn a place here.
+      RegExp(r'(is|are|was|were) left alone because', caseSensitive: false):
+          'the reason is always a structural cost — links to sweep, a body to '
+              're-read — and correctness outranks it',
+    };
+
+    /// An occurrence is allowed when the same paragraph records that the rule
+    /// was overruled: `detail/` keeps the history of decisions this project
+    /// reversed, and deleting that is its own kind of dishonesty.
+    bool isHistorical(String text, int at) =>
+        text.substring(at, (at + 260).clamp(0, text.length)).contains('overruled');
+
+    test('no doc carries a rule permitting stale prose', () {
+      final offences = <String>[];
+      for (final file in [..._ceilings.keys, 'detail/decisions.md',
+        'detail/implementation-plan.md']) {
+        final text = _read(file);
+        for (final entry in banned.entries) {
+          for (final m in entry.key.allMatches(text)) {
+            if (isHistorical(text, m.start)) continue;
+            offences.add('$file: "${m.group(0)}" — ${entry.value}');
+          }
+        }
+      }
+      expect(offences, isEmpty,
+          reason: 'correct the claim instead, and the heading above it. A '
+              'genuinely historical mention must say in the same paragraph '
+              'that the rule was overruled:\n${offences.join('\n')}');
+    });
+
+    test('the ledger states that a heading tracks the current outcome', () {
+      // The conventions this whole group defends. If the sentence goes, the
+      // group is guarding a rule nobody is told about.
+      final index = _read('decisions.md');
+      expect(index, contains('Ruling numbers are permanent; headings are not.'),
+          reason: 'decisions.md must keep saying that a heading states what '
+              'the ruling means now. Ruling 104 sat under a heading claiming '
+              'the opposite of its outcome because a doc said the heading was '
+              'fixed by its inbound links');
+      expect(index, contains('Correct in place; do not append.'),
+          reason: 'decisions.md must keep the rule that a falsified claim is '
+              'replaced rather than layered over');
     });
   });
 }

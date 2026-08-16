@@ -40,9 +40,11 @@ when this file grows past its line ceiling.
 | `SUPERSEDED`        | Replaced outright. Title struck.                                                                                 |
 | `REJECTED`          | Considered and not adopted. Title struck. The body stays so it is not re-proposed from scratch.                  |
 
-Of the 106 rulings below, **three** are not fully in force: [1], [11] and
-[104]. The ledger is long because the project made many decisions that still
-stand, not because it is full of dead ones.
+The ledger is long because the project made many decisions that still stand,
+not because it is full of dead ones — the Status column says which, and it is
+the only place that says so. A sentence here counting them was **deleted
+2026-08-16**: it said "three" while the table said six, in the very commit that
+created both. Two copies of one fact disagree eventually; only one is kept.
 
 ⚠️ **Two rulings were both numbered 68.** The second, *Workstream B(ii)*, is
 now **68b** — nothing cited it. All eight citations of "decisions 68" mean the
@@ -100,7 +102,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [43]  | RF-2b lands, and what the first genuine ML-DSA PKAM found                                   | 2026-08-05 | LIVE                      |
 | [44]  | RF-2c: the switch-over, and what it cost to make a client PQ                                | 2026-08-05 | LIVE                      |
 | [45]  | The retrofit rows, and the five defects the first end-to-end run found                      | 2026-08-05 | LIVE                      |
-| [46]  | RFC 9180, and where the design's version hatches are                                        | 2026-08-05 | LIVE                      |
+| [46]  | RFC 9180, and where the design's version hatches are                                        | 2026-08-05 | PARTLY SUPERSEDED by [48] |
 | [47]  | B-2 lands: two levers, and the difference between excluding and revoking                    | 2026-08-06 | LIVE                      |
 | [48]  | The standards question reopened, and what the check found                                   | 2026-08-06 | LIVE                      |
 | [49]  | Two KEMs by configuration, and the downgrade gap that stays open                            | 2026-08-06 | LIVE                      |
