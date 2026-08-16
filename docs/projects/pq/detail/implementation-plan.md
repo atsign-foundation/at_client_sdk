@@ -6,24 +6,46 @@ dependency graph, the phase sections, the backlog and the D1 burn-down.
 which carries full detail for open work only and one row each for parked and
 completed items, every row pointing back here.
 
-**No prose was changed, but 224 lines were.** Moving this file down a directory
-broke every relative link in it, so `](design.md)`, `](acceptance.md)` and
-`](roadmap.md)` were repointed to `../`. Nothing else was touched: the body is
-the same 4,039 lines `git show a5bf04d75:docs/projects/pq/implementation-plan.md`
-produces, and `diff` against it returns only link lines.
+**Two edits since the snapshot, and the second is prose.** Moving this file down
+a directory broke every relative link in it, so `](design.md)`,
+`](acceptance.md)` and `](roadmap.md)` were repointed to `../` — 224 lines. Then
+on 2026-08-16 **item 18 of section 14.19 was struck and closed** when the
+release it complained about was deleted outright; item 18 lives here, not in the
+live plan, so the closure had to land here.
 
-⛔ **Links to `decisions.md` were deliberately NOT repointed, and must not be.**
-The 141 anchored ones (`](decisions.md#105-…)`) resolve *inside this directory*,
-to the ruling bodies in [`decisions.md`](decisions.md) — which is where a
-citation wants to land. The live ledger one level up is **bodyless by design**
-and carries zero `## <number>.` headings, so "fixing" these to
-`](../decisions.md#…)` would break all 141 at once while looking like a
-consistency sweep. Re-derive before believing this:
+⚠️ **This file is therefore no longer link-identical to the snapshot, and it is
+4,087 lines rather than the reference's 4,039.** Re-derive rather than trusting
+that sentence — the changed lines outside the link repointing are item 18's and
+this header's, and nothing else:
 
 ```bash
+diff <(git show a5bf04d75:docs/projects/pq/implementation-plan.md) \
+     docs/projects/pq/detail/implementation-plan.md
+```
+
+⚠️⚠️ **Every STATUS line below is as of 2026-08-16 morning and is not current.**
+The burn-down's row 12, for one, still calls 14.24 open with an unmerged
+at_server PR; both are false. The live plan owns status. This file is here for
+the detail a live row points at, not for what is done.
+
+⛔ **Links to `decisions.md` were deliberately NOT repointed, and must not be.**
+The anchored ones (`](decisions.md#105-…)`) resolve *inside this directory*, to
+the ruling bodies in [`decisions.md`](decisions.md) — which is where a citation
+wants to land. The live ledger one level up is **bodyless by design** and
+carries zero `## <number>.` headings, so "fixing" these to
+`](../decisions.md#…)` would break every one of them at once while looking like
+a consistency sweep. Re-derive before believing this:
+
+```bash
+grep -oP '\]\(decisions\.md#' detail/implementation-plan.md | wc -l  # 158 links
+grep -cP '\]\(decisions\.md#' detail/implementation-plan.md          # on 142 lines
 grep -cE '^## [0-9]+b?\. ' ../decisions.md   # 0 — the index has no ruling anchors
 grep -cE '^## [0-9]+b?\. ' decisions.md      # 107 — the bodies are here
 ```
+
+⚠️ This block said **141** until 2026-08-16. It is 158 links on 142 lines; the
+two are different questions and `grep -c` answers the second even with `-o`, so
+a count taken that way reads low and looks authoritative.
 
 The 25 *bare* `](decisions.md)` links are the arguable ones: they land on the
 body dump rather than on the index a general "see the ledger" reference wants.
@@ -3281,9 +3303,11 @@ its own. None blocks anything.
     because with nothing deleting the record a missing ttl means it is never
     released at all. ⚠️ The remaining caveat stands and is not this item's: a
     client relying on ttl-only release is correct **only** against an atServer
-    carrying the expired-immutable fix, which is on
-    [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) and
-    not yet merged. `at_virtual_env:local` runs it.
+    carrying the expired-immutable fix.
+    [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)
+    **merged 2026-08-16**, which is not the same as deployed — the atServer has
+    to *run* it. `at_virtual_env:local` does; `virtualenv:vip` does not until
+    it is rebuilt.
 19. **`tests/at_onboarding_cli_functional_tests` analyzes with 6 warnings, all
     in one file nobody touched — noticed 2026-08-15.** Every one is an
     `unused_import` in `test/ecc_secure_element_mock_test.dart`; `dart analyze
@@ -3937,8 +3961,14 @@ asserts.
 
 ### 14.24 The nskey mint elects a winner — decisions 105
 
+⛔ **Demoted here 2026-08-16 when 14.24 completed**, replacing the pre-build
+snapshot copy that used to sit at this position — which still called the item
+open and its at_server PR unmerged. This is the finished section, moved whole
+rather than summarised, and it is the only copy.
+
+
 ⚠️ **THIS is the model being built.**
-[14.23](#1423-the-nskey-mint-stops-needing-a-winner--decisions-104) is HELD.
+[14.23](implementation-plan.md#1423-the-nskey-mint-stops-needing-a-winner--decisions-104) is HELD.
 [decisions 105](decisions.md#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16)
 rules the design; this is the order. One nskey record, and a lock used as an
 **election token with a cooldown** rather than a mutex.
@@ -3949,9 +3979,42 @@ earlier argument about the lock was about mechanisms with no agreed property to
 hold them to, which is why "is 14.19 item 18 worth fixing" stayed unanswerable
 for two sessions.
 
-**⛔ Rows 3 and 5 depend on an at_server change that is OPEN, NOT MERGED:
+✅ **DONE 2026-08-16.** All seven rows are built and proven against a live
+atServer: `tests/at_functional_test` runs **166/166, `EXIT=0`** on the rebuilt
+`at_virtual_env:local`.
+
+The live run found what the protocol implies
+and nobody had written down: **the cooldown binds rotation too.** A rotation of
+a namespace minted or rotated within `mintLockTtl` is refused, because nothing
+releases the lock but its ttl. Four functional tests failed on it.
+
+⚠️ **No unit test can find this.** The interlock *is* the atServer refusing a
+second create of an immutable record, and a mocked `executeVerb` accepts the
+second take happily — so every unit test of this path is green whether or not
+the cooldown exists. gkc ruled 2026-08-16 to **accept** it
+([decisions 105.6](decisions.md#1056-built-and-the-cooldown-applies-to-rotation-too-2026-08-16)):
+`mintLockTtl` became injectable (`PublishedNskeyKeyRing.lockTtl`,
+`PqSigningRoot.lockTtl`) so a live test need not wait two minutes between its
+mint and its rotation, and `revokeEnrollmentAndRotate`'s partial state — it
+revokes first, so a refused rotation leaves the enrollment cut off but still
+holding the live generation — is named in its own `severe` log rather than
+retried.
+
+**Rows 3 and 5 depend on an at_server change that ✅ MERGED 2026-08-16 18:46Z:
 [at_server PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)**,
-branch `gkc-expired-immutable-blocks-create`. **gkc owns that PR.**
+branch `gkc-expired-immutable-blocks-create`, now `00c2f9a6` on `origin/trunk`.
+It was open for most of the day this work was built; a reader who saw an earlier
+version of this line has a stale gate.
+
+⚠️ **Merged is not deployed, and this gate is about a RUNNING atServer.** A
+ttl-only release is correct only against one carrying the fix. `at_virtual_env:local`
+is rebuilt and does; `atsigncompany/virtualenv:vip` and every deployed atServer
+need their own rebuild, which the merge does not perform. Re-derive both halves:
+
+```bash
+gh pr view 2751 --repo atsign-foundation/at_server --json state,mergedAt
+git -C ~/dev/atsign/repos/at_server merge-base --is-ancestor 425a2f29 origin/trunk
+```
 
 ⚠️ **Cite the PR, not a SHA.** This block named `b5654bfd`; gkc rewrote the
 commits before pushing, so that SHA no longer exists anywhere. The branch now
@@ -3970,13 +4033,13 @@ release is incorrect against an atServer without it.
 
 | # | What | The differential |
 |---|---|---|
-| 1 | A **remote-only** read of the published advertisement for the mint path. ⚠️ **NOT by changing `currentPublic`** — that is also the sender path, reached from `CkManager.ensureCurrent` on *every* put, so making it remote puts a round trip on the write path and breaks offline writes. A separate read, always remote, skipping both caches — the shape `PqSigningRoot.publishedRoots` already has | a sibling enrollment publishes; this client's pre-check sees it without waiting for sync. ⚠️ **Scope: `published_nskey_key_ring.dart:450` is the read to change, but it is NOT the only optionless read in the subsystem** — `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are optionless too. Those two are **content-key conveyance** reads rather than advertisement reads and are plausibly correct as local-first, so they are out of scope *by argument, not by absence*. Re-derive before believing either way: `git grep -n -A3 "atClient\.get(" -- packages/at_client/lib/src/crypto/nskey/` |
-| 2 | The **winner's re-check under the lock**, which the nskey path has never had. `_mintUnderLock` (root) re-reads; `_mint` (nskey) does not | a winner that published between the pre-check and this client taking the lock is adopted, not overwritten |
-| 3 | `withLock` **stops releasing** — the ttl is the release. ⛔ Needs the at_server fix | a holder that finishes does not free the lock; a second enrollment is refused until the ttl elapses. This is what makes [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18 disappear rather than be fixed |
-| 4 | The **loser**: re-read once, adopt a published generation, otherwise **fail** with a reason. The `StateError` at `published_nskey_key_ring.dart:292` is rewritten, not deleted — the loser must not mint | lock held + a generation published → adopts. Lock held + nothing published → fails naming the contention, and a waiting `put` fails loudly rather than hanging on another device's crash |
-| 5 | The **lease self-abort**: the holder carries its lease and refuses to publish once it is spent, so a slow winner abandons rather than racing the enrollment that legitimately took the lock next. ⛔ Depends on row 3's timing | a mint that overruns the ttl publishes nothing. Without it the requirement fails even with everything else correct, because the bounded window bounds when the three *attempt*, not how long the winner *takes* |
-| 6 | The "crash backstop" claim is **false as written** and true only against an atServer carrying the fix. ⚠️ **TWO sites, and neither is in `mint_lock.dart` where a reader would look**: `nskey_records.dart:76` (`mintLockTtl`'s own dartdoc) and `nskey_records.dart:133` (`pqSigningRootMintLockKey`, "and [ttl] is the crash backstop"). Re-derive: `grep -n "crash backstop" packages/at_client/lib/src/crypto/nskey/nskey_records.dart` | none — a doc correction, but it must land in whichever commit first touches this path, and it must hit both sites |
-| 7 | Docs and acceptance sweep | `catalogue_test.dart` going red is the check. Four acceptance scenarios name `_nskeylock` (`a3_self_data_test`, `a5_rotation_test`, `b5_edge_cases_test`, `cross_cutting_test`), plus `design.md` §1.3 and `wire_literal_pins_test.dart` |
+| 1 | ~~A **remote-only** read of the published advertisement for the mint path. ⚠️ **NOT by changing `currentPublic`** — that is also the sender path, reached from `CkManager.ensureCurrent` on *every* put, so making it remote puts a round trip on the write path and breaks offline writes. A separate read, always remote, skipping both caches — the shape `PqSigningRoot.publishedRoots` already has | a sibling enrollment publishes; this client's pre-check sees it without waiting for sync. ⚠️ **Scope: `published_nskey_key_ring.dart:450` is the read to change, but it is NOT the only optionless read in the subsystem** — `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are optionless too. Those two are **content-key conveyance** reads rather than advertisement reads and are plausibly correct as local-first, so they are out of scope *by argument, not by absence*. Re-derive before believing either way: `git grep -n -A3 "atClient\.get(" -- packages/at_client/lib/src/crypto/nskey/`~~ ✅ **BUILT.** `PublishedNskeyKeyRing.publishedAdvertisement` is the new read; `currentPublic` is untouched. Three mint-path call sites use it — `mintAndPublish`'s post-loss read, `rotate`'s precondition, and `NskeySeeding.seed`'s pre-check |
+| 2 | ~~The **winner's re-check under the lock**, which the nskey path has never had. `_mintUnderLock` (root) re-reads; `_mint` (nskey) does not~~ ✅ **BUILT** as `_mintUnlessPublished`, which wraps `_mint` on the `mintAndPublish` path only — `rotate` still runs `_mint` directly, because a rotation that adopted what it found would have rotated nothing while reporting success | a winner that published between the pre-check and this client taking the lock is adopted, not overwritten |
+| 3 | ~~`withLock` **stops releasing** — the ttl is the release~~ ✅ **BUILT.** `MintLock._release` is deleted, and `withLock` now **refuses a lock key with no ttl** — with nothing deleting the record, a missing ttl means it is never released at all rather than released late | a holder that finishes does not free the lock; a second enrollment is refused until the ttl elapses. This is what made [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18 disappear rather than be fixed |
+| 4 | ~~The **loser**: re-read once, adopt a published generation, otherwise **fail** with a reason~~ ✅ **BUILT.** Both arms now have a test; the `StateError` says why the loser must not mint and that the retry is the next client start | lock held + a generation published → adopts. Lock held + nothing published → fails naming the contention, and a waiting `put` fails loudly rather than hanging on another device's crash |
+| 5 | ~~The **lease self-abort**~~ ✅ **BUILT** as `MintLease`, which `withLock` hands to the mint. ⚠️ Its deadline is stamped **before** the take goes out, never after: the atServer starts the ttl at or after the send, so stamping from the reply would have the client believe it still held a lock the atServer had released. Checked immediately before each publish, so a keygen or a suspend cannot happen after the check | a mint that overruns the ttl publishes nothing. Without it the requirement fails with everything else correct, because the bounded window bounds when the three *attempt*, not how long the winner *takes* |
+| 6 | ~~The "crash backstop" claim is **false as written**~~ ✅ **BUILT** — both sites in `nskey_records.dart` now say the ttl is what releases the lock, and `mintLockTtl` says it is also the winner's own budget | none — a doc correction |
+| 7 | ~~Docs and acceptance sweep~~ ✅ **BUILT.** `acceptance.md` steps A3.2 and B6 said the holder "releases"; `design.md` §1.3 and the B5b sequence said the same. All now say the ttl releases it, and §1.3 states the winner's re-read | `catalogue_test.dart` and `docs_structure_test.dart` staying green is the check |
 
 **Two things found while checking the protocol against the tree, which the rows
 above assume.**
@@ -3984,13 +4047,23 @@ above assume.**
 - **Exactly two production callers mint**: `nskey_seeding.dart:100`
   (`mintAndPublish`) and `nskey_rotation.dart:152` (`rotate`). Re-derive:
   `git grep -n "mintAndPublish\|\.rotate(" -- packages/at_client/lib packages/at_onboarding_cli/lib`
-- **`rotate`'s precondition read is asked twice.**
+- ~~**`rotate`'s precondition read is asked twice.**
   `NskeyRotation.rotateNamespaceKey:145` calls `ring.currentPublic` to refuse a
   cold-start rotation, and `ring.rotate:320` calls it again. Both are
   local-first, so row 1 has to reach both — and they are the same question
-  asked twice, which is worth collapsing rather than converting twice.
+  asked twice, which is worth collapsing rather than converting twice.~~
+  ✅ **COLLAPSED** into `ring.rotate`, which now returns
+  `({rotated, superseded})` so its caller names what it superseded from the read
+  already made. The cold-start refusal and its message live in one place.
+- **A third advertisement read is still local-first, and is out of scope by
+  argument.** `NskeySeeding.requestMissingPrivates` (`nskey_seeding.dart:186`)
+  reads `currentPublic` to decide which generation's private to ask for. It is
+  the *pull* path, not the mint path, so nothing it does can overwrite a key —
+  but a stale read there asks for a superseded generation, and the heal then
+  waits for the next start. Worth deciding on rather than leaving undecided.
 
 ---
+
 
 ## 15. D1 burn-down — the single index of what D1 owes
 

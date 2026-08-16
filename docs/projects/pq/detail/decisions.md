@@ -9969,6 +9969,13 @@ is reading a snapshot, not the state.
 
 **In brief:** *the election protocol, the expired-immutable-record defect, and the order of work*
 
+⚠️ **The heading is the title this ruling was made under, and both of its
+clauses have moved on.** The defect no longer blocks anything — it was fixed
+and merged the same day — and the design is now **built and proven live**. The
+heading is left alone because six links resolve to its slug and a ruling is
+named for what it decided at the time. [105.6](#1056-built-and-the-cooldown-applies-to-rotation-too-2026-08-16)
+is the current state.
+
 Supersedes [ruling 104](#104-the-nskey-mint-stops-needing-a-winner-2026-08-16),
 made the same day. 104 removed the *need* to coordinate; this one satisfies the
 coordination requirement directly and keeps a single nskey record. **The log
@@ -10039,9 +10046,11 @@ The fix is on `gkc-expired-immutable-blocks-create` off `origin/trunk`, the
 image is rebuilt, and expiry+1ms is accepted on the wire. **Step 6 of the
 protocol is therefore available**: the winner never deletes the lock, the ttl
 releases it, and item 18 ceases to exist on any path that uses it that way.
-⚠️ It is not merged — an unfixed atServer still behaves the old way, so a
-client built on ttl-only release is correct only against a server carrying
-this.
+✅ **Merged 2026-08-16 18:46Z** as `00c2f9a6` on `origin/trunk`. ⚠️ That does
+not lift the gate it is cited for: an atServer must *run* the fix, and a merge
+rebuilds no image. A client built on ttl-only release is correct only against a
+server carrying this, which today means `at_virtual_env:local` and not
+`atsigncompany/virtualenv:vip`.
 
 ### 105.4 Three client-side things the protocol needs, none of which exist
 

@@ -34,8 +34,6 @@ class MintLease {
   /// Whether the lease has run out, so nothing further may be published under
   /// it.
   bool get isSpent => !DateTime.now().isBefore(expiresAt);
-
-  Duration get remaining => expiresAt.difference(DateTime.now());
 }
 
 /// Serialises minting a key record between an atSign's own enrollments.

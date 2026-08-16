@@ -32,7 +32,6 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| ~~[14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105)~~ | ✅ **DONE** — all seven rows built and proven live: functional **166/166 `EXIT=0`** against the rebuilt `at_virtual_env:local` | Nothing outstanding here. What waits on at_server [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) is **release**: ttl-only release is correct only against an atServer running the expired-immutable fix |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | 17 open small items — the items are in `detail/`, none of them blocking | Item 8 is the only one waiting on a ruling. Items 20–22 are examined-and-left, not work. Item 18 closed 2026-08-16 by ceasing to exist |
@@ -44,7 +43,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.25](#1425-three-projects-state-partial-completion-and-six-state-none) | Reconcile nine project entries whose stated status and the burn-down disagree | — |
-| [14.26](#1426-a-comment-in-at_server-is-now-false) | A comment in at_server says a branch never runs; the PR #2751 fix makes it run | **Lands in at_server**, not here. Rides PR #2751 while it is still open |
+| [14.26](#1426-a-comment-in-at_server-is-now-false) | A comment in at_server says a branch never runs; the PR #2751 fix makes it run | **Lands in at_server**, not here. ⛔ It missed its ride — #2751 merged 2026-08-16 without it, so it is a standalone change off `trunk` now |
 
 ### 14.26 A comment in at_server is now false
 
@@ -64,8 +63,13 @@ makes an update delete an expired record and proceed, so the branch is now
 reachable and the comment is false — see
 [decisions 104.10](detail/decisions.md#10410-fixed-in-at_server-the-same-day-and-re-measured-on-the-wire).
 
-Cheapest while the PR is still open: it rides that branch. Re-derive rather
-than trusting this row — the comment may already be gone:
+⛔ **It missed its ride.** This row said "cheapest while the PR is still open:
+it rides that branch". PR #2751 **merged 2026-08-16 18:46Z** without it, and
+the comment is still there — verified against the merged trunk, at the path
+above, line 46. So this is now a standalone at_server change off `trunk`, not
+a rider, and it is the only thing 14.26 still owes.
+
+Re-derive rather than trusting this row:
 
 ```bash
 git -C ~/dev/atsign/repos/at_server grep -n "never occurs right now"
@@ -95,96 +99,6 @@ neither has been checked. Read each entry in
 tree, then either add a TODO row or correct the record. Do not assume the
 burn-down was right because it is newer: it was maintained by hand, and this
 project has been bitten by exactly that before.
-
-### 14.24 The nskey mint elects a winner — decisions 105
-
-⚠️ **THIS is the model being built.**
-[14.23](detail/implementation-plan.md#1423-the-nskey-mint-stops-needing-a-winner--decisions-104) is HELD.
-[decisions 105](detail/decisions.md#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16)
-rules the design; this is the order. One nskey record, and a lock used as an
-**election token with a cooldown** rather than a mutex.
-
-**The requirement, which had never been written down:** *if enrollments A, B
-and C all decide they need to mint, only one of them eventually does.* Every
-earlier argument about the lock was about mechanisms with no agreed property to
-hold them to, which is why "is 14.19 item 18 worth fixing" stayed unanswerable
-for two sessions.
-
-✅ **DONE 2026-08-16.** All seven rows are built and proven against a live
-atServer: `tests/at_functional_test` runs **166/166, `EXIT=0`** on the rebuilt
-`at_virtual_env:local`.
-
-The live run found what the protocol implies
-and nobody had written down: **the cooldown binds rotation too.** A rotation of
-a namespace minted or rotated within `mintLockTtl` is refused, because nothing
-releases the lock but its ttl. Four functional tests failed on it.
-
-⚠️ **No unit test can find this.** The interlock *is* the atServer refusing a
-second create of an immutable record, and a mocked `executeVerb` accepts the
-second take happily — so every unit test of this path is green whether or not
-the cooldown exists. gkc ruled 2026-08-16 to **accept** it
-([decisions 105.6](detail/decisions.md#1056-built-and-the-cooldown-applies-to-rotation-too-2026-08-16)):
-`mintLockTtl` became injectable (`PublishedNskeyKeyRing.lockTtl`,
-`PqSigningRoot.lockTtl`) so a live test need not wait two minutes between its
-mint and its rotation, and `revokeEnrollmentAndRotate`'s partial state — it
-revokes first, so a refused rotation leaves the enrollment cut off but still
-holding the live generation — is named in its own `severe` log rather than
-retried.
-
-**Rows 3 and 5 depend on an at_server change that is OPEN, NOT MERGED:
-[at_server PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)**,
-branch `gkc-expired-immutable-blocks-create`. **gkc owns that PR.** That is a
-**release** gate, not a development one — gkc ruled 2026-08-16 that the work
-runs against the locally built `at_virtual_env:local`, which carries the fix.
-
-⚠️ **Cite the PR, not a SHA.** This block named `b5654bfd`; gkc rewrote the
-commits before pushing, so that SHA no longer exists anywhere. The branch now
-carries the fix plus an at_secondary_server version bump. Re-derive rather than
-trust this line:
-
-```
-gh pr view 2751 --repo atsign-foundation/at_server --json state,mergedAt
-git -C ~/dev/atsign/repos/at_server log --oneline origin/trunk..origin/gkc-expired-immutable-blocks-create
-```
-
-⚠️ **A merge is not enough for rows 3 and 5** — they need an atServer that
-*runs* the fix. The local `at_virtual_env:local` has been rebuilt and does; any
-other deployment needs its own rebuild, and a client relying on ttl-only
-release is incorrect against an atServer without it.
-
-| # | What | The differential |
-|---|---|---|
-| 1 | ~~A **remote-only** read of the published advertisement for the mint path. ⚠️ **NOT by changing `currentPublic`** — that is also the sender path, reached from `CkManager.ensureCurrent` on *every* put, so making it remote puts a round trip on the write path and breaks offline writes. A separate read, always remote, skipping both caches — the shape `PqSigningRoot.publishedRoots` already has | a sibling enrollment publishes; this client's pre-check sees it without waiting for sync. ⚠️ **Scope: `published_nskey_key_ring.dart:450` is the read to change, but it is NOT the only optionless read in the subsystem** — `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are optionless too. Those two are **content-key conveyance** reads rather than advertisement reads and are plausibly correct as local-first, so they are out of scope *by argument, not by absence*. Re-derive before believing either way: `git grep -n -A3 "atClient\.get(" -- packages/at_client/lib/src/crypto/nskey/`~~ ✅ **BUILT.** `PublishedNskeyKeyRing.publishedAdvertisement` is the new read; `currentPublic` is untouched. Three mint-path call sites use it — `mintAndPublish`'s post-loss read, `rotate`'s precondition, and `NskeySeeding.seed`'s pre-check |
-| 2 | ~~The **winner's re-check under the lock**, which the nskey path has never had. `_mintUnderLock` (root) re-reads; `_mint` (nskey) does not~~ ✅ **BUILT** as `_mintUnlessPublished`, which wraps `_mint` on the `mintAndPublish` path only — `rotate` still runs `_mint` directly, because a rotation that adopted what it found would have rotated nothing while reporting success | a winner that published between the pre-check and this client taking the lock is adopted, not overwritten |
-| 3 | ~~`withLock` **stops releasing** — the ttl is the release~~ ✅ **BUILT.** `MintLock._release` is deleted, and `withLock` now **refuses a lock key with no ttl** — with nothing deleting the record, a missing ttl means it is never released at all rather than released late | a holder that finishes does not free the lock; a second enrollment is refused until the ttl elapses. This is what made [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18 disappear rather than be fixed |
-| 4 | ~~The **loser**: re-read once, adopt a published generation, otherwise **fail** with a reason~~ ✅ **BUILT.** Both arms now have a test; the `StateError` says why the loser must not mint and that the retry is the next client start | lock held + a generation published → adopts. Lock held + nothing published → fails naming the contention, and a waiting `put` fails loudly rather than hanging on another device's crash |
-| 5 | ~~The **lease self-abort**~~ ✅ **BUILT** as `MintLease`, which `withLock` hands to the mint. ⚠️ Its deadline is stamped **before** the take goes out, never after: the atServer starts the ttl at or after the send, so stamping from the reply would have the client believe it still held a lock the atServer had released. Checked immediately before each publish, so a keygen or a suspend cannot happen after the check | a mint that overruns the ttl publishes nothing. Without it the requirement fails with everything else correct, because the bounded window bounds when the three *attempt*, not how long the winner *takes* |
-| 6 | ~~The "crash backstop" claim is **false as written**~~ ✅ **BUILT** — both sites in `nskey_records.dart` now say the ttl is what releases the lock, and `mintLockTtl` says it is also the winner's own budget | none — a doc correction |
-| 7 | ~~Docs and acceptance sweep~~ ✅ **BUILT.** `acceptance.md` steps A3.2 and B6 said the holder "releases"; `design.md` §1.3 and the B5b sequence said the same. All now say the ttl releases it, and §1.3 states the winner's re-read | `catalogue_test.dart` and `docs_structure_test.dart` staying green is the check |
-
-**Two things found while checking the protocol against the tree, which the rows
-above assume.**
-
-- **Exactly two production callers mint**: `nskey_seeding.dart:100`
-  (`mintAndPublish`) and `nskey_rotation.dart:152` (`rotate`). Re-derive:
-  `git grep -n "mintAndPublish\|\.rotate(" -- packages/at_client/lib packages/at_onboarding_cli/lib`
-- ~~**`rotate`'s precondition read is asked twice.**
-  `NskeyRotation.rotateNamespaceKey:145` calls `ring.currentPublic` to refuse a
-  cold-start rotation, and `ring.rotate:320` calls it again. Both are
-  local-first, so row 1 has to reach both — and they are the same question
-  asked twice, which is worth collapsing rather than converting twice.~~
-  ✅ **COLLAPSED** into `ring.rotate`, which now returns
-  `({rotated, superseded})` so its caller names what it superseded from the read
-  already made. The cold-start refusal and its message live in one place.
-- **A third advertisement read is still local-first, and is out of scope by
-  argument.** `NskeySeeding.requestMissingPrivates` (`nskey_seeding.dart:186`)
-  reads `currentPublic` to decide which generation's private to ask for. It is
-  the *pull* path, not the mint path, so nothing it does can overwrite a key —
-  but a stale read there asks for a superseded generation, and the heal then
-  waits for the next start. Worth deciding on rather than leaving undecided.
-
----
-
 
 ### 14.18 The remaining D1 initial-development sequence
 
@@ -460,6 +374,40 @@ place with what it used to say.
    [14.18](#1418-the-remaining-d1-initial-development-sequence) step 16. When
    steps 17–18 need to reach `update` from at_client, give it a seam of its own
    on the signing path rather than widening this one.
+
+7. **Do NOT make the mint lock release itself while its lease is unspent.**
+   Proposed 2026-08-16 — by me, and *recommended* — when the first live run of
+   [14.24](detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) showed a
+   rotation refused for the two minutes after a mint. The argument was that it
+   is sound by construction: `MintLease.expiresAt` is stamped *before* the take
+   goes out, so "unspent by my clock" implies the atServer has not expired it
+   either, so the lock cannot be a successor's — closing the stolen-release
+   window properly while keeping rotation responsive.
+   **gkc rejected it.** Step 6 of the election protocol
+   ([decisions 105.2](detail/decisions.md#1052-the-protocol-gkc-specified)) is
+   that the winner does not delete the lock, and it binds rotation as well as
+   the mint election. The cooldown is the design, not a cost to engineer away.
+   ⚠️ **It will look like an obvious improvement again**, because the refusal
+   is visible in a test failure and the change is six lines. What is not
+   visible from the code is that a lock nobody deletes has **no**
+   stolen-release window to close, and adding a delete back reintroduces the
+   whole class — which is what
+   [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18
+   was, and it took two sessions to kill. If this is re-opened, the thing to
+   change is the *protocol*, in a ruling — not `MintLock`. See
+   [decisions 105.6](detail/decisions.md#1056-built-and-the-cooldown-applies-to-rotation-too-2026-08-16).
+
+8. **`revokeEnrollmentAndRotate` does NOT retry a rotation the cooldown
+   refused, and that was decided rather than overlooked.** It revokes first, so
+   a refusal leaves the enrollment cut off from the atServer while still
+   holding the live generation. Retrying in-process would mean sleeping for the
+   ttl inside a call that already did the destructive half, and swallowing the
+   partial state rather than surfacing it. It instead catches per namespace,
+   logs `severe` naming the cooldown as the likely cause, and carries on to the
+   other namespaces. If this is revisited, the question is whether the CALLER
+   can see which namespaces failed — `outcomes` lists only the successes today,
+   so a caller counting them cannot tell a refusal from a namespace that had
+   nothing to rotate.
 
 
 ### 14.17 Signature agility — what is built, and what is owed
@@ -837,6 +785,7 @@ measured — see [14.25](#1425-three-projects-state-partial-completion-and-six-s
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.24  | The nskey mint elects a winner; the lock became an election token with a cooldown | DONE 2026-08-16 — seven rows, proven live at functional **166/166 `EXIT=0`**. Detail: [14.24](detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) |
 | P-1    | at_chops stateless core + HPKE                          | SATISFIED — at_chops 3.3.0 published 2026-06-23                                                                      |
 | P-2    | `mldsa65` wired into the verification branch            | SATISFIED — published 2026-07-17                                                                                     |
 | P-3    | `public:pqpublickey` + X-Wing-preferred enrollment wrap | No status stated — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none)                     |
@@ -886,8 +835,14 @@ Run these rather than trusting the table. Each answers one row.
 git grep -n "keyIdPrefix =\|apskAdvertisement" -- packages/at_client/lib/src/crypto/nskey/
 
 # row 11: which 14.19 items are still open? (~~struck~~ ones are done)
-awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \
-  | grep -E "^[0-9]+\. \*\*"
+# ⚠️ Against detail/, NOT this file. The items moved there in the restructure
+# and this copy was left pointing here, where it matches nothing: it printed
+# ZERO and exited 1 while the answer was 17, so a reader working down this
+# block concluded there was no open work. Fixed 2026-08-16.
+awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
+  | grep -cE "^[0-9]+\. \*\*"     # 17 open
+awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
+  | grep -cE "^[0-9]+\. ~~"       # 5 struck
 
 # rows 3-9: the stage-5 table, which owns steps 23-31
 awk '/^\*\*Stage 5/,/^\*\*Stage 6/' docs/projects/pq/implementation-plan.md
