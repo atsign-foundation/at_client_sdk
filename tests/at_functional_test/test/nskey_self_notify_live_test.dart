@@ -81,13 +81,15 @@ void main() {
           'the nskey private that opens it, and is dropped without retry',
       () async {
     // ⚠️ Raised HERE, not in `setUpAll`. `TestUtils.initAtClient` sets
-    // `AtSignLogger.root_level = 'shout'` as its first statement, so a level
-    // set before it is silently undone — which is what happened, and produced
-    // a 74-line "finest" log containing nothing but `shout`. Everything the
-    // monitor says about what it sent and what it did with each frame lives at
-    // `info` and below, and a notification dropped in the delivery loop logs
-    // at `warning`, so under `shout` a drop and a non-arrival print the same
-    // nothing.
+    // `AtSignLogger.root_level` as its first statement, so a level set before
+    // it is silently undone — which is what happened, and produced a 74-line
+    // "finest" log containing nothing but `shout`.
+    //
+    // The pack default is now `info` (raised from `shout` 2026-08-16, after
+    // this file's investigation showed a `warning`-level drop was invisible).
+    // `finest` is still needed here: the monitor's `RECEIVED notification`
+    // frames, which are what prove the receiver got the treaty and discarded
+    // it rather than never seeing it, log at `finer`.
     AtSignLogger.root_level = 'finest';
     expect(AtSignLogger.root_level, 'finest',
         reason: 'the level must survive setup, or every conclusion drawn from '

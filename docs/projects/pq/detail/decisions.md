@@ -3594,11 +3594,21 @@ code path does it.
 
   **Instrument caveat that nearly derailed this:** the notify verb appears
   nowhere in either captured log, and that carries NO information.
-  `TestUtils.initAtClient` pins `AtSignLogger.root_level = 'shout'`, and
-  `AtSignLogger` copies the level once into a *detached* logger at
-  construction — so flipping the root level later is retroactively inert
-  for every already-built object. Concluding "the owner never sent it" from
-  that absence would have been wrong.
+  `TestUtils.initAtClient` pins `AtSignLogger.root_level` — **`shout` when
+  this was written, raised to `info` 2026-08-16** — and `AtSignLogger` copies
+  the level once into a *detached* logger at construction, so flipping the
+  root level later is retroactively inert for every already-built object.
+  Concluding "the owner never sent it" from that absence would have been
+  wrong.
+
+  ⚠️ **Both halves of this bit again on 2026-08-16**, in
+  `nskey_self_notify_live_test.dart`: a `warning`-level drop was invisible
+  under `shout` for three runs, and then a `finest` set in `setUpAll` produced
+  a 74-line log of nothing because `initAtClient` resets the level *and* the
+  clients were already built. The level now has to be raised before any client
+  is constructed, which is why that file raises it as its first statement and
+  asserts it survived. See
+  [106](#106-the-nskey-private-is-pulled-so-content-can-outrun-it-2026-08-16).
 
 ## 45. The retrofit rows, and the five defects the first end-to-end run found (2026-08-05)
 

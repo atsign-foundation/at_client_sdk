@@ -69,7 +69,19 @@ class TestUtils {
   static Future<AtClientManager> initAtClient(
       String currentAtSign, String namespace,
       {AtClientPreference? preference, AtKeysIo? atKeysIo}) async {
-    AtSignLogger.root_level = 'shout';
+    // `info`, matching the e2e pack (`test_initializers.dart`), not `shout`.
+    //
+    // At `shout` the client's own account of what it did is filtered out
+    // before it reaches the run's output — including `warning`, which is the
+    // level a notification dropped in the delivery loop logs at. A drop and a
+    // non-arrival then print the same nothing, and the failure gets attributed
+    // to whichever side the reader guesses. That cost most of an evening on
+    // `nskey_self_notify_live_test.dart`: three hypotheses about the atServer,
+    // all wrong, while the reason sat in a `warning` line nobody could see.
+    //
+    // A test wanting the monitor's frame-by-frame detail still has to ask for
+    // `finest` — and must do so AFTER this call, which resets the level.
+    AtSignLogger.root_level = 'info';
     preference ??= TestUtils.getPreference(currentAtSign);
     final encryptionKeysLoader = AtEncryptionKeysLoader.getInstance();
     var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
