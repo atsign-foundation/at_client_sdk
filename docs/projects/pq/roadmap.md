@@ -207,7 +207,7 @@ The M0 provider seam is what makes this work; the whole plan is one invariant
 plus **each app's own two releases** — capability, then active use. (There is no
 rollout *machinery*: the readiness-marker/negotiation layer was built and removed
 2026-08-05 —
-[`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05);
+[`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05);
 the two-release model + the flag semantics live in [`design.md`](design.md) [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d).)
 
 **The seam lets schemes coexist per value, so the sender encrypts in the scheme
@@ -273,10 +273,10 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
    once (era config, `disallowLegacyEncryption`, the in-use signing set,
    enrolment key exchange, retrofit signing algorithm), which is why the flag
    and the era default can no longer be flipped apart
-   ([`decisions.md` 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)).
+   ([`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)).
    Legacy *reads* and the legacy provider remain. Minting/conveying legacy key
    material stops only in a later, **ecosystem-gated** release
-   ([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
+   ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 
 In short: **3.x defaults to "PQ when it can, legacy when it must"; 4.x defaults
 to "PQ — refuse rather than write legacy" — overridable either way, but never
@@ -305,7 +305,7 @@ The promises, at a high level:
 - **Backwards-compatible rollout** — reads are universal, and which scheme an
   app writes is its own release decision; the only per-destination gate is the
   cold-start refusal with its explicit legacy fallback
-  ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
+  ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
   An old peer keeps the legacy path by never having published a namespace key.
 - **Safety is automatic** — a duplicate same-identity launch forks or refuses
   deterministically rather than corrupting state.
@@ -355,7 +355,7 @@ the key stores and the WASM-readiness split) → **Phase SS** (the per-APKAM
 secret-sharing substrate) → **Phase B** (the `nskey` data path) → **Phase R**
 (rollout: the `disallowLegacyEncryption` flag, the key-material self-heal, and
 the server self-enroll — the readiness lifecycle was removed,
-[`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)) —
+[`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)) —
 with, off the critical path, **Phase RF's client half** (the retrofit
 orchestration), the
 `selfEncryptionKey` retirement, PQ-native onboarding, and the **D2** carve. The
@@ -368,7 +368,7 @@ cutover. The GA version slot is re-derived at execution against pub.dev — both
 **D1 development is complete; a "make it right" quality pass
 follows before GA** — structural refactoring (readability, maintainability,
 explainability) that lands the design goals the spike left implicit. Those goals
-are ruled in [`decisions.md` §56](decisions.md#56-the-make-it-right-quality-pass-and-the-design-goals-it-settled-2026-08-09):
+are ruled in [`decisions.md` §56](detail/decisions.md#56-the-make-it-right-quality-pass-and-the-design-goals-it-settled-2026-08-09):
 the signing chain is **root-anchored** (chain links provisional, the sweep
 upgrades them; a root-holder conveys root links, not chain links); retrofit has
 **three modes** with a per-retrofit signing-algorithm selector; and — the frame

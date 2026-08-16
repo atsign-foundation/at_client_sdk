@@ -8,7 +8,7 @@ stays the one entry point and the matrix recycles the virtualenv like every
 other live row.
 
 Specified by [`acceptance.md` 16](../../docs/projects/pq/acceptance.md#16-g1--signature-agility-and-the-rollout-matrix);
-the layout is ruled in [`decisions.md` 96](../../docs/projects/pq/decisions.md#96-the-programme-pair-gets-a-home-outside-the-workspace-2026-08-14).
+the layout is ruled in [`decisions.md` 96](../../docs/projects/pq/detail/decisions.md#96-the-programme-pair-gets-a-home-outside-the-workspace-2026-08-14).
 
 ## Why three packages
 
@@ -62,7 +62,7 @@ a released client and this tree cannot exchange an envelope in either
 direction, under any stage — measured, both errors pinned, and accepted rather
 than fixed. [`acceptance.md` 16.5](../../docs/projects/pq/acceptance.md#165-the-rollout-matrix)
 has the reasoning and
-[`decisions.md` 95](../../docs/projects/pq/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+[`decisions.md` 95](../../docs/projects/pq/detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 rulings 2 and 3 have the amendment that finding forced.
 
 ## Running it by hand

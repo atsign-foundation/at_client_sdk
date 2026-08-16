@@ -486,8 +486,12 @@ void main() {
                 'than a 4096 B one');
       }
 
-      final decisions = File('${repoRoot().path}/docs/projects/pq/decisions.md')
-          .readAsStringSync();
+      // The bodies, not the index. `decisions.md` is one row per ruling; the
+      // measured figures this guard exists for live under the ruling's own
+      // heading in the detail file.
+      final decisions =
+          File('${repoRoot().path}/docs/projects/pq/detail/decisions.md')
+              .readAsStringSync();
       expect(decisions, contains('The PQ performance budget, measured'),
           reason: 'a harness nobody has run pins nothing; the measured budget '
               'has to be recorded where the next reader will find it');

@@ -11,7 +11,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 > atSign-level key is `public:pq_signing_root@<atSign>`, it signs and verifies
 > only, and no scenario encapsulates to it. Cold-start has no PQ target and fails,
 > so PQ sharing requires the recipient to have used or authorised the namespace.
-> See [decisions.md section 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
+> See [decisions.md section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
 
 ## Table of contents
 
@@ -103,7 +103,7 @@ per keyfile/install):
 | `publickey`   | legacy RSA encryption pubkey published?                                                               |
 | `pq_signing_root` | atSign-level user-owned **signing** root published (mutable, minted under `_rootlock@owner`)?     |
 | `nskey.ns`    | namespace `ns` nskey state: `—` (never used, so no nskey) · `<kid>` (minted and published at `public:__nskey.<ns>@owner`; the kid names the current generation) |
-| `stage`       | The **app's release stage** for the namespace ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)): `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes legacy) · `active` (writes PQ). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
+| `stage`       | The **app's release stage** for the namespace ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)): `legacy` (pre-capability build) · `cap` (capability build — reads everything, writes legacy) · `active` (writes PQ). Replaces the removed per-`(atSign, namespace)` readiness marker: there is no published readiness state, only what build each install runs. |
 
 **Key objects** (shapes defined in `design.md`; named here for test wiring):
 
@@ -114,13 +114,13 @@ per keyfile/install):
   appears in a key-transport path. Value is
   `{"v": 1, "keys": [{"kid": "<hex>", "use": "sign", "alg": "mldsa65", "pub": "<base64>"}]}`
   — the `_apsk` advertisement vocabulary verbatim, because the root **is** an
-  ordinary signing key ([`decisions.md` 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+  ordinary signing key ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
   requirement 1). A retired entry carries `"status": "retired"`, which is what
   keeps every root link it ever signed verifiable. Only an enrollment with `rw` on `*`
   and `__manage` may create it; the private rides that app's `.atKeys` and is
   conveyed to the other fully privileged enrollments over the substrate. Published
   plain (not `_`-hidden) because it is meant to be found and audited. See
-  [`decisions.md` section 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
+  [`decisions.md` section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
 - **PQ APKAM keypair** — ML-DSA (`mldsa65`) signing key for auth; one per
   enrollment; its public half is the enrollment record's single `apkamPublicKey`.
 - **Namespace key (`nskey`)** — **one** X-Wing KEM keypair per
@@ -147,7 +147,7 @@ per keyfile/install):
   keyfile.
 - **`appMetadata.providerId`** routes a reader to a provider; a value with **no**
   `providerId` defaults to **legacy**. `appMetadata` **states its record's namespace**
-  ([decisions.md section 19](decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)),
+  ([decisions.md section 19](detail/decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)),
   because `AtKey.fromString` splits at the last dot and a multi-segment namespace
   cannot be recovered from the wire string:
   - `at/nskey/XWING/AES/GCM` → `{providerId, recipientKind, ckKid, nskeyKid, ns}` — a
@@ -206,7 +206,7 @@ once in `design.md`; UCs below reference them by name.
   5. Persist AtKeys (PQ APKAM private + signing-root private + key-package private).
   6. **Verify**: re-authenticate using the PQ APKAM key (proves the server accepts PQ auth).
   7. **Legacy material is still cut and published, by default**
-     ([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05),
+     ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05),
      reversing the original Decision #1 default): mint the legacy RSA encryption
      keypair + `selfEncryptionKey`, and publish `public:publickey@alice` — whether
      this atSign will need legacy is determined by the apps that adopt it, which is
@@ -233,9 +233,9 @@ once in `design.md`; UCs below reference them by name.
 |-----|-------|--------|---------|----|
 | E1  | pq    | ✓      | —       | ✓  |
 
-- **Cross-ref:** [`decisions.md` section 18](decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)
+- **Cross-ref:** [`decisions.md` section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03)
   (the signing root, and why there is no cold-start KEM);
-  `decisions.md` ([Decision #1](decisions.md#numbered-rulings-14), legacy-peer interop flag).
+  `decisions.md` ([Decision #1](detail/decisions.md#numbered-rulings-14), legacy-peer interop flag).
 - **Impl/verify:** project **ON-1** (see `implementation-plan.md`); harness
   `tests/at_functional_test` runLocal.sh (live CRAM onboard).
 
@@ -261,7 +261,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   3. `alice1` approves E2; the server records `alice2`'s single `apkamPublicKey` +
      `signingAlgo` + key package + metadata for E2, and populates E2's `_apsk` from
      the enrollment record — the **bare key value, exactly as today**
-     ([`decisions.md` 39](decisions.md#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05)).
+     ([`decisions.md` 39](detail/decisions.md#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05)).
      What chains it to the root is the **approval-chain link** `alice1` signs and
      conveys, which E2 stamps onto its own `_apsk` metadata at first run — the
      value itself is untouched, because apps parse it.
@@ -307,7 +307,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - Both hosts share `pq_signing_root@alice⁻¹` and E1's namespace authorisations.
   - Revocation is per-enrollment (`enroll:revoke`), so revoking E1 cuts every host
     sharing the copy at once.
-- **Cross-ref:** `decisions.md` ([Decision #3](decisions.md#numbered-rulings-14) PQ-APKAM copyable-keyfile placement,
+- **Cross-ref:** `decisions.md` ([Decision #3](detail/decisions.md#numbered-rulings-14) PQ-APKAM copyable-keyfile placement,
   Decision #F 1:1:1).
 
 ### 3.3 UC-A2.3 — Namespace-restricted enrollment
@@ -320,7 +320,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   boundary is enforced at the atServer `__ssenv` namespace-delivery gate (it will not
   deliver an `…__ssenv.app_2.my_apps` key to an enrollment lacking `r` on it), not by
   a client-side refusal alone. `alice3` can read/write `app_1.my_apps` but not `app_2.my_apps`.
-- **Cross-ref:** `decisions.md` ([Decision #4](decisions.md#numbered-rulings-14) push-at-approve + pull backstop);
+- **Cross-ref:** `decisions.md` ([Decision #4](detail/decisions.md#numbered-rulings-14) push-at-approve + pull backstop);
   `design.md` (the substrate enroll flow, `__ssenv` envelope, `shareAllSecretsWithEnrollment`).
 
 ### 3.4 UC-A2.4 — The key package advertises the KEM the deployment configured
@@ -352,7 +352,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then (an unimplemented algorithm fails the mint):** it does not quietly mint the
   other one. This is the only moment an enrollment's encapsulation target can be set
   without the enrollment later sending `enroll:update` for itself.
-- **Cross-ref:** [`decisions.md` 50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
+- **Cross-ref:** [`decisions.md` 50](detail/decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
   (why the knob is a preference and not a `CryptoConfig` field);
   [`implementation-plan.md` 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)
   (the door `enroll:update` opened; `AtEnrollment.update` can walk through it
@@ -398,7 +398,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   enrollment cannot re-advertise an encapsulation target.
 - **Then (the arms must differ):** the accepted arm — E4 updating E4 — has to run in the
   same session, or the two refusals prove only that the verb refuses everything.
-- **Cross-ref:** [`decisions.md` 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
+- **Cross-ref:** [`decisions.md` 68](detail/decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
   rulings 2, 3 and 6.
 
 - **Impl/verify (A2.x):** projects **SS-2 / SS-4** + **RF-2b**, and **KE-1** for
@@ -442,7 +442,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 > keypair generation, a public record publish and a per-enrollment conveyance behind one write,
 > all on the latency path of a user action. Minting is therefore a **start-time** step, and the
 > write path stays honest about what it cannot do. See
-> [decisions 29](decisions.md#29-uc-a32-describes-a-mint-trigger-that-was-never-built-2026-08-04).
+> [decisions 29](detail/decisions.md#29-uc-a32-describes-a-mint-trigger-that-was-never-built-2026-08-04).
 
 - **Given:** `@alice` pq-native; no `app_1.my_apps` nskey exists;
   `alice1`, `alice2` PQ, both with registered key packages.
@@ -561,7 +561,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   ML-KEM-1024 receives `ver 0x03`. That absent-field default **must never grow**: unlike
   a key package, an advertisement is fetched by *senders*, who act on the claim
   immediately.
-- **Cross-ref:** [`decisions.md` 50.3](decisions.md#503-the-kem-is-configured-the-construction-is-negotiated);
+- **Cross-ref:** [`decisions.md` 50.3](detail/decisions.md#503-the-kem-is-configured-the-construction-is-negotiated);
   [`seal-spec.md`](seal-spec.md) (the three versions and what each is attested by).
 
 - **Cross-ref:** `design.md` (nskey data path: 3 layers / 3 providers, CK model, the
@@ -725,7 +725,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Cross-ref:** `design.md` (the nskey + its eager publication, bilateral
   inbound forward-secrecy); `decisions.md` (forward-secrecy rationale, and
-  [50](decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
+  [50](detail/decisions.md#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
   for the KEM/construction split).
 - **Impl/verify (A4.x):** **B-1** + **SS-4**, and **KE-1** for UC-A4.5/A4.6/A4.7; harness
   `tests/at_end2end_test` (cross-atSign). The negotiation itself is unit-provable, but
@@ -786,7 +786,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Cross-ref:** `decisions.md` (FS levers, Decision #F); `design.md`
   (forward-secrecy / rotation levers, nskey-keypair rotation).
 - **Impl/verify (A5.x):** **B-2** — landed 2026-08-06
-  ([decisions 47](decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)).
+  ([decisions 47](detail/decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)).
   A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
   (both positions of the retention knob); A5.1(b), A5.2 and A5.3 by
   `tests/at_functional_test/test/nskey_rotation_live_test.dart`.
@@ -874,7 +874,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
      entirely and proceeds without a root ([UC-B5.3](#123-uc-b53--two-enrollments-race-to-create-pq_signing_root)).
   6. The enrollment now holds its key material. Writing PQ remains the **app's
      release decision** — there is no readiness state to flip
-     ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
+     ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
 - **Then:**
   - `alice1.APKAM = pq` on the fresh auto-approved enrollment; PQ auth works.
   - `public:pq_signing_root@alice` created; `alice1.root⁻¹ = ✓`; `alice1` serves the private to other fully privileged enrollments on request.
@@ -909,7 +909,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   drives the signing-root step in-flow (privileged mint, clone request+verify,
   scoped skip) and the two clones reaching distinct enrollment ids; the submit
   half is `tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart`.
-  See [`decisions.md` 45](decisions.md#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05).
+  See [`decisions.md` 45](detail/decisions.md#45-the-retrofit-rows-and-the-five-defects-the-first-end-to-end-run-found-2026-08-05).
 
 ## 9. B2 · Legacy retirement & lockout
 
@@ -946,7 +946,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 ## 10. B3 · Mixed-PQ within one atSign
 
 > **Rewritten 2026-08-05** around the app-decides model
-> ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)):
+> ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)):
 > there is no readiness marker and no negotiation. "Mixed within one atSign" means
 > different **apps** at different stages (which never interact — they cannot read
 > each other's namespaces) or one app's **installs** mid-rollout (the developer's
@@ -984,9 +984,9 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 | E2      | cap    | legacy + nskey data path | legacy               |
 
 - **Cross-ref:**
-  [`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
+  [`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)
   (the two-release model) and
-  [27](decisions.md#27-the-era-default-read-the-new-scheme-everywhere-write-it-once-2026-08-04)
+  [27](detail/decisions.md#27-the-era-default-read-the-new-scheme-everywhere-write-it-once-2026-08-04)
   (the era default that *is* the capability stage);
   `design.md` [section 1.8](design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d).
 - **Impl/verify:** the era default + data path (**built**; unit
@@ -1000,14 +1000,14 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 > whole contribution is the **cold-start gate**: refuse by name when the
 > destination has no key, take legacy only on explicit opt-in, never substitute a
 > scheme silently
-> ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
+> ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)).
 
 ### 11.1 UC-B4.1 — Active-PQ `alice` shares toward a `bob` with no namespace key
 
 - **Given:** alice's install is at stage `active`; bob's install has never run the
   capability build, so `public:__nskey.app_1.my_apps@bob` does not exist. Bob's
   atSign holds a `public:publickey` (the retained-by-default legacy material,
-  [`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
+  [`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 - **When:** `alice1` shares or notifies `@bob:<k>.app_1.my_apps@alice`.
 - **Then:** the write **fails cold start by name**
   (`NamespaceKeyUnavailableException(@bob, app_1.my_apps)`), unless the app opted
@@ -1026,16 +1026,16 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   legacy app on `@alice` shares with `@bob`).
 - **Then:** **interop works by default in both directions**, because legacy
   material outlives the atSign's own migration
-  ([`decisions.md` 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)):
+  ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)):
   toward alice, bob's app uses the explicit legacy fallback to
   `public:publickey@alice`; toward bob, alice's legacy app finds
   `public:publickey@bob` because even a PQ-native onboard publishes it by
   default. **Test outcome (reversed from the original Decision #1):** a
   legacy-peer send is **supported by default**; only an atSign that set the
   legacy-interop **opt-out** refuses it — deliberately, and loudly.
-- **Cross-ref:** [Decision #1](decisions.md#numbered-rulings-14) (original ruling,
+- **Cross-ref:** [Decision #1](detail/decisions.md#numbered-rulings-14) (original ruling,
   default reversed by
-  [37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
+  [37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).
 - **Impl/verify:** **green live 2026-08-08** —
   `tests/at_functional_test/test/pq_legacy_interop_live_test.dart`, three atSigns
   the test CRAM-activates itself: a pre-PQ one (default signing algorithm, so no
@@ -1059,7 +1059,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   build reached every install), and it is the **app developer's** failure mode,
   not the SDK's to detect: the remedy is updating `alice2`, and everything
   written stays readable to it the moment it is
-  ([`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).2 item 4).
+  ([`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).2 item 4).
   What the SDK guarantees: `alice2`'s *own* writes still work (legacy), nothing
   it wrote becomes unreadable to anyone, and its upgrade is purely additive.
 
@@ -1067,7 +1067,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 
 - **Given:** bob's install runs the capability build for the first time: it
   mints/publishes `public:__nskey.app_1.my_apps@bob` (or pulls the private if the
-  key exists, [`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)).
+  key exists, [`decisions.md` 38](detail/decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)).
   Alice's install is at stage `active`.
 - **When:** `alice1` next shares/notifies `@bob`.
 - **Then:** alice's next `ensureCurrent` re-`plookup` finds bob's advertisement,
@@ -1094,7 +1094,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   `enroll:listns` push — its `requestSecret` for `pq_signing_root@alice⁻¹` is
   the steady-state path, answered by any online holder (persists until one answers).
   Namespaced `nskey` privates `alice2` missed while offline arrive by **its own
-  pull at next start** ([`decisions.md` 38](decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)
+  pull at next start** ([`decisions.md` 38](detail/decisions.md#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)
   — an enrollment created or offline after the mint missed the push, so pulling
   is its normal path, not a backstop), answered store-and-forward by any current
   holder whenever that holder next runs. (Pull = `requestSecret` and push =
@@ -1140,7 +1140,7 @@ These invariants are testable against **every** UC above:
   never substituted, and under `disallowLegacyEncryption = true` a legacy-only
   destination is **refused**, never quietly written legacy.
   *(Replaces "writes gated by reader readiness", 2026-08-05 —
-  [`decisions.md` 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).)*
+  [`decisions.md` 36](detail/decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05).)*
 - **`appMetadata.providerId` is authoritative**, names every algorithm a reader needs
   code for ([`decisions.md`](decisions.md) section 16), and is present on **stored keys,
   notification frames and `lookup` responses alike**. The lookup clause is not
@@ -1163,7 +1163,7 @@ These invariants are testable against **every** UC above:
   are minted behind one. `public:__nskey.<ns>@owner` is mutable because nskey-keypair
   rotation has to overwrite it; `public:pq_signing_root@owner` is mutable because
   advertising a successor beside a retired predecessor is the same rewrite
-  ([`decisions.md` 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)).
+  ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)).
   What stops two of the owner's enrollments racing is a short-ttl **immutable** lock
   key — `_nskeylock.<ns>@owner` and `_rootlock@owner` — and what stops substitution is
   the APKAM signature over the advertised envelope, not the write mode. A lock is a
@@ -1173,7 +1173,7 @@ These invariants are testable against **every** UC above:
   keyfile and the record each carry two root entries — one active, one retired
   — a link signed under the **retired** one still verifies, and signing selects
   the active one. This is D1's boundary
-  ([`decisions.md` 101](decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
+  ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)
   requirement 5): D1 builds the root's rotat*ability* and not the rotation, so
   the two-entry state is written by hand rather than reached by rotating.
 - **Published nskeys are fetchable but not enumerable.** `public:__nskey.<ns>@owner`
@@ -1254,12 +1254,12 @@ restates project IDs, and only as a coverage map):
 
 | UC cluster                                                                      | Project(s)                      |
 |---------------------------------------------------------------------------------|---------------------------------|
-| A1.1 (PQ-native onboard, [Decision #1](decisions.md#numbered-rulings-14), B4.2) | **ON-1**                        |
+| A1.1 (PQ-native onboard, [Decision #1](detail/decisions.md#numbered-rulings-14), B4.2) | **ON-1**                        |
 | A2.x / A3.x / A4.x / A5.x                                                       | **SS-2, SS-4, B-1, B-2, RF-2b** |
 | A2.4 / A3.5 / A4.5 / A4.6 / A4.7 (KEM selection + construction negotiation)      | **KE-1**                        |
-| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path per [`decisions.md` 40](decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)); the B3.x/B4.x data-path halves are built (B-1 + the decisions-36 ladder; R-1's surviving scope is the `disallowLegacyEncryption` flag) |
+| B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path per [`decisions.md` 40](detail/decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)); the B3.x/B4.x data-path halves are built (B-1 + the decisions-36 ladder; R-1's surviving scope is the `disallowLegacyEncryption` flag) |
 
-| C1.x (the rollout driven by flags: era, refusal, envelope, key exchange, retrofit, grouped posture) | **Workstream A** (the rollout-posture capstone, [`decisions.md` 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)) — landed; the default-flip these rows will then guard is **R-2** |
+| C1.x (the rollout driven by flags: era, refusal, envelope, key exchange, retrofit, grouped posture) | **Workstream A** (the rollout-posture capstone, [`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)) — landed; the default-flip these rows will then guard is **R-2** |
 
 Project names follow the `implementation-plan.md` scheme (RF-SRV / RF-2b /
 RF-2c); Workstreams A and B are the cross-cutting strands of the "make it
@@ -1300,7 +1300,7 @@ and B already own.
 
 ### 15.3 UC-C1.3 — WITHDRAWN: there is no envelope axis
 
-**Withdrawn 2026-08-12** by [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+**Withdrawn 2026-08-12** by [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 ruling 1. Do not write this test: it asserts a mechanism that is being deleted.
 
 It read: *given a client whose preference carries
@@ -1310,7 +1310,7 @@ Every clause of it is void — `envelopeVersion` stops being a `ReleasePosture`
 axis, there is one envelope shape rather than a postured choice between two,
 and the trailing claim that a key package "freezes the threaded version in the
 write-once `metadata.keyPackage`" was already false once `enroll:update`
-reached `metadata` ([91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
+reached `metadata` ([91](detail/decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
 ruling 13).
 
 What replaces it belongs to the multi-signature rows in section 16, not here:
@@ -1375,7 +1375,7 @@ Covered by `packages/at_client/test/release_posture_test.dart`.
 
 ## 16. G1 · Signature agility and the rollout matrix
 
-⚠️ **The stages were redefined 2026-08-14 — [`decisions.md` 98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14).**
+⚠️ **The stages were redefined 2026-08-14 — [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14).**
 Rollout 1 moves the **authentication** key to ML-DSA-65 and mints a fresh
 **RSA-2048 signing key** to be advertised in its place, because only the
 atServer verifies the authentication key while every peer verifies the signing
@@ -1388,7 +1388,7 @@ key. Rows below written before that ruling may still describe rollout 1 as
 | `rollout1` | `mldsa65` | `rsa2048` | bare RSA (the signing key) |
 | `rollout2` | `mldsa65` | `mldsa65` active, `rsa2048` retired | the array |
 
-Acceptance for [`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11);
+Acceptance for [`decisions.md` 91](detail/decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11);
 design in [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
 
 The rows below run in `tests/at_functional_test` against the locally built
@@ -1401,7 +1401,7 @@ fixed identifier passes once and collides on the next run.
 Two stage-parameterised executables, a sender and a receiver, each taking
 `--stage published|now|rollout1|rollout2`, plus a driver that runs the matrix.
 
-**What the pair exercises** (ruled [`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
+**What the pair exercises** (ruled [`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
 ruling 3) — the whole story, not the shapes:
 
 - the signed-envelope exchange;
@@ -1623,7 +1623,7 @@ handoff, who grepped for the two literals and found them in prose only. A
 "pinned" claim is checkable in one grep, and this one was false — which is
 worth more as a recorded near-miss than as a silently corrected line, because
 the accepted-break ruling in
-[`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+[`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 rests on exactly this visibility.
 
 **The `now`/`rollout1`/`rollout2` envelope grid is not built.** The functional
@@ -1641,7 +1641,7 @@ error were wrong: `apskValueOf` publishes the array as a JSON **string**, so
 tree's reader is ungated (step 19: "the reader half needs no gate"), so a `now`
 receiver reads the array as readily as a `rollout1` one. The argument for
 capability-before-active is unaffected and lives in
-[`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11);
+[`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11);
 what is gone is the claim that this matrix demonstrates it.
 
 - **UC-G1.14 · rollout 1 is invisible to a deployed peer.**
@@ -1655,7 +1655,7 @@ what is gone is the claim that this matrix demonstrates it.
 
   ⚠️ **This row used to read "rollout 1 changes nothing on the wire", asserting
   the envelopes and the `_apsk` were byte-identical to the `now`/`now` cell.**
-  That is false under [`decisions.md` 98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14):
+  That is false under [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14):
   rollout 1 publishes a *different key* from `now` — its own signing key rather
   than its authentication key — so the bytes differ by design. What must hold
   is the **form**, and only a released reader can settle that. Byte-identity
