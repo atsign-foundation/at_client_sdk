@@ -116,6 +116,14 @@ verb-wire-shape and 1:1:1 cardinality rulings, and a dated decision log.
 - [99. The keyfile groups by enrollment, and the atSign's own keys move out (2026-08-14)](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) — *the at-rest shape; nothing released has ever written a typed keyfile, so there is nothing to migrate*
 - [100. The seven shapes ruling 99 left open (2026-08-14)](#100-the-seven-shapes-ruling-99-left-open-2026-08-14) — *what 98 and 99 left unstated, and what row A1 encodes*
 - [101. The signing root becomes an ordinary signing key, and rotatable (2026-08-15)](#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15) — *the root adopts the `_apsk` vocabulary and the record becomes mutable; D1 builds rotatability, not rotation*
+- [102. An `_apsk` fallback value never replaces a real advertisement (2026-08-15)](#102-an-_apsk-fallback-value-never-replaces-a-real-advertisement-2026-08-15) — *the publish-before-file window, three refused guards, and why the rule has no meaning on `primary`*
+- [103. An envelope says what it is for, and a verifier says what it wants (2026-08-15)](#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15) — *per-use `typ` in the protected header; a verifier is handed the type it expects*
+- [104. The nskey mint stops needing a winner (2026-08-16)](#104-the-nskey-mint-stops-needing-a-winner-2026-08-16) — ⛔ *HELD, superseded the same day by [105](#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16); the log model is a candidate in reserve, and 104.1–104.3 and 104.9 are measurement that stands*
+- [105. The nskey mint elects a winner, and an atServer defect blocks the clean shape (2026-08-16)](#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16) — *the election protocol, the expired-immutable-record defect, and the order of work*
+
+⚠️ **This list omitted 102 and 103 until 2026-08-16** — they were written
+without a TOC line, so the index of the ledger disagreed with the ledger for a
+day. Adding the entry is part of adding the ruling.
 
 ---
 
@@ -9647,3 +9655,462 @@ untouched — they are not JWS and carry no room for a type, and their
 disjointness from each other and from the envelope is still the character-set
 argument of 103.1. Nothing here makes the challenge self-describing;
 `at_lookup` 3.6.1's `validatedFromChallenge` remains the assertion on that side.
+
+---
+
+## 104. The nskey mint stops needing a winner (2026-08-16)
+
+⛔⛔ **HELD — NOT THE DECISION. Read
+[ruling 105](#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16)
+first.** This ruling was made and then superseded **the same day**, by a
+measurement taken hours after it was written. It said, in this paragraph,
+"gkc ruled that an nskey generation is minted without coordination", and that
+was true when written: it is what 104.4 records, and 14.23's seven rows were
+sequenced against it.
+
+What changed is that gkc then stated the requirement directly — *if enrollments
+A, B and C all decide they need to mint, only one of them eventually does* —
+and proposed an election protocol that satisfies it without a log. Ruling 105
+records that protocol and the order of work. **The log model here is a
+candidate held in reserve, to be chosen or discarded once the lock-only design
+has been built and measured**, not work in flight.
+
+Everything below stays, because none of it is wrong and most of it is
+measurement rather than design: 104.1–104.3 and 104.9 are what the lock
+actually buys, how both paths heal, two claims of mine that were corrected, and
+the atServer probe. 104.4–104.8 describe the log model as designed, which is
+exactly what a later reader will need if it is taken up.
+
+**gkc ruled that an nskey generation is minted without coordination.** Each
+generation gets its own record; the published advertisement becomes a *summary*
+healed from those records; and the mint lock survives on this path only as an
+advisory hint that can never stop a client making progress. The signing root is
+untouched and keeps its dispositive interlock.
+
+The route here was
+[`implementation-plan.md` 14.19](implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+item 18 — `MintLock._release` force-deletes a lock it may no longer own.
+Answering "is that worth fixing" meant measuring what the lock was buying, and
+the measurement is what moved the design.
+
+### 104.1 What the lock buys, measured
+
+`MintLock` takes an interlock by writing a short-ttl **immutable** record and
+relies on the atServer refusing a second create; the refusal *is* the lock.
+Nothing reads the record — `_take` writes a timestamp and every other reference
+in the tree is a write, a delete, a key composer, a pin on the key string, or
+prose. It is write-only.
+
+Two windows follow, and only one of them is item 18.
+
+| | window | what happens |
+|---|---|---|
+| 1 | **ttl overrun** | A is still inside `mint()` when the ttl elapses; B takes the lock legitimately and mints alongside A. Inherent to any lease without a fence at the resource, and no change to `_release` touches it |
+| 2 | **stolen release** | A finishes late and force-deletes what is now **B's** lock; C takes it and mints alongside B. This is item 18 |
+
+Window 2 is the worse one, and not because it adds a third minter: it is
+**self-sustaining**. Every late release re-opens the door for the next caller,
+so one chronically slow client degrades the lock to no lock rather than to an
+occasionally-leaky one.
+
+### 104.2 Both paths already heal a loser — by different moves
+
+Item 18 asked for exactly this measurement before any fix, because the argument
+that made it tolerable was about the root and the nskey path was untested.
+
+| | signing root | nskey |
+|---|---|---|
+| start-time step | `reconcileHeldPrivate` → `_retireUnadvertised` | `NskeySeeding.requestMissingPrivates` |
+| what it does | **retires** an active private the record does not advertise | **requests** the private for the kid the record *does* advertise |
+| why that shape | an active-but-unadvertised root private is *actively wrong* — `_activePrivates(keys).firstOrNull` selects it and signs with it | an nskey private is only ever selected by the kid in the envelope being opened, so a losing generation is **inert** |
+
+So the answer is *yes, and not by the same move*. The nskey path needs no
+retire and should not have one: retention is the design
+([ruling 13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02)),
+since rotation deliberately keeps old privates so `__ck` records sealed to
+earlier generations still open.
+
+### 104.3 Two claims corrected in the course of measuring
+
+Both were mine, and the second is the one that changed the ruling.
+
+1. **"A stranded generation is one nobody holds" — wrong.** The minting
+   enrollment holds it. The accurate statement is nobody *reachable* holds it:
+   the device is revoked or gone, its `_apsk` deleted, so it cannot answer a
+   pull.
+2. **"The log makes stranding worse, because today a later mint overwrites the
+   advertisement and garbage-collects it" — wrong.** That overwrite never
+   fires. `NskeySeeding.seed` is `if (await ring.currentPublic(owner,
+   namespace) != null) continue;` — **nothing mints while an advertisement
+   exists.** So an atSign whose advertised generation has no reachable holder
+   is stuck *today*: `currentPublic` returns it, no mint happens,
+   `requestMissingPrivates` asks and nobody answers.
+
+Also confirmed while checking: there **is** a mint-time push — `seed` calls
+`mintAndPublish` and then `_convey`, so stranding needs the minter to die
+between publishing and conveying, or to be the atSign's only enrollment and be
+revoked before a second one ever starts.
+
+The consequence for this ruling: the log model does not introduce that hole. It
+is the first thing that makes it **fixable**, because retirement gains a writer
+and minting stops costing a lock.
+
+### 104.4 The ruling
+
+1. **A generation is minted into its own record.** Two concurrent minters write
+   two different records and neither overwrites the other, so the mint needs no
+   winner.
+2. **The published advertisement becomes a summary healed from those records.**
+   Senders keep reading one well-known name. Coordination is therefore not
+   removed but **demoted** — from a lock before the mint to a shared write
+   after it, on a value that converges because the summary is a pure function
+   of the log.
+3. **A sender may seal to any active entry.** List order carries no meaning.
+4. **Retirement lives in the generation's own record**, as `status: retired`.
+   The transition is monotone — active → retired, never back — so concurrent
+   retires converge and no healer can re-activate a withdrawn generation.
+5. **The mint lock becomes advisory.** A loser re-reads, adopts a usable
+   generation if one is published, and **mints anyway if nothing is there**.
+6. **The heal takes no lock**, reads the log **remotely**, and is **additive
+   plus proven retirements**.
+7. **`rotate` = mint + retire.** `mintAndPublish` only adds.
+8. **An enrollment that cannot obtain an advertised generation's private, and
+   finds no key package to ask, retires that generation and mints a fresh
+   one** — on the first observation.
+9. **The signing root is out of scope** and keeps its dispositive interlock.
+
+### 104.5 The record shapes
+
+**Summary — `public:__nskey.<ns>@<owner>`. The address and the wire format are
+entirely unchanged**, which is worth stating because it is surprising: `keys`
+is already a list, `NskeyAdvertisement` already defaults `suites` to
+`openableSuitesForAll(keys.map((k) => k.alg))` — the union across generations —
+and a sender already intersects that union with its own algorithm's suites, so
+a union is safe by construction. `status` is already parsed and honoured by
+`bestKeyFor`. What changes is who writes the record and that its list finally
+has more than one entry.
+
+**Generation — `public:__<kid>.__nskeys.<ns>@<owner>`, new.** One per
+generation, signed by its minter under its own
+[`EnvelopeType`](#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15).
+Id first, reserved marker in the middle, namespace last — the same shape a
+`__ck` conveyance uses — parsed by splitting on the **first** occurrence of the
+marker, so a multi-segment namespace survives where `AtKey.fromString`'s
+last-dot cut would not. The leading `__` keeps it invisible to an
+unauthenticated scan, which is the property that forces the summary to exist at
+all: a peer structurally cannot enumerate these, and exposing them so it could
+would leak which namespaces — which apps — an atSign uses.
+
+The marker carries **double** underscores because a namespace segment could
+legitimately be the word `nskeys`, and because every other reserved token in
+this subsystem says "protocol vocabulary, not your data" the same way.
+
+### 104.6 Advisory has to be structural, not documented
+
+The lock stays because duplicate minting is not a coincidence here. The heal in
+ruling 8 above has a **correlated trigger**: several enrollments starting after
+a revocation all discover the same unanswerable pull at the same moment, so
+they all retire and all re-mint. That is a thundering herd by construction, and
+it scales with the number of devices.
+
+What makes keeping it safe is that its correctness stops mattering. The stolen
+release of 104.1, the ttl question of 104.9, a network blip on `_take` that is
+not contention at all — each degrades to *one extra generation* rather than to
+broken exclusion or an atSign that cannot mint.
+
+⚠️ **But "helpful, not dispositive" decays unless the shape enforces it.**
+Today's call site is `if (!await _take(lockKey)) return null;`, which reads
+identically whichever it is, and `mintAndPublish` currently **throws** when it
+loses the lock and finds nothing published — dispositive behaviour inside a
+method whose own doc calls losing the race a resolution. The
+lost-it-and-still-nothing-there-so-mint-anyway path must exist and must have
+its own test, or the next reader reasons from the call site and it becomes a
+hard lock again.
+
+`MintLock` therefore serves **two policies from one mechanism**: it reports one
+fact — somebody else holds it — and what that means is the caller's. The root
+reads it as "do not mint"; the nskey reads it as "mint anyway if nothing is
+there". That is the separation, and the class doc has to say so, because it is
+also why item 18 still has to be fixed: one of the two callers is still
+dispositive.
+
+### 104.7 The heal is additive, and that is a correctness property
+
+A healer that scans the log, gets nothing back — a failed scan, a partial
+result, a namespace it lacks access to — and then writes what it found would
+**destroy a working advertisement**. The heal would break the thing it exists
+to repair.
+
+So the healer may **add** any generation it finds, and may **drop** an entry
+only when it has positively read that generation's record carrying
+`status: retired`. It can never drop for absence. A failed or partial scan then
+degrades to "no change" by construction rather than by a guard someone has to
+remember to write, and both operations stay monotone, which is what keeps
+concurrent healers convergent.
+
+It reads the log from the **atServer**, not the local store: that is the only
+place all enrollments' generation records are certainly present, and a heal
+computed from a stale local view is how a just-minted generation gets left out
+of the summary it was minted for.
+
+### 104.8 Considered and rejected
+
+- **Senders enumerate the generation records directly, and no summary exists.**
+  Genuinely removes the shared write. **Rejected** because a `public:__` key is
+  revealed only by `showhidden`, so a peer cannot enumerate them — and changing
+  that leaks the atSign's namespace inventory, which is the property the
+  double-underscore naming was chosen for.
+- **At most one active entry per `(alg, use)`, with the healer picking a
+  winner.** **Rejected**: choosing a winner under contention is the
+  coordination this ruling removes, wearing the heal's clothes.
+- **An explicit "current" marker in the summary.** Same objection, plus a field
+  in a record whose format otherwise does not change at all.
+- **Retirement recorded only in the summary.** **Rejected** because it breaks
+  convergence: the summary would stop being a pure function of the log, so two
+  healers with different views of it write different bytes.
+- **Deleting a generation's record to retire it.** **Rejected**: it loses the
+  *fact* of the retirement, so a healer holding a cached view can re-add it,
+  and it loses the record of which generations ever existed.
+- **A healer that advertises only generations it can itself open.** The obvious
+  answer to the advertised-versus-held gap, and it is **disqualified rather
+  than merely worse**: every healer would then write a different summary, which
+  destroys the convergence the whole model rests on.
+- **A lock on the heal.** **Rejected**: the value converges, so racing healers
+  cost redundant writes and nothing durable.
+
+### 104.9 Measured — the ttl does not free the lock, and gkc ruled that an atServer defect
+
+**Measured live against `at_virtual_env:local` on 2026-08-16**, because this
+started as a hypothesis read off at_server source and the local at_server tree
+is not the build the virtualenv ships.
+
+The probe: create an immutable record with a 20s ttl; attempt the same create
+five times while it is live; attempt once more 1ms past the expiry instant. The
+expiry instant is computed from when the FIRST create's response *returned* —
+the atServer committed at or before that moment, so `returnedAt + ttl + 1ms` is
+guaranteed past the true expiry rather than merely near it.
+
+```
+t=0.000s   create #1              -> ACCEPTED
+t=1.016s   create (live)          -> refused: Immutable records may not be updated
+t=5.013s   create (live)          -> refused    <- five independent positive
+t=10.015s  create (live)          -> refused       controls, each naming the
+t=15.016s  create (live)          -> refused       interlock rather than an
+t=19.016s  create (live)          -> refused       unrelated failure
+llookup:meta: while live -> {"expiresAt":"…11:08:47.456Z","status":"active","ttl":20000,"immutable":true}
+
+t=20.017s  create (expiry+1ms)    -> refused: Immutable records may not be updated
+llookup:meta: after expiry -> data:null
++5s … +150s past expiry           -> refused, every 5s, all 30 attempts
+```
+
+⚠️ **The record is simultaneously GONE and BLOCKING.** `llookup` says
+`data:null` — to every reader it does not exist — while the immutability check
+still refuses a create. The two answers disagree about whether the record is
+there.
+
+That is the source asymmetry confirmed on the wire.
+`AbstractUpdateVerbHandler` refuses on `keyStore.getMeta(atKey)?.immutable ==
+true`; `HiveAtKeyValueStore.getMeta` delegates to `get`; and `get` has **no
+expiry filter** — a comment describing one sits there with no code under it,
+while `_isKeyAvailable` guards the lookup and enumeration paths.
+
+⚠️ **What the number bounds.** 150s past a 20s expiry is 7.5× the ttl, and it
+bounds the cooldown at **more than 150s**. It does *not* establish that the
+record blocks forever — nothing was measured past that point, and a sweep may
+free it later. A floor was measured, not a kind.
+
+**gkc ruled this an atServer defect (2026-08-16), not a constraint to design
+around.** A ttl on an immutable record has no purpose other than making it
+re-creatable; `llookup` already agrees the record is gone; and the fix is
+small — the update handler's existing-metadata read needs the same availability
+check the lookup path already applies.
+
+**What it cost.** A design where the winner never deletes the lock and lets the
+ttl release it — otherwise the best shape available, because no release means
+no *stolen* release and
+[14.19](implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+item 18 ceases to exist rather than being fixed — did not work on this
+atServer. The release was mandatory, and item 18 came back with it.
+
+### 104.10 FIXED in at_server the same day, and re-measured on the wire
+
+Branch `gkc-expired-immutable-blocks-create`, cut from `origin/trunk`.
+
+**gkc ruled the shape, and it is better than the three that were offered:
+an update that finds an expired record DELETES it (`skipCommit: true`) before
+proceeding.** Not "teach each reader to look past it" — the store genuinely
+ends up empty, so the cache-metadata validation, the immutability check and the
+keystore's own merge all see the absence a reader already saw.
+
+⚠️ **Deleting turned out to be necessary rather than merely tidier.** Nulling
+the metadata inside the verb handler was tried first and was **not enough**:
+`HiveAtKeyValueStore.putAll` re-reads the record for itself
+(`if (await exists(key)) existingData = await get(key)`) and merges it through
+`AtMetadataBuilder`, so an expired record still supplied `immutable`,
+`createdAt` and `version` to the record replacing it. A unit test caught it —
+the re-created record came back `immutable: true` without asking.
+
+⚠️ **And `AtMetadataBuilder` carried a comment the fix falsified**: *"Note:
+this condition never occurs right now but we will leave it here for safety's
+sake"*, above the immutable-stickiness branch. It never occurred **because the
+update handler refused every such update**. The fix makes it reachable.
+
+`skipCommit` because nothing observable changes — the record stopped being
+visible when its ttl elapsed, so a commit entry would sync the deletion of
+something no peer ever saw.
+
+**Expiry only, deliberately not the server's general is-this-active test**,
+which also answers false inside a record's ttb. A not-yet-born record has not
+stopped existing and must still refuse a second create.
+
+**Measured, at_server:** `update_verb_test.dart` 74/74; the whole
+at_secondary_server unit suite **958/958**; the functional pack **221/221**
+`EXIT=0`; `dart analyze lib test` exit 0. Isolated by mutation — removing the
+delete gives exactly **2** failures, both expired-record tests, while the
+not-yet-born test stays green.
+
+**Re-measured on the wire**, same probe as above against a rebuilt
+`at_virtual_env:local`:
+
+```
+t=1s … 19s  create (live)       -> refused, five times   (the interlock intact)
+t=20.019s   create (expiry+1ms) -> ACCEPTED              (was refused, >150s)
+llookup before -> createdAt 11:42:10.879, version 0
+llookup after  -> createdAt 11:42:30.909, version 0
+```
+
+The fresh `createdAt` and `version: 0` are what prove the *delete* rather than
+just a relaxed check: the replacement is a new record, not a merge with a
+corpse.
+
+⚠️ **One unexplained observation, recorded rather than diagnosed.** The first
+functional run failed one unrelated test —
+`create_update_key_test.dart`, on `updatedAt >= keyUpdateDateTime` — and the
+second run passed it. **1 failure in 2 runs, cause unknown.** A clock-skew
+explanation was proposed and then **disproven by measurement**: the container
+runs ~317ms *ahead* of the host (bounded by `docker exec` latency), and that
+assertion needs the server to be *behind*. What can be said without a
+diagnosis is that the assertion compares a client-captured timestamp against a
+server-generated one with zero tolerance, while `AtMetadataBuilder` truncates
+to millisecond precision — so it is flap-prone whatever the trigger.
+
+---
+
+## 105. The nskey mint elects a winner, and an atServer defect blocks the clean shape (2026-08-16)
+
+Supersedes [ruling 104](#104-the-nskey-mint-stops-needing-a-winner-2026-08-16),
+made the same day. 104 removed the *need* to coordinate; this one satisfies the
+coordination requirement directly and keeps a single nskey record. **The log
+model is held in reserve, not discarded** — the decision between them is
+deferred until the design below is built and measured.
+
+### 105.1 The requirement, stated
+
+**If enrollments A, B and C all decide they need to mint, only one of them
+eventually does.**
+
+Worth writing down because it had never been stated. Every earlier discussion
+argued about mechanisms — the lock, its ttl, its release — without an agreed
+property to hold them to, which is how "is item 18 worth fixing" stayed
+unanswerable for two sessions.
+
+⚠️ **It is a requirement only under the single-record model.** Under the log,
+two mints are two records and nothing is lost, so the same sentence would be an
+optimisation. Stating it *is* therefore a lean toward keeping one record, and
+that is what makes ruling 104 held rather than in flight.
+
+### 105.2 The protocol gkc specified
+
+1. A, B and C each decide they need to mint.
+2. Each **reads**, and stops if it turns out it does not need to mint.
+3. Each attempts the lock — possibly at different times, but within a bounded
+   window.
+4. Only the winner proceeds. The losers do **not** mint.
+5. The winner **re-checks under the lock** that it still needs to mint, because
+   somebody may have finished between step 2 and step 3.
+6. The winner **does not delete the lock**; the ttl releases it.
+
+The reframing that makes step 6 right rather than wasteful: **this is not a
+mutex, it is an election token with a cooldown.** Holding it for the whole ttl
+means "an election happened recently, do not hold another one". The only case
+where a second election is wanted inside the window is *the winner failed*,
+which is exactly what the ttl exists to bound — so in the success case the
+cooldown costs nothing. And it makes 14.19 item 18 **cease to exist** rather
+than be fixed: no release, no stolen release.
+
+**gkc ruled the loser's behaviour:** re-read once, adopt a key if one is there,
+otherwise **fail**. A waiting `put` fails loudly rather than hanging on another
+device's crash, and the retry is the next client start, which is where minting
+is triggered from anyway.
+
+### 105.3 Step 6 does not work on today's atServer, and that is a defect
+
+[104.9](#1049-measured--the-ttl-does-not-free-the-lock-and-gkc-ruled-that-an-atserver-defect)
+has the probe. An expired immutable record keeps refusing a create for **more
+than 150s past a 20s ttl**, while `llookup` reports it `data:null` — the record
+is simultaneously gone and blocking.
+
+**gkc ruled this an atServer defect, and ruled the fix belongs in
+`AbstractUpdateVerbHandler`** rather than at the store — making `get` filter
+expiry is what its own comment says was intended and would make lookup and
+update agree everywhere, but the internals that legitimately need to *see*
+expired records (`deleteExpiredKeys`, compaction, migration) were never
+enumerated, and that is wider than this needs.
+
+**gkc ruled the client waits for it.** Building the release-based version first
+would work today and be thrown away; building the never-delete version against
+an unfixed atServer cannot be tested at all. So the order is: fix at_server,
+rebuild `at_virtual_env:local`, then build the client.
+
+✅ **The first two are DONE** — see
+[104.10](#10410-fixed-in-at_server-the-same-day-and-re-measured-on-the-wire).
+The fix is on `gkc-expired-immutable-blocks-create` off `origin/trunk`, the
+image is rebuilt, and expiry+1ms is accepted on the wire. **Step 6 of the
+protocol is therefore available**: the winner never deletes the lock, the ttl
+releases it, and item 18 ceases to exist on any path that uses it that way.
+⚠️ It is not merged — an unfixed atServer still behaves the old way, so a
+client built on ttl-only release is correct only against a server carrying
+this.
+
+### 105.4 Three client-side things the protocol needs, none of which exist
+
+Found while checking whether the protocol holds against the tree as it stands.
+
+1. **Both reads must be remote, and the one that matters is not.** Every read
+   in the nskey subsystem that must see another party's write passes
+   `useRemoteAtServer = true` — ten sites in `pq_signing_chain.dart`, plus the
+   root's `publishedRoots` — and `current_ck_pointer.dart` passes `false`
+   *explicitly*, because that one is the client's own pointer.
+   `published_nskey_key_ring.dart:450`, the advertisement read behind
+   `currentPublic`, is **the only read in the family with no options at all**,
+   so it is local-first and lags sync.
+   ⚠️ **This is not an oversight.** `currentPublic` deliberately serves two
+   callers through one read — a sender fetching a *peer's* advertisement, where
+   local-first plus the 15-minute `advertisementTtl` cache is right, and a
+   minter asking whether its *own* atSign already has a key, where it is wrong.
+   Its dartdoc celebrates that unification as what makes "one verify path,
+   same-atSign and cross-atSign" true rather than aspirational. The elegance
+   and the defect are the same line.
+2. **Step 5 does not exist for the nskey.** `_mintUnderLock` re-reads the
+   record under the lock; `_mint` does not. The root has the winner's re-check
+   and the nskey has never had one.
+3. **The requirement still fails on a ttl overrun, and the bounded window in
+   step 3 does not cover it.** A takes the lock at T0, is still minting at
+   T0+ttl, the lock expires, B wins the next election, re-checks, A has not
+   published yet, B mints too. The window bounds when the three *attempt*, not
+   how long the winner *takes*. The fix is for the holder to carry its lease
+   and refuse to publish once it is spent, so a slow A abandons rather than
+   racing B — which turns "two mints" into "one mint, by B", the requirement.
+
+### 105.5 What is held, and what would revive it
+
+Ruling 104's log model stays written up in full. It is revived if the lock-only
+design, once built, fails to hold the requirement in practice — the residual
+risks being a suspend landing between the lease check and the publish, and the
+cooldown a crashed winner imposes on an atSign. Neither is measurable until the
+client exists, which is why the decision is deferred rather than argued.
+
+⚠️ **`mintLockTtl`'s dartdoc is false as written** — "a crash backstop, not a
+budget" — and is corrected in whichever commit first touches this path,
+regardless of which model wins.

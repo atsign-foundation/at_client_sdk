@@ -3198,6 +3198,44 @@ its own. None blocks anything.
     `reconcileHeldPrivate` on every start retires a private the record does
     not advertise, so the loser heals — and that argument is about the ROOT.
     Whether the nskey path has an equivalent is **not measured**.
+    ✅ **MEASURED 2026-08-16, and the item got SMALLER rather than larger.**
+    The nskey path does heal a loser, by a different move —
+    `NskeySeeding.requestMissingPrivates` *requests* the advertised
+    generation's private rather than retiring an unadvertised one, which is
+    right because an nskey private is selected by the kid in the envelope being
+    opened and so a losing generation is inert. Details and the table are in
+    [decisions 104.2](decisions.md#1042-both-paths-already-heal-a-loser--by-different-moves).
+    ⚠️ **The scope then changed underneath this item.**
+    [decisions 104](decisions.md#104-the-nskey-mint-stops-needing-a-winner-2026-08-16)
+    makes the lock **advisory on the nskey path**, where a stolen release costs
+    one extra generation and nothing else. So this item is now about the
+    **signing root only** — one record, one caller (`mintIfAbsent`, at
+    activation and retrofit), no rotation reasoning and no nskey differential
+    test. That is what made it worth doing rather than documenting.
+    **The shape gkc chose:** read the lock's value back and delete only if it
+    is still ours, with a local elapsed check in front so the extra round trip
+    is paid only when we might actually have overrun — and a random nonce
+    instead of `_take`'s timestamp, so "is it mine" is a byte comparison rather
+    than an argument about clock resolution.
+    ⚠️⚠️ **MEASURED 2026-08-16, then FIXED the same day — this item is now
+    expected to DISAPPEAR rather than be fixed.**
+    ([decisions 104.9](decisions.md#1049-measured--the-ttl-does-not-free-the-lock-and-gkc-ruled-that-an-atserver-defect)
+    and [104.10](decisions.md#10410-fixed-in-at_server-the-same-day-and-re-measured-on-the-wire).)
+    An expired immutable record kept refusing a create for **more than 150s
+    past a 20s ttl**, while `llookup` reported it `data:null` — simultaneously
+    gone and blocking. gkc ruled it an atServer defect; it is fixed on
+    `gkc-expired-immutable-blocks-create` off `origin/trunk` (an update that
+    finds an expired record deletes it with `skipCommit` before proceeding),
+    and expiry+1ms is now **accepted on the wire** against a rebuilt
+    `at_virtual_env:local`.
+    **So the better shape is available: the winner never deletes the lock and
+    the ttl releases it.** No release means no *stolen* release, which is this
+    entire item. Do not build the nonce-and-read-back fence described above
+    unless that shape is rejected. ⚠️ Two things still owed either way:
+    `mintLockTtl`'s dartdoc says "a crash backstop, not a budget", which was
+    **false as written** and is only true once the server fix is merged; and a
+    client relying on ttl-only release is correct **only** against an atServer
+    carrying that fix, which is not yet merged.
 19. **`tests/at_onboarding_cli_functional_tests` analyzes with 6 warnings, all
     in one file nobody touched — noticed 2026-08-15.** Every one is an
     `unused_import` in `test/ecc_secure_element_mock_test.dart`; `dart analyze
@@ -3763,6 +3801,75 @@ reading the row.
 
 ---
 
+### 14.23 The nskey mint stops needing a winner — decisions 104
+
+[decisions 104](decisions.md#104-the-nskey-mint-stops-needing-a-winner-2026-08-16)
+rules the shape; this is the order. Generations get their own records, the
+advertisement becomes a summary healed from them, and the mint lock survives on
+this path only as an advisory hint. **The signing root is out of scope** and
+keeps its dispositive interlock —
+[14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18 is
+still owed, and now guards exactly one record with one caller.
+
+**Three things measured before sequencing**, because rows below rest on them:
+
+- **The tolerant reader has already shipped.** `NskeyAdvertisement.keys` is
+  genuinely a list and `bestKeyFor` walks it filtering on `status == active`;
+  its own dartdoc says *"Not `keys.single`… a reader that assumed one would
+  throw on the first advertisement that did"*. So the usual
+  reader-ships-first ordering constraint does not apply here. Re-derive:
+
+  ```
+  git grep -n "bestKeyFor\|keys.single\|keys.first" -- packages/at_client/lib/src/crypto/nskey/
+  ```
+
+- **The summary's wire format does not change at all.** `suites` already
+  defaults to `openableSuitesForAll(keys.map((k) => k.alg))` — the union across
+  generations — and `NskeyProvider._sealVersionFor` intersects that union with
+  the sender's own algorithm's suites, so a multi-generation advertisement is
+  safe by construction. `status` is already parsed. What changes is the writer.
+- **Nothing mints while an advertisement exists.** `NskeySeeding.seed` is
+  `if (await ring.currentPublic(owner, namespace) != null) continue;`. This is
+  why the stranded-generation hole is unfixable today and why row 6 can exist
+  at all. ⚠️ It also disproves the "a later mint overwrites and cleans up the
+  stranded generation" reasoning, which was believed for part of the design
+  session — see [decisions 104.3](decisions.md#1043-two-claims-corrected-in-the-course-of-measuring).
+
+**The rows, in order.** Each names the differential that proves it, because
+every one of these can pass for the wrong reason.
+
+| # | What | The differential |
+|---|---|---|
+| 1 | The generation record — composer, first-marker parser, `EnvelopeType` — **plus** the healer **plus** `_mint` writing the record and then healing. ⚠️ **ONE commit.** Splitting it leaves a tree that writes generation records and publishes no advertisement, so every sender sees a cold start; [B3](#8-phase-rb--rollout-rotation-retirement--versioning-r-1-sh-1-b-2-ke-1-b-3-on-1-r-2) had the same shape and had to be one commit for the same reason | two concurrent mints leave **two** generations, both advertised, neither overwritten. Mutation: make the healer replace rather than merge → the second mint's generation is the only one left |
+| 2 | The mint lock becomes advisory: a loser re-reads, adopts if a usable generation is published, and **mints anyway if not**. The `StateError` at `published_nskey_key_ring.dart:292` is deleted | lock held **and** nothing published → mints. Today that throws, so the arm is a straight inversion. ⚠️ This is the row that decays — the test is the only thing that stops the advisory contract silently becoming a hard lock again |
+| 3 | `status: retired` gains a writer; `rotate` becomes mint + retire; its lock-contention dartdoc is deleted because it documents a failure that can no longer happen | retiring drops the entry from the summary **and** leaves the private filed. Both halves, or it passes for a delete |
+| 4 | `_ownCurrent` deleted; the owner's own advertisement goes through the same fetch/verify/TTL path as a peer's | a retirement written by **another** enrollment stops this one sealing to the withdrawn generation. Today it seals to it for the life of the process |
+| 5 | `requestMissingPrivates` walks the **log** rather than the summary | a new device pulls a **retired** generation's private — which it needs to open `__ck` records sealed before the rotation, and which an active-only summary can never tell it about |
+| 6 | The evidence-based retire and re-mint: no private for an advertised generation **and** no key package to ask → retire it and mint fresh, on the first observation | sole enrollment, advertised private absent, no key package → retires and mints. **Control arm required**: a sibling key package present → waits and does not retire. Without the control this passes for the absence of the effect |
+| 7 | Docs and acceptance sweep | `catalogue_test.dart` going red **is** the check. Four acceptance scenarios name `_nskeylock` (`a3_self_data_test`, `a5_rotation_test`, `b5_edge_cases_test`, `cross_cutting_test`), plus `acceptance.md` rows, `test/acceptance/README.md`'s pinned counts, `design.md` section 1.3's shape table, and `wire_literal_pins_test.dart` |
+
+**Routing notes — [14.20](#1420-building-rulings-98-and-99--the-sequence)'s
+question applied before building, not after.**
+
+- Row 3 reads like bookkeeping ("write a status field") and routes into the
+  **summary composer**, exactly as B5's did: the healer must be told what was
+  retired, or it recomputes from a log it re-reads and the retirement is
+  invisible until the write lands.
+- Row 4 reads like deleting a cache and routes into **every `put`** —
+  `CkManager.ensureCurrent` runs per write and reaches `currentPublic`, so
+  removing the in-memory short-circuit puts the 15-minute `advertisementTtl`
+  cache on that path instead of nothing.
+- Row 6 reads like a heal and routes into **`rotate`'s meaning**: it is the
+  first caller that retires a generation it did not mint.
+
+⚠️ **Two files to read before starting, neither of which the rows name.**
+`nskey_rotation.dart` is unexamined and may carry a single-generation
+assumption; and `tests/at_functional_test/test/pq_signing_root_mint_lock_test.dart`
+drives `ring.rotate` live in its third test, so row 3 changes what that file
+asserts.
+
+---
+
 ## 15. D1 burn-down — the single index of what D1 owes
 
 **Why this exists.** There was no one place to answer "what is left for D1".
@@ -3799,7 +3906,8 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
 | 11 | **14.19's open small items — 18 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
-| 12 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
+| 12 | **The nskey mint stops needing a winner** — generations get their own records, the advertisement is healed from them, the lock becomes advisory | [14.23](#1423-the-nskey-mint-stops-needing-a-winner--decisions-104) | Open, ruled 2026-08-16, **in D1**. Seven rows in order; row 1 is one commit or the tree publishes nothing. Re-derive: `git grep -n "__nskeys\|nskeyMintLockKey" -- packages/at_client/lib` |
+| 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
 **Not owed, and worth stating so nobody re-opens them:** step 11 is labelled
 `PARTLY DONE` but its own cell closes with `✅ DONE 2026-08-13, with step 12` —
