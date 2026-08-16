@@ -10143,3 +10143,78 @@ well as to the mint election. Two things follow, both built:
 rotation inside the mint lock's cooldown is refused*), with the control that
 makes the refusal mean something: the same client, same namespace, same call,
 accepted once the ttl has lapsed.
+
+---
+
+## 106. The nskey private is pulled, so content can outrun it (2026-08-16)
+
+**In brief:** ⚠️ *a notification whose decryption needs a not-yet-held nskey private is dropped and never retried; the private arrives seconds later*
+
+Found while writing UC-A3.4's **self** direction live — the row the catalogue
+carries as PROVEN against a `MockAtClient` and a hand-built frame.
+
+### 106.1 What was measured
+
+Two distinct enrollments of one atSign, the nskey minted by the approver
+*before* either existed, both on the nskey data path. `alice1` notifies
+`@alice` with an encrypted value; `alice2` runs a monitor.
+
+```
+53.278  update:ttl:604800000  __ssenv envelope -> kpid f456ee8e4fe5ab77
+53.290  update:ttl:604800000  __ssenv envelope -> kpid f456ee8e4fe5ab77
+53.322  notify:               wake-up for those envelopes
+53.334  PublishedNskeyKeyRing Asked the other enrollments for the nskey
+                              private …; filed when a holder replies
+53.945  notify:               the treaty (content, encrypted)
+53.948  Monitor RECEIVED      the treaty — on BOTH monitors
+53.980  WARNING NotificationServiceImpl
+                              Dropping notification …treaty… :
+                              no nskey private held for @alice🛠:selfntfy…
+56.62   (the answer to the 53.334 pull arrives)
+```
+
+**Nothing here is an atServer defect, and three hypotheses that said otherwise
+were disproven in turn.** The monitor was listening (adding a wait for
+`NotificationListenerState.listening` changed the result not at all). Self
+notifications *are* delivered to sibling enrollments' monitors — the receiver
+received the treaty, and `__ssenv` frames besides. Sends left in the right
+order. The client even logs the drop at `warning`, naming the reason.
+
+### 106.2 Why the ordering invariant does not save it
+
+gkc's model, and it is the right one: a secret is **PUT to the receiver's
+inbox and a self notification sent**, so ordering should give
+secret → content-key → content, and a receiver that *needs* a secret can fetch
+it from the inbox without waiting for any notification.
+
+⛔ **Step one does not exist for the nskey private.** It is not pushed as a
+notification the receiver could receive in order — the receiver **pulls** it
+(`PublishedNskeyKeyRing`: *"Asked the other enrollments…"*), and a pull the
+receiver starts at its own bootstrap has no ordering relationship to a send by
+another party. So the content notification races the pull, and here lost by
+**0.6s** against an answer that arrived **2.7s** later.
+
+⚠️ **Not established:** whether the envelopes at 53.278/.290 — addressed to the
+receiver's own kpid, ttl 7 days — carry the nskey private or only the
+approval-time `apkamSymmetricKey`. They land during approval, which conveys the
+latter, and the receiver's subsequent pull is evidence against the former.
+**Settle this before choosing a fix**, because it decides whether the push is
+missing or merely unconsumed.
+
+### 106.3 What is owed
+
+A dropped notification that nothing retries is data loss, not a log level: the
+subscriber never sees the value, while the material needed to open it is on the
+atServer for `envelopeTtl` and in hand seconds later. Two candidate directions,
+neither ruled:
+
+1. **Push the private ahead of content** at approval, making the ordering
+   invariant true by construction.
+2. **Fetch on demand at decrypt** — on `no nskey private held`, await or fetch
+   rather than drop.
+
+⚠️ **`PairwiseSecretSharing.startListening()` has no production caller** — only
+its own unit tests. The periodic inbox sweep is therefore not running anywhere;
+a client sweeps once at start via `collectConveyedKeyMaterial`
+(`pq_client_bootstrap.dart:312`) and never again. That is a separate gap and it
+widens this one.

@@ -163,6 +163,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [103] | An envelope says what it is for, and a verifier says what it wants                          | 2026-08-15 | LIVE                      |
 | [104] | ~~Per-generation nskey records~~                                                            | 2026-08-16 | REJECTED — see [105]      |
 | [105] | The nskey mint elects a winner                                                              | 2026-08-16 | LIVE                      |
+| [106] | The nskey private is pulled, so content can outrun it                                       | 2026-08-16 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -270,3 +271,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [103]: detail/decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15
 [104]: detail/decisions.md#104-per-generation-nskey-records-rejected-2026-08-16
 [105]: detail/decisions.md#105-the-nskey-mint-elects-a-winner-2026-08-16
+[106]: detail/decisions.md#106-the-nskey-private-is-pulled-so-content-can-outrun-it-2026-08-16

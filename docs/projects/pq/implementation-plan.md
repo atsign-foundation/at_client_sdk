@@ -42,7 +42,38 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
+| [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) | A notification needing a not-yet-held nskey private is dropped without retry | Blocked on one question: does approval-time conveyance push the private, or only the apkamSymmetricKey? |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
+
+### 14.30 A content notification can outrun the key that opens it
+
+Found 2026-08-16 writing UC-A3.4's self direction live
+([decisions 106](detail/decisions.md#106-the-nskey-private-is-pulled-so-content-can-outrun-it-2026-08-16)).
+A notification whose decryption needs an nskey private the receiver does not
+yet hold is **dropped and never retried**, while the private arrives seconds
+later and the envelope stays on the atServer for `envelopeTtl`.
+
+**Measured**, not inferred: drop at `53.980` with `no nskey private held`; the
+receiver's pull answered at `56.62`. The atServer, the monitor and the ordering
+of sends were all correct — three hypotheses blaming them were disproven in
+turn.
+
+**Owed, and not ruled:**
+
+1. ⛔ **Settle first:** do the approval-time envelopes addressed to the new
+   enrollment's kpid carry the **nskey private**, or only the
+   `apkamSymmetricKey`? That decides whether the push is missing or merely
+   unconsumed, and no fix should be chosen before it is answered.
+2. Then either push the private ahead of any content sealed to it, or fetch on
+   demand when decryption reports `no nskey private held`.
+3. **`PairwiseSecretSharing.startListening()` has no production caller** — the
+   periodic inbox sweep runs nowhere. A client sweeps once at start
+   (`collectConveyedKeyMaterial`, `pq_client_bootstrap.dart:312`). Separate
+   gap, widens this one.
+
+⚠️ **The live test that found it is `nskey_self_notify_live_test.dart` and it
+is RED** — deliberately, and it is not committed to the pack in that state. It
+is the characterisation of the defect, not a regression.
 
 ### 14.29 The residuals 14.25 surfaced
 
@@ -583,10 +614,16 @@ place (the layer-3 AAD literal, and UC-A3.4 below).
    is not yet true. B-1's own unmet acceptance requirement (#2010).
 2. **UC-A3.4's self direction is unit-only.** Both live notify tests are
    alice→bob; the alice1→alice2 case is asserted against a `MockAtClient`. The
-   plan claimed both A3.4 and A4.4 were live-covered — corrected. It is now
-   *owed rather than blocked*: the harness limitation the issue cites
-   (`AtClientManager` being a singleton) was removed by `ConcurrentClients` and
-   `EnrolledClient`, so the assertion is writable today (#2093).
+   plan claimed both A3.4 and A4.4 were live-covered — corrected.
+   ⛔ **"Writable today" was wrong, and writing it is what showed why**
+   (2026-08-16). The harness limitation is indeed gone — `ConcurrentClients`
+   and `EnrolledClient` make two real enrollments of one atSign routine — but
+   the row cannot pass as specified: a content notification can reach the
+   second enrollment **before** the nskey private that opens it, and is then
+   dropped without retry
+   ([decisions 106](detail/decisions.md#106-the-nskey-private-is-pulled-so-content-can-outrun-it-2026-08-16),
+   [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it)).
+   The assertion is writable; what it asserts is not yet true (#2093).
 3. **SS-4: an interrupted mint does not resume.** The acceptance bullet asks
    that it resume rather than re-generate; there is no persisted in-progress
    marker, so it starts over. Worth deciding whether that is still required —
