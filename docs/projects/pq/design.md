@@ -1,22 +1,33 @@
 # design.md — Detailed designs & implementation steps (by subsystem)
 
-> ⛔ **PARTLY SUPERSEDED, 2026-08-14. Read this before building from any
-> section that names a rollout stage or the `.atKeys` shape.**
+> **Coverage of this document, stated rather than implied.**
 >
-> [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
-> redefined the rollout stages and
-> [99](detail/decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
-> reshaped the at-rest keyfile. **Neither is built**, so this document still
-> describes what the *code* does — and that is exactly the trap: it reads as
-> current because it matches the tree.
+> **Re-verified against the tree on 2026-08-16:**
+> [section 9](#9-subsystem-g--signature-agility-the-authsigning-key-split) and
+> the `.atKeys` shape it describes. Rulings
+> [98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
+> and [99](detail/decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
+> are **built**, and section 9 has been rewritten to describe what the code
+> does rather than what it was about to do:
 >
-> Two statements in [section 9](#9-subsystem-g--signature-agility-the-authsigning-key-split)
-> are now false, and both are called out in place below: **`rollout1` writes
-> exactly what `now` writes**, and the **file-wide single-active-authentication
-> rule** as the thing that makes the enrollment id derivable.
+> ```bash
+> # 98: the rollout axis and what each stage keeps active
+> sed -n '/enum SigningRollout/,/^}/p' \
+>   packages/at_client/lib/src/preference/release_posture.dart
+> # 99: material grouped by enrollment, the atSign's own keys outside it
+> git grep -n "_enrollments\|atSignKeys\|'atsignKeys'" \
+>   -- packages/at_auth/lib/src/keys/at_keys.dart
+> ```
 >
-> The order to build the replacements in is
-> [`implementation-plan.md` 14.20](detail/implementation-plan.md#1420-building-rulings-98-and-99--the-sequence).
+> ⚠️ **Sections 0–8 were NOT re-verified in that pass**, and nothing marks a
+> section that has drifted. Treat a claim there as needing a check before you
+> build on it — `git grep -n "<symbol>" -- packages`, unscoped, because a
+> pathspec you invent can match nothing and read as a clean absence
+> (`git grep -c . -- 'packages/*/lib'` returns **zero paths**).
+>
+> This notice exists because the banner it replaces asserted that rulings 98
+> and 99 were unbuilt. Both had shipped, so the document was warning about the
+> wrong direction of drift.
 
 **Status:** working design doc (not plan-of-record). Lives in `docs/`.
 **Purpose:** the detailed per-subsystem design + build-level implementation steps
@@ -250,11 +261,11 @@ advertisement is fetched by *senders*, who act on the claim immediately. See
 
 ### 1.4 the nskey and the signing root
 
-> **Revised 2026-08-03.** What this section used to say — that
-> `public:pqpublickey@<atSign>` was the atSign-level root **KEM** target and the
-> universal cold-start recipient — is gone. The key signs and verifies only, is named
-> `public:pq_signing_root@<atSign>`, and is the user-owned root of trust. The full
-> reasoning, and what it replaced, is
+> The atSign-level key is `public:pq_signing_root@<atSign>`. It **signs and
+> verifies only** — it is not a KEM target and no scenario encapsulates to it —
+> and it is the user-owned root of trust. There is therefore no universal
+> cold-start recipient: PQ sharing requires the recipient to have used or
+> authorised the namespace. Ruled in
 > [decisions.md section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
 
 **The nskey's public half is published eagerly.** Minting writes
@@ -2027,32 +2038,24 @@ single-active-authentication rule. With one live enrollment per install, a
 second active authentication key is a keyfile this build will not write,
 whatever algorithm it names.
 
-✅ **The refusal is on the WRITE path only, since 2026-08-14** — [`decisions.md` 99](detail/decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
-ruling 2, built as 14.20 row A2. `AtKeys.addKey` calls it; the parse files
-through a private path that applies the structural invariants and not this
-one. A reader that refused a second entry would make the plurality
-unenableable — the first build to emit two would break every build that
-predates it, so no build could ever start — and the whole file is somebody's
-key material to lose. The ambiguity surfaces instead at
-`resolveAuthenticatingEnrollment()`, where a caller is asking for the one
-answer that does not exist.
+**The refusal is on the WRITE path only** — [`decisions.md` 99](detail/decisions.md#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14)
+ruling 2. `AtKeys.addKey` calls it; the parse files through a private path that
+applies the structural invariants and not this one. A reader that refused a
+second entry would make the plurality unenableable — the first build to emit
+two would break every build that predates it, so no build could ever start —
+and the whole file is somebody's key material to lose. The ambiguity surfaces
+instead at `resolveAuthenticatingEnrollment()`, where a caller is asking for
+the one answer that does not exist.
 
-Until then this rule ran on the read path too, and was described here as "what
-makes the enrollment id derivable" — which `AtKeys.activeEnrollmentId` no
-longer is.
-
-**What replaces it: the caller supplies the enrollment id, and `AtKeys` offers
-a derivation the caller can ask for** —
+**The caller supplies the enrollment id, and `AtKeys` offers a derivation the
+caller can ask for** —
 [`decisions.md` 100](detail/decisions.md#100-the-seven-shapes-ruling-99-left-open-2026-08-14)
-ruling 1. `activeEnrollmentId` has no production caller, and both live
-resolvers already pass an explicit id; a cold start with no id to pass calls
-`resolveAuthenticatingEnrollment()`, which answers when exactly one enrollment
-holds active authentication material and throws rather than picking when
-several do. A null id keeps meaning the flat block.
-(This paragraph read "what replaces its side effect is an OPEN QUESTION …
-settle this before building row A2" until 2026-08-14; the top-level
-`enrollmentId` is still explicitly **not** the answer — 99 ruling 7, it belongs
-to the legacy block.)
+ruling 1. Both live resolvers pass an explicit id; a cold start with no id to
+pass calls `resolveAuthenticatingEnrollment()`, which answers when exactly one
+enrollment holds active authentication material and throws rather than picking
+when several do. A null id keeps meaning the flat block, and the top-level
+`enrollmentId` is explicitly **not** the answer — 99 ruling 7, it belongs to
+the legacy block.
 
 `AtKeys.replaceKey(enrollmentId, keyId, replacements)` retires the named
 keyId's materials and files the replacements in one call. Rotation is never two
@@ -2090,13 +2093,13 @@ from the flat block as the wrong enrollment.
 }
 ```
 
-⚠️ **Corrected 2026-08-13: `kid` was missing from this example**, and it is
-required — `apskSigningKeys` skips any entry lacking one, so the document as
-previously shown is one every reader treats as empty and then refuses outright.
-`apskAdvertisement` has always written it. The example also showed
-`"status": "active"` on the live entry; the field is **omitted** when a key is
-active, because absent already reads as active and stating the default would
-change the bytes of every advertisement in the protocol.
+⚠️ **`kid` is required on every entry** — `apskSigningKeys` skips any entry
+lacking one, so a document without it is one every reader treats as empty and
+then refuses outright. `apskAdvertisement` writes it.
+
+`status` is **omitted** on a live entry rather than written as `"active"`,
+because absent already reads as active and stating the default would change the
+bytes of every advertisement in the protocol.
 
 `kid`, `use`, `alg`, `pub` and `status` are `PackageKey`'s spellings
 (`packages/at_client/lib/src/secret_sharing/key_package.dart` — grep the class,
@@ -2235,11 +2238,10 @@ unmodifiable, defaulting to `{}` under `ReleasePosture.migration()` and
 `{mldsa65}` under `ReleasePosture.postQuantum()`. Empty is not "unsigned": an
 enrollment with no signing key of its own signs with its APKAM authentication
 key, and that is the key `_apsk` advertises for exactly as long as it is the
-signer. ⚠️ **Amended 2026-08-14 by [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
-ruling 2**, which this sentence used to contradict: it said the auth key
-"~~stays published afterwards~~", i.e. was retained once the enrollment held
-signing keys. It is not — a key is retained for what it *signed*, and an
-enrollment holding signing keys held them from birth. Naming an algorithm this build
+signer. It is **not** retained once the enrollment holds signing keys
+([`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
+ruling 2): a key is retained for what it *signed*, and an enrollment holding
+signing keys held them from birth. Naming an algorithm this build
 produces no envelope signature for is refused at construction rather than
 skipped. The reasoning for each of those is in
 [`decisions.md` 91.3](detail/decisions.md#913-the-rulings) ruling 16.
@@ -2303,19 +2305,12 @@ separate signing keys, publish the array, emit multi-signature envelopes. A
 build doing any one without the others emits something the fleet cannot handle,
 so they do not get independent flags.
 
-⛔ **FALSE since [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14),
-and built out on 2026-08-14 (rows B1 and B3).** ~~Rollout 1 is the reader half
-only, and is not gated — a reader that understands more shapes is always
-safe.~~ Rollout 1 is a **writer** position: the enrollment authenticates with
-ML-DSA-65 and owns a fresh RSA-2048 signing key from before it submits, which
-is what `_apsk` advertises. The reader half needing no gate is still true and
-is why the *advertisement* stays the bare string an un-upgraded peer parses —
-but the key it names changes, and the stage carries an atServer dependency
-(ML-DSA PKAM) that `now` does not.
-
-⚠️ This sentence survived the 2026-08-14 banner two paragraphs below, which
-corrected the same claim in its other form. Corrected in the sweep that
-followed.
+**Rollout 1 is a writer position**, not a reader-only one: the enrollment
+authenticates with ML-DSA-65 and owns a fresh RSA-2048 signing key from before
+it submits, and that signing key is what `_apsk` advertises. A reader needs no
+gate — which is why the *advertisement* stays the bare string an un-upgraded
+peer parses — but the key it names changes, and the stage carries an atServer
+dependency (ML-DSA PKAM) that `now` does not.
 
 **The axis is `SigningRollout`,** on `ReleasePosture.signingRollout` and
 overridable per `AtClientPreference`. It names a position — `now`, `rollout1`,
@@ -2332,15 +2327,12 @@ supplies the default for the one piece of state all three read,
 the stage rather than storing both, because two stored fields are two controls
 over one behaviour.
 
-⛔ **FALSE since [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
-(2026-08-14), and still what the code does because 98 is unbuilt.** Under 98,
-rollout 1 mints an **ML-DSA-65 authentication** keypair and a fresh **RSA-2048
-signing** keypair, and `_apsk` advertises the *signing* key — so rollout 1
+`rollout1` mints an **ML-DSA-65 authentication** keypair and a fresh
+**RSA-2048 signing** keypair, and `_apsk` advertises the *signing* key. So it
 writes something `now` does not, and carries an atServer dependency (ML-DSA
-PKAM) that `now` does not. The paragraph below describes the superseded design:
+PKAM) that `now` does not.
 
-~~`rollout1` writes exactly what `now` writes, deliberately.~~ What it carries is
-the *fleet's* position — the peers' readers have upgraded — which no client can
-observe for itself and which is the precondition for anyone moving to
-`rollout2`. It is reachable only through `AtClientPreference`, since there are
-two postures and no general constructor.
+What the stage also carries is the *fleet's* position — the peers' readers have
+upgraded — which no client can observe for itself, and which is the
+precondition for anyone moving to `rollout2`. It is reachable only through
+`AtClientPreference`, since there are two postures and no general constructor.
