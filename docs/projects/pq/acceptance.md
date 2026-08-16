@@ -49,7 +49,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**41 PROVEN · 2 BLOCKED · 1 WITHDRAWN** across 44 use cases and 44 scenarios —
+**45 PROVEN · 2 BLOCKED · 1 WITHDRAWN** across 48 use cases and 48 scenarios —
 `UC-A5.1` has two.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -103,6 +103,10 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-B5.1  | Offline enrollment pulls `pq_signing_root` later                                    | PROVEN    | `b5_edge_cases_test.dart`    |
 | UC-B5.2  | Reading legacy history after retrofit                                               | PROVEN    | `b5_edge_cases_test.dart`    |
 | UC-B5.3  | Two enrollments race to create `pq_signing_root`                                    | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.4  | Two enrollments race to mint a namespace's nskey                                    | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.5  | The mint lock has no release but its ttl                                            | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.6  | A rotation inside the cooldown is refused, and succeeds after it                    | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.7  | A winner that overruns its lease publishes nothing                                  | PROVEN    | `b5_edge_cases_test.dart`    |
 | UC-C1.1  | The era axis: a postured client writes PQ by default                                | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.2  | The refusal axis: the posture disallows legacy writes                               | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.3  | WITHDRAWN — there is no envelope axis                                               | WITHDRAWN | —                            |
@@ -1207,6 +1211,87 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 
 - **Cross-ref:** `design.md` (push/pull duality — substrate facts stated once there).
 - **Impl/verify:** **RF-1** (`requestSecret` confirm) + **B-1** (provider routing).
+
+### 12.4 UC-B5.4 — Two enrollments race to mint a namespace's nskey
+
+The nskey twin of [UC-B5.3](#123-uc-b53--two-enrollments-race-to-create-pq_signing_root),
+and the property [decisions 105](detail/decisions.md#105-the-nskey-mint-elects-a-winner-2026-08-16)
+exists to hold: *if enrollments A, B and C all decide they need to mint, only
+one of them eventually does.*
+
+- **Given:** `alice1` and `alice3` both decide namespace `n` needs an nskey.
+  Each has already read and found none — **from the atServer**, not from local
+  storage, because a sibling's publication is absent locally until sync catches
+  up and reading that absence as a cold start is what mints a second key.
+- **When:** both attempt the `_nskeylock.n@alice` lock, within a bounded window.
+- **Then:** exactly one takes it. It **re-reads under the lock**, because a
+  sibling may have published between its first read and the take, and **adopts**
+  what it finds rather than overwriting it. The loser re-reads once: it adopts a
+  published key if there is one, and otherwise **fails loudly** rather than
+  minting or waiting — a `put` blocked on another device's crash must not hang,
+  and the retry is the next client start, which is where minting is triggered
+  from anyway.
+
+- **Cross-ref:** `design.md` §  the nskey mint lock; `seal-spec.md` (kid addressing).
+- **Impl/verify:** **SS-4** (mint) + **B-1** (provider routing).
+
+### 12.5 UC-B5.5 — The mint lock has no release but its ttl
+
+- **Given:** an enrollment holds `_nskeylock.n@alice` or `_rootlock@alice` and
+  finishes minting.
+- **When:** it completes, successfully or not.
+- **Then:** it **does not delete the lock**. The ttl is the only release, which
+  is what makes the record an *election token with a cooldown* rather than a
+  mutex: holding it for the whole ttl says "an election happened recently, do
+  not hold another one". A lock nobody deletes has no stolen-release window,
+  so a holder that overruns cannot free a successor's lock. A lock key
+  presented with **no ttl is refused outright** — with nothing deleting the
+  record, a missing ttl would block minting permanently rather than late.
+
+- **Cross-ref:** `design.md` (the two mint locks and what each guards).
+- **Impl/verify:** **SS-4**.
+
+### 12.6 UC-B5.6 — A rotation inside the cooldown is refused, and succeeds after it
+
+The consequence of [12.5](#125-uc-b55--the-mint-lock-has-no-release-but-its-ttl)
+that a caller can see. It is here because it changes an API's observable
+behaviour, and because **no unit test can find it**: the interlock *is* the
+atServer refusing a second create of an immutable record, and a mocked
+`executeVerb` accepts the second take, so the mechanism's presence and its
+absence are indistinguishable under mocks.
+
+- **Given:** namespace `n` was minted or rotated within `mintLockTtl`, so the
+  lock is still held by its own ttl.
+- **When:** the same enrollment asks to rotate `n`.
+- **Then:** the rotation is **refused**, with an error naming the cooldown and
+  saying the retry must wait the ttl out — the one thing the caller can act on.
+  Once the ttl lapses the same call from the same client for the same namespace
+  is **accepted**, which is the control that makes the refusal mean something.
+  ⚠️ `revokeEnrollmentAndRotate` revokes first, so a refusal here leaves the
+  enrollment cut off from the atServer while still holding the live generation.
+  It catches per namespace, logs `severe`, and carries on to the others rather
+  than sleeping for the ttl inside a call that has already done the destructive
+  half.
+
+- **Cross-ref:** [decisions 105.6](detail/decisions.md#1056-built-the-cooldown-binds-rotation-too).
+- **Impl/verify:** **SS-4** + **B-2** (revocation).
+
+### 12.7 UC-B5.7 — A winner that overruns its lease publishes nothing
+
+- **Given:** `alice1` takes the lock at T0 and is still minting at T0+ttl. The
+  lock expires, `alice3` wins the next election, re-reads, finds nothing
+  published, and mints.
+- **When:** `alice1` finally reaches its publish.
+- **Then:** it **abandons**. The holder carries a lease stamped *before* the
+  take goes out — so "unspent by my clock" implies the atServer has not expired
+  it either, and the client errs early rather than late — and refuses to publish
+  once the lease is spent. That turns "two mints" into "one mint, by `alice3`",
+  which is the requirement. The bounded window in the election covers when the
+  three *attempt*, never how long the winner *takes*, so without this the
+  property fails on any slow minter.
+
+- **Cross-ref:** `design.md` (the mint lock's two windows).
+- **Impl/verify:** **SS-4**.
 
 ---
 

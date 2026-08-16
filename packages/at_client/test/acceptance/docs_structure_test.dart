@@ -67,11 +67,24 @@ Set<String> _headingSlugs(String markdown) => RegExp(r'^#{1,6}\s+(.*?)\s*$',
 const _ceilings = <String, int>{
   'decisions.md': 300,
   'implementation-plan.md': 1000,
-  'acceptance.md': 1900,
   'design.md': 2450,
   'roadmap.md': 450,
   'seal-spec.md': 400,
 };
+
+/// The live files. A ceiling is a separate question — `acceptance.md` has none
+/// (gkc, 2026-08-16: the catalogue is the bar for "D1 is done", so it is as
+/// long as the use cases require and a length limit would argue for leaving
+/// one out) — but every live file is still checked for the rules that are
+/// about correctness rather than size.
+const _liveFiles = <String>[
+  'decisions.md',
+  'implementation-plan.md',
+  'acceptance.md',
+  'design.md',
+  'roadmap.md',
+  'seal-spec.md',
+];
 
 void main() {
   group('the ledger index and its bodies stay in step', () {
@@ -323,7 +336,7 @@ void main() {
 
     test('no doc carries a rule permitting stale prose', () {
       final offences = <String>[];
-      for (final file in [..._ceilings.keys, 'detail/decisions.md',
+      for (final file in [..._liveFiles, 'detail/decisions.md',
         'detail/implementation-plan.md']) {
         final text = _read(file);
         for (final entry in banned.entries) {

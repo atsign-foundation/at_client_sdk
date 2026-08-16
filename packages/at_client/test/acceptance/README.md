@@ -118,7 +118,7 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## The catalogue
 
-**54 rows** — the catalogue's 44 use cases become 44 scenarios (UC-A5.1 splits
+**58 rows** — the catalogue's 48 use cases become 48 scenarios (UC-A5.1 splits
 and UC-C1.3 is withdrawn, both below), plus 10 cross-cutting invariants.
 
 | Cluster                       | Scenarios                        | Blocked on   |
@@ -133,11 +133,11 @@ and UC-C1.3 is withdrawn, both below), plus 10 cross-cutting invariants.
 | B2 · retirement & lockout     | B2.1 ✅, B2.2 ✅                    | —            |
 | B3 · mixed-PQ intra-atSign    | B3.1 ✅, B3.2 ✅                    | —            |
 | B4 · mixed-PQ cross-atSign    | B4.1 ✅, B4.2 ✅, B4.3 ✅, B4.4 ✅   | —            |
-| B5 · retrofit edge cases      | B5.1 ✅, B5.2 ✅, B5.3 ✅           | —            |
+| B5 · retrofit edge cases      | B5.1 ✅, B5.2 ✅, B5.3 ✅, B5.4 ✅, B5.5 ✅, B5.6 ✅, B5.7 ✅ | — |
 | C1 · rollout by flags         | C1.1 ✅, C1.2 ✅, C1.4 ✅, C1.5 ✅, C1.6 ✅, C1.7 ✅ | — |
 | cross-cutting invariants      | 10 (10 ✅)                        | —            |
 
-**UC-C1.3 is withdrawn**, which is why 44 use cases yield 44 scenarios rather
+**UC-C1.3 is withdrawn**, which is why 48 use cases yield 48 scenarios rather
 than 45 despite the A5.1 split. The rollout's envelope-shape axis stopped
 existing when the envelope stopped having a second shape to roll out to. Its
 heading stays in the catalogue, marked `WITHDRAWN`, so cross-references still
@@ -159,7 +159,7 @@ the 45** rows as the catalogue stood then, and no data-path row could go green u
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**2 of the 54** rows are skipped, and the burn-down went back above zero on
+**2 of the 58** rows are skipped, and the burn-down went back above zero on
 2026-08-10 rather than drifting there. `enroll:updateMetadata` was ruled
 ([`decisions.md` 68](../../../../docs/projects/pq/decisions.md)) and brought two
 new rows with it — UC-A2.5 and UC-A2.6 — so the catalogue grew by two use cases

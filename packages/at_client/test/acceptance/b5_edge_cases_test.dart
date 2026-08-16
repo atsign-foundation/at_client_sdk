@@ -127,6 +127,92 @@ void main() {
             'namespace-scoped enrollment declines to attempt the mint at all',
       );
     });
+
+    test('UC-B5.4 · two enrollments race to mint a namespace nskey', () {
+      // GIVEN alice1 and alice3 both decide namespace n needs an nskey, each
+      //       having read the atServer rather than local storage.
+      // WHEN  both attempt the _nskeylock.n@alice lock.
+      // THEN  one takes it, re-reads under it, and adopts what a sibling
+      //       published rather than overwriting it; the loser adopts a
+      //       published key or fails loudly, never mints.
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'every advertisement read on the mint path goes to the atServer',
+        proves: 'the decision to mint is taken against the atServer, not '
+            'against local storage where a sibling publication lags sync — '
+            'reading that absence as a cold start is what mints a second key',
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a winner that published while this client took the lock is adopted',
+        proves: 'the winner re-reads under the lock and adopts, so a sibling '
+            'that published between the first read and the take is not '
+            'overwritten',
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a loser with nothing published fails rather than minting',
+        proves: 'the loser does not mint and does not wait on another '
+            "device's crash — a put fails loudly and the retry is the next "
+            'client start',
+      );
+    });
+
+    test('UC-B5.5 · the mint lock has no release but its ttl', () {
+      // GIVEN an enrollment holds the lock and finishes minting.
+      // WHEN  it completes.
+      // THEN  it does not delete the lock; the ttl is the only release, and a
+      //       lock key with no ttl is refused outright.
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'the winner does not release the lock — the ttl does',
+        proves: 'no delete means no stolen release, so a holder that overruns '
+            "cannot free a successor's lock",
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a lock key with no ttl is refused outright',
+        proves: 'with nothing deleting the record, a missing ttl would block '
+            'minting permanently rather than late',
+      );
+    });
+
+    test('UC-B5.6 · a rotation inside the cooldown is refused, then succeeds',
+        () {
+      // GIVEN namespace n was minted or rotated within mintLockTtl.
+      // WHEN  the same enrollment asks to rotate n.
+      // THEN  refused, naming the cooldown; accepted once the ttl lapses.
+      //
+      // ⚠️ Cited live and NOT from a unit test on purpose. The interlock is
+      // the atServer refusing a second create of an immutable record; a mocked
+      // executeVerb accepts the second take, so every unit test of this path
+      // is green whether or not the cooldown exists.
+      // Cited up to the apostrophe: provenIn matches raw source, and the test
+      // is named with an escaped `\'`, so the full name is not the string in
+      // the file. The prefix identifies it uniquely.
+      provenIn(
+        'tests/at_functional_test/test/nskey_rotation_live_test.dart',
+        'a rotation inside the mint lock',
+        proves: 'the refusal names the cooldown and says the retry waits the '
+            'ttl out, and the same call from the same client for the same '
+            'namespace is accepted once it lapses — the control without which '
+            'the refusal would prove nothing',
+      );
+    });
+
+    test('UC-B5.7 · a winner that overruns its lease publishes nothing', () {
+      // GIVEN alice1 takes the lock at T0 and is still minting at T0+ttl,
+      //       while alice3 wins the next election and mints.
+      // WHEN  alice1 reaches its publish.
+      // THEN  it abandons, turning "two mints" into "one mint, by alice3".
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'a mint that overruns its lease publishes nothing',
+        proves: 'the lease is stamped before the take goes out, so the client '
+            'errs early rather than late, and the election window bounding '
+            'when the three attempt does not bound how long the winner takes',
+      );
+    });
   });
 }
 
