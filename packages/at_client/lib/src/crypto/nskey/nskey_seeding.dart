@@ -96,7 +96,13 @@ class NskeySeeding {
     final minted = <String>{};
     for (final namespace in await authorisedNamespaces()) {
       try {
-        if (await ring.currentPublic(owner, namespace) != null) continue;
+        // The atServer, not local storage: a namespace another enrollment
+        // minted a moment ago is absent locally until sync catches up, and
+        // reading that absence as a cold start is what publishes a second key
+        // over the first.
+        if (await ring.publishedAdvertisement(owner, namespace) != null) {
+          continue;
+        }
         final advertisement = await ring.mintAndPublish(namespace);
         minted.add(namespace);
         await _convey(namespace, advertisement.nskeyKid);

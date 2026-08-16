@@ -4,8 +4,9 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
+    show EnvelopeType, SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
@@ -27,19 +28,38 @@ void main() {
     registerFallbackValue(FakeUpdateVerbBuilder());
   });
 
-  /// A client whose remote verbs succeed, recording what was sent. [lockTaken]
-  /// makes the lock's immutable create fail, which is how the atServer reports
-  /// that another enrollment already holds it.
-  ({MockAtClient client, List<AtKey> verbs, Map<String, String?> values})
-      client({bool lockAlreadyHeld = false}) {
+  /// A client whose remote verbs succeed, recording what was sent, and serving
+  /// back whatever has been published to the one record these tests turn on.
+  /// [lockAlreadyHeld] makes the lock's immutable create fail, which is how the
+  /// atServer reports that another enrollment already holds it.
+  ///
+  /// Serving the advertisement back matters: the mint path reads the atServer
+  /// rather than this client's caches, precisely so that a *sibling*
+  /// enrollment's publication is visible before sync catches up. A fixture that
+  /// always answered "absent" would make every adoption test pass by minting.
+  ({
+    MockAtClient client,
+    List<AtKey> verbs,
+    Map<String, String?> values,
+    Map<String, String> advertised,
+    List<GetRequestOptions?> advertisementReads,
+  }) client({bool lockAlreadyHeld = false}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookUp();
     final verbs = <AtKey>[];
     final values = <String, String?>{};
+    // The atServer's copy of `public:__nskey.<ns>@alice`, by namespace. A test
+    // writes into it to stand for another enrollment having published.
+    final advertised = <String, String>{};
+    // How each advertisement read was asked for. A mocktail stub cannot tell a
+    // local-first get from a remote one on its own — both arrive here — so the
+    // options are what the remote-only claim is pinned against.
+    final advertisementReads = <GetRequestOptions?>[];
+    final chops = AtChopsImpl(
+        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
 
-    when(() => atClient.atChops).thenReturn(AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+    when(() => atClient.atChops).thenReturn(chops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
@@ -49,8 +69,22 @@ void main() {
         .thenAnswer((_) async => true);
     when(() => atClient.get(any(),
             getRequestOptions: any(named: 'getRequestOptions')))
-        .thenAnswer((inv) async =>
-            throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
+        .thenAnswer((inv) async {
+      final key = inv.positionalArguments[0] as AtKey;
+      // Anything that is not the advertisement is the `_apsk` its signature is
+      // checked against. One key for every enrollment of this atSign, so an
+      // advertisement signed by the fixture verifies whichever enrollment it
+      // claims — authenticity itself is pinned in published_nskey_key_ring_test.
+      if (key.key != '__nskey') {
+        return AtValue()
+          ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+      }
+      advertisementReads.add(
+          inv.namedArguments[#getRequestOptions] as GetRequestOptions?);
+      final serving = advertised[key.namespace];
+      if (serving == null) throw AtKeyNotFoundException('$key');
+      return AtValue()..value = serving;
+    });
 
     when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((inv) async {
@@ -63,10 +97,19 @@ void main() {
           throw AtLookUpException(
               'AT0023', 'Immutable records may not be updated');
         }
+        if (builder.atKey.key == '__nskey') {
+          advertised[builder.atKey.namespace!] = builder.value as String;
+        }
       }
       return 'data:1';
     });
-    return (client: atClient, verbs: verbs, values: values);
+    return (
+      client: atClient,
+      verbs: verbs,
+      values: values,
+      advertised: advertised,
+      advertisementReads: advertisementReads,
+    );
   }
 
   Future<NskeyPrivateFiling> filing() async {
@@ -165,19 +208,47 @@ void main() {
             'good');
   });
 
+  /// The winner's advertisement as it sits **on the atServer** — signed, so it
+  /// goes through the same verify a peer's would.
+  Future<String> publishedByAnother(
+          MockAtClient client, XWingKeyPair winner) async =>
+      AtClientEnvelopeSigner(client).wrapAndSignAndJsonEncode(
+          NskeyAdvertisement.single(
+            publicKey: winner.publicKeyBytes,
+            alg: SecretSharingAlgos.xWing,
+            suites:
+                SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
+          ).toPayload(),
+          type: EnvelopeType.nskeyRing);
+
+  test('every advertisement read on the mint path goes to the atServer',
+      () async {
+    // Row 1. The sender's read (`currentPublic`) stays local-first on purpose —
+    // `CkManager.ensureCurrent` reaches it on every put — so this is a claim
+    // about the mint path only, and it is a claim about the OPTIONS rather than
+    // about a value, because both routings return the same thing here.
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    await ring.mintAndPublish(namespace);
+
+    expect(c.advertisementReads, isNotEmpty,
+        reason: 'the mint asks whether a generation is already published');
+    expect(c.advertisementReads.map((o) => o?.useRemoteAtServer), everyElement(isTrue),
+        reason: 'a local-first read answers out of storage that a sibling '
+            'enrollment\'s publication has not synced into yet, and reading '
+            'that absence as a cold start is what publishes a second key over '
+            'the first');
+  });
+
   test('the loser of the race adopts the winner\'s advertisement', () async {
     final c = client(lockAlreadyHeld: true);
     final winner = await XWingKeyPair.generate();
     final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
-    // The winner published while this client was trying to take the lock.
-    ring.rememberOwn(
-        atSign,
-        namespace,
-        NskeyAdvertisement.single(
-          publicKey: winner.publicKeyBytes,
-          alg: SecretSharingAlgos.xWing,
-          suites: SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
-        ));
+    // On the atServer, not in this client's memory. A sibling enrollment's
+    // publication is exactly what local storage does not have yet, so a
+    // fixture that seeded it locally would be testing the wrong absence.
+    c.advertised[namespace] = await publishedByAnother(c.client, winner);
 
     final adopted = await ring.mintAndPublish(namespace);
 
@@ -186,5 +257,29 @@ void main() {
             'every peer that had already fetched it');
     expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty,
         reason: 'and the loser publishes nothing at all');
+  });
+
+  test('a winner that published while this client took the lock is adopted',
+      () async {
+    // Row 2's differential, and the one the lock alone never covered: this
+    // client WINS the race, so nothing refuses it — but a sibling published in
+    // the window between the decision to mint and the lock being taken. The
+    // record is mutable, so minting here overwrites a key peers already hold.
+    final c = client();
+    final winner = await XWingKeyPair.generate();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+    c.advertised[namespace] = await publishedByAnother(c.client, winner);
+
+    final adopted = await ring.mintAndPublish(namespace);
+
+    expect(adopted.nskeyKid, nskeyKidOf(winner.publicKeyBytes),
+        reason: 'a different kid means this client minted its own generation '
+            'over the sibling\'s, which is the overwrite the re-read under the '
+            'lock exists to prevent');
+    expect(c.verbs.where((k) => k.key == '_nskeylock'), hasLength(1),
+        reason: 'the lock was taken — this client is the winner, and the '
+            're-read under it is what stops it overwriting the sibling');
+    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty,
+        reason: 'and nothing is published over the generation already there');
   });
 }

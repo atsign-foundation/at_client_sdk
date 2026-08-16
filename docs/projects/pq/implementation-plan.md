@@ -32,7 +32,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | The nskey mint elects a winner — seven rows | Rows 3 and 5 need at_server [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) merged **and** deployed atServers running it. Rows 1–2 need nothing |
+| [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | The nskey mint elects a winner — rows 1 and 2 are **built**; 3–7 remain | Rows 3 and 5 need at_server [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) merged **and** deployed atServers running it. Rows 4, 6 and 7 need nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | 18 open small items — the items are in `detail/`, none of them blocking | Item 8 is the only one waiting on a ruling. Items 20–22 are examined-and-left, not work |
@@ -131,8 +131,8 @@ release is incorrect against an atServer without it.
 
 | # | What | The differential |
 |---|---|---|
-| 1 | A **remote-only** read of the published advertisement for the mint path. ⚠️ **NOT by changing `currentPublic`** — that is also the sender path, reached from `CkManager.ensureCurrent` on *every* put, so making it remote puts a round trip on the write path and breaks offline writes. A separate read, always remote, skipping both caches — the shape `PqSigningRoot.publishedRoots` already has | a sibling enrollment publishes; this client's pre-check sees it without waiting for sync. ⚠️ **Scope: `published_nskey_key_ring.dart:450` is the read to change, but it is NOT the only optionless read in the subsystem** — `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are optionless too. Those two are **content-key conveyance** reads rather than advertisement reads and are plausibly correct as local-first, so they are out of scope *by argument, not by absence*. Re-derive before believing either way: `git grep -n -A3 "atClient\.get(" -- packages/at_client/lib/src/crypto/nskey/` |
-| 2 | The **winner's re-check under the lock**, which the nskey path has never had. `_mintUnderLock` (root) re-reads; `_mint` (nskey) does not | a winner that published between the pre-check and this client taking the lock is adopted, not overwritten |
+| 1 | ~~A **remote-only** read of the published advertisement for the mint path. ⚠️ **NOT by changing `currentPublic`** — that is also the sender path, reached from `CkManager.ensureCurrent` on *every* put, so making it remote puts a round trip on the write path and breaks offline writes. A separate read, always remote, skipping both caches — the shape `PqSigningRoot.publishedRoots` already has | a sibling enrollment publishes; this client's pre-check sees it without waiting for sync. ⚠️ **Scope: `published_nskey_key_ring.dart:450` is the read to change, but it is NOT the only optionless read in the subsystem** — `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are optionless too. Those two are **content-key conveyance** reads rather than advertisement reads and are plausibly correct as local-first, so they are out of scope *by argument, not by absence*. Re-derive before believing either way: `git grep -n -A3 "atClient\.get(" -- packages/at_client/lib/src/crypto/nskey/`~~ ✅ **BUILT.** `PublishedNskeyKeyRing.publishedAdvertisement` is the new read; `currentPublic` is untouched. Three mint-path call sites use it — `mintAndPublish`'s post-loss read, `rotate`'s precondition, and `NskeySeeding.seed`'s pre-check |
+| 2 | ~~The **winner's re-check under the lock**, which the nskey path has never had. `_mintUnderLock` (root) re-reads; `_mint` (nskey) does not~~ ✅ **BUILT** as `_mintUnlessPublished`, which wraps `_mint` on the `mintAndPublish` path only — `rotate` still runs `_mint` directly, because a rotation that adopted what it found would have rotated nothing while reporting success | a winner that published between the pre-check and this client taking the lock is adopted, not overwritten |
 | 3 | `withLock` **stops releasing** — the ttl is the release. ⛔ Needs the at_server fix | a holder that finishes does not free the lock; a second enrollment is refused until the ttl elapses. This is what makes [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18 disappear rather than be fixed |
 | 4 | The **loser**: re-read once, adopt a published generation, otherwise **fail** with a reason. The `StateError` at `published_nskey_key_ring.dart:292` is rewritten, not deleted — the loser must not mint | lock held + a generation published → adopts. Lock held + nothing published → fails naming the contention, and a waiting `put` fails loudly rather than hanging on another device's crash |
 | 5 | The **lease self-abort**: the holder carries its lease and refuses to publish once it is spent, so a slow winner abandons rather than racing the enrollment that legitimately took the lock next. ⛔ Depends on row 3's timing | a mint that overruns the ttl publishes nothing. Without it the requirement fails even with everything else correct, because the bounded window bounds when the three *attempt*, not how long the winner *takes* |
@@ -145,11 +145,20 @@ above assume.**
 - **Exactly two production callers mint**: `nskey_seeding.dart:100`
   (`mintAndPublish`) and `nskey_rotation.dart:152` (`rotate`). Re-derive:
   `git grep -n "mintAndPublish\|\.rotate(" -- packages/at_client/lib packages/at_onboarding_cli/lib`
-- **`rotate`'s precondition read is asked twice.**
+- ~~**`rotate`'s precondition read is asked twice.**
   `NskeyRotation.rotateNamespaceKey:145` calls `ring.currentPublic` to refuse a
   cold-start rotation, and `ring.rotate:320` calls it again. Both are
   local-first, so row 1 has to reach both — and they are the same question
-  asked twice, which is worth collapsing rather than converting twice.
+  asked twice, which is worth collapsing rather than converting twice.~~
+  ✅ **COLLAPSED** into `ring.rotate`, which now returns
+  `({rotated, superseded})` so its caller names what it superseded from the read
+  already made. The cold-start refusal and its message live in one place.
+- **A third advertisement read is still local-first, and is out of scope by
+  argument.** `NskeySeeding.requestMissingPrivates` (`nskey_seeding.dart:186`)
+  reads `currentPublic` to decide which generation's private to ask for. It is
+  the *pull* path, not the mint path, so nothing it does can overwrite a key —
+  but a stale read there asks for a superseded generation, and the heal then
+  waits for the next start. Worth deciding on rather than leaving undecided.
 
 ---
 

@@ -142,14 +142,13 @@ class NskeyRotation {
     if (owner == null) {
       throw StateError('cannot rotate $namespace: no current atSign');
     }
-    final superseded = await ring.currentPublic(owner, namespace);
-    if (superseded == null) {
-      throw StateError(
-          'nothing to rotate for $owner:$namespace — no nskey is published '
-          'there, so this is a cold-start mint rather than a rotation');
-    }
-
-    final advertisement = await ring.rotate(namespace);
+    // The cold-start refusal is [PublishedNskeyKeyRing.rotate]'s, which has to
+    // make the same check anyway and reads the atServer rather than local
+    // storage to make it. Asking here as well put the same question to the
+    // atServer twice, one round trip apart, with nothing able to act on a
+    // difference between the two answers.
+    final outcome = await ring.rotate(namespace);
+    final advertisement = outcome.rotated;
 
     // Read back the durable copy rather than trusting the mint's return: a
     // private that failed to persist must never be conveyed, and this is the
@@ -187,7 +186,7 @@ class NskeyRotation {
 
     return (
       namespace: namespace,
-      supersededKid: superseded.nskeyKid,
+      supersededKid: outcome.superseded.nskeyKid,
       advertisement: advertisement,
       conveyedTo: conveyedTo,
       excluded: excludeEnrollmentIds,

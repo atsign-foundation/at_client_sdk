@@ -3,6 +3,8 @@ import 'dart:convert' show jsonDecode;
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/request_options.dart'
+    show GetRequestOptions;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
@@ -279,19 +281,46 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   /// difference is the one that matters.
   Future<NskeyAdvertisement> mintAndPublish(String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
-    final minted = await mintLock.withLock(
-        nskeyMintLockKey(owner, namespace), () => _mint(owner, namespace));
+    final minted = await mintLock.withLock(nskeyMintLockKey(owner, namespace),
+        () => _mintUnlessPublished(owner, namespace));
     if (minted != null) return minted;
 
     // Another enrollment is minting. Re-read rather than wait: whatever it is
     // doing ends with an advertisement published, and this client needs that
     // one — minting a second would rotate the first out from under any peer
     // that had already fetched it.
-    final published = await currentPublic(owner, namespace);
+    final published = await publishedAdvertisement(owner, namespace);
     if (published != null) return published;
     throw StateError(
         'another enrollment holds the mint lock for $owner:$namespace but has '
         'published no advertisement yet');
+  }
+
+  /// [_mint], unless a sibling enrollment published while this client was
+  /// taking the lock.
+  ///
+  /// This re-read is what the lock is worth taking for. Every check made before
+  /// it — `NskeySeeding.seed`'s, or a caller's own — ran outside the lock, so a
+  /// winner that published in the window between that check and this client
+  /// winning the race is invisible to all of them. The advertisement record is
+  /// **mutable**: minting on that stale absence overwrites the winner's key,
+  /// and every peer that had already fetched it goes on sealing to a generation
+  /// its owner will never look for.
+  ///
+  /// Adopting is the right answer only because this is the cold-start mint,
+  /// where the atSign holding *a* key is the whole of what was wanted. [rotate]
+  /// runs [_mint] directly for exactly that reason: a rotation that adopted
+  /// what it found would have rotated nothing while reporting success, and
+  /// rotation is the revocation lever.
+  Future<NskeyAdvertisement> _mintUnlessPublished(
+      String owner, String namespace) async {
+    final published = await publishedAdvertisement(owner, namespace);
+    if (published == null) return _mint(owner, namespace);
+    _logger.info(
+        'Not minting an nskey for $owner:$namespace: ${published.nskeyKid} was '
+        'published between the decision to mint and this client taking the '
+        'lock, so it is adopted rather than overwritten');
+    return published;
   }
 
   /// Rotates `(currentAtSign, namespace)` onto a fresh generation: mints the
@@ -315,9 +344,16 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   /// Rotating a namespace with no published key throws for the same reason: it
   /// is a cold-start mint wearing a rotation's name, and a caller that meant to
   /// supersede a generation should hear that there was none.
-  Future<NskeyAdvertisement> rotate(String namespace) async {
+  ///
+  /// Returns both generations, so a caller that must name what it superseded —
+  /// which every rotation report does — takes it from the read this already
+  /// made rather than repeating it. The two reads were the same question asked
+  /// of the atServer twice, one round trip apart, with nothing able to act on a
+  /// difference between the answers.
+  Future<({NskeyAdvertisement rotated, NskeyAdvertisement superseded})> rotate(
+      String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
-    final superseded = await currentPublic(owner, namespace);
+    final superseded = await publishedAdvertisement(owner, namespace);
     if (superseded == null) {
       throw StateError(
           'nothing to rotate for $owner:$namespace — no nskey is published '
@@ -336,7 +372,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
     _logger.info('Rotated $owner:$namespace from ${superseded.nskeyKid} to '
         '${rotated.nskeyKid}; the superseded private is retained so records '
         'sealed to it still open');
-    return rotated;
+    return (rotated: rotated, superseded: superseded);
   }
 
   Future<NskeyAdvertisement> _mint(String owner, String namespace) async {
@@ -480,6 +516,51 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
         'it, because a peer that rotated on a revocation is exactly the peer '
         'this must stop trusting');
     return null;
+  }
+
+  /// What `(owner, namespace)` has published **on the atServer**, fetched with
+  /// both caches skipped.
+  ///
+  /// [currentPublic] answers a different question and must keep answering it
+  /// local-first: it is the sender's read, reached from `CkManager.ensureCurrent`
+  /// on every `put`, so a round trip there would sit on the write path and break
+  /// offline writes. This is the mint path's read, where the question is not
+  /// "what may I seal to" but "has another of this atSign's enrollments already
+  /// published a generation" — and a sibling's publication reaches local storage
+  /// only when sync gets round to it. That lag is the window in which a second
+  /// mint overwrites the first.
+  ///
+  /// Both caches are skipped deliberately. `_ownCurrent` holds what *this*
+  /// client minted, and `_remote` what it fetched up to [advertisementTtl] ago;
+  /// neither can hold a generation a sibling published a moment ago, so a mint
+  /// that trusted either would be minting on a stale absence.
+  ///
+  /// Null means the atServer says there is none. Any other failure throws: a
+  /// mint must not read an unreachable atServer as a cold start, because that
+  /// is the reading that publishes a second key.
+  Future<NskeyAdvertisement?> publishedAdvertisement(
+      String owner, String namespace) async {
+    final AtValue value;
+    try {
+      value = await _atClient.get(
+        nskeyAdvertisementKey(owner, namespace),
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true,
+      );
+    } on KeyNotFoundException {
+      return null;
+    } on AtKeyNotFoundException {
+      return null;
+    }
+    if (value.value == null) return null;
+
+    final advertisement = await verifier.verify(owner, value.value as String);
+    // Kept, because a verified fetch straight from the atServer is strictly
+    // fresher than whatever the sender-side cache holds: the next
+    // [currentPublic] for this scope answers from it instead of paying for a
+    // round trip of its own.
+    _remote[_scope(owner, namespace)] =
+        (advertisement: advertisement, fetchedAt: DateTime.now());
+    return advertisement;
   }
 
   @override

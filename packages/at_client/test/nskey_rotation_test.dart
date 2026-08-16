@@ -7,8 +7,9 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart'
     show NskeySeeding;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
+import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
 import 'package:at_client/src/signing/envelope_signature.dart'
-    show SignedEnvelope;
+    show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -40,19 +41,30 @@ void main() {
   });
 
   /// A client whose remote verbs succeed, recording an ordered trace of what
-  /// it was asked to do. [lockAlreadyHeld] makes the mint lock's immutable
-  /// create fail, which is how the atServer reports that another enrollment
-  /// holds it.
-  ({MockAtClient client, List<String> trace, List<String> published}) client(
-      {bool lockAlreadyHeld = false}) {
+  /// it was asked to do, and serving back whatever has been published.
+  /// [lockAlreadyHeld] makes the mint lock's immutable create fail, which is
+  /// how the atServer reports that another enrollment holds it.
+  ///
+  /// The mint and rotate paths read the atServer rather than this client's
+  /// caches — a sibling enrollment's publication is not in local storage until
+  /// sync catches up — so the fixture has to hold the record for them to find.
+  ({
+    MockAtClient client,
+    List<String> trace,
+    List<String> published,
+    Map<String, String> advertised,
+  }) client({bool lockAlreadyHeld = false}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookUp();
     final trace = <String>[];
     final published = <String>[];
+    // The atServer's copy of `public:__nskey.<ns>@alice`, by namespace.
+    final advertised = <String, String>{};
+    final chops = AtChopsImpl(
+        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair()));
 
-    when(() => atClient.atChops).thenReturn(AtChopsImpl(
-        AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+    when(() => atClient.atChops).thenReturn(chops);
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.getRemoteSecondary()).thenReturn(secondary);
     when(() => secondary.atLookUp).thenReturn(lookUp);
@@ -62,8 +74,19 @@ void main() {
         .thenAnswer((_) async => true);
     when(() => atClient.get(any(),
             getRequestOptions: any(named: 'getRequestOptions')))
-        .thenAnswer((inv) async =>
-            throw AtKeyNotFoundException('${inv.positionalArguments[0]}'));
+        .thenAnswer((inv) async {
+      final key = inv.positionalArguments[0] as AtKey;
+      // Anything else is the `_apsk` an advertisement's signature is checked
+      // against; one key serves every enrollment of this atSign here, since
+      // authenticity is pinned in published_nskey_key_ring_test.
+      if (key.key != '__nskey') {
+        return AtValue()
+          ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
+      }
+      final serving = advertised[key.namespace];
+      if (serving == null) throw AtKeyNotFoundException('$key');
+      return AtValue()..value = serving;
+    });
 
     when(() => secondary.executeVerb(any(), sync: any(named: 'sync')))
         .thenAnswer((inv) async {
@@ -79,11 +102,17 @@ void main() {
         } else if (key.startsWith('__nskey')) {
           trace.add('publish:${builder.atKey.namespace}');
           published.add(builder.value as String);
+          advertised[builder.atKey.namespace!] = builder.value as String;
         }
       }
       return 'data:1';
     });
-    return (client: atClient, trace: trace, published: published);
+    return (
+      client: atClient,
+      trace: trace,
+      published: published,
+      advertised: advertised,
+    );
   }
 
   Future<NskeyPrivateFiling> filing() async {
@@ -108,20 +137,26 @@ void main() {
     return (sharing: mock, pushes: pushes);
   }
 
-  /// Puts [ring] into the "already published" state without a live atServer,
-  /// and returns the generation it now serves.
-  NskeyAdvertisement published(PublishedNskeyKeyRing ring, Uint8List seed) {
+  /// Puts a generation on the fixture's atServer — a real keypair, signed, so
+  /// it survives the same verify a peer's advertisement gets — and returns it.
+  ///
+  /// This stands for another of @alice's enrollments having published. Seeding
+  /// the ring's own memory instead would be the wrong precondition: the whole
+  /// point of the mint path's read is that it does not trust this client's
+  /// caches to know what a sibling has done.
+  Future<NskeyAdvertisement> publishedByAnother(
+      MockAtClient client, Map<String, String> advertised) async {
+    final pair = await XWingKeyPair.generate();
     final advertisement = NskeyAdvertisement.single(
-      publicKey: seed,
+      publicKey: pair.publicKeyBytes,
       alg: SecretSharingAlgos.xWing,
       suites: SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
     );
-    ring.rememberOwn(atSign, namespace, advertisement);
+    advertised[namespace] = await AtClientEnvelopeSigner(client)
+        .wrapAndSignAndJsonEncode(advertisement.toPayload(),
+            type: EnvelopeType.nskeyRing);
     return advertisement;
   }
-
-  final generation0 =
-      Uint8List.fromList(List<int>.generate(32, (i) => 200 - i));
 
   group('the rotation lever', () {
     test('the published advertisement carries a payload version', () async {
@@ -149,7 +184,7 @@ void main() {
       // A first generation this client actually holds the private for, so the
       // retention claim is about a key it could otherwise have dropped.
       final first = await ring.mintAndPublish(namespace);
-      final second = await ring.rotate(namespace);
+      final second = (await ring.rotate(namespace)).rotated;
 
       expect(second.nskeyKid, isNot(first.nskeyKid));
       expect(await filer.read(namespace, second.nskeyKid), isNotNull);
@@ -169,7 +204,7 @@ void main() {
       final c = client(lockAlreadyHeld: true);
       final ring =
           PublishedNskeyKeyRing(c.client, privateFiling: await filing());
-      final current = published(ring, generation0);
+      final current = await publishedByAnother(c.client, c.advertised);
 
       await expectLater(ring.rotate(namespace), throwsA(isA<StateError>()),
           reason: 'a cold-start mint that loses the race adopts the winner and '

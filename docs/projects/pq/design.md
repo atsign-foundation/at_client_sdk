@@ -296,9 +296,17 @@ never a confidentiality control; substitution is prevented by the APKAM signatur
 the envelope, verified against `_apsk`. What immutability *was* doing is stopping two
 of the owner's enrollments creating or rotating at once, so that job moves to an
 explicit **short-ttl immutable lock key**, `_nskeylock.<ns>@<atSign>` — a self key,
-since no one else can write the owner's records. Take the lock, mint, write the
-advertisement, convey the private, release (or let the ttl expire). The loser of the
-race backs off and re-reads. The root `public:pq_signing_root@<atSign>` now follows
+since no one else can write the owner's records. Take the lock, **re-read**, mint,
+write the advertisement, convey the private, release (or let the ttl expire). The
+loser of the race backs off and re-reads.
+
+Both re-reads go to the **atServer**, never to local storage or a cache: a sibling
+enrollment's publication is not in local storage until sync catches up, and reading
+that absence as a cold start is what publishes a second key over the first. The
+winner's re-read is what closes the window between deciding to mint and holding the
+lock — the record is mutable, so minting on a stale absence overwrites a generation
+peers already hold. A cold-start mint that finds one adopts it; a **rotation** that
+found one would have rotated nothing while reporting success, so it does not adopt. The root `public:pq_signing_root@<atSign>` now follows
 exactly the same pattern, behind `_rootlock@<atSign>`
 ([`decisions.md` 101](detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15)):
 it is an ordinary signing key, and advertising a successor beside a retired

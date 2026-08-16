@@ -1,4 +1,21 @@
 ## 3.14.1
+- fix!: the nskey mint path reads the **atServer**, not local storage or a
+  cache. A sibling enrollment's publication is not in local storage until sync
+  catches up, and reading that absence as a cold start publishes a second key
+  over the first — which every peer holding the first goes on sealing to.
+  - New `PublishedNskeyKeyRing.publishedAdvertisement`, used by
+    `mintAndPublish`, `rotate` and `NskeySeeding.seed`. `currentPublic` is
+    unchanged and stays local-first: it is the *sender's* read, reached from
+    `CkManager.ensureCurrent` on every `put`, where a round trip would break
+    offline writes.
+  - The winner now re-reads **under the lock**, so a generation published
+    between the decision to mint and the lock being taken is adopted rather
+    than overwritten. `rotate` deliberately does not adopt — a rotation that
+    took what it found would have rotated nothing while reporting success.
+  - **Breaking:** `PublishedNskeyKeyRing.rotate` returns
+    `({NskeyAdvertisement rotated, NskeyAdvertisement superseded})` rather than
+    the new advertisement alone, so its caller names what it superseded from
+    the read already made instead of asking the atServer twice.
 - feat!: every signed envelope names what it was signed **for**, and every
   verifier names what it wants. New `EnvelopeType` — `at-app+jws`,
   `at-chain-link+jws`, `at-key-package+jws`, `at-nskey-ring+jws`,
