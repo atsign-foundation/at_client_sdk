@@ -125,6 +125,50 @@ void main() {
           reason: 'the index lists a ruling number with no body');
     });
 
+    test('a ruling amended in its body says so in the index', () {
+      // The status vocabulary reserves AMENDED for "stands, but one or more
+      // sub-rulings were changed later, on the date given". Eleven rulings
+      // carried a dated amendment in the body and `LIVE` in the index — the
+      // marker is written while editing the body, and nothing takes the
+      // author back to the row.
+      final index = _read('decisions.md');
+      // ⚠️ `[ \t]`, never `\s`: `\s` eats the newline and each match swallows
+      // the following row, which silently halved a count here once.
+      final status = <String, String>{
+        for (final m in RegExp(
+                r'^\|[ \t]*\[(\d+[a-z]?)\][ \t]*\|[^\n]*\|[^|\n]*\|[ \t]*([^|\n]+?)[ \t]*\|[ \t]*$',
+                multiLine: true)
+            .allMatches(index))
+          m.group(1)!: m.group(2)!,
+      };
+      expect(status.length, greaterThan(100),
+          reason: 'the ruling table did not parse, so this guard checks '
+              'nothing. Its row shape must have changed');
+
+      final amended = RegExp(r'\bAmended\b[^.\n]{0,12}?\(?(20\d\d-\d\d-\d\d)',
+          caseSensitive: false);
+      final bodies = _read('detail/decisions.md').split(RegExp(r'^## ', multiLine: true));
+
+      final silent = <String>[];
+      for (final body in bodies) {
+        final head = RegExp(r'^(\d+[a-z]?)\. ').firstMatch(body);
+        if (head == null) continue;
+        final dates = amended.allMatches(body).map((m) => m.group(1)!).toList();
+        if (dates.isEmpty) continue;
+        final st = (status[head.group(1)] ?? '').toUpperCase();
+        // A stronger not-in-force status already tells the reader to look.
+        if (st.contains('AMENDED') || st.contains('SUPERSEDED') ||
+            st.contains('REJECTED')) {
+          continue;
+        }
+        silent.add('[${head.group(1)}] body says "Amended ${dates.last}", '
+            'index says "${status[head.group(1)]}"');
+      }
+      expect(silent, isEmpty,
+          reason: 'a ruling records its own amendment and the index does not:\n'
+              '${silent.join('\n')}');
+    });
+
     test('no ruling body creeps back into the live ledger', () {
       // A body announces itself with a `## <number>.` heading. The live file
       // holds the index and its prose, and nothing numbered.

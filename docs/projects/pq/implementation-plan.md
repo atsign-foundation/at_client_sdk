@@ -55,22 +55,33 @@ and 105 were corrected, the doctrine sentences at
 and [89](detail/decisions.md#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
 were marked overruled, and [46] moved to `PARTLY SUPERSEDED by [48]`.
 
-⚠️ **The other 103 rulings were NOT audited.** A scan flagged 41 whose body
-records a falsified claim while the index says `LIVE`; reading the summaries,
-most are healthy — they say "was wrong" about *another* ruling or about a
-correction already made in place. Which of the 41 are real is unmeasured. Two
-concrete items are already known:
+✅ **The status audit is DONE.** A scan flagged 41 rulings whose body records a
+falsified claim while the index said `LIVE`. Printing the *sentence* carrying
+each trigger — rather than the one-line summary, which cannot tell "this ruling
+was falsified" from "this ruling says another one was" — separated them:
 
-- **Ruling 84 left two earlier rulings citing renamed test files**, and 89 left
-  74 section-symbol citations unconverted. Both were deferred on the
-  now-overruled reasoning, so both are owed.
-- The scan is `heading_truth.py` in the session scratchpad — rebuild it rather
-  than trusting this row's numbers:
+- **Most were healthy.** "superseded" naming a *generation* of key material
+  (47, 76), "was wrong" about the catalogue (29) or about a checker (85), a
+  timeline that records other rulings' supersessions (7).
+- **11 were real, and are fixed**: 13, 18, 42, 45, 56, 68, 69, 70, 91, 93, 98
+  each carry a dated `Amended <date>` marker in the body while the index said
+  `LIVE`. The ledger's own vocabulary reserves `AMENDED` for exactly that, so
+  each row now carries it with the latest date. Four (13, 91, 93, 98) were
+  read directly; the other seven matched the same unambiguous marker.
+
+⛔ **Still owed — two citation debts**, both deferred on the now-overruled
+append-only reasoning and neither touched:
+
+- [84](detail/decisions.md#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
+  left **two earlier rulings citing renamed test files**.
+- [89](detail/decisions.md#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
+  left **74 section-symbol citations** unconverted.
+
+Re-derive rather than trusting the numbers above:
 
 ```bash
-# rulings whose body admits a falsified claim while the index still says LIVE
-grep -rnP "(left alone|as written|no longer true|was wrong|append-only)" \
-  docs/projects/pq/detail/decisions.md | wc -l
+# a dated self-amendment in the body is now asserted against the index status
+dart test packages/at_client/test/acceptance --concurrency=1
 ```
 
 ### 14.26 A comment in at_server is now false

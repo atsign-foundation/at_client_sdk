@@ -69,12 +69,12 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [10]  | nskey derivation from a shared master seed: rejected                                        | 2026-06-30 | LIVE                      |
 | [11]  | Single nskey per namespace, lazily published                                                | 2026-06-30 | PARTLY SUPERSEDED by [13] |
 | [12]  | Advertised recipient keys are signed against `_apsk`                                        | 2026-07-02 | LIVE                      |
-| [13]  | The nskey is published eagerly, mutable, and generation-addressed                           | 2026-08-02 | LIVE                      |
+| [13]  | The nskey is published eagerly, mutable, and generation-addressed                           | 2026-08-02 | AMENDED 2026-08-02        |
 | [14]  | Content keys are scoped per recipient                                                       | 2026-08-02 | LIVE                      |
 | [15]  | The record owner and the nskey owner are different atSigns                                  | 2026-08-02 | LIVE                      |
 | [16]  | A provider id names every algorithm a reader needs code for                                 | 2026-08-02 | LIVE                      |
 | [17]  | The sync push dropped `appMetadata`                                                         | 2026-08-02 | LIVE                      |
-| [18]  | `pqpublickey` becomes the user-owned signing root                                           | 2026-08-03 | LIVE                      |
+| [18]  | `pqpublickey` becomes the user-owned signing root                                           | 2026-08-03 | AMENDED 2026-08-15        |
 | [19]  | Nested namespaces: the nskey is resolved by walking up                                      | 2026-08-03 | LIVE                      |
 | [20]  | SS-2: how the key package reaches an enrollment, and how conveyance fires                   | 2026-08-03 | LIVE                      |
 | [21]  | SS-3: where key material lives, and what the substrate stops storing                        | 2026-08-03 | LIVE                      |
@@ -98,10 +98,10 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [39]  | `_apsk` rides the same two-stage ladder                                                     | 2026-08-05 | LIVE                      |
 | [40]  | RF-SRV is the mechanism the whole model stands on                                           | 2026-08-05 | LIVE                      |
 | [41]  | The to-define list                                                                          | 2026-08-05 | LIVE                      |
-| [42]  | The to-define list, ruled                                                                   | 2026-08-05 | LIVE                      |
+| [42]  | The to-define list, ruled                                                                   | 2026-08-05 | AMENDED 2026-08-12        |
 | [43]  | RF-2b lands, and what the first genuine ML-DSA PKAM found                                   | 2026-08-05 | LIVE                      |
 | [44]  | RF-2c: the switch-over, and what it cost to make a client PQ                                | 2026-08-05 | LIVE                      |
-| [45]  | The retrofit rows, and the five defects the first end-to-end run found                      | 2026-08-05 | LIVE                      |
+| [45]  | The retrofit rows, and the five defects the first end-to-end run found                      | 2026-08-05 | AMENDED 2026-08-15        |
 | [46]  | RFC 9180, and where the design's version hatches are                                        | 2026-08-05 | PARTLY SUPERSEDED by [48] |
 | [47]  | B-2 lands: two levers, and the difference between excluding and revoking                    | 2026-08-06 | LIVE                      |
 | [48]  | The standards question reopened, and what the check found                                   | 2026-08-06 | LIVE                      |
@@ -112,7 +112,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [53]  | UC-B4.2, and what asking for no legacy material actually costs                              | 2026-08-08 | LIVE                      |
 | [54]  | S-3: the two things an updatable key store turned out to be                                 | 2026-08-08 | LIVE                      |
 | [55]  | ON-1's consumer half: what "the CLI can do it too" actually cost                            | 2026-08-08 | LIVE                      |
-| [56]  | The "make it right" quality pass, and the design goals it settled                           | 2026-08-09 | LIVE                      |
+| [56]  | The "make it right" quality pass, and the design goals it settled                           | 2026-08-09 | AMENDED 2026-08-13        |
 | [57]  | The wire vocabulary gets one home per family                                                | 2026-08-09 | LIVE                      |
 | [58]  | The two published-API breaks are repaired in place                                          | 2026-08-09 | LIVE                      |
 | [59]  | Phase-3 at_chops surface rulings                                                            | 2026-08-09 | LIVE                      |
@@ -124,10 +124,10 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [65]  | Phase 4g: the secret-sharing seam work                                                      | 2026-08-10 | LIVE                      |
 | [66]  | The approval list's last hop tells the truth                                                | 2026-08-10 | LIVE                      |
 | [67]  | Workstream B(i): the sweep anchors to the root                                              | 2026-08-10 | LIVE                      |
-| [68]  | The enrollment record stops being a one-way door: `enroll:updateMetadata`                   | 2026-08-10 | LIVE                      |
+| [68]  | The enrollment record stops being a one-way door: `enroll:updateMetadata`                   | 2026-08-10 | AMENDED 2026-08-13        |
 | [68b] | Workstream B(ii): approvals anchor to the root                                              | 2026-08-10 | LIVE                      |
-| [69]  | Workstream B(iii): the retrofit selector, and the KEM the retrofit froze wrong              | 2026-08-10 | LIVE                      |
-| [70]  | Workstream A capstone: ReleasePosture, the five flags as one value                          | 2026-08-10 | LIVE                      |
+| [69]  | Workstream B(iii): the retrofit selector, and the KEM the retrofit froze wrong              | 2026-08-10 | AMENDED 2026-08-13        |
+| [70]  | Workstream A capstone: ReleasePosture, the five flags as one value                          | 2026-08-10 | AMENDED 2026-08-13        |
 | [71]  | Phase 5 begins: the CLI's handshake copy is deleted                                         | 2026-08-10 | LIVE                      |
 | [72]  | Phase 5: the keyfile store's double stops lying, and the lock's three races close           | 2026-08-10 | LIVE                      |
 | [73]  | Phase 5: `AtEnrollmentImpl` splits into submitter, approver, handshake                      | 2026-08-10 | LIVE                      |
@@ -148,14 +148,14 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [88]  | Phase 7: mintAndPublish is the cold-start mint, and stops calling itself the rotation       | 2026-08-11 | LIVE                      |
 | [89]  | Phase 7: the section symbol keeps the two jobs it is good at                                | 2026-08-11 | LIVE                      |
 | [90]  | Phase 7: a refusal the approval wait cannot resolve stops being silent                      | 2026-08-11 | LIVE                      |
-| [91]  | Signature agility: the APKAM auth key stops being the enrollment's signing key              | 2026-08-11 | LIVE                      |
+| [91]  | Signature agility: the APKAM auth key stops being the enrollment's signing key              | 2026-08-11 | AMENDED 2026-08-13        |
 | [92]  | The spike takes trunk, and two published version numbers move underneath it                 | 2026-08-11 | LIVE                      |
-| [93]  | The D1 remaining-work sequence, and the rollout axis becomes real                           | 2026-08-11 | LIVE                      |
+| [93]  | The D1 remaining-work sequence, and the rollout axis becomes real                           | 2026-08-11 | AMENDED 2026-08-15        |
 | [94]  | Three records advertise keys, and only one of them speaks the vocabulary                    | 2026-08-11 | AMENDED 2026-08-12        |
 | [95]  | The envelope keeps one shape, and a retained key says so                                    | 2026-08-12 | AMENDED 2026-08-14        |
 | [96]  | The programme pair gets a home outside the workspace                                        | 2026-08-14 | LIVE                      |
 | [97]  | A keyfile status a build has never seen is read, not refused                                | 2026-08-14 | LIVE                      |
-| [98]  | Rollout 1 moves the authentication key, not the signing key                                 | 2026-08-14 | LIVE                      |
+| [98]  | Rollout 1 moves the authentication key, not the signing key                                 | 2026-08-14 | AMENDED 2026-08-14        |
 | [99]  | The keyfile groups by enrollment, and the atSign's own keys move out                        | 2026-08-14 | LIVE                      |
 | [100] | The seven shapes ruling 99 left open                                                        | 2026-08-14 | LIVE                      |
 | [101] | The signing root becomes an ordinary signing key, and rotatable                             | 2026-08-15 | LIVE                      |
