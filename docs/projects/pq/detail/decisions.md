@@ -461,7 +461,7 @@ timeline rows).
   ships as 3.3.0** (see the 2026-07-17 rulings). (The WP-SS "where does
   `register()` get called?" decision is resolved by #B above.)
 - **#E — S-2 scope / SoT conflict.** `crypto_impl_plan` §3-S5 ("migrate legacy to
-  `context.keys`") vs §7-WP3 ("legacy unchanged for now") conflict. This plan
+  `context.keys`") vs [section 7](#7-decision-log--timeline-dated)-WP3 ("legacy unchanged for now") conflict. This plan
   takes the **additive-field-only** reading — add `CryptoContext.keys` but do not
   migrate `LegacyCryptoProvider` to read from it (legacy pulls remote `plookup`s +
   `atChops` cipher ops that the field's static keys can't supply). (The
@@ -522,7 +522,7 @@ Execution rulings from the plan-vs-code review (post-review); each is binding.
   enrollment record's `apkamPublicKey` rather than relying on the client-side
   `ApkamSigning.publishPublicSigningKey` (removes a race + a missing-key failure mode),
   and (2) **restricts writes** to that key to the owning enrollment's own authenticated
-  connection. Recorded in design.md §2.4 and the atServer DEP list; e2e tests (an
+  connection. Recorded in [section 2.4](../design.md#24-the-atserver-enrollment-record--ml-dsa-apkam-auth) and the atServer DEP list; e2e tests (an
   approved enrollment's `_apsk` is fetchable without a client publish; a cross-enrollment
   overwrite is refused) are required before WP-SS ships.
 - **Advertised recipient keys are signed against `_apsk` — the full ruling is
@@ -572,7 +572,7 @@ each is binding. The code-side alignment landed via #2046 (merged 2026-07-03 int
   set precedent — post-3.4.0 the surface is treated as stable and breaking
   changes require a major.
 - **Conformance coverage for the FFI PRs.** #2030 and #2039 are covered under
-  P-2's coordinated 3.4.0 slot for the purposes of implementation-plan §10(e):
+  P-2's coordinated 3.4.0 slot for the purposes of implementation-plan section 10(e):
   their PR descriptions cite "P-2 (coordinated 3.4.0 slot)"; no separate project
   id is minted.
 - **Auto-resolve scope: accessors, not keygen helpers.** The FFI-auto-resolve
@@ -606,7 +606,7 @@ each is binding. The code-side alignment landed via #2046 (merged 2026-07-03 int
   deprecation path is clear-cut, and the churn is far smaller than carving a new
   holder hierarchy. *Affects:* **S-1** (reframed from "new `WritableAtKeys`
   holder" to "extend `AtKeys`/`AtKeysIo` in place"), **S-2**, **S-3**, and
-  design §4. *Open question (not decided):* whether `AtClient` needs any concept
+  [design section 4](../design.md#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel). *Open question (not decided):* whether `AtClient` needs any concept
   of `AtKeys` outside the provider seam at all (encrypt/decrypt and auth already
   reach keys via the injected `AtKeysIo`).
 
@@ -629,7 +629,7 @@ record:
   (`active` → `retired` → `dead`) and material bytes are never deleted —
   retired bytes are still needed to decrypt data they protected. Consistent
   with OQ8's no-per-APKAM-key-delete ruling. (Supersedes the
-  `add`/`remove`/`write` working names in design §4 and S-1's
+  `add`/`remove`/`write` working names in [design section 4](../design.md#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel) and S-1's
   "add→read→remove" acceptance line.)
 - **The never-lose contract is scoped to bootstrap key stores.**
   `WrittenAtKeysIo.flush`'s nothing-may-be-lost contract applies to stores of
@@ -682,19 +682,19 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-06-25** | **ADR 0002 Accepted — single-tier `nskey` supersedes 0001.** WP-SS rework audit ratified (OQ1–OQ7). Verb wire shape ratified. | Per-APKAM push + the KEM-wrapper realisation dissolved 0001's two claims (the false dichotomy); the only genuine MLS delta is D2. FS becomes a rotation *policy*, not a tier. |
 | **2026-06-30** | **Decision #F ratified — 1:1:1 + fresh-enrollment retrofit.** Decision #B resolved (Option A). OQ2/OQ3 revised, OQ8/OQ9 added. `listns` flattened. `enroll:metadata` verb removed (→ `EnrollParams.metadata`). Per-APKAM-key delete removed. The d1-execution-plan revision folded a 15-delta workflow (verified against the live `at_server`/at_commons/at_client trees). | One keypair per enrollment removes verify-against-any, the multi-key record reshape, and the delete-after-ML-DSA ordering; retrofit becomes a clean fresh auto-approved enrollment that ages the old one out. Simpler, smaller blast radius, no escalation path. |
 | **2026-06-30** | **APKAM keypair ≠ key package — kept two keypairs per enrollment.** Considered collapsing the enrollment's ML-DSA APKAM keypair and X-Wing key package into one (and single-seed derivation of the pair); both rejected. | ML-DSA (signature) and X-Wing (KEM) are distinct PQ primitives — one keypair can't both sign/auth and be encapsulated to. Two keypairs is the floor; single-seed derivation saves only keyfile bytes and adds a re-derivation-stability risk. See [9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30). |
-| **2026-06-30** | **Shared-master-seed nskey derivation rejected; the `design.md` §1.3 derivation paragraph was removed.** nskey privates are minted as fresh random keypairs and conveyed per-APKAM over the substrate — never HKDF-derived from a shared seed. | A seed shared across an atSign's enrollments (required for the whole atSign to share one nskey per namespace) breaks post-compromise security, namespace compartmentalization, and rotation forward-secrecy; the namespace/epoch HKDF labels are public and don't gate who can derive. A full-corpus sweep confirmed this was the only insecure derivation. See [10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30). |
+| **2026-06-30** | **Shared-master-seed nskey derivation rejected; the [section 1.3](../design.md#13-keys--key-shapes) derivation paragraph was removed.** nskey privates are minted as fresh random keypairs and conveyed per-APKAM over the substrate — never HKDF-derived from a shared seed. | A seed shared across an atSign's enrollments (required for the whole atSign to share one nskey per namespace) breaks post-compromise security, namespace compartmentalization, and rotation forward-secrecy; the namespace/epoch HKDF labels are public and don't gate who can derive. A full-corpus sweep confirmed this was the only insecure derivation. See [10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30). |
 | **2026-06-30** | **Single nskey per namespace, lazily published — collapses the former self/public nskey pair.** One X-Wing keypair serves both self data and inbound shares; the public half is published lazily (owner-only self at-key → `public:` on first cross-atSign use). | Peer review: the two nskeys did the same KEM job with the same private-holders, so the split bought no real compartmentalization or authenticity, and one key simplifies the read path and rotation. Lazy publication preserves namespace-existence privacy for self-only namespaces. See [11](#11-single-nskey-per-namespace-lazily-published-2026-06-30) — the one-keypair half stands; **lazy publication superseded 2026-08-02** by [13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02). |
 | **2026-07-02** | **Six execution rulings** (post-review): verb name `enroll:listns`; D1 surface scope (`.atKeys`-at-rest IN via KF-1; TLS + atDirectory non-goals); readiness operator-primary + auto-detect fast-follow; R-2 ecosystem-floor package set named; FFI auto-resolve default; `_apsk` write-restriction pinned + e2e-test-required. | Landed from the plan-vs-code review that found in-flight PRs implementing superseded rulings; the rulings + a conformance gate keep execution aligned to the record. |
 | **2026-07-02** | **Advertised-key signing + `_apsk` always-present** ([section 12](#12-advertised-recipient-keys-are-signed-against-_apsk-2026-07-02)). Advertised recipient keys (key package, `nskey` public, `pqpublickey`) are APKAM-signed by the generating enrollment and verified against its `_apsk` — same path same-atSign and cross-atSign; the atServer keeps `_apsk` present (populated from the record) as well as write-restricted. Supersedes "atServer vouches". Also: the key package is a **singular signed `metadata.keyPackage`** (no format-keyed map). | Authenticates the encapsulation target against a rogue *insider* enrollment under an honest server (not server-asserted); reuses the existing `wrapAndSign`/`_apsk` machinery. Does **not** remove a malicious atServer *operator* from the TCB — the operator is the `_apsk` anchor (see section 12 + design.md *Trust boundary*). The format-map was redundant with in-package `keys[].alg` + `v` agility. |
 
 | **2026-07-03** | **PR #2030 review rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `AtPqc` supersedes the `PqcFfi` working name; `AtSignatureAlgorithm` recorded with a **staged** `AtSigningAlgorithm` deprecation (stays implemented through D1 — P-2 and the section-12 `wrapAndSign` path are typed against it; removal deferred past the D1 ladder); at_chops 3.4.0 stays a minor under a recorded one-time semver exemption for the barrel-split breaks; #2030/#2039 conformance-covered under P-2's coordinated slot; auto-resolve scoped to the `AtPqc` accessors (web-safe-barrel keygen is pure-Dart by construction). | The two-pass review of #2030 found the PR shipping designs the record didn't yet name (`AtPqc`, `AtSignatureAlgorithm`) and removals the ladder didn't authorize; these rulings plus the stacked review-fixes PR align code and record. |
-| **2026-07-06** | **Planning-day reconciliation rulings** (two): (1) **inter-server PQ authentication is IN D1 scope** as new project **IS-1** ([implementation-plan.md §13](../implementation-plan.md)) — the atServer FROM/POL X-Wing+ML-DSA-65 handshake (PR #2683), off the D1 GA critical path, gated on publishing the at_chops PQ-API surface (`XWingCert`/`resolveXWing`/`resolveMlDsa65`). (2) **P-2's `mldsa65` verify branch folds into the existing unpublished at_chops 3.4.0** (bumped on trunk by #2030) before it publishes — not a fresh minor. | Planning-day reconciliation of #1889 vs the plan vs merged/open PRs across at_client_sdk + at_server surfaced a whole untracked inter-server workstream and an at_chops 3.4.0 slot already opened on trunk; these two rulings place both in the record. |
+| **2026-07-06** | **Planning-day reconciliation rulings** (two): (1) **inter-server PQ authentication is IN D1 scope** as new project **IS-1** ([implementation-plan.md section 13](../implementation-plan.md)) — the atServer FROM/POL X-Wing+ML-DSA-65 handshake (PR #2683), off the D1 GA critical path, gated on publishing the at_chops PQ-API surface (`XWingCert`/`resolveXWing`/`resolveMlDsa65`). (2) **P-2's `mldsa65` verify branch folds into the existing unpublished at_chops 3.4.0** (bumped on trunk by #2030) before it publishes — not a fresh minor. | Planning-day reconciliation of #1889 vs the plan vs merged/open PRs across at_client_sdk + at_server surfaced a whole untracked inter-server workstream and an at_chops 3.4.0 slot already opened on trunk; these two rulings place both in the record. |
 | **2026-07-06** | **P-2 satisfied on trunk** — the `mldsa65` `_getVerificationAlgorithm` branch merged (issue #2050 / PR #2056), folded into the unpublished at_chops 3.4.x slot per the ruling above; #2039 (AES-GCM FFI) merged into the same slot. | The one missing ML-DSA verify branch is now in the tree; P-2's residual is the 3.4.x publish itself. |
 | **2026-07-17** | **PR #2047 / S-1 conformance rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `flush()` supersedes `append()`/`save()`; retire-never-remove (`retireKey`, forward-only status); the never-lose flush contract scoped to bootstrap stores (`LocalKeystoreAtKeysIo` not needed at this time; CK-class stores must support eviction for B5a); `keyPartType`/`keyAlgorithmType` as open String tokens with known-token consts (X-Wing = `xwing` + encapsulation/decapsulation); S-1 ships as at_auth **3.3.0** (3.2.0 consumed by the network-timeout release). | The S-1 implementation review found the built shape better than the recorded working names in three places and a version-slot collision; these rulings align the record with the code before at_auth 3.3.0 publishes. |
 | **2026-07-17** | **Release train published:** `at_commons 5.13.0`, `at_chops 3.4.0`, `at_client 3.13.0` then `3.14.0`, `at_auth 3.3.0-rc1`, `at_lookup 3.6.0`, `at_onboarding_cli 1.16.0`. Same day, **SS-0 merged** (#2037) and **S-2 completed** (#2076, `AtKeysIo` threaded through `CryptoContext`). | Closes P-2's 3.4.x publish residual and the at_chops prerequisite for both S-1 and IS-1; `at_client 3.14.0` now carries the SS-0 substrate as an experimental surface, moving the D1 GA version slot off 3.14.x. |
 | **2026-07-20** | **Planning-day reconciliation** (#1889 vs the doc set vs merged/open PRs and branches). Recorded: SS-0, SS-1b, S-1 and S-2 are **satisfied**; P-2 is fully closed by the 3.4.0 publish; `SS-1c` is the next actionable critical-path project. Issues cut for the previously-untracked substrate tail — SS-1c [#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084), SS-2 [#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085), SS-3 [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086), SS-4 [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087) — and **two merged-but-unpublished residuals recorded as open gates**: the at_auth rc1 → stable 3.3.0 promotion (blocking S-6 and SS-2), and S-2's `CryptoContext.keys` (#2076), which merged at 18:20Z on 2026-07-17 — after `at_client 3.14.0` published at 16:02Z — so it awaits the next at_client release. IS-1 (at_server #2683) restated as in progress and off the critical path. | #2008 had been closed on the SS-0 merge, leaving `SS-1c → SS-2 → SS-3 → SS-4` — the whole run-up to the D1 GA gate — with no tracking issue; and the 2026-07-17 release train had closed several publish gates the docs still carried as open. |
-| **2026-07-21** | **Client PKAM auth is a signature swap only (guardrail + the under-specified client piece named).** PKAM PQ-safety = sign the server-issued per-connection `from:` challenge with ML-DSA-65 instead of RSA (`PkamSigningAlgo` → ML-DSA in at_lookup, selected off the stored `signingAlgo`), verified record-authoritatively server-side. **No KEM, no certificate, no per-connection key lifecycle; the 1:1:1 single-key record stays the minimal form.** The one legitimate KEM in the enrollment path is the `apkamSymmetricKey` conveyance at enroll/approve (P-3) — key *transport*, not auth. The client-side signing swap was previously unnamed in the plan; it now has a home (design.md §2.4), exercised by RF-2b + ON-1. | Same principle as the IS-1 pare-back: PKAM is authentication, not key agreement — the per-connection challenge gives freshness and TLS secures the channel, so only the signature is Shor-vulnerable. Recorded to pre-empt the same over-build (a KEM/cert/keyring on client auth) that IS-1 had carried, and to close the plan gap the client swap left. |
-| **2026-07-21** | **IS-1 pared back to a signature swap; X-Wing KEM + cert machinery dropped.** IS-1 becomes: publish an ML-DSA-65 `pq_signing_publickey` (JSON, one field, for agility), sign the existing FROM/POL UUID challenge with ML-DSA instead of RSA, verify with `AtPqc.mlDsa65.verifyBytes` instead of the RSA path — two one-line algorithm swaps in the existing branch. **Removed:** the X-Wing KEM, the inter-server certificate, expiry / 30-day rotation grace, the HKDF confirmation tag, the `PqKeyManager` lifecycle class, and the unpublished at_chops `XWingCert`/`resolveXWing` surface (so IS-1's cross-package publish gate **dissolves** — it builds on published at_chops 3.4.x only). Effort L→M. PR #2683 is over-built against this scope and is to be pared back. | FROM/POL is **authentication, not key agreement**: the per-session UUID challenge already gives freshness/anti-replay and TLS already secures the channel, so the only Shor-vulnerable element is the signature. A KEM establishes a shared secret nothing in the handshake needs; a signing key needs no cert/rotation lifecycle (a change is a re-publish, read live). Same PQ guarantee at a fraction of the surface — the "don't over-engineer PQ safety" principle applied. See design.md §8. |
+| **2026-07-21** | **Client PKAM auth is a signature swap only (guardrail + the under-specified client piece named).** PKAM PQ-safety = sign the server-issued per-connection `from:` challenge with ML-DSA-65 instead of RSA (`PkamSigningAlgo` → ML-DSA in at_lookup, selected off the stored `signingAlgo`), verified record-authoritatively server-side. **No KEM, no certificate, no per-connection key lifecycle; the 1:1:1 single-key record stays the minimal form.** The one legitimate KEM in the enrollment path is the `apkamSymmetricKey` conveyance at enroll/approve (P-3) — key *transport*, not auth. The client-side signing swap was previously unnamed in the plan; it now has a home ([section 2.4](../design.md#24-the-atserver-enrollment-record--ml-dsa-apkam-auth)), exercised by RF-2b + ON-1. | Same principle as the IS-1 pare-back: PKAM is authentication, not key agreement — the per-connection challenge gives freshness and TLS secures the channel, so only the signature is Shor-vulnerable. Recorded to pre-empt the same over-build (a KEM/cert/keyring on client auth) that IS-1 had carried, and to close the plan gap the client swap left. |
+| **2026-07-21** | **IS-1 pared back to a signature swap; X-Wing KEM + cert machinery dropped.** IS-1 becomes: publish an ML-DSA-65 `pq_signing_publickey` (JSON, one field, for agility), sign the existing FROM/POL UUID challenge with ML-DSA instead of RSA, verify with `AtPqc.mlDsa65.verifyBytes` instead of the RSA path — two one-line algorithm swaps in the existing branch. **Removed:** the X-Wing KEM, the inter-server certificate, expiry / 30-day rotation grace, the HKDF confirmation tag, the `PqKeyManager` lifecycle class, and the unpublished at_chops `XWingCert`/`resolveXWing` surface (so IS-1's cross-package publish gate **dissolves** — it builds on published at_chops 3.4.x only). Effort L→M. PR #2683 is over-built against this scope and is to be pared back. | FROM/POL is **authentication, not key agreement**: the per-session UUID challenge already gives freshness/anti-replay and TLS already secures the channel, so the only Shor-vulnerable element is the signature. A KEM establishes a shared secret nothing in the handshake needs; a signing key needs no cert/rotation lifecycle (a change is a re-publish, read live). Same PQ guarantee at a fraction of the surface — the "don't over-engineer PQ safety" principle applied. See [section 8](../design.md#8-subsystem-f--inter-server-pq-authentication-is-1) |
 
 | **2026-08-02** | **Seven nskey data-path rulings** from walking an Alice↔Bob message end to end against the built providers ([13](#13-the-nskey-is-published-eagerly-mutable-and-generation-addressed-2026-08-02), [14](#14-content-keys-are-scoped-per-recipient-2026-08-02), [15](#15-the-record-owner-and-the-nskey-owner-are-different-atsigns-2026-08-02)): the nskey is published **eagerly** to `public:__nskey.<ns>@<owner>` (mutable, lock-serialised, generation-tagged), superseding lazy publication; content keys are scoped **per recipient**; and the record owner (`sharedBy`, for `info`) is separated from the nskey owner (`sharedWith ?? sharedBy`, for key selection). | The walk surfaced three defects the doc set had not caught: cross-atSign reads could not work, because the key ring was looked up under the sender's atSign; the promotion trigger fired on *sending* while the key a sender needs is the *recipient's*, so a receive-only atSign cold-started forever; and `design.md` called the published half immutable while B5b required re-publishing it, leaving the revocation lever unimplementable. Rotation additionally had no signal reaching senders — a silent B6 revocation failure — and a post-rotation joiner could not open retained history. |
 | **2026-08-02** | **The sync push dropped `appMetadata`, and the fix deletes the duplicate serializer that dropped it** ([17](#17-the-sync-push-dropped-appmetadata-2026-08-02-fixed)). `SyncServiceImpl` now delegates to `Metadata.toAtProtocolFragment` instead of hand-rolling the metadata fragment, and a guard parses a fully-populated fragment with `VerbSyntax.update`. Cross-atSign reads work; the e2e test is un-skipped. | This was first recorded as an atServer defect — that attribution was wrong, and the correction is the durable lesson: **an absent field indicts the writer before the reader.** The wire observation (a `lookup` returning no `appMetadata`) was accurate, but *absent from the response* was read as *withheld by the responder* when the field had never been stored. The probe that separates them is an authenticated `llookup:all:` against the **writer's own** atServer after sync. Blast radius was every provider's synced writes, including shipped 3.14 — not PQ-specific — because a duplicated wire serializer had silently lagged the canonical one. |
@@ -774,7 +774,7 @@ simplification. Rejected:
   byte-identically *forever*, across at_chops/OpenSSL versions and platforms, or a client
   loses access to its own keys. Storing the privates directly avoids that risk entirely.
 - A `HKDF(seed, namespace) → nskey` derivation was *also* floated for the nskey keypairs
-  and **rejected outright** for an independent, more serious reason ([§10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)):
+  and **rejected outright** for an independent, more serious reason ([section 10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)):
   there the seed would be **shared across the atSign's enrollments**, which breaks
   post-compromise security, namespace compartmentalization, and rotation forward-secrecy.
   The **per-enrollment** seed considered here does **not** share that flaw — it is local
@@ -791,7 +791,7 @@ keypairs.
 
 ## 10. nskey derivation from a shared master seed: rejected (2026-06-30)
 
-**Proposed (and briefly written into `design.md` §1.3).** Derive both nskey X-Wing KEM
+**Proposed (and briefly written into [section 1.3](../design.md#13-keys--key-shapes)).** Derive both nskey X-Wing KEM
 privates per namespace as `HKDF(master-seed, namespace [, epoch]) → X-Wing seed`, with the
 master seed held in `.atKeys`, so that "any client of the atSign derives both privates with
 no distribution." The pitch was eliminating the per-APKAM substrate conveyance of the nskey
@@ -814,13 +814,13 @@ long-term secret breaks the three properties the nskey design exists to provide:
    it was granted.
 3. **Forward secrecy of rotation.** The `epoch` term is likewise a public label, so every
    epoch is derivable from the one seed — epoch rotation buys **zero** FS against a seed leak.
-   The `epoch` lever (`design.md` §1.7) only works when the underlying private is random per
+   The `epoch` lever ([section 1.7](../design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation)) only works when the underlying private is random per
    epoch.
 
 The shared seed is **intrinsic** to the derivation: a per-enrollment seed would derive
 *different* keys and so couldn't produce the shared namespace nskey at all. There is no safe
 scoping — the optimization is rejected outright, not demoted to optional. It was also
-internally inconsistent: `design.md` §4's `.atKeys` store taxonomy holds no master seed.
+internally inconsistent: [section 4](../design.md#4-subsystem-d--structural-design-cryptoprovider-seam-atkeysatkeysio--key-stores-wasm-barrel)'s `.atKeys` store taxonomy holds no master seed.
 
 **Accepted model (already used everywhere else in the corpus).** nskey privates are **minted
 as fresh random keypairs and conveyed per-APKAM over the substrate** (sealed to each
@@ -833,12 +833,12 @@ only for the namespaces granted to it.
 
 **Scope of the ruling.** A full-corpus derivation sweep (all five docs, finder + independent
 adversarial verifier per doc) found this to be the **only** insecure key-derivation site —
-present only here (`design.md` §1.3) and in the [§9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)
+present only here ([section 1.3](../design.md#13-keys--key-shapes)) and in the [section 9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)
 cross-reference that mis-framed it as a "win"; both are now corrected. Every other derivation
 in the design is secure by construction: the X-Wing/HPKE key schedule (ephemeral per-op
 shared secret), the MLS/D2 ratchet (epoch secrets advance and are deleted), CK/nskey rotation
 (fresh independent material), and `kid`/`kpid` identifiers (a hash of a *public* key, not a
-secret). This is **distinct** from §9's **per-enrollment** single-seed idea, which is
+secret). This is **distinct** from [section 9](#9-apkam-keypair-as-key-package-considered-and-rejected-2026-06-30)'s **per-enrollment** single-seed idea, which is
 *per-principal* and local-only — it lacks this flaw and was rejected on the separate ground
 that it saves only keyfile bytes.
 
@@ -861,7 +861,7 @@ with her. Its public half is **published lazily**: it lives as the self at-key
 `nskey.<ns>@<owner>` (owner-only, synced to the owner's authorised clients) until the namespace
 is first used cross-atSign, at which point the *same* public half is promoted to the
 world-readable `public:nskey.<ns>@<owner>`. The private half is minted fresh and conveyed
-per-APKAM over the substrate ([§10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)),
+per-APKAM over the substrate ([section 10](#10-nskey-derivation-from-a-shared-master-seed-rejected-2026-06-30)),
 never derived. This came from peer review, which observed that a separate "self nskey" and
 "public nskey" were doing the same cryptographic job (X-Wing KEM wrapping a CK) for the same
 private-holders.
@@ -1018,9 +1018,8 @@ separate transparency work above, not by the substrate.
 **Implementation status.** Target, not yet built: sign in the mint paths
 (**SS-2** key package, **SS-4** nskey / pqpublickey), verify on read (**SS-1c**); the
 atServer `_apsk`-always-present + write-restriction is **SS-1b**. The current
-substrate advertises the key package **unsigned** — tracked as a gap in `design.md`
-§6. Mechanics: `design.md` §2.1 (*Advertised-key authenticity*) and §2.4; sequencing:
-`implementation-plan.md` SS-1b/SS-1c/SS-2/SS-4; acceptance: `acceptance.md` §13.
+substrate advertises the key package **unsigned** — tracked as a gap in [section 6](../design.md#6-implementation-notes--file-level-pointers-consolidated) Mechanics: [section 2.1](../design.md#21-kpid-addressing-__ssenv-envelope-signverify) (*Advertised-key authenticity*) and §2.4; sequencing:
+`implementation-plan.md` SS-1b/SS-1c/SS-2/SS-4; acceptance: [section 13](../acceptance.md#13-cross-cutting-acceptance-applies-to-all-flows)
 
 ---
 
@@ -2116,7 +2115,7 @@ real evidence — the evidence was simply half the path.
 
 ### 23.4 What the live coverage does and does not prove
 
-`enrollment_pq_key_exchange_e2e_test.dart` drives the whole chain against a live atServer:
+`enrollment_pq_key_exchange_live_test.dart` drives the whole chain against a live atServer:
 the request reaches it with no RSA-wrapped key, approval mints one, and the enrollee
 recovers it **over its own PKAM-authenticated connection**, scoped to the single namespace
 it was granted. That last part matters — running the resolver from the approver's
@@ -2518,7 +2517,7 @@ namespace with no key mints one on the way through.
 
 A put to a namespace with no key does not mint; it **fails**, with
 `NamespaceKeyUnavailableException` naming the atSign and namespace. That behaviour is deliberate
-and is itself an acceptance row — UC-A3.3 — proven live in `nskey_data_path_e2e_test.dart`. So
+and is itself an acceptance row — UC-A3.3 — proven live in `nskey_data_path_live_test.dart`. So
 the two rows as written contradict each other: A3.3 requires the cold-namespace write to fail,
 while A3.2 requires it to mint and succeed.
 
@@ -2871,7 +2870,7 @@ when that one bottoms out rather than deleting it.
 
 ## 36. The rollout is the app's decision: capability markers built, examined, and removed (2026-08-05)
 
-**In brief:** *supersedes Decision #2 and §16's marker consequence; the migration is two app releases*
+**In brief:** *supersedes Decision #2 and [section 16](#16-a-provider-id-names-every-algorithm-a-reader-needs-code-for-2026-08-02)'s marker consequence; the migration is two app releases*
 
 R-1 was built as designed — the per-`(atSign, namespace)` capability marker
 (`public:__capability.<ns>@<atSign>`, an APKAM-signed envelope carrying the **set** of
@@ -3126,7 +3125,7 @@ moves onto the D1 GA critical path**, and every "transient, self-healing" claim 
 [38](#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05) is conditional
 on it existing.
 
-Constraints beyond §5's ruling, from the scenario-3 examination:
+Constraints beyond [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s ruling, from the scenario-3 examination:
 
 - **Revocation must cascade.** Self-enrollment makes enrollments a parent/child
   graph. A stolen keyfile can spawn a child before the theft is noticed; if revoking
@@ -3137,7 +3136,7 @@ Constraints beyond §5's ruling, from the scenario-3 examination:
   keypair, so it seals the legacy encryption keypair + self key to its own new key
   package; `encryptedDefaultSelfEncryptionKey` is satisfiable without the server
   holding anything.
-- **§5's expiry cap is in tension with scenario 3 and needs re-ratifying.** §5 caps
+- **[section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s expiry cap is in tension with scenario 3 and needs re-ratifying.** [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment) caps
   the old enrollment to `min(now + grace, expiry)` on retrofit — but scenario 3's
   devices upgrade on schedules measured in whenever-they-next-run. A short grace
   strands laggard clones; an infinite one never retires the legacy credential. On
@@ -3155,12 +3154,12 @@ where one exists.
 **Ruled the same day** — [42](#42-the-to-define-list-ruled-2026-08-05) records the
 ruling on every item; this list stays as the index of what each owner project owes.
 
-1. **RF-SRV verb wire shape** (the ruling in [§5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)
+1. **RF-SRV verb wire shape** (the ruling in [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)
    plus [40](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)'s
    constraints, as protocol: request fields, response, error cases). → RF-SRV.
 2. **The revocation-cascade mechanics** — where the parent link lives on the
    enrollment record, and how revoke walks it. → RF-SRV + atServer.
-3. **§5's expiry cap vs scenario-3 laggards** — grace length, or cap-on-retrofit vs
+3. **[section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s expiry cap vs scenario-3 laggards** — grace length, or cap-on-retrofit vs
    cap-on-operator-action. → RF-SRV.
 4. **Who runs the chain sweep** for an atSign whose apps are all scoped enrollments —
    the atSign's own keys are privileged by construction, but that keyfile lives in a
@@ -3231,7 +3230,7 @@ ruling, each with a differential test.
    is also exposed in `enroll:fetch` and `enroll:list`, so an owner can see what a
    stolen keyfile spawned.
 
-3. **The cap slides.** [§5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s
+3. **The cap slides.** [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s
    formula — min(now + grace, the enrollment's own expiry) — is applied on every
    sibling retrofit against the enrollment's pre-cap expiry, not folded into the
    previously capped ttl. The built min-fold made the first retrofit fix the
@@ -3293,7 +3292,7 @@ ruling, each with a differential test.
    and the upgraded file becomes the backup. Timing: nothing to do; the grace cap
    retires it one window after the last retrofit (item 3). Never `enroll:revoke`
    as cleanup, since revocation cascades to every retrofitted child — this narrows
-   [§5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s "(or an
+   [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s "(or an
    explicit enroll:revoke)" aside to the compromise case, where cascading is the
    point. A straggler past the window gets a loud auth failure, not data loss;
    recovery is a copied upgraded keyfile or a fresh OTP enrollment. Once the
@@ -4074,7 +4073,7 @@ which enrollment to leave out. The forward-secrecy lever did not exist at all.
 
 ### 47.1 The two levers, kept apart on purpose
 
-`design.md` §1.7 spends its first paragraph insisting B5a and B5b are not
+[section 1.7](../design.md#17-forward-secrecy--rotation-levers-ck-rotation-vs-nskey-keypair-rotation) spends its first paragraph insisting B5a and B5b are not
 substitutes, and the code now says so in two class names rather than one.
 
 **`NskeyRotation` (B5b)** mints the next nskey keypair, overwrites
@@ -5115,7 +5114,7 @@ D1 development is complete (acceptance 45/45); the branch works. A structural
 quality refactor — readability, maintainability, explainability — was audited
 (every changed production file read in full) and planned phase by phase. The
 plan review grilled out several design questions the spike had left implicit,
-and settled them. This section records the **decisions**; per §46.7 the ledger
+and settled them. This section records the **decisions**; per [section 46.7](#467-what-this-entry-does-not-rule) the ledger
 names a mechanism only once its differential test is green, so what follows is
 the intent and the shape, and the build names the mechanism as each lands. The
 full plan lives outside the tree (it is scaffolding, not design of record); its
@@ -5137,7 +5136,7 @@ built now.
 The consequence that made this the right call: with no durable parent→child
 signatures, replacing any non-root enrollment's key orphans nobody, because it
 has no signed children. The cascade a key rotation would otherwise trigger
-(§56.3) dissolves into the sweep.
+([section 56.3](#563-three-retrofit-modes-and-the-signing-algorithm-selector)) dissolves into the sweep.
 
 ### 56.2 A root-holder conveys root links, not chain links attributed to itself
 
@@ -5178,27 +5177,27 @@ new and which signing algorithm the enrollment gets:
   Keeping the id is justified by *data-path continuity*: replacing only the
   signing key leaves the KEM key package (kpid, nskey privates) untouched, so
   the enrollment survives while its signing key rotates. Its repair falls out of
-  §56.1: replace the key, re-anchor that one enrollment with a new root link,
+  [section 56.1](#561-the-signing-chain-is-root-anchored-chain-links-are-provisional): replace the key, re-anchor that one enrollment with a new root link,
   and let a sweep upgrade any provisional chain-linked children — no bespoke
   walk-and-re-sign of a subtree.
 
 The SDK therefore needs a **per-retrofit signing-algorithm selector** (RSA vs
 ML-DSA), built now as an operation parameter, not a preference — a preference
-would reintroduce the disagrees-with-reality bug class §56.6 designs out. Built
+would reintroduce the disagrees-with-reality bug class [section 56.6](#566-signingalgotype-is-a-fact-about-the-key-material-not-a-preference) designs out. Built
 alongside it: the fix for `self_retrofit` hardcoding ML-DSA (which blocks
 type-1) and ignoring `keyEstablishmentAlgo` (the KEM axis). The selector is one
-of the rollout flags in §56.4.
+of the rollout flags in [section 56.4](#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults).
 
 ### 56.4 From the PQ project's view, 4.0 is final-3.x with different flag defaults
 
 Every rollout stage is a flag; **all the code ships in final 3.x, and 4.0 flips
 only the defaults.** (4.0 also does ordinary major-version cleanup — deprecation
 and dead-code removal — which is orthogonal to the PQ rollout; the deprecations
-this pass *adds*, §56.6 and the in-place-deprecated enrollment-model fields, are
+this pass *adds*, [section 56.6](#566-signingalgotype-is-a-fact-about-the-key-material-not-a-preference) and the in-place-deprecated enrollment-model fields, are
 the 3.x→4.0 bridge that cleanup removes.) This is the correct deployment
 architecture, not merely a testing convenience: it auto-honours the
 `keyPackage`-write-once freeze (the JWS producer defaults on only in 4.0, by
-which point every 3.x client already *reads* the new shape — §56.5), and it
+which point every 3.x client already *reads* the new shape — [section 56.5](#565-jws-ships-both-stages-in-3x-the-producer-is-a-flag-not-a-4x-fork)), and it
 makes the entire multi-stage rollout testable from one codebase by setting
 flags.
 
@@ -5208,15 +5207,15 @@ per-operation flags still override per call):
 
 | Axis | home | 3.x default | 4.0 default |
 |---|---|---|---|
-| Crypto era default | `Expando` keyed by `AtClient` (§27.2 — never the shared preference) | reads-nskey, writes-legacy | writes-PQ |
+| Crypto era default | `Expando` keyed by `AtClient` ([section 27.2](#272-why-it-stopped-being-a-constant) — never the shared preference) | reads-nskey, writes-legacy | writes-PQ |
 | `disallowLegacyEncryption` | `AtClientPreference`, final at construction | false | true |
-| Signing rollout position | `ReleasePosture.signingRollout`, overridable per `AtClientPreference`; the in-use signing set derives from it (§91.3 rulings 16–17) | `now` (set `{}`) | `rollout2` (set `{mldsa65}`) |
+| Signing rollout position | `ReleasePosture.signingRollout`, overridable per `AtClientPreference`; the in-use signing set derives from it ([section 91.3](#913-the-rulings) rulings 16–17) | `now` (set `{}`) | `rollout2` (set `{mldsa65}`) |
 | `EnrollmentKeyExchangeMode` | `AtEnrollmentRequest` | legacy | pq |
-| Retrofit signing algorithm | per-retrofit parameter (§56.3) | RSA | ML-DSA |
+| Retrofit signing algorithm | per-retrofit parameter ([section 56.3](#563-three-retrofit-modes-and-the-signing-algorithm-selector)) | RSA | ML-DSA |
 
 *Table amended 2026-08-13 during implementation. It carried a **Signed-envelope
 version** axis — signer config, v1 in 3.x and v2 in 4.0 — and that axis no
-longer exists: [§95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+longer exists: [section 95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 ruling 1 collapsed the envelope to one shape, so there is nothing for a posture
 to choose between, and `envelopeVersion` is a plain constant. The in-use signing
 set took the fifth slot when it landed. **The count is five by coincidence, not
@@ -5231,12 +5230,12 @@ key-exchange axis of this same table.
 
 ### 56.5 JWS ships both stages in 3.x; the producer is a flag, not a 4.x fork
 
-Backlog 14.3 (JWS Flattened JSON, ruled in §48.8) is implemented in **both**
+Backlog 14.3 (JWS Flattened JSON, ruled in [section 48.8](#488-what-this-entry-does-not-rule)) is implemented in **both**
 stages in final 3.x. Stage one — readers accept both the current and the JWS
 shape, dispatching on the wrapper's `v` field rather than on
 `payload is String`, with base64url normalisation at every decode site — is
 always on. Stage two — the producer emitting the JWS shape — ships behind the
-signed-envelope-version flag of §56.4, defaulting to v1. There is no 4.x code
+signed-envelope-version flag of [section 56.4](#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults), defaulting to v1. There is no 4.x code
 fork; 4.0 flips the default to v2. The measured base64 padding trap stands: a
 naive decode throws on every RSA signature and succeeds on every ML-DSA one, so
 the RSA arm must be tested specifically.
@@ -5248,7 +5247,7 @@ breaks every external `implements`. It is removed from the interface (nothing
 published reads it — the addition was this branch's). The signing algorithm is
 resolved authoritatively from the enrollment's APKAM key material, via
 `AtKeys.signingAlgorithmForEnrollment` through `AtKeysIo` — not from `AtChops`
-(§20.6 forbids a new AtChops-as-source consumer) and not from a preference: you
+([section 20.6](#206-atchops-is-not-a-key-holder) forbids a new AtChops-as-source consumer) and not from a preference: you
 cannot sign ML-DSA with an RSA key, so the algorithm is a property of the key
 you hold. This also fixes a live bug where the value was set only as a
 side-effect of `_createAtChops`, so an injected-`AtChops` client signed rsa2048
@@ -5264,7 +5263,7 @@ shipped. `AtClientPreference.crypto` went non-nullable → nullable so the SDK
 could tell "app named a config" from "app did not"; it is restored to
 non-nullable with a distinguished `CryptoConfig.eraDefault()` sentinel that
 `forClient` dereferences through the `Expando` — preserving the era-default
-design and §27.2. `signingAlgoType` is handled per §56.6. Every other
+design and [section 27.2](#272-why-it-stopped-being-a-constant). `signingAlgoType` is handled per [section 56.6](#566-signingalgotype-is-a-fact-about-the-key-material-not-a-preference). Every other
 branch-added surface across all packages is unpublished and freely reshapeable,
 which is the window this pass uses to draw the deliberate public surface before
 publication.
@@ -5421,7 +5420,7 @@ Identifier-level cleanups (the Dart names, at_chops barrel spellings) are
 deliberately deferred to the at_chops naming decisions and the at_auth model
 reshape. One more spelling family arrives later by design: the JWS wrapper
 brings its own registered names (`RS256`, `ML-DSA-65`) confined to the
-protected header (§56.5) — it replaces the envelope's `signingAlgo` spelling,
+protected header ([section 56.5](#565-jws-ships-both-stages-in-3x-the-producer-is-a-flag-not-a-4x-fork)) — it replaces the envelope's `signingAlgo` spelling,
 never the keyfile's or the records'.
 
 ### 57.8 `SecretSharingAlgos` stays as functions, not a suite table
@@ -5442,7 +5441,7 @@ mapping with literals on both sides. Skipped, deliberately.
 
 ## 58. The two published-API breaks are repaired in place (2026-08-09)
 
-The §56.7 ruling, landed. Each entry records the mechanism as built, after its
+The [section 56.7](#567-the-two-published-api-breaks-are-repaired-not-shipped) ruling, landed. Each entry records the mechanism as built, after its
 tests went green.
 
 ### 58.1 `AtClientPreference.crypto` is non-nullable again; the marker carries "app named nothing"
@@ -5453,7 +5452,7 @@ The nullable branch shape existed to distinguish "app named a config" from
 `const CryptoConfig.eraDefault()`, a distinguished const the SDK recognises by
 its private subtype. `forClient` and `adoptEraDefault` treat it exactly as
 they treated null: resolve the per-client era default through the `Expando`
-(§27.2 intact — the marker is a signal, never per-atSign provider state, and
+([section 27.2](#272-why-it-stopped-being-a-constant) intact — the marker is a signal, never per-atSign provider state, and
 nothing is resolved into the shared preference object). Assigning any real
 config, including `CryptoConfig.legacy()`, is an explicit opt-out, and the two
 legacy-shaped values being distinct is covered by test.
@@ -5468,10 +5467,10 @@ opted into the new one.
 
 ### 58.2 `signingAlgoType` comes off the interface; the key material answers
 
-The §56.6 ruling, landed in two commits. First the behaviour: resolution from
+The [section 56.6](#566-signingalgotype-is-a-fact-about-the-key-material-not-a-preference) ruling, landed in two commits. First the behaviour: resolution from
 the enrollment's key material is an explicit `_init` step
 (`_resolveSigningAlgoFromKeyMaterial`, via `AtKeysIo` →
-`AtKeys.signingAlgorithmForEnrollment`, never `AtChops` — §20.6), running
+`AtKeys.signingAlgorithmForEnrollment`, never `AtChops` — [section 20.6](#206-atchops-is-not-a-key-holder)), running
 whether or not an `AtChops` was injected. It had been a side effect of
 `_createAtChops`, which an injected-`AtChops` client never runs, so that
 client signed the preference's rsa2048 default under an ML-DSA enrollment —
@@ -5539,14 +5538,14 @@ The dartdoc also now records that data-mode ML-DSA verification resolves here
 
 ### 59.4 `KemSeedMixin` — one implementation of the seed contract
 
-[§50.4](#504-one-seed-contract-and-why-at_chops-350-is-a-minor) put
+[section 50.4](#504-one-seed-contract-and-why-at_chops-350-is-a-minor) put
 `newSeed`/`keyPairFromSeed` on the interface; the five backends then each
 carried their own copy of the same two bodies, and the copies had begun to
 drift — `MlKem768FfiAlgo` validated against a hardcoded `64` rather than its
 own `seedLength`. The mixin holds the single implementation: draw
 `kemSeedLength` secure-random bytes, reject any other length with a
 diagnostic that names the backend, delegate to the backend's deterministic
-keygen through a protected member. Per §50.4 the length stays off
+keygen through a protected member. Per [section 50.4](#504-one-seed-contract-and-why-at_chops-350-is-a-minor) the length stays off
 `AtKemAlgorithm`; on the mixin it is `@protected`, so it is not caller-facing
 surface, and the concrete classes keep their public `static const seedLength`
 (which the in-tree 3.5.0 changelog already promises). Landed before the
@@ -5610,7 +5609,7 @@ row is either an RFC 9180 suite (domain separation: the `suite_id` inside
 every label) or the custom `atPQv1-base` label (v1's domain separation) — by
 construction an RFC row has no label and the custom row no suite, so
 relabelling an envelope across versions keeps failing in both directions.
-Per [§57.8](#578-secretsharingalgos-stays-as-functions-not-a-suite-table)'s
+Per [section 57.8](#578-secretsharingalgos-stays-as-functions-not-a-suite-table)'s
 burden the per-version rationale rides the rows. `pqSealSupportedVersions` stays the
 public const (raw-literal-pinned); a 256-value behavioural probe pins the
 table's key set equal to it. The file header was rewritten — it described
@@ -6347,7 +6346,7 @@ sentence outlived the reason for it.
 | 4 | **Per-key set, never whole-map replace.** The request names the keys to set; keys it does not name survive untouched. Whole-map replace is read-mutate-write against shared durable state — a client that does not know about a future sibling field clobbers it, and two processes of one device are concurrent by construction |
 | 5 | **The server keeps no opinion.** Metadata stays opaque: no parsing, no signature check, no ordering of successive packages. The consequence is stated rather than mitigated — the server cannot detect a downgrade to an older validly-signed package, which is why ruling 2 carries the weight it does |
 | 6 | **A replaced kpid is not retired.** The client keeps the superseded private half and keeps answering at the old address. An envelope written before the update is addressed to the old kpid and must still open; the alternative is silent, unattributable loss of a secret that was correctly sent |
-| 7 | **A server without the sub-command must fail loudly**, and does: an unknown operation does not match the verb regex. This is strictly better than the `EnrollParams.metadata` passthrough it complements, which an old atServer drops silently — the gap recorded at [implementation-plan §14 backlog](implementation-plan.md#14-backlog--carried-items-with-no-owning-project) ("a PQ-capable client cannot tell a legacy atServer from an old peer") |
+| 7 | **A server without the sub-command must fail loudly**, and does: an unknown operation does not match the verb regex. This is strictly better than the `EnrollParams.metadata` passthrough it complements, which an old atServer drops silently — the gap recorded at [implementation-plan section 14 backlog](implementation-plan.md#14-backlog--carried-items-with-no-owning-project) ("a PQ-capable client cannot tell a legacy atServer from an old peer") |
 | 8 | **No peer invalidation is owed today, and the reason is checkable.** `VerbEnrollmentDirectory.listForNamespace` executes `enroll:listns` against the atServer on every call (`enrollment_directory.dart:141`) and caches nothing, so a sender reads the current package at seal time. Any future cache inherits an invalidation obligation from this ruling |
 
 ### 68.4 The verb
@@ -6497,7 +6496,7 @@ not by this change).
 **Status:** accepted. The retrofit signing algorithm is a per-operation
 PARAMETER (never a preference), the last of the five rollout axes to
 gain its flag. *Amended 2026-08-13: "the last" was true when written and is
-not now — the in-use signing set ([§91.3](#913-the-rulings) ruling 16) became
+not now — the in-use signing set ([section 91.3](#913-the-rulings) ruling 16) became
 an axis later, taking the slot the deleted signed-envelope-version axis left.* `AtSelfEnrollmentRequest.signingAlgo` (at_auth 3.4.0,
 additive, default `mldsa65` — the mechanism keeps its old behaviour)
 selects what the self-enrollment mints: `rsa2048` is type-1, the
@@ -6530,10 +6529,10 @@ its natural home, settable as a group.
 
 *Amended 2026-08-13 during implementation: two of the axes this entry describes
 have moved. The signed-envelope version stopped being an axis
-([§95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+([section 95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 ruling 1) — the paragraph below still describes `EnvelopeSigning.envelopeVersion`
 resolving per-signer → posture → v1, and none of that mechanism exists; there is
-one shape and a constant. The in-use signing set ([§91.3](#913-the-rulings)
+one shape and a constant. The in-use signing set ([section 91.3](#913-the-rulings)
 ruling 16) took the vacated fifth slot, so the heading's count is right again by
 coincidence rather than because these five stand.* `ReleasePosture` (at_client, main
 barrel) has exactly two constructors and no general one: `migration()` is
@@ -6851,7 +6850,7 @@ the shared rule lives in one private helper.
   one of those throws `LateInitializationError`. Nothing reads it there
   today. A 4.0 job, recorded here so it is not rediscovered as a surprise.
 
-## 76. The nskey advertises one KEM key, and §50's premise is a release property (2026-08-10)
+## 76. The nskey advertises one KEM key (2026-08-10)
 
 **Status:** open, tracked as
 [#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135) under
@@ -6860,12 +6859,12 @@ tree. Recorded as a defect and an intent, not as a mechanism. Nothing is
 built, and the shape below is where the reasoning points rather than a ruling
 on how it lands.
 
-**What [§50](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
+**What [section 50](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
 settled, and why it held.** An nskey advertisement carries exactly one key:
 `publicKey` and `alg` are both singular, and a sender gets no choice about
 either — `NskeyProvider.encrypt` throws when the advertised `alg` is not the
 KEM its provider handles, because encapsulating under the wrong KEM produces
-a conveyance the owner could never open. §50.2 says that restricts nobody,
+a conveyance the owner could never open. [section 50.2](#502-the-sender-follows-the-recipient-so-configuring-a-kem-restricts-nobody) says that restricts nobody,
 and gives the reason: *"every build produces and opens both, and the
 recipient's advertised `alg` is what decides"*. That is exactly right, and
 the single-key record is the simplest thing that works under it.
@@ -6879,11 +6878,11 @@ to the newer algorithm stops every sender that has not shipped it, and those
 senders recover only when *they* upgrade. That is worse than cold start,
 which heals when the recipient acts. It is a flag day imposed on senders by
 a recipient, and it is the one failure the rollout model in
-[§1.8](../design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d)
+[section 1.8](../design.md#18-migration-rollout--the-disallowlegacyencryption-flag-d1-c--d1-d)
 exists to prevent. `suites` gives agility over the construction; nothing
 gives it over the KEM.
 
-So §50 is not being overturned. What is being removed is its precondition:
+So [section 50](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07) is not being overturned. What is being removed is its precondition:
 that the KEM set is frozen and every client carries all of it.
 
 **Why now.** No atSign has published an nskey advertisement, since PQ is
@@ -6913,7 +6912,7 @@ question and is the precedent worth copying:
   wart, since today's mint is a race whose loser silently inherits the
   winner's algorithm.
 
-**This does not soften [§50.3](#503-the-kem-is-configured-the-construction-is-negotiated).**
+**This does not soften [section 50.3](#503-the-kem-is-configured-the-construction-is-negotiated).**
 The KEM stays configured and the construction stays negotiated. A recipient
 still declares what it is a recipient *for*; it may now declare more than one
 thing. The sender chooses among keys the recipient actually holds, by its own
@@ -7079,7 +7078,7 @@ carrying those names would genuinely lose them.
 Note the shape — this is the reserved-name collision between two formats that
 share a top level, and it was invisible because the file store never hits it:
 a legacy `.atKeys` file names its atSign as *the key itself* (`"@alice":
-"<selfEncryptionKey>"`, see §77), not as a literal `atsign`.
+"<selfEncryptionKey>"`, see [section 77](#77-phase-5-the-cli-stops-hand-building-its-keyfile-2026-08-10)), not as a literal `atsign`.
 
 ### 78.3 The list widget closed a service it did not own
 
@@ -7277,7 +7276,7 @@ mechanism-with-no-operator shape.
 Nothing to build. pq mode is not dark: it is selectable through
 `AtEnrollmentRequest.pq(...)`, which requires the two companions it cannot
 work without, and it is exercised live by the functional pack's
-`enrollment_pq_key_exchange_e2e_test.dart`. `ReleasePosture.keyExchangeMode`
+`enrollment_pq_key_exchange_live_test.dart`. `ReleasePosture.keyExchangeMode`
 carries the release default for the app that builds the request — `legacy`
 in 3.x, `pq` under `postQuantum()` — which is exactly the Workstream A
 table, and exactly what the field's own dartdoc already described.
@@ -7286,12 +7285,12 @@ One imprecision fixed with it: `ReleasePosture.postQuantum()`'s summary read
 "enrollments exchange their symmetric key post-quantum" alongside four
 things the posture really does apply by itself. It now says that this one
 takes effect when the app builds its request from the value — the same
-correction §70.1 made to that constructor's "safe to adopt early".
+correction [section 70.1](#701-the-review-harvest-the-postures-claims-corrected-two-consults-get-their-reds-2026-08-10) made to that constructor's "safe to adopt early".
 
 ## 82. Phase 7: an approval finishes its own bookkeeping, and every decision closes its connection (2026-08-11)
 
 **Status:** accepted (2026-08-11). Both defects predate this branch; the
-at_client_flutter audit (§78) found the first, ruled it out of scope there
+at_client_flutter audit ([section 78](#78-phase-5-the-keychain-is-reachable-flushable-and-no-longer-closes-someone-elses-service-2026-08-10)) found the first, ruled it out of scope there
 because it was not the branch's doing, and recorded it for closing hygiene.
 The second was found by sweeping the file for the same shape and is fixed
 here with it.
@@ -7324,7 +7323,7 @@ generic `catch`, which rewrites everything it sees as
 `Exception('Enrollment failed: $e')`. That is a widened guard across an
 operation boundary: by the time the delete runs, the atServer has recorded
 the decision, so reporting the approval as failed is the exact mis-report
-§78's own test file was written to prevent — the red proof produced
+[section 78](#78-phase-5-the-keychain-is-reachable-flushable-and-no-longer-closes-someone-elses-service-2026-08-10)'s own test file was written to prevent — the red proof produced
 `Enrollment failed: Exception: keychain unavailable` after a successful
 approval.
 
@@ -7700,7 +7699,7 @@ one job, and the ruling follows the split rather than the total.
   reasoning ⛔ **overruled 2026-08-16** — see the conventions in
   [`decisions.md`](../decisions.md). They are owed the conversion.
 - **68 outline labels.** `design.md`'s table of contents reads
-  `**[Subsystem A — …](#1-subsystem-a-…)** (§1) — the three layers`. The `(§1)`
+  `**[Subsystem A — …](#1-subsystem-a-…)** ([section 1](#1-adr-0001--d1-as-two-tiers-superseded)) — the three layers`. The `([section 1](#1-adr-0001--d1-as-two-tiers-superseded))`
   is a label beside a link to that exact heading. Converting it produces a
   second, identical link touching the first. Left alone.
 - **7 citations of external standards** — `SP 800-227 §4.6.2`, `§4.3`,
@@ -7843,7 +7842,7 @@ superseded kpid is not retired) is the same shape as ruling 9 below.
 | 4  | **The assurance invariants count only `active` material, and uniqueness is per `(enrollment, role, algorithm)`.** At most one active `privateAuthentication` **file-wide** — not per algorithm, since one live enrollment per install is the model — and at most one active `privateSigning` per algorithm, which is what lets an enrollment hold the whole signing array at once. *Amended 2026-08-11 during implementation: this ruling first said one active material per `(enrollment, keyPartType)`, which contradicted ruling 16 — every signing key shares the `privateSigning` role, so that rule permitted exactly one signing algorithm. Caught by a test asserting several active signing keys are fine, not by review.* Today they are status-blind, so retiring a key does not free its slot — confirmed by probe: retire `gen1`, add `gen2` under the same enrollment, and `addKey` throws while the same add under a different enrollment is allowed |
 | 5  | **"Which enrollment do I authenticate as" is derived, never stored.** It is the enrollment id of the unique active `privateAuthentication` material. No `activeEnrollmentId` field is added: a pointer duplicating a fact already in the file is a second writer waiting to disagree with the first |
 | 6  | **`AtKeys.replaceKey(keyId, newMaterial)`** performs retire-and-add in one call. Leaving callers to sequence two mutations across a keyfile flush is how one generation goes missing. *⚠️ Signature updated by [99](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) row A1: it is now `replaceKey(enrollmentId, keyId, replacements)`, because identity became `(enrollment, keyId)`. The ruling — one call, never two — is unchanged.* |
-| 7  | **All key material becomes typed.** The flat `apkamPublicKey`/`apkamPrivateKey` stay as a compatibility projection, read in exactly one place. `rsa2048` exists only as a retrofit's legacy APKAM keypair. *Amended 2026-08-13 during implementation: this ruling first said the flat fields become a **write-only** projection over the typed materials, "never read as the source of truth", and the projection cannot be materialised — two probes refused it. Filing a projected material makes `toJson` emit `version`/`atsign`/`keys`, because its guard is `keys.isEmpty` and both stores stamp `atsign` first (`file_io.dart:113`, `keychain_io_impl.dart:89`), which breaks the byte-identical legacy round-trip [§91.4](#914-what-is-released-and-therefore-what-must-still-be-read) promises; and on a retrofitted keyfile the one-active-`privateAuthentication`-per-document rule in `assurance.dart` refuses the add outright. There is also nothing to project from on four shipping shapes — a keyfile written before the typed section existed, an `rsa2048` first onboard, an OTP enrollment, and an onboard handed its keys by the caller. So "never read" narrows to "read in one place": `AtKeys.authenticationFor` / `authenticationAlgorithmFor` is the single resolver every caller goes through, typed material winning wherever the keyfile holds it for that enrollment and the flat fields answering only where it holds none.* |
+| 7  | **All key material becomes typed.** The flat `apkamPublicKey`/`apkamPrivateKey` stay as a compatibility projection, read in exactly one place. `rsa2048` exists only as a retrofit's legacy APKAM keypair. *Amended 2026-08-13 during implementation: this ruling first said the flat fields become a **write-only** projection over the typed materials, "never read as the source of truth", and the projection cannot be materialised — two probes refused it. Filing a projected material makes `toJson` emit `version`/`atsign`/`keys`, because its guard is `keys.isEmpty` and both stores stamp `atsign` first (`file_io.dart:113`, `keychain_io_impl.dart:89`), which breaks the byte-identical legacy round-trip [section 91.4](#914-what-is-released-and-therefore-what-must-still-be-read) promises; and on a retrofitted keyfile the one-active-`privateAuthentication`-per-document rule in `assurance.dart` refuses the add outright. There is also nothing to project from on four shipping shapes — a keyfile written before the typed section existed, an `rsa2048` first onboard, an OTP enrollment, and an onboard handed its keys by the caller. So "never read" narrows to "read in one place": `AtKeys.authenticationFor` / `authenticationAlgorithmFor` is the single resolver every caller goes through, typed material winning wherever the keyfile holds it for that enrollment and the flat fields answering only where it holds none.* |
 | 8  | **`_apsk` becomes `{"v":1,"keys":[{"use","alg","pub","status"}]}`,** reusing `PackageKey`'s vocabulary so the design has one spelling for "a list of keys with algorithms". `status` is `active` or `verifyOnly`; absent reads as `active`. Written by the atServer verbatim from `EnrollParams.apsk`, at approval and on `enroll:update` — one writer for the record's whole life, which makes a rotation atomic from the client's view |
 | 9  | **The array is append-mostly.** An algorithm leaving the in-use set stops signing; its key and its published entry are retained indefinitely as `verifyOnly`. Key packages and chain links are stored durably, so withdrawing an entry retroactively unverifies everything ever signed with it |
 | 10 | ⚠️ **SUPERSEDED 2026-08-14 by [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 2 — the auth key is never retained in `_apsk`.** What it said, and why it stood until then, is kept below because the reasoning is still correct *given its premise*: the premise was that the auth key had signed durable envelopes worth verifying. gkc ruled 2026-08-14 that **no long-lived signatures exist**, so it protects nothing; and under 98 an enrollment holds a signing key from birth, so its auth key never signs at all. ~~**The APKAM auth key is in the array permanently, as `verifyOnly`.** Everything signed before rollout 2 was signed by it; the array replacing the bare-string record would otherwise unverify all of it.~~ This is ruling 9 applied at the rollout boundary rather than at an algorithm retirement. *Amended 2026-08-13 during implementation: as written this ruling could not do its job, because the reader took **one key per algorithm** — `ParsedApsk.keyFor` was `where(alg).firstOrNull` and `verifyEnvelope` checked that one. Retaining the auth key works only where its algorithm differs from the minted key's, which is the **legacy** enrollment. A post-quantum-native enrollment holds an ML-DSA auth key and mints an ML-DSA signing key, so both entries name `mldsa65`, the active one is found first, and every envelope signed before the split fails to verify — the exact outcome this ruling exists to prevent, in what will be the ordinary 4.0 case. The reader now resolves the algorithm first and tries **every** key advertised under it, refusing only when none verifies. That is not the fallback ruling 11 forbids: 11 is about dropping to a weaker algorithm after a failure, and the algorithm here is already fixed by the strongest-shared rule, with every key tried one this signer published under it.* |
@@ -8234,7 +8233,7 @@ published, is not retracted, and does ship `secret_sharing/`** — every file of
 it marked `@experimental`, unused by anyone, and therefore free to change. The
 sub-ruling holds for both records on the marker, which is the durable reason.
 The released-surface table is
-[§91.4](#914-what-is-released-and-therefore-what-must-still-be-read).
+[section 91.4](#914-what-is-released-and-therefore-what-must-still-be-read).
 
 **5. The suite-negotiation loop is written twice and becomes one function.**
 `KeyPackage.bestSuiteFor` plus `sendEnvelope`'s narrowing, versus
@@ -8401,14 +8400,14 @@ matrix in [`acceptance.md` 16.5](../acceptance.md#165-the-rollout-matrix) is
 corrected accordingly — it becomes a data-path matrix, with the envelope
 exchange a `now`/`rollout1`/`rollout2` question.
 
-The lesson is the one [§14.19.1](../implementation-plan.md#14191-things-that-look-like-defects-and-are-not)
+The lesson is the one [section 14.19.1](../implementation-plan.md#14191-things-that-look-like-defects-and-are-not)
 keeps relearning from the other side: this claim was checked by grepping the
 released tree for `lib/src/signing/`, which is where *this* tree keeps the
 code. The released build kept it somewhere else. A search for the directory
 answered a question about the directory, and got read as an answer about the
 capability. (The rest of what 3.14.0 ships in this area — `secret_sharing/`,
 the signing mixins — is `@experimental` and free to change; see
-[§91.4](#914-what-is-released-and-therefore-what-must-still-be-read).)
+[section 91.4](#914-what-is-released-and-therefore-what-must-still-be-read).)
 
 **4. The reversibility hatch is spent, not lost.** `nskeyAdvertisementVersion`'s
 doc calls the version field "the hatch that makes moving the envelope to JWS

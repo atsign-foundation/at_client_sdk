@@ -377,7 +377,7 @@ exists to prevent. `suites` gives agility over the *construction*; nothing gives
 it over the KEM. The direction of travel is a set-valued `keys[]` on the
 advertisement, mirroring the key package, added while no advertisement has been
 published anywhere and the change is still a shape rather than a migration:
-[decisions.md §76](detail/decisions.md#76-the-nskey-advertises-one-kem-key-and-50s-premise-is-a-release-property-2026-08-10).
+[decisions.md section 76](detail/decisions.md#76-the-nskey-advertises-one-kem-key-2026-08-10).
 
 ### 1.5 The CK model, cache, ckKid & appMetadata encoding
 

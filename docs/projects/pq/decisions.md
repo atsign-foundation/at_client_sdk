@@ -240,7 +240,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 [73]: detail/decisions.md#73-phase-5-atenrollmentimpl-splits-into-submitter-approver-handshake-2026-08-10
 [74]: detail/decisions.md#74-phase-5-enrollment-material-gets-one-filing-path-2026-08-10
 [75]: detail/decisions.md#75-phase-5-the-enrolment-requests-mode-is-a-constructor-not-a-field-2026-08-10
-[76]: detail/decisions.md#76-the-nskey-advertises-one-kem-key-and-50s-premise-is-a-release-property-2026-08-10
+[76]: detail/decisions.md#76-the-nskey-advertises-one-kem-key-2026-08-10
 [77]: detail/decisions.md#77-phase-5-the-cli-stops-hand-building-its-keyfile-2026-08-10
 [78]: detail/decisions.md#78-phase-5-the-keychain-is-reachable-flushable-and-no-longer-closes-someone-elses-service-2026-08-10
 [79]: detail/decisions.md#79-phase-6-maxretries-becomes-a-budget-for-the-thing-it-is-named-after-2026-08-10

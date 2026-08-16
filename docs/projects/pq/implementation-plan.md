@@ -69,13 +69,28 @@ was falsified" from "this ruling says another one was" — separated them:
   each row now carries it with the latest date. Four (13, 91, 93, 98) were
   read directly; the other seven matched the same unambiguous marker.
 
-⛔ **Still owed — two citation debts**, both deferred on the now-overruled
-append-only reasoning and neither touched:
+✅ **Both citation debts are DISCHARGED**, and each was smaller or different
+than the ruling that deferred it said:
 
 - [84](detail/decisions.md#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
-  left **two earlier rulings citing renamed test files**.
+  said "two earlier rulings cite the old filenames". It was **3 citations
+  across 2 files** — `enrollment_pq_key_exchange_e2e_test.dart` and
+  `nskey_data_path_e2e_test.dart`, both now `*_live_test.dart`. ⚠️ A first
+  pass also reported `retrofit_e2e_test.dart` and
+  `retrofit_retirement_e2e_test.dart` as dead; they are **alive**, in
+  `tests/at_end2end_test/test/pq/` — the check had looked in the functional
+  pack only.
 - [89](detail/decisions.md#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
-  left **74 section-symbol citations** unconverted.
+  said 74 section symbols were owed conversion. **54 converted plus 19 link
+  labels**; the remaining **17 stay by 89's own classification** — external
+  standards (`SP 800-227 §4.3`, `RFC 9180 §5.1`, `RFC 7515 §7.2.2`,
+  `RFC 8725 §3.11`) and 89's own quoted examples of the notation.
+  ⚠️ **The scripted conversion mis-resolved five references and broke one
+  heading**, all caught by verifying every link afterwards rather than by the
+  script: `design §4` without the `.md` resolved to *ruling* 4; two labels
+  that already contained `§` became nested links; and ruling 76's heading
+  carried a `§50`, so converting it changed the slug and orphaned the index
+  row. 76's heading is now short and its two pointers moved with it.
 
 Re-derive rather than trusting the numbers above:
 
