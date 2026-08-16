@@ -15,6 +15,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 ## Table of contents
 
+- [Use-case status](#use-case-status)
 - [0. Purpose, scope & how to read this doc](#0-purpose-scope--how-to-read-this-doc)
 - [1. Notation, state model & key objects (test vocabulary)](#1-notation-state-model--key-objects-test-vocabulary)
 - [2. A1 · Onboard a new atSign (PQ-native)](#2-a1--onboard-a-new-atsign-pq-native)
@@ -32,6 +33,83 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 - [14. Test harness & impl/verify mapping](#14-test-harness--implverify-mapping)
 - [15. C1 · The rollout posture (capstone of `decisions.md` 56.4)](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564)
 - [16. G1 · Signature agility and the rollout matrix](#16-g1--signature-agility-and-the-rollout-matrix)
+
+---
+
+## Use-case status
+
+**Generated from the scenarios, not written by hand.** A use case is:
+
+- **PROVEN** — a scenario in `packages/at_client/test/acceptance/` asserts it
+  and runs.
+- **BLOCKED** — its scenario exists but is skipped against a named constant in
+  `blockers.dart`, so something is recorded as owing it.
+- **WITHDRAWN** — the catalogue withdrew the row and kept the heading, so the
+  reason and every cross-reference to it survive.
+
+There is no "in progress" state, because nothing in the tree can express one: a
+scenario either runs or is skipped against a named blocker. Today that is
+**41 PROVEN · 2 BLOCKED · 1 WITHDRAWN** across 44 use cases and 44 scenarios —
+`UC-A5.1` has two.
+
+⚠️ **This table is an index. The `###` headings below are the definitions** —
+`manifest.dart` parses them, and `catalogue_test.dart` fails when they and the
+scenarios disagree. Do not collapse the headings into this table.
+
+Re-derive rather than trusting the rows:
+
+```bash
+grep -rn "}, skip:" packages/at_client/test/acceptance/*_test.dart
+grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
+cd packages/at_client && dart test test/acceptance --concurrency=1
+```
+
+| Use case | What it proves                                                                      | Status    | Proof                        |
+|----------|-------------------------------------------------------------------------------------|-----------|------------------------------|
+| UC-A1.1  | First-enrollment CRAM onboard is PQ-native                                          | PROVEN    | `a1_onboard_test.dart`       |
+| UC-A2.1  | New enrollment, approved by an online enrollment (PQ-safe enroll/approve)           | PROVEN    | `a2_enrollment_test.dart`    |
+| UC-A2.2  | Second host using the *same* keyfile (copied keyfile, E1)                           | PROVEN    | `a2_enrollment_test.dart`    |
+| UC-A2.3  | Namespace-restricted enrollment                                                     | PROVEN    | `a2_enrollment_test.dart`    |
+| UC-A2.4  | The key package advertises the KEM the deployment configured                        | PROVEN    | `a2_enrollment_test.dart`    |
+| UC-A2.5  | An enrollment amends its own key package (`enroll:update`)                          | BLOCKED   | `ke2`                        |
+| UC-A2.6  | Only the enrollment itself may amend its metadata                                   | BLOCKED   | `ke2`                        |
+| UC-A3.1  | Self write/read, namespace key already exists                                       | PROVEN    | `a3_self_data_test.dart`     |
+| UC-A3.2  | A client mints and publishes the nskey for each namespace it is authorised for      | PROVEN    | `a3_self_data_test.dart`     |
+| UC-A3.3  | Self write with no namespace key has no PQ fallback                                 | PROVEN    | `a3_self_data_test.dart`     |
+| UC-A3.4  | Self notification (encrypted value)                                                 | PROVEN    | `a3_self_data_test.dart`     |
+| UC-A3.5  | The published nskey advertisement names its KEM and what it can open                | PROVEN    | `a3_self_data_test.dart`     |
+| UC-A4.1  | alice → bob, both PQ-native, bob has the namespace key                              | PROVEN    | `a4_shared_data_test.dart`   |
+| UC-A4.2  | alice → bob where bob has no namespace key → the share fails                        | PROVEN    | `a4_shared_data_test.dart`   |
+| UC-A4.3  | Multi-enrollment both ends                                                          | PROVEN    | `a4_shared_data_test.dart`   |
+| UC-A4.4  | Cross-atSign notification (encrypted value)                                         | PROVEN    | `a4_shared_data_test.dart`   |
+| UC-A4.5  | A sender follows the recipient's advertised algorithm, not its own preference       | PROVEN    | `a4_shared_data_test.dart`   |
+| UC-A4.6  | The construction is negotiated from `suites`, and an absent list means the original | PROVEN    | `a4_shared_data_test.dart`   |
+| UC-A4.7  | No mutually supported construction is a refusal, not a guess                        | PROVEN    | `a4_shared_data_test.dart`   |
+| UC-A5.1  | Rotate a namespace key (post-compromise)                                            | PROVEN    | `a5_rotation_test.dart`      |
+| UC-A5.2  | Per-enrollment auth revocation                                                      | PROVEN    | `a5_rotation_test.dart`      |
+| UC-A5.3  | Enrollment revocation                                                               | PROVEN    | `a5_rotation_test.dart`      |
+| UC-B0.1  | A PQ-capable client cannot PQ-upgrade against a legacy atServer                     | PROVEN    | `b0_server_prereq_test.dart` |
+| UC-B1.1  | First client retrofit (`alice1`)                                                    | PROVEN    | `b1_retrofit_test.dart`      |
+| UC-B1.2  | Second install on a copied keyfile (`alice1c`)                                      | PROVEN    | `b1_retrofit_test.dart`      |
+| UC-B1.3  | Third client, different enrollment (`alice3`, E2)                                   | PROVEN    | `b1_retrofit_test.dart`      |
+| UC-B2.1  | Un-upgraded copy is locked out after retirement                                     | PROVEN    | `b2_retirement_test.dart`    |
+| UC-B2.2  | Grace-period variant                                                                | PROVEN    | `b2_retirement_test.dart`    |
+| UC-B3.1  | A capability-stage enrollment reads PQ but still writes legacy                      | PROVEN    | `b3_mixed_intra_test.dart`   |
+| UC-B3.2  | The app's active release flips self data to the nskey path                          | PROVEN    | `b3_mixed_intra_test.dart`   |
+| UC-B4.1  | Active-PQ `alice` shares toward a `bob` with no namespace key                       | PROVEN    | `b4_mixed_cross_test.dart`   |
+| UC-B4.2  | Legacy `@alice` receives from PQ `@bob` (the interop question)                      | PROVEN    | `b4_mixed_cross_test.dart`   |
+| UC-B4.3  | Mid-rollout `@alice` (one install active, one still old) shares with `@bob`         | PROVEN    | `b4_mixed_cross_test.dart`   |
+| UC-B4.4  | Bob's install reaches capability → alice's shares flip to PQ                        | PROVEN    | `b4_mixed_cross_test.dart`   |
+| UC-B5.1  | Offline enrollment pulls `pq_signing_root` later                                    | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.2  | Reading legacy history after retrofit                                               | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.3  | Two enrollments race to create `pq_signing_root`                                    | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-C1.1  | The era axis: a postured client writes PQ by default                                | PROVEN    | `c1_rollout_test.dart`       |
+| UC-C1.2  | The refusal axis: the posture disallows legacy writes                               | PROVEN    | `c1_rollout_test.dart`       |
+| UC-C1.3  | WITHDRAWN — there is no envelope axis                                               | WITHDRAWN | —                            |
+| UC-C1.4  | The key-exchange axis: the posture names pq enrollment                              | PROVEN    | `c1_rollout_test.dart`       |
+| UC-C1.5  | The retrofit axis: an argless retrofit follows the posture                          | PROVEN    | `c1_rollout_test.dart`       |
+| UC-C1.6  | The grouped posture: one value moves all five axes                                  | PROVEN    | `c1_rollout_test.dart`       |
+| UC-C1.7  | The signing-set axis: which keys an enrollment holds                                | PROVEN    | `c1_rollout_test.dart`       |
 
 ---
 
