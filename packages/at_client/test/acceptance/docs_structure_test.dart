@@ -16,6 +16,8 @@
 /// - each live file stays under a stated ceiling, so the way to add is to
 ///   demote something rather than to append;
 /// - the catalogue's status table keeps saying what the scenarios do;
+/// - a ruling amended in its body says so in the index;
+/// - the plan may not claim DONE for a use case the catalogue has not proven;
 /// - no doc licenses itself to leave a falsified claim standing.
 ///
 /// **A ceiling breach is not a failure of this test.** It means the file has
@@ -289,6 +291,74 @@ void main() {
               'rather than editing the row. A hand-maintained status column '
               'is the "current state" table this project has been wrong about '
               'before');
+    });
+  });
+
+  group('the plan and the catalogue agree about what is done', () {
+    /// The status column in `acceptance.md` is derived from the scenario
+    /// files, so it is the one status in the doc set that cannot lie. These
+    /// two checks make the plan borrow it.
+    ///
+    /// ⚠️ **Neither can tell you a use case is MISSING**, which is the failure
+    /// that actually happened: the nskey mint election had nine proofs and no
+    /// use case, so every rail here was green while the done-bar had never
+    /// heard of it. Coverage has no mechanical form. What closes it is the
+    /// convention these checks reward — **a plan row marked DONE names the
+    /// use cases it proved** — and the more rows that do, the more of the plan
+    /// these two actually cover. Today only 6 lines cite one.
+    List<String> planLines() => [
+          for (final f in const [
+            'implementation-plan.md',
+            'detail/implementation-plan.md'
+          ])
+            ..._read(f).split('\n').map((l) => '$f $l'),
+        ];
+
+    final ucId = RegExp(r'UC-[ABC]\d+\.\d+');
+
+    test('every use case the plan cites is one the catalogue defines', () {
+      final defined = catalogueUseCases().map((u) => u.id).toSet();
+      final cited = <String>{};
+      for (final line in planLines()) {
+        cited.addAll(ucId.allMatches(line).map((m) => m.group(0)!));
+      }
+      expect(cited, isNotEmpty,
+          reason: 'the plan cites no use case at all, so this guard checks '
+              'nothing — either the plan stopped citing them or the id shape '
+              'changed');
+      expect(cited.difference(defined), isEmpty,
+          reason: 'the plan points at a use case the catalogue does not '
+              'define. A renamed or withdrawn use case leaves the plan '
+              'claiming a done-bar that no longer exists');
+    });
+
+    test('a plan row that claims DONE cites a use case the tree has proven',
+        () {
+      final status = <String, String>{
+        for (final m in RegExp(
+                r'^\|\s*(UC-[ABC]\d+\.\d+)\s*\|[^|]*\|\s*(\w[\w ]*?)\s*\|',
+                multiLine: true)
+            .allMatches(_read('acceptance.md')))
+          m.group(1)!: m.group(2)!.trim(),
+      };
+      expect(status, isNotEmpty, reason: 'the status table did not parse');
+
+      final wrong = <String>[];
+      for (final entry in planLines()) {
+        final parts = entry.split(' ');
+        final line = parts[1];
+        if (!RegExp(r'\bDONE\b|✅').hasMatch(line)) continue;
+        for (final m in ucId.allMatches(line)) {
+          final st = status[m.group(0)] ?? '<no row>';
+          if (st != 'PROVEN' && st != 'WITHDRAWN') {
+            wrong.add('${parts[0]}: a DONE row cites ${m.group(0)}, and the '
+                'catalogue says $st');
+          }
+        }
+      }
+      expect(wrong, isEmpty,
+          reason: 'the plan says done and the done-bar does not:\n'
+              '${wrong.join('\n')}');
     });
   });
 

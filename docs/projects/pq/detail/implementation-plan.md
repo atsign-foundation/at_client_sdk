@@ -4134,3 +4134,58 @@ default-flip: 4.0 is identical to final-3.x *code*).
 
 ⚠️ Check pub.dev against every touched pubspec before acting on that ladder —
 a same-value version bump merges silently.
+
+---
+
+### 14.27 The ledger's remaining append-only rot
+
+Raised 2026-08-16 when gkc ruled that a heading states a ruling's *current*
+outcome and that falsified claims are replaced, not layered over. Rulings 104
+and 105 were corrected, the doctrine sentences at
+[84](decisions.md#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
+and [89](decisions.md#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
+were marked overruled, and [46] moved to `PARTLY SUPERSEDED by [48]`.
+
+✅ **The status audit is DONE.** A scan flagged 41 rulings whose body records a
+falsified claim while the index said `LIVE`. Printing the *sentence* carrying
+each trigger — rather than the one-line summary, which cannot tell "this ruling
+was falsified" from "this ruling says another one was" — separated them:
+
+- **Most were healthy.** "superseded" naming a *generation* of key material
+  (47, 76), "was wrong" about the catalogue (29) or about a checker (85), a
+  timeline that records other rulings' supersessions (7).
+- **11 were real, and are fixed**: 13, 18, 42, 45, 56, 68, 69, 70, 91, 93, 98
+  each carry a dated `Amended <date>` marker in the body while the index said
+  `LIVE`. The ledger's own vocabulary reserves `AMENDED` for exactly that, so
+  each row now carries it with the latest date. Four (13, 91, 93, 98) were
+  read directly; the other seven matched the same unambiguous marker.
+
+✅ **Both citation debts are DISCHARGED**, and each was smaller or different
+than the ruling that deferred it said:
+
+- [84](decisions.md#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
+  said "two earlier rulings cite the old filenames". It was **3 citations
+  across 2 files** — `enrollment_pq_key_exchange_e2e_test.dart` and
+  `nskey_data_path_e2e_test.dart`, both now `*_live_test.dart`. ⚠️ A first
+  pass also reported `retrofit_e2e_test.dart` and
+  `retrofit_retirement_e2e_test.dart` as dead; they are **alive**, in
+  `tests/at_end2end_test/test/pq/` — the check had looked in the functional
+  pack only.
+- [89](decisions.md#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
+  said 74 section symbols were owed conversion. **54 converted plus 19 link
+  labels**; the remaining **17 stay by 89's own classification** — external
+  standards (`SP 800-227 §4.3`, `RFC 9180 §5.1`, `RFC 7515 §7.2.2`,
+  `RFC 8725 §3.11`) and 89's own quoted examples of the notation.
+  ⚠️ **The scripted conversion mis-resolved five references and broke one
+  heading**, all caught by verifying every link afterwards rather than by the
+  script: `design §4` without the `.md` resolved to *ruling* 4; two labels
+  that already contained `§` became nested links; and ruling 76's heading
+  carried a `§50`, so converting it changed the slug and orphaned the index
+  row. 76's heading is now short and its two pointers moved with it.
+
+Re-derive rather than trusting the numbers above:
+
+```bash
+# a dated self-amendment in the body is now asserted against the index status
+dart test packages/at_client/test/acceptance --concurrency=1
+```

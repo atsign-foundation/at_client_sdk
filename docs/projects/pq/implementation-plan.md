@@ -44,59 +44,37 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.25](#1425-three-projects-state-partial-completion-and-six-state-none) | Reconcile nine project entries whose stated status and the burn-down disagree | — |
 | [14.26](#1426-a-comment-in-at_server-is-now-false) | A comment in at_server says a branch never runs; the PR #2751 fix makes it run | **Lands in at_server**, not here. ⛔ It missed its ride — #2751 merged 2026-08-16 without it, so it is a standalone change off `trunk` now |
-| [14.27](#1427-the-ledgers-remaining-append-only-rot) | 103 rulings unaudited for stale claims under `LIVE` headings; two known citation debts from 84 and 89 | — |
+| [14.28](#1428-live-pq-proofs-that-no-use-case-names) | 9 live PQ test files, 17 tests, that no use case cites — each needs a ruling on whether it belongs in the D1 done-bar | — |
 
-### 14.27 The ledger's remaining append-only rot
+### 14.28 Live PQ proofs that no use case names
 
-Raised 2026-08-16 when gkc ruled that a heading states a ruling's *current*
-outcome and that falsified claims are replaced, not layered over. Rulings 104
-and 105 were corrected, the doctrine sentences at
-[84](detail/decisions.md#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
-and [89](detail/decisions.md#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
-were marked overruled, and [46] moved to `PARTLY SUPERSEDED by [48]`.
+Raised 2026-08-16 by auditing the test tree the same way the mint election's
+gap was found: **a live test file that no `provenIn` cites**. Live tests are
+expensive and deliberate, so one nobody cites is a behaviour somebody thought
+worth proving and the done-bar never named.
 
-✅ **The status audit is DONE.** A scan flagged 41 rulings whose body records a
-falsified claim while the index said `LIVE`. Printing the *sentence* carrying
-each trigger — rather than the one-line summary, which cannot tell "this ruling
-was falsified" from "this ruling says another one was" — separated them:
+**36 of 60 live files are uncited, and most are correctly so** — `at_client`'s
+pre-PQ suites (sync, notify, put, delete) were never what this catalogue is
+about. Filtering to PQ leaves **9 files, 17 tests**:
 
-- **Most were healthy.** "superseded" naming a *generation* of key material
-  (47, 76), "was wrong" about the catalogue (29) or about a checker (85), a
-  timeline that records other rulings' supersessions (7).
-- **11 were real, and are fixed**: 13, 18, 42, 45, 56, 68, 69, 70, 91, 93, 98
-  each carry a dated `Amended <date>` marker in the body while the index said
-  `LIVE`. The ledger's own vocabulary reserves `AMENDED` for exactly that, so
-  each row now carries it with the latest date. Four (13, 91, 93, 98) were
-  read directly; the other seven matched the same unambiguous marker.
+| file (all live) | what it proves that no use case names |
+|-----------------|----------------------------------------|
+| `crypto_era_default_test.dart` + e2e `pq/era_default_read_test.dart` | a client naming **no `CryptoConfig` at all** resolves the nskey providers, and opens what a peer sealed to it. Zero-config interop, and arguably the strongest product claim D1 makes |
+| `conveyed_key_collection_test.dart` | a conveyed private is swept off the atServer into the keyfile — **and a private addressed to another key package is not filed**. The second is a security property |
+| `signing_root_pull_test.dart` | an enrollment **not entitled** to the root does not ask for it |
+| `nskey_self_heal_live_test.dart` | an enrollment that missed the mint pulls the private from a holder |
+| `nskey_published_ring_test.dart` | the owner verifies her own advertisement the way a peer would; a namespace nobody minted for resolves to nothing |
+| `enrollment_key_package_live_test.dart` | a key package survives `enroll:request` and comes back on the record |
+| `pq_rollout_matrix_test.dart` | the sender/receiver stage matrix (`UC-G1.14` is cited; the matrix rows are not) |
+| `auth_session_handoff_test.dart` | — no `test(` at all; check whether it still runs |
 
-✅ **Both citation debts are DISCHARGED**, and each was smaller or different
-than the ruling that deferred it said:
-
-- [84](detail/decisions.md#84-phase-7-the-functional-packs-live-tests-stop-claiming-to-be-the-e2e-pack-2026-08-11)
-  said "two earlier rulings cite the old filenames". It was **3 citations
-  across 2 files** — `enrollment_pq_key_exchange_e2e_test.dart` and
-  `nskey_data_path_e2e_test.dart`, both now `*_live_test.dart`. ⚠️ A first
-  pass also reported `retrofit_e2e_test.dart` and
-  `retrofit_retirement_e2e_test.dart` as dead; they are **alive**, in
-  `tests/at_end2end_test/test/pq/` — the check had looked in the functional
-  pack only.
-- [89](detail/decisions.md#89-phase-7-the-section-symbol-keeps-the-two-jobs-it-is-good-at-2026-08-11)
-  said 74 section symbols were owed conversion. **54 converted plus 19 link
-  labels**; the remaining **17 stay by 89's own classification** — external
-  standards (`SP 800-227 §4.3`, `RFC 9180 §5.1`, `RFC 7515 §7.2.2`,
-  `RFC 8725 §3.11`) and 89's own quoted examples of the notation.
-  ⚠️ **The scripted conversion mis-resolved five references and broke one
-  heading**, all caught by verifying every link afterwards rather than by the
-  script: `design §4` without the `.md` resolved to *ruling* 4; two labels
-  that already contained `§` became nested links; and ruling 76's heading
-  carried a `§50`, so converting it changed the slug and orphaned the index
-  row. 76's heading is now short and its two pointers moved with it.
-
-Re-derive rather than trusting the numbers above:
+⚠️ **This is a list of candidates, not a verdict.** Each needs a ruling on
+whether it belongs in the D1 done-bar; some are covered in substance by an
+existing use case that happens to cite a unit test instead. Re-derive:
 
 ```bash
-# a dated self-amendment in the body is now asserted against the index status
-dart test packages/at_client/test/acceptance --concurrency=1
+# live test files no provenIn cites
+grep -rhoP "provenIn\(\s*'\K[^']+" packages/at_client/test/acceptance/
 ```
 
 ### 14.26 A comment in at_server is now false
@@ -839,6 +817,7 @@ measured — see [14.25](#1425-three-projects-state-partial-completion-and-six-s
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.27  | The ledger's append-only rot, corrected | DONE 2026-08-16 — 11 rulings amended in the body and LIVE in the index, both citation debts discharged, and a test now asserts each. Detail: [14.27](detail/implementation-plan.md#1427-the-ledgers-remaining-append-only-rot) |
 | 14.24  | The nskey mint elects a winner; the lock became an election token with a cooldown | DONE 2026-08-16 — seven rows, proven live at functional **166/166 `EXIT=0`**. Detail: [14.24](detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) |
 | P-1    | at_chops stateless core + HPKE                          | SATISFIED — at_chops 3.3.0 published 2026-06-23                                                                      |
 | P-2    | `mldsa65` wired into the verification branch            | SATISFIED — published 2026-07-17                                                                                     |
