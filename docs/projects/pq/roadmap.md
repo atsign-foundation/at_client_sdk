@@ -334,11 +334,16 @@ own; later ones build on earlier. **M0–M3 are Deliverable 1** (PQ-safe messagi
 via the `nskey` data path); **M4–M6 are Deliverable 2** (the `at/pqmls` group
 provider through to the pq-mls engine).
 
+⚠️ **This table is about capability, not progress.** Which milestone is done
+lives in [`implementation-plan.md`](implementation-plan.md)'s TODO / PARKED /
+DONE sections, and only there. Status written here goes stale silently, because
+nothing reads this file when work lands.
+
 | Milestone | Capability added | Why it matters |
 |---|---|---|
-| **M0 · Pluggable crypto seam** | Per-value `CryptoProvider` routing via `appMetadata`; legacy + new schemes coexist | The migration machinery — old data readable forever, new schemes drop in as providers, no flag-day. Everything rides this seam. **Landed** (Wave-0). |
-| **M1 · PQ primitives** | X-Wing hybrid KEM and pure ML-KEM-1024, AES-256-GCM, HKDF in at_chops; PQ enrollment-conveyance pubkey | The PQ/hybrid building blocks; closes the last harvest-now-decrypt-later hole (enrollment); the crypto-agile base. **Primitives landed and published** (`at_chops` 3.3.0 + 3.4.0, incl. ML-DSA-65 verify dispatch and the AES-GCM FFI backend); the enrollment-conveyance pubkey (P-3) is the remaining piece. ⚠️ **`at_chops` 3.6.0 — the second KEM, `pqSeal ver 0x03`, and the seed contract — is in-tree and NOT yet published** (KE-1). A published `at_chops` 3.5.0 exists but is a trunk release carrying `RsaSignatureAlgo` and PQ length validation, not this work. |
-| **M2 · Per-APKAM identity / substrate** | Each APKAM keypair carries a key package naming its own KEM; the per-APKAM secret-sharing substrate beneath the `nskey` data path | The substrate that conveys `nskey` privates per-APKAM (D1) and underpins `at/pqmls` (D2); per-APKAM granularity + revocability. **In progress** — the substrate baseline (SS-0) and the atServer discovery verb (SS-1b) landed 2026-07-17 and 2026-07-07; wiring it to the live verbs and into AtClient is SS-1c/SS-2. |
+| **M0 · Pluggable crypto seam** | Per-value `CryptoProvider` routing via `appMetadata`; legacy + new schemes coexist | The migration machinery — old data readable forever, new schemes drop in as providers, no flag-day. Everything rides this seam. |
+| **M1 · PQ primitives** | X-Wing hybrid KEM and pure ML-KEM-1024, AES-256-GCM, HKDF in at_chops; PQ enrollment-conveyance pubkey | The PQ/hybrid building blocks; closes the last harvest-now-decrypt-later hole (enrollment); the crypto-agile base. |
+| **M2 · Per-APKAM identity / substrate** | Each APKAM keypair carries a key package naming its own KEM; the per-APKAM secret-sharing substrate beneath the `nskey` data path | The substrate that conveys `nskey` privates per-APKAM (D1) and underpins `at/pqmls` (D2); per-APKAM granularity + revocability. |
 | **M3 · the `nskey` data path** | `at/nskey` conveys the CK + `at/symmetric/AES/GCM` encrypts the data, as D1's default self **and** shared encryption; coarse FS via CK rotation; per-APKAM future-data revocation + PCS via `nskey`-keypair rotation; retires `selfEncryptionKey`/`shared_key.*` | **Completes Deliverable 1** — PQ-safe self + shared messaging, no group machinery in the app's face. |
 | **M4 · `at/pqmls` intra-atSign groups (D2)** | `SecureGroup` v1 epoch engine; per-APKAM leaves; two-lever rotation | First forward-secure (intra-atSign) group encryption; the stable interface MLS later swaps under. |
 | **M5 · `at/pqmls` cross-atSign groups + Group Delivery Service (D2)** | `(pair, namespace)`-scoped groups; the ciphertext-only Group Delivery Service (wake-then-pull, ordering/catch-up/retention) | First cross-atSign group encryption + the delivery service that makes *large* groups scale; precursor to NoPorts sessions. |
@@ -361,14 +366,12 @@ orchestration), the
 `selfEncryptionKey` retirement, PQ-native onboarding, and the **D2** carve. The
 critical-path shape to GA is **seam → primitives → substrate → data path →
 rollout → rotation** (D1 GA), with the v4 default flip as the final gated
-cutover. The GA version slot is re-derived at execution against pub.dev — both
-`at_client` 3.13.0 and 3.14.0 published on 2026-07-17, so it is no longer 3.14.x
-— trunk already sits at 3.14.1.
+cutover. The GA version slot is re-derived against pub.dev at the time of
+release rather than named here, because a version written into a design doc is
+wrong from the next publish onward.
 
-**D1 development is complete; a "make it right" quality pass
-follows before GA** — structural refactoring (readability, maintainability,
-explainability) that lands the design goals the spike left implicit. Those goals
-are ruled in [`decisions.md` §56](detail/decisions.md#56-the-make-it-right-quality-pass-and-the-design-goals-it-settled-2026-08-09):
+**The design goals the cutover rests on** are ruled in
+[`decisions.md` 56](detail/decisions.md#56-the-make-it-right-quality-pass-and-the-design-goals-it-settled-2026-08-09):
 the signing chain is **root-anchored** (chain links provisional, the sweep
 upgrades them; a root-holder conveys root links, not chain links); retrofit has
 **three modes** with a per-retrofit signing-algorithm selector; and — the frame
@@ -378,15 +381,10 @@ only flag *defaults* changed.** Every rollout stage (the crypto era default,
 the retrofit signing algorithm) is an independent flag with a 3.x and a 4.0
 default, plus a convenience posture that sets them as a group; all the code ships
 in 3.x, and the acceptance suite drives the entire rollout by flag manipulation.
-No PR opens until the published atServer image verifies ML-DSA PKAM.
 
-**Baseline on trunk** (so M0 and the M1 primitives are landed, not in flight):
-`#1930` (the M0 pluggable-crypto seam), `#1993` / `at_chops 3.3.0`
-(`pqSeal`/`pqOpen`), and `#2035` (design fixes). **As of the 2026-07-17 release
-train**, `at_chops 3.4.0`, `at_commons 5.13.0`, `at_client 3.14.0` (carrying the
-SS-0 substrate as an experimental surface) and `at_auth 3.3.0-rc1` are published,
-and SS-0 / SS-1b / S-1 / S-2 are satisfied — `SS-1c` is the next actionable
-project on the critical path. The full project sequence, the
-dependency graph (ASCII), waves/parallelism, effort sizing, publish gates, the
-critical path, and the coverage map are in
-[`implementation-plan.md`](implementation-plan.md).
+**Where the build has got to is not recorded here.** The project sequence, what
+is owed, what is parked and what has landed, the dependency graph, publish
+gates and the coverage map are all in
+[`implementation-plan.md`](implementation-plan.md), which is the only place
+progress is written down. This document describes the shape of the work, and
+that shape does not change when a project lands.
