@@ -9,11 +9,19 @@ headlines — so a decision you were not asking about cannot arrive in the middl
 of unrelated work. Open the detail file when you want a specific ruling's
 argument, and only then.
 
-**Ruling numbers are permanent.** They are cited from production dartdoc, from
-the four sibling docs and from `blockers.dart`, so a ruling is never renumbered
-and never deleted. A superseded ruling keeps its whole body: the reasoning is
-what stops a rejected design being proposed again from scratch, and that has
-already happened here — 104 and 105 were made on the same day.
+**Ruling numbers are permanent; headings are not.** The number is cited from
+production dartdoc, from the four sibling docs and from `blockers.dart`, so a
+ruling is never renumbered and never deleted. **Its heading states what the
+ruling means now** — when an outcome changes, the heading changes with it and
+every link is updated in the same edit. Keep headings short: they become URL
+slugs, and a long one makes that sweep expensive enough to skip.
+
+**Correct in place; do not append.** A ruling's body is the argument, not a
+diary. New reasoning is added, but a claim the project has since falsified is
+**replaced** — a stale sentence left standing under a ⚠️ is read as current by
+the next session, and has been. What a ruling used to say is worth keeping only
+where the reasoning stops a rejected design being re-proposed from scratch, and
+that has already happened here — 104 and 105 were made on the same day.
 
 **To add a ruling:** append its body to `detail/decisions.md` **and** one row
 here. Neither half is optional; an earlier version of this index silently
@@ -30,7 +38,7 @@ when this file grows past its line ceiling.
 | `AMENDED`           | Stands, but one or more sub-rulings were changed later, on the date given.                                       |
 | `PARTLY SUPERSEDED` | Part was replaced and the rest holds, so the title is not struck. The body says which part went.                 |
 | `SUPERSEDED`        | Replaced outright. Title struck.                                                                                 |
-| `HELD`              | Neither in force nor rejected — a candidate kept in reserve. Its body states the condition that would revive it. |
+| `REJECTED`          | Considered and not adopted. Title struck. The body stays so it is not re-proposed from scratch.                  |
 
 Of the 106 rulings below, **three** are not fully in force: [1], [11] and
 [104]. The ledger is long because the project made many decisions that still
@@ -151,8 +159,8 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [101] | The signing root becomes an ordinary signing key, and rotatable                             | 2026-08-15 | LIVE                      |
 | [102] | An `_apsk` fallback value never replaces a real advertisement                               | 2026-08-15 | LIVE                      |
 | [103] | An envelope says what it is for, and a verifier says what it wants                          | 2026-08-15 | LIVE                      |
-| [104] | ~~The nskey mint stops needing a winner~~                                                   | 2026-08-16 | HELD — see [105]          |
-| [105] | The nskey mint elects a winner; built, and the cooldown binds rotation too                   | 2026-08-16 | LIVE                      |
+| [104] | ~~Per-generation nskey records~~                                                            | 2026-08-16 | REJECTED — see [105]      |
+| [105] | The nskey mint elects a winner                                                              | 2026-08-16 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -258,5 +266,5 @@ first, `enroll:updateMetadata`, and they still resolve.
 [101]: detail/decisions.md#101-the-signing-root-becomes-an-ordinary-signing-key-and-rotatable-2026-08-15
 [102]: detail/decisions.md#102-an-_apsk-fallback-value-never-replaces-a-real-advertisement-2026-08-15
 [103]: detail/decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15
-[104]: detail/decisions.md#104-the-nskey-mint-stops-needing-a-winner-2026-08-16
-[105]: detail/decisions.md#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16
+[104]: detail/decisions.md#104-per-generation-nskey-records-rejected-2026-08-16
+[105]: detail/decisions.md#105-the-nskey-mint-elects-a-winner-2026-08-16

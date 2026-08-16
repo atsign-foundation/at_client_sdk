@@ -61,7 +61,7 @@ It never occurred **because the update handler refused every such update**. The
 fix on [at_server PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)
 makes an update delete an expired record and proceed, so the branch is now
 reachable and the comment is false — see
-[decisions 104.10](detail/decisions.md#10410-fixed-in-at_server-the-same-day-and-re-measured-on-the-wire).
+[decisions 104.10](detail/decisions.md#10410-fixed-in-at_server-and-merged).
 
 ⛔ **It missed its ride.** This row said "cheapest while the PR is still open:
 it rides that branch". PR #2751 **merged 2026-08-16 18:46Z** without it, and
@@ -395,7 +395,7 @@ place with what it used to say.
    [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18
    was, and it took two sessions to kill. If this is re-opened, the thing to
    change is the *protocol*, in a ruling — not `MintLock`. See
-   [decisions 105.6](detail/decisions.md#1056-built-and-the-cooldown-applies-to-rotation-too-2026-08-16).
+   [decisions 105.6](detail/decisions.md#1056-built-the-cooldown-binds-rotation-too).
 
 8. **`revokeEnrollmentAndRotate` does NOT retry a rotation the cooldown
    refused, and that was decided rather than overlooked.** It revokes first, so
@@ -765,7 +765,7 @@ the reason is the point of the row.
 | 14.1  | The signing root's `keys[]` shape               | SUPERSEDED by decisions 101 and 14.22. Kept for the reasoning; two of its conclusions are now false |
 | 14.13 | A passive-by-default flag                       | FOLDED AWAY 2026-08-11 into the rollout axis (14.18 step 19). Kept for its survey                   |
 | 14.21 | The signing root cannot be rotated              | RULED the same day by decisions 101. Kept so 14.22 is legible against it                            |
-| 14.23 | The nskey mint stops needing a winner           | ⛔ HELD — do NOT build. decisions 105 supersedes it; 104 states what would revive it                 |
+| 14.23 | Per-generation nskey records                    | ⛔ REJECTED — do NOT build. 14.24 shipped instead; the body is kept so it is not re-derived          |
 | KE-2  | `enroll:update` + a multi-kpid receiver         | Blocks the two skipped acceptance rows. Issue #2133                                                 |
 | B-3   | `selfEncryptionKey` + `shared_key.*` retirement | Ecosystem-gated by decisions 37. Issue #2128                                                        |
 | KF-1  | `.atKeys`-at-rest protection + backup/restore   | Off the GA critical path. Issue #2129                                                               |

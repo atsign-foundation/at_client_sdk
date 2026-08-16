@@ -9614,36 +9614,31 @@ argument of 103.1. Nothing here makes the challenge self-describing;
 
 ---
 
-## 104. The nskey mint stops needing a winner (2026-08-16)
+## 104. Per-generation nskey records, rejected (2026-08-16)
 
-**In brief:** ⛔ *HELD, superseded the same day by [105](#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16); the log model is a candidate in reserve, and 104.1–104.3 and 104.9 are measurement that stands*
+**In brief:** ⛔ *REJECTED — the design below was not built. [105](#105-the-nskey-mint-elects-a-winner-2026-08-16) is what shipped. 104.1–104.3 and 104.9–104.10 are measurement, and they stand*
 
-⛔⛔ **HELD — NOT THE DECISION. Read
-[ruling 105](#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16)
-first.** This ruling was made and then superseded **the same day**, by a
-measurement taken hours after it was written. It said, in this paragraph,
-"gkc ruled that an nskey generation is minted without coordination", and that
-was true when written: it is what 104.4 records, and 14.23's seven rows were
-sequenced against it.
+⛔⛔ **DO NOT BUILD THIS.** It is written up in full so that nobody re-derives
+it, which has already been attempted once. The design was proposed and ruled on
+in the morning and **rejected the same day**: gkc stated the coordination
+requirement directly — *if enrollments A, B and C all decide they need to mint,
+only one of them eventually does* — and specified an election protocol that
+satisfies it while keeping a single record.
+[Ruling 105](#105-the-nskey-mint-elects-a-winner-2026-08-16) is that protocol,
+and it is **built and proven live**.
 
-What changed is that gkc then stated the requirement directly — *if enrollments
-A, B and C all decide they need to mint, only one of them eventually does* —
-and proposed an election protocol that satisfies it without a log. Ruling 105
-records that protocol and the order of work. **The log model here is a
-candidate held in reserve, to be chosen or discarded once the lock-only design
-has been built and measured**, not work in flight.
-
-Everything below stays, because none of it is wrong and most of it is
-measurement rather than design: 104.1–104.3 and 104.9 are what the lock
-actually buys, how both paths heal, two claims of mine that were corrected, and
-the atServer probe. 104.4–104.8 describe the log model as designed, which is
-exactly what a later reader will need if it is taken up.
-
-**gkc ruled that an nskey generation is minted without coordination.** Each
-generation gets its own record; the published advertisement becomes a *summary*
-healed from those records; and the mint lock survives on this path only as an
+**What was proposed:** an nskey generation minted **without coordination**.
+Each generation gets its own record; the published advertisement becomes a
+*summary* healed from those records; and the mint lock survives only as an
 advisory hint that can never stop a client making progress. The signing root is
-untouched and keeps its dispositive interlock.
+untouched and keeps its dispositive interlock. 104.4–104.8 have the design.
+
+**What stands regardless**, because it is measurement rather than design:
+104.1–104.3 (what the lock buys, how both paths heal a loser, two claims of
+mine that were corrected) and 104.9–104.10 (the expired-immutable-record
+defect, and its fix in at_server). The defect was found here and is the reason
+[at_server PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)
+exists.
 
 The route here was
 [`implementation-plan.md` 14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
@@ -9836,7 +9831,7 @@ of the summary it was minted for.
 - **A lock on the heal.** **Rejected**: the value converges, so racing healers
   cost redundant writes and nothing durable.
 
-### 104.9 Measured — the ttl does not free the lock, and gkc ruled that an atServer defect
+### 104.9 The ttl does not free the lock — an atServer defect
 
 **Measured live against `at_virtual_env:local` on 2026-08-16**, because this
 started as a hypothesis read off at_server source and the local at_server tree
@@ -9891,9 +9886,15 @@ no *stolen* release and
 item 18 ceases to exist rather than being fixed — did not work on this
 atServer. The release was mandatory, and item 18 came back with it.
 
-### 104.10 FIXED in at_server the same day, and re-measured on the wire
+### 104.10 Fixed in at_server, and merged
 
-Branch `gkc-expired-immutable-blocks-create`, cut from `origin/trunk`.
+✅ **Merged 2026-08-16 18:46Z as `00c2f9a6` on at_server `origin/trunk`**, from
+branch `gkc-expired-immutable-blocks-create` via
+[PR #2751](https://github.com/atsign-foundation/at_server/pull/2751).
+
+⚠️ **A merge rebuilds no image.** A client that relies on ttl-only release is
+correct only against an atServer *running* this, which today means
+`at_virtual_env:local` and not `atsigncompany/virtualenv:vip`.
 
 **gkc ruled the shape, and it is better than the three that were offered:
 an update that finds an expired record DELETES it (`skipCommit: true`) before
@@ -9965,22 +9966,20 @@ is reading a snapshot, not the state.
 
 ---
 
-## 105. The nskey mint elects a winner, and an atServer defect blocks the clean shape (2026-08-16)
+## 105. The nskey mint elects a winner (2026-08-16)
 
-**In brief:** *the election protocol, the expired-immutable-record defect, and the order of work*
+**In brief:** ✅ *BUILT and proven live — the election protocol, and the cooldown it imposes on rotation*
 
-⚠️ **The heading is the title this ruling was made under, and both of its
-clauses have moved on.** The defect no longer blocks anything — it was fixed
-and merged the same day — and the design is now **built and proven live**. The
-heading is left alone because six links resolve to its slug and a ruling is
-named for what it decided at the time. [105.6](#1056-built-and-the-cooldown-applies-to-rotation-too-2026-08-16)
-is the current state.
+Replaces [ruling 104](#104-per-generation-nskey-records-rejected-2026-08-16),
+made and rejected the same day. 104 removed the *need* to coordinate; this one
+satisfies the coordination requirement directly and keeps a single nskey
+record, which is why it won.
 
-Supersedes [ruling 104](#104-the-nskey-mint-stops-needing-a-winner-2026-08-16),
-made the same day. 104 removed the *need* to coordinate; this one satisfies the
-coordination requirement directly and keeps a single nskey record. **The log
-model is held in reserve, not discarded** — the decision between them is
-deferred until the design below is built and measured.
+**All seven rows of plan 14.24 are built**, and the design is pinned by live
+tests against an atServer running the fix from
+[104.10](#10410-fixed-in-at_server-and-merged).
+[105.6](#1056-built-the-cooldown-binds-rotation-too) is what the build found
+that the protocol implied and nobody had written down.
 
 ### 105.1 The requirement, stated
 
@@ -9995,7 +9994,7 @@ unanswerable for two sessions.
 ⚠️ **It is a requirement only under the single-record model.** Under the log,
 two mints are two records and nothing is lost, so the same sentence would be an
 optimisation. Stating it *is* therefore a lean toward keeping one record, and
-that is what makes ruling 104 held rather than in flight.
+that lean is what decided against [104](#104-per-generation-nskey-records-rejected-2026-08-16).
 
 ### 105.2 The protocol gkc specified
 
@@ -10021,12 +10020,12 @@ otherwise **fail**. A waiting `put` fails loudly rather than hanging on another
 device's crash, and the retry is the next client start, which is where minting
 is triggered from anyway.
 
-### 105.3 Step 6 does not work on today's atServer, and that is a defect
+### 105.3 Step 6 needed an atServer fix, and got one
 
-[104.9](#1049-measured--the-ttl-does-not-free-the-lock-and-gkc-ruled-that-an-atserver-defect)
-has the probe. An expired immutable record keeps refusing a create for **more
-than 150s past a 20s ttl**, while `llookup` reports it `data:null` — the record
-is simultaneously gone and blocking.
+[104.9](#1049-the-ttl-does-not-free-the-lock--an-atserver-defect) has the
+probe. An expired immutable record kept refusing a create for **more than 150s
+past a 20s ttl**, while `llookup` reported it `data:null` — the record was
+simultaneously gone and blocking, so step 6 could not work.
 
 **gkc ruled this an atServer defect, and ruled the fix belongs in
 `AbstractUpdateVerbHandler`** rather than at the store — making `get` filter
@@ -10035,35 +10034,33 @@ update agree everywhere, but the internals that legitimately need to *see*
 expired records (`deleteExpiredKeys`, compaction, migration) were never
 enumerated, and that is wider than this needs.
 
-**gkc ruled the client waits for it.** Building the release-based version first
-would work today and be thrown away; building the never-delete version against
-an unfixed atServer cannot be tested at all. So the order is: fix at_server,
-rebuild `at_virtual_env:local`, then build the client.
+**gkc ruled the client waits for it**, rather than building a release-based
+version that would work and then be thrown away. So the order was: fix
+at_server, rebuild `at_virtual_env:local`, then build the client — and all
+three are done ([104.10](#10410-fixed-in-at_server-and-merged)). **Step 6 of
+the protocol therefore holds**: the winner never deletes the lock, the ttl
+releases it, and
+[14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
+item 18 ceased to exist rather than being fixed.
 
-✅ **The first two are DONE** — see
-[104.10](#10410-fixed-in-at_server-the-same-day-and-re-measured-on-the-wire).
-The fix is on `gkc-expired-immutable-blocks-create` off `origin/trunk`, the
-image is rebuilt, and expiry+1ms is accepted on the wire. **Step 6 of the
-protocol is therefore available**: the winner never deletes the lock, the ttl
-releases it, and item 18 ceases to exist on any path that uses it that way.
-✅ **Merged 2026-08-16 18:46Z** as `00c2f9a6` on `origin/trunk`. ⚠️ That does
-not lift the gate it is cited for: an atServer must *run* the fix, and a merge
-rebuilds no image. A client built on ttl-only release is correct only against a
-server carrying this, which today means `at_virtual_env:local` and not
-`atsigncompany/virtualenv:vip`.
+### 105.4 Three client-side things the protocol needed — all three built
 
-### 105.4 Three client-side things the protocol needs, none of which exist
+Found while checking whether the protocol held against the tree as it stood.
+All three are now in `packages/at_client/lib/src/crypto/nskey/`, and 105.6 has
+the measurement.
 
-Found while checking whether the protocol holds against the tree as it stands.
-
-1. **Both reads must be remote, and the one that matters is not.** Every read
+1. **Both reads must be remote, and the one that mattered was not.** Every read
    in the nskey subsystem that must see another party's write passes
    `useRemoteAtServer = true` — **eight** sites in `pq_signing_chain.dart`,
    plus the root's `publishedRoots` — and `current_ck_pointer.dart` passes
-   `false` *explicitly*, because that one is the client's own pointer.
-   `published_nskey_key_ring.dart:450`, the advertisement read behind
-   `currentPublic`, carries no options at all, so it is local-first and lags
-   sync.
+   `false` *explicitly*, because that one is the client's own pointer. The
+   advertisement read behind `currentPublic` carried no options at all, so it
+   was local-first and lagged sync.
+   ✅ **Fixed by adding a read, not by changing that one.**
+   `PublishedNskeyKeyRing.publishedAdvertisement` fetches with both caches
+   skipped and is what the mint and the seeding pre-check now call.
+   `currentPublic` stays local-first because it is the sender path on every
+   `put`, and making it remote would break offline writes.
    ⚠️ **Two numbers here were wrong when first written, and a cold read caught
    both.** It said "ten sites" (there are eight — ten was the total across the
    whole subsystem, which double-counts `publishedRoots` and includes the
@@ -10081,33 +10078,37 @@ Found while checking whether the protocol holds against the tree as it stands.
    Its dartdoc celebrates that unification as what makes "one verify path,
    same-atSign and cross-atSign" true rather than aspirational. The elegance
    and the defect are the same line.
-2. **Step 5 does not exist for the nskey.** `_mintUnderLock` re-reads the
-   record under the lock; `_mint` does not. The root has the winner's re-check
-   and the nskey has never had one.
-3. **The requirement still fails on a ttl overrun, and the bounded window in
-   step 3 does not cover it.** A takes the lock at T0, is still minting at
-   T0+ttl, the lock expires, B wins the next election, re-checks, A has not
-   published yet, B mints too. The window bounds when the three *attempt*, not
-   how long the winner *takes*. The fix is for the holder to carry its lease
-   and refuse to publish once it is spent, so a slow A abandons rather than
-   racing B — which turns "two mints" into "one mint, by B", the requirement.
+2. **Step 5 did not exist for the nskey.** `_mintUnderLock` re-read the record
+   under the lock; `_mint` did not. The root had the winner's re-check and the
+   nskey never had one.
+   ✅ **Fixed:** `_mintUnlessPublished` re-reads under the lock and **adopts**
+   what a sibling published rather than overwriting it.
+3. **The requirement failed on a ttl overrun, and the bounded window in step 3
+   did not cover it.** A takes the lock at T0, is still minting at T0+ttl, the
+   lock expires, B wins the next election, re-checks, A has not published yet,
+   B mints too. The window bounds when the three *attempt*, not how long the
+   winner *takes*.
+   ✅ **Fixed:** the holder carries a `MintLease` and refuses to publish once
+   it is spent, so a slow A abandons rather than racing B — turning "two mints"
+   into "one mint, by B", which is the requirement. The lease is stamped
+   *before* the take goes out, so the client errs early rather than late.
 
-### 105.5 What is held, and what would revive it
+### 105.5 The residual risks, and what would reopen the question
 
-Ruling 104's log model stays written up in full. It is revived if the lock-only
-design, once built, fails to hold the requirement in practice — the residual
-risks being a suspend landing between the lease check and the publish, and the
-cooldown a crashed winner imposes on an atSign. Neither is measurable until the
-client exists, which is why the decision is deferred rather than argued.
+Two risks are inherent to the lock-only design and neither is engineered away:
+a suspend landing between the lease check and the publish, and the cooldown a
+crashed winner imposes on an atSign for `mintLockTtl`. Both were accepted as
+the price of a single record.
 
-⚠️ **`mintLockTtl`'s dartdoc is false as written** — "a crash backstop, not a
-budget" — and is corrected in whichever commit first touches this path,
-regardless of which model wins.
+⚠️ **104 is rejected, not parked behind these.** Its body is kept as the record
+of a design already argued through, so that it is not re-derived — not as a
+fallback waiting to be promoted. Should a residual bite in practice, that is a
+new ruling with its own measurement.
 
-### 105.6 Built, and the cooldown applies to ROTATION too (2026-08-16)
+### 105.6 Built; the cooldown binds rotation too
 
-All seven rows of plan 14.24 are built. The live run found the consequence the
-protocol implies and nobody had written down.
+The live run found the consequence the protocol implies and nobody had written
+down.
 
 **The finding.** With the winner no longer deleting the lock, a rotation of a
 namespace that was minted or rotated within `mintLockTtl` is **refused** — the

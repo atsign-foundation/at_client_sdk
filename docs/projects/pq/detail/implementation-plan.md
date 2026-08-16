@@ -3268,46 +3268,21 @@ its own. None blocks anything.
     right because an nskey private is selected by the kid in the envelope being
     opened and so a losing generation is inert. Details and the table are in
     [decisions 104.2](decisions.md#1042-both-paths-already-heal-a-loser--by-different-moves).
-    ⚠️ **The scope then changed underneath this item.**
-    [decisions 104](decisions.md#104-the-nskey-mint-stops-needing-a-winner-2026-08-16)
-    makes the lock **advisory on the nskey path**, where a stolen release costs
-    one extra generation and nothing else. So this item is now about the
-    **signing root only** — one record, one caller (`mintIfAbsent`, at
-    activation and retrofit), no rotation reasoning and no nskey differential
-    test. That is what made it worth doing rather than documenting.
-    **The shape gkc chose:** read the lock's value back and delete only if it
-    is still ours, with a local elapsed check in front so the extra round trip
-    is paid only when we might actually have overrun — and a random nonce
-    instead of `_take`'s timestamp, so "is it mine" is a byte comparison rather
-    than an argument about clock resolution.
-    ⚠️⚠️ **MEASURED 2026-08-16, then FIXED the same day — this item is now
-    expected to DISAPPEAR rather than be fixed.**
-    ([decisions 104.9](decisions.md#1049-measured--the-ttl-does-not-free-the-lock-and-gkc-ruled-that-an-atserver-defect)
-    and [104.10](decisions.md#10410-fixed-in-at_server-the-same-day-and-re-measured-on-the-wire).)
-    An expired immutable record kept refusing a create for **more than 150s
-    past a 20s ttl**, while `llookup` reported it `data:null` — simultaneously
-    gone and blocking. gkc ruled it an atServer defect; it is fixed on
-    `gkc-expired-immutable-blocks-create` off `origin/trunk` (an update that
-    finds an expired record deletes it with `skipCommit` before proceeding),
-    and expiry+1ms is now **accepted on the wire** against a rebuilt
-    `at_virtual_env:local`.
-    **So the better shape is available: the winner never deletes the lock and
-    the ttl releases it.** No release means no *stolen* release, which is this
-    entire item. Do not build the nonce-and-read-back fence described above
-    unless that shape is rejected.
     ✅ **CLOSED 2026-08-16 — it disappeared rather than being fixed.**
     [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) row 3 removed
     `MintLock._release` outright, so there is no delete to steal and no fencing
-    token to build. `mintLockTtl`'s dartdoc no longer calls itself a crash
-    backstop (row 6), and `withLock` now refuses a lock key with no ttl,
+    token to build. `withLock` now refuses a lock key with no ttl instead,
     because with nothing deleting the record a missing ttl means it is never
-    released at all. ⚠️ The remaining caveat stands and is not this item's: a
-    client relying on ttl-only release is correct **only** against an atServer
-    carrying the expired-immutable fix.
-    [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)
-    **merged 2026-08-16**, which is not the same as deployed — the atServer has
-    to *run* it. `at_virtual_env:local` does; `virtualenv:vip` does not until
-    it is rebuilt.
+    released at all.
+    ⚠️ **Do not rebuild the fence.** A nonce-and-read-back release — delete
+    only if the lock is still ours — was designed here in full and is *not*
+    the answer: the winner not deleting at all is strictly stronger, and
+    reintroducing a delete reintroduces this whole class. That the ttl truly
+    frees the lock took an atServer fix
+    ([decisions 104.9](decisions.md#1049-the-ttl-does-not-free-the-lock--an-atserver-defect)
+    and [104.10](decisions.md#10410-fixed-in-at_server-and-merged)); a client
+    relying on ttl-only release is correct **only** against an atServer running
+    it, which today means `at_virtual_env:local` and not `virtualenv:vip`.
 19. **`tests/at_onboarding_cli_functional_tests` analyzes with 6 warnings, all
     in one file nobody touched — noticed 2026-08-15.** Every one is an
     `unused_import` in `test/ecc_secure_element_mock_test.dart`; `dart analyze
@@ -3873,15 +3848,16 @@ reading the row.
 
 ---
 
-### 14.23 The nskey mint stops needing a winner — decisions 104
+### 14.23 Per-generation nskey records — decisions 104, REJECTED
 
-⛔⛔ **HELD — DO NOT BUILD THIS. Build
-[14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) instead.**
-[decisions 104](decisions.md#104-the-nskey-mint-stops-needing-a-winner-2026-08-16)
-was superseded by
-[105](decisions.md#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16)
-the same day it was written. This section is kept in full because the design is
-held in reserve, not discarded — 104's own opening says what would revive it.
+⛔⛔ **REJECTED — DO NOT BUILD THIS.**
+[14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) is what was built
+instead, and it is done.
+[decisions 104](decisions.md#104-per-generation-nskey-records-rejected-2026-08-16)
+was rejected the same day it was written, in favour of
+[105](decisions.md#105-the-nskey-mint-elects-a-winner-2026-08-16). This section
+is kept in full so the design is not re-derived from scratch, which has already
+been attempted once.
 
 ⚠️ **Its rows contradict 14.24's on the same lines of code, so following it by
 accident is not a no-op.** Row 2 here says the `StateError` at
@@ -3968,8 +3944,8 @@ rather than summarised, and it is the only copy.
 
 
 ⚠️ **THIS is the model being built.**
-[14.23](implementation-plan.md#1423-the-nskey-mint-stops-needing-a-winner--decisions-104) is HELD.
-[decisions 105](decisions.md#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16)
+[14.23](implementation-plan.md#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED.
+[decisions 105](decisions.md#105-the-nskey-mint-elects-a-winner-2026-08-16)
 rules the design; this is the order. One nskey record, and a lock used as an
 **election token with a cooldown** rather than a mutex.
 
@@ -3992,7 +3968,7 @@ releases the lock but its ttl. Four functional tests failed on it.
 second create of an immutable record, and a mocked `executeVerb` accepts the
 second take happily — so every unit test of this path is green whether or not
 the cooldown exists. gkc ruled 2026-08-16 to **accept** it
-([decisions 105.6](decisions.md#1056-built-and-the-cooldown-applies-to-rotation-too-2026-08-16)):
+([decisions 105.6](decisions.md#1056-built-the-cooldown-binds-rotation-too)):
 `mintLockTtl` became injectable (`PublishedNskeyKeyRing.lockTtl`,
 `PqSigningRoot.lockTtl`) so a live test need not wait two minutes between its
 mint and its rotation, and `revokeEnrollmentAndRotate`'s partial state — it
@@ -4101,7 +4077,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
 | 11 | **14.19's open small items — 18 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
-| 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | Open, ruled 2026-08-16, **in D1**. Seven rows. ⛔ Rows 3 and 5 need an at_server fix that is built, proven, and **OPEN as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) — gkc owns it** — plus an atServer that *runs* it once merged. ⚠️ Do not cite a SHA: the commits were rewritten before pushing. ⚠️ **[14.23](#1423-the-nskey-mint-stops-needing-a-winner--decisions-104) is the rejected-for-now alternative and is HELD** — do not build it; [decisions 104](decisions.md#104-the-nskey-mint-stops-needing-a-winner-2026-08-16) says what would revive it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
+| 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
 **Not owed, and worth stating so nobody re-opens them:** step 11 is labelled
