@@ -1,6 +1,6 @@
 # See https://www.dartlang.org/guides/libraries/private-files
 
-CLAUDE.md
+CLAUDE*.md
 
 # Files and directories created by pub
 .dart_tool/
