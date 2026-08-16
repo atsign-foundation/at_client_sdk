@@ -4189,3 +4189,80 @@ Re-derive rather than trusting the numbers above:
 # a dated self-amendment in the body is now asserted against the index status
 dart test packages/at_client/test/acceptance --concurrency=1
 ```
+
+---
+
+### 14.26 A comment in at_server is now false
+
+⚠️ **This lands in at_server, not in this repo.** It is recorded here because
+this is the list the work is driven from, and a correction owed in a sibling
+repo dies if it is only written in the ruling that found it.
+
+`packages/at_persistence_secondary_server/lib/src/spec/keystore/at_metadata_builder.dart:46`
+carries, above the immutable-stickiness branch:
+
+> *"Note: this condition never occurs right now but we will leave it here for
+> safety's sake"*
+
+It never occurred **because the update handler refused every such update**. The
+fix on [at_server PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)
+makes an update delete an expired record and proceed, so the branch is now
+reachable and the comment is false — see
+[decisions 104.10](decisions.md#10410-fixed-in-at_server-and-merged).
+
+⛔ **It missed its ride.** This row said "cheapest while the PR is still open:
+it rides that branch". PR #2751 **merged 2026-08-16 18:46Z** without it, and
+the comment is still there — verified against the merged trunk, at the path
+above, line 46. So this is now a standalone at_server change off `trunk`, not
+a rider, and it is the only thing 14.26 still owes.
+
+Re-derive rather than trusting this row:
+
+```bash
+git -C ~/dev/atsign/repos/at_server grep -n "never occurs right now"
+gh pr view 2751 --repo atsign-foundation/at_server --json state,mergedAt
+```
+
+---
+
+### 14.28 Live PQ proofs that no use case names
+
+Raised and settled 2026-08-16 by auditing the test tree the way the mint
+election's gap was found: **a live test file that no `provenIn` cites**. Live
+tests are expensive and deliberate, so one nobody cites is a behaviour somebody
+thought worth proving and the done-bar never named.
+
+**36 of 60 live files are uncited, and most are correctly so** — at_client's
+pre-PQ suites (sync, notify, put, delete) were never what this catalogue is
+about. Nine were PQ. gkc ruled each:
+
+**Five became use cases** ([12.8](../acceptance.md#128-uc-b58--a-client-that-configures-nothing-still-takes-part)–[12.12](../acceptance.md#1212-uc-b512--the-owner-verifies-her-own-advertisement-as-a-peer-would)),
+every one citing a proof that already existed:
+
+| use case | the behaviour that had no done-bar row |
+|----------|-----------------------------------------|
+| UC-B5.8  | a client with **no `CryptoConfig` at all** resolves providers and opens what a peer sealed. The strongest product claim D1 makes |
+| UC-B5.9  | a conveyed private addressed to **another** key package is not filed — arrival is not entitlement |
+| UC-B5.10 | an enrollment **not entitled** to the root does not ask. The refusal half of UC-B5.1 |
+| UC-B5.11 | an enrollment that missed the mint **heals from a holder** rather than minting a rival generation |
+| UC-B5.12 | the owner verifies her own advertisement by the **same path a peer takes** |
+
+**Four did not**, and the reason is the point of the row:
+
+- `enrollment_key_package_live_test.dart` — the key package surviving
+  `enroll:request` is [UC-A2.4](../acceptance.md#24-uc-a24--the-key-package-advertises-the-kem-the-deployment-configured)
+  in substance; it cites a different proof, which is a citation question, not a
+  coverage one.
+- `pq_rollout_matrix_test.dart` — the sender/receiver stage matrix is
+  UC-B3.1–B4.4 swept systematically, and the file already cites `UC-G1.14`.
+- `nskey_published_ring_test.dart`'s *rotation keeps the old private* is
+  [UC-A5.1](../acceptance.md#61-uc-a51--rotate-a-namespace-key-post-compromise).
+  Its other two tests became UC-B5.12.
+- `auth_session_handoff_test.dart` — `fromAuthSession` rebuilding a connection
+  is SDK session plumbing, not PQ. ⚠️ **An earlier version of this row said it
+  had no `test(` at all.** It has one; the name is on the line after `test(`
+  and the grep required them on the same line.
+
+**The B5 cluster is now "edge cases", not "retrofit edge cases"** — neither the
+mint election nor these are retrofit, and the label was already false when
+UC-B5.4 landed.

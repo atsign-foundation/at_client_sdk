@@ -43,70 +43,6 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.25](#1425-three-projects-state-partial-completion-and-six-state-none) | Reconcile nine project entries whose stated status and the burn-down disagree | — |
-| [14.26](#1426-a-comment-in-at_server-is-now-false) | A comment in at_server says a branch never runs; the PR #2751 fix makes it run | **Lands in at_server**, not here. ⛔ It missed its ride — #2751 merged 2026-08-16 without it, so it is a standalone change off `trunk` now |
-| [14.28](#1428-live-pq-proofs-that-no-use-case-names) | 9 live PQ test files, 17 tests, that no use case cites — each needs a ruling on whether it belongs in the D1 done-bar | — |
-
-### 14.28 Live PQ proofs that no use case names
-
-Raised 2026-08-16 by auditing the test tree the same way the mint election's
-gap was found: **a live test file that no `provenIn` cites**. Live tests are
-expensive and deliberate, so one nobody cites is a behaviour somebody thought
-worth proving and the done-bar never named.
-
-**36 of 60 live files are uncited, and most are correctly so** — `at_client`'s
-pre-PQ suites (sync, notify, put, delete) were never what this catalogue is
-about. Filtering to PQ leaves **9 files, 17 tests**:
-
-| file (all live) | what it proves that no use case names |
-|-----------------|----------------------------------------|
-| `crypto_era_default_test.dart` + e2e `pq/era_default_read_test.dart` | a client naming **no `CryptoConfig` at all** resolves the nskey providers, and opens what a peer sealed to it. Zero-config interop, and arguably the strongest product claim D1 makes |
-| `conveyed_key_collection_test.dart` | a conveyed private is swept off the atServer into the keyfile — **and a private addressed to another key package is not filed**. The second is a security property |
-| `signing_root_pull_test.dart` | an enrollment **not entitled** to the root does not ask for it |
-| `nskey_self_heal_live_test.dart` | an enrollment that missed the mint pulls the private from a holder |
-| `nskey_published_ring_test.dart` | the owner verifies her own advertisement the way a peer would; a namespace nobody minted for resolves to nothing |
-| `enrollment_key_package_live_test.dart` | a key package survives `enroll:request` and comes back on the record |
-| `pq_rollout_matrix_test.dart` | the sender/receiver stage matrix (`UC-G1.14` is cited; the matrix rows are not) |
-| `auth_session_handoff_test.dart` | — no `test(` at all; check whether it still runs |
-
-⚠️ **This is a list of candidates, not a verdict.** Each needs a ruling on
-whether it belongs in the D1 done-bar; some are covered in substance by an
-existing use case that happens to cite a unit test instead. Re-derive:
-
-```bash
-# live test files no provenIn cites
-grep -rhoP "provenIn\(\s*'\K[^']+" packages/at_client/test/acceptance/
-```
-
-### 14.26 A comment in at_server is now false
-
-⚠️ **This lands in at_server, not in this repo.** It is recorded here because
-this is the list the work is driven from, and a correction owed in a sibling
-repo dies if it is only written in the ruling that found it.
-
-`packages/at_persistence_secondary_server/lib/src/spec/keystore/at_metadata_builder.dart:46`
-carries, above the immutable-stickiness branch:
-
-> *"Note: this condition never occurs right now but we will leave it here for
-> safety's sake"*
-
-It never occurred **because the update handler refused every such update**. The
-fix on [at_server PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)
-makes an update delete an expired record and proceed, so the branch is now
-reachable and the comment is false — see
-[decisions 104.10](detail/decisions.md#10410-fixed-in-at_server-and-merged).
-
-⛔ **It missed its ride.** This row said "cheapest while the PR is still open:
-it rides that branch". PR #2751 **merged 2026-08-16 18:46Z** without it, and
-the comment is still there — verified against the merged trunk, at the path
-above, line 46. So this is now a standalone at_server change off `trunk`, not
-a rider, and it is the only thing 14.26 still owes.
-
-Re-derive rather than trusting this row:
-
-```bash
-git -C ~/dev/atsign/repos/at_server grep -n "never occurs right now"
-gh pr view 2751 --repo atsign-foundation/at_server --json state,mergedAt
-```
 
 ### 14.25 Three projects state partial completion, and six state none
 
@@ -794,6 +730,7 @@ the reason is the point of the row.
 
 | Item  | What it is                                      | Why it is parked                                                                                    |
 |-------|-------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| 14.26 | A false comment in at_server's `at_metadata_builder`  | ⛔ **NOT PART OF D1** (gkc, 2026-08-16). It lands in at_server, off `trunk`, and nothing in D1 waits on it. Detail: [14.26](detail/implementation-plan.md#1426-a-comment-in-at_server-is-now-false) |
 | 14.1  | The signing root's `keys[]` shape               | SUPERSEDED by decisions 101 and 14.22. Kept for the reasoning; two of its conclusions are now false |
 | 14.13 | A passive-by-default flag                       | FOLDED AWAY 2026-08-11 into the rollout axis (14.18 step 19). Kept for its survey                   |
 | 14.21 | The signing root cannot be rotated              | RULED the same day by decisions 101. Kept so 14.22 is legible against it                            |
@@ -817,6 +754,7 @@ measured — see [14.25](#1425-three-projects-state-partial-completion-and-six-s
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.28  | Live PQ proofs that no use case names | DONE 2026-08-16 — 9 uncited PQ live files ruled on: 5 became UC-B5.8–B5.12, 4 were already covered. Detail: [14.28](detail/implementation-plan.md#1428-live-pq-proofs-that-no-use-case-names) |
 | 14.27  | The ledger's append-only rot, corrected | DONE 2026-08-16 — 11 rulings amended in the body and LIVE in the index, both citation debts discharged, and a test now asserts each. Detail: [14.27](detail/implementation-plan.md#1427-the-ledgers-remaining-append-only-rot) |
 | 14.24  | The nskey mint elects a winner; the lock became an election token with a cooldown | DONE 2026-08-16 — seven rows, proven live at functional **166/166 `EXIT=0`**. Detail: [14.24](detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) |
 | P-1    | at_chops stateless core + HPKE                          | SATISFIED — at_chops 3.3.0 published 2026-06-23                                                                      |

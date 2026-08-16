@@ -28,7 +28,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 - [9. B2 · Legacy retirement & lockout](#9-b2--legacy-retirement--lockout)
 - [10. B3 · Mixed-PQ within one atSign](#10-b3--mixed-pq-within-one-atsign)
 - [11. B4 · Mixed-PQ across atSigns](#11-b4--mixed-pq-across-atsigns)
-- [12. B5 · Retrofit edge cases](#12-b5--retrofit-edge-cases)
+- [12. B5 · Edge cases](#12-b5--edge-cases)
 - [13. Cross-cutting acceptance (applies to all flows)](#13-cross-cutting-acceptance-applies-to-all-flows)
 - [14. Test harness & impl/verify mapping](#14-test-harness--implverify-mapping)
 - [15. C1 · The rollout posture (capstone of `decisions.md` 56.4)](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564)
@@ -49,7 +49,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**45 PROVEN · 2 BLOCKED · 1 WITHDRAWN** across 48 use cases and 48 scenarios —
+**50 PROVEN · 2 BLOCKED · 1 WITHDRAWN** across 53 use cases and 53 scenarios —
 `UC-A5.1` has two.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
@@ -107,6 +107,11 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-B5.5  | The mint lock has no release but its ttl                                            | PROVEN    | `b5_edge_cases_test.dart`    |
 | UC-B5.6  | A rotation inside the cooldown is refused, and succeeds after it                    | PROVEN    | `b5_edge_cases_test.dart`    |
 | UC-B5.7  | A winner that overruns its lease publishes nothing                                  | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.8  | A client that configures nothing still takes part                                    | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.9  | A conveyed private is filed only if it is addressed here                            | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.10 | An enrollment not entitled to the root does not ask for it                          | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.11 | An enrollment that missed the mint heals from a holder                              | PROVEN    | `b5_edge_cases_test.dart`    |
+| UC-B5.12 | The owner verifies her own advertisement as a peer would                            | PROVEN    | `b5_edge_cases_test.dart`    |
 | UC-C1.1  | The era axis: a postured client writes PQ by default                                | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.2  | The refusal axis: the posture disallows legacy writes                               | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.3  | WITHDRAWN — there is no envelope axis                                               | WITHDRAWN | —                            |
@@ -124,7 +129,7 @@ step-sequence that produces them.
 
 **Read order.** Part A (PQ-native greenfield, sections [2](#2-a1--onboard-a-new-atsign-pq-native)–[6](#6-a5--rotation--revocation-new-world))
 is specified and built **before** Part B (retrofit / mixed,
-sections [7](#7-b0--prerequisite--atserver-upgrade)–[12](#12-b5--retrofit-edge-cases)). [Section 13](#13-cross-cutting-acceptance-applies-to-all-flows)
+sections [7](#7-b0--prerequisite--atserver-upgrade)–[12](#12-b5--edge-cases)). [Section 13](#13-cross-cutting-acceptance-applies-to-all-flows)
 states invariants that hold across every flow; [section 14](#14-test-harness--implverify-mapping)
 maps each UC cluster to its test layer and owning project.
 [Section 15](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564) (Part C)
@@ -1172,7 +1177,7 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   `nskey_recipient_not_ready_test`, `nskey_cross_atsign_test`) + **RF-2c** for
   the retrofit-driven live orchestration; harness `tests/at_end2end_test`.
 
-## 12. B5 · Retrofit edge cases
+## 12. B5 · Edge cases
 
 ### 12.1 UC-B5.1 — Offline enrollment pulls `pq_signing_root` later
 
@@ -1292,6 +1297,80 @@ absence are indistinguishable under mocks.
 
 - **Cross-ref:** `design.md` (the mint lock's two windows).
 - **Impl/verify:** **SS-4**.
+
+### 12.8 UC-B5.8 — A client that configures nothing still takes part
+
+The strongest product claim D1 makes, and it had live proofs on both sides and
+no use case. An app that never mentions crypto is the common case; if it has to
+name a `CryptoConfig` to interoperate, PQ is opt-in in practice however the
+flags are set.
+
+- **Given:** a client constructed with **no `CryptoConfig` at all** — not a
+  default one, none.
+- **When:** it resolves providers for a namespace, and separately, when a peer
+  seals data to it.
+- **Then:** the era default supplies the nskey providers, and the client opens
+  what the peer sealed. Configuration selects *behaviour*, never *capability*.
+
+- **Cross-ref:** `design.md` (the era default).
+- **Impl/verify:** **B-1** (provider routing) + **RF-2c**.
+
+### 12.9 UC-B5.9 — A conveyed private is filed only if it is addressed here
+
+- **Given:** privates are conveyed to an enrollment over the envelope channel
+  and swept off the atServer into the keyfile.
+- **When:** the sweep encounters a private addressed to a **different** key
+  package.
+- **Then:** it is **not filed**. Sweeping is not the same as accepting: the
+  channel is a shared surface, so "it arrived" can never be the test for "it is
+  mine". The addressed-to-me check is what stops one enrollment collecting
+  another's material by being first to look.
+
+- **Cross-ref:** `design.md` (conveyance and the key package).
+- **Impl/verify:** **SS-2**.
+
+### 12.10 UC-B5.10 — An enrollment not entitled to the root does not ask for it
+
+The refusal half of [UC-B5.1](#121-uc-b51--offline-enrollment-pulls-pq_signing_root-later),
+which proves the positive. A pull path that asks unconditionally turns every
+enrollment into a supplicant for material it may not hold, and the holder's
+answer is the only thing standing between them.
+
+- **Given:** an enrollment whose grants do not entitle it to the signing root.
+- **When:** it reaches the point where an entitled enrollment would request the
+  root private.
+- **Then:** it **does not ask**. The check is on the seeker, before the
+  request, not only on the holder answering it.
+
+- **Cross-ref:** `design.md` (the signing chain and entitlement).
+- **Impl/verify:** **SS-1c**.
+
+### 12.11 UC-B5.11 — An enrollment that missed the mint heals from a holder
+
+- **Given:** a namespace was minted while this enrollment was absent, so it
+  holds no private for the advertised generation.
+- **When:** it next starts.
+- **Then:** it **requests the private from a holder** and files it, rather than
+  minting a rival generation. This is what makes a losing or absent enrollment
+  *inert* rather than divergent, and it is why the nskey path needs no retire:
+  a generation nobody advertises is never selected, because selection is by the
+  kid in the envelope being opened.
+
+- **Cross-ref:** [decisions 104.2](detail/decisions.md#1042-both-paths-already-heal-a-loser--by-different-moves).
+- **Impl/verify:** **SS-2** + **SS-4**.
+
+### 12.12 UC-B5.12 — The owner verifies her own advertisement as a peer would
+
+- **Given:** `alice` published an nskey advertisement for a namespace.
+- **When:** `alice` herself resolves and verifies it.
+- **Then:** she takes the **same verify path a peer takes** — no owner
+  shortcut. One path means a defect in verification cannot hide behind the
+  common case, and it is what makes "same-atSign and cross-atSign are the same
+  code" a tested property rather than an aspiration. A namespace nobody minted
+  for resolves to nothing rather than to an error or a guess.
+
+- **Cross-ref:** [UC-A3.5](#45-uc-a35--the-published-nskey-advertisement-names-its-kem-and-what-it-can-open).
+- **Impl/verify:** **SS-4** + **B-1**.
 
 ---
 

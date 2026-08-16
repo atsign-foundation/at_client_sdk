@@ -1,4 +1,4 @@
-/// B5 · Retrofit edge cases.
+/// B5 · Edge cases.
 ///
 /// Catalogue: `docs/projects/pq/acceptance.md` section 12.
 library;
@@ -10,7 +10,7 @@ import '../test_utils/mocks.dart';
 import 'proven_elsewhere.dart';
 
 void main() {
-  group('B5 · retrofit edge cases', () {
+  group('B5 · edge cases', () {
     test('UC-B5.1 · offline enrollment pulls the signing root later', () {
       // GIVEN alice2 was offline during the retrofit wave; pq_signing_root was
       //       created by alice1.
@@ -211,6 +211,97 @@ void main() {
         proves: 'the lease is stamped before the take goes out, so the client '
             'errs early rather than late, and the election window bounding '
             'when the three attempt does not bound how long the winner takes',
+      );
+    });
+
+    test('UC-B5.8 · a client that configures nothing still takes part', () {
+      // GIVEN a client built with no CryptoConfig at all.
+      // WHEN  it resolves providers, and when a peer seals data to it.
+      // THEN  the era default supplies the providers and it opens what the
+      //       peer sealed — configuration selects behaviour, not capability.
+      provenIn(
+        'tests/at_functional_test/test/crypto_era_default_test.dart',
+        'a client that named no CryptoConfig still resolves the nskey providers',
+        proves: 'the era default supplies the nskey providers to a client that '
+            'named none, so an app that never mentions crypto is not silently '
+            'excluded from PQ',
+      );
+      provenIn(
+        'tests/at_end2end_test/test/pq/era_default_read_test.dart',
+        'bob, given no CryptoConfig at all, opens what alice sealed to him',
+        proves: 'the other half, and the one that makes it a product claim '
+            'rather than a resolver detail — cross-atSign, on the wire, with '
+            'the receiving side configured with nothing',
+      );
+    });
+
+    test('UC-B5.9 · a conveyed private is filed only if addressed here', () {
+      // GIVEN privates are conveyed and swept off the atServer.
+      // WHEN  the sweep meets one addressed to a different key package.
+      // THEN  it is not filed. Arrival is not entitlement.
+      provenIn(
+        'tests/at_functional_test/test/conveyed_key_collection_test.dart',
+        'a conveyed private is swept off the atServer and filed into the keyfile',
+        proves: 'the positive control without which the refusal below could '
+            'pass by the sweep simply not working',
+      );
+      provenIn(
+        'tests/at_functional_test/test/conveyed_key_collection_test.dart',
+        'a private addressed to another key package is not filed',
+        proves: 'the channel is a shared surface, so "it arrived" can never be '
+            'the test for "it is mine" — this is what stops one enrollment '
+            "collecting another's material by being first to look",
+      );
+    });
+
+    test('UC-B5.10 · an unentitled enrollment does not ask for the root', () {
+      // GIVEN an enrollment whose grants do not entitle it to the signing root.
+      // WHEN  it reaches the point an entitled one would request it.
+      // THEN  it does not ask — the check is on the seeker, before the request.
+      provenIn(
+        'tests/at_functional_test/test/signing_root_pull_test.dart',
+        'an enrollment not entitled to the root does not ask for it',
+        proves: 'the refusal half of UC-B5.1. A pull path that asks '
+            "unconditionally leaves the holder's answer as the only thing "
+            'standing between an enrollment and material it may not hold',
+      );
+    });
+
+    test('UC-B5.11 · an enrollment that missed the mint heals from a holder',
+        () {
+      // GIVEN a namespace was minted while this enrollment was absent.
+      // WHEN  it next starts.
+      // THEN  it requests the private from a holder rather than minting a
+      //       rival generation.
+      provenIn(
+        'tests/at_functional_test/test/nskey_self_heal_live_test.dart',
+        'an enrollment that missed the mint pulls the private from a holder',
+        proves: 'this is what makes an absent or losing enrollment inert '
+            'rather than divergent, and why the nskey path needs no retire: a '
+            'generation nobody advertises is never selected, because selection '
+            'is by the kid in the envelope being opened',
+      );
+    });
+
+    test('UC-B5.12 · the owner verifies her own advertisement as a peer would',
+        () {
+      // GIVEN alice published an nskey advertisement.
+      // WHEN  alice herself resolves and verifies it.
+      // THEN  she takes the same path a peer takes; an unminted namespace
+      //       resolves to nothing rather than to an error or a guess.
+      provenIn(
+        'tests/at_functional_test/test/nskey_published_ring_test.dart',
+        'the owner verifies her own advertisement the same way a peer would',
+        proves: 'one verify path means a defect in verification cannot hide '
+            'behind the common case — it is what makes "same-atSign and '
+            'cross-atSign are the same code" tested rather than aspirational',
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_published_ring_test.dart',
+        'a namespace nobody minted for resolves to nothing',
+        proves: 'the absent case resolves to nothing rather than to an error '
+            'or a guess, which is what lets a caller distinguish "not minted" '
+            'from "minted and unreadable"',
       );
     });
   });
