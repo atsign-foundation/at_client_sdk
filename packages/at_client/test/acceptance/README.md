@@ -95,7 +95,7 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 - Some scenarios finally belong in `tests/at_functional_test` or
   `tests/at_end2end_test` (separate packages). Keep the placeholder here until
   the real assertion exists somewhere, so the count stays honest.
-- **Two files here are guards rather than scenarios, and neither is ever
+- **Three files here are guards rather than scenarios, and none is ever
   skipped.** `catalogue_test.dart` fails if a use case loses its scenario, if
   `acceptance.md` refers to a use case it never defines with a heading, if a
   `skip:` and the blocker declaring it fall out of step, or if the counts below
@@ -103,6 +103,12 @@ catalogue executable-but-skipped turns an 800-line document into a count.
   `architecture_guard_test.dart` holds the checks asserted against the source
   tree rather than against behaviour, so a rename that breaks a grep reports a
   broken guard instead of a failed scenario.
+  `docs_structure_test.dart` guards the shape of `docs/projects/pq/` — that the
+  ledger index and the ruling bodies in `detail/` stay in step both ways, that
+  no body creeps back into the live ledger, that each live doc stays under a
+  stated line ceiling, and that the catalogue's status table keeps saying what
+  the scenarios do. A ceiling breach means the file has earned a demotion to
+  `detail/`, not that the guard is wrong.
 - **Adding a file here means declaring it.** `manifest.dart` lists the scenario
   files and the guard files, and the row counts below are computed from the
   scenario list alone. A `*_test.dart` that is in neither list turns

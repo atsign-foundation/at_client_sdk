@@ -46,6 +46,7 @@ const scenarioFiles = <String>[
 const guardFiles = <String>[
   'architecture_guard_test.dart',
   'catalogue_test.dart',
+  'docs_structure_test.dart',
 ];
 
 /// A use case as the catalogue defines it — by a heading, not by a mention.
@@ -163,6 +164,33 @@ Set<String> declaredBlockers() {
       .map((m) => m[1]!)
       .where((name) => !name.startsWith('_'))
       .toSet();
+}
+
+/// Which use cases have a skipped scenario, and the blocker each is skipped
+/// against.
+///
+/// Attributed per scenario, not per file. [skippedCount] only has to total the
+/// skips, but the catalogue's status table has to say *which* use case is
+/// blocked — and a file holds both running and skipped scenarios, so a
+/// file-level answer would mark every use case in `a2_enrollment_test.dart`
+/// blocked when two of its six are.
+Map<String, String> skippedUseCases() {
+  final out = <String, String>{};
+  for (final file in scenarioFiles) {
+    final text = _read(file);
+    // Slice at each `test(` so a `skip:` belongs to the scenario it closes
+    // rather than to whichever one happens to sit nearest it in the file.
+    final starts = _anyScenario.allMatches(text).map((m) => m.start).toList();
+    for (var i = 0; i < starts.length; i++) {
+      final end = i + 1 < starts.length ? starts[i + 1] : text.length;
+      final chunk = text.substring(starts[i], end);
+      final named = _scenarioName.firstMatch(chunk);
+      if (named == null) continue;
+      final skipped = _skip.firstMatch(chunk);
+      if (skipped != null) out[named.group(1)!] = skipped.group(1)!;
+    }
+  }
+  return out;
 }
 
 /// Blocker constants the scenarios actually skip against.

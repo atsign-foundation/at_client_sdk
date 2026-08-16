@@ -17,7 +17,10 @@ already happened here — 104 and 105 were made on the same day.
 
 **To add a ruling:** append its body to `detail/decisions.md` **and** one row
 here. Neither half is optional; an earlier version of this index silently
-omitted rulings 102 and 103 for a day.
+omitted rulings 102 and 103 for a day. That is now enforced —
+`packages/at_client/test/acceptance/docs_structure_test.dart` fails when a row
+has no body, when a body has no row, when a body is written into this file, and
+when this file grows past its line ceiling.
 
 ## Status vocabulary
 

@@ -13,6 +13,11 @@ with a DONE row and move the detail to the detail file. When it is set aside,
 give it a PARKED row whose reason is enough to stop someone building it — that
 is the row's whole job.
 
+This file has a **line ceiling**, enforced by
+`packages/at_client/test/acceptance/docs_structure_test.dart`. Breaching it
+means something finished and has not been demoted yet, so the fix is to move a
+DONE item's detail out — not to raise the ceiling reflexively.
+
 ⚠️ **Re-derive before acting on any row below.** Every "current state" table in
 this project has been wrong at least once by being carried forward; the
 commands that re-derive these are in
