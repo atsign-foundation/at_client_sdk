@@ -16,7 +16,7 @@
 > rule** as the thing that makes the enrollment id derivable.
 >
 > The order to build the replacements in is
-> [`implementation-plan.md` 14.20](implementation-plan.md#1420-building-rulings-98-and-99--the-sequence).
+> [`implementation-plan.md` 14.20](detail/implementation-plan.md#1420-building-rulings-98-and-99--the-sequence).
 
 **Status:** working design doc (not plan-of-record). Lives in `docs/`.
 **Purpose:** the detailed per-subsystem design + build-level implementation steps
@@ -984,7 +984,7 @@ that existed before the field and must never be widened; and on parse, entries t
 build does not recognise are **kept**, because the field is the holder's statement about
 itself. `metadata.keyPackage` is written by `enroll:request` and reachable
 afterwards only by the enrollment's own self-only `enroll:update`
-([plan 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
+([plan 14.6](detail/implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
 which no client sends yet — so in practice whatever it claims is what peers seal
 to, and nobody else can repair it. That is why an overstatement is a defect and
 not a cosmetic one

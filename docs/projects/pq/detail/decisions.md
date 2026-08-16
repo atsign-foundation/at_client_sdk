@@ -4050,7 +4050,7 @@ Read rather than assumed:
 Per the rule that a ledger ruling names a mechanism only once its differential
 test is green, the above records defects and intent, not fixes. Four items are
 open with no code written, and they are **tracked in
-[`implementation-plan.md` §14](../implementation-plan.md#14-backlog--carried-items-with-no-owning-project)**
+[`implementation-plan.md` §14](implementation-plan.md#14-backlog--carried-items-with-no-owning-project)**
 so they are visible from the plan rather than only from here:
 
 1. the signing root's `keys[]` shape, the only one with a deadline — and the
@@ -4448,7 +4448,7 @@ mechanism:
   call site and both AEADs are Nk=32/Nn=12, so it was a free parameter.
 - Two blockers must clear first: `_envelopeVersion` is a global const with **no
   write-side version selector**, and `suites` on the key package
-  ([plan 14.4](../implementation-plan.md#144-a-suites-list-on-the-key-package--done)) is
+  ([plan 14.4](implementation-plan.md#144-a-suites-list-on-the-key-package--done)) is
   what makes the move a sender-side decision rather than a fleet-wide
   readers-first migration.
 - The **enrollment record's `metadata.keyPackage` is a signed envelope written
@@ -4599,7 +4599,7 @@ never what it can read.
 **A key that already exists keeps its own algorithm, whatever the preference
 later says.** The kpid is the address peers seal to and it is frozen in an
 enrollment record that is never rewritten
-([14.6](../implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
+([14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
 so re-minting under a newly configured KEM would move the client to an address
 nobody writes to — it would scan for envelopes being sent somewhere else.
 Changing the preference takes effect on the next enrollment, and the mismatch
@@ -4644,7 +4644,7 @@ advertisement's own for the CK conveyance. A sender takes the strongest entry
 both sides list and derives the `pqSeal` version from it. That is what let the
 wire move from `0x01` to `0x02` between modern peers **without a flag day** —
 which is the whole reason
-[14.4](../implementation-plan.md#144-a-suites-list-on-the-key-package--done) was on
+[14.4](implementation-plan.md#144-a-suites-list-on-the-key-package--done) was on
 the backlog.
 
 Three rules the lists obey, each preventing a specific failure:
@@ -4845,7 +4845,7 @@ The false arm also turns out to need no new at-rest machinery: `FileAtKeysIo`
 only reaches for the `selfEncryptionKey` when a legacy flat field is actually
 present, so a keyfile with none simply never asks for one.
 
-### 52.3 The signing root's shape, ruled — [14.1](../implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep) closed
+### 52.3 The signing root's shape, ruled — [14.1](implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep) closed
 
 14.1 said the deadline was "a state, not a date: before the next long-lived
 atSign runs a privileged PQ client". ON-1 **is** that state — every atSign
@@ -4872,7 +4872,7 @@ verified under the wrong routine.
 
 Three failures, each one assertion further in, and none of them a defect in the
 onboarding path itself — it worked on the first run. The root shape was
-[14.1](../implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep)
+[14.1](implementation-plan.md#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep)
 coming due. The other two were the test's own instrument: the atServer *throws*
 on a second immutable create rather than returning an error string, and
 `enroll:listns` requires its namespace argument and does not return
@@ -6328,7 +6328,7 @@ Three costs, all present in the tree today:
 3. **An unparseable package is terminal.** `KeyPackageStatus.unsupported` ends
    that enrollment's ability to receive a sealed conveyance for good; the only
    remedy is delete-and-re-enrol
-   ([implementation-plan 14.6](../implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)).
+   ([implementation-plan 14.6](implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)).
 
 Against that, note what the freeze never bought. **It is not a security
 property.** Nothing trusts a key package because the record is immutable — a
@@ -6347,7 +6347,7 @@ sentence outlived the reason for it.
 | 4 | **Per-key set, never whole-map replace.** The request names the keys to set; keys it does not name survive untouched. Whole-map replace is read-mutate-write against shared durable state — a client that does not know about a future sibling field clobbers it, and two processes of one device are concurrent by construction |
 | 5 | **The server keeps no opinion.** Metadata stays opaque: no parsing, no signature check, no ordering of successive packages. The consequence is stated rather than mitigated — the server cannot detect a downgrade to an older validly-signed package, which is why ruling 2 carries the weight it does |
 | 6 | **A replaced kpid is not retired.** The client keeps the superseded private half and keeps answering at the old address. An envelope written before the update is addressed to the old kpid and must still open; the alternative is silent, unattributable loss of a secret that was correctly sent |
-| 7 | **A server without the sub-command must fail loudly**, and does: an unknown operation does not match the verb regex. This is strictly better than the `EnrollParams.metadata` passthrough it complements, which an old atServer drops silently — the gap recorded at [implementation-plan §14 backlog](../implementation-plan.md#14-backlog--carried-items-with-no-owning-project) ("a PQ-capable client cannot tell a legacy atServer from an old peer") |
+| 7 | **A server without the sub-command must fail loudly**, and does: an unknown operation does not match the verb regex. This is strictly better than the `EnrollParams.metadata` passthrough it complements, which an old atServer drops silently — the gap recorded at [implementation-plan §14 backlog](implementation-plan.md#14-backlog--carried-items-with-no-owning-project) ("a PQ-capable client cannot tell a legacy atServer from an old peer") |
 | 8 | **No peer invalidation is owed today, and the reason is checkable.** `VerbEnrollmentDirectory.listForNamespace` executes `enroll:listns` against the atServer on every call (`enrollment_directory.dart:141`) and caches nothing, so a sender reads the current package at seal time. Any future cache inherits an invalidation obligation from this ruling |
 
 ### 68.4 The verb
@@ -8009,7 +8009,7 @@ was carried as an open server defect it had already been proven not to be.
 the five [70](#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)
 established. Not a harness-only construct and not a fourth dimension.
 
-The consequence worth stating separately: **[14.13](../implementation-plan.md#1413-a-passive-by-default-flag-surveyed-not-built)'s
+The consequence worth stating separately: **[14.13](implementation-plan.md#1413-a-passive-by-default-flag-surveyed-not-built)'s
 passive-by-default IS what `now` means.** That entry stops being a separate
 item and becomes the definition of the axis's first position — a client at
 `now` reads and routes post-quantum records and never writes one on its own
@@ -8043,7 +8043,7 @@ is the same lesson as a differential test having to prove its two arms differ �
 here the two arms are two *builds*, and simulating both in one build proves
 nothing about the one we did not write.
 
-**5. [14.9](../implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly)
+**5. [14.9](implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly)
 is CLOSED — a test-instrument failure, proven, not an atServer defect.** The
 record had softened only as far as "the attribution was never established,
 OPEN, not a known server defect." That understates it: the instrument was the
@@ -8079,7 +8079,7 @@ open unknown invited someone to go looking for a server bug that is not there.
 >
 > ⚠️ **This amendment is three days late.** The root cause was established
 > 2026-08-12 and reached
-> [14.9](../implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly),
+> [14.9](implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly),
 > but no ruling here was amended, so the ledger asserted the opposite of a
 > measured fix until 2026-08-15. A root cause that lands in the plan and not in
 > the ledger leaves the ledger arguing against it.
@@ -8108,7 +8108,7 @@ and 14.16's four residuals are all in scope, as are S-3's completion, B-3
 > 14.19, 14.20 and 14.21. Eight are closed — 14.1, 14.2, 14.3, 14.4, 14.5, 14.9
 > with 14.9a, 14.10 and 14.13. The split and its re-derivation date now live at
 > the head of
-> [`implementation-plan.md` §14](../implementation-plan.md#14-backlog--carried-items-with-no-owning-project),
+> [`implementation-plan.md` §14](implementation-plan.md#14-backlog--carried-items-with-no-owning-project),
 > which is the copy to read; repeating it here is what produced two stale lists.
 >
 > ⚠️ **One item is deliberately outside this ruling's scope claim.** 14.21 (the
@@ -9128,7 +9128,7 @@ say:
 
 **In brief:** *what 98 and 99 left unstated, and what row A1 encodes*
 
-[`implementation-plan.md` 14.20](../implementation-plan.md#1420-building-rulings-98-and-99--the-sequence)
+[`implementation-plan.md` 14.20](implementation-plan.md#1420-building-rulings-98-and-99--the-sequence)
 listed six questions its build sequence does not answer and said to ask rather
 than guess, because each decides a shape and guessing wrong builds the wrong
 thing silently. A seventh surfaced while checking the six against the tree. All
@@ -9243,7 +9243,7 @@ each state in their own dartdoc.
 From a question gkc asked while reading the at-rest shape: what is persisted for
 the atSign's root signing key, and can it be rotated later. The answer was no —
 for four reasons beyond the record's immutability, stated at
-[`implementation-plan.md` 14.21](../implementation-plan.md#1421-the-signing-root-cannot-be-rotated--raised-2026-08-15).
+[`implementation-plan.md` 14.21](implementation-plan.md#1421-the-signing-root-cannot-be-rotated--raised-2026-08-15).
 gkc set two requirements, and between them they settle it: the root is
 persisted like every other signing key, and D1 does everything that makes
 rotation possible **without building the rotation**.
@@ -9304,7 +9304,7 @@ reconciliation, which stays: read the published record, compare what is held
 against it, retire a pair that corresponds to nothing. It was written for a
 lost immutable create and answers the same question here.
 
-> ✅ **BUILT 2026-08-15 by [14.22](../implementation-plan.md#1422-making-the-signing-root-rotatable--decisions-101)
+> ✅ **BUILT 2026-08-15 by [14.22](implementation-plan.md#1422-making-the-signing-root-rotatable--decisions-101)
 > row 6, with three amendments this ruling did not anticipate.**
 > (1) `NskeyMintLock` is now **`MintLock`** and takes the lock's `AtKey`, so
 > one implementation serves `_nskeylock.<ns>@<owner>` and the new
@@ -9464,7 +9464,7 @@ it needs an application call racing the unawaited `startup()`.
 
 **In brief:** *per-use `typ` in the protected header; a verifier is handed the type it expects*
 
-Step 27, [`implementation-plan.md` 14.8](../implementation-plan.md#148-domain-separation-on-the-signed-envelope).
+Step 27, [`implementation-plan.md` 14.8](implementation-plan.md#148-domain-separation-on-the-signed-envelope).
 [Ruling 51](#51-the-from-challenge-and-a-signed-envelope-must-never-share-a-shape-2026-08-08)
 asked for domain separation between the `from:` challenge and a signed
 envelope. Building it turned up a second, nearer confusion, and the ruling
