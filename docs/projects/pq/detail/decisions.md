@@ -9942,16 +9942,26 @@ The fresh `createdAt` and `version: 0` are what prove the *delete* rather than
 just a relaxed check: the replacement is a new record, not a merge with a
 corpse.
 
-⚠️ **One unexplained observation, recorded rather than diagnosed.** The first
-functional run failed one unrelated test —
+⚠️ **An observation recorded here as undiagnosed, and diagnosed later the same
+day.** The first functional run failed one unrelated test —
 `create_update_key_test.dart`, on `updatedAt >= keyUpdateDateTime` — and the
-second run passed it. **1 failure in 2 runs, cause unknown.** A clock-skew
-explanation was proposed and then **disproven by measurement**: the container
-runs ~317ms *ahead* of the host (bounded by `docker exec` latency), and that
-assertion needs the server to be *behind*. What can be said without a
-diagnosis is that the assertion compares a client-captured timestamp against a
-server-generated one with zero tolerance, while `AtMetadataBuilder` truncates
-to millisecond precision — so it is flap-prone whatever the trigger.
+second run passed it: 1 failure in 2 runs. A clock-skew explanation was
+proposed and **disproven by measurement**: the container runs ~317ms *ahead* of
+the host (bounded by `docker exec` latency), and that assertion needs the
+server to be *behind*.
+
+✅ **Resolved 2026-08-16, after this ruling was written.** The assertion
+compared a client-captured timestamp against a server-generated one with zero
+tolerance — two clocks, so it measured the environment rather than the product.
+Measuring the margin rather than re-running the outcome is what settled it: 60
+iterations put the gap at **0–6ms, with 8 of 60 landing on exactly zero**. It
+was rewritten to compare the second update's `updatedAt` against the **first
+update's**, both produced by the server, which is what `AtMetadataBuilder`
+actually guarantees and leaves a full round trip of headroom. The rewrite rode
+in at_server `77091f98` on
+[PR #2751](https://github.com/atsign-foundation/at_server/pull/2751), committed
+1h38m after this ruling — so anything citing "cause unknown" from this section
+is reading a snapshot, not the state.
 
 ---
 

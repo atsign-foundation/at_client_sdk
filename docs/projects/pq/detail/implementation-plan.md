@@ -1,10 +1,32 @@
 # implementation-plan.md — the detail
 
-The plan as it stood on 2026-08-16, entire and unedited below the header: every
-project entry, the dependency graph, the phase sections, the backlog and the
-D1 burn-down. **The live plan is [`../implementation-plan.md`](../implementation-plan.md)**,
+The plan as it stood on 2026-08-16 below the header: every project entry, the
+dependency graph, the phase sections, the backlog and the D1 burn-down.
+**The live plan is [`../implementation-plan.md`](../implementation-plan.md)**,
 which carries full detail for open work only and one row each for parked and
 completed items, every row pointing back here.
+
+**No prose was changed, but 224 lines were.** Moving this file down a directory
+broke every relative link in it, so `](design.md)`, `](acceptance.md)` and
+`](roadmap.md)` were repointed to `../`. Nothing else was touched: the body is
+the same 4,039 lines `git show a5bf04d75:docs/projects/pq/implementation-plan.md`
+produces, and `diff` against it returns only link lines.
+
+⛔ **Links to `decisions.md` were deliberately NOT repointed, and must not be.**
+The 141 anchored ones (`](decisions.md#105-…)`) resolve *inside this directory*,
+to the ruling bodies in [`decisions.md`](decisions.md) — which is where a
+citation wants to land. The live ledger one level up is **bodyless by design**
+and carries zero `## <number>.` headings, so "fixing" these to
+`](../decisions.md#…)` would break all 141 at once while looking like a
+consistency sweep. Re-derive before believing this:
+
+```bash
+grep -cE '^## [0-9]+b?\. ' ../decisions.md   # 0 — the index has no ruling anchors
+grep -cE '^## [0-9]+b?\. ' decisions.md      # 107 — the bodies are here
+```
+
+The 25 *bare* `](decisions.md)` links are the arguable ones: they land on the
+body dump rather than on the index a general "see the ledger" reference wants.
 
 Item ids are permanent. `14.13`, `14.19 item 11` and their siblings are cited
 from production dartdoc and from `blockers.dart`, so an item keeps its id when

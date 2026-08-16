@@ -33,10 +33,10 @@ the canonical home rather than duplicating it.
 | Doc | What lives there |
 |---|---|
 | **roadmap.md** (this doc) | Roadmap & high-level design — the WHY + WHAT: deliverables D1/D2, the conceptual `nskey` shape, migration philosophy, usability/crypto-agility constraints, the phase trajectory at a glance. |
-| [`implementation-plan.md`](implementation-plan.md) | The build sequence — the project list (Wave-0 baseline, P-1..P-3, S-1..S-6, SS-*, B-*, RF-*, R-1/R-2, ON-1, D2-1), the dependency graph, waves/parallelism, effort, publish gates, the critical path, and the coverage map. |
+| [`implementation-plan.md`](implementation-plan.md) | The build sequence, as **TODO / PARKED / DONE**: full detail for open work, one row each for parked and completed items. The project list (Wave-0 baseline, P-1..P-3, S-1..S-6, SS-*, B-*, RF-*, R-1/R-2, ON-1, D2-1), the dependency graph, waves/parallelism, effort, publish gates, the critical path and the coverage map moved to [`detail/implementation-plan.md`](detail/implementation-plan.md) on 2026-08-16. |
 | [`design.md`](design.md) | Detailed designs by subsystem — the D1 `nskey` data-path key shapes / 3 providers / `appMetadata` / CK model / cold-start / FS + rotation levers; the secret-sharing substrate (`kpid`, `__ssenv`, `SecretStore`, push/pull, `enroll:listns`, the enrollment record + self-retrofit flow); at_chops primitives; the `CryptoProvider` seam / key stores / WASM split; and the worked walkthroughs (NoPorts, at_talk). Build-level notes with `file:line`. |
 | [`acceptance.md`](acceptance.md) | The given/when/then use-case catalogue (A1.x–A5.x, B0.x–B5.x) with concrete at-keys plus the impl/verify steps and the test harness. |
-| [`decisions.md`](decisions.md) | The decision log — the design rulings (the verb wire shape, the 1:1:1 ruling), the resolved and open decisions, and a dated timeline. The WHY behind every choice. |
+| [`decisions.md`](decisions.md) | The decision **index** — one row per ruling, with date and status, and nothing else. Since 2026-08-16 it is deliberately bodyless, so grepping it returns headlines; the reasoning behind every choice is in [`detail/decisions.md`](detail/decisions.md), under a `## <number>.` heading matching the row. |
 | [`seal-spec.md`](seal-spec.md) | The byte-level `atPQv1-base` seal specification a second implementation builds from, paired with `packages/at_chops/test/vectors/pq_seal_v1.json`. |
 
 ## The two major deliverables (D1 / D2)
@@ -382,9 +382,10 @@ the retrofit signing algorithm) is an independent flag with a 3.x and a 4.0
 default, plus a convenience posture that sets them as a group; all the code ships
 in 3.x, and the acceptance suite drives the entire rollout by flag manipulation.
 
-**Where the build has got to is not recorded here.** The project sequence, what
-is owed, what is parked and what has landed, the dependency graph, publish
-gates and the coverage map are all in
-[`implementation-plan.md`](implementation-plan.md), which is the only place
-progress is written down. This document describes the shape of the work, and
+**Where the build has got to is not recorded here.** What is owed, what is
+parked and what has landed are in
+[`implementation-plan.md`](implementation-plan.md)'s TODO / PARKED / DONE
+sections, which are the only place progress is written down; the project
+sequence, the dependency graph, publish gates and the coverage map are one
+level down in [`detail/implementation-plan.md`](detail/implementation-plan.md). This document describes the shape of the work, and
 that shape does not change when a project lands.

@@ -44,6 +44,33 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.25](#1425-three-projects-state-partial-completion-and-six-state-none) | Reconcile nine project entries whose stated status and the burn-down disagree | — |
+| [14.26](#1426-a-comment-in-at_server-is-now-false) | A comment in at_server says a branch never runs; the PR #2751 fix makes it run | **Lands in at_server**, not here. Rides PR #2751 while it is still open |
+
+### 14.26 A comment in at_server is now false
+
+⚠️ **This lands in at_server, not in this repo.** It is recorded here because
+this is the list the work is driven from, and a correction owed in a sibling
+repo dies if it is only written in the ruling that found it.
+
+`packages/at_persistence_secondary_server/lib/src/spec/keystore/at_metadata_builder.dart:46`
+carries, above the immutable-stickiness branch:
+
+> *"Note: this condition never occurs right now but we will leave it here for
+> safety's sake"*
+
+It never occurred **because the update handler refused every such update**. The
+fix on [at_server PR #2751](https://github.com/atsign-foundation/at_server/pull/2751)
+makes an update delete an expired record and proceed, so the branch is now
+reachable and the comment is false — see
+[decisions 104.10](detail/decisions.md#10410-fixed-in-at_server-the-same-day-and-re-measured-on-the-wire).
+
+Cheapest while the PR is still open: it rides that branch. Re-derive rather
+than trusting this row — the comment may already be gone:
+
+```bash
+git -C ~/dev/atsign/repos/at_server grep -n "never occurs right now"
+gh pr view 2751 --repo atsign-foundation/at_server --json state,mergedAt
+```
 
 ### 14.25 Three projects state partial completion, and six state none
 
@@ -843,15 +870,20 @@ grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 # question; the atServer image gate is gkc's call and is NOT to be checked
 # against atsigncompany/virtualenv:vip (ruled 2026-08-13).
 
-# rails, all four packages
-cd packages/at_auth           && dart test --concurrency=1   # 312
-cd packages/at_client         && dart test --concurrency=1   # 1327 (2 skipped)
-cd packages/at_client         && dart test test/acceptance --concurrency=1  # 58 (2)
-cd packages/at_onboarding_cli && dart test --concurrency=1   # 39
-cd tests/at_functional_test   && ./runLocal.sh               # 165/165
-# measured at 7c6b3e7f2 (2026-08-15). Every figure in this project has been
-# wrong at least once by being carried forward — the COMMAND is the value
-# here, not the number beside it.
+# rails, all four packages. EACH FIGURE CARRIES THE COMMIT IT WAS MEASURED AT —
+# a block with one date at the bottom invites reading every number as current,
+# and three of these five were re-measured 15 commits after the other two.
+cd packages/at_client         && dart analyze lib test       # exit 0, 351 info  @92e859e52
+cd packages/at_client         && dart test --concurrency=1   # 1344 (2 skipped)  @92e859e52
+cd packages/at_client         && dart test test/acceptance --concurrency=1  # 66 (2)  @92e859e52
+cd packages/at_auth           && dart test --concurrency=1   # 312              @7c6b3e7f2
+cd packages/at_onboarding_cli && dart test --concurrency=1   # 39               @7c6b3e7f2
+cd tests/at_functional_test   && ./runLocal.sh               # 165/165          @7c6b3e7f2
+# ⚠️ The functional 165/165 was measured against the virtualenv image as it
+# was BEFORE `at_virtual_env:local` was rebuilt, so it is not a claim about the
+# image on this machine now. Rebuild-and-re-run before treating it as current.
+# Every figure in this project has been wrong at least once by being carried
+# forward — the COMMAND is the value here, not the number beside it.
 ```
 
 
@@ -864,3 +896,11 @@ default-flip: 4.0 is identical to final-3.x *code*).
 
 ⚠️ Check pub.dev against every touched pubspec before acting on that ladder —
 a same-value version bump merges silently.
+
+⚠️ **The first rung is contested and this line is not the ruling.** gkc has
+ruled *in principle* that at_chops' next release should be a **major**, not
+3.6.0: 3.6.0 carries two source-breaking changes. The 4.0.0 bump was built and
+**reverted** on 2026-08-13, so the decision exists in principle and not in the
+tree, and nothing in TODO owns it. Settle it before publishing at_chops, and
+note that six constraints must widen together or `pub get` fails, and at_lookup
+needs at_chops 3.6.2.
