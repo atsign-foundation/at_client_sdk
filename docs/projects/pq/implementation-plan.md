@@ -55,20 +55,24 @@ invisible to anyone working the TODO table.
   at all, so DEP4's update-put auto-notify is unbuilt. ⚠️ Needs parity across
   every atServer implementation in the same sweep. Re-derive:
   `git -C ~/dev/atsign/repos/at_server grep -n "__ssenv"` (zero today).
-- **B-1 — three.** Everything beyond envelope delivery (`pushSecretToNames…`);
-  a unit fixture that backs local storage and the atServer with **one map**, so
-  it structurally cannot see a local-first-vs-remote-first defect on the read
-  side; and UC-A3.4's self direction, owed rather than blocked since
-  `ConcurrentClients` landed ([#2093](https://github.com/atsign-foundation/at_client_sdk/issues/2093)).
+- **B-1 — two left.** Everything beyond envelope delivery
+  (`pushSecretToNames…`); and UC-A3.4's self direction, owed rather than
+  blocked since `ConcurrentClients` landed
+  ([#2093](https://github.com/atsign-foundation/at_client_sdk/issues/2093)).
+  ✅ **The fixture blind spot is closed** (2026-08-16):
+  `buildRemoteBackedMockClient` takes an optional `localData`, and with it a
+  local-first read of a key only the atServer holds misses instead of
+  succeeding. Opt-in, because the nine callers that predate it specify the
+  single-store default.
 - **S-3 — three, all small.** A migration test on a v(N-1) fixture; a keychain
   round-trip on a real device, **blocked** because this repo has no
   `integration_test` harness and at_client_flutter's tests mock the platform
   channel; and `LocalKeystoreAtKeysIo`, still "not needed at this time".
 
 ⚠️ **None of these blocks D1's remaining sequence**, which is why they were
-survivable as residuals. The B-1 fixture item is the one with teeth: a fake
+survivable as residuals. The B-1 fixture item was the one with teeth — a fake
 that cannot distinguish local from remote is exactly the shape that let the
-nskey mint read local storage for months.
+nskey mint read local storage — and it is now closed.
 
 ### 14.18 The remaining D1 initial-development sequence
 
