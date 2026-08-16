@@ -10079,12 +10079,22 @@ Found while checking whether the protocol holds against the tree as it stands.
 
 1. **Both reads must be remote, and the one that matters is not.** Every read
    in the nskey subsystem that must see another party's write passes
-   `useRemoteAtServer = true` — ten sites in `pq_signing_chain.dart`, plus the
-   root's `publishedRoots` — and `current_ck_pointer.dart` passes `false`
-   *explicitly*, because that one is the client's own pointer.
+   `useRemoteAtServer = true` — **eight** sites in `pq_signing_chain.dart`,
+   plus the root's `publishedRoots` — and `current_ck_pointer.dart` passes
+   `false` *explicitly*, because that one is the client's own pointer.
    `published_nskey_key_ring.dart:450`, the advertisement read behind
-   `currentPublic`, is **the only read in the family with no options at all**,
-   so it is local-first and lags sync.
+   `currentPublic`, carries no options at all, so it is local-first and lags
+   sync.
+   ⚠️ **Two numbers here were wrong when first written, and a cold read caught
+   both.** It said "ten sites" (there are eight — ten was the total across the
+   whole subsystem, which double-counts `publishedRoots` and includes the
+   `= false` site the same sentence lists separately), and it called `:450`
+   **"the only read with no options at all"**, which is false:
+   `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are
+   optionless too. Those two are content-key conveyance reads rather than
+   advertisement reads and are plausibly right as local-first — but they are
+   out of scope **by argument, not by absence**, and the original sentence
+   would have had someone stop one file early.
    ⚠️ **This is not an oversight.** `currentPublic` deliberately serves two
    callers through one read — a sender fetching a *peer's* advertisement, where
    local-first plus the 15-minute `advertisementTtl` cache is right, and a

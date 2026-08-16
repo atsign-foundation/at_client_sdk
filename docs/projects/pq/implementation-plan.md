@@ -3803,8 +3803,25 @@ reading the row.
 
 ### 14.23 The nskey mint stops needing a winner — decisions 104
 
+⛔⛔ **HELD — DO NOT BUILD THIS. Build
+[14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) instead.**
 [decisions 104](decisions.md#104-the-nskey-mint-stops-needing-a-winner-2026-08-16)
-rules the shape; this is the order. Generations get their own records, the
+was superseded by
+[105](decisions.md#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16)
+the same day it was written. This section is kept in full because the design is
+held in reserve, not discarded — 104's own opening says what would revive it.
+
+⚠️ **Its rows contradict 14.24's on the same lines of code, so following it by
+accident is not a no-op.** Row 2 here says the `StateError` at
+`published_nskey_key_ring.dart:292` "is deleted" and that a loser with nothing
+published "mints anyway"; 14.24 row 4 says it is **rewritten, not deleted** and
+that the loser **must not mint**. Row 6 here says 14.19 item 18 is still owed;
+14.24 says it disappears. **Where they disagree, 14.24 wins.**
+(A context-free reader jumped straight to this heading by anchor and got a
+confident, unflagged instruction to build the rejected design. That is why this
+banner exists.)
+
+The rest of this section is the order that *would* apply if 104 were revived. Generations get their own records, the
 advertisement becomes a summary healed from them, and the mint lock survives on
 this path only as an advisory hint. **The signing root is out of scope** and
 keeps its dispositive interlock —
@@ -3870,6 +3887,59 @@ asserts.
 
 ---
 
+### 14.24 The nskey mint elects a winner — decisions 105
+
+⚠️ **THIS is the model being built.**
+[14.23](#1423-the-nskey-mint-stops-needing-a-winner--decisions-104) is HELD.
+[decisions 105](decisions.md#105-the-nskey-mint-elects-a-winner-and-an-atserver-defect-blocks-the-clean-shape-2026-08-16)
+rules the design; this is the order. One nskey record, and a lock used as an
+**election token with a cooldown** rather than a mutex.
+
+**The requirement, which had never been written down:** *if enrollments A, B
+and C all decide they need to mint, only one of them eventually does.* Every
+earlier argument about the lock was about mechanisms with no agreed property to
+hold them to, which is why "is 14.19 item 18 worth fixing" stayed unanswerable
+for two sessions.
+
+**⛔ Rows 3 and 5 depend on an at_server change that is NOT MERGED.** The fix is
+`b5654bfd` on `gkc-expired-immutable-blocks-create`, cut from `origin/trunk`
+(`73bfe48b`) in `~/dev/atsign/repos/at_server`. Re-derive rather than trust
+this line:
+
+```
+git -C ~/dev/atsign/repos/at_server log --oneline -1
+git -C ~/dev/atsign/repos/at_server merge-base --is-ancestor <sha> origin/trunk && echo MERGED
+```
+
+⚠️ **A merge is not enough for rows 3 and 5** — they need an atServer that
+*runs* the fix. The local `at_virtual_env:local` has been rebuilt and does; any
+other deployment needs its own rebuild, and a client relying on ttl-only
+release is incorrect against an atServer without it.
+
+| # | What | The differential |
+|---|---|---|
+| 1 | A **remote-only** read of the published advertisement for the mint path. ⚠️ **NOT by changing `currentPublic`** — that is also the sender path, reached from `CkManager.ensureCurrent` on *every* put, so making it remote puts a round trip on the write path and breaks offline writes. A separate read, always remote, skipping both caches — the shape `PqSigningRoot.publishedRoots` already has | a sibling enrollment publishes; this client's pre-check sees it without waiting for sync. ⚠️ **Scope: `published_nskey_key_ring.dart:450` is the read to change, but it is NOT the only optionless read in the subsystem** — `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are optionless too. Those two are **content-key conveyance** reads rather than advertisement reads and are plausibly correct as local-first, so they are out of scope *by argument, not by absence*. Re-derive before believing either way: `git grep -n -A3 "atClient\.get(" -- packages/at_client/lib/src/crypto/nskey/` |
+| 2 | The **winner's re-check under the lock**, which the nskey path has never had. `_mintUnderLock` (root) re-reads; `_mint` (nskey) does not | a winner that published between the pre-check and this client taking the lock is adopted, not overwritten |
+| 3 | `withLock` **stops releasing** — the ttl is the release. ⛔ Needs the at_server fix | a holder that finishes does not free the lock; a second enrollment is refused until the ttl elapses. This is what makes [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18 disappear rather than be fixed |
+| 4 | The **loser**: re-read once, adopt a published generation, otherwise **fail** with a reason. The `StateError` at `published_nskey_key_ring.dart:292` is rewritten, not deleted — the loser must not mint | lock held + a generation published → adopts. Lock held + nothing published → fails naming the contention, and a waiting `put` fails loudly rather than hanging on another device's crash |
+| 5 | The **lease self-abort**: the holder carries its lease and refuses to publish once it is spent, so a slow winner abandons rather than racing the enrollment that legitimately took the lock next. ⛔ Depends on row 3's timing | a mint that overruns the ttl publishes nothing. Without it the requirement fails even with everything else correct, because the bounded window bounds when the three *attempt*, not how long the winner *takes* |
+| 6 | The "crash backstop" claim is **false as written** and true only against an atServer carrying the fix. ⚠️ **TWO sites, and neither is in `mint_lock.dart` where a reader would look**: `nskey_records.dart:76` (`mintLockTtl`'s own dartdoc) and `nskey_records.dart:133` (`pqSigningRootMintLockKey`, "and [ttl] is the crash backstop"). Re-derive: `grep -n "crash backstop" packages/at_client/lib/src/crypto/nskey/nskey_records.dart` | none — a doc correction, but it must land in whichever commit first touches this path, and it must hit both sites |
+| 7 | Docs and acceptance sweep | `catalogue_test.dart` going red is the check. Four acceptance scenarios name `_nskeylock` (`a3_self_data_test`, `a5_rotation_test`, `b5_edge_cases_test`, `cross_cutting_test`), plus `design.md` §1.3 and `wire_literal_pins_test.dart` |
+
+**Two things found while checking the protocol against the tree, which the rows
+above assume.**
+
+- **Exactly two production callers mint**: `nskey_seeding.dart:100`
+  (`mintAndPublish`) and `nskey_rotation.dart:152` (`rotate`). Re-derive:
+  `git grep -n "mintAndPublish\|\.rotate(" -- packages/at_client/lib packages/at_onboarding_cli/lib`
+- **`rotate`'s precondition read is asked twice.**
+  `NskeyRotation.rotateNamespaceKey:145` calls `ring.currentPublic` to refuse a
+  cold-start rotation, and `ring.rotate:320` calls it again. Both are
+  local-first, so row 1 has to reach both — and they are the same question
+  asked twice, which is worth collapsing rather than converting twice.
+
+---
+
 ## 15. D1 burn-down — the single index of what D1 owes
 
 **Why this exists.** There was no one place to answer "what is left for D1".
@@ -3891,7 +3961,7 @@ cite this table as evidence.
 **D1 initial development ends at step 34** — the spike carved into stacked PRs
 and merged. Publishing and R-2 follow it and are not D1.
 
-### 15.1 Open work, 2026-08-15
+### 15.1 Open work — re-derive before acting
 
 | # | What is owed | Owner | State |
 |---|---|---|---|
@@ -3906,7 +3976,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
 | 11 | **14.19's open small items — 18 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
-| 12 | **The nskey mint stops needing a winner** — generations get their own records, the advertisement is healed from them, the lock becomes advisory | [14.23](#1423-the-nskey-mint-stops-needing-a-winner--decisions-104) | Open, ruled 2026-08-16, **in D1**. Seven rows in order; row 1 is one commit or the tree publishes nothing. Re-derive: `git grep -n "__nskeys\|nskeyMintLockKey" -- packages/at_client/lib` |
+| 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | Open, ruled 2026-08-16, **in D1**. Seven rows. ⛔ Rows 3 and 5 need an at_server fix that is **built and proven but NOT MERGED** (`b5654bfd` on `gkc-expired-immutable-blocks-create`), and an atServer that *runs* it. ⚠️ **[14.23](#1423-the-nskey-mint-stops-needing-a-winner--decisions-104) is the rejected-for-now alternative and is HELD** — do not build it; [decisions 104](decisions.md#104-the-nskey-mint-stops-needing-a-winner-2026-08-16) says what would revive it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
 **Not owed, and worth stating so nobody re-opens them:** step 11 is labelled
