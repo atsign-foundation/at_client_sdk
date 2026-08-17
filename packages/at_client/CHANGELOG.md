@@ -1,4 +1,21 @@
 ## 3.14.1
+- fix: an `_apsk` advertisement is no longer overwritten by a fallback composed
+  mid-mint. A minter publishes its new signing key before it files it, so no
+  envelope is ever signed under a key the advertisement does not name; in that
+  gap any other writer composing from the keyfile saw no signing key, took the
+  APKAM authentication-key fallback, and published that over the advertisement.
+  Measured: a `postQuantum` approver's own envelope signer overwrote its own
+  ML-DSA-65 mint 20ms later, and the enrollment it was approving then failed —
+  the enrollee could find no algorithm in common and `waitForApproval` timed out.
+  - New `serialiseApskWrite`, which chains every `_apsk` write one client makes.
+    `SigningKeyMinting` now holds it across **publish, file and retire
+    together**, so a writer arriving mid-mint composes after the filing.
+  - **In-process only, and it says so.** A second client of the same atSign in
+    another process is unaffected; the record has no single owner and a rule
+    stated over it cannot hold. This closes the case that was actually measured.
+  - `publishPublicSigningKey` acquires the lock;
+    `publishPublicSigningKeyLocked` is the same work for a caller that already
+    holds it. Acquiring twice from one call chain would deadlock.
 - fix: a `local:` record is no longer routed through the shared-data crypto
   path. `AtKey.isLocal` means the record is never synced to the atServer, and
   the keystore already encrypts it at rest, so value-level encryption was

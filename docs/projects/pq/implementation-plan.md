@@ -43,7 +43,6 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) | A notification needing a not-yet-filed nskey private is dropped without retry | Cause found 2026-08-17: the conveyed private is filed by an unawaited startup. Park-and-re-drive designed, not built |
-| [14.32](#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers) | A `primary` client signs ML-DSA-65 while its published `_apsk` still advertises `rsa2048` | Diagnosed live 2026-08-17; the transport of the republish is the open question |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
 
 ### 14.30 A content notification can outrun the key that opens it
@@ -296,13 +295,20 @@ mint's `io` and `atClient.atKeysIo` the same instance. The keyfile does hold the
 post-mint state; `AtClientEnvelopeSigner` simply read before the filing
 completed.
 
-**What is left to decide** is recorded on the ruling rather than here: the
-failure is entirely **within one process and one client**, and 102 dismissed
-serialising the writers as an unkeepable *cross-process* guarantee at a time
-when it believed the race needed an application call racing `startup()`. It
-does not. An in-process ordering fix would close the measured failure without
-claiming more than it can; a record guard would not, because guard 3 showed the
-rule cannot be stated over `primary`.
+✅ **DONE 2026-08-17 — fixed by serialising this process's `_apsk` writes**,
+ruled and built as [102.2](detail/decisions.md#1022-the-in-process-window-is-closed-by-serialising-the-writers-2026-08-17).
+`serialiseApskWrite` chains every `_apsk` write one client makes, and the mint
+holds it across publish, file and retire together, so a writer arriving mid-mint
+composes after the filing and finds nothing to change. It states in-process-only
+and nothing more — a second client in another process is still 102's accepted
+window. Re-entrancy is handled by splitting `publishPublicSigningKey` (acquires)
+from `publishPublicSigningKeyLocked` (does not).
+
+**Proven live on the arm that had never passed:** updates to
+`_apsk.primary` go 4 → 2, the final value goes bare RSA → the `mldsa65` array,
+`no algorithm in common` goes 2 → 0, and the test goes fail → pass. Unit cover
+in `apsk_write_serialisation_test.dart`, whose ordering test reddens on the
+exact interleave when the lock is removed.
 
 ⚠️ This is **not** [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor).
 That one is a refused internal write killing the monitor; this one is an
@@ -992,6 +998,7 @@ measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.32  | An in-process `_apsk` write no longer clobbers a just-minted advertisement | DONE 2026-08-17 — ruling [102.2](detail/decisions.md#1022-the-in-process-window-is-closed-by-serialising-the-writers-2026-08-17); proven live, `_apsk.primary` ends on the mldsa65 array where it ended on bare RSA. Body: [14.32](#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers) |
 | 14.31  | A `local:` record is not encrypted, and the legacy refusal exempts it | DONE 2026-08-17 — six related defects, not one; the listener no longer dies from a refused watermark. Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17). Body: [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor) |
 | 14.25  | Nine project entries reconciled against the tree | DONE 2026-08-16 — burn-down right about 4, headings stale for SS-1c and SS-4, real residuals in SS-2/B-1/S-3 (now [14.29](#1429-the-residuals-1425-surfaced)). Detail: [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
 | 14.28  | Live PQ proofs that no use case names | DONE 2026-08-16 — 9 uncited PQ live files ruled on: 5 became UC-B5.8–B5.12, 4 were already covered. Detail: [14.28](detail/implementation-plan.md#1428-live-pq-proofs-that-no-use-case-names) |

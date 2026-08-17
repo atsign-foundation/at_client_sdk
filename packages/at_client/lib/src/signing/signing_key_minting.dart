@@ -7,7 +7,8 @@ import 'package:at_auth/at_auth.dart'
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
-import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
+import 'package:at_client/src/mixins/apkam_signing.dart'
+    show ApkamSigning, serialiseApskWrite;
 import 'package:at_client/src/signing/apsk_composition.dart'
     show apskEntries, apskValueOf, bareApskValueOf;
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -161,14 +162,23 @@ class SigningKeyMinting with ApkamSigning {
           'verifies');
     }
 
-    await _publish(_strongestFirst([...minted, ...keeping], (key) => key.algorithm),
-        retiring: superseded);
-    for (final key in minted) {
-      await _file(io, atSign, key);
-    }
-    for (final key in superseded) {
-      await _retire(io, atSign, key.algorithm);
-    }
+    // Publish and file are one critical section, not two steps that happen to
+    // run in order. The window between them is exactly where another writer in
+    // this process composes from a keyfile that does not yet hold the minted
+    // key, takes the authentication-key fallback, and overwrites what was just
+    // advertised. Holding the lock across both means such a writer composes
+    // after the filing and finds nothing to change.
+    await serialiseApskWrite(atClient, () async {
+      await _publish(
+          _strongestFirst([...minted, ...keeping], (key) => key.algorithm),
+          retiring: superseded);
+      for (final key in minted) {
+        await _file(io, atSign, key);
+      }
+      for (final key in superseded) {
+        await _retire(io, atSign, key.algorithm);
+      }
+    });
     return (
       minted: missing,
       retired: [for (final key in superseded) key.algorithm]
@@ -284,7 +294,10 @@ class SigningKeyMinting with ApkamSigning {
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
 
     if (atLookUp?.enrollmentId == null) {
-      await publishPublicSigningKey(value: apskValueOf(entries));
+      // The unlocked variant: reconcileSigningKeys already holds the lock for
+      // this whole publish-then-file section, and acquiring it again here would
+      // wait on a chain entry only this call chain can complete.
+      await publishPublicSigningKeyLocked(value: apskValueOf(entries));
       return;
     }
     // Which FIELD carries the advertisement is the same question as which

@@ -9522,10 +9522,44 @@ could not give", which is a true objection to a *cross-process* guarantee and
 not to closing this one. That option was dismissed while the race was believed
 to need an application call racing `startup()`; it does not.
 
-So the fix space is: an in-process ordering fix that closes the measured
-failure without claiming a cross-process guarantee — not a record guard, which
-guard 3 showed cannot be stated over `primary`. **Choosing between the shapes
-of that is open and is the next decision on this ruling.**
+### 102.2 The in-process window is closed by serialising the writers (2026-08-17)
+
+gkc ruled the fix an **in-process serialisation**, and it is built.
+`serialiseApskWrite(client, action)` in `apkam_signing.dart` chains every
+`_apsk` write one client makes, and `SigningKeyMinting.reconcileSigningKeys`
+holds it across **publish, file and retire together** — one critical section,
+not three steps that happen to run in order. A writer arriving mid-mint composes
+after the filing and finds nothing to change.
+
+**It says only what it can keep.** 102 rejected serialising because "both
+triggers are publicly exported, so it would read as a guarantee it could not
+give". That objection is about a *cross-process* guarantee and it still stands:
+the dartdoc states in-process-only outright, and a second client of the same
+atSign in another process remains this ruling's accepted window. What changed is
+that the race was believed to need an application call racing `startup()` — it
+does not, and the ordinary approver flow hits it every run.
+
+**Re-entrancy is the trap and is handled explicitly.** The mint holds the lock
+and then publishes, so `publishPublicSigningKey` (which acquires) is split from
+`publishPublicSigningKeyLocked` (which does not); the mint calls the latter.
+Acquiring twice from one call chain would wait on a chain entry only that chain
+can complete.
+
+**Proven live, same arm, before and after:**
+
+| | updates to `_apsk.primary` | final value | `no algorithm in common` | test |
+|---|---|---|---|---|
+| before | 4 | bare RSA | 2 | **fail** |
+| after | 2 | **the `mldsa65` array** | 0 | **pass** |
+
+⚠️ The before-row's updates 3 and 4 were to the two *enrollments'* records, not
+to `primary` — an earlier reading of this evidence stripped the record name and
+counted them as `primary`'s. The primary record takes four writes before and two
+after.
+
+Unit cover is `apsk_write_serialisation_test.dart`; removing the lock reddens
+the ordering test with the exact interleave, `mint:enter, signer:enter,
+signer:exit, mint:exit`.
 
 ## 103. An envelope says what it is for, and a verifier says what it wants (2026-08-15)
 

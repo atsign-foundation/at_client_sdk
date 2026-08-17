@@ -1,3 +1,5 @@
+import 'dart:async' show Completer;
+
 import 'package:at_auth/at_auth.dart' show AtKeys;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
@@ -11,6 +13,49 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show signingAlgoOf;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
+
+/// The tail of each client's `_apsk` write chain, so [serialiseApskWrite] can
+/// queue behind whatever is already running for that client.
+///
+/// Keyed on the [AtClient] rather than the atSign: two clients of one atSign
+/// are two enrollments writing two different records.
+final Expando<Future<void>> _apskWriteChain = Expando('apskWriteChain');
+
+/// Runs [action] with no other `_apsk` write for [client] interleaved.
+///
+/// **This is in-process only, and deliberately claims nothing more.** A minter
+/// publishes its new key before it files it, so that no envelope is ever signed
+/// under a key the advertisement does not name. Between those two steps the
+/// keyfile does not yet hold what was advertised, so any other writer composing
+/// from the keyfile sees no signing key, takes the authentication-key fallback,
+/// and overwrites the advertisement with it. Measured 2026-08-17: the approver's
+/// own envelope signer overwrote its own mint 20 ms later, and the enrollment it
+/// was approving then failed because the enrollee could find no algorithm in
+/// common.
+///
+/// Serialising here closes that, because both writers are this process's. It
+/// does **not** close the same window against a writer in another process, and
+/// no caller should read it as doing so — the record has no single owner, and a
+/// rule stated over it fails for that reason (see the `_apsk` fallback ruling in
+/// `docs/projects/pq/`). What remains uncovered is a genuinely concurrent second
+/// client of the same atSign, which is the case that ruling accepted.
+///
+/// A failed predecessor never wedges the chain: its error is the caller's to
+/// see, not the next writer's to inherit.
+Future<T> serialiseApskWrite<T>(
+    AtClient client, Future<T> Function() action) async {
+  final previous = _apskWriteChain[client];
+  final release = Completer<void>();
+  _apskWriteChain[client] = release.future;
+  if (previous != null) {
+    await previous.catchError((Object _) {});
+  }
+  try {
+    return await action();
+  } finally {
+    release.complete();
+  }
+}
 
 mixin ApkamSigning {
   AtClient get atClient;
@@ -47,7 +92,19 @@ mixin ApkamSigning {
   /// advertise a key before filing it: [publicSigningKeyValue] is composed from
   /// what the keyfile holds, and a minter publishes first precisely so that no
   /// envelope is ever signed under a key the advertisement does not name.
-  Future publishPublicSigningKey({String? value}) async {
+  ///
+  /// Serialised against every other `_apsk` write this process makes for this
+  /// client — see [serialiseApskWrite] for what that does and does not promise.
+  /// The composition happens **inside** the lock, which is the point: composing
+  /// outside it would read a keyfile a mint had not finished writing and then
+  /// publish the fallback it computed from it.
+  Future publishPublicSigningKey({String? value}) =>
+      serialiseApskWrite(atClient, () => publishPublicSigningKeyLocked(value: value));
+
+  /// [publishPublicSigningKey] without taking the lock, for a caller that
+  /// already holds it. Taking it twice from one call chain would deadlock: the
+  /// second acquire waits on a chain entry only the first can complete.
+  Future publishPublicSigningKeyLocked({String? value}) async {
     value ??= await publicSigningKeyValue;
 
     String? published;
