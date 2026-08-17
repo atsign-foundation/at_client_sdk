@@ -212,12 +212,35 @@ cannot drift on this path. `EnvelopeSigning.wrapAndSign` resolves
 composed from the same getter, which is what `signingKeys`' own dartdoc claims
 ("what signs and what is advertised are one rule and cannot drift apart").
 
-**So the cause is elsewhere, and it is unknown.** ⚠️ The next step is a
-MEASUREMENT, not more reading — three hypotheses have now been retired here on
-inference alone. Re-run the arm with the approver built `postQuantum`, and read
-what `public:_apsk.primary.a.__e@<atSign>` actually **holds on the atServer** at
-the moment the verifier refuses, from the atServer's own state rather than from
-the client's account of what it published.
+**The cause, measured 2026-08-17 — it is a CLOBBER, in order, both writes
+remote.** The arm was re-run with the approver built `postQuantum`, and the
+atServer's own log for `@alice🛠` was read rather than the client's account of
+it. The record starts absent (`AT0015 … does not exist in keystore`) and then
+takes **four** updates:
+
+| # | what the update wrote |
+|---|-----------------------|
+| 1 | a bare RSA public key (`MIIBIjANBgkqhkiG9w0B…`) |
+| 2 | a bare RSA public key |
+| 3 | **`{"v":1,"keys":[{…,"alg":"mldsa65",…}]}`** — the mint's republish |
+| 4 | **a bare RSA public key** — overwrites 3 |
+
+So the ML-DSA advertisement *is* published, and is then overwritten by a later
+writer with the RSA fallback. A remote read taken **after** both republishes
+returned the bare RSA key, which is what the verifier then refuses against for
+the whole 30s. Nothing here is a transport problem; the final state is simply
+the wrong value.
+
+**Which writer, and why — hypothesis, not yet measured.** The client log orders
+them: `SigningKeyMinting` republishes at `…55.077` (update 3), then
+`AtClientEnvelopeSigner` republishes at `…55.123` (update 4). The mint logs
+*"Minted mldsa65 signing key(s) for primary; **publishing before filing**"*, and
+`heldSigningKeys` composes from the **keyfile**, falling back to the APKAM
+authentication key — RSA — when the keyfile holds nothing for this enrollment.
+That gives a window in which a second component composes the advertisement from
+a keyfile the mint has not written yet and publishes the fallback over the real
+answer. **To confirm, observe `heldSigningKeys` at update 4's instant** — do not
+build on this paragraph until something has.
 
 ⚠️ This is **not** [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor).
 That one is a refused internal write killing the monitor; this one is an
