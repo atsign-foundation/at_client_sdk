@@ -191,12 +191,33 @@ correctly, because there is no enrollment record to update. Yet a verifier
 reading `public:_apsk.primary.a.__e@alice🛠` still saw `rsa2048` throughout the
 30s.
 
-**Open, and it is one question:** by what transport does the `primary`
-republish reach the atServer? A local-first put reaches it only when sync gets
-round to it, while the envelope it authenticates goes out remote-first with a
-notification — a value and the key that verifies it travelling by different
-transports, which is a race by construction. Establish whether the republish
-lands remotely at all before choosing a fix.
+⛔ **The transport question is ANSWERED, and the answer is no — do not
+re-derive it.** This entry used to say the one open question was "by what
+transport does the `primary` republish reach the atServer? A local-first put
+reaches it only when sync gets round to it … a race by construction." Read
+2026-08-17: **every leg of this path is remote-first.**
+
+| leg | where | routing |
+|-----|-------|---------|
+| the writer's pre-read | `apkam_signing.dart:56` | `useRemoteAtServer = true` |
+| the republish itself | `apkam_signing.dart:73` | `useRemoteAtServer = true` |
+| all five verifier reads | `pq_signing_chain.dart` 224, 272, 403, 465, 637 | `useRemoteAtServer = true` |
+
+So there is no value-and-pointer-on-different-transports race here, and no fix
+should be designed around one.
+
+**Also ruled out by reading, not by measurement:** signing and advertising
+cannot drift on this path. `EnvelopeSigning.wrapAndSign` resolves
+`await signingKeys` (`envelope_signing.dart:56`) and the advertisement is
+composed from the same getter, which is what `signingKeys`' own dartdoc claims
+("what signs and what is advertised are one rule and cannot drift apart").
+
+**So the cause is elsewhere, and it is unknown.** ⚠️ The next step is a
+MEASUREMENT, not more reading — three hypotheses have now been retired here on
+inference alone. Re-run the arm with the approver built `postQuantum`, and read
+what `public:_apsk.primary.a.__e@<atSign>` actually **holds on the atServer** at
+the moment the verifier refuses, from the atServer's own state rather than from
+the client's account of what it published.
 
 ⚠️ This is **not** [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor).
 That one is a refused internal write killing the monitor; this one is an
