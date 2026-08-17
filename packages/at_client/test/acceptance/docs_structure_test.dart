@@ -13,20 +13,14 @@
 ///
 /// - the ledger index and the ruling bodies stay in step, both directions;
 /// - no ruling body creeps back into the live ledger;
-/// - each live file stays under a stated ceiling, so the way to add is to
-///   demote something rather than to append;
 /// - the catalogue's status table keeps saying what the scenarios do;
 /// - a ruling amended in its body says so in the index;
 /// - the plan may not claim DONE for a use case the catalogue has not proven;
 /// - no doc licenses itself to leave a falsified claim standing.
 ///
-/// **A ceiling breach is not a failure of this test.** It means the file has
-/// earned a demotion — move the finished part to `detail/`. Raising a ceiling
-/// is legitimate and deliberate, and the edit is the review.
-///
 /// ⚠️ **Correctness outranks every structural rule here, and only the
 /// structural ones can be asserted.** Nothing in this file can tell whether a
-/// paragraph is true, so the rails go red for a broken link, a ceiling breach
+/// paragraph is true, so the rails go red for a broken link
 /// or a missing row, and stay green for a sentence the tree falsified three
 /// commits ago. That asymmetry taught exactly the wrong lesson once: rulings
 /// 104 and 105 were edited at every step, always by appending a layer under
@@ -62,23 +56,13 @@ Set<String> _headingSlugs(String markdown) => RegExp(r'^#{1,6}\s+(.*?)\s*$',
     .map((m) => _slug(m.group(1)!))
     .toSet();
 
-/// The live files and the most lines each may hold.
+/// The live files.
 ///
-/// Measured at the split and given modest headroom. They are deliberately not
-/// generous: a ceiling that nothing ever reaches enforces nothing.
-const _ceilings = <String, int>{
-  'decisions.md': 300,
-  'implementation-plan.md': 1000,
-  'design.md': 2450,
-  'roadmap.md': 450,
-  'seal-spec.md': 400,
-};
-
-/// The live files. A ceiling is a separate question — `acceptance.md` has none
-/// (gkc, 2026-08-16: the catalogue is the bar for "D1 is done", so it is as
-/// long as the use cases require and a length limit would argue for leaving
-/// one out) — but every live file is still checked for the rules that are
-/// about correctness rather than size.
+/// These carried per-file line ceilings until 2026-08-17 (gkc). They are gone:
+/// a ceiling made *length* the trigger for demotion, when the real trigger is
+/// that something has **finished**. The live/detail split is still enforced by
+/// the rules below — a ruling body may not sit in the live ledger, an index row
+/// must resolve both ways — and those are about correctness, not size.
 const _liveFiles = <String>[
   'decisions.md',
   'implementation-plan.md',
@@ -89,6 +73,56 @@ const _liveFiles = <String>[
 ];
 
 void main() {
+  group('no LINKED heading is duplicated', () {
+    // ⚠️ [_headingSlugs] returns a Set, so a heading written twice in one file
+    // collapses and every other check here passes. That is not cosmetic: GitHub
+    // resolves a duplicated anchor to the FIRST occurrence and suffixes the
+    // rest, so the second copy is unreachable — a demotion that appends a body
+    // the file already holds silently orphans it, and a link lands on whichever
+    // copy happens to be earlier. Landed 2026-08-17 after a demotion did
+    // exactly that to `14.7` and a cold read found it.
+    //
+    // Scoped to slugs something actually LINKS to. A bare duplicate is
+    // harmless, and the ledger legitimately repeats sub-headings like
+    // "The ruling" under many rulings — failing on those would demand dozens of
+    // indefensible renames, and a rail that fires for an indefensible reason
+    // gets deleted rather than obeyed.
+    for (final file in [
+      ..._liveFiles,
+      'detail/decisions.md',
+      'detail/implementation-plan.md',
+    ]) {
+      test('$file duplicates no slug that is linked', () {
+        final headings = RegExp(r'^#{1,6}\s+(.*?)\s*$', multiLine: true)
+            .allMatches(_read(file))
+            .map((m) => _slug(m.group(1)!))
+            .toList();
+        final seen = <String>{};
+        final duplicated = headings.where((h) => !seen.add(h)).toSet();
+        if (duplicated.isEmpty) return;
+
+        // Every anchor referenced anywhere in the doc set, target file
+        // unresolved — a slug is "linked" if any document names it. Coarse on
+        // purpose: it over-reports rather than missing the case that matters.
+        final linked = <String>{};
+        for (final f in _pq()
+            .listSync(recursive: true)
+            .whereType<File>()
+            .where((f) => f.path.endsWith('.md'))) {
+          linked.addAll(RegExp(r'\]\([^)]*#([\w-]+)\)')
+              .allMatches(f.readAsStringSync())
+              .map((m) => m.group(1)!));
+        }
+
+        expect(duplicated.intersection(linked), isEmpty,
+            reason: 'these slugs appear more than once in $file AND are link '
+                'targets, so every link reaches the first copy and the rest '
+                'are unreachable. Merge the copies — diff them first, because '
+                'the later one is often the fresher');
+      });
+    }
+  });
+
   group('the ledger index and its bodies stay in step', () {
     test('every index row resolves to a ruling body', () {
       final index = _read('decisions.md');
@@ -200,33 +234,6 @@ void main() {
   });
 
   group('the live files stay live', () {
-    test('every live file is under its ceiling', () {
-      final over = <String>[];
-      for (final entry in _ceilings.entries) {
-        final lines = _read(entry.key).split('\n').length;
-        if (lines > entry.value) {
-          over.add('${entry.key}: $lines lines, ceiling ${entry.value}');
-        }
-      }
-      expect(over, isEmpty,
-          reason: 'a live doc has grown past its ceiling. The fix is to demote '
-              'the finished part to detail/, not to append here - accretion is '
-              'exactly what produced a 10,126-line ledger and a 4,039-line '
-              'plan. Raising a ceiling deliberately is fine, and that edit is '
-              'the review');
-    });
-
-    test('every ceiling names a file that exists', () {
-      // Otherwise a rename silently retires a ceiling, and the guard goes on
-      // passing while the file it was written for grows unwatched.
-      final missing = _ceilings.keys
-          .where((f) => !File('${_pq().path}/$f').existsSync())
-          .toList();
-      expect(missing, isEmpty,
-          reason: 'a ceiling names a file that is not there. If it was '
-              'renamed, move the ceiling with it');
-    });
-
     test('the detail files exist and hold the bulk', () {
       for (final f in const ['decisions.md', 'implementation-plan.md']) {
         final detail = File('${_pq().path}/detail/$f');

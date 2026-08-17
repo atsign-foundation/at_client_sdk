@@ -105,10 +105,9 @@ catalogue executable-but-skipped turns an 800-line document into a count.
   broken guard instead of a failed scenario.
   `docs_structure_test.dart` guards the shape of `docs/projects/pq/` — that the
   ledger index and the ruling bodies in `detail/` stay in step both ways, that
-  no body creeps back into the live ledger, that each live doc stays under a
-  stated line ceiling, and that the catalogue's status table keeps saying what
-  the scenarios do. A ceiling breach means the file has earned a demotion to
-  `detail/`, not that the guard is wrong.
+  no body creeps back into the live ledger, that no linked heading is
+  duplicated, and that the catalogue's status table keeps saying what the
+  scenarios do.
 - **Adding a file here means declaring it.** `manifest.dart` lists the scenario
   files and the guard files, and the row counts below are computed from the
   scenario list alone. A `*_test.dart` that is in neither list turns
