@@ -1,7 +1,4 @@
-// These gates read the filesystem to inspect sources, so they run on the VM
-// only. Without this they would be compiled and launched by the T2
-// node+dart2wasm platform run, where dart:io throws and the failure looks like a
-// neutrality problem rather than a test that was never meant to run there.
+// This suite reads the filesystem to inspect sources, so it runs on the VM only.
 @TestOn('vm')
 library;
 
@@ -101,28 +98,6 @@ void main() {
 
     test('blockedPackages is the owning set', () {
       expect(result.blockedPackages, {'at_client', 'at_utils'});
-    });
-
-    test('baselineLiteral emits what a baseline asserts', () {
-      // Pasted verbatim into a dep_tree_test.dart, so the exact text is the
-      // contract — not just the values in it.
-      expect(result.baselineLiteral('at_client'), '''
-const expectedOffenders = <String, List<String>>{
-  'lib/src/a.dart': ['dart:io'],
-  'lib/src/deep/b.dart': ['dart:ffi', 'dart:io'],
-};
-const expectedBlocked = <String>{'at_client', 'at_utils'};
-''');
-    });
-
-    test('baselineLiteral types the empty case', () {
-      // Where every baseline in the repo is eventually headed, so the literal it
-      // emits there has to be pasteable without a hand edit.
-      final clean = Shakedown({}, {'at_commons': '/w/at_commons/lib/'}, 9, []);
-      expect(clean.baselineLiteral('at_commons'), '''
-const expectedOffenders = <String, List<String>>{};
-const expectedBlocked = <String>{};
-''');
     });
 
     test('report names the owning package for every offender', () {

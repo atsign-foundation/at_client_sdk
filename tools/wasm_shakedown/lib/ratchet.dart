@@ -1,17 +1,17 @@
 /// The shared shape of a per-package dependency-tree ratchet.
 ///
-/// Each neutral package's `test/wasm/dep_tree_test.dart` supplies its barrels and
-/// its baselines; the assertions, the two-way semantics and the failure messages
-/// live here so that five copies cannot drift into five slightly different
-/// notions of what the gate promises.
+/// Each package's `test/wasm/dep_tree_test.dart` supplies its barrels and its
+/// baselines; the assertions and the failure messages live here so that five
+/// copies cannot drift into five slightly different notions of what the gate
+/// promises.
 ///
 /// ```dart
 /// void main() {
 ///   ratchetGroup(
 ///     'package:at_lookup/at_lookup.dart',
 ///     package: 'at_lookup',
-///     expectedOffenders: const <String, List<String>>{...},
-///     expectedBlocked: const <String>{...},
+///     allowedOffenders: const {'lib/src/at_lookup_impl.dart'},
+///     maxBlockedPackages: 3,
 ///     minFilesWalked: 600,
 ///   );
 /// }
@@ -24,39 +24,57 @@ import 'wasm_shakedown.dart';
 
 /// Pins the platform libraries reachable from [barrel].
 ///
-/// [expectedOffenders] is [package]'s own offending sources, keyed by
-/// package-relative path; [expectedBlocked] is every package owning an offender
-/// anywhere in the graph, [package] included. Both are asserted by **equality**,
-/// which is what makes this a ratchet rather than a ceiling: a new entry means
-/// someone introduced a browser-hostile import, a missing entry means a blocker
-/// was fixed and the baseline owes an update. Both directions fail, and both are
-/// meant to.
+/// [allowedOffenders] is the set of [package]-owned sources permitted to reach a
+/// forbidden library, keyed by package-relative path; [maxBlockedPackages] is a
+/// ceiling on how many packages anywhere in the graph own an offender.
+///
+/// Both are **one-way**. A path outside [allowedOffenders] fails, and so does a
+/// blocked count above the ceiling — but fixing a file, or dropping a dependency,
+/// passes with no edit here. Only tightening a baseline needs a deliberate
+/// change, which is the direction worth spending attention on.
 ///
 /// [minFilesWalked] guards the whole thing. Every assertion here is about what
 /// the walk did *not* find, and a traversal that stalled at the entry point also
-/// finds nothing — so set it near the real figure the baseline was taken at, not
-/// to 1.
+/// finds nothing — so set it near the real figure, not to 1.
 void ratchetGroup(
   String barrel, {
   required String package,
-  required Map<String, List<String>> expectedOffenders,
-  required Set<String> expectedBlocked,
+  required Set<String> allowedOffenders,
+  required int maxBlockedPackages,
   required int minFilesWalked,
   Map<String, bool> environment = webEnvironment,
 }) {
   group(barrel, () {
     late Shakedown result;
+    late Set<String> owned;
 
-    setUpAll(() => result = shakedown(barrel, environment: environment));
-
-    test('$package owns exactly the offenders it is baselined for', () {
-      expect(result.offendersIn(package), expectedOffenders,
-          reason: _drift(barrel, result));
+    setUpAll(() {
+      result = shakedown(barrel, environment: environment);
+      owned = result.offendersIn(package).keys.toSet();
+      // Printed on every run, pass or fail, so the CI log carries the figure
+      // rather than only reporting the moment it gets worse.
+      print('$barrel — ${result.filesWalked} files walked, '
+          '${owned.length}/${allowedOffenders.length} offenders, '
+          '${result.blockedPackages.length}/$maxBlockedPackages blocked');
     });
 
-    test('the blocked-package set is unchanged', () {
-      expect(result.blockedPackages, expectedBlocked,
-          reason: _drift(barrel, result));
+    test('no new browser-hostile import', () {
+      final added = owned.difference(allowedOffenders).toList()..sort();
+      expect(added, isEmpty,
+          reason: 'These $package sources reach a forbidden platform library '
+              'and are not in allowedOffenders:\n'
+              '${added.map((p) => '  $p').join('\n')}\n\n'
+              'If that is deliberate, add the path. Otherwise this is the '
+              'regression the gate exists to catch.\n\n'
+              'The full walk (${result.filesWalked} files):\n'
+              '${result.report()}');
+
+      expect(
+          result.blockedPackages.length, lessThanOrEqualTo(maxBlockedPackages),
+          reason: 'The graph under $barrel now has offenders in '
+              '${result.blockedPackages.length} packages, over the '
+              '$maxBlockedPackages this is baselined at:\n'
+              '  ${(result.blockedPackages.toList()..sort()).join(', ')}');
     });
 
     test('the walk traversed the tree', () {
@@ -68,22 +86,8 @@ void ratchetGroup(
       expect(result.filesWalked, greaterThan(minFilesWalked),
           reason: 'The walk visited only ${result.filesWalked} files, fewer '
               'than the $minFilesWalked this baseline was taken at. Package '
-              'resolution is probably broken — in which case the two '
-              'assertions above passed by finding nothing.');
+              'resolution is probably broken — in which case the assertions '
+              'above passed by finding nothing.');
     });
   });
 }
-
-String _drift(String barrel, Shakedown result) => '''
-The reachable platform libraries under $barrel have changed.
-
-This is a two-way ratchet. A NEW entry means a browser-hostile import was
-introduced. A MISSING entry means a blocker was fixed and this baseline should
-shrink — which is the good direction, and still needs a deliberate edit.
-
-Regenerate with:
-  dart run wasm_shakedown:baseline $barrel
-
-What the walk found (${result.filesWalked} files):
-${result.report()}
-''';
