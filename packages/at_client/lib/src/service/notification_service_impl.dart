@@ -6,6 +6,7 @@ import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart'
     show
+        CryptoConfig,
         FiledNskeyPrivate,
         NskeyPrivateUnavailableException,
         SignalsPrivateFiling;
@@ -90,8 +91,19 @@ class NotificationServiceImpl extends NotificationService {
   /// Subscribed at construction rather than when the first notification parks:
   /// the stream is broadcast and therefore not replayed, so a subscription
   /// taken after the read that failed could miss the very filing it needs.
+  /// ⚠️ Resolves through [CryptoConfig.forClient], **not**
+  /// `getPreferences().crypto`. An app that names no config gets the era
+  /// default, whose ring is supplied by the client's PQ bootstrap — the raw
+  /// preference carries none, so reading it directly finds null and silently
+  /// subscribes to nothing. Measured live: notifications parked correctly and
+  /// were never re-driven, because this had never subscribed.
+  ///
+  /// Idempotent and re-attempted at park time: the bootstrap wires the ring
+  /// asynchronously, so a service constructed first would otherwise never
+  /// subscribe at all.
   void _listenForFilings() {
-    final ring = atClient.getPreferences()?.crypto.keyRing;
+    if (_filingSubscription != null) return;
+    final ring = CryptoConfig.forClient(atClient).keyRing;
     if (ring is! SignalsPrivateFiling) return;
     _filingSubscription =
         (ring as SignalsPrivateFiling).privatesFiled.listen(_reDriveParked);
@@ -137,6 +149,10 @@ class NotificationServiceImpl extends NotificationService {
       namespace: e.namespace,
       nskeyKid: e.nskeyKid
     );
+    // The ring may only have been wired after this service was built, and a
+    // park with nothing listening for the filing is a notification held until
+    // its ttl and then dropped.
+    _listenForFilings();
     final entries = _parked.putIfAbsent(key, () => []);
     entries.add(_ParkedNotification(n, config, controller, DateTime.now()));
     parkedTotal++;

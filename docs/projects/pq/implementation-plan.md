@@ -118,7 +118,36 @@ that "it arrived" cannot be mistaken for "it was parked and released".
    and the sender after** — on the hypothesis that `currentPublic` being
    local-first hid the new namespace from the sender. Also still legacy.
 
-⛔ **STOP GUESSING. The one thing to measure first:** in all four runs the
+✅ **The cause was found, and the park is now PROVEN LIVE.** The era default is
+`readsNskeyWritesLegacy` — it reads the nskey path and **writes legacy** — so a
+`notify` that does not pass `cryptoProviderId: symmetricAesGcmCryptoProviderId`
+goes out legacy and the park is never reached. UC-A3.4's test passes it on one
+line; four runs were spent not reading that line. With it, the client log shows
+`providerId":"at/nskey/XWING/AES/GCM"` and, decisively:
+
+```
+Parked notification @alice🛠:parked….nskeyparkb…
+```
+
+**Still not proven: the RE-DRIVE.** With the park entered and the filing
+released, the notification was not delivered within 60 s. One real product bug
+was found and fixed on the way — `_listenForFilings` read
+`getPreferences().crypto.keyRing`, the **raw** preference, where an app that
+names no config gets the era default whose ring the PQ bootstrap supplies; it
+found null and silently subscribed to nothing. It now resolves through
+`CryptoConfig.forClient` and re-attempts at park time. That fix is committed;
+it did not make the re-drive land.
+
+**The next measurement, and it is not a guess.** `NskeyPrivateFiling.store()`
+logs nothing on success, so "no filing log" is equally consistent with a silent
+success and with never being reached — the instrument cannot separate them.
+Instrument `store()` to log on the success path, then answer, in this order:
+(1) is `store()` reached for the pulled private; (2) does `privatesFiled` have a
+listener at that instant. The pull itself is confirmed — *"Asked the other
+enrollments for the nskey private"* is in the log and the `__ssenv` envelope
+arrives.
+
+⛔ **Superseded — kept only so it is not re-derived:** in all four runs the
 notification went out under **`legacy`** — `providerId":"legacy"` in the client
 log, zero decrypt failures, the monitor receiving it fine. So the park is never
 reached because nothing PQ is ever sent. UC-A3.4's live test asserts
