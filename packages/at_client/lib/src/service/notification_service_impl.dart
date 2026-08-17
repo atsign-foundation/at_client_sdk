@@ -97,10 +97,20 @@ class NotificationServiceImpl extends NotificationService {
         (ring as SignalsPrivateFiling).privatesFiled.listen(_reDriveParked);
   }
 
-  /// How many notifications are held waiting for a key.
+  /// How many notifications are held waiting for a key, right now.
   @visibleForTesting
   int get parkedCount =>
       _parked.values.fold<int>(0, (sum, entries) => sum + entries.length);
+
+  /// How many have been parked over this service's life.
+  ///
+  /// Cumulative because [parkedCount] is zero again as soon as the re-drive
+  /// runs, so a test that only checked it could not tell a notification that
+  /// was parked and released from one that never needed parking. A live test
+  /// of this path is racing a ~100 ms window, and without this it goes green
+  /// whenever it loses the race — which is the silent failure to guard.
+  @visibleForTesting
+  int parkedTotal = 0;
 
   /// Transforms [n] for one subscriber and delivers it if the regex matches.
   ///
@@ -129,6 +139,7 @@ class NotificationServiceImpl extends NotificationService {
     );
     final entries = _parked.putIfAbsent(key, () => []);
     entries.add(_ParkedNotification(n, config, controller, DateTime.now()));
+    parkedTotal++;
     logger.info('Parked notification ${n.key}: waiting for the nskey private '
         'for ${key.owner}:${key.namespace} generation ${key.nskeyKid}');
     _evictParkedOverBounds();

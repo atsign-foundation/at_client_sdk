@@ -85,10 +85,35 @@ controls that keep it honest (a failure no filing can fix is dropped rather
 than parked, and a filing for a *different* generation releases nothing).
 Removing the park reddens three of them, each quoting its own reason.
 
-⚠️ **Not yet proven live.** The unit rows drive the seam with a provider that
-refuses until told otherwise; nothing has yet observed a real conveyed private
-releasing a real parked notification. UC-A3.4's live test closes the startup
-window by awaiting `startupComplete`, so it does **not** exercise this path.
+⚠️ **Not proven live, and a live proof needs something that does not exist
+yet.** The unit rows drive the seam with a provider that refuses until told
+otherwise; nothing has observed a real conveyed private releasing a real parked
+notification. UC-A3.4's live test closes the startup window by awaiting
+`startupComplete`, so it does not exercise this path.
+
+**Two attempts, both vacuous, and what they establish.** A live file was written
+and run twice on 2026-08-17:
+
+1. **Minting the nskey *after* the enrollments** — intended to leave the
+   receiver without the private. It leaves the *sender* without a published
+   nskey too, so the send falls back to `legacy`, the receiver opens it
+   trivially, and the run is green with the park never entered.
+2. **Minting before, and not awaiting the receiver's `startupComplete`** — the
+   originally measured shape. Still green with `parkedTotal == 0`: the test's
+   own positive control (waiting for the monitor's stats notification to prove
+   the monitor is live) takes seconds, and the receiver's startup finishes
+   inside it. **The setup closes the very gap the test exists to open.**
+
+The window is ~116 ms and sits between an `unawaited` startup's second step and
+a notification, so no arrangement of ordinary test setup reliably lands inside
+it. ⚠️ **Both runs would have been recorded as live proof but for
+`NotificationServiceImpl.parkedTotal`**, a cumulative counter added precisely so
+that "it arrived" cannot be mistaken for "it was parked and released".
+
+**Owed: a decision.** A live proof needs a deterministic seam — a test-only
+delay on the filing, or an injectable clock — and adding one to production code
+for a test is a call worth making explicitly rather than quietly. The attempt is
+not in the tree; it was red and would have been a pack failure.
 
 **The three items, as recorded:**
 
