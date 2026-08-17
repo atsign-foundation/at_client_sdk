@@ -1,4 +1,13 @@
 ## 3.14.1
+- fix: a client now keeps sweeping for envelopes addressed to it, rather than
+  sweeping once at start. `PairwiseSecretSharing.startListening()` had no
+  production caller, and `_handleRequestPayload` — which answers another
+  enrollment's request for a secret — is reachable only from `sweepOnce`. So a
+  request arriving after a client's start was seen by nobody, and no read-miss
+  self-heal could complete for anyone. `PqClientBootstrap` starts the listener
+  as a startup step; its `stop()` tears it down, so a stopped client does not
+  leave a periodic timer, a sync listener and a notification subscription
+  running for the life of the process.
 - fix: a client no longer holds two `NskeyPrivateFiling` objects.
   `collectConveyedKeyMaterial` built its own unconditionally, so the object that
   actually files conveyed privates was not the one the key ring exposes. Both

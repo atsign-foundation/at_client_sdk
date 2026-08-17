@@ -224,6 +224,10 @@ class PqClientBootstrap {
   /// completes.
   void stop() {
     _stopped = true;
+    // Paired with [_startEnvelopeListener]. Without this a stopped client keeps
+    // a periodic timer, a sync listener and a notification subscription alive
+    // for the life of the process.
+    sharing.stopListening();
   }
 
   /// Runs the ordered steps. Fired unawaited by the client's init;
@@ -236,6 +240,7 @@ class PqClientBootstrap {
       for (final step in [
         _hydrateHeldSecrets,
         _collectConveyedKeys,
+        _startEnvelopeListener,
         _mintInUseSigningKeys,
         _seedNamespaceKeys,
         _requestRootPrivate,
@@ -299,6 +304,29 @@ class PqClientBootstrap {
       _logger.warning('Could not prime what $_atSign holds for answering '
           'other enrollments; their pulls go unanswered until the next '
           'start retries: $e, $st');
+    }
+  }
+
+  /// Keeps sweeping for envelopes addressed to this client, rather than the
+  /// single sweep [_collectConveyedKeys] does at start.
+  ///
+  /// ⚠️ **This is what makes a read-miss self-heal possible at all, and not
+  /// only for this client.** `_handleRequestPayload` — the code that answers
+  /// another enrollment's request for a secret — is reachable only from
+  /// `sweepOnce`. With no listener running, a client's only sweep is the
+  /// one-shot at its own start, so a request arriving afterwards is never seen
+  /// and never answered. Measured live 2026-08-17: a receiver asked for an
+  /// nskey private, the holder never swept again, and the ask went unanswered
+  /// for the life of the test.
+  ///
+  /// Stopped by [stop], which the client's teardown calls.
+  Future<void> _startEnvelopeListener() async {
+    try {
+      await sharing.startListening();
+    } catch (e) {
+      _logger.warning('Could not start the envelope listener for $_atSign; '
+          'this client will not answer other enrollments\' secret requests '
+          'and will not pick up envelopes that arrive later: $e');
     }
   }
 

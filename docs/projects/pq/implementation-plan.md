@@ -158,19 +158,31 @@ minted (the receiver has already filed by then).
    had each subscribed successfully to a different one. The bootstrap now passes
    `ring:` through and the sweep files through the ring's filing.
 
-⛔ **The RE-DRIVE half cannot be proven live yet, and this is why.** With the
-park entered and the hold released, the private never arrives. The read-miss
-self-heal broadcasts a request via `requestSecretsFromNamespace`, and
-**`PairwiseSecretSharing.startListening()` — the thing that answers it — has no
-production caller** (item 3 below, now measured rather than noted). In the run:
-the ask is logged once, no `__ssenv` for that namespace ever reaches the
-receiver, and `store()` is never entered for it there — only on the approver,
-which minted it, and the sender, which had it conveyed at approval.
+⛔ **The RE-DRIVE half is not proven live, and chasing it found a third defect
+one layer down.**
 
-**So the self-heal cannot complete for anyone**, which is a larger claim than
-14.30 and is why item 3 is not the small tidy-up it reads as. The re-drive is
-unit-proven (`notification_park_test.dart`) and waits on that wiring for a live
-proof.
+**Item 3 was real and is now fixed.** `PairwiseSecretSharing.startListening()`
+had no production caller, and `_handleRequestPayload` — the code that answers
+another enrollment's request for a secret — is reachable **only** from
+`sweepOnce`. So a client's only sweep was the one-shot at its own start: a
+request arriving afterwards was seen by nobody and **no read-miss self-heal
+could complete for anyone**. `PqClientBootstrap` now starts the listener as a
+startup step and `stop()` tears it down, so a stopped client does not leak a
+timer, a sync listener and a subscription.
+
+⚠️ **Necessary, and measured NOT sufficient.** With the listener running the ask
+still goes out and the requesting client's `store()` is still never entered for
+that generation, so at least one more layer of the pull is unfinished. What is
+known: the request is sent (*"Asked the other enrollments … the answer is filed
+when a holder replies"*), and there is heavy `__ssenv` traffic for the namespace
+— 135 events in the run — so envelopes are moving. What has **not** been
+established is whether the holder sees the request envelope at all, and if it
+does, why it does not reply. ⛔ Do not assume it is the sweep's local-vs-remote
+choice; that is the obvious next hypothesis and it is untested.
+
+**The re-drive stays unit-proven** (`notification_park_test.dart`). The live row
+proves the park, against a real post-quantum notification and a generation the
+client genuinely lacks, and says in the file why it stops there.
 
 ### 14.31 A refused watermark write permanently disables the monitor
 

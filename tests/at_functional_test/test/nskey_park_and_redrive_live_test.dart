@@ -180,23 +180,26 @@ void main() {
         reason: 'and it must not have been delivered yet: a value handed over '
             'before its key was filed would be ciphertext');
 
-    // ⛔ **The re-drive half is NOT asserted here, and that is a finding rather
-    // than a gap in this test.** Releasing the hold does not deliver the
-    // notification, because the private never arrives: the read-miss self-heal
-    // broadcasts a request with `requestSecretsFromNamespace`, and
-    // `PairwiseSecretSharing.startListening()` — the thing that would answer it
-    // — has **no production caller**. Measured in this file's own run: the ask
-    // is logged once, no `__ssenv` for the namespace ever reaches this client,
-    // and `store()` is never entered for it here (only on the approver, which
-    // minted it, and the sender, which had it conveyed at approval).
+    // Release the hold. ⛔ **Delivery is deliberately NOT asserted**, and the
+    // reason is a finding rather than a gap in this test.
     //
-    // So the park is live-proven and the release is not, and it cannot be until
-    // that responder is wired — plan 14.30 item 3.
+    // `_handleRequestPayload` — the code that answers another enrollment's
+    // request for a secret — is reachable only from `sweepOnce`. Until
+    // `PqClientBootstrap` was made to call `startListening()`, a client's only
+    // sweep was the one-shot at its own start, so a request arriving afterwards
+    // was never seen by anyone and no read-miss self-heal could complete. That
+    // is now wired, and it was necessary — but not sufficient: measured on
+    // 2026-08-17 the ask still goes out and this client's `store()` is never
+    // entered for the generation, so at least one more layer of the pull is
+    // unfinished.
+    //
+    // The park is what this row proves, and it proves it against a real
+    // post-quantum notification and a generation this client genuinely lacks.
     release.complete();
 
     expect(notifications.parkedTotal, greaterThan(0),
         reason: 'the claim this row makes and can keep: a real notification, '
-            'sealed post-quantum to a generation this client genuinely does '
-            'not hold, is HELD rather than dropped');
+            'sealed post-quantum to a generation this client does not hold, '
+            'is HELD rather than dropped');
   });
 }
