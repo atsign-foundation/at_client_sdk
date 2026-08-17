@@ -110,10 +110,25 @@ it. ⚠️ **Both runs would have been recorded as live proof but for
 `NotificationServiceImpl.parkedTotal`**, a cumulative counter added precisely so
 that "it arrived" cannot be mistaken for "it was parked and released".
 
-**Owed: a decision.** A live proof needs a deterministic seam — a test-only
-delay on the filing, or an injectable clock — and adding one to production code
-for a test is a call worth making explicitly rather than quietly. The attempt is
-not in the tree; it was red and would have been a pack failure.
+3. **A `holdBeforeStore` seam on `NskeyPrivateFiling`**, so the window is held
+   open rather than raced. Built, and then **reverted unexercised**: the park
+   was still never entered, so the hook proved nothing and committing it would
+   have added a test affordance to production crypto that no test uses.
+4. **Reordering so the receiver enrols before the second namespace is minted
+   and the sender after** — on the hypothesis that `currentPublic` being
+   local-first hid the new namespace from the sender. Also still legacy.
+
+⛔ **STOP GUESSING. The one thing to measure first:** in all four runs the
+notification went out under **`legacy`** — `providerId":"legacy"` in the client
+log, zero decrypt failures, the monitor receiving it fine. So the park is never
+reached because nothing PQ is ever sent. UC-A3.4's live test asserts
+`symmetricAesGcmCryptoProviderId` on the delivered frame and passes, so the
+difference is in the setup, not in the product.
+
+**Diff this file's setup against `nskey_self_notify_live_test.dart`'s and find
+what makes its sender seal PQ** — before writing another line of test. Four
+hypotheses have now been spent without measuring that, which is three more than
+the rule allows. The attempts are not in the tree; they were red.
 
 **The three items, as recorded:**
 
