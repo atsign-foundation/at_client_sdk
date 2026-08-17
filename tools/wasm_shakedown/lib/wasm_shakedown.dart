@@ -112,40 +112,6 @@ class Shakedown {
   String report() => (offenders.keys.toList()..sort())
       .map((k) => '  ${packageOf(k)}: $k -> ${offenders[k]!.join(', ')}')
       .join('\n');
-
-  /// What the walk found for [package], as pasteable Dart source: the
-  /// `expectedOffenders` map and the `expectedBlocked` set a baselined ratchet
-  /// asserts on.
-  ///
-  /// Every later phase shrinks a baseline, and every shrink is a copy out of a
-  /// failure message into a `const`. Emitting the literal removes the
-  /// transcription step, and with it the risk of a baseline that claims
-  /// something slightly different from what the walk actually saw.
-  ///
-  /// Note that `expectedBlocked` includes [package] itself when it owns
-  /// offenders — the ratchet asserts on the whole of [blockedPackages] rather
-  /// than an "external only" subset, so that there is one set with one meaning.
-  String baselineLiteral(String package) {
-    final owned = offendersIn(package);
-    final buffer = StringBuffer();
-    // Both literals are annotated even when non-empty, so that the empty case —
-    // which is where every one of these baselines is headed — pastes in as a
-    // correctly typed `{}` rather than a `Map<dynamic, dynamic>`.
-    if (owned.isEmpty) {
-      buffer.writeln('const expectedOffenders = <String, List<String>>{};');
-    } else {
-      buffer.writeln('const expectedOffenders = <String, List<String>>{');
-      for (final path in owned.keys.toList()..sort()) {
-        buffer.writeln("  '$path': ["
-            "${owned[path]!.map((lib) => "'$lib'").join(', ')}],");
-      }
-      buffer.writeln('};');
-    }
-    final blocked = blockedPackages.toList()..sort();
-    buffer.writeln('const expectedBlocked = '
-        '<String>{${blocked.map((p) => "'$p'").join(', ')}};');
-    return buffer.toString();
-  }
 }
 
 /// Walks the import/export graph from [entryUri], following [environment]'s

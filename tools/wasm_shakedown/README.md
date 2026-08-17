@@ -1,8 +1,14 @@
 # wasm_shakedown
 
-Dev-only tooling that keeps the platform-neutral packages neutral. Not published;
-a workspace member used by tests and by CI's `wasm_shakedown_tests` and
-`wasm_ratchet` jobs in `.github/workflows/at_libraries.yaml`.
+Dev-only tooling that keeps at_chops compiling to wasm and stops it gaining
+browser-hostile imports. Not published; a workspace member used by
+`packages/at_chops/test/wasm/` and by CI's `wasm_ratchet` job in
+`.github/workflows/at_libraries.yaml`.
+
+Scoped to at_chops on purpose. It is the only core package already web-safe, so it
+is the only one where a gate holds a line rather than recording a backlog.
+at_utils, at_lookup, at_client and at_auth get the same pair of files as each is
+ported — the tooling here is package-agnostic and needs no change to take them.
 
 ## Why this exists
 
@@ -20,58 +26,100 @@ accepts `dart:html` and `dart:js` on top. Measured on Dart 3.12:
 | `dart:ffi`     | rejected  | rejected |
 | `dart:mirrors` | rejected  | rejected |
 
-No Dart web compiler gates `dart:io`. A build step therefore cannot police
-neutrality, and that is the whole reason this package is a graph walk rather than
-a compile.
+No Dart web compiler gates `dart:io`. That is the whole reason a graph walk exists
+here alongside the compile.
 
-## The gate
+## The two gates
 
-| Gate                 | Lives in                                      | Catches                                    |
-| -------------------- | --------------------------------------------- | ------------------------------------------ |
-| Dependency-tree walk | each package's `test/wasm/dep_tree_test.dart` | a platform library reachable from a barrel |
+| Gate                 | Lives in                                    | Catches                                               |
+| -------------------- | ------------------------------------------- | ----------------------------------------------------- |
+| Dependency-tree walk | `at_chops/test/wasm/dep_tree_test.dart`     | `dart:io` (and anything else) reachable from a barrel  |
+| Compile probe        | `at_chops/test/wasm/compile_probe.dart`     | the libraries dart2wasm rejects outright              |
+
+Neither covers the other, which is why there are two. The walk sees what the
+compiler waves through; the compile sees hard rejections and answers "does this
+package build for wasm at all".
 
 The walk crosses package boundaries via `.dart_tool/package_config.json`, so it
-covers siblings and third-party packages, and it resolves configurable URIs the
-way the *target* platform would — `dart.library.io` false, `dart.library.js_interop`
-true for a web build. Run `dart pub get` first or it has nothing to resolve
-against.
+covers siblings and third-party packages, and it resolves configurable URIs the way
+the *target* platform would — `dart.library.io` false, `dart.library.js_interop`
+true for a web build. Run `dart pub get` first or it has nothing to resolve against.
 
-## Regenerating a baseline
+The probe is a list of imports and an empty `main()`. It must live inside the
+package it probes: `dart compile wasm` has no `--packages` flag and resolves
+`package:` URIs by walking up from the entry file. It is not named `*_test.dart`, so
+`dart test` ignores it. `at_chops_ffi.dart` is deliberately absent from it — that
+barrel does not compile to wasm, and that is the point.
 
-Each `dep_tree_test.dart` pins the exact set of platform libraries reachable from
-its barrels. It is a **two-way** ratchet: a new entry means someone introduced a
-browser-hostile import, a missing entry means a blocker was fixed and the baseline
-owes an update. Both directions fail the build, and both are meant to — the point
-is that either way somebody reads the change.
+## Baselines
 
-Do not hand-edit a baseline. Regenerate it:
+`dep_tree_test.dart` names the package sources allowed to reach a forbidden library,
+plus a ceiling on how many packages anywhere in the graph own one. Both are
+**one-way**:
 
-```bash
-dart run wasm_shakedown:baseline package:at_lookup/at_lookup.dart
+- A source outside `allowedOffenders`, or a blocked count above the ceiling, fails.
+  That is the regression the gate exists to catch.
+- Fixing a source, or dropping a dependency, **passes with no edit here.** The
+  baseline just becomes loose, and the printed figures say so — `6/7 offenders`
+  means one listed file is no longer reaching anything.
+
+So the only edit ever required is tightening, and that can happen whenever it is
+convenient rather than in the same commit as the fix. To widen a baseline
+deliberately, add the path; the failure message prints the full live walk, so there
+is nothing to transcribe.
+
+at_chops' own set is empty — it owns no offender, and its blocked ceiling of 2 is
+`at_utils` and `chalkdart`, inherited through the logger. Those come off when the
+at_utils barrel split lands.
+
+Every run prints its figures whether or not it fails:
+
+```
+package:at_chops/at_chops.dart — 574 files walked, 0/0 offenders, 2/2 blocked
 ```
 
-and paste the two literals it prints. Pass `--io` to walk with native semantics
-instead — that is how you assert the *inverse* half of a seam, e.g. that
-`at_chops_ffi.dart` still carries the FFI algorithms it exists to quarantine.
-Without that half, "the web barrel is clean" goes vacuously green the day the two
-barrels get merged.
+`minFilesWalked` guards the rest. Every other assertion is about what the walk did
+*not* find, and a traversal that stalled at the entry point also finds nothing.
+
+## Adding a package
+
+Two files, no tooling change:
+
+1. `packages/<pkg>/test/wasm/dep_tree_test.dart` calling `ratchetGroup` once per
+   barrel. Run it, read the reported figures off the failure, and set
+   `allowedOffenders` / `maxBlockedPackages` / `minFilesWalked` from them.
+2. `packages/<pkg>/test/wasm/compile_probe.dart` importing every web-safe barrel
+   plus `void main() {}`.
+
+Then add the two steps to `wasm_ratchet`.
 
 ## Running it
 
 ```bash
-cd tools/wasm_shakedown && dart test    # the walk's own tests
-cd packages/at_lookup   && dart test test/wasm/dep_tree_test.dart
+cd tools/wasm_shakedown && dart test              # the walk's own tests
+cd packages/at_chops    && dart test test/wasm/dep_tree_test.dart
+cd packages/at_chops    && dart compile wasm test/wasm/compile_probe.dart -o /tmp/probe.wasm
 ```
 
-Every suite here reads the filesystem, so all of them are `@TestOn('vm')`. They
-are deliberately invisible to the `dart test -p node -c dart2wasm` platform run,
-which exists to execute the *libraries* under WasmGC.
+Every suite here reads the filesystem, so all of them are `@TestOn('vm')`.
 
-## What this gate does not prove
+## What these gates do not prove
 
-That the code is correct under WasmGC. A package can be perfectly neutral and
-still mishandle a 64-bit integer, a string encoding, or an async ordering
-difference. Absence from the graph is a strong guarantee precisely because it does
-not depend on a test exercising the path — but it is a guarantee about reachability
-only. Executing the suites under Node is what covers the rest, and it covers only
-the paths the tests touch. Report both, never one alone.
+That the code is correct under WasmGC. A package can compile clean and still
+mishandle a 64-bit integer, a string encoding, or an async ordering difference. Two
+specific limits worth knowing:
+
+- Absence from the graph is a strong guarantee precisely because it does not depend
+  on a test exercising the path — but it is a guarantee about *reachability* only.
+- The compile probe's `void main() {}` tree-shakes aggressively. It proves the front
+  end accepts the whole import graph, which is what catches a hard rejection; it
+  does not prove codegen for code nothing calls.
+
+Executing the suites under Node is what would cover the rest, and only for the paths
+the tests touch. That step is **not in CI**, and its absence is the honest state of
+things rather than an oversight: on the hosted runner every suite fails to load
+before any test body runs, because the generated CJS bootstrap calls `instantiate`
+from the ESM `.mjs` init file and gets `undefined`. The same command works on
+Dart 3.12 + Node 24 locally, so it is a toolchain-version problem, not a finding
+about our code. It comes back once Dart and Node are pinned to a pair where a failure
+means something.

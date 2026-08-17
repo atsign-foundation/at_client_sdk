@@ -150,114 +150,71 @@ jobs:
           dart test --concurrency=1 --tags ffi
           dart test --concurrency=1 test/at_pqc_test.dart
 
-  # The dependency-tree walk's own unit tests, which every wasm_ratchet job below
-  # depends on being correct. A green ratchet means nothing if the walk that
-  # produced it is broken, so this runs as its own job rather than inside the
-  # matrix.
-  wasm_shakedown_tests:
+  # Two gates over at_chops, because neither covers the other.
+  #
+  # 1. The dependency-tree walk (test/wasm/dep_tree_test.dart) catches `dart:io`.
+  #    A compile cannot: `dart compile wasm` ACCEPTS `dart:io` and ships a stub
+  #    that throws `Unsupported operation` on first use, so a browser-hostile
+  #    import compiles clean and fails in the browser instead (measured on Dart
+  #    3.12). `dart compile js` accepts `dart:html` and `dart:js` on top. No Dart
+  #    web compiler gates `dart:io`. The walk is one-way: a source outside the
+  #    baseline fails, a source that gets fixed just stops being reported.
+  #
+  # 2. The compile probe (test/wasm/compile_probe.dart) catches the libraries
+  #    dart2wasm rejects outright — dart:ffi, dart:html, dart:js, dart:mirrors —
+  #    and is the measurable for whether at_chops compiles to wasm at all.
+  #
+  # at_chops only, deliberately. It is the one core package already web-safe, so
+  # it is the only one where a gate holds a line rather than recording a backlog.
+  # The other four get theirs as each is ported.
+  #
+  # There is deliberately no `dart test -p node -c dart2wasm` step. Executing the
+  # suites under WasmGC is what would turn "compiles" into "runs", but on this
+  # runner every suite fails to load before any test body executes: the generated
+  # CJS bootstrap calls `instantiate` from the ESM `.mjs` init file and gets
+  # `undefined`. The same command runs fine on Dart 3.12 + Node 24 locally, and
+  # neither version is pinned here — Dart comes from `dart-channel: stable` and
+  # Node from the runner image. An allowed-to-fail step that fails every time
+  # cannot be told apart from one reporting real failures, so it waits for a
+  # pinned pair where a failure means something.
+  wasm_ratchet:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - uses: ./actions/setup-flutter-and-dart
 
-      - name: Install dependencies
+      # The walk's own tests run in the same job as the gate they underwrite: a
+      # green ratchet means nothing if the walk that produced it is broken.
+      - name: Install dependencies in wasm_shakedown
         working-directory: tools/wasm_shakedown
         run: dart pub get
 
-      - name: Analyze project source
+      - name: Analyze wasm_shakedown
         working-directory: tools/wasm_shakedown
         run: dart analyze
 
-      - name: run tests
+      - name: Test wasm_shakedown
         working-directory: tools/wasm_shakedown
         run: dart test --concurrency=1
 
-  # Keeps the neutral packages from silently getting worse.
-  #
-  # Why a dependency-tree walk and not a compile: `dart compile wasm` ACCEPTS
-  # `dart:io`. It ships a stub that throws `Unsupported operation` on first use,
-  # so a browser-hostile import compiles clean and fails in the browser instead
-  # (measured on Dart 3.12). `dart compile js` accepts `dart:html` and `dart:js`
-  # on top of that. No Dart web compiler gates `dart:io`, which is why the walk
-  # is the primary gate here rather than a build step.
-  #
-  # Each package's test/wasm/dep_tree_test.dart pins the exact set of platform
-  # libraries reachable from its barrels, and fails in BOTH directions: a new
-  # entry is a regression, a missing entry means a blocker was fixed and the
-  # baseline owes an update. Regenerate one with
-  # `dart run wasm_shakedown:baseline <barrel>`.
-  wasm_ratchet:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # t2_required flips to true per package as its suite goes green under
-          # WasmGC. Every entry starts false because the suites themselves import
-          # dart:io, which has nothing to do with whether the library is neutral.
-          # at_utils is the closest: 25 pass, and the 2 failures are real —
-          # stdErrLoggingHandler throwing at runtime, exactly the failure mode
-          # the structural gate cannot see. It goes green with the logging split.
-          - package: at_utils
-            t2_required: false
-          - package: at_chops
-            t2_required: false
-            # The pure-Dart barrel only. The ffi-tagged tests need libcrypto and
-            # are covered by build_and_test_ffi above.
-            test_args: --exclude-tags ffi
-          - package: at_lookup
-            t2_required: false
-          - package: at_client
-            t2_required: false
-            # Deliberately scoped, and stated rather than left to be discovered.
-            # The runner compiles one wasm module PER TEST FILE, and at_client has
-            # 68 of them — an unscoped run cannot finish inside any sane timeout.
-            # These three are pure logic needing neither storage nor a socket,
-            # which makes them the suites most likely to say something true about
-            # WasmGC rather than about dart:io. Widen this list as the sweep
-            # progresses; the target is every suite that needs neither.
-            test_args: >-
-              test/at_client_util_test.dart
-              test/at_key_validation_test.dart
-              test/default_response_parser_test.dart
-          # Baseline only — at_auth is owned by the post-quantum program, and this
-          # entry exists to notice a regression, not to drive a fix.
-          - package: at_auth
-            t2_required: false
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-
-      - uses: ./actions/setup-flutter-and-dart
-
-      - name: Install dependencies in ${{ matrix.package }}
-        working-directory: packages/${{ matrix.package }}
+      - name: Install dependencies in at_chops
+        working-directory: packages/at_chops
         run: dart pub get
 
-      # Resolves package: URIs through .dart_tool/package_config.json, so the
-      # walk crosses package boundaries into the siblings and third-party
-      # packages too — not just this package's own sources.
-      - name: Dependency-tree ratchet in ${{ matrix.package }}
-        working-directory: packages/${{ matrix.package }}
+      # Resolves package: URIs through .dart_tool/package_config.json, so the walk
+      # crosses package boundaries into the siblings and third-party packages too —
+      # not just at_chops' own sources.
+      - name: Dependency-tree ratchet in at_chops
+        working-directory: packages/at_chops
         run: dart test --concurrency=1 test/wasm/dep_tree_test.dart
 
-      # Executes the suites under WasmGC, which is what turns "compiles" into
-      # "runs" — the structural gate above cannot see code that is neutral and
-      # still wrong about integer width, string encoding or async ordering.
-      #
-      # Note the absent `--concurrency=1`. The other jobs in this file pass it,
-      # but here the dominant cost is not test execution: the runner compiles a
-      # separate wasm module for every test file, and serialising that is what
-      # took at_chops past 25 minutes locally without finishing. Compilation
-      # parallelises across cores; leave it to.
-      #
-      # Bounded rather than open-ended, because an unbounded allowed-to-fail step
-      # is how a job quietly becomes the longest thing in CI.
-      - name: Execute under Node + dart2wasm in ${{ matrix.package }}
-        working-directory: packages/${{ matrix.package }}
-        continue-on-error: ${{ !matrix.t2_required }}
-        timeout-minutes: 25
-        run: dart test -p node -c dart2wasm ${{ matrix.test_args }}
+      # A hard gate, not allowed-to-fail: at_chops compiles today. Tree-shaking
+      # means this proves the front end accepts the graph, not that the code is
+      # correct under WasmGC.
+      - name: Compile at_chops to wasm
+        working-directory: packages/at_chops
+        run: dart compile wasm test/wasm/compile_probe.dart -o "$RUNNER_TEMP/at_chops.wasm"
 
   functional_tests_at_onboarding_cli:
     runs-on: ubuntu-latest
