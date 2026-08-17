@@ -204,7 +204,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
      S-5 at_auth 4.0 WASM split → S-6 consumer bumps          D2-1 at/pqmls carve + D1-E (D2)
      KF-1 .atKeys-at-rest protection + backup/restore (builds on S-3)
      IS-1 inter-server PQ auth (FROM/POL: swap challenge signature RSA→ML-DSA-65, PR #2683) — no KEM, no cert; builds on published at_chops 3.4.x (ungated)
-     R-2 at_client 4.0 (apply the postQuantum posture defaults — five axes, decisions 70) — final, gated on the ecosystem floor
+     R-2 at_client 4.0 (apply the postQuantum posture defaults — five axes, decisions 70) — final; NO CLIENT-SIDE WORK OUTSTANDING as of 2026-08-17, gated on the ecosystem floor alone (see 14.33)
 ```
 
 **Hosted-publish ordering (stated once).** `at_chops` (`P-1`, `P-2`) and `at_commons` (`SS-1a`) are
@@ -1515,9 +1515,16 @@ the migration era default's `defaultProviderId` IS `legacy`, and
 **structural**: the posture carries the era choice and the flag together, so
 the default-posture flip cannot make one edit without the other
 ([decisions 70](decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)).
-Still owed before R-2 is green: local and namespace-less keys route to legacy
-and are refused under the flag, because the AES-GCM provider declines them —
-the SDK's own namespace-less internal writes need their own decision.
+⚠️ **This paragraph used to say local and namespace-less keys route to legacy
+and are refused, so "the SDK's own namespace-less internal writes need their own
+decision".** Both halves are now settled and neither gates R-2: `local:` records
+are written unencrypted and exempt
+([decisions 107](decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17)),
+and the namespace-less case named there — a legacy recipient's `shared_key.*` —
+never reaches the refusal at all
+([14.33](#1433-closed-the-shared_key-refusal-was-never-reachable)). The one
+genuine instance is a key-construction bug in `NotificationService.send()`
+([14.35](../implementation-plan.md#1435-notificationservicesend-throws-away-the-namespace-it-was-given)).
 
 ⚠️ **The "dead-code removal" bullet was wrong on both halves** and is dropped.
 (a) The two `package:encrypt` files are live production code, not leftovers:
@@ -1550,16 +1557,20 @@ recoverable.
 **Acceptance → [acceptance.md](../acceptance.md):** the five rollout axes under the flipped default
 posture — UC-C1.1 (era), C1.4 (key exchange), C1.5 (retrofit), C1.2 (refusal) and
 C1.6 (the grouped posture); **C1.3 (envelope) is withdrawn** — [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) removed the axis it tested, written for R-2 by the capstone; plus legacy read still works (UC-B5.2);
-full unit/functional/e2e green. **Two things UC-C1.x cannot reach, which R-2 owes:** a live postured
-CRAM onboard (`pqNativeOnboard`'s posture consult is pinned at the parameter level only), and a
-decision on the SDK's own namespace-less internal writes, so the default cannot flip until they are
-settled ([decisions 70.1](decisions.md#701-the-review-harvest-the-postures-claims-corrected-two-consults-get-their-reds-2026-08-10)).
-⚠️ **This sentence used to name "the sync and notification watermarks" as the writes in question, and
-that was wrong twice over:** those are `local:` records, they are now written unencrypted, and the fix
-had to land in D1 because R-2 is a pure default-flip that cannot carry code
+full unit/functional/e2e green. **One thing UC-C1.x cannot reach, which R-2 owes:** a live postured
+CRAM onboard (`pqNativeOnboard`'s posture consult is pinned at the parameter level only)
+([decisions 70.1](decisions.md#701-the-review-harvest-the-postures-claims-corrected-two-consults-get-their-reds-2026-08-10)).
+⚠️ **There used to be a second, and it has been withdrawn twice over.** It first
+named "the sync and notification watermarks" as internal writes owing a decision: wrong,
+those are `local:` records, now written unencrypted, and the fix had to land in D1 because
+R-2 is a pure default-flip that cannot carry code
 ([decisions 107](decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17)).
-What R-2 still owes here is the *non-local* namespace-less writes — a legacy recipient's `shared_key.*`
-most obviously.
+It was then rewritten to name the *non-local* namespace-less writes — a legacy recipient's
+`shared_key.*` most obviously — and that was wrong too: nothing routes one through the
+refusal, so it cannot be refused
+([14.33](#1433-closed-the-shared_key-refusal-was-never-reachable)).
+**No client-side blocker remains for R-2**; the gates that stand are the ecosystem floor
+and [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05).
 **▶ at_client 4.0.0.**
 **Effort:** M.
 **Watch-outs:** different major / different time from at_auth 4.0 (S-5). Don't remove the legacy provider.
@@ -4331,3 +4342,54 @@ since been done. A stale "owed" reads as conservative and costs a rebuild;
 `_getSigningAlgoType` is the sharp case, because the tree contradicted it
 loudly — a passing live suite — and the contradiction sat unexamined because
 nothing reads a project entry when a test goes green.
+
+### 14.33 CLOSED: the `shared_key.*` refusal was never reachable
+
+Raised by [14.31](../implementation-plan.md#1431-a-refused-watermark-write-permanently-disables-the-monitor)
+as the remaining half of what 70.1 observed, and recorded in the TODO table as
+"the genuine remaining R-2 blocker". It was neither.
+
+**`shared_key.*` cannot reach the refusal.** The two records are written by
+`AbstractAtKeyEncryption` straight at a `Secondary` with a raw verb
+(`legacy_encryption.dart:293` and `:177`), not through `PutRequestTransformer`:
+
+```dart
+var updateSharedKeyForCurrentAtSignBuilder = UpdateVerbBuilder()
+  ..atKey = (AtKey()
+    ..key = '${AtConstants.atEncryptionSharedKey}.${atKey.sharedWith?.replaceAll('@','')}'
+    ..sharedBy = atKey.sharedBy)
+  ..value = encryptedSharedKey;
+await secondary.executeVerb(updateSharedKeyForCurrentAtSignBuilder, sync: false);
+```
+
+No transformer, no crypto runtime, no refusal. And the writer is *downstream* of
+the refusal in any case: `AbstractAtKeyEncryption.encrypt` runs only from
+`LegacyEncryption.build`, whose sole caller is the legacy provider's `encrypt`
+(`legacy_crypto_provider.dart:19`), and `encryptForPut` calls
+`refuseLegacyIfDisallowed` **before** `provider.encrypt`. Under the flag the
+legacy path is refused one step earlier, on the data key, so the `shared_key.*`
+write is never attempted. Reads are untouched — `decrypt` goes through
+`LegacyDecryption`, which the refusal does not guard.
+
+**The test that pinned it never entered production's path.** `providerIdFor` has
+exactly two call sites (`crypto_runtime.dart:44` and
+`put_request_transformer.dart:73`), and neither is ever handed a `shared_key.*`
+key; the pin in `disallow_legacy_encryption_test.dart` hand-built one. It has
+been re-pointed at a key the SDK genuinely produces — see
+[14.35](../implementation-plan.md#1435-notificationservicesend-throws-away-the-namespace-it-was-given).
+
+**What is genuinely refused** is `NotificationService.send()` with a
+single-segment namespace, which is [14.35](../implementation-plan.md#1435-notificationservicesend-throws-away-the-namespace-it-was-given)
+— a key-construction bug in one method, not a gap in the scheme.
+
+**Consequence for R-2:** no client-side blocker remains. The gates that do stand
+are external and unchanged — the ecosystem-floor gate
+([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)'s five
+downstream packages, recorded under the R-2 ecosystem-floor bullet) and
+[decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05),
+which retains legacy material until the ecosystem is PQ rather than until one
+atSign is.
+
+⛔ **Do not re-open this on the grounds that `shared_key.*` is namespace-less.**
+It is; that is not the question. The question is whether anything routes it
+through the refusal, and nothing does.

@@ -10426,7 +10426,21 @@ right and the filing was wrong: R-2 is defined as *"a pure default-flip: 4.0 is
 identical to final-3.x code"*, so it structurally cannot carry a code change.
 Anything the posture needs in order to work has to land before it. This is D1's.
 
-**What it does not settle.** Namespace-less keys that are *not* local — a
-legacy recipient's `shared_key.*` most obviously — are still refused, and that
-is still owed. The carve-out here is only about records that never leave the
-device.
+**What it does not settle.** The carve-out here is only about records that never
+leave the device; a namespace-less key that *is* transmitted gets no exemption
+from it.
+
+⚠️ **AMENDED 2026-08-17.** This paragraph used to add that namespace-less keys
+which are not local — "a legacy recipient's `shared_key.*` most obviously" — are
+"still refused, and that is still owed". The example was wrong, and it became
+the whole of plan item 14.33. **Nothing routes a `shared_key.*` through the
+refusal**: both copies are written by `AbstractAtKeyEncryption` with a raw
+`UpdateVerbBuilder` at a `Secondary`, bypassing `PutRequestTransformer`
+entirely, and that writer is reached only from the legacy provider's `encrypt`,
+which `refuseLegacyIfDisallowed` blocks one step earlier on the data key. The
+record can neither be written nor refused under the flag. 14.33 is closed and
+no client-side blocker remains for R-2; the one namespace-less write that
+genuinely is refused is a key-construction bug in `NotificationService.send()`
+(plan 14.35). Measured both arms: `send(namespace:"wavi")` throws
+`LegacyEncryptionRefusedException`, `send(namespace:"buzz.wavi")` seals but
+scopes to `wavi`.

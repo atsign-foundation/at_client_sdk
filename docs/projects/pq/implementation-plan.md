@@ -42,7 +42,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
-| [14.33](#1433-a-legacy-recipients-shared_key-is-still-refused-under-the-posture) | A legacy recipient's `shared_key.*` is still refused under `disallowLegacyEncryption` | The genuine remaining R-2 blocker; [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17) says outright it did not cover this |
+| [14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given) | `NotificationService.send()` derives its namespace by re-parsing, so a single-segment namespace is refused and a dotted one seals to the wrong scope | — |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
 
@@ -277,10 +277,13 @@ passing `putRequestOptions:`, so mocktail returned null, the write failed, the
 new guard swallowed it, and the test reported success while persisting nothing.
 It now verifies the call and its arguments.
 
-**Still owed, and NOT covered by this:** namespace-less keys that are not local
-— a legacy recipient's `shared_key.*` most obviously — are still refused under
-the posture. That one is real, and it is the remaining half of what 70.1
-observed.
+⚠️ **This section used to claim a second half was still owed** — "namespace-less
+keys that are not local, a legacy recipient's `shared_key.*` most obviously, are
+still refused under the posture". That was wrong: nothing routes a
+`shared_key.*` through the refusal, so it can never be refused. Closed as
+[14.33](detail/implementation-plan.md#1433-closed-the-shared_key-refusal-was-never-reachable).
+The one namespace-less write that genuinely is refused is
+[14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given).
 
 ### 14.32 A `primary` client's ML-DSA signing key is not visible to its verifiers
 
@@ -432,22 +435,59 @@ That one is a refused internal write killing the monitor; this one is an
 advertisement a verifier cannot see. Both surfaced from the same posture and
 they have nothing else in common.
 
-### 14.33 A legacy recipient's `shared_key.*` is still refused under the posture
+### 14.35 `NotificationService.send()` throws away the namespace it was given
 
-Uncovered by [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor)
-and deliberately left by it. Ruling
-[107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17)
-exempts `isLocal` from `disallowLegacyEncryption` and says outright what it does
-**not** cover: namespace-less keys that are not local. A legacy recipient's
-`shared_key.*` is the obvious one — it is genuinely written for a peer, the
-atServer holds it, and no post-quantum scheme serves a key with no namespace.
+`send()` takes a namespace as a parameter, builds a key string from it, and then
+recovers the namespace by re-parsing that string
+(`notification_service_impl.dart:578`):
 
-**This is the remaining blocker between the postQuantum posture and being
-flippable**, and it is not a variant of 14.31: that one was about records nobody
-transmits, this one is about records a peer must read. Gated by
-[37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05),
-which retains legacy key material until the ecosystem is PQ rather than until
-one atSign is.
+```dart
+final String key = '$to:$namespace$atSign';
+final AtKey atKey = AtKey.fromString(key);
+atKey.metadata.namespaceAware = false;
+```
+
+`AtKey.fromString` splits at the last dot, so the round trip is lossy in two
+different ways. Measured, both arms, against a client under the postQuantum
+posture:
+
+```
+send(namespace:"wavi")       => THREW LegacyEncryptionRefusedException
+send(namespace:"buzz.wavi")  => selected at/symmetric/AES/GCM
+```
+
+A **single-segment** namespace parses to `namespace = null`, so every
+post-quantum provider declines it (`canHandle` is `!isLocal && namespace != null
+&& namespace.isNotEmpty`), the fallback is legacy, and the flag refuses it. A
+**dotted** namespace parses to `key = "buzz", namespace = "wavi"` — it seals,
+but to an nskey scoped to `wavi` rather than to the `buzz.wavi` the caller
+named.
+
+`send()` is the only write path that can reach this, because it is the only one
+that bypasses the namespace defaulting every other path applies before
+encrypting — `at_client_impl.dart:981` and `:1252`
+(`atKey.namespace ??= preference?.namespace`) and
+`notify_request_transformer.dart:122` (`ak.namespace ??= atClientPreference.namespace`).
+`send()` encrypts inline and hand-builds its own `notify:` command string, so it
+touches none of them. `AtRpc` sets `..namespace = baseNameSpace` explicitly and
+goes through `notify()`, so it is unaffected.
+
+**Intended fix:** set `atKey.namespace = namespace` after the `fromString`,
+leaving `namespaceAware` false so the wire key string is byte-identical. That
+closes both arms at once.
+
+Not a cross-version break: the receiver takes the scope from the envelope
+(`'ns'` and `'ckNs'` in `appMetadata.additional`), not from the key string —
+`symmetric_aes_gcm_provider.dart:120` says why, and it is the same lossy
+`fromString` split, already worked around on the read side and never on the
+write side. What does change is that the content key is conveyed at the correct
+level; a receiver that has not yet got it parks and re-drives
+([14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it)).
+
+`send()` is public, documented and not deprecated, and two example programs use
+it (`example/bin/notifications.dart`, `example/bin/dockerstats_publish.dart`) —
+both with dotted namespaces, so both take the wrong-scope arm rather than the
+refusal.
 
 ### 14.34 An unexplained intermittent in `self_enrollment_retrofit_live_test.dart`
 
@@ -1149,6 +1189,7 @@ measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.33  | Closed as mis-stated: the refusal it named is unreachable | CLOSED 2026-08-17 — `shared_key.*` is written by a raw `UpdateVerbBuilder` at a `Secondary`, downstream of a refusal that fires before `provider.encrypt`, so it can never reach it. No client-side blocker remains for R-2. The real gap it was standing in front of is [14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given). Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17) amended in place. Detail: [14.33](detail/implementation-plan.md#1433-closed-the-shared_key-refusal-was-never-reachable) |
 | 14.30  | A notification that outruns its key is parked and re-driven | DONE 2026-08-17 — ruling [106.5](detail/decisions.md#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17); proven live end to end (parked → asked → answered → filed → re-driven → decrypted). Three further defects fixed on the way, all invisible to unit tests. Body: [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) |
 | 14.32  | An in-process `_apsk` write no longer clobbers a just-minted advertisement | DONE 2026-08-17 — ruling [102.2](detail/decisions.md#1022-the-in-process-window-is-closed-by-serialising-the-writers-2026-08-17); proven live, `_apsk.primary` ends on the mldsa65 array where it ended on bare RSA. Body: [14.32](#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers) |
 | 14.31  | A `local:` record is not encrypted, and the legacy refusal exempts it | DONE 2026-08-17 — six related defects, not one; the listener no longer dies from a refused watermark. Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17). Body: [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor) |

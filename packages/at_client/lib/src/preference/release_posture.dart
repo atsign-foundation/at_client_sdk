@@ -223,16 +223,23 @@ class ReleasePosture {
   ///   written legacy — and seeding is a separate, deliberate knob
   ///   ([AtClientPreference.seedNamespaceKeys]), not something this posture
   ///   turns on;
-  /// - the SDK's own namespace-less internal writes are refused under this
-  ///   posture today: no post-quantum scheme serves a key with no namespace,
-  ///   so a legacy recipient's `shared_key.*` cannot be written. The 4.0
-  ///   release owes a decision on those writes before this posture can become
-  ///   the default. ⚠️ **The sync and notification watermarks used to be named
-  ///   here and no longer belong**: they are `local:` records, never
-  ///   transmitted, and are now written unencrypted — see
-  ///   [AtClientPreference.disallowLegacyEncryption], which exempts
-  ///   [AtKey.isLocal]. Until that landed, this refusal took the notification
-  ///   listener out altogether rather than failing one write.
+  /// - a write whose key carries **no namespace** is refused, because no
+  ///   post-quantum scheme serves one: the nskey data path is
+  ///   `(owner, namespace)`-scoped throughout, so every provider declines such
+  ///   a key and the only fallback is legacy. An app hits this if it hands the
+  ///   SDK a key with neither its own namespace nor one on the preference.
+  ///
+  /// ⚠️ **Two things this bullet used to name do not belong in it.** The sync
+  /// and notification watermarks are `local:` records, never transmitted, and
+  /// are now written unencrypted — see
+  /// [AtClientPreference.disallowLegacyEncryption], which exempts
+  /// [AtKey.isLocal]; until that landed, the refusal took the notification
+  /// listener out altogether rather than failing one write. And a legacy
+  /// recipient's `shared_key.*` was named as an unwritable record: it is not,
+  /// because nothing routes it through the refusal. Both copies are written
+  /// with a raw update verb straight at a `Secondary`, and the code that writes
+  /// them runs only inside the legacy provider's `encrypt`, which this flag
+  /// blocks one step earlier on the data key.
   ///
   /// The readers for everything this posture emits — the nskey records among
   /// them — ship in the **same release line as the posture itself**, so its

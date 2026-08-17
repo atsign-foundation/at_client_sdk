@@ -60,22 +60,42 @@ void main() {
               'over the flag — the flag is the guarantee');
     });
 
+    /// Exactly the key `NotificationService.send()` builds: it composes the
+    /// string from the namespace it was handed and then recovers the namespace
+    /// by re-parsing it. `AtKey.fromString` splits at the last dot, so a
+    /// single-segment namespace comes back as null.
+    ///
+    /// ⚠️ Do not replace this with a hand-built key. An earlier version of the
+    /// test below asserted the same refusal against `shared_key.bob`, a shape
+    /// no caller produces — `providerIdFor` is reached only from
+    /// `PutRequestTransformer` and from `CryptoRuntime._provider`, and neither
+    /// is ever handed a `shared_key.*` key, which is written with a raw update
+    /// verb instead. The test was green and proved nothing about reachability.
+    AtKey sendKey(String namespace) {
+      final atKey = AtKey.fromString('$bob:$namespace$alice');
+      atKey.metadata.namespaceAware = false;
+      return atKey;
+    }
+
     test('a key the PQ provider declines, whose fallback is legacy', () {
       final atClient = strictClient(
           crypto: CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
-      // No namespace: the nskey path is (owner, namespace)-scoped and declines
-      // it, so the defaulted id falls back to legacy — which the flag refuses.
-      final internalKey = AtKey()
-        ..key = 'shared_key.bob'
-        ..sharedBy = alice
-        ..metadata = (Metadata()..namespaceAware = false);
 
       expect(
-          () => CryptoRuntime.providerIdFor(atClient, null, atKey: internalKey),
+          () => CryptoRuntime.providerIdFor(atClient, null,
+              atKey: sendKey('wavi')),
           throwsA(isA<LegacyEncryptionRefusedException>()),
           reason: 'the decline-fallback is a legacy write like any other; '
               'letting it through would make the guarantee leak through '
-              'every namespace-less internal record');
+              'every namespace-less record');
+
+      // The control: the same call with a dotted namespace takes the PQ path,
+      // so the refusal above is caused by the namespace being lost and not by
+      // anything else about this key.
+      expect(
+          CryptoRuntime.providerIdFor(atClient, null,
+              atKey: sendKey('buzz.wavi')),
+          symmetricAesGcmCryptoProviderId);
     });
 
     test('a write that reaches encryption still routed to legacy', () async {
