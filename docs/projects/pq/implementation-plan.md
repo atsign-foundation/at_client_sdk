@@ -42,7 +42,8 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
-| [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) | A notification needing a not-yet-filed nskey private is dropped without retry | Cause found 2026-08-17: the conveyed private is filed by an unawaited startup. Park-and-re-drive designed, not built |
+| [14.33](#1433-a-legacy-recipients-shared_key-is-still-refused-under-the-posture) | A legacy recipient's `shared_key.*` is still refused under `disallowLegacyEncryption` | The genuine remaining R-2 blocker; [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17) says outright it did not cover this |
+| [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
 
 ### 14.30 A content notification can outrun the key that opens it
@@ -85,14 +86,11 @@ controls that keep it honest (a failure no filing can fix is dropped rather
 than parked, and a filing for a *different* generation releases nothing).
 Removing the park reddens three of them, each quoting its own reason.
 
-⚠️ **Not proven live, and a live proof needs something that does not exist
-yet.** The unit rows drive the seam with a provider that refuses until told
-otherwise; nothing has observed a real conveyed private releasing a real parked
-notification. UC-A3.4's live test closes the startup window by awaiting
-`startupComplete`, so it does not exercise this path.
-
-**Two attempts, both vacuous, and what they establish.** A live file was written
-and run twice on 2026-08-17:
+**Four vacuous live attempts preceded the proof below, and they are kept because
+each one is a trap worth not re-entering.** ⚠️ This paragraph used to end "Not
+proven live, and a live proof needs something that does not exist yet" — that
+was true when written and is now false; the whole chain is proven live, further
+down. What the attempts establish:
 
 1. **Minting the nskey *after* the enrollments** — intended to leave the
    receiver without the private. It leaves the *sender* without a published
@@ -111,9 +109,12 @@ it. ⚠️ **Both runs would have been recorded as live proof but for
 that "it arrived" cannot be mistaken for "it was parked and released".
 
 3. **A `holdBeforeStore` seam on `NskeyPrivateFiling`**, so the window is held
-   open rather than raced. Built, and then **reverted unexercised**: the park
-   was still never entered, so the hook proved nothing and committing it would
-   have added a test affordance to production crypto that no test uses.
+   open rather than raced. ⚠️ This entry used to end "reverted unexercised …
+   committing it would have added a test affordance to production crypto that no
+   test uses". It **was** reverted at the time, for that reason — and once the
+   `legacy` cause below was found it went back in and is now exercised by the
+   live row (`nskey_private_filing.dart`, used at the live test's hold). The
+   seam is in the tree; only the attempt that could not use it was discarded.
 4. **Reordering so the receiver enrols before the second namespace is minted
    and the sender after** — on the hypothesis that `currentPublic` being
    local-first hid the new namespace from the sender. Also still legacy.
@@ -430,6 +431,40 @@ exact interleave when the lock is removed.
 That one is a refused internal write killing the monitor; this one is an
 advertisement a verifier cannot see. Both surfaced from the same posture and
 they have nothing else in common.
+
+### 14.33 A legacy recipient's `shared_key.*` is still refused under the posture
+
+Uncovered by [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor)
+and deliberately left by it. Ruling
+[107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17)
+exempts `isLocal` from `disallowLegacyEncryption` and says outright what it does
+**not** cover: namespace-less keys that are not local. A legacy recipient's
+`shared_key.*` is the obvious one — it is genuinely written for a peer, the
+atServer holds it, and no post-quantum scheme serves a key with no namespace.
+
+**This is the remaining blocker between the postQuantum posture and being
+flippable**, and it is not a variant of 14.31: that one was about records nobody
+transmits, this one is about records a peer must read. Gated by
+[37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05),
+which retains legacy key material until the ecosystem is PQ rather than until
+one atSign is.
+
+### 14.34 An unexplained intermittent in `self_enrollment_retrofit_live_test.dart`
+
+One full-pack run on 2026-08-17 came back **166/167**: the test timed out after
+40 s at `await firstNotification`. **Five pack runs were made that day and only
+that one failed** — the others were 167/167 and 168/168 ×3 — and the file passes
+alone.
+
+⛔ **Not a flake, and not fixed.** Nothing explains it. Five observations bound a
+rate, not a kind, and "it was green before" is weak in the other direction too:
+the 167/167 baseline it is measured against was itself a single run. Record any
+further occurrence with its numerator and denominator rather than re-classifying
+it.
+
+**If it recurs,** the bisect point is `0668cf91d` — code there is 14.31's
+local-key fix without the `_apsk` write serialisation, so green at that commit
+would pin it on the serialisation.
 
 ### 14.29 The residuals 14.25 surfaced
 
@@ -1114,6 +1149,7 @@ measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.30  | A notification that outruns its key is parked and re-driven | DONE 2026-08-17 — ruling [106.5](detail/decisions.md#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17); proven live end to end (parked → asked → answered → filed → re-driven → decrypted). Three further defects fixed on the way, all invisible to unit tests. Body: [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) |
 | 14.32  | An in-process `_apsk` write no longer clobbers a just-minted advertisement | DONE 2026-08-17 — ruling [102.2](detail/decisions.md#1022-the-in-process-window-is-closed-by-serialising-the-writers-2026-08-17); proven live, `_apsk.primary` ends on the mldsa65 array where it ended on bare RSA. Body: [14.32](#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers) |
 | 14.31  | A `local:` record is not encrypted, and the legacy refusal exempts it | DONE 2026-08-17 — six related defects, not one; the listener no longer dies from a refused watermark. Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17). Body: [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor) |
 | 14.25  | Nine project entries reconciled against the tree | DONE 2026-08-16 — burn-down right about 4, headings stale for SS-1c and SS-4, real residuals in SS-2/B-1/S-3 (now [14.29](#1429-the-residuals-1425-surfaced)). Detail: [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
