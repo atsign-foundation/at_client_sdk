@@ -1,3 +1,4 @@
+import 'dart:async' show StreamController;
 import 'dart:convert' show base64Decode;
 import 'dart:typed_data' show Uint8List;
 
@@ -8,6 +9,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeysMaterial,
         CryptographicKeyType,
         WrittenAtKeysIo;
+import 'package:at_client/src/crypto/crypto.dart' show FiledNskeyPrivate;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
     show NskeyAdvertisement, NskeyDecapsulationKey, NskeySeed;
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
@@ -79,6 +81,31 @@ class NskeyPrivateFiling {
     required String atSign,
     this.publishedGeneration,
   }) : atSign = atSign.toAtsign();
+
+  final StreamController<FiledNskeyPrivate> _filed =
+      StreamController<FiledNskeyPrivate>.broadcast();
+
+  /// Fires once per private filed, **after** it is stored and readable.
+  ///
+  /// This is the signal a reader that came up empty waits on. It is emitted
+  /// here, at the point of filing, rather than where a secret arrives: the
+  /// start-time sweep consumes secrets that were already in the inbox, so a
+  /// signal keyed on arrival misses precisely the conveyance that happened
+  /// before this client started — which is the ordinary case.
+  ///
+  /// Broadcast, and therefore not replayed. A caller subscribes before the read
+  /// it expects to fail, or it can miss the event it is waiting for.
+  Stream<FiledNskeyPrivate> get privatesFiled => _filed.stream;
+
+  /// Emitted after the material is readable, never before: a listener that
+  /// re-reads on this signal must find what the signal says is there.
+  void _announceFiled(String namespace, String nskeyKid) {
+    if (_filed.isClosed) return;
+    _filed.add((owner: atSign, namespace: namespace, nskeyKid: nskeyKid));
+  }
+
+  /// Releases the signal. A filing whose owner is gone announces to nobody.
+  Future<void> close() => _filed.close();
 
   /// Files every conveyed nskey private waiting in the secret store. Returns
   /// how many were filed.
@@ -349,6 +376,9 @@ class NskeyPrivateFiling {
       _logger.severe('Filed the nskey private for $namespace:$nskeyKid in '
           'memory only — this AtKeysIo cannot persist, so a restart will lose '
           'it and every value its content keys protect becomes unreadable');
+      // Usable for this process, so anything waiting on it can proceed now —
+      // the durability warning above is a separate concern from readability.
+      _announceFiled(namespace, nskeyKid);
       return true;
     }
 
@@ -381,6 +411,7 @@ class NskeyPrivateFiling {
           '$namespace:$nskeyKid — this atSign has no writable AtKeys: $e');
       return false;
     }
+    if (filed) _announceFiled(namespace, nskeyKid);
     return filed;
   }
 }

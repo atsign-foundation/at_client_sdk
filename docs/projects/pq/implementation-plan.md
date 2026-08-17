@@ -64,12 +64,31 @@ handed to its caller before its conveyed privates are filed. Drop at `12.703`
 with `no nskey private held`; the ring's read-miss self-heal fired at `12.819`,
 **116 ms too late**.
 
-✅ **RULED 2026-08-17 (gkc): direction 1, park and re-drive** — see
+✅ **RULED 2026-08-17 (gkc), and BUILT** — see
 [106.5](detail/decisions.md#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17).
 Direction 2 was not taken on its own: awaiting `startupComplete` closes only the
 startup window, and a private conveyed while the client is already running still
-races. **Owed: the build.** Also owed and deliberately left to the build — what
-bounds a park, and what happens when the bound is hit.
+races.
+
+**What shipped.** `NskeyPrivateUnavailableException` carries
+`(owner, namespace, nskeyKid)` so the park has a key that is not a message
+string; `SignalsPrivateFiling` — implemented by `PublishedNskeyKeyRing`,
+emitting from `NskeyPrivateFiling` **after** the material is readable — is what
+releases it; `CryptoConfig` now carries the `keyRing` so the notification
+service can reach the signal without depending on which providers are
+registered. The park is bounded by `maxParked` and `parkTtl`, and every
+eviction logs at `warning` naming the notification, because a held message
+nothing re-drives is the same data loss with a longer fuse.
+
+Unit cover: `notification_park_test.dart` — five rows, including the two
+controls that keep it honest (a failure no filing can fix is dropped rather
+than parked, and a filing for a *different* generation releases nothing).
+Removing the park reddens three of them, each quoting its own reason.
+
+⚠️ **Not yet proven live.** The unit rows drive the seam with a provider that
+refuses until told otherwise; nothing has yet observed a real conveyed private
+releasing a real parked notification. UC-A3.4's live test closes the startup
+window by awaiting `startupComplete`, so it does **not** exercise this path.
 
 **The three items, as recorded:**
 

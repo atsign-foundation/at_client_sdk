@@ -1,4 +1,25 @@
 ## 3.14.1
+- fix: a notification that arrives before the key that opens it is now held and
+  re-driven, instead of being dropped. An nskey private is conveyed to an
+  enrollment at approval and filed asynchronously, so a value sealed to that
+  generation can arrive first; the notification was discarded while the key
+  landed milliseconds later and the record sat on the atServer for its ttl.
+  Nothing re-delivered it.
+  - New `NskeyPrivateUnavailableException`, carrying `(owner, namespace,
+    nskeyKid)`. It is a distinct type rather than a message, because it is the
+    one decryption failure worth waiting for — everything else that fails to
+    decrypt is final, and matching on wording would break silently.
+  - New `SignalsPrivateFiling` capability interface and `FiledNskeyPrivate`
+    record. `PublishedNskeyKeyRing` implements it, emitting once per private
+    **after** it is stored and readable. The signal is at the *filing* point,
+    not at secret arrival: the start-time sweep consumes secrets that were
+    already in the inbox, which is precisely the conveyance a client misses.
+  - `CryptoConfig` now carries the `keyRing`, so a collaborator outside the
+    crypto layer can reach it without depending on which providers are
+    registered.
+  - The park is **bounded** — `maxParked` entries and a `parkTtl` — and anything
+    it drops is logged at `warning` naming the notification. A held message
+    nothing re-drives is the same data loss with a longer fuse.
 - fix: an `_apsk` advertisement is no longer overwritten by a fallback composed
   mid-mint. A minter publishes its new signing key before it files it, so no
   envelope is ever signed under a key the advertisement does not name; in that

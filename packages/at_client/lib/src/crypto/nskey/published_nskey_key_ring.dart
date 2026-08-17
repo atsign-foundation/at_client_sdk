@@ -2,6 +2,8 @@ import 'dart:async' show unawaited;
 import 'dart:convert' show jsonDecode;
 
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/crypto/crypto.dart'
+    show FiledNskeyPrivate, SignalsPrivateFiling;
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart'
     show GetRequestOptions;
@@ -167,7 +169,7 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
 /// Own privates are held in memory here; conveying them per-APKAM over the
 /// secret-sharing substrate is SS-4's job, and when it lands it supplies them
 /// instead of [mintAndPublish].
-class PublishedNskeyKeyRing implements NskeyKeyRing {
+class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   final AtClient _atClient;
   final AdvertisedKeyVerifier verifier;
 
@@ -259,6 +261,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing {
   /// a published key whose private did not survive the process leaves senders
   /// sealing to something nobody can open.
   final NskeyPrivateFiling? privateFiling;
+
+  @override
+  Stream<FiledNskeyPrivate> get privatesFiled =>
+      privateFiling?.privatesFiled ?? const Stream<FiledNskeyPrivate>.empty();
 
   /// Signs this atSign's own advertisements. A recipient that cannot check who
   /// generated the key it is about to seal to has no protection left but the

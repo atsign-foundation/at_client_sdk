@@ -4,6 +4,11 @@ import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/request_options.dart';
+import 'package:at_client/src/crypto/crypto.dart'
+    show
+        FiledNskeyPrivate,
+        NskeyPrivateUnavailableException,
+        SignalsPrivateFiling;
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
@@ -55,6 +60,137 @@ class NotificationServiceImpl extends NotificationService {
 
   late SecondaryAddressFinder secondaryAddressFinder;
 
+  /// Notifications held back because the nskey private that opens them has not
+  /// been filed yet, keyed by the generation they are waiting for.
+  ///
+  /// A conveyed private is filed asynchronously, so a value sealed to it can
+  /// arrive first. Dropping it there is data loss: the record sits on the
+  /// atServer for its ttl and the key lands milliseconds later, so nothing
+  /// re-delivers what was already discarded.
+  ///
+  /// **In memory, and lost on restart** — deliberately. A park that outlived
+  /// the process would need the notification and its ordering position to be
+  /// durable, and a restart re-drives from the watermark anyway.
+  final Map<FiledNskeyPrivate, List<_ParkedNotification>> _parked = {};
+
+  /// Bounds the park. A held notification that is never re-driven is the same
+  /// data loss with a longer fuse, so the park is not allowed to grow without
+  /// limit or to hold anything indefinitely: the oldest entry is dropped —
+  /// **at `warning`, naming what was lost** — once either bound is reached.
+  @visibleForTesting
+  static int maxParked = 64;
+
+  @visibleForTesting
+  static Duration parkTtl = const Duration(minutes: 2);
+
+  StreamSubscription<FiledNskeyPrivate>? _filingSubscription;
+
+  /// Subscribes to the filing signal, if this client's key ring emits one.
+  ///
+  /// Subscribed at construction rather than when the first notification parks:
+  /// the stream is broadcast and therefore not replayed, so a subscription
+  /// taken after the read that failed could miss the very filing it needs.
+  void _listenForFilings() {
+    final ring = atClient.getPreferences()?.crypto.keyRing;
+    if (ring is! SignalsPrivateFiling) return;
+    _filingSubscription =
+        (ring as SignalsPrivateFiling).privatesFiled.listen(_reDriveParked);
+  }
+
+  /// How many notifications are held waiting for a key.
+  @visibleForTesting
+  int get parkedCount =>
+      _parked.values.fold<int>(0, (sum, entries) => sum + entries.length);
+
+  /// Transforms [n] for one subscriber and delivers it if the regex matches.
+  ///
+  /// Shared by the arrival path and the re-drive so the two cannot diverge on
+  /// the regex rule — a parked notification must reach exactly the subscribers
+  /// the live one would have.
+  Future<void> _deliver(AtNotification n, NotificationConfig config,
+      StreamController controller) async {
+    final transformed = await NotificationResponseTransformer(atClient)
+        .transform(Tuple()
+          ..one = n
+          ..two = config);
+    if (config.regex != emptyRegex && !hasRegexMatch(n.key, config.regex)) {
+      return;
+    }
+    if (!controller.isClosed) controller.add(transformed);
+  }
+
+  /// Holds [n] until the generation it needs is filed.
+  void _park(NskeyPrivateUnavailableException e, AtNotification n,
+      NotificationConfig config, StreamController controller) {
+    final key = (
+      owner: e.owner.toAtsign().toString(),
+      namespace: e.namespace,
+      nskeyKid: e.nskeyKid
+    );
+    final entries = _parked.putIfAbsent(key, () => []);
+    entries.add(_ParkedNotification(n, config, controller, DateTime.now()));
+    logger.info('Parked notification ${n.key}: waiting for the nskey private '
+        'for ${key.owner}:${key.namespace} generation ${key.nskeyKid}');
+    _evictParkedOverBounds();
+  }
+
+  /// Enforces both park bounds. Anything dropped here is logged at `warning`
+  /// naming what was lost — a silently discarded notification is
+  /// indistinguishable from one that was never sent.
+  void _evictParkedOverBounds() {
+    final now = DateTime.now();
+    for (final entry in _parked.entries.toList()) {
+      entry.value.removeWhere((parked) {
+        if (now.difference(parked.parkedAt) < parkTtl) return false;
+        logger.warning('Dropping parked notification ${parked.notification.key}'
+            ': the nskey private for ${entry.key.namespace} generation '
+            '${entry.key.nskeyKid} did not arrive within $parkTtl');
+        return true;
+      });
+      if (entry.value.isEmpty) _parked.remove(entry.key);
+    }
+
+    var total = _parked.values.fold<int>(0, (sum, l) => sum + l.length);
+    while (total > maxParked) {
+      final oldestKey = _parked.entries
+          .reduce((a, b) => a.value.first.parkedAt.isBefore(b.value.first.parkedAt)
+              ? a
+              : b)
+          .key;
+      final dropped = _parked[oldestKey]!.removeAt(0);
+      logger.warning('Dropping parked notification ${dropped.notification.key}'
+          ': the park is full at $maxParked entries');
+      if (_parked[oldestKey]!.isEmpty) _parked.remove(oldestKey);
+      total--;
+    }
+  }
+
+  /// Re-drives everything waiting on the generation just filed.
+  Future<void> _reDriveParked(FiledNskeyPrivate filed) async {
+    final key = (
+      owner: filed.owner.toAtsign().toString(),
+      namespace: filed.namespace,
+      nskeyKid: filed.nskeyKid
+    );
+    final waiting = _parked.remove(key);
+    if (waiting == null || waiting.isEmpty) return;
+
+    logger.info('The nskey private for ${key.namespace} generation '
+        '${key.nskeyKid} was filed; re-driving ${waiting.length} parked '
+        'notification(s)');
+    for (final parked in waiting) {
+      try {
+        await _deliver(parked.notification, parked.config, parked.controller);
+      } catch (e) {
+        // Warning, and it names the notification: this was the retry, so a
+        // failure here is the point at which the value is genuinely lost.
+        logger.warning('Re-driving parked notification '
+            '${parked.notification.key} failed, and nothing retries it '
+            'again: $e');
+      }
+    }
+  }
+
   /// - [monitor] is providable for unit test purposes
   static Future<NotificationService> create(AtClient atClient,
       {Monitor? monitor,
@@ -95,6 +231,10 @@ class NotificationServiceImpl extends NotificationService {
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
             namespace: atClient.getPreferences()!.namespace)
         .build();
+    // Here, not at the first park: the filing stream is broadcast and is not
+    // replayed, so subscribing only once a notification has already failed to
+    // decrypt could miss the very filing that would release it.
+    _listenForFilings();
   }
 
   /// How every write of the last-received-notification watermark is routed.
@@ -296,6 +436,18 @@ class NotificationServiceImpl extends NotificationService {
       stopListening();
     }
 
+    unawaited(_filingSubscription?.cancel());
+    _filingSubscription = null;
+    // Anything still parked is now unreachable: its subscriber's controller is
+    // about to close. Say what is being lost rather than letting it vanish with
+    // the object.
+    final stranded = _parked.values.fold<int>(0, (sum, l) => sum + l.length);
+    if (stranded > 0) {
+      logger.warning('Discarding $stranded parked notification(s) on shutdown: '
+          'the nskey privates they were waiting for never arrived');
+    }
+    _parked.clear();
+
     _streamListeners.forEach((regex, streamController) {
       if (!streamController.isClosed) {
         streamController.close();
@@ -357,19 +509,12 @@ class NotificationServiceImpl extends NotificationService {
           final notificationConfig = entry.key;
           final streamController = entry.value;
           try {
-            var transformedNotification =
-                await NotificationResponseTransformer(atClient)
-                    .transform(Tuple()
-                      ..one = n
-                      ..two = notificationConfig);
-
-            if (notificationConfig.regex != emptyRegex) {
-              if (hasRegexMatch(n.key, notificationConfig.regex)) {
-                streamController.add(transformedNotification);
-              }
-            } else {
-              streamController.add(transformedNotification);
-            }
+            await _deliver(n, notificationConfig, streamController);
+          } on NskeyPrivateUnavailableException catch (e) {
+            // Not a failure: the private is conveyed at approval and filed
+            // asynchronously, so this value is openable as soon as it lands.
+            // Dropping it here loses a message whose key arrives moments later.
+            _park(e, n, notificationConfig, streamController);
           } catch (e) {
             // Warning, not finer. A notification that cannot be transformed is
             // dropped here and never retried — nothing re-delivers it when the
@@ -826,4 +971,19 @@ class NotificationServiceImpl extends NotificationService {
   @override
   Stream<NotificationListenerState> get currentListenerStateStream =>
       monitor.currentStateStream;
+}
+
+/// One notification held back, with everything needed to deliver it later.
+///
+/// Holds the subscriber's [StreamController] rather than looking it up at
+/// re-drive time: a subscriber that cancelled while its notification was parked
+/// must not have someone else's controller handed its value.
+class _ParkedNotification {
+  final AtNotification notification;
+  final NotificationConfig config;
+  final StreamController controller;
+  final DateTime parkedAt;
+
+  _ParkedNotification(
+      this.notification, this.config, this.controller, this.parkedAt);
 }

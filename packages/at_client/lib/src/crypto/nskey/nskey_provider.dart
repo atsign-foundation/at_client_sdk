@@ -225,10 +225,15 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
 
     final private = await keyRing.privateHalf(nskeyOwner, namespace, nskeyKid);
     if (private == null) {
-      throw AtDecryptionException(
-          'no nskey private held for $nskeyOwner:$namespace generation '
-          '$nskeyKid — this client is not authorised for the namespace, or has '
-          'not yet received that generation');
+      // Typed, not a message: the notification service parks on exactly this
+      // and re-drives it when the private is filed, so the retry must not
+      // depend on the wording here.
+      throw NskeyPrivateUnavailableException(
+          nskeyOwner,
+          namespace,
+          nskeyKid,
+          'this client is not authorised for the namespace, or has not yet '
+          'received that generation');
     }
 
     final Uint8List ckBytes;

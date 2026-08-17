@@ -66,6 +66,63 @@ class LegacyEncryptionRefusedException extends AtEncryptionException {
             'one that can be harvested now and opened later.');
 }
 
+/// A record was sealed to an nskey generation whose private half this client
+/// does not hold **yet**.
+///
+/// Distinguished from every other decryption failure by its own type, because
+/// it is the one that is worth waiting for: the private is conveyed to an
+/// enrollment at approval and filed asynchronously, so a value that arrives in
+/// that gap is openable moments later. Everything else that fails to decrypt is
+/// final. Matching on the message text instead would make the retry path
+/// silently stop working the day the wording changed.
+///
+/// Carries the three fields that identify what is missing, so a caller holding
+/// the record can match it against a private as that private is filed.
+class NskeyPrivateUnavailableException extends AtDecryptionException {
+  /// The atSign whose namespace key this is — not necessarily the reader.
+  final String owner;
+  final String namespace;
+
+  /// The generation, which is what makes this specific: holding *a* private for
+  /// the namespace is not holding the one this record was sealed to.
+  final String nskeyKid;
+
+  NskeyPrivateUnavailableException(
+      this.owner, this.namespace, this.nskeyKid, String reason)
+      : super('no nskey private held for $owner:$namespace generation '
+            '$nskeyKid — $reason');
+}
+
+/// A record identifying one filed nskey private, as [SignalsPrivateFiling]
+/// reports it.
+typedef FiledNskeyPrivate = ({String owner, String namespace, String nskeyKid});
+
+/// Implemented by an [NskeyKeyRing] that can say when a private half arrives.
+///
+/// A conveyed private is filed asynchronously — a client is handed back before
+/// its startup sweep has run — so a notification sealed to that generation can
+/// arrive before the key that opens it. Without a signal the only options are to
+/// drop it (data loss: the value is on the atServer for its ttl and the key is
+/// in hand milliseconds later) or to poll.
+///
+/// **The signal belongs at the FILING point, not at the arrival of the secret.**
+/// A start-time sweep consumes secrets from the inbox before any per-secret
+/// stream exists, so anything keyed on arrival misses exactly the privates that
+/// were already waiting — which is the common case, since the conveyance
+/// happens at approval and the client starts afterwards.
+///
+/// Separate from [NskeyKeyRing] so adding it breaks no existing
+/// `implements NskeyKeyRing` — a mock of that interface satisfies it through
+/// `noSuchMethod` and would return null into a non-nullable Stream at runtime,
+/// with the analyzer silent.
+abstract interface class SignalsPrivateFiling {
+  /// Fires once per private half filed, after it is stored and readable.
+  ///
+  /// Broadcast, so a late subscriber misses earlier events: a caller that must
+  /// not miss one subscribes before it does the read that might come up empty.
+  Stream<FiledNskeyPrivate> get privatesFiled;
+}
+
 /// Selects and configures the crypto providers for an [AtClient].
 class CryptoConfig {
   /// Provider used when an [AtKey] carries no `appMetadata.providerId`.
@@ -79,15 +136,27 @@ class CryptoConfig {
   /// the same config can back any client that reuses this preference.
   final List<CryptoProvider> providers;
 
+  /// The namespace key material these providers share, when there is any.
+  ///
+  /// Held here as well as inside the providers because it is the config, not
+  /// any one provider, that a non-crypto collaborator can reach: the
+  /// notification service subscribes to [SignalsPrivateFiling] on it to learn
+  /// when a private it was waiting for has been filed. Routing that through a
+  /// particular provider type would tie an unrelated subsystem to which
+  /// providers happen to be registered.
+  final NskeyKeyRing? keyRing;
+
   const CryptoConfig({
     required this.defaultProviderId,
     this.providers = const [],
+    this.keyRing,
   });
 
   /// Legacy-only — the default for un-migrated apps.
   const CryptoConfig.legacy()
       : defaultProviderId = legacyCryptoProviderId,
-        providers = const [];
+        providers = const [],
+        keyRing = null;
 
   /// The distinguished "the app named nothing" marker — the default value of
   /// [AtClientPreference.crypto].
@@ -151,6 +220,7 @@ class CryptoConfig {
     final cache = ContentKeyCache();
     return CryptoConfig(
       defaultProviderId: defaultProviderId,
+      keyRing: keyRing,
       providers: [
         // One conveyance provider per key-establishment algorithm, each with
         // its own wire id. Reads route by the id the record carries, so a
