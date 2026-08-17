@@ -767,16 +767,17 @@ ladder — a same-value version bump merges silently.)
 
 ### 14.19 Small items, raised 2026-08-12 and not yet acted on
 
-**17 open, 5 struck.** Each is real and verified at the time of writing, and
-each is too small to be a step of its own. **None blocks anything** — which is
-why the items themselves live in
+**11 open, 11 struck** (was 17 open on 2026-08-17, before items 1, 3, 16, 17 and
+19 were fixed and 22 was struck as a false positive). Each is real and verified
+at the time of writing, and each is too small to be a step of its own. **None
+blocks anything** — which is why the items themselves live in
 [`detail/implementation-plan.md`](detail/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 rather than here: they are work to pick up, not work to hold in mind.
 
 **Item 8 is the only one waiting on a ruling** — typed key material is not
 self-encrypted at rest while the flat fields are. Item 10 is an unexplained
-functional run with two disproven theories. Item 14 is not PQ at all. Items
-20–22 were examined and deliberately left, so they are not work.
+functional run with two disproven theories. Item 14 is not PQ at all. Items 20
+and 21 were examined and deliberately left, so they are not work.
 
 Re-derive the open count rather than trusting the number above:
 

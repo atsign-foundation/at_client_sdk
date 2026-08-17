@@ -48,22 +48,21 @@ void main() {
         remoteSecondary: mockRemoteSecondary);
     atClient.syncService = MockSyncService();
 
-    var localEnrollmentKey = AtKey()
-      ..isLocal = true
-      ..key = enrollmentId
-      ..sharedBy = '@alice';
-    AtData atData = AtData()
-      ..data = jsonEncode(Enrollment()
-        ..appName = 'wavi'
-        ..deviceName = 'iphone'
-        ..namespace = {'wavi': 'rw'}
-        ..enrollmentId = enrollmentId);
-
-    // Store enrollment data
-    await atClient
-        .getLocalSecondary()
-        ?.keyStore
-        ?.put(localEnrollmentKey.toString(), atData);
+    // The `enroll:fetch` this client makes the first time something asks what
+    // it is authorized for.
+    //
+    // ⚠️ This used to seed a keystore entry at `local:<enrollmentId><atSign>`
+    // instead. Nothing in production writes that key, so the seed stood for a
+    // state the SDK never reaches and the fetch-and-parse path below was never
+    // exercised. Stubbing the command drives the real one.
+    when(() => mockRemoteSecondary.executeCommand(
+            'enroll:fetch:{"enrollmentId":"$enrollmentId"}\n',
+            auth: true))
+        .thenAnswer((_) async => 'data:${jsonEncode({
+              'appName': 'wavi',
+              'deviceName': 'iphone',
+              'namespace': {'wavi': 'rw'},
+            })}');
 
     AtEncryptionResult? atEncryptionResult = await atClient.atChops
         ?.encryptString(atChops.atChopsKeys.selfEncryptionKey!.key,
@@ -178,7 +177,7 @@ void main() {
           'abcdef01-1a2e-43e4-93bd-378f1d366ea7.new.enrollments.__manage$currentAtsign';
       const enrollValue = '{"appName":"buzz","deviceName":"pixel",'
           '"namespace":{"buzz":"rw"},'
-          '"metadata":{"keyPackage":{"payload":{"v":1},"signature":"sig"}}}';
+          '"metadata":{"keyPackage":{"opaqueToTheClient":true}}}';
       final listCommand = (EnrollVerbBuilder()
             ..operation = EnrollOperationEnum.list)
           .buildCommand();
@@ -203,7 +202,14 @@ void main() {
           reason: 'an approver reads the encapsulation target from here — the '
               'metadata is only ever written by the request that creates the '
               'record, so there is nowhere else to read it from');
-      expect((request.metadata!['keyPackage'] as Map)['signature'], 'sig');
+      // The stub's contents are deliberately not shaped like a real key
+      // package. What this asserts is pass-through of an opaque map, and a
+      // stub that mimicked the envelope would read as documentation of its
+      // shape — which is how this line came to describe a flat `signature`
+      // field that the envelope has not had since it went to a signatures
+      // list.
+      expect((request.metadata!['keyPackage'] as Map)['opaqueToTheClient'],
+          isTrue);
     });
 
     /// What an approving app passes in on the RSA path: the wrapped key it
@@ -254,7 +260,7 @@ void main() {
           '@apkamminted',
           '{"appName":"buzz","deviceName":"pixel",'
               '"namespace":{"buzz":"rw"},'
-              '"metadata":{"keyPackage":{"payload":{"v":1},"signature":"s"}}}');
+              '"metadata":{"keyPackage":{"opaqueToTheClient":true}}}');
 
       expect(decision.mintedApkamSymmetricKey, isNotNull,
           reason: 'the absent wrapped key is the whole signal that this '
@@ -271,7 +277,7 @@ void main() {
           '{"appName":"buzz","deviceName":"pixel",'
               '"namespace":{"buzz":"rw"},'
               '"encryptedAPKAMSymmetricKey":"rsa-wrapped",'
-              '"metadata":{"keyPackage":{"payload":{"v":1},"signature":"s"}}}');
+              '"metadata":{"keyPackage":{"opaqueToTheClient":true}}}');
 
       expect(decision.mintedApkamSymmetricKey, isNull,
           reason: 'this enrollee advertised a key package for secret '

@@ -2854,19 +2854,25 @@ ladder — a same-value version bump merges silently.)
 Each is real, verified at the time of writing, and too small to be a step of
 its own. None blocks anything.
 
-1. **`packages/at_client/lib/src/exception/at_client_exception.dart` is dead.**
-   `@Deprecated` since the type moved to at_commons, not exported from the
-   barrel, and imported by nothing in at_client or either test package
-   (verified by grep 2026-08-12). It is reachable only by a deep
-   `package:at_client/src/…` import, so deleting it is not a public-API change.
+1. ~~**`packages/at_client/lib/src/exception/at_client_exception.dart` is
+   dead.**~~ **DELETED 2026-08-17.** Re-verified before deleting rather than
+   trusting the 2026-08-12 grep: zero importers of that path anywhere in the
+   workspace, absent from the barrel, and both classes `@Deprecated` since the
+   types moved to at_commons. The directory went with it — it held nothing
+   else. Not a public-API change: it was reachable only by a deep
+   `package:at_client/src/…` import.
 2. **`at_commons`' `KeyUtil` (`lib/src/keystore/at_key_util.dart`) has zero
    callers** anywhere in the workspace — but unlike the above it IS published
    public API, so removing it is a deprecate-then-delete, not an edit.
-3. **`enrollment_service_test.dart:206` asserts
+3. ~~**`enrollment_service_test.dart:206` asserts
    `(metadata!['keyPackage'] as Map)['signature'] == 'sig'`** against an opaque
-   stub. It passes and tests metadata pass-through correctly, but it reads as
-   documentation of the pre-2026-08-12 envelope shape, which had a top-level
-   `signature`. Cosmetic; the risk is a future reader believing it.
+   stub.~~ **FIXED 2026-08-17.** The stub no longer mimics an envelope at all —
+   it is `{"opaqueToTheClient":true}`, which is what the client actually treats
+   the metadata as. ⚠️ **Three stubs carried the shape, not the one this row
+   named**: the same `{"payload":…,"signature":…}` sat in two neighbouring
+   tests, so fixing only line 206 would have left the misleading documentation
+   two lines away. The assertion now says in a comment why the stub is shaped
+   the way it is.
 4. **Every kpid changed value** at
    [`8d44a9222`](#1418-the-remaining-d1-initial-development-sequence) (step 4,
    ruling 3 — the kid preimage became the key's raw bytes). Licensed by ruling
@@ -3253,31 +3259,52 @@ its own. None blocks anything.
     attempts — the guard and its tests are reverted — so this entry is the
     only record that they were tried.
 
-16. **`LocalSecondary`'s enrollment cache can never hit, and its write is never
-    read.** `_getEnrollmentDetails` reads
-    `local:<enrollmentId><atSign>` (`local_secondary.dart:898`) and, on a miss,
-    writes the fetched record to
-    `<enrollmentId>.new.enrollments.__manage<atSign>` (`:935`) — a *different*
-    key. Measured 2026-08-15 across all 16 `local:` occurrences in at_client's
-    `lib/` and every one in at_auth's: **nothing anywhere writes the key the
-    read looks for.** So every client instance pays one `enroll:fetch`, and the
-    "cache it in local secondary" write is dead. Pre-existing and outside the PQ
-    path; found while asking what C2 routed into. Harmless today — an in-memory
-    memo on the same object means one fetch per client, not per call — so this
-    is a cleanup, not a defect. ⚠️ **Whichever way it is fixed, decide
-    deliberately whether the cache SHOULD hit:** C2 wants a fresh record on
-    every start precisely so a changed grant is noticed, and making the cache
-    work would silently defeat that.
-17. **`Enrollment.metadata`'s dartdoc claims a field `enroll:fetch` does not
-    return.** It says the metadata is "stored verbatim by the atServer and
-    returned here", but `_fetchEnrollmentInfoById` (at_server `6a86fbcc`,
-    merged to trunk) returns exactly
-    `{appName, deviceName, namespace, encryptedAPKAMSymmetricKey, status}` —
-    no `metadata`. The field is presumably populated on a different response
-    (`enroll:list`), so the type is fine and the *sentence* is wrong where it
-    sits. Worth correcting before someone reads a key package off a `fetch`
-    result and gets null. Also note `Enrollment.namespace` is singular in name
-    and holds the whole grants **map**.
+16. ~~**`LocalSecondary`'s enrollment cache can never hit, and its write is
+    never read.**~~ **FIXED 2026-08-17 — and it was not the cleanup this row
+    described.** Both halves are gone: the read that could never hit and the
+    write nothing read. gkc ruled the cache should NOT be made to work, for the
+    reason this row already gave — a client re-reads the record on every start
+    so that a changed grant is noticed.
+
+    ⚠️ **The row's absence claim was about production only, and the tests were
+    the other half.** "Nothing anywhere writes the key the read looks for" was
+    measured over `local:` occurrences in `lib/`. Ten test blocks write it —
+    nine in `apkam_authorization_test.dart`, one in
+    `enrollment_service_test.dart` — under the comment *"Insert the enrollment
+    info into the local secondary"*. So the read was a **test-only seam**, and
+    removing it turned eight tests red. That is what the row could not see: the
+    fixture stood for a state production never reaches, so **the fetch-and-parse
+    path underneath every one of those authorization checks had never been
+    exercised.** The nine now use `LocalSecondary.enrollment`, already declared
+    `@visibleForTesting`; the one with a mock remote stubs the real
+    `enroll:fetch` instead, which drives the production path for the first time.
+
+    ⚠️ **Three of the nine seeded through a different client than the one under
+    test** (`atClient` while the assertions ran on `enrolledAtClient`) and
+    passed only because both shared a Hive path on disk. Through the named seam
+    that could not have compiled into a silent pass.
+
+    ⚠️ **A second defect, previously unreachable, became reachable the moment
+    the cache went.** Both catch arms around the `enroll:fetch` logged at
+    `finer` and fell through to `jsonDecode(enrollmentInfoFromServer!)`, so an
+    unreachable atServer surfaced as *"Null check operator used on a null
+    value"* from a line naming neither the enrollment nor the fetch — with the
+    exception that explains it discarded at a level nobody runs at. It now
+    throws `AtKeyNotFoundException` naming the enrollment id and the cause.
+    Three tests in `local_secondary_test.dart` cover the no-id, the parsed and
+    the failed cases; the "before" behaviour was observed directly, as the
+    original eight failures.
+17. ~~**`Enrollment.metadata`'s dartdoc claims a field `enroll:fetch` does not
+    return.**~~ **FIXED 2026-08-17.** Re-verified against at_server's own source
+    at `c6ed3771` rather than inherited: `_fetchEnrollmentInfoById` returns
+    exactly `{appName, deviceName, namespace, encryptedAPKAMSymmetricKey,
+    status}`, with no `metadata`. The row guessed the field "is presumably
+    populated on a different response (`enroll:list`)" — that is right, and
+    there is a second: `enrollment_manager.dart:354` returns
+    `{enrollmentId, access, apkamPubKey, metadata}` for `enroll:listns`, for
+    every approved enrollment in a namespace. The dartdoc now names all three
+    verbs and warns that a fetch result carries null. `Enrollment.namespace`
+    now documents that it is singular in name and holds the whole grants map.
 18. ~~**`MintLock` releases a lock it may no longer own — raised 2026-08-15,
     while building [14.22](#1422-making-the-signing-root-rotatable--decisions-101)
     row 6.**~~ **CLOSED 2026-08-16 — the release itself is gone; see the ✅
@@ -3317,14 +3344,24 @@ its own. None blocks anything.
     and [104.10](decisions.md#10410-fixed-in-at_server-and-merged)); a client
     relying on ttl-only release is correct **only** against an atServer running
     it, which today means `at_virtual_env:local` and not `virtualenv:vip`.
-19. **`tests/at_onboarding_cli_functional_tests` analyzes with 6 warnings, all
-    in one file nobody touched — noticed 2026-08-15.** Every one is an
-    `unused_import` in `test/ecc_secure_element_mock_test.dart`; `dart analyze
-    test` exits **2** for that package as a result. Not PQ and not caused by
-    this branch (`git status` shows the file unmodified), but it means the
-    package has no clean analyze rail, so a real finding there would arrive
-    inside a red that everyone already ignores. Re-derive:
-    `cd tests/at_onboarding_cli_functional_tests && dart analyze test`.
+19. ~~**`tests/at_onboarding_cli_functional_tests` analyzes with 6 warnings, all
+    in one file nobody touched.**~~ **FIXED 2026-08-17 — the package now
+    analyzes exit 0 (14 info), where it exited 2.**
+
+    ⚠️ **The row read as an import tidy-up and the file was entirely dead.**
+    `ecc_secure_element_mock_test.dart` had `void main(){}` — empty — with its
+    whole test body commented out beneath it, and its three helper functions
+    duplicated in `at_onboarding_cli_test.dart`, which declares its own
+    `getPreferences`. The imports were unused because *the test was*. Deleted,
+    together with `utils/at_chops_secure_element_mock.dart`, which nothing else
+    imported. `utils/onboarding_service_impl_override.dart` stays — the live
+    test uses it.
+
+    The secure-element reference is not lost with it:
+    `packages/at_chops/example/zariot/at_chops_secure_element.dart` is a live
+    example of the same thing, and git history holds the disabled test.
+
+    Re-derive: `cd tests/at_onboarding_cli_functional_tests && dart analyze test`.
 20. **`PqSigningRoot` and `PublishedNskeyKeyRing` both take a constructor
     parameter whose TYPE the barrel does not export — examined 2026-08-15 and
     deliberately left.** `PqSigningRoot(atClient, {keysIo, MintLock? mintLock})`
@@ -3350,15 +3387,21 @@ its own. None blocks anything.
     overlooked. If it ever matters, the fix is to cache the advertised roots
     for the life of the start rather than to go back to a presence check.
 
-22. **`decisions.md` carries one broken intra-document anchor,
-    `#1-subsystem-a-…` — pre-existing, found 2026-08-15, deliberately not
-    folded into an unrelated commit.** Its anchor text contains an ellipsis,
-    which GFM strips when it slugs the heading, so no heading can ever match
-    it. Confirmed pre-existing by stashing the session's doc edits and
-    re-grepping. Every other intra-doc anchor in `decisions.md`,
-    `implementation-plan.md` and `design.md` resolves — 785 checked, this the
-    only failure — so this is a one-line fix whenever someone is editing that
-    section for another reason.
+22. ~~**`decisions.md` carries one broken intra-document anchor,
+    `#1-subsystem-a-…`.**~~ ⛔ **STRUCK 2026-08-17 — it is a FALSE POSITIVE and
+    there is nothing to fix.** The only occurrence sits inside a backtick code
+    span at `detail/decisions.md:7718`, where the surrounding bullet quotes
+    `design.md`'s table-of-contents *as an example* of a label beside a link.
+    GFM does not render links inside code spans, so it is not a link and no
+    heading needs to match it — and the bullet it lives in already says that
+    case was "left alone" deliberately.
+
+    ⚠️ **This is the second time an anchor checker that does not skip code
+    spans has produced a finding here.** The first reported 785 checked / 235
+    broken across `docs/projects/pq/`; the real number was zero, and the one
+    surviving hit was this same backtick block. A checker over Markdown must
+    skip code spans and prove a positive control before any absence or any
+    count it reports is worth acting on.
 
 #### 14.19.1 Things that LOOK like defects and are not
 

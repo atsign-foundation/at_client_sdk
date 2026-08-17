@@ -10,6 +10,9 @@ import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 import 'package:mocktail/mocktail.dart';
 
+import 'package:at_lookup/at_lookup.dart' show AtLookUpException;
+
+import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 
 class MockSecondaryKeyStore extends Mock
@@ -881,6 +884,84 @@ void main() {
           response.contains(AtKey.fromString(
               MockSecondaryKeyStore.otherWaviOtherNonHiddenKey)),
           true);
+    });
+  });
+
+  /// The enrollment record is fetched from the atServer on first use. There is
+  /// no local cache: one used to be written here and could never be read back,
+  /// because the read looked for `local:<enrollmentId><atSign>` and the write
+  /// went to the atServer's own `<enrollmentId>.new.enrollments.__manage`
+  /// naming.
+  group('fetching the enrollment record', () {
+    late MockRemoteSecondary remote;
+
+    // ⚠️ The instance map is keyed by atSign, so without this eviction
+    // `AtClientImpl.create` hands back a client built by an earlier group —
+    // with that group's remote secondary, and with `enrollment` already
+    // memoised. Every stub below would then be measuring the wrong object.
+    setUp(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await setupLocalStorage(storageDir, atSign);
+    });
+    tearDown(() async {
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      await tearDownLocalStorage(storageDir);
+    });
+
+    Future<AtClient> client({String? enrollmentId}) async {
+      remote = MockRemoteSecondary();
+      final c = await AtClientImpl.create(
+          atSign,
+          'wavi',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/commit',
+          remoteSecondary: remote);
+      c.enrollmentId = enrollmentId;
+      return c;
+    }
+
+    test('a client with no enrollment id has no record to fetch', () async {
+      final c = await client();
+      expect(await c.getLocalSecondary()!.getEnrollmentDetails(), isNull);
+      verifyNever(() => remote.executeCommand(any(), auth: any(named: 'auth')));
+    });
+
+    test('the fetched record is parsed, and fetched only once', () async {
+      final c = await client(enrollmentId: 'e-1');
+      when(() => remote.executeCommand(
+              'enroll:fetch:{"enrollmentId":"e-1"}\n',
+              auth: true))
+          .thenAnswer((_) async => 'data:${jsonEncode({
+                'appName': 'buzz',
+                'deviceName': 'pixel',
+                'namespace': {'buzz': 'rw'},
+              })}');
+
+      final first = await c.getLocalSecondary()!.getEnrollmentDetails();
+      expect(first!.appName, 'buzz');
+      expect(first.namespace, {'buzz': 'rw'});
+
+      await c.getLocalSecondary()!.getEnrollmentDetails();
+      verify(() => remote.executeCommand(any(), auth: true)).called(1);
+    });
+
+    test('a failed fetch names the enrollment and the cause', () async {
+      final c = await client(enrollmentId: 'e-2');
+      when(() => remote.executeCommand(any(), auth: true))
+          .thenThrow(AtLookUpException('AT0014', 'the atServer said no'));
+
+      // Before this, both catch arms logged at `finer` and fell through to a
+      // `!` on the null result, so an unreachable atServer surfaced as "Null
+      // check operator used on a null value" from a line naming neither the
+      // enrollment nor the fetch — with the exception that explains it
+      // discarded at a level nobody runs at.
+      await expectLater(
+          () => c.getLocalSecondary()!.getEnrollmentDetails(),
+          throwsA(isA<AtKeyNotFoundException>()
+              .having((e) => e.message, 'message', contains('e-2'))
+              .having((e) => e.message, 'message',
+                  contains('the atServer said no'))));
     });
   });
 }

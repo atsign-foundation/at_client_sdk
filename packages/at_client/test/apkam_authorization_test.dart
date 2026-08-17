@@ -3,9 +3,23 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
+
+/// Supplies the enrollment record the client would otherwise fetch, through
+/// `LocalSecondary.enrollment` — the seam already declared `@visibleForTesting`
+/// for exactly this.
+///
+/// ⚠️ These tests used to seed a keystore entry at
+/// `local:<enrollmentId><atSign>` instead, which read like a cache warm-up and
+/// was not one: **nothing in production writes that key.** The fixture stood
+/// for a state the SDK never reaches, and it meant the fetch-and-parse path
+/// underneath every authorization check below was never exercised here. It
+/// still is not — that wants its own test against a stubbed `enroll:fetch`,
+/// which is a different subject from authorization.
+void seedEnrollment(AtClient client, Map<String, String> namespace) =>
+    client.getLocalSecondary()!.enrollment = Enrollment()
+      ..namespace = namespace;
 
 void main() {
   var storageDir = '${Directory.current.path}/test/hive';
@@ -28,16 +42,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
-      // Insert the enrollment info into the local secondary.
-      var localEnrollmentKey = AtKey()
-        ..isLocal = true
-        ..key = testEnrollmentId
-        ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
-          localEnrollmentKey.toString(),
-          AtData()
-            ..data = jsonEncode(
-                Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
+      seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
       //1. create a self key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -131,15 +136,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
-      // Insert the enrollment info into the local secondary.
-      var localEnrollmentKey = AtKey()
-        ..isLocal = true
-        ..key = testEnrollmentId
-        ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
-          localEnrollmentKey.toString(),
-          AtData()
-            ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
+      seedEnrollment(atClient, {"wavi": "rw"});
       //1. create a self key in wavi namespace should pass
       var waviKey = AtKey()
         ..key = 'phone'
@@ -213,16 +210,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
-      // Insert the enrollment info into the local secondary.
-      var localEnrollmentKey = AtKey()
-        ..isLocal = true
-        ..key = testEnrollmentId
-        ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
-          localEnrollmentKey.toString(),
-          AtData()
-            ..data = jsonEncode(
-                Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
+      seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
       //1. create a self key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -288,15 +276,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
-      // Insert the enrollment info into the local secondary.
-      var localEnrollmentKey_2 = AtKey()
-        ..isLocal = true
-        ..key = newEnrollmentId
-        ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
-          localEnrollmentKey_2.toString(),
-          AtData()
-            ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
+      seedEnrollment(enrolledAtClient, {"wavi": "rw"});
       // delete self key in wavi namespace should pass
       var deleteBuilder = DeleteVerbBuilder()..atKey = waviKey;
       var deleteWaviKeyResult = await enrolledAtClient
@@ -348,16 +328,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
-      // Insert the enrollment info into the local secondary.
-      var localEnrollmentKey = AtKey()
-        ..isLocal = true
-        ..key = testEnrollmentId
-        ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
-          localEnrollmentKey.toString(),
-          AtData()
-            ..data = jsonEncode(
-                Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
+      seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
 
       //1. create a key in wavi namespace
       var waviKey = AtKey()
@@ -446,14 +417,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = privilegedEnrollment;
-      // Insert the enrollment info into the local secondary.
-      var localEnrollmentKey = AtKey()
-        ..isLocal = true
-        ..key = privilegedEnrollment
-        ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
-          localEnrollmentKey.toString(),
-          AtData()..data = jsonEncode(Enrollment()..namespace = {"*": "rw"}));
+      seedEnrollment(atClient, {"*": "rw"});
       //1. create a key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -515,15 +479,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
-      // Insert the enrollment info into the local secondary.
-      var localEnrollmentKey_2 = AtKey()
-        ..isLocal = true
-        ..key = newEnrollmentId
-        ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
-          localEnrollmentKey_2.toString(),
-          AtData()
-            ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
+      seedEnrollment(enrolledAtClient, {"wavi": "rw"});
       // llookup on wavi namespace should be allowed
       var waviLookupBuilder = LLookupVerbBuilder()..atKey = waviKey;
       var waviResult = await enrolledAtClient
@@ -572,16 +528,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       atClient.enrollmentId = testEnrollmentId;
-      // Insert the enrollment info into the local secondary.
-      var localEnrollmentKey = AtKey()
-        ..isLocal = true
-        ..key = testEnrollmentId
-        ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
-          localEnrollmentKey.toString(),
-          AtData()
-            ..data = jsonEncode(
-                Enrollment()..namespace = {"__manage": "rw", "*": "rw"}));
+      seedEnrollment(atClient, {"__manage": "rw", "*": "rw"});
       //1. create a key in wavi namespace
       var waviKey = AtKey()
         ..key = 'phone'
@@ -655,15 +602,7 @@ void main() {
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/commit');
       enrolledAtClient.enrollmentId = newEnrollmentId;
-      // Insert the enrollment info into the local secondary.
-      var localEnrollmentKey_2 = AtKey()
-        ..isLocal = true
-        ..key = newEnrollmentId
-        ..sharedBy = '@alice';
-      await atClient.getLocalSecondary()?.keyStore?.put(
-          localEnrollmentKey_2.toString(),
-          AtData()
-            ..data = jsonEncode(Enrollment()..namespace = {"wavi": "rw"}));
+      seedEnrollment(enrolledAtClient, {"wavi": "rw"});
       // enrolled client should be able to see wavi key and reserved key in scan. Buzz key and no namespace keys should not be returned
       enrolledAtClient.enrollmentId = newEnrollmentId;
       var enrolledClientScanResult = await enrolledAtClient

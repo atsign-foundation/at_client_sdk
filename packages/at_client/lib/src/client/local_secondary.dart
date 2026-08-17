@@ -898,60 +898,62 @@ class LocalSecondary implements Secondary {
   Future<Enrollment?> getEnrollmentDetails() async =>
       enrollment ??= await _getEnrollmentDetails();
 
+  /// Always goes to the atServer. There is deliberately no durable cache: the
+  /// only reuse is the in-memory memo in [getEnrollmentDetails], which makes
+  /// this one fetch per client rather than per call.
+  ///
+  /// There used to be a local-keystore cache here and **it could never hit** —
+  /// the read looked for `local:<enrollmentId><atSign>` while the write went to
+  /// `<enrollmentId>.new.enrollments.__manage<atSign>`, which is the atServer's
+  /// own naming for an enrollment record rather than a private cache key.
+  /// Nothing in the workspace read what it wrote; the chain sweep gets its
+  /// records from a remote `enroll:list`, where that string is only a key in
+  /// the response map.
+  ///
+  /// Making the cache hit would have been the wrong repair. A client re-reads
+  /// this record on every start precisely so that a grant changed since last
+  /// time is noticed, and a cache that worked would hide exactly that.
   Future<Enrollment?> _getEnrollmentDetails() async {
     if (_atClient.enrollmentId == null) {
       return null;
     }
 
-    // Fetch enrollment information from local secondary
-    AtData? enrollmentInfoFromLocalSecondary;
-    try {
-      enrollmentInfoFromLocalSecondary = await keyStore?.get(
-          'local:${_atClient.enrollmentId}${_atClient.getCurrentAtSign()}');
-    } on Exception {
-      _logger.finer(
-          'Enrollment information for id: ${_atClient.enrollmentId} not found in local secondary. Fetching from server');
-    }
-
-    // If enrollmentInfo is not found in local secondary, fetch the info from the remote secondary server and cache it in local
-    // secondary.
     String? enrollmentInfoFromServer;
-    if (enrollmentInfoFromLocalSecondary == null) {
-      try {
-        enrollmentInfoFromServer = await _atClient
-            .getRemoteSecondary()
-            ?.executeCommand(
-                'enroll:fetch:{"enrollmentId":"${_atClient.enrollmentId}"}\n',
-                auth: true);
-      } on AtException catch (e) {
-        _logger.finer(
-            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
-      } on AtLookUpException catch (e) {
-        _logger.finer(
-            'Failed to fetch enrollment information for id: ${_atClient.enrollmentId} from server caused by ${e.toString()}');
-      }
-      enrollmentInfoFromServer =
-          enrollmentInfoFromServer?.replaceFirst(RegExp('^data:'), '');
-      Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer!);
-      _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
-      enrollment = Enrollment()
-        ..appName = enrollmentDetailsMap['appName']
-        ..deviceName = enrollmentDetailsMap['deviceName']
-        ..namespace = enrollmentDetailsMap['namespace']
-        ..encryptedAPKAMSymmetricKey =
-            enrollmentDetailsMap['encryptedAPKAMSymmetricKey'];
-
-      AtData atData = AtData()..data = jsonEncode(enrollment);
-      // The enrollment data is fetch from server, Set skipCommit to true to prevent
-      // the key sync back to server
-      await keyStore?.put(
-          '${_atClient.enrollmentId}.new.enrollments.__manage${_atClient.getCurrentAtSign()}',
-          atData,
-          skipCommit: true);
-    } else {
-      enrollment = Enrollment.fromJSON(
-          jsonDecode(enrollmentInfoFromLocalSecondary.data!));
+    Object? fetchFailure;
+    try {
+      enrollmentInfoFromServer = await _atClient
+          .getRemoteSecondary()
+          ?.executeCommand(
+              'enroll:fetch:{"enrollmentId":"${_atClient.enrollmentId}"}\n',
+              auth: true);
+    } on AtException catch (e) {
+      fetchFailure = e;
+    } on AtLookUpException catch (e) {
+      fetchFailure = e;
     }
+
+    // Both catches above used to log at `finer` and fall through to a `!` on
+    // this value, so an unreachable atServer surfaced as "Null check operator
+    // used on a null value" from a line that mentions neither the enrollment
+    // nor the fetch — with the exception that explains it discarded at a level
+    // nobody runs at.
+    if (enrollmentInfoFromServer == null) {
+      throw AtKeyNotFoundException(
+          'Failed to fetch the enrollment record for '
+          '${_atClient.enrollmentId} from the atServer'
+          '${fetchFailure == null ? '' : ': $fetchFailure'}');
+    }
+
+    enrollmentInfoFromServer =
+        enrollmentInfoFromServer.replaceFirst(RegExp('^data:'), '');
+    Map enrollmentDetailsMap = jsonDecode(enrollmentInfoFromServer);
+    _logger.info('Enrollment Details Map : $enrollmentDetailsMap');
+    enrollment = Enrollment()
+      ..appName = enrollmentDetailsMap['appName']
+      ..deviceName = enrollmentDetailsMap['deviceName']
+      ..namespace = enrollmentDetailsMap['namespace']
+      ..encryptedAPKAMSymmetricKey =
+          enrollmentDetailsMap['encryptedAPKAMSymmetricKey'];
 
     if (enrollment == null) {
       throw AtKeyNotFoundException(

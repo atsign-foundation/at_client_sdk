@@ -1,4 +1,23 @@
 ## 3.14.1
+- fix: a failed `enroll:fetch` now throws `AtKeyNotFoundException` naming the
+  enrollment id and the cause. Both catch arms logged at `finer` and fell
+  through to a null-check on the result, so an unreachable atServer surfaced as
+  "Null check operator used on a null value" from a line mentioning neither the
+  enrollment nor the fetch.
+- chore: `LocalSecondary` no longer keeps a local-keystore cache of the
+  enrollment record. It could never hit — the read looked for
+  `local:<enrollmentId><atSign>` while the write went to the atServer's own
+  `<enrollmentId>.new.enrollments.__manage<atSign>` naming — and it should not:
+  a client re-reads the record on every start so that a changed grant is
+  noticed. The in-memory memo still makes this one fetch per client.
+- chore: removed `lib/src/exception/at_client_exception.dart`, whose two
+  classes had been `@Deprecated` since the types moved to at_commons. It was
+  never exported from the barrel and nothing in the workspace imported it, so
+  it was reachable only by a deep `package:at_client/src/…` import.
+- docs: `Enrollment.metadata` no longer claims to be returned by
+  `enroll:fetch`, which does not carry it — a fetch result's `metadata` is
+  null. It comes back from `enroll:list` and `enroll:listns`. `Enrollment.namespace`
+  now says that it is singular in name and holds the whole grants map.
 - refactor!: `NotificationService.send()` composes its command with
   `NotifyVerbBuilder`, the builder every other notification path already uses,
   instead of hand-rolling the `notify:` string. The duplicated construction is

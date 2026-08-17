@@ -3,11 +3,21 @@ class Enrollment {
   String? enrollmentId;
   String? appName;
   String? deviceName;
+
+  /// Singular in name, but it holds the whole grants **map** —
+  /// `{namespace: access}`, e.g. `{'buzz': 'rw', '__manage': 'rw'}`.
   Map<String, dynamic>? namespace;
   String? encryptedAPKAMSymmetricKey;
 
   /// The opaque metadata this enrollment carried on its `enroll:request`,
-  /// stored verbatim by the atServer and returned here.
+  /// stored verbatim by the atServer.
+  ///
+  /// ⚠️ **Null on an `enroll:fetch` result.** That verb returns exactly
+  /// `appName`, `deviceName`, `namespace`, `encryptedAPKAMSymmetricKey` and
+  /// `status`; it does not carry the metadata, so reading a key package off a
+  /// fetch gets null. It comes back from `enroll:list`, which returns the
+  /// record whole, and from `enroll:listns`, which returns it for every
+  /// approved enrollment in a namespace.
   ///
   /// `metadata.keyPackage` is the enrolling app's APKAM-signed X-Wing key
   /// package — the target an approver seals this atSign's secrets to. It is
