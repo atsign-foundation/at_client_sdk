@@ -58,6 +58,19 @@ Future<int> collectConveyedKeyMaterial(AtClient atClient, AtKeysIo keysIo,
   final held = sharing.secretStore.listSecrets();
   await PqSigningRoot(atClient, keysIo: keysIo)
       .filePendingPrivate(atSign, held);
+
+  // ⚠️ **One filing per client, and it must be the ring's.** This used to build
+  // its own unconditionally, which made every client hold two: the one the ring
+  // exposes and this one, which is the one that actually files. Nothing broke
+  // while filing was write-only — both wrote the same keyfile — but the moment
+  // a filing gained an observable event, the object emitting it was not the
+  // object anything could reach. Measured live: a notification parked correctly
+  // for a private that was then filed successfully, and was never re-driven,
+  // because the subscription was on the ring's filing and the announcement came
+  // from this one.
+  final ringFiling = ring is PublishedNskeyKeyRing ? ring.privateFiling : null;
+  if (ringFiling != null) return ringFiling.filePending(held);
+
   return NskeyPrivateFiling(
     keysIo: keysIo,
     atSign: atSign,

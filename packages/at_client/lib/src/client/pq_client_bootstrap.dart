@@ -309,7 +309,11 @@ class PqClientBootstrap {
     final keysIo = _keysIo;
     if (keysIo == null) return;
     try {
-      await collectConveyedKeyMaterial(_atClient, keysIo);
+      // `ring:` so the sweep files through THIS client's one filing rather
+      // than building a second. Two filings wrote the same keyfile and looked
+      // equivalent until a filing gained an observable event: the one emitting
+      // it was then not the one the ring exposes, so nothing could hear it.
+      await collectConveyedKeyMaterial(_atClient, keysIo, ring: ring);
     } catch (e, st) {
       _logger.warning('Collecting conveyed key material failed for $_atSign; '
           'this enrollment holds only what it already had, and the next '

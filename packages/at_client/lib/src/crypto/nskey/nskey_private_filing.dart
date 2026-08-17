@@ -22,7 +22,7 @@ import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental;
+import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 final _logger = AtSignLogger('NskeyPrivateFiling');
 
@@ -84,6 +84,11 @@ class NskeyPrivateFiling {
 
   final StreamController<FiledNskeyPrivate> _filed =
       StreamController<FiledNskeyPrivate>.broadcast();
+
+  /// Awaited immediately before a private is stored, so a test can hold the
+  /// filing open. Null in production.
+  @visibleForTesting
+  Future<void> Function()? holdBeforeStore;
 
   /// Fires once per private filed, **after** it is stored and readable.
   ///
@@ -360,6 +365,9 @@ class NskeyPrivateFiling {
     String keyAlgo = SecretSharingAlgos.xWing,
     DateTime? createdAt,
   }) async {
+    final hold = holdBeforeStore;
+    if (hold != null) await hold();
+
     final materialAlgo = SecretSharingAlgos.materialAlgoFor(keyAlgo);
     if (materialAlgo == null) {
       _logger.severe('Refusing to file an nskey seed for $namespace:$nskeyKid '

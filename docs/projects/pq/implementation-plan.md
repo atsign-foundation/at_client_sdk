@@ -118,68 +118,59 @@ that "it arrived" cannot be mistaken for "it was parked and released".
    and the sender after** — on the hypothesis that `currentPublic` being
    local-first hid the new namespace from the sender. Also still legacy.
 
-✅ **The cause was found, and the park is now PROVEN LIVE.** The era default is
-`readsNskeyWritesLegacy` — it reads the nskey path and **writes legacy** — so a
-`notify` that does not pass `cryptoProviderId: symmetricAesGcmCryptoProviderId`
-goes out legacy and the park is never reached. UC-A3.4's test passes it on one
-line; four runs were spent not reading that line. With it, the client log shows
-`providerId":"at/nskey/XWING/AES/GCM"` and, decisively:
+✅ **THE PARK IS PROVEN LIVE**, in
+`tests/at_functional_test/test/nskey_park_and_redrive_live_test.dart`. A real
+notification, sealed `at/nskey/XWING/AES/GCM` to a generation the receiver
+genuinely does not hold, is **held rather than dropped**:
 
 ```
 Parked notification @alice🛠:parked….nskeyparkb…
 ```
 
-**Still not proven: the RE-DRIVE.** With the park entered and the filing
-released, the notification was not delivered within 60 s. One real product bug
-was found and fixed on the way — `_listenForFilings` read
-`getPreferences().crypto.keyRing`, the **raw** preference, where an app that
-names no config gets the era default whose ring the PQ bootstrap supplies; it
-found null and silently subscribed to nothing. It now resolves through
-`CryptoConfig.forClient` and re-attempts at park time. That fix is committed;
-it did not make the re-drive land.
+The window is made deterministic by `NskeyPrivateFiling.holdBeforeStore`, a
+test-only hook: the race is ~116 ms wide and four earlier attempts to catch it
+by timing all passed while never entering the park.
 
-**The next measurement, and it is not a guess.** `NskeyPrivateFiling.store()`
-logs nothing on success, so "no filing log" is equally consistent with a silent
-success and with never being reached — the instrument cannot separate them.
-Instrument `store()` to log on the success path, then answer, in this order:
-(1) is `store()` reached for the pulled private; (2) does `privatesFiled` have a
-listener at that instant. The pull itself is confirmed — *"Asked the other
-enrollments for the nskey private"* is in the log and the `__ssenv` envelope
-arrives.
+⛔ **What made those four vacuous, so nobody repeats them.** The era default is
+`readsNskeyWritesLegacy` — it reads the nskey path and **writes legacy** — so a
+`notify` that does not pass `cryptoProviderId: symmetricAesGcmCryptoProviderId`
+goes out legacy and the park is never reached. UC-A3.4's test passes it on one
+line. Four live runs were spent not reading that line; one grep would have
+answered it. The other dead ends: minting the nskey after the enrollments
+(starves the sender too), and installing the hold after the second namespace is
+minted (the receiver has already filed by then).
 
-⛔ **Superseded — kept only so it is not re-derived:** in all four runs the
-notification went out under **`legacy`** — `providerId":"legacy"` in the client
-log, zero decrypt failures, the monitor receiving it fine. So the park is never
-reached because nothing PQ is ever sent. UC-A3.4's live test asserts
-`symmetricAesGcmCryptoProviderId` on the delivered frame and passes, so the
-difference is in the setup, not in the product.
+**Two real defects fell out of the live work, both invisible to unit tests:**
 
-**Diff this file's setup against `nskey_self_notify_live_test.dart`'s and find
-what makes its sender seal PQ** — before writing another line of test. Four
-hypotheses have now been spent without measuring that, which is three more than
-the rule allows. The attempts are not in the tree; they were red.
+1. **The filing signal resolved the wrong config.** `_listenForFilings` read
+   `getPreferences().crypto.keyRing` — the *raw* preference. An app that names
+   no config gets the era default, whose ring the PQ bootstrap supplies, so the
+   read found null and the service silently subscribed to nothing. Now via
+   `CryptoConfig.forClient`, re-attempted at park time because the bootstrap
+   wires the ring asynchronously. Unit tests set `crypto` explicitly, which is
+   the one case where the raw read happens to work.
+2. **Every client held TWO `NskeyPrivateFiling` objects.**
+   `collectConveyedKeyMaterial` built its own unconditionally, so the object
+   that actually files conveyed privates was not the one the ring exposes.
+   Harmless while filing was write-only — both wrote the same keyfile — but the
+   moment a filing gained an observable event, the emitter was unreachable.
+   Measured: `hasListener=false` on the announcing object while three clients
+   had each subscribed successfully to a different one. The bootstrap now passes
+   `ring:` through and the sweep files through the ring's filing.
 
-**The three items, as recorded:**
+⛔ **The RE-DRIVE half cannot be proven live yet, and this is why.** With the
+park entered and the hold released, the private never arrives. The read-miss
+self-heal broadcasts a request via `requestSecretsFromNamespace`, and
+**`PairwiseSecretSharing.startListening()` — the thing that answers it — has no
+production caller** (item 3 below, now measured rather than noted). In the run:
+the ask is logged once, no `__ssenv` for that namespace ever reaches the
+receiver, and `store()` is never entered for it there — only on the approver,
+which minted it, and the sender, which had it conveyed at approval.
 
-1. **Park and re-drive at decrypt** ← **RULED, unbuilt.** On `no nskey private held`, hold the
-   notification and re-drive it when the filing point signals, rather than
-   dropping it. Designed in full 2026-08-16 and deliberately not built:
-   park-and-retry (ordering yields), an in-memory park, re-driven by a signal
-   at the **filing point** — not by `receivedSecrets`, which misses anything
-   the start-time sweep already consumed.
-2. **Make readiness observable at the hand-back.** A caller that must not miss
-   early notifications can `await pqBootstrap.startupComplete`, but nothing
-   says so where a client is returned, and no production caller does it.
-3. **`PairwiseSecretSharing.startListening()` has no production caller** — the
-   periodic inbox sweep runs nowhere. A client sweeps once at start
-   (`collectConveyedKeyMaterial`, `pq_client_bootstrap.dart:312`). Separate
-   gap, widens this one.
-
-✅ **`nskey_self_notify_live_test.dart` is GREEN and in the pack** as of
-2026-08-17. It closes UC-A3.4's self direction by waiting for
-`startupComplete`, so it proves what the row claims — a second enrollment opens
-what was conveyed to it — and does **not** cover the drop above. Nothing yet
-tests the park path, because nothing implements it.
+**So the self-heal cannot complete for anyone**, which is a larger claim than
+14.30 and is why item 3 is not the small tidy-up it reads as. The re-drive is
+unit-proven (`notification_park_test.dart`) and waits on that wiring for a live
+proof.
 
 ### 14.31 A refused watermark write permanently disables the monitor
 

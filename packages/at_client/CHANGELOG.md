@@ -1,4 +1,16 @@
 ## 3.14.1
+- fix: a client no longer holds two `NskeyPrivateFiling` objects.
+  `collectConveyedKeyMaterial` built its own unconditionally, so the object that
+  actually files conveyed privates was not the one the key ring exposes. Both
+  wrote the same keyfile, so nothing broke while filing was write-only — but the
+  moment a filing gained an observable event, the object emitting it was not one
+  any caller could reach. The bootstrap now passes its ring through and the
+  sweep files through that ring's filing.
+- fix: the filing signal resolves the key ring through `CryptoConfig.forClient`
+  rather than `getPreferences().crypto`. An app that names no config gets the
+  era default, whose ring the PQ bootstrap supplies; the raw preference carries
+  none, so the notification service silently subscribed to nothing and anything
+  it parked would have waited for a signal that could never arrive.
 - fix: a notification that arrives before the key that opens it is now held and
   re-driven, instead of being dropped. An nskey private is conveyed to an
   enrollment at approval and filed asynchronously, so a value sealed to that
