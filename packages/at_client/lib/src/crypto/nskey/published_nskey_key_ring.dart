@@ -637,8 +637,15 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
     // A generation of our own atSign that we do not hold: ask the other
     // enrollments for it rather than failing forever. Fire-and-forget — the
-    // caller still gets its miss (and its typed error), and the answer is
-    // filed by the arrival path so a later read finds it.
+    // caller still gets its miss (and its typed error).
+    //
+    // ⚠️ **The asking side does not file.** This used to say "the answer is
+    // filed by the arrival path so a later read finds it", and there is no such
+    // arrival path mid-session: nothing subscribes to `receivedSecrets` to file
+    // an nskey private, and `NskeyPrivateFiling.filePending` runs at start.
+    // Whoever supplies `requestConveyance` owns waiting for the answer and
+    // filing it — `PqClientBootstrap` does, and without that the heal repaired
+    // the client only at its next start.
     _askForMissingPrivate(namespace, nskeyKid);
     return null;
   }

@@ -158,11 +158,39 @@ class PqClientBootstrap {
       // generation broadcasts a pull, so a record that arrived before its
       // key stops being permanently unreadable and becomes merely early.
       // Only when the answer has somewhere durable to land.
+      // ⚠️ The ask alone is not the heal. Asking puts the answer in the
+      // in-memory secret store, and **nothing files it from there
+      // mid-session**: `NskeyPrivateFiling.filePending` runs at start and says
+      // so itself ("a private that arrives after this runs is filed at the next
+      // start"). So a read-miss heal that only broadcast would repair the
+      // client at its *next* start, not this one — measured live 2026-08-17,
+      // with the holder replying correctly and the answer sitting unfiled.
+      //
+      // The startup path already waits and files (`NskeySeeding`); this does
+      // the same, so the two agree. Unawaited and best-effort: a holder may be
+      // offline for a long time and a read must not block on it.
       requestConveyance: (keysIo == null || !gates.askOnReadMiss)
           ? null
-          : (namespace, secretName) =>
-              sharing.requestSecretsFromNamespace(namespace,
-                  names: [secretName]),
+          : (namespace, secretName) async {
+              await sharing
+                  .requestSecretsFromNamespace(namespace, names: [secretName]);
+              unawaited(sharing
+                  .waitForSecret(namespace, secretName,
+                      timeout: const Duration(minutes: 5))
+                  .then((secret) async => await filing?.file(secret) ?? false)
+                  .then((filed) {
+                if (filed) {
+                  _logger.info('Filed the nskey private $namespace:'
+                      '$secretName that a holder conveyed on request');
+                }
+              }).catchError((Object e) {
+                // info, not warning: no holder replying within the window is
+                // ordinary (they may all be offline), and the next start asks
+                // again.
+                _logger.info('No holder conveyed $namespace:$secretName '
+                    'within the wait; the next start asks again: $e');
+              }));
+            },
     );
     seeding = NskeySeeding(
       atClient: _atClient,

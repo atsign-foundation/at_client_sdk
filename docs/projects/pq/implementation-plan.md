@@ -158,46 +158,49 @@ minted (the receiver has already filed by then).
    had each subscribed successfully to a different one. The bootstrap now passes
    `ring:` through and the sweep files through the ring's filing.
 
-⛔ **The RE-DRIVE half is not proven live, and chasing it found a third defect
-one layer down.**
+✅ **THE WHOLE CHAIN IS PROVEN LIVE.** The run shows it end to end:
 
-**Item 3 was real and is now fixed.** `PairwiseSecretSharing.startListening()`
-had no production caller, and `_handleRequestPayload` — the code that answers
-another enrollment's request for a secret — is reachable **only** from
-`sweepOnce`. So a client's only sweep was the one-shot at its own start: a
-request arriving afterwards was seen by nobody and **no read-miss self-heal
-could complete for anyone**. `PqClientBootstrap` now starts the listener as a
-startup step and `stop()` tears it down, so a stopped client does not leak a
-timer, a sync listener and a subscription.
+```
+Parked notification @alice🛠:parked…
+handleRequest kind=request          (the holder sees and answers the ask)
+Filed the nskey private nskeyparkb…:__nskey.b195…
+re-driving 1 parked notification(s)
+```
 
-⚠️ **Necessary, and measured NOT sufficient — but the remainder is now narrow.**
-A second fix went in on the way: `_handleRequestPayload` **declined silently**
-when the answer policy refused, so a holder that chose not to reply logged
-nothing and "nobody answered" was indistinguishable from "everybody declined".
-That refusal now logs at `warning` naming both sides. With it in place the live
-run shows **no** decline, **no** authorization rejection (*"Ignoring request
-from kpid …"*) and **no** duplicate-answer suppression (*"another holder already
-did"*).
+and the notification is delivered **decrypted**. Getting there took three more
+defects, none of which a unit test could reach:
 
-**So `_handleRequestPayload` is never reached with the request: the holder does
-not see the request envelope.** Eliminated by measurement — the send (`sent > 0`,
-no `Could not request secrets` warnings), the answer policy, the authorization
-gate, duplicate suppression, and the absence of a listener.
+1. **`PairwiseSecretSharing.startListening()` had no production caller**, and
+   `_handleRequestPayload` — which answers another enrollment's request — is
+   reachable **only** from `sweepOnce`. So a client's only sweep was the one at
+   its own start, a request arriving later was seen by nobody, and **no
+   read-miss self-heal could complete for anyone**. `PqClientBootstrap` now
+   starts the listener and `stop()` tears it down.
+2. **A declined request returned silently.** A holder that refused logged
+   nothing, so "nobody answered" was indistinguishable from "everybody
+   declined". Now `warning`, naming both sides. Fixing the instrument first is
+   what made the next step findable.
+3. **The read-miss heal asked and never filed the answer.** This is the one that
+   mattered. `_askForMissingPrivate`'s dartdoc claimed *"the answer is filed by
+   the arrival path so a later read finds it"* — and **there is no such arrival
+   path mid-session**: nothing subscribes to `receivedSecrets` to file an nskey
+   private, and `NskeyPrivateFiling.filePending` says so itself (*"a private
+   that arrives after this runs is filed at the next start"*). Two dartdocs in
+   one subsystem contradicted each other and the ring's was wrong. The heal now
+   waits for the answer and files it, exactly as the startup path already did.
 
-**What is left, and it is two candidates:**
+⛔ **What made four earlier live attempts vacuous, so nobody repeats them.** The
+era default is `readsNskeyWritesLegacy` — it reads the nskey path and **writes
+legacy** — so a `notify` without
+`cryptoProviderId: symmetricAesGcmCryptoProviderId` goes out legacy and the park
+is never reached. UC-A3.4's test passes it on one line. Also dead: minting the
+nskey after the enrollments (starves the sender too), and installing the filing
+hold after the second namespace is minted (the receiver has already filed).
 
-1. `startListening` sweeps `fromRemote: !clientRunsSync`, so a holder that runs
-   sync polls its **local** store — and an envelope reaches local only once sync
-   has brought it.
-2. The wake-up notification, which is what would trigger a **remote** sweep, may
-   not match the holder's subscription regex for a request envelope.
-
-Instrument `sweepOnce` to log what it read and from where, and check whether a
-wake-up for the request arrives at the holder.
-
-**The re-drive stays unit-proven** (`notification_park_test.dart`). The live row
-proves the park, against a real post-quantum notification and a generation the
-client genuinely lacks, and says in the file why it stops there.
+The window is made deterministic by `NskeyPrivateFiling.holdBeforeStore`; it is
+~116 ms wide and every attempt to catch it by timing passed while never entering
+the park. `parkedTotal` is asserted so a run that wins the race cannot pass
+quietly.
 
 ### 14.31 A refused watermark write permanently disables the monitor
 

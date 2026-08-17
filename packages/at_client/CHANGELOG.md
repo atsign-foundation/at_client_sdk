@@ -1,4 +1,13 @@
 ## 3.14.1
+- fix: the read-miss self-heal now **files** the private it asked for, so it
+  repairs the client in the session that needed it rather than at the next
+  start. `PublishedNskeyKeyRing` broadcast the request and left the answer in
+  the in-memory secret store; nothing subscribes to `receivedSecrets` to file an
+  nskey private, and `NskeyPrivateFiling.filePending` states outright that a
+  private arriving after it runs is filed at the next start. The ring's own
+  dartdoc claimed the opposite ("the answer is filed by the arrival path"), so
+  two docs in one subsystem disagreed and the ring's was wrong. It now waits for
+  the answer and files it, matching what the startup path already did.
 - fix: a holder that declines to answer a secret request now logs it at
   `warning`, naming the requester and the namespace. It returned silently, and
   the requester sees only an unanswered ask — indistinguishable from nobody

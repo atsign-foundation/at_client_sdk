@@ -71,7 +71,7 @@ void main() {
         namespaces: {'*': 'rw', '__manage': 'rw', nsA: 'rw', nsB: 'rw'},
       );
 
-  test('a notification that outruns its key is parked rather than dropped',
+  test('a notification that outruns its key is parked, then delivered when it lands',
       timeout: Timeout(Duration(minutes: 3)), () async {
     AtSignLogger.root_level = 'finest';
 
@@ -180,26 +180,24 @@ void main() {
         reason: 'and it must not have been delivered yet: a value handed over '
             'before its key was filed would be ciphertext');
 
-    // Release the hold. ⛔ **Delivery is deliberately NOT asserted**, and the
-    // reason is a finding rather than a gap in this test.
-    //
-    // `_handleRequestPayload` — the code that answers another enrollment's
-    // request for a secret — is reachable only from `sweepOnce`. Until
-    // `PqClientBootstrap` was made to call `startListening()`, a client's only
-    // sweep was the one-shot at its own start, so a request arriving afterwards
-    // was never seen by anyone and no read-miss self-heal could complete. That
-    // is now wired, and it was necessary — but not sufficient: measured on
-    // 2026-08-17 the ask still goes out and this client's `store()` is never
-    // entered for the generation, so at least one more layer of the pull is
-    // unfinished.
-    //
-    // The park is what this row proves, and it proves it against a real
-    // post-quantum notification and a generation this client genuinely lacks.
+    // Release the hold: the pull's answer can now be stored, and the filing
+    // signal is what releases the park.
     release.complete();
 
+    final delivered = await received.future.timeout(Duration(seconds: 120),
+        onTimeout: () => throw StateError(
+            'the parked notification was never re-driven. The chain to watch: '
+            'the read miss asks (requestSecretsFromNamespace), the holder is '
+            'woken and sweeps remote, _handleRequestPayload replies, the reply '
+            'is filed, and the filing signal releases the park. Keys seen were '
+            '$seen'));
+
+    expect(delivered.value, value,
+        reason: 'and it is DECRYPTED: the re-drive goes through the same '
+            'transform the live path would have, or the subscriber is handed '
+            'ciphertext');
     expect(notifications.parkedTotal, greaterThan(0),
-        reason: 'the claim this row makes and can keep: a real notification, '
-            'sealed post-quantum to a generation this client does not hold, '
-            'is HELD rather than dropped');
+        reason: 'and it genuinely went through the park rather than being '
+            'delivered first time');
   });
 }
