@@ -231,16 +231,73 @@ returned the bare RSA key, which is what the verifier then refuses against for
 the whole 30s. Nothing here is a transport problem; the final state is simply
 the wrong value.
 
-**Which writer, and why — hypothesis, not yet measured.** The client log orders
-them: `SigningKeyMinting` republishes at `…55.077` (update 3), then
-`AtClientEnvelopeSigner` republishes at `…55.123` (update 4). The mint logs
-*"Minted mldsa65 signing key(s) for primary; **publishing before filing**"*, and
-`heldSigningKeys` composes from the **keyfile**, falling back to the APKAM
-authentication key — RSA — when the keyfile holds nothing for this enrollment.
-That gives a window in which a second component composes the advertisement from
-a keyfile the mint has not written yet and publishes the fallback over the real
-answer. **To confirm, observe `heldSigningKeys` at update 4's instant** — do not
-build on this paragraph until something has.
+**The mechanism, confirmed by instrumenting `publishPublicSigningKey` and
+re-running.** Every call logged what it held and what it was about to write:
+
+| # | caller | `heldSigningKeys` | `value` passed in? | writes |
+|---|--------|-------------------|--------------------|--------|
+| 1 | `AtClientSecretSharing` | `[]` | no | bare RSA |
+| 2 | `AtClientSecretSharing` | `[]` | no | bare RSA |
+| 3 | `SigningKeyMinting` | `[]` | **yes** | **`mldsa65` JSON** |
+| 4 | `AtClientEnvelopeSigner` | `[]` | no | bare RSA |
+
+**`heldSigningKeys` is empty at all four**, so the minted signing key never
+reaches the keyfile for `primary` at all. `signing_key_minting.dart:287` — the
+only call that passes `value:`, and guarded by `atLookUp?.enrollmentId == null`
+— advertises the minted key by handing the value in directly, which is what
+"publishing before filing" means. Every other caller composes from
+`publicSigningKeyValue`, reads an empty keyfile, falls back to the APKAM
+authentication key (RSA), and publishes that over the mint's advertisement.
+
+⛔ **STOP — this is [ruling 102](detail/decisions.md#102-an-_apsk-fallback-value-never-replaces-a-real-advertisement-2026-08-15),
+already measured and already ACCEPTED.** `_publish`'s own dartdoc
+(`signing_key_minting.dart` ~252) describes this exact sequence — "a concurrent
+`publishPublicSigningKey` … sees no signing key, falls back to the APKAM
+**authentication** key, and overwrites: measured, a PQ-native enrollment's
+ML-DSA array replaced by a bare RSA string" — and records that **three guards
+against it were built and all three broke the live enrollment path.** It warns
+anyone tempted to try a fourth that "never drop an advertised key" cannot be
+stated over `public:_apsk.primary.a.__e`, which no single client owns.
+
+**So the record-level guard is a re-derivation. Do not build it without
+re-opening 102.**
+
+⚠️ **What is NOT yet established, and what an earlier version of this entry
+wrongly asserted.** It claimed "it is not a timing window … the keyfile is empty
+for the whole run". The evidence does not support that: `_file` **is** called,
+at `signing_key_minting.dart:167`, immediately after `_publish`, so the empty
+keyfile at all four calls is equally consistent with all four falling *inside*
+the publish-before-file window — which is exactly what 102 describes. The
+timeline is 20 ms wide:
+
+```
+07.117  Minted mldsa65 … publishing before filing
+07.119  SigningKeyMinting   held=[]  -> writes mldsa65 (value: override)
+07.155  … republishing
+07.175  AtClientEnvelopeSigner held=[]  -> writes bare RSA
+07.200  … republishing
+```
+
+**Ruling 102 has been re-opened on this evidence** — see
+[102.1](detail/decisions.md#1021-the-race-is-measured-and-the-price-it-was-accepted-at-was-wrong-2026-08-17).
+Two of its sentences were false and are corrected there: the race **is**
+measured, and reaching it needs **no** application call racing `startup()` —
+the ordinary approver flow does it every run. More importantly the *price* was
+wrong: 102 accepted "one process lifetime of refused envelopes", where the
+measured cost is that **a `postQuantum` approver cannot approve an enrollment
+at all**.
+
+⛔ **That does not revive the three guards.** Guard 3's finding stands: the
+demotion rule cannot be stated over `primary`, a record no single client owns.
+
+**The open question is therefore narrower than it looks:** 102's acceptance
+rests on "it heals at the next start, because `publishPublicSigningKey` composes
+from the keyfile, which by then holds the post-mint state". Here it did **not**
+heal inside the test's 30 s, and `AtClientEnvelopeSigner` saw an empty keyfile
+20 ms *after* the mint's publish returned. So either the healing claim is wrong
+for the `primary` pseudo-enrollment, or the filing at `:167` is not making
+`heldSigningKeys` non-empty for `primary`. **Distinguish those two before
+designing anything** — log `heldSigningKeys` immediately after `_file` returns.
 
 ⚠️ This is **not** [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor).
 That one is a refused internal write killing the monitor; this one is an

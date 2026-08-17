@@ -9474,9 +9474,46 @@ the next person to notice the window will reach for the first of them.
 ⚠️ **What this does NOT do.** It does not close the window: a concurrent writer
 can still publish a *different real* composition, and the order-only at-rest
 divergence between the two composers stays (benign — same kids, same pubs, same
-statuses, and readers select by algorithm). Nor is the race itself measured;
-the bootstrap awaits its steps in order and cannot interleave them, so reaching
-it needs an application call racing the unawaited `startup()`.
+statuses, and readers select by algorithm).
+
+### 102.1 The race IS measured, and the price it was accepted at was wrong (2026-08-17)
+
+⚠️ **This entry used to end "Nor is the race itself measured; the bootstrap
+awaits its steps in order and cannot interleave them, so reaching it needs an
+application call racing the unawaited `startup()`." Both halves are false.**
+It was measured on 2026-08-17 from the atServer's own log, and reaching it
+needed no application race at all — the ordinary approver flow does it on every
+run when the approver is built `postQuantum`
+([`implementation-plan.md` 14.32](../implementation-plan.md#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers)).
+
+`public:_apsk.primary.a.__e@alice🛠` starts absent and takes four updates: bare
+RSA, bare RSA, **the `mldsa65` array**, **bare RSA again**. Instrumenting
+`publishPublicSigningKey` named the writers — `SigningKeyMinting` writes the
+array via the `value:` override, and `AtClientEnvelopeSigner` overwrites it 45 ms
+later with the authentication-key fallback, `heldSigningKeys` empty at both.
+
+**Why this matters to the acceptance rather than just to the record.** The cost
+was priced here as "one process lifetime of refused envelopes and refused
+key-package verification, on a race that is itself unmeasured". Measured, the
+cost in that process lifetime is that **`waitForApproval` times out at 30 s and
+the enrollment does not complete** — the enrollee refuses the conveyance
+envelope for want of an algorithm in common. "Some envelopes are refused until
+restart" and "a `postQuantum` approver cannot approve an enrollment" are
+different prices, and only the first was ruled on.
+
+⛔ **This does NOT revive any of the three guards.** Guard 3's finding stands
+and is the reason: the demotion rule cannot be stated over `primary`, a record
+no single client owns. A fourth guard of that shape is still refused.
+
+**What is genuinely open, and it is one question.** The acceptance rests on "the
+state heals at the next start — `publishPublicSigningKey` composes from the
+keyfile, which by then holds the post-mint state". `_file` is called at
+`signing_key_minting.dart:167`, immediately after `_publish` — yet
+`AtClientEnvelopeSigner` read `heldSigningKeys == []` **20 ms after** the mint's
+publish returned. So either the healing claim is false for the `primary`
+pseudo-enrollment, or the filing at `:167` is not making `heldSigningKeys`
+non-empty for `primary`. Log `heldSigningKeys` immediately after `_file`
+returns; the two answers need different fixes, and neither is a record guard.
 
 ## 103. An envelope says what it is for, and a verifier says what it wants (2026-08-15)
 

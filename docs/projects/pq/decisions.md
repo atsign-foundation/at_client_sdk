@@ -159,7 +159,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [99]  | The keyfile groups by enrollment, and the atSign's own keys move out                        | 2026-08-14 | LIVE                      |
 | [100] | The seven shapes ruling 99 left open                                                        | 2026-08-14 | LIVE                      |
 | [101] | The signing root becomes an ordinary signing key, and rotatable                             | 2026-08-15 | LIVE                      |
-| [102] | An `_apsk` fallback value never replaces a real advertisement                               | 2026-08-15 | LIVE                      |
+| [102] | An `_apsk` fallback value never replaces a real advertisement                               | 2026-08-15 | AMENDED 2026-08-17        |
 | [103] | An envelope says what it is for, and a verifier says what it wants                          | 2026-08-15 | LIVE                      |
 | [104] | ~~Per-generation nskey records~~                                                            | 2026-08-16 | REJECTED — see [105]      |
 | [105] | The nskey mint elects a winner                                                              | 2026-08-16 | LIVE                      |
