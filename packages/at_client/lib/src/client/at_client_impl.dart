@@ -1283,8 +1283,14 @@ class AtClientImpl implements AtClient {
     // pipeline starts. The nskey data path needs it: minting a content key means
     // writing a conveyance record, and that cannot happen once the transformer
     // is mid-way through building a verb builder.
+    // A `local:` record is excluded: [AtKey.isLocal] means it is never synced
+    // to the atServer, and the keystore already encrypts it at rest. Routing
+    // one through the shared-data pipeline bought nothing and cost it
+    // correctness — every post-quantum provider declines a local key, so the
+    // defaulted id fell back to legacy and every local write became a legacy
+    // write, refused outright under `disallowLegacyEncryption`.
     var options = putRequestOptions ?? PutRequestTransformer.defaultOptions;
-    if (!atKey.metadata.isPublic && options.shouldEncrypt) {
+    if (!atKey.metadata.isPublic && !atKey.isLocal && options.shouldEncrypt) {
       try {
         await CryptoRuntime(this).prepareWrite(
           atKey,

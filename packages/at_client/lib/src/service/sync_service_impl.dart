@@ -5,6 +5,7 @@ import 'dart:convert';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -127,6 +128,20 @@ class SyncServiceImpl implements SyncService {
 
   /// A local AtKey to store skipDeletesUntil value
   late final AtKey _skipDeletesUntilCommitId;
+
+  /// How both sync watermarks above are written.
+  ///
+  /// They are `local:` records — never synced, and already encrypted at rest by
+  /// the keystore — so there is nothing for value-level encryption to protect.
+  /// Saying so explicitly keeps them off the shared-data crypto path, which is
+  /// where a client that refuses legacy encryption used to have them refused:
+  /// every post-quantum provider declines a local key, and the fallback from
+  /// that decline is legacy.
+  ///
+  /// A fresh instance per call: [PutRequestOptions] is mutable and the put
+  /// pipeline may rewrite the options it is handed.
+  static PutRequestOptions get _watermarkPutOptions =>
+      PutRequestOptions()..shouldEncrypt = false;
 
   /// [warmStartSync] (default `true`) enqueues a single sync request
   /// at the end of construction so the first round runs immediately
@@ -943,10 +958,31 @@ class SyncServiceImpl implements SyncService {
       // fetch the next set of entries to sync from server
       // Adding this piece in finally block to ensure lastReceivedServerCommitId state
       // is persisted even if there occurs any exception during sync to local.
-      await _atClient.put(_lastReceivedServerCommitIdAtKey,
-          lastReceivedServerCommitId.toString());
+      //
+      await persistPullCursor(lastReceivedServerCommitId);
     }
     return keyInfoList;
+  }
+
+  /// Persist the pull cursor, best-effort. **Never throws.**
+  ///
+  /// Its only caller runs it in a `finally`, where a thrown exception REPLACES
+  /// whichever one is already in flight from the sync itself — so an unguarded
+  /// failure here would report a sync error as a failure of the cursor write
+  /// and lose the real cause. Not persisting the cursor costs one re-read of
+  /// the same window on the next round, which is survivable in a way that
+  /// losing the reason a sync failed is not.
+  @visibleForTesting
+  Future<void> persistPullCursor(int lastReceivedServerCommitId) async {
+    try {
+      await _atClient.put(_lastReceivedServerCommitIdAtKey,
+          lastReceivedServerCommitId.toString(),
+          putRequestOptions: _watermarkPutOptions);
+    } catch (e) {
+      _logger.warning('Failed to persist the pull cursor at '
+          '$lastReceivedServerCommitId; the next sync re-reads from the '
+          'previously persisted commitId: $e');
+    }
   }
 
   Future<void> _processServerCommitEntry(
@@ -1010,7 +1046,21 @@ class SyncServiceImpl implements SyncService {
   Future<int?> setAndGetSkipDeletesUntil(
       int? localCommitIdBeforeSync, int serverCommitId) async {
     if (localCommitIdBeforeSync == -1) {
-      await _atClient.put(_skipDeletesUntilCommitId, serverCommitId.toString());
+      // Best-effort, like the pull cursor: an unwritable watermark must not be
+      // able to stop a new client's first sync. The value returned below is
+      // what THIS run uses, so a failed write costs nothing until the process
+      // restarts — at which point an initial sync interrupted midway has no
+      // persisted window and will apply deletes it would have skipped. That is
+      // why the failure is warned about rather than swallowed silently.
+      try {
+        await _atClient.put(
+            _skipDeletesUntilCommitId, serverCommitId.toString(),
+            putRequestOptions: _watermarkPutOptions);
+      } catch (e) {
+        _logger.warning('Failed to persist skipDeletesUntil at '
+            '$serverCommitId; this sync still skips deletes, but if it is '
+            'interrupted the next run will not: $e');
+      }
       return serverCommitId;
     }
     try {

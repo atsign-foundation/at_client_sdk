@@ -39,8 +39,13 @@ class PutRequestTransformer
     updateVerbBuilder.value = tuple.two;
     final atKey = updateVerbBuilder.atKey;
     final metadata = atKey.metadata;
-    // Check if the data needs to be encrypted for non-public keys
-    if (!_isPublicKey(metadata) && options.shouldEncrypt) {
+    // Check if the data needs to be encrypted for non-public keys.
+    //
+    // A `local:` key is excluded for the same reason it is excluded in
+    // [AtClientImpl] before the pipeline starts: it is never synced to the
+    // atServer, so there is nothing for a peer to decrypt and nothing an
+    // adversary can capture, and the keystore encrypts it at rest already.
+    if (!_isPublicKey(metadata) && !atKey.isLocal && options.shouldEncrypt) {
       // Add metadata for the crypto provider used to route future decrypts.
       updateVerbBuilder.atKey.metadata.appMetadata =
           AppMetadata(providerId: _cryptoProviderIdFor(options, atKey));

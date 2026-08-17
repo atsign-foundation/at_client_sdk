@@ -6614,8 +6614,14 @@ caller-composed design working as intended. What changed:
   the posture the era default declines local and namespace-less keys, the
   fallback is legacy, and the posture's own `disallowLegacyEncryption`
   refuses it — so the SDK's internal watermarks (sync, notification) throw
-  on every write, which is exactly the open R-2 decision this tree already
-  records. Confirmed empirically by both refuters' probes. The dartdoc now
+  on every write. ⚠️ **This paragraph used to end "which is exactly the open
+  R-2 decision this tree already records", and that filing was wrong**: R-2 is
+  a pure default-flip whose code is identical to final-3.x, so it cannot carry
+  a fix. The watermarks are `local:` records and are now written unencrypted,
+  with the refusal exempting `isLocal` —
+  [107](#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17),
+  landed in D1. The observation below stands; only its destination changed.
+  Confirmed empirically by both refuters' probes. The dartdoc now
   states the two eyes-open consequences and cites R-2; the SHOUT recommends
   the flag alone again, not the posture; the CHANGELOG carries the caveat.
   Also false: "every 3.x client already reads all of it" — published 3.14.0
@@ -10258,3 +10264,63 @@ arriving **2.9 ms after** the notification was enqueued — and because the
 atServer's inbound stream is a **broadcast** stream, a connection registering
 after an event never receives it. The only sound gate is a notification
 actually reaching the listener.
+
+## 107. A `local:` record is not encrypted, and the legacy refusal exempts it (2026-08-17)
+
+**The ruling.** `AtClientImpl._putInternal` and `PutRequestTransformer` skip the
+crypto pipeline when `atKey.isLocal`, and `CryptoRuntime.refuseLegacyIfDisallowed`
+returns early for the same predicate. The SDK's own watermark writes also pass
+`shouldEncrypt = false` explicitly. All three layers, because the refusal is
+already checked at both selection and encryption time so the guarantee does not
+rest on one path having remembered to ask.
+
+**Why the encryption bought nothing.** `AtKey`'s own dartdoc: a local key "will
+never be synced to the cloud atServer", and `_putInternal` routes it
+`RemoteLocalPref.localOnly`. The keystore encrypts at rest already
+(`storage_manager.dart` — it self-manages its on-disk secret). So the record is
+a never-transmitted timestamp inside an encrypted store.
+
+**Why it was refused, measured.** Both post-quantum providers declare
+`canHandle => !atKey.isLocal && namespace non-empty`. A probe over the three
+production watermark keys, run against the production selection code:
+
+| key | flag ON | flag OFF |
+|-----|---------|----------|
+| `local:lastreceivednotification.<ns>@<atSign>` | refused | `legacy` → `SelfKeyEncryption` |
+| `local:lastreceivedservercommitid@<atSign>` | refused | `legacy` → `SelfKeyEncryption` |
+| `local:skipdeletesuntil@<atSign>` | refused | `legacy` → `SelfKeyEncryption` |
+
+Controls both positive: an ordinary shared key on the same client routed to
+`at/symmetric/AES/GCM`, and `canHandle` returned `false` for a local key *with*
+a namespace while returning `true` for a non-local one — so `isLocal` is the
+discriminator, not the missing namespace.
+
+**The masquerade.** The exception says the record is "refused rather than
+written in one that can be harvested now and opened later". For a local record
+there is no destination and no capturable ciphertext, and what "legacy"
+resolves to is `SelfKeyEncryption` — AES-256-CTR under a key that never leaves
+the device, which is not Shor-vulnerable in the first place. The flag was
+refusing a provider **id**, not an exposure.
+
+**Why the carve-out is `isLocal` and not "it lands on `SelfKeyEncryption`".** A
+*synced* self key reaches the identical encryption class, but the atServer
+holds it, so it genuinely is harvestable. Exempting on the encryption class
+would widen the hole to every one of those. What to do about them belongs to
+the retirement of the legacy self and shared key material
+([37](#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)),
+not here. Pinned in `disallow_legacy_encryption_test.dart`, which asserts the
+synced self key reaches `SelfKeyEncryption` *and* is still refused.
+
+**What this corrects.**
+[70.1](#701-the-review-harvest-the-postures-claims-corrected-two-consults-get-their-reds-2026-08-10)
+recorded that the era default "declines local and namespace-less keys … so the
+SDK's internal watermarks (sync, notification) throw on every write, which is
+exactly the open R-2 decision this tree already records." The observation was
+right and the filing was wrong: R-2 is defined as *"a pure default-flip: 4.0 is
+identical to final-3.x code"*, so it structurally cannot carry a code change.
+Anything the posture needs in order to work has to land before it. This is D1's.
+
+**What it does not settle.** Namespace-less keys that are *not* local — a
+legacy recipient's `shared_key.*` most obviously — are still refused, and that
+is still owed. The carve-out here is only about records that never leave the
+device.

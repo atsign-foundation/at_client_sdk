@@ -38,7 +38,9 @@ void main() {
   // ignore: unused_local_variable
   late Function(Exception e) socketOnErrorFn;
   int? lastNotificationTime;
+  Object? lastNotificationTimeError;
   Future<int?> getLastNotificationTime() async {
+    if (lastNotificationTimeError != null) throw lastNotificationTimeError!;
     return lastNotificationTime;
   }
 
@@ -131,6 +133,7 @@ void main() {
     );
     monitor.logger.level = 'warning';
     lastNotificationTime = null;
+    lastNotificationTimeError = null;
     monitorStateHistory.clear();
     currentStateSubscription = monitor.currentStateStream.listen((s) {
       final d = DateTime.now().toUtc();
@@ -183,6 +186,36 @@ void main() {
       expect(writesToSocket.length, 3);
       // We've created a monitor with a null lastNotificationTime - expect the command sent to the server to be simply 'monitor\n'
       expect(writesToSocket.last, 'monitor:selfNotifications\n');
+    });
+
+    /// Reading the watermark is a local keystore operation that happens partway
+    /// through the connect sequence. Its failure must not be able to abort the
+    /// connect: a client that refuses legacy encryption had its own watermark
+    /// write refused, the exception reached the connect handler, and the
+    /// monitor closed and retried with backoff for as long as the cause
+    /// persisted — which, for a configuration flag, is forever. The client was
+    /// silently deaf and the only symptom was the absence of `listening`.
+    test('a watermark read that throws does not stop the monitor connecting',
+        () async {
+      lastNotificationTimeError = LegacyEncryptionRefusedException(
+          'lastreceivednotification',
+          'the configured provider cannot handle this key');
+
+      monitor.start();
+
+      final state = await monitor.currentStateStream.first.timeout(
+          const Duration(seconds: 5),
+          onTimeout: () => throw StateError(
+              'the monitor never reached listening: a watermark read failure '
+              'aborted the connect sequence and the retry loop ran forever'));
+      expect(state, NotificationListenerState.listening);
+
+      final writesToSocket =
+          verify(() => mockOutboundConnection.write(captureAny())).captured;
+      expect(writesToSocket.last, 'monitor:selfNotifications\n',
+          reason: 'and it connects with NO watermark rather than a stale one: '
+              'starting without one replays a window, which is recoverable, '
+              'where starting from a wrong one loses notifications');
     });
 
     /// Create a Monitor with our mock connectivity checker, remote secondary and outbound connection factory.

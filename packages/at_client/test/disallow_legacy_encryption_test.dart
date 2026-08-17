@@ -1,4 +1,5 @@
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -139,6 +140,73 @@ void main() {
           symmetricAesGcmCryptoProviderId,
           reason: 'control: the flag refuses one scheme, it does not refuse '
               'writing — an app that writes the PQ path is untouched');
+    });
+  });
+
+  /// A `local:` record is never synced to the atServer, so the
+  /// harvest-now-decrypt-later premise the flag exists for has no referent.
+  /// Before this carve-out every post-quantum provider declined a local key,
+  /// the defaulted id fell back to legacy, and the flag refused it — which made
+  /// the SDK's own watermarks unwritable and took the notification listener out
+  /// with them.
+  group('local: keys', () {
+    AtKey watermark() => AtKey.local('lastreceivednotification', alice,
+            namespace: namespace)
+        .build();
+
+    test('a local key is not refused', () {
+      final atClient = strictClient(
+          crypto: CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
+
+      expect(
+          CryptoRuntime.providerIdFor(atClient, null, atKey: watermark()),
+          legacyCryptoProviderId,
+          reason: 'the nskey path is (owner, namespace)-scoped and declines a '
+              'local key, so the id still falls back to legacy — but the '
+              'record never leaves the device, so there is nothing to harvest '
+              'and nothing to refuse');
+    });
+
+    test('nor at encryption time', () async {
+      final atClient = strictClient();
+      final key = watermark()
+        ..metadata.appMetadata =
+            AppMetadata(providerId: legacyCryptoProviderId);
+
+      // The legacy provider fails on this fixture for its own reasons (no
+      // atChops). What matters is that the refusal is not the failure.
+      await expectLater(
+          () => CryptoRuntime(atClient).encryptForPut(key, 'secret'),
+          throwsA(isNot(isA<LegacyEncryptionRefusedException>())),
+          reason: 'the second check is a separate call site and carries the '
+              'same carve-out, or the guarantee would depend on which one the '
+              'write happened to reach');
+    });
+
+    test('the carve-out is isLocal, NOT "it lands on self encryption"', () {
+      final atClient = strictClient(
+          crypto: CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
+      // A synced self key: no namespace, so the nskey path declines it and the
+      // fallback is legacy — exactly as for a local key, and it reaches the
+      // very same encryption class. The difference that matters is that the
+      // atServer holds this one, so it IS harvestable.
+      final syncedSelfKey = AtKey()
+        ..key = 'phone'
+        ..sharedBy = alice
+        ..metadata = (Metadata()..namespaceAware = false);
+
+      expect(LegacyEncryption.build(syncedSelfKey, atClient),
+          isA<SelfKeyEncryption>(),
+          reason: 'the premise: this reaches the same AES-256-CTR-under-the-'
+              'self-key path a local: record does, or the refusal below would '
+              'be about something else entirely');
+      expect(
+          () =>
+              CryptoRuntime.providerIdFor(atClient, null, atKey: syncedSelfKey),
+          throwsA(isA<LegacyEncryptionRefusedException>()),
+          reason: 'and it is still refused — exempting on the encryption class '
+              'rather than on isLocal would silently widen the carve-out to '
+              'every synced self key, which the atServer does hold');
     });
   });
 

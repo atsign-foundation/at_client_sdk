@@ -1552,9 +1552,14 @@ posture — UC-C1.1 (era), C1.4 (key exchange), C1.5 (retrofit), C1.2 (refusal) 
 C1.6 (the grouped posture); **C1.3 (envelope) is withdrawn** — [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) removed the axis it tested, written for R-2 by the capstone; plus legacy read still works (UC-B5.2);
 full unit/functional/e2e green. **Two things UC-C1.x cannot reach, which R-2 owes:** a live postured
 CRAM onboard (`pqNativeOnboard`'s posture consult is pinned at the parameter level only), and a
-decision on the SDK's own namespace-less internal writes — the sync and notification watermarks are
-refused under this posture, so the default cannot flip until they are settled
-([decisions 70.1](decisions.md#701-the-review-harvest-the-postures-claims-corrected-two-consults-get-their-reds-2026-08-10)).
+decision on the SDK's own namespace-less internal writes, so the default cannot flip until they are
+settled ([decisions 70.1](decisions.md#701-the-review-harvest-the-postures-claims-corrected-two-consults-get-their-reds-2026-08-10)).
+⚠️ **This sentence used to name "the sync and notification watermarks" as the writes in question, and
+that was wrong twice over:** those are `local:` records, they are now written unencrypted, and the fix
+had to land in D1 because R-2 is a pure default-flip that cannot carry code
+([decisions 107](decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17)).
+What R-2 still owes here is the *non-local* namespace-less writes — a legacy recipient's `shared_key.*`
+most obviously.
 **▶ at_client 4.0.0.**
 **Effort:** M.
 **Watch-outs:** different major / different time from at_auth 4.0 (S-5). Don't remove the legacy provider.

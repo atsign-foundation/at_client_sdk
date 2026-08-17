@@ -269,7 +269,19 @@ class Monitor {
           }
         });
 
-        int? lastNotificationTime = await getLastNotificationTime();
+        // Reading the watermark is a local keystore operation, not part of
+        // connecting, so it gets its own guard: a failure here must not be
+        // reported as — or abort — a failed connection. Starting without one
+        // costs a replayed window; letting it out of here costs the listener,
+        // because the handler below closes the connection and retries with
+        // backoff for as long as the cause persists.
+        int? lastNotificationTime;
+        try {
+          lastNotificationTime = await getLastNotificationTime();
+        } catch (e) {
+          logger.warning('Could not read the last-notification watermark, so '
+              'the monitor is starting without one: $e');
+        }
 
         // authenticate
         await _authenticateConnection();
@@ -295,7 +307,11 @@ class Monitor {
         await closeConnection();
         _connectionDoneCompleter = null;
       } catch (e) {
-        logger.info('Failed to connect: $e');
+        // Not a socket failure. An unreachable atServer is expected and
+        // transient; anything else reaching here is likely neither, and the
+        // loop below will retry it for as long as it persists. Logging that at
+        // `info` makes a permanently deaf client look like a flaky network.
+        logger.warning('Failed to connect: $e');
         await closeConnection();
         _connectionDoneCompleter = null;
       }

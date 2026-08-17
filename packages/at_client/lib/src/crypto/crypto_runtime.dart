@@ -141,6 +141,17 @@ class CryptoRuntime {
       AtClient atClient, AtKey atKey, String providerId,
       {required String because}) {
     if (providerId != legacyProviderId) return;
+    // A `local:` record is never transmitted, so the harvest-now-decrypt-later
+    // premise this flag exists for has no referent: there is no destination,
+    // and no ciphertext an adversary can capture to open later. What "legacy"
+    // resolves to for such a key is [SelfKeyEncryption] — AES-256-CTR under a
+    // key that never leaves the device — which is not Shor-vulnerable anyway.
+    //
+    // Deliberately keyed on `isLocal` and not on "lands on SelfKeyEncryption":
+    // a *synced* self key IS held by the atServer and so IS harvestable, and
+    // what to do about those belongs to the retirement of the legacy self and
+    // shared key material, not here.
+    if (atKey.isLocal) return;
     if (atClient.getPreferences()?.disallowLegacyEncryption != true) return;
     throw LegacyEncryptionRefusedException(atKey.key, because);
   }

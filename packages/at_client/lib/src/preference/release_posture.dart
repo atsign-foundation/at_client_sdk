@@ -223,11 +223,16 @@ class ReleasePosture {
   ///   written legacy — and seeding is a separate, deliberate knob
   ///   ([AtClientPreference.seedNamespaceKeys]), not something this posture
   ///   turns on;
-  /// - the SDK's own namespace-less internal writes (the sync and
-  ///   notification watermarks among them) are refused under this posture
-  ///   today: no post-quantum scheme serves a key with no namespace, and
-  ///   the 4.0 release owes a decision on those writes before this posture
-  ///   can become the default (the R-2 project in `docs/projects/pq/`).
+  /// - the SDK's own namespace-less internal writes are refused under this
+  ///   posture today: no post-quantum scheme serves a key with no namespace,
+  ///   so a legacy recipient's `shared_key.*` cannot be written. The 4.0
+  ///   release owes a decision on those writes before this posture can become
+  ///   the default. ⚠️ **The sync and notification watermarks used to be named
+  ///   here and no longer belong**: they are `local:` records, never
+  ///   transmitted, and are now written unencrypted — see
+  ///   [AtClientPreference.disallowLegacyEncryption], which exempts
+  ///   [AtKey.isLocal]. Until that landed, this refusal took the notification
+  ///   listener out altogether rather than failing one write.
   ///
   /// The readers for everything this posture emits — the nskey records among
   /// them — ship in the **same release line as the posture itself**, so its

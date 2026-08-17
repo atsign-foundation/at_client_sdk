@@ -43,8 +43,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) | A notification needing a not-yet-filed nskey private is dropped without retry | Cause found 2026-08-17: the conveyed private is filed by an unawaited startup. Park-and-re-drive designed, not built |
-| [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor) | Under `disallowLegacyEncryption` the monitor never connects, and retries forever | Diagnosed live 2026-08-17. The refusal is R-2's known gap; the listener dying from it is not |
-| [14.32](#1432-a-primary-clients-mldsa-signing-key-is-not-visible-to-its-verifiers) | A `primary` client signs ML-DSA-65 while its published `_apsk` still advertises `rsa2048` | Diagnosed live 2026-08-17; the transport of the republish is the open question |
+| [14.32](#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers) | A `primary` client signs ML-DSA-65 while its published `_apsk` still advertises `rsa2048` | Diagnosed live 2026-08-17; the transport of the republish is the open question |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
 
 ### 14.30 A content notification can outrun the key that opens it
@@ -121,11 +120,51 @@ authenticates `rsa2048` under both postures, with no signing-algorithm
 resolution warnings: `signingAlgoOf` prefers the key-material resolution, and
 the posture moves the *signing* key, never the authentication key.
 
-**Owed:** R-2 has to decide what happens to namespace-less internal writes.
-Independently of that decision, a refused internal write should not be able to
-disable the listener — the watermark is an optimisation (it exists so a restart
-does not replay history), and failing to seed it is survivable in a way that
-never connecting is not.
+✅ **DONE 2026-08-17.** It was six related defects, not one, and the diagnosis
+above named the symptom rather than the cause. Ruling
+[107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17)
+carries the measurements; what shipped:
+
+1. **A `local:` record no longer goes through the shared-data crypto path.**
+   `_putInternal` and `PutRequestTransformer` skip it on `atKey.isLocal`. Such a
+   record is never synced and the keystore encrypts it at rest, so value-level
+   encryption protected nothing — while every post-quantum provider declines a
+   local key, making *every* local write a legacy write by construction.
+2. **`disallowLegacyEncryption` exempts `isLocal`.** It was refusing a provider
+   **id**, not an exposure: for these keys "legacy" is `SelfKeyEncryption`,
+   AES-256-CTR under a key that never leaves the device. A *synced* self key
+   reaches the same class and is deliberately still refused.
+3. **The SDK's own watermark writes pass `shouldEncrypt = false`** — the third
+   layer, matching how the refusal is already checked at both selection and
+   encryption time.
+4. **`Monitor` no longer dies from it.** The watermark read has its own guard
+   rather than sitting inside the connect `try` alongside four other
+   operations, and a connect failure that is not a `SocketException` logs at
+   `warning`, not `info`.
+5. **The sync watermarks are guarded, and no longer mask.** The pull cursor is
+   written in a `finally`, where a throw *replaces* the in-flight exception —
+   so a failed cursor write was reported instead of whatever broke the sync.
+   Extracted as `persistPullCursor`, whose contract is that it never throws.
+6. **The notification watermark drops the payload and the metadata blob.** All
+   twelve fields were stored and one is read. Older records still read back
+   unchanged, so nothing migrates.
+
+**Rails at the fix:** at_client unit **1386 (2 skipped)**, `dart analyze lib
+test` exit 0 / 351 info, `dart analyze test` in `at_functional_test` exit 0 /
+193 info. Twelve new tests, each with its break-it mutation run and confirmed
+red *for its own stated reason*.
+
+⚠️ One of those mutations found a defect in the tests rather than the product:
+guarding `setAndGetSkipDeletesUntil` made a **stub-arity mismatch invisible** —
+`sync_service_test.dart` stubbed `put(any(), any())` while production had begun
+passing `putRequestOptions:`, so mocktail returned null, the write failed, the
+new guard swallowed it, and the test reported success while persisting nothing.
+It now verifies the call and its arguments.
+
+**Still owed, and NOT covered by this:** namespace-less keys that are not local
+— a legacy recipient's `shared_key.*` most obviously — are still refused under
+the posture. That one is real, and it is the remaining half of what 70.1
+observed.
 
 ### 14.32 A `primary` client's ML-DSA signing key is not visible to its verifiers
 
@@ -847,6 +886,7 @@ measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.31  | A `local:` record is not encrypted, and the legacy refusal exempts it | DONE 2026-08-17 — six related defects, not one; the listener no longer dies from a refused watermark. Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17). Body: [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor) |
 | 14.25  | Nine project entries reconciled against the tree | DONE 2026-08-16 — burn-down right about 4, headings stale for SS-1c and SS-4, real residuals in SS-2/B-1/S-3 (now [14.29](#1429-the-residuals-1425-surfaced)). Detail: [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
 | 14.28  | Live PQ proofs that no use case names | DONE 2026-08-16 — 9 uncited PQ live files ruled on: 5 became UC-B5.8–B5.12, 4 were already covered. Detail: [14.28](detail/implementation-plan.md#1428-live-pq-proofs-that-no-use-case-names) |
 | 14.27  | The ledger's append-only rot, corrected | DONE 2026-08-16 — 11 rulings amended in the body and LIVE in the index, both citation debts discharged, and a test now asserts each. Detail: [14.27](detail/implementation-plan.md#1427-the-ledgers-remaining-append-only-rot) |

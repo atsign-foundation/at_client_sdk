@@ -962,7 +962,8 @@ void main() {
             ..monitorAutoStart = false);
 
       registerFallbackValue(AtKey());
-      when(() => mockAtClientImpl.put(any(), any()))
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
     });
 
@@ -1287,7 +1288,8 @@ void main() {
       when(() => mockAtClientImpl.get(any()))
           .thenAnswer((_) async => Future.value(AtValue()));
 
-      when(() => mockAtClientImpl.put(any(), any()))
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
 
       // #1942 — the legacy-key migration may call delete; stub it so
@@ -1327,7 +1329,8 @@ void main() {
             ..value = jsonEncode(atNotification)
             ..metadata = Metadata()));
 
-      when(() => mockAtClientImpl.put(any(), any()))
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
 
       // #1942 migration cleanup may call delete on legacy keys.
@@ -1363,7 +1366,8 @@ void main() {
             ..value = jsonEncode(atNotification)
             ..metadata = Metadata()));
 
-      when(() => mockAtClientImpl.put(any(), any()))
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
 
       // #1942 migration cleanup may call delete on legacy keys.
@@ -1417,7 +1421,8 @@ void main() {
             ..value = jsonEncode(atNotification)
             ..metadata = Metadata()));
 
-      when(() => mockAtClientImpl.put(any(), any()))
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
 
       // #1942 migration cleanup may call delete on legacy keys.
@@ -1425,6 +1430,96 @@ void main() {
 
       expect(
           await notificationServiceImpl.getLastNotificationTime(), epochMillis);
+    });
+  });
+
+  /// The watermark is a `local:` record: never synced to the atServer, and
+  /// already encrypted at rest by the keystore. It is written on every
+  /// notification and only ever read for one field.
+  group('the last-received-notification watermark', () {
+    late NotificationServiceImpl service;
+
+    setUp(() async {
+      registerFallbackValue(FakeAtKey());
+      when(() => mockAtClientImpl.getPreferences())
+          .thenAnswer((_) => AtClientPreference()
+            ..namespace = 'wavi'
+            ..fetchOfflineNotifications = true);
+      when(() => mockAtClientImpl.delete(any())).thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => false);
+      service = await NotificationServiceImpl.create(mockAtClientImpl,
+          monitor: fakeMonitor) as NotificationServiceImpl;
+      service.stopAllSubscriptions();
+    });
+
+    test('is written unencrypted, without the payload or the metadata',
+        () async {
+      when(() => mockAtClientImpl.get(service.lastReceivedNotificationAtKey))
+          .thenAnswer((_) async => AtValue());
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+
+      // The first-call branch seeds the watermark and returns null.
+      expect(await service.getLastNotificationTime(), isNull);
+
+      final captured = verify(() => mockAtClientImpl.put(any(), captureAny(),
+              putRequestOptions: captureAny(named: 'putRequestOptions')))
+          .captured;
+      final written = jsonDecode(captured[0] as String) as Map<String, dynamic>;
+
+      expect(written['epochMillis'], isNotNull,
+          reason: 'the one field that is ever read back');
+      expect(written.containsKey('value'), isFalse,
+          reason: 'the payload is bounded only by maxDataSize, is rewritten on '
+              'every notification, and is held here without value-level '
+              'encryption');
+      expect(written.containsKey('metadata'), isFalse);
+      expect((captured[1] as PutRequestOptions).shouldEncrypt, isFalse,
+          reason: 'routing a never-synced record through the shared-data '
+              'crypto path is what made it refusable: every post-quantum '
+              'provider declines a local key and the fallback is legacy');
+    });
+
+    test('a write failure does not escape into the connect sequence', () async {
+      when(() => mockAtClientImpl.get(service.lastReceivedNotificationAtKey))
+          .thenAnswer((_) async => AtValue());
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenThrow(AtKeyException('keystore unavailable'));
+
+      // Monitor.stayConnected calls this partway through connecting and treats
+      // anything thrown as a failed connection, retrying with backoff for as
+      // long as the cause persists.
+      await expectLater(service.getLastNotificationTime(), completion(isNull),
+          reason: 'seeding the watermark is an optimisation — failing to seed '
+              'it costs one replayed window, where letting the failure out '
+              'costs the listener entirely');
+      verify(() => mockAtClientImpl.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions'))).called(1);
+    });
+
+    test('a record written by an older build still reads back', () async {
+      // Older builds stored all twelve AtNotification fields. The reader takes
+      // one key out of the JSON, so both shapes open without a compat branch —
+      // which is why dropping the fields needs no migration.
+      final legacyShape = AtNotification(Uuid().v4(), 'k', '@bob', '@alice',
+          1234567890123, 'update', true,
+          value: 'a payload an older build persisted', metadata: Metadata());
+      // The canonical record has to EXIST for the migration to read it — with
+      // `exists` false it takes the first-call seed branch and this would be a
+      // test of the seed, not of the reader.
+      when(() => mockAtClientImpl.getLocalSecondary()!.keyStore!.exists(any()))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
+      when(() => mockAtClientImpl.get(service.lastReceivedNotificationAtKey))
+          .thenAnswer((_) async =>
+              AtValue()..value = jsonEncode(legacyShape.toJson()));
+
+      expect(await service.getLastNotificationTime(), 1234567890123);
     });
   });
 
@@ -1512,7 +1607,8 @@ void main() {
         final atKey = invocation.positionalArguments.first as AtKey;
         return AtValue()..value = valuesLower[atKey.toString().toLowerCase()];
       });
-      when(() => mockAtClientImpl.put(any(), any()))
+      when(() => mockAtClientImpl.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((invocation) async {
         final atKey = invocation.positionalArguments[0] as AtKey;
         final value = invocation.positionalArguments[1] as String?;

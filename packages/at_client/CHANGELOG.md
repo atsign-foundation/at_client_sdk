@@ -1,4 +1,32 @@
 ## 3.14.1
+- fix: a `local:` record is no longer routed through the shared-data crypto
+  path. `AtKey.isLocal` means the record is never synced to the atServer, and
+  the keystore already encrypts it at rest, so value-level encryption was
+  protecting nothing — but every post-quantum provider declines a local key,
+  the defaulted id fell back to legacy, and a client setting
+  `disallowLegacyEncryption` therefore could not write **any** local key. The
+  SDK's own notification and sync watermarks are local keys.
+  - `disallowLegacyEncryption` now exempts `isLocal`. The flag refuses what a
+    quantum adversary could harvest, and a record that is never transmitted
+    cannot be harvested; what "legacy" resolves to for such a key is
+    AES-256-CTR under a self key that never leaves the device. A *synced* self
+    key reaches that same path and is deliberately **not** exempted, because
+    the atServer does hold those.
+  - **The notification listener no longer dies from it.** `Monitor` read the
+    watermark inside its connect `try`, so the refusal was reported as a failed
+    connection and retried with backoff for as long as the flag was set: the
+    client went silently deaf, the absence of a `listening` state its only
+    symptom. The watermark read now has its own guard, and a connect failure
+    that is not a `SocketException` logs at `warning` rather than `info`.
+  - The internal watermark writes are guarded, and the sync ones no longer mask
+    what broke. `SyncServiceImpl`'s pull-cursor write runs inside a `finally`,
+    where a throw *replaces* the exception already in flight — so a failed
+    cursor write was reported in place of the real reason a sync failed.
+  - The notification watermark no longer persists the notification payload or
+    its metadata blob. Only `epochMillis` is ever read back, yet all twelve
+    `AtNotification` fields were stored, rewritten on every notification and
+    bounded only by `maxDataSize`. Records written by older builds still read
+    back unchanged — the reader takes one key out of the JSON either way.
 - fix!: a mint lock is an **election token with a cooldown**, not a mutex. The
   winner no longer deletes it — the ttl is what releases it — which removes the
   window where a holder finishing late deleted its *successor's* lock, because

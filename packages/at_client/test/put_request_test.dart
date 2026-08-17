@@ -254,6 +254,62 @@ void main() {
       expect(builder.atKey.metadata.isEncrypted, isFalse);
     });
   });
+
+  /// A `local:` record is never synced to the atServer, so there is no peer to
+  /// decrypt it and nothing an adversary can capture; the keystore already
+  /// encrypts it at rest. Routing one through the shared-data crypto path also
+  /// made it unwritable under `disallowLegacyEncryption`, because every
+  /// post-quantum provider declines a local key and the fallback is legacy.
+  group('local: keys are not encrypted', () {
+    late PutRequestTransformer transformer;
+
+    setUp(() {
+      final client = MockAtClient();
+      client.getPreferences()
+        ..namespace = 'wavi'
+        ..crypto = CryptoConfig(
+          defaultProviderId: 'cipher-provider',
+          providers: [CipherProvider()],
+        );
+      transformer = PutRequestTransformer()..atClient = client;
+    });
+
+    Future<UpdateVerbBuilder> transform(AtKey atKey) => transformer.transform(
+        Tuple<AtKey, dynamic>()
+          ..one = atKey
+          ..two = 'value');
+
+    test('the value is stored as given', () async {
+      final builder = await transform(
+          AtKey.local('lastreceivednotification', '@alice', namespace: 'wavi')
+              .build());
+
+      expect(builder.value, 'value',
+          reason: 'CipherProvider prefixes what it encrypts with "abc", so an '
+              'unprefixed value is proof the crypto path was not entered');
+      expect(builder.atKey.metadata.isEncrypted, isFalse,
+          reason: 'and the get path keys off exactly this to return the raw '
+              'value, so old encrypted records and new plain ones both read '
+              'back without a compatibility branch');
+      expect(builder.atKey.metadata.appMetadata, isNull,
+          reason: 'nothing encrypted it, so nothing may claim to have');
+    });
+
+    test('control: a non-local key with the same client IS encrypted',
+        () async {
+      final builder = await transform(AtKey()
+        ..key = 'phone'
+        ..namespace = 'wavi'
+        ..sharedBy = '@alice'
+        ..sharedWith = '@bob');
+
+      expect(builder.value, 'abcvalue',
+          reason: 'without this the local arm above would prove only that the '
+              'test provider had stopped working');
+      expect(builder.atKey.metadata.isEncrypted, isTrue);
+      expect(builder.atKey.metadata.appMetadata?.providerId, 'cipher-provider');
+    });
+  });
 }
 
 class TupleMatcher extends Matcher {

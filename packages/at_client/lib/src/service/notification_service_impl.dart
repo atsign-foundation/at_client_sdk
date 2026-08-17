@@ -3,6 +3,7 @@ import 'dart:collection';
 import 'dart:convert';
 
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
@@ -96,6 +97,33 @@ class NotificationServiceImpl extends NotificationService {
         .build();
   }
 
+  /// How every write of the last-received-notification watermark is routed.
+  ///
+  /// The watermark is a `local:` record — never synced, and already encrypted
+  /// at rest by the keystore — so there is nothing for value-level encryption
+  /// to protect. Saying so explicitly keeps these writes off the shared-data
+  /// crypto path, which is where a client that refuses legacy encryption used
+  /// to have them refused: every post-quantum provider declines a local key,
+  /// and the fallback from that decline is legacy.
+  ///
+  /// A fresh instance per call: [PutRequestOptions] is mutable and the put
+  /// pipeline may rewrite the options it is handed.
+  static PutRequestOptions get _watermarkPutOptions =>
+      PutRequestOptions()..shouldEncrypt = false;
+
+  /// What gets persisted as the watermark: the notification minus its payload
+  /// and its metadata blob.
+  ///
+  /// Only `epochMillis` is ever read back — see [getLastNotificationTime] —
+  /// and the remaining fields are kept because they cost little and make the
+  /// record legible to someone working out why a monitor replayed from where
+  /// it did. `value` and `metadata` are dropped: `value` is the notification
+  /// payload, bounded only by [AtClientPreference.maxDataSize], rewritten on
+  /// every notification, and held here without value-level encryption.
+  static String _watermarkValue(AtNotification n) => jsonEncode(n.toJson()
+    ..remove('value')
+    ..remove('metadata'));
+
   /// Migrate any legacy (non-`local:`) forms of the
   /// last-received-notification key to the canonical
   /// `local:lastreceivednotification.<ns>@<atSign>` form, and delete
@@ -169,7 +197,8 @@ class NotificationServiceImpl extends NotificationService {
         try {
           final v = await atClient.get(AtKey.fromString(legacyStr));
           if (v.value != null) {
-            await atClient.put(lastReceivedNotificationAtKey, v.value);
+            await atClient.put(lastReceivedNotificationAtKey, v.value,
+                putRequestOptions: _watermarkPutOptions);
             canonicalValue = v;
           }
         } on Exception catch (e) {
@@ -231,7 +260,18 @@ class NotificationServiceImpl extends NotificationService {
       value: 'placeholder',
       metadata: Metadata(),
     );
-    await atClient.put(lastReceivedNotificationAtKey, jsonEncode(n.toJson()));
+    // Best-effort, like the other two writes of this key. The watermark is an
+    // optimisation — it exists so a restart does not replay history — so
+    // failing to seed it costs one replayed window. Letting the failure out of
+    // here would reach `Monitor.stayConnected`, which treats anything thrown
+    // during its connect sequence as a failed connection and retries forever.
+    try {
+      await atClient.put(lastReceivedNotificationAtKey, _watermarkValue(n),
+          putRequestOptions: _watermarkPutOptions);
+    } catch (e) {
+      logger.warning('Failed to seed the last-received-notification '
+          'watermark; the next monitor connect will seed it again: $e');
+    }
 
     return null;
   }
@@ -285,7 +325,8 @@ class NotificationServiceImpl extends NotificationService {
         if (n.id != '-1') {
           try {
             await atClient.put(
-                lastReceivedNotificationAtKey, jsonEncode(n.toJson()));
+                lastReceivedNotificationAtKey, _watermarkValue(n),
+                putRequestOptions: _watermarkPutOptions);
           } catch (e) {
             logger.warning('Failed to save last received notification ID: $e');
           }
