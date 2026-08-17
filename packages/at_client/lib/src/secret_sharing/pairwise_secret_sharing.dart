@@ -695,6 +695,15 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     }
     final policy = answerSecretRequests;
     if (policy != null && !(await policy(received, requester))) {
+      // Warning, and it names both sides. A holder that declines is the only
+      // party that knows it did: the requester sees an unanswered ask, which is
+      // indistinguishable from nobody holding the secret, from nobody sweeping,
+      // and from the envelope never arriving. Silence here cost a live
+      // diagnosis that had already eliminated three other causes.
+      logger.warning('Declining to answer the secret request from kpid '
+          '${received.fromKpid} (enrollment ${received.fromEnrollmentId}) in '
+          '${received.appNamespace}: the answer policy refused it. The '
+          'requester will see no reply.');
       return;
     }
 

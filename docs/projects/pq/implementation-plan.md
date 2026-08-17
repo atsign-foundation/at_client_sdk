@@ -170,15 +170,30 @@ could complete for anyone**. `PqClientBootstrap` now starts the listener as a
 startup step and `stop()` tears it down, so a stopped client does not leak a
 timer, a sync listener and a subscription.
 
-⚠️ **Necessary, and measured NOT sufficient.** With the listener running the ask
-still goes out and the requesting client's `store()` is still never entered for
-that generation, so at least one more layer of the pull is unfinished. What is
-known: the request is sent (*"Asked the other enrollments … the answer is filed
-when a holder replies"*), and there is heavy `__ssenv` traffic for the namespace
-— 135 events in the run — so envelopes are moving. What has **not** been
-established is whether the holder sees the request envelope at all, and if it
-does, why it does not reply. ⛔ Do not assume it is the sweep's local-vs-remote
-choice; that is the obvious next hypothesis and it is untested.
+⚠️ **Necessary, and measured NOT sufficient — but the remainder is now narrow.**
+A second fix went in on the way: `_handleRequestPayload` **declined silently**
+when the answer policy refused, so a holder that chose not to reply logged
+nothing and "nobody answered" was indistinguishable from "everybody declined".
+That refusal now logs at `warning` naming both sides. With it in place the live
+run shows **no** decline, **no** authorization rejection (*"Ignoring request
+from kpid …"*) and **no** duplicate-answer suppression (*"another holder already
+did"*).
+
+**So `_handleRequestPayload` is never reached with the request: the holder does
+not see the request envelope.** Eliminated by measurement — the send (`sent > 0`,
+no `Could not request secrets` warnings), the answer policy, the authorization
+gate, duplicate suppression, and the absence of a listener.
+
+**What is left, and it is two candidates:**
+
+1. `startListening` sweeps `fromRemote: !clientRunsSync`, so a holder that runs
+   sync polls its **local** store — and an envelope reaches local only once sync
+   has brought it.
+2. The wake-up notification, which is what would trigger a **remote** sweep, may
+   not match the holder's subscription regex for a request envelope.
+
+Instrument `sweepOnce` to log what it read and from where, and check whether a
+wake-up for the request arrives at the holder.
 
 **The re-drive stays unit-proven** (`notification_park_test.dart`). The live row
 proves the park, against a real post-quantum notification and a generation the

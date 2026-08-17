@@ -1,4 +1,9 @@
 ## 3.14.1
+- fix: a holder that declines to answer a secret request now logs it at
+  `warning`, naming the requester and the namespace. It returned silently, and
+  the requester sees only an unanswered ask — indistinguishable from nobody
+  holding the secret, nobody sweeping, or the envelope never arriving. The
+  silence cost a live diagnosis that had already eliminated three other causes.
 - fix: a client now keeps sweeping for envelopes addressed to it, rather than
   sweeping once at start. `PairwiseSecretSharing.startListening()` had no
   production caller, and `_handleRequestPayload` — which answers another
