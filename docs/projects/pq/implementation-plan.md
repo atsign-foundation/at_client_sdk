@@ -64,9 +64,16 @@ handed to its caller before its conveyed privates are filed. Drop at `12.703`
 with `no nskey private held`; the ring's read-miss self-heal fired at `12.819`,
 **116 ms too late**.
 
-**Owed, and not ruled:**
+✅ **RULED 2026-08-17 (gkc): direction 1, park and re-drive** — see
+[106.5](detail/decisions.md#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17).
+Direction 2 was not taken on its own: awaiting `startupComplete` closes only the
+startup window, and a private conveyed while the client is already running still
+races. **Owed: the build.** Also owed and deliberately left to the build — what
+bounds a park, and what happens when the bound is hit.
 
-1. **Park and re-drive at decrypt** — on `no nskey private held`, hold the
+**The three items, as recorded:**
+
+1. **Park and re-drive at decrypt** ← **RULED, unbuilt.** On `no nskey private held`, hold the
    notification and re-drive it when the filing point signals, rather than
    dropping it. Designed in full 2026-08-16 and deliberately not built:
    park-and-retry (ordering yields), an in-memory park, re-driven by a signal

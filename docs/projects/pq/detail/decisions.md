@@ -10329,6 +10329,29 @@ a client sweeps once at start via `collectConveyedKeyMaterial`
 (`pq_client_bootstrap.dart:312`) and never again. That is a separate gap and it
 widens this one.
 
+### 106.5 Ruled: park and re-drive, not readiness at the hand-back (2026-08-17)
+
+106.3 recorded two candidate directions and said neither was ruled. **gkc ruled
+direction 1 on 2026-08-17: park and re-drive at decrypt.**
+
+On `no nskey private held`, the notification is held rather than dropped, and
+re-driven when the private is filed. Re-driving is signalled from the **filing
+point** — not from `receivedSecrets`, which misses anything the start-time sweep
+already consumed, and that distinction is the whole reason the design took a day
+to work out.
+
+**Why not direction 2 alone.** Awaiting `pqBootstrap.startupComplete` at the
+hand-back closes only the *startup* window. A private conveyed while the client
+is already running — a second enrollment approved mid-session, which is the
+ordinary case — still races, and no wait at construction can cover it. The park
+covers both, so it is the general fix and direction 2 is at most an optimisation
+on top of it.
+
+**Not ruled by this, and still owed:** whether a park has a bound (count, age,
+or both) and what happens when it is hit; a parked notification that is never
+re-driven is the same data loss with a longer fuse. Decide that when the park is
+built, and say it in the code rather than here.
+
 ### 106.4 What this ruling used to say, and why it was wrong
 
 Until 2026-08-17 this was headed *"The nskey private is pulled, so content can
