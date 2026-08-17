@@ -14,9 +14,11 @@ import 'package:test/test.dart';
 /// `local:<enrollmentId><atSign>` instead, which read like a cache warm-up and
 /// was not one: **nothing in production writes that key.** The fixture stood
 /// for a state the SDK never reaches, and it meant the fetch-and-parse path
-/// underneath every authorization check below was never exercised here. It
-/// still is not — that wants its own test against a stubbed `enroll:fetch`,
-/// which is a different subject from authorization.
+/// underneath every authorization check below was never exercised here.
+///
+/// It is exercised now, but elsewhere and deliberately so: the fetch is
+/// `local_secondary_test.dart`'s subject, not this file's. Supplying the
+/// record here keeps these tests about authorization.
 void seedEnrollment(AtClient client, Map<String, String> namespace) =>
     client.getLocalSecondary()!.enrollment = Enrollment()
       ..namespace = namespace;

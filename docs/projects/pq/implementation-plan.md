@@ -34,7 +34,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
-| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | 17 open small items — the items are in `detail/`, none of them blocking | Item 8 is the only one waiting on a ruling. Items 20–22 are examined-and-left, not work. Item 18 closed 2026-08-16 by ceasing to exist |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **10** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10 | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
 | [14.17](#1417-signature-agility--what-is-built-and-what-is-owed) | Signature agility — the owed half | — |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Four audit residuals | — |
 | [14.15](#1415-pre-pr-rails-checklist) | Pre-PR rails checklist | — |
@@ -767,10 +767,11 @@ ladder — a same-value version bump merges silently.)
 
 ### 14.19 Small items, raised 2026-08-12 and not yet acted on
 
-**11 open, 11 struck** (was 17 open on 2026-08-17, before items 1, 3, 16, 17 and
-19 were fixed and 22 was struck as a false positive). Each is real and verified
-at the time of writing, and each is too small to be a step of its own. **None
-blocks anything** — which is why the items themselves live in
+**10 open, 12 struck** (was 17 open on 2026-08-17, before items 1, 3, 16, 17 and
+19 were fixed, 22 was struck as a false positive, and 15 was struck as the
+closure it had already recorded in its own body since 2026-08-15). Each is real
+and verified at the time of writing, and each is too small to be a step of its
+own. **None blocks anything** — which is why the items themselves live in
 [`detail/implementation-plan.md`](detail/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
 rather than here: they are work to pick up, not work to hold in mind.
 

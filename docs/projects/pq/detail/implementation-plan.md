@@ -3124,10 +3124,23 @@ its own. None blocks anything.
     `atProtocol/1.0` wire value. The filter above excludes them deliberately:
     renaming those is a breaking API/wire change, not a docs fix.
 
-15. **An enrolled enrollment's `_apsk` has THREE writers, not one — and a
-    dartdoc said otherwise while row B4 was being built on it.** Raised
-    2026-08-14, deferred deliberately, and recorded here because it lives
-    nowhere else.
+15. ~~**An enrolled enrollment's `_apsk` has THREE writers, not one — and a
+    dartdoc said otherwise while row B4 was being built on it.**~~ **CLOSED —
+    and the strike was owed since 2026-08-15.** The body below has ended "This
+    item is CLOSED" since then; only the heading was never struck, so the
+    open-item count kept counting it. Found by a cold read 2026-08-17.
+
+    ⚠️ **And its resolution has since been superseded in the reader's favour.**
+    Ruling 102 accepted the multi-writer window as documented-and-healing. On
+    2026-08-17 [14.32](../implementation-plan.md#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers)
+    re-opened that ruling deliberately, measured the window actually costing a
+    clobber — four writes to `_apsk.primary` ending on bare RSA — and closed it
+    in code by serialising the in-process writers
+    ([102.2](decisions.md#1022-the-in-process-window-is-closed-by-serialising-the-writers-2026-08-17)).
+    So the plurality is still three, but the race it created is gone.
+
+    Raised 2026-08-14, deferred deliberately, and recorded here because it
+    lives nowhere else.
 
     `SigningKeyMinting._publish` sends `enroll:update` and its dartdoc said
     *"the atServer is the only writer of an enrollment's `_apsk` — one writer
