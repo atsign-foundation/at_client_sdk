@@ -3608,7 +3608,7 @@ code path does it.
   clients were already built. The level now has to be raised before any client
   is constructed, which is why that file raises it as its first statement and
   asserts it survived. See
-  [106](#106-the-nskey-private-is-pulled-so-content-can-outrun-it-2026-08-16).
+  [106](#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16).
 
 ## 45. The retrofit rows, and the five defects the first end-to-end run found (2026-08-05)
 
@@ -10156,75 +10156,105 @@ accepted once the ttl has lapsed.
 
 ---
 
-## 106. The nskey private is pulled, so content can outrun it (2026-08-16)
+## 106. A notification that outruns its key is dropped, not parked (2026-08-16)
 
-**In brief:** ⚠️ *a notification whose decryption needs a not-yet-held nskey private is dropped and never retried; the private arrives seconds later*
+**In brief:** ⚠️ *a notification needing an nskey private the receiver has not yet **filed** is dropped and never retried; the private was pushed on time and is filed moments later*
 
-Found while writing UC-A3.4's **self** direction live — the row the catalogue
-carries as PROVEN against a `MockAtClient` and a hand-built frame.
+Found while writing UC-A3.4's **self** direction live — a row the catalogue then
+carried as PROVEN against a `MockAtClient` and a hand-built frame. That row is
+now live-proven too, and deliberately does not cover the drop this ruling names.
 
 ### 106.1 What was measured
 
 Two distinct enrollments of one atSign, the nskey minted by the approver
 *before* either existed, both on the nskey data path. `alice1` notifies
-`@alice` with an encrypted value; `alice2` runs a monitor.
+`@alice` with an encrypted value; `alice2` runs a monitor. Client clock:
 
 ```
-53.278  update:ttl:604800000  __ssenv envelope -> kpid f456ee8e4fe5ab77
-53.290  update:ttl:604800000  __ssenv envelope -> kpid f456ee8e4fe5ab77
-53.322  notify:               wake-up for those envelopes
-53.334  PublishedNskeyKeyRing Asked the other enrollments for the nskey
-                              private …; filed when a holder replies
-53.945  notify:               the treaty (content, encrypted)
-53.948  Monitor RECEIVED      the treaty — on BOTH monitors
-53.980  WARNING NotificationServiceImpl
+11.918  EnvelopeEnrollmentConveyance
+                              Conveyed 1 held nskey private(s) to
+                              enrollment f63f4aee…            <- the receiver
+12.604  Monitor               SENDING: monitor:selfNotifications
+12.609  llookup:all           7d06d143….__ssenv…  (receiver's bootstrap sweep)
+12.637  delete                7d06d143….__ssenv…
+12.682  notify:               the treaty (content, encrypted)
+12.684  Monitor RECEIVED      the treaty
+12.686  llookup:all           …__ck…              (conveyance read, remote)
+12.703  WARNING NotificationServiceImpl
                               Dropping notification …treaty… :
                               no nskey private held for @alice🛠:selfntfy…
-56.62   (the answer to the 53.334 pull arrives)
+                              generation 7ee3a31f83cfb756
+12.819  PublishedNskeyKeyRing Asked the other enrollments for the nskey
+                              private …; filed when a holder replies
 ```
 
-**Nothing here is an atServer defect, and three hypotheses that said otherwise
-were disproven in turn.** The monitor was listening (adding a wait for
-`NotificationListenerState.listening` changed the result not at all). Self
-notifications *are* delivered to sibling enrollments' monitors — the receiver
-received the treaty, and `__ssenv` frames besides. Sends left in the right
-order. The client even logs the drop at `warning`, naming the reason.
+**Nothing here is an atServer defect.** The atServer's own log settles delivery
+in three lines: it enqueues the notification and writes it to every monitor
+connection registered at that instant. The client logs the drop at `warning`,
+naming the reason.
 
-### 106.2 Why the ordering invariant does not save it
+### 106.2 The push exists and is on time; the filing is not
 
 gkc's model, and it is the right one: a secret is **PUT to the receiver's
-inbox and a self notification sent**, so ordering should give
+inbox and a self notification sent**, so ordering gives
 secret → content-key → content, and a receiver that *needs* a secret can fetch
 it from the inbox without waiting for any notification.
 
-⛔ **Step one does not exist for the nskey private.** It is not pushed as a
-notification the receiver could receive in order — the receiver **pulls** it
-(`PublishedNskeyKeyRing`: *"Asked the other enrollments…"*), and a pull the
-receiver starts at its own bootstrap has no ordering relationship to a send by
-another party. So the content notification races the pull, and here lost by
-**0.6s** against an answer that arrived **2.7s** later.
+**Every step of that is built.** Approval conveys the private
+(`EnvelopeEnrollmentConveyance`, `11.918` above), the content key is written
+remote-first before the notify, and the ring's read-miss self-heal exists as
+the fallback (`PublishedNskeyKeyRing`, `12.819`).
 
-⚠️ **Not established:** whether the envelopes at 53.278/.290 — addressed to the
-receiver's own kpid, ttl 7 days — carry the nskey private or only the
-approval-time `apkamSymmetricKey`. They land during approval, which conveys the
-latter, and the receiver's subsequent pull is evidence against the former.
-**Settle this before choosing a fix**, because it decides whether the push is
-missing or merely unconsumed.
+⛔ **What is not built is the wait.** `AtClientImpl` fires the PQ startup with
+`unawaited(_pqBootstrap!.startup())`, and `PqClientBootstrap._collectConveyedKeys`
+— its own dartdoc: *"the only route by which a conveyed nskey private reaches
+the keyfile"* — is that startup's **second step**. So a client is handed to its
+caller before the private conveyed to it at approval has been filed, and
+anything sealed to that generation in the meantime cannot be opened. The
+receiver above was still sweeping its own envelopes 45 ms before the
+notification arrived.
+
+The self-heal then fires **116 ms after the drop**. It repairs the client and
+loses the message, because a dropped notification is not retried.
 
 ### 106.3 What is owed
 
 A dropped notification that nothing retries is data loss, not a log level: the
 subscriber never sees the value, while the material needed to open it is on the
-atServer for `envelopeTtl` and in hand seconds later. Two candidate directions,
-neither ruled:
+atServer for `envelopeTtl` and in hand a fraction of a second later. Two
+candidate directions, neither ruled:
 
-1. **Push the private ahead of content** at approval, making the ordering
-   invariant true by construction.
-2. **Fetch on demand at decrypt** — on `no nskey private held`, await or fetch
-   rather than drop.
+1. **Park and re-drive at decrypt** — on `no nskey private held`, hold the
+   notification and re-drive it when the filing point signals, rather than
+   dropping it. The design for this was worked out in full on 2026-08-16 and
+   deliberately not built; it is recorded in
+   [14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it).
+2. **Make the client's readiness observable** — a caller that must not miss
+   early notifications can already `await pqBootstrap.startupComplete`, but
+   nothing says so at the point a client is handed back, and no production
+   caller does it.
 
 ⚠️ **`PairwiseSecretSharing.startListening()` has no production caller** — only
 its own unit tests. The periodic inbox sweep is therefore not running anywhere;
 a client sweeps once at start via `collectConveyedKeyMaterial`
 (`pq_client_bootstrap.dart:312`) and never again. That is a separate gap and it
 widens this one.
+
+### 106.4 What this ruling used to say, and why it was wrong
+
+Until 2026-08-17 this was headed *"The nskey private is pulled, so content can
+outrun it"*, and asserted that approval-time conveyance pushes only the
+`apkamSymmetricKey`, so the receiver had no choice but to pull. That was
+inferred from a run whose harness had disabled both push paths — the approver
+was built with no `AtKeysIo`, so it held no filed private to convey
+— and the pull was the only thing left to observe. Two envelopes per
+enrollment are conveyed at approval, and the receiver reads and deletes both.
+
+Its claim that *"the monitor was listening"* was also unsafe. That rested on
+`NotificationListenerState.listening`, which the client sets straight after
+writing the `monitor:` command and which says nothing about the atServer having
+processed it. On 2026-08-17 the atServer log showed the `monitor:` command
+arriving **2.9 ms after** the notification was enqueued — and because the
+atServer's inbound stream is a **broadcast** stream, a connection registering
+after an event never receives it. The only sound gate is a notification
+actually reaching the listener.

@@ -2365,12 +2365,15 @@ place (the layer-3 AAD literal, and UC-A3.4 below).
    but only on a 16-core arm64 Mac, which is the opposite of the device the
    criterion names. Until it is re-run, "performance is measured, not assumed"
    is not yet true. B-1's own unmet acceptance requirement (#2010).
-2. **UC-A3.4's self direction is unit-only.** Both live notify tests are
-   alice→bob; the alice1→alice2 case is asserted against a `MockAtClient`. The
-   plan claimed both A3.4 and A4.4 were live-covered — corrected. It is now
-   *owed rather than blocked*: the harness limitation the issue cites
+2. ✅ **UC-A3.4's self direction is live, DONE 2026-08-17.** It had been
+   unit-only — both live notify tests were alice→bob and the alice1→alice2 case
+   was asserted against a `MockAtClient`, while the plan claimed both A3.4 and
+   A4.4 were live-covered. The harness limitation the issue cites
    (`AtClientManager` being a singleton) was removed by `ConcurrentClients` and
-   `EnrolledClient`, so the assertion is writable today (#2093).
+   `EnrolledClient`, and `nskey_self_notify_live_test.dart` now drives the row
+   against a live atServer. Two product fixes landed with it; see
+   [14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it)
+   for what it deliberately does not cover (#2093).
 3. **SS-4: an interrupted mint does not resume.** The acceptance bullet asks
    that it resume rather than re-generate; there is no persisted in-progress
    marker, so it starts over. Worth deciding whether that is still required —
@@ -4256,7 +4259,7 @@ every one citing a proof that already existed:
 **Four did not**, and the reason is the point of the row:
 
 - `enrollment_key_package_live_test.dart` — the key package surviving
-  `enroll:request` is [UC-A2.4](../acceptance.md#24-uc-a24--the-key-package-advertises-the-kem-the-deployment-configured)
+  `enroll:request` is [UC-A2.4](../acceptance.md#34-uc-a24--the-key-package-advertises-the-kem-the-deployment-configured)
   in substance; it cites a different proof, which is a citation question, not a
   coverage one.
 - `pq_rollout_matrix_test.dart` — the sender/receiver stage matrix is

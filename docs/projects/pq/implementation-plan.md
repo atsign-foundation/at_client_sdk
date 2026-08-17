@@ -42,38 +42,49 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
-| [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) | A notification needing a not-yet-held nskey private is dropped without retry | Blocked on one question: does approval-time conveyance push the private, or only the apkamSymmetricKey? |
+| [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) | A notification needing a not-yet-filed nskey private is dropped without retry | Cause found 2026-08-17: the conveyed private is filed by an unawaited startup. Park-and-re-drive designed, not built |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
 
 ### 14.30 A content notification can outrun the key that opens it
 
 Found 2026-08-16 writing UC-A3.4's self direction live
-([decisions 106](detail/decisions.md#106-the-nskey-private-is-pulled-so-content-can-outrun-it-2026-08-16)).
-A notification whose decryption needs an nskey private the receiver does not
-yet hold is **dropped and never retried**, while the private arrives seconds
-later and the envelope stays on the atServer for `envelopeTtl`.
+([decisions 106](detail/decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16)).
+A notification whose decryption needs an nskey private the receiver has not yet
+**filed** is **dropped and never retried**, while the private is filed a
+fraction of a second later and the envelope stays on the atServer for
+`envelopeTtl`.
 
-**Measured**, not inferred: drop at `53.980` with `no nskey private held`; the
-receiver's pull answered at `56.62`. The atServer, the monitor and the ordering
-of sends were all correct — three hypotheses blaming them were disproven in
-turn.
+**Cause, measured 2026-08-17.** The push is built and on time: approval conveys
+the private (`EnvelopeEnrollmentConveyance`), and the receiver reads and deletes
+both of its `__ssenv` envelopes. What is missing is the **wait** — `AtClientImpl`
+fires `unawaited(_pqBootstrap!.startup())`, and
+`PqClientBootstrap._collectConveyedKeys` (*"the only route by which a conveyed
+nskey private reaches the keyfile"*) is that startup's second step. A client is
+handed to its caller before its conveyed privates are filed. Drop at `12.703`
+with `no nskey private held`; the ring's read-miss self-heal fired at `12.819`,
+**116 ms too late**.
 
 **Owed, and not ruled:**
 
-1. ⛔ **Settle first:** do the approval-time envelopes addressed to the new
-   enrollment's kpid carry the **nskey private**, or only the
-   `apkamSymmetricKey`? That decides whether the push is missing or merely
-   unconsumed, and no fix should be chosen before it is answered.
-2. Then either push the private ahead of any content sealed to it, or fetch on
-   demand when decryption reports `no nskey private held`.
+1. **Park and re-drive at decrypt** — on `no nskey private held`, hold the
+   notification and re-drive it when the filing point signals, rather than
+   dropping it. Designed in full 2026-08-16 and deliberately not built:
+   park-and-retry (ordering yields), an in-memory park, re-driven by a signal
+   at the **filing point** — not by `receivedSecrets`, which misses anything
+   the start-time sweep already consumed.
+2. **Make readiness observable at the hand-back.** A caller that must not miss
+   early notifications can `await pqBootstrap.startupComplete`, but nothing
+   says so where a client is returned, and no production caller does it.
 3. **`PairwiseSecretSharing.startListening()` has no production caller** — the
    periodic inbox sweep runs nowhere. A client sweeps once at start
    (`collectConveyedKeyMaterial`, `pq_client_bootstrap.dart:312`). Separate
    gap, widens this one.
 
-⚠️ **The live test that found it is `nskey_self_notify_live_test.dart` and it
-is RED** — deliberately, and it is not committed to the pack in that state. It
-is the characterisation of the defect, not a regression.
+✅ **`nskey_self_notify_live_test.dart` is GREEN and in the pack** as of
+2026-08-17. It closes UC-A3.4's self direction by waiting for
+`startupComplete`, so it proves what the row claims — a second enrollment opens
+what was conveyed to it — and does **not** cover the drop above. Nothing yet
+tests the park path, because nothing implements it.
 
 ### 14.29 The residuals 14.25 surfaced
 
@@ -612,18 +623,23 @@ place (the layer-3 AAD literal, and UC-A3.4 below).
    but only on a 16-core arm64 Mac, which is the opposite of the device the
    criterion names. Until it is re-run, "performance is measured, not assumed"
    is not yet true. B-1's own unmet acceptance requirement (#2010).
-2. **UC-A3.4's self direction is unit-only.** Both live notify tests are
-   alice→bob; the alice1→alice2 case is asserted against a `MockAtClient`. The
-   plan claimed both A3.4 and A4.4 were live-covered — corrected.
-   ⛔ **"Writable today" was wrong, and writing it is what showed why**
-   (2026-08-16). The harness limitation is indeed gone — `ConcurrentClients`
-   and `EnrolledClient` make two real enrollments of one atSign routine — but
-   the row cannot pass as specified: a content notification can reach the
-   second enrollment **before** the nskey private that opens it, and is then
-   dropped without retry
-   ([decisions 106](detail/decisions.md#106-the-nskey-private-is-pulled-so-content-can-outrun-it-2026-08-16),
-   [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it)).
-   The assertion is writable; what it asserts is not yet true (#2093).
+2. ✅ **UC-A3.4's self direction is live, DONE 2026-08-17.** It had been
+   unit-only — both live notify tests were alice→bob and the alice1→alice2 case
+   was asserted against a `MockAtClient`, while the plan claimed both A3.4 and
+   A4.4 were live-covered. `nskey_self_notify_live_test.dart` now drives it
+   against a live atServer: two real enrollments of one atSign, the nskey
+   minted before either existed, the treaty delivered to the second
+   enrollment's monitor and decrypted with the private conveyed at approval.
+   Two product fixes were needed and both landed with it — the content-key
+   conveyance retries **remotely** when the local read misses (only the self
+   direction can hit that; a cross-atSign conveyance is owned by the other
+   atSign with no `ttr`, so it was always a remote lookup), and the
+   notification dispatch loop awaits its transforms instead of discarding them
+   via `Map.forEach`. What the row does **not** cover is a notification that
+   outruns its key, which is still dropped
+   ([decisions 106](detail/decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16),
+   [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it))
+   (#2093).
 3. **SS-4: an interrupted mint does not resume.** The acceptance bullet asks
    that it resume rather than re-generate; there is no persisted in-progress
    marker, so it starts over. Worth deciding whether that is still required —
@@ -793,7 +809,7 @@ the reason is the point of the row.
 One row each; the detail is in
 [`detail/implementation-plan.md`](detail/implementation-plan.md). The third
 column reports what the plan **records**, which is not always what was
-measured — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none).
+measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none).
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
@@ -803,20 +819,20 @@ measured — see [14.25](#1425-three-projects-state-partial-completion-and-six-s
 | 14.24  | The nskey mint elects a winner; the lock became an election token with a cooldown | DONE 2026-08-16 — seven rows, proven live at functional **166/166 `EXIT=0`**. Detail: [14.24](detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) |
 | P-1    | at_chops stateless core + HPKE                          | SATISFIED — at_chops 3.3.0 published 2026-06-23                                                                      |
 | P-2    | `mldsa65` wired into the verification branch            | SATISFIED — published 2026-07-17                                                                                     |
-| P-3    | `public:pqpublickey` + X-Wing-preferred enrollment wrap | No status stated — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none)                     |
+| P-3    | `public:pqpublickey` + X-Wing-preferred enrollment wrap | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
 | S-1    | at_auth `AtKeys`/`AtKeysIo` extended in place           | SATISFIED — at_auth 3.3.0 published                                                                                  |
 | S-2    | `CryptoContext.keys` additive field                     | SATISFIED on trunk 2026-07-17; residual is the at_client publish                                                     |
-| S-3    | Updatable `.atKeys` / keychain via injected `AtKeysIo`  | States PARTLY LANDED — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none)                 |
+| S-3    | Updatable `.atKeys` / keychain via injected `AtKeysIo`  | States PARTLY LANDED — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                 |
 | SS-0   | WP-SS substrate baseline                                | SATISFIED — merged 2026-07-17                                                                                        |
 | SS-1a  | at_commons enroll grammar + flattened `listns`          | SATISFIED — at_commons 5.12.0 published 2026-07-04                                                                   |
 | SS-1b  | atServer stores/returns `EnrollParams.metadata`         | SATISFIED — merged 2026-07-07                                                                                        |
-| SS-1c  | Client wired to the live verbs + flattened parser       | States live drive owed — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none)               |
-| SS-2   | Substrate wired into AtClient + server wake-up          | No status stated — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none)                     |
+| SS-1c  | Client wired to the live verbs + flattened parser       | States live drive owed — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)               |
+| SS-2   | Substrate wired into AtClient + server wake-up          | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
 | SS-3   | Substrate hardening + `signingAlgo` verify              | LANDED — at_server#2739 merged 2026-08-10                                                                            |
-| SS-4   | nskey minting + signing-root lifecycle                  | States ABOUT HALF LANDED — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none)             |
-| B-1    | The nskey data path — providers + cold start            | No status stated; the D1 centrepiece — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none) |
-| RF-1   | `requestSecret(name)` confirm                           | No status stated — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none)                     |
-| RF-SRV | atServer authenticated self-retrofit enroll             | No status stated — see [14.25](#1425-three-projects-state-partial-completion-and-six-state-none)                     |
+| SS-4   | nskey minting + signing-root lifecycle                  | States ABOUT HALF LANDED — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)             |
+| B-1    | The nskey data path — providers + cold start            | No status stated; the D1 centrepiece — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
+| RF-1   | `requestSecret(name)` confirm                           | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
+| RF-SRV | atServer authenticated self-retrofit enroll             | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
 | RF-2b  | PQ ML-DSA APKAM mint + self-retrofit                    | LANDED 2026-08-05 (decisions 43)                                                                                     |
 | RF-2c  | Retrofit orchestration + full e2e                       | LANDED 2026-08-05 (decisions 44)                                                                                     |
 | R-1    | `disallowLegacyEncryption`                              | DELIVERED 2026-08-05; scope shrunk by decisions 36                                                                   |
