@@ -9505,15 +9505,27 @@ different prices, and only the first was ruled on.
 and is the reason: the demotion rule cannot be stated over `primary`, a record
 no single client owns. A fourth guard of that shape is still refused.
 
-**What is genuinely open, and it is one question.** The acceptance rests on "the
-state heals at the next start — `publishPublicSigningKey` composes from the
-keyfile, which by then holds the post-mint state". `_file` is called at
-`signing_key_minting.dart:167`, immediately after `_publish` — yet
-`AtClientEnvelopeSigner` read `heldSigningKeys == []` **20 ms after** the mint's
-publish returned. So either the healing claim is false for the `primary`
-pseudo-enrollment, or the filing at `:167` is not making `heldSigningKeys`
-non-empty for `primary`. Log `heldSigningKeys` immediately after `_file`
-returns; the two answers need different fixes, and neither is a record guard.
+**The filing works — measured, so the mechanism above is exactly 102's window.**
+Logging `heldSigningKeys` immediately after `_file` returns gives
+`[mldsa65]`, with `io` and `atClient.atKeysIo` the same instance
+(`InMemoryAtKeysIo@20542779`). So the keyfile does hold the post-mint state, the
+healing claim is intact, and `AtClientEnvelopeSigner` simply read **before** the
+filing completed. Nothing is broken about filing or about healing; the window is
+real and is the whole of it.
+
+⚠️ **What that leaves, and 102 never priced it.** The observed failure is
+entirely **within one process and one client** — the approver's own
+`AtClientEnvelopeSigner` overwrites the approver's own mint, 20 ms apart, on the
+same `AtKeysIo` instance. 102 rejected serialising the writers on the grounds
+that "both triggers are publicly exported, so it would read as a guarantee it
+could not give", which is a true objection to a *cross-process* guarantee and
+not to closing this one. That option was dismissed while the race was believed
+to need an application call racing `startup()`; it does not.
+
+So the fix space is: an in-process ordering fix that closes the measured
+failure without claiming a cross-process guarantee — not a record guard, which
+guard 3 showed cannot be stated over `primary`. **Choosing between the shapes
+of that is open and is the next decision on this ruling.**
 
 ## 103. An envelope says what it is for, and a verifier says what it wants (2026-08-15)
 

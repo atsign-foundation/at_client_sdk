@@ -290,14 +290,19 @@ at all**.
 ⛔ **That does not revive the three guards.** Guard 3's finding stands: the
 demotion rule cannot be stated over `primary`, a record no single client owns.
 
-**The open question is therefore narrower than it looks:** 102's acceptance
-rests on "it heals at the next start, because `publishPublicSigningKey` composes
-from the keyfile, which by then holds the post-mint state". Here it did **not**
-heal inside the test's 30 s, and `AtClientEnvelopeSigner` saw an empty keyfile
-20 ms *after* the mint's publish returned. So either the healing claim is wrong
-for the `primary` pseudo-enrollment, or the filing at `:167` is not making
-`heldSigningKeys` non-empty for `primary`. **Distinguish those two before
-designing anything** — log `heldSigningKeys` immediately after `_file` returns.
+✅ **The filing works, so this is 102's window and nothing else.** Logging
+`heldSigningKeys` immediately after `_file` returns gives `[mldsa65]`, with the
+mint's `io` and `atClient.atKeysIo` the same instance. The keyfile does hold the
+post-mint state; `AtClientEnvelopeSigner` simply read before the filing
+completed.
+
+**What is left to decide** is recorded on the ruling rather than here: the
+failure is entirely **within one process and one client**, and 102 dismissed
+serialising the writers as an unkeepable *cross-process* guarantee at a time
+when it believed the race needed an application call racing `startup()`. It
+does not. An in-process ordering fix would close the measured failure without
+claiming more than it can; a record guard would not, because guard 3 showed the
+rule cannot be stated over `primary`.
 
 ⚠️ This is **not** [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor).
 That one is a refused internal write killing the monitor; this one is an
