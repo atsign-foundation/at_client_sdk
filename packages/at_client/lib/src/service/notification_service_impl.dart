@@ -33,7 +33,6 @@ import 'package:at_persistence_secondary_server/at_persistence_secondary_server.
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
 import 'package:meta/meta.dart';
-import 'package:uuid/uuid.dart' show Uuid;
 
 class NotificationServiceImpl extends NotificationService {
   final Map<NotificationConfig, StreamController> _streamListeners =
@@ -651,26 +650,26 @@ class NotificationServiceImpl extends NotificationService {
       atKey.metadata.ttl = ttl;
     }
 
-    final String id = Uuid().v4();
-    StringBuffer sb = StringBuffer();
-    sb.write('notify:id:$id');
-    sb.write(':ttln:${expiration.inMilliseconds}');
-    sb.write(atKey.metadata.toAtProtocolFragment());
-    sb.write(':$key');
-
-    if (notifPayload.isNotEmpty) {
-      sb.write(':$notifPayload');
-    }
-
-    sb.write('\n');
+    // The same builder every other notification path goes through. This method
+    // used to compose the command itself, which is how it came to resolve its
+    // own namespace and get it wrong.
+    //
+    // [NotifyVerbBuilder.useAtKeyToString] is required, not incidental: the
+    // field-by-field form writes `:${atKey.key}`, and the name here is split
+    // across `key` and `namespace`, so it would put only the id on the wire.
+    final builder = NotifyVerbBuilder()
+      ..atKey = atKey
+      ..ttln = expiration.inMilliseconds
+      ..value = notifPayload.isEmpty ? null : notifPayload
+      ..useAtKeyToString = true;
 
     logger.info('SENDING: $key');
 
     await atClient
         .getRemoteSecondary()
-        ?.executeCommand(sb.toString(), auth: true);
+        ?.executeCommand(builder.buildCommand(), auth: true);
 
-    return id;
+    return builder.id;
   }
 
   @override

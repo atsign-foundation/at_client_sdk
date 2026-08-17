@@ -36,7 +36,6 @@ void main() {
     final lib = Directory('${repoRoot().path}/packages/at_client/lib/src');
     for (final path in const [
       'service/sync_service_impl.dart',
-      'service/notification_service_impl.dart',
     ]) {
       expect(File('${lib.path}/$path').readAsStringSync(),
           contains('toAtProtocolFragment'),
@@ -44,6 +43,24 @@ void main() {
               'builder; a private one beside it is how appMetadata silently '
               'stopped reaching the atServer once already');
     }
+
+    // `notification_service_impl.dart` used to be in that list. It no longer
+    // calls the fragment builder at all — every notification it sends is now
+    // composed by `NotifyVerbBuilder`, which calls it — so requiring the name
+    // to appear there would force the hand-rolled command back.
+    //
+    // The guard is stronger stated this way round: what it is really for is
+    // the absence of a rival serializer, and `send()` composing its own
+    // `notify:` command was exactly that. It is the reason `send()` resolved
+    // its own namespace and got it wrong, having never reached the transformer
+    // that resolves one.
+    expect(
+        File('${lib.path}/service/notification_service_impl.dart')
+            .readAsStringSync(),
+        isNot(contains("'notify:id:")),
+        reason: 'notification_service_impl.dart must not compose a notify '
+            'command by hand — NotifyVerbBuilder is the one that serializes '
+            'metadata into the frame, and a second one beside it drifts');
   });
 
   test('every test file here is declared as a scenario file or a guard', () {

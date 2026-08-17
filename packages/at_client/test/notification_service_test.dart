@@ -690,6 +690,26 @@ void main() {
       expect(command, contains(':@bob:a.b.c@alice'));
     });
 
+    test('the built command, pinned', () async {
+      final id = await (await service())
+          .send(to: '@bob'.toAtsign(), idAndNamespace: 'a.b.c', body: 'hello');
+
+      final command =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .single as String;
+
+      // A raw literal, with only the generated id substituted out. This is a
+      // wire shape, so it is frozen: an intended change has to edit this line,
+      // and that edit is the review. A `contains` check would not have caught
+      // the swap to NotifyVerbBuilder adding `:notifier:SYSTEM`.
+      expect(
+          command.replaceFirst(id, '<id>'),
+          'notify:id:<id>:notifier:SYSTEM:ttln:900000:isEncrypted:true'
+          ':appMetadata:eyJwcm92aWRlcklkIjoicmVjb3JkaW5nLXByb3ZpZGVyIn0='
+          ':@bob:a.b.c@alice:enc:hello\n');
+    });
+
     test('the deprecated parameter is the same value, split the same way',
         () async {
       await (await service())

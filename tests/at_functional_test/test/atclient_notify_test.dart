@@ -250,6 +250,64 @@ void main() {
     await received.future;
   });
 
+  /// `send()` had no live coverage at all, so nothing exercised the command it
+  /// puts on the wire — which is its own command, not the one `notify()` sends.
+  ///
+  /// Two things this catches that no unit test can: that the atServer accepts
+  /// the command this path builds, and that the name survives being split
+  /// across the AtKey's `key` and `namespace` fields. `send()` names a record
+  /// with a single string and the split is at the FIRST dot, so a regression
+  /// there puts a truncated key on the wire and no recipient regex matches it.
+  test('send() delivers, and the name it puts on the wire is the whole name',
+      () async {
+    // Run-unique: the id half separates this run's record from the last one's,
+    // which matters because the recipient matches on the namespace half.
+    final id = Uuid().v4();
+    const sendNamespace = 'sendlive.wavi';
+    final sentValue = 'send-live-${Random().nextInt(1000000)}';
+
+    await AtClientManager.getInstance().setCurrentAtSign(
+        currentAtSign, namespace, TestUtils.getPreference(currentAtSign));
+
+    final notificationId = await AtClientManager.getInstance()
+        .atClient
+        .notificationService
+        .send(
+            to: sharedWithAtSign.toAtsign(),
+            idAndNamespace: '$id.$sendNamespace',
+            body: sentValue);
+
+    // The sender's own atServer stored it, which is the command being accepted
+    // — a rejected notify would not be here to fetch.
+    final stored = await AtClientManager.getInstance()
+        .atClient
+        .notificationService
+        .fetch(notificationId);
+    expect(stored.key, '$sharedWithAtSign:$id.$sendNamespace$currentAtSign',
+        reason: 'the whole name must reach the wire. The AtKey holds it split '
+            'across key and namespace, and a builder writing only the key '
+            'field would put "$id" here — which no recipient regex matches');
+
+    logger.info('Switching to $sharedWithAtSign');
+    atClientManager = await atClientManager.setCurrentAtSign(
+        sharedWithAtSign, 'wavi', TestUtils.getPreference(sharedWithAtSign));
+
+    final received = Completer<String>();
+    final subscription = atClientManager.atClient.notificationService
+        .subscribe(regex: '.*\\.$sendNamespace', shouldDecrypt: true)
+        .listen((event) {
+      if (event.key.contains(id) && !received.isCompleted) {
+        received.complete(event.value ?? '');
+      }
+    });
+    addTearDown(subscription.cancel);
+
+    expect(await received.future.timeout(Duration(seconds: 60)), sentValue,
+        reason: 'and it arrives decrypted — the body is encrypted under the '
+            'namespace half of the name, so a send resolving the wrong '
+            'namespace would be opened with the wrong key');
+  });
+
   test('A test to fetch non existent notification', () async {
     var atNotification =
         await atClientManager.atClient.notificationService.fetch('abc-123');

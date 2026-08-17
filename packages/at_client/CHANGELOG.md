@@ -1,4 +1,12 @@
 ## 3.14.1
+- refactor!: `NotificationService.send()` composes its command with
+  `NotifyVerbBuilder`, the builder every other notification path already uses,
+  instead of hand-rolling the `notify:` string. The duplicated construction is
+  what let `send()` resolve its own namespace and get it wrong: it never
+  reached the transformer that resolves one. **One byte-level change on the
+  wire** — the builder always writes `:notifier:SYSTEM`, which `send()` omitted
+  and every `notify()` call already sends. The built command is now pinned as a
+  raw literal in the tests.
 - fix!: `NotificationService.send()` now splits its name at the **first** dot,
   so the namespace it encrypts under is the one the caller named.
   `send(namespace: 'a.b.c')` means the id `a` in the namespace `b.c`, but the

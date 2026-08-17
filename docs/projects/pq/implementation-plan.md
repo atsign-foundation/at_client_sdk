@@ -42,7 +42,6 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
-| [14.36](#1436-sends-command-is-hand-rolled-where-a-tested-builder-exists) | `send()` hand-rolls its `notify:` command instead of using `NotifyVerbBuilder` — the duplication that allowed 14.35 | Nothing, but it adds `:notifier:SYSTEM` to the wire, so it wants its own commit and a functional-pack run |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
 
@@ -533,9 +532,28 @@ token, so the atServer sees it constantly) is an argument, not evidence.
 so the wire key would become `@bob:a@alice` — measured. `atKey.toString()`
 yields `@bob:a.b.c@alice` under either `namespaceAware` setting.
 
-When it lands, pin the built command as a raw literal rather than asserting it
-`contains` fragments: a wire shape is frozen, and an intended change should have
-to edit the pin.
+**Built 2026-08-17.** The command is pinned as a raw literal rather than by
+`contains` fragments — a wire shape is frozen, and an intended change has to
+edit the pin, which is the review. A `contains` check would not have noticed
+`:notifier:SYSTEM` arriving.
+
+⚠️ **`send()` had NO live coverage at all, in either direction** — the pack's
+168 tests never called it, so the first pack run after this change proved only
+that nothing else regressed. `:notifier:SYSTEM` being safe rested on every
+`notify()` already sending it, which is an inference, not an exercise of this
+path. `atclient_notify_test.dart` now drives `send()` live: it asserts the
+stored notification's key is the *whole* name (the wire half, which a builder
+writing only `atKey.key` would truncate) and that the body arrives decrypted at
+the recipient.
+
+⚠️ **The architecture guard had to move with it, and the direction matters.**
+`architecture_guard_test.dart` required `notification_service_impl.dart` to
+mention `toAtProtocolFragment`, which the file no longer does — the builder
+calls it. Keeping that assertion would have forced the hand-rolled command back,
+so the guard now asserts the file does **not** contain `'notify:id:`. That is
+what the guard was always for: not the presence of a name, but the absence of a
+rival serializer. Verified against the previous commit, where the pattern
+appears once.
 
 ### 14.34 An unexplained intermittent in `self_enrollment_retrofit_live_test.dart`
 
@@ -1237,6 +1255,7 @@ measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.36  | `send()` composes its command with `NotifyVerbBuilder`, and finally has live coverage | DONE 2026-08-17 — the hand-rolled `notify:` string is gone; `useAtKeyToString = true` is required, since the name is split across `key` and `namespace`. One wire delta, `:notifier:SYSTEM`. **`send()` had no live test at all before this**, so the wire delta was landed with one added rather than on the inference that `notify()` already sends the token. The architecture guard moved with it: requiring `toAtProtocolFragment` in this file would now force the hand-rolled command back, so it asserts the absence of one instead. Body: [14.36](#1436-sends-command-is-hand-rolled-where-a-tested-builder-exists) |
 | 14.35  | `send()` splits its name at the first dot, and says what the parameter is | DONE 2026-08-17 — gkc ruled the parameter is `<id>.<namespace>` and poorly named; `namespace` deprecated for `idAndNamespace`, a dot-free name now throws at the call site. Unit **1401 (2)**, analyze exit 0. The one-line fix this row first proposed was measured WRONG — it would have changed the ciphertext binding. Body: [14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given) |
 | 14.33  | Closed as mis-stated: the refusal it named is unreachable | CLOSED 2026-08-17 — `shared_key.*` is written by a raw `UpdateVerbBuilder` at a `Secondary`, downstream of a refusal that fires before `provider.encrypt`, so it can never reach it. No client-side blocker remains for R-2. The real gap it was standing in front of is [14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given). Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17) amended in place. Detail: [14.33](detail/implementation-plan.md#1433-closed-the-shared_key-refusal-was-never-reachable) |
 | 14.30  | A notification that outruns its key is parked and re-driven | DONE 2026-08-17 — ruling [106.5](detail/decisions.md#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17); proven live end to end (parked → asked → answered → filed → re-driven → decrypted). Three further defects fixed on the way, all invisible to unit tests. Body: [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) |
