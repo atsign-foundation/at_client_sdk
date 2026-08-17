@@ -77,6 +77,29 @@ class FakeNotifyVerbBuilder extends Fake implements NotifyVerbBuilder {}
 class FakeNotifyFetchVerbBuilder extends Fake
     implements NotifyFetchVerbBuilder {}
 
+/// Keeps the [AtKey] it was handed, so a test can assert which namespace the
+/// encryption was scoped to rather than only that the send succeeded.
+class RecordingProvider extends CryptoProvider {
+  @override
+  final String id = 'recording-provider';
+
+  AtKey? seen;
+
+  @override
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    seen = atKey;
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    atKey.metadata.isEncrypted = true;
+    return 'enc:$value';
+  }
+
+  @override
+  Future<String> decrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      value.substring(4);
+}
+
 void main() {
   AtClientImpl mockAtClientImpl = MockAtClientImpl();
   AtChops mockAtChops = MockAtChops();
@@ -547,7 +570,7 @@ void main() {
 
       await notificationServiceImpl.send(
         to: '@bob'.toAtsign(),
-        namespace: 'wavi',
+        idAndNamespace: 'note.wavi',
         body: 'hello',
         cryptoProviderId: 'override-provider',
       );
@@ -596,7 +619,7 @@ void main() {
 
       await notificationServiceImpl.send(
         to: '@bob'.toAtsign(),
-        namespace: 'wavi',
+        idAndNamespace: 'note.wavi',
         body: 'hello',
       );
 
@@ -613,6 +636,114 @@ void main() {
           '${Metadata.encodeAppMetadata(AppMetadata(providerId: 'default-provider'))}',
         ),
       );
+    });
+  });
+
+  /// `send()`'s name is an id and a namespace joined by a dot, and the split is
+  /// at the FIRST dot. `AtKey.fromString` cuts at the last one, so leaving it to
+  /// parse the name scopes the encryption to the wrong namespace — or, for a
+  /// two-segment name, to no namespace at all, which sends the write to legacy.
+  group('send() splits its name into an id and a namespace', () {
+    late RecordingProvider recorder;
+    late MockRemoteSecondary remoteSecondary;
+
+    setUp(() {
+      recorder = RecordingProvider();
+      remoteSecondary = MockRemoteSecondary();
+      when(() => mockAtClientImpl.getPreferences()).thenReturn(
+        AtClientPreference()
+          ..namespace = 'my_app'
+          ..crypto = CryptoConfig(
+              defaultProviderId: recorder.id, providers: [recorder]),
+      );
+      when(() => mockAtClientImpl.getRemoteSecondary())
+          .thenReturn(remoteSecondary);
+      when(() => remoteSecondary.executeCommand(any(), auth: true))
+          .thenAnswer((_) async => 'data:ok');
+    });
+
+    Future<NotificationServiceImpl> service() async =>
+        await NotificationServiceImpl.create(mockAtClientImpl,
+            monitor: fakeMonitor,
+            secondaryAddressFinder: mockSecondaryAddressFinder)
+            as NotificationServiceImpl;
+
+    test('everything after the first dot is the namespace', () async {
+      await (await service())
+          .send(to: '@bob'.toAtsign(), idAndNamespace: 'a.b.c', body: 'hello');
+
+      // The mechanism, not the outcome: this is the AtKey the encryption was
+      // actually handed, so it says which namespace scoped the key. Asserting
+      // only that the send succeeded would pass with the old last-dot split.
+      expect(recorder.seen!.key, 'a');
+      expect(recorder.seen!.namespace, 'b.c',
+          reason: 'the last-dot split would say "c" here, and would encrypt '
+              'under a namespace the caller never named');
+
+      final command =
+          verify(() => remoteSecondary.executeCommand(captureAny(), auth: true))
+              .captured
+              .single as String;
+      // Raw literal: the wire name is frozen. Re-splitting the AtKey must not
+      // move it, because the recipient derives the ciphertext's binding from
+      // this string and would compute different bytes.
+      expect(command, contains(':@bob:a.b.c@alice'));
+    });
+
+    test('the deprecated parameter is the same value, split the same way',
+        () async {
+      await (await service())
+          .send(to: '@bob'.toAtsign(), namespace: 'a.b.c', body: 'hello');
+
+      expect(recorder.seen!.namespace, 'b.c',
+          reason: 'the rename is a rename — a caller that has not migrated '
+              'must not get different crypto');
+    });
+
+    test('a name with no dot is refused at the call site', () async {
+      final s = await service();
+
+      await expectLater(
+          () => s.send(to: '@bob'.toAtsign(), idAndNamespace: 'wavi'),
+          throwsA(isA<ArgumentError>().having(
+              (e) => '$e', 'message', contains('joined by a dot'))),
+          reason: 'an id in no namespace cannot be encrypted for a recipient. '
+              'Before this, it reached the crypto layer, declined every '
+              'post-quantum provider, fell back to legacy and surfaced as a '
+              'refusal about encryption — three layers from the mistake');
+
+      expect(recorder.seen, isNull,
+          reason: 'and it is refused BEFORE anything is encrypted or sent');
+      verifyNever(() => remoteSecondary.executeCommand(any(), auth: true));
+    });
+
+    test('an empty id or an empty namespace is refused too', () async {
+      final s = await service();
+      for (final bad in ['.wavi', 'wavi.']) {
+        await expectLater(
+            () => s.send(to: '@bob'.toAtsign(), idAndNamespace: bad),
+            throwsA(isA<ArgumentError>()),
+            reason: '"$bad" has a dot but leaves one half empty, and an empty '
+                'namespace declines exactly as a missing one does');
+      }
+    });
+
+    test('both spellings at once is refused, and so is neither', () async {
+      final s = await service();
+
+      await expectLater(
+          () => s.send(
+              to: '@bob'.toAtsign(),
+              idAndNamespace: 'a.b',
+              namespace: 'c.d',
+              body: 'hi'),
+          throwsA(isA<ArgumentError>()),
+          reason: 'silently preferring one would make the migration '
+              'unreviewable — a half-migrated call site would keep working '
+              'while sending under the wrong name');
+
+      await expectLater(() => s.send(to: '@bob'.toAtsign(), body: 'hi'),
+          throwsA(isA<ArgumentError>()));
     });
   });
 

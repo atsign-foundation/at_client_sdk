@@ -1,4 +1,25 @@
 ## 3.14.1
+- fix!: `NotificationService.send()` now splits its name at the **first** dot,
+  so the namespace it encrypts under is the one the caller named.
+  `send(namespace: 'a.b.c')` means the id `a` in the namespace `b.c`, but the
+  method recovered the namespace by re-parsing the key string it had just
+  built, and `AtKey.fromString` cuts at the last dot — so it encrypted under
+  `c`. A name with only two segments came back with no namespace at all, which
+  every post-quantum provider declines, sending the write to legacy and, under
+  `disallowLegacyEncryption`, refusing it outright. The wire format is
+  unchanged, and so is the ciphertext binding, which is computed over the name
+  and namespace rejoined precisely because writer and reader split them
+  differently.
+- feat: `NotificationService.send()` takes `idAndNamespace`, and `namespace` is
+  deprecated in its favour. Same value, same wire format — the old name said
+  the value was a namespace when it was always an id and a namespace joined by
+  a dot, and reading it as a bare namespace is what left a dot-free value with
+  nothing to encrypt under.
+- fix!: `NotificationService.send()` now throws `ArgumentError` when the name
+  has no interior dot, instead of failing several layers down inside the crypto
+  layer with a message about encryption. An id in no namespace cannot be
+  encrypted for a recipient, and the call site is the only place that can act
+  on it.
 - fix: the read-miss self-heal now **files** the private it asked for, so it
   repairs the client in the session that needed it rather than at the next
   start. `PublishedNskeyKeyRing` broadcast the request and left the answer in

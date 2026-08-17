@@ -42,7 +42,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
-| [14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given) | `NotificationService.send()` derives its namespace by re-parsing, so a single-segment namespace is refused and a dotted one seals to the wrong scope | — |
+| [14.36](#1436-sends-command-is-hand-rolled-where-a-tested-builder-exists) | `send()` hand-rolls its `notify:` command instead of using `NotifyVerbBuilder` — the duplication that allowed 14.35 | Nothing, but it adds `:notifier:SYSTEM` to the wire, so it wants its own commit and a functional-pack run |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
 
@@ -472,22 +472,70 @@ encrypting — `at_client_impl.dart:981` and `:1252`
 touches none of them. `AtRpc` sets `..namespace = baseNameSpace` explicitly and
 goes through `notify()`, so it is unaffected.
 
-**Intended fix:** set `atKey.namespace = namespace` after the `fromString`,
-leaving `namespaceAware` false so the wire key string is byte-identical. That
-closes both arms at once.
+**The fix, ruled by gkc 2026-08-17: the parameter is `<id>.<namespace>` and is
+poorly named — that is the root of it.** The id is the first segment and the
+namespace is the remainder, so `send()` splits at the **first** dot and sets
+both `AtKey` fields itself instead of letting `fromString` do it. `namespace` is
+deprecated in favour of `idAndNamespace`; a name with no interior dot, or with
+either half empty, throws `ArgumentError` at the call site.
 
-Not a cross-version break: the receiver takes the scope from the envelope
-(`'ns'` and `'ckNs'` in `appMetadata.additional`), not from the key string —
-`symmetric_aes_gcm_provider.dart:120` says why, and it is the same lossy
-`fromString` split, already worked around on the read side and never on the
-write side. What does change is that the content key is conveyed at the correct
-level; a receiver that has not yet got it parks and re-drives
+⚠️ **An earlier draft of this row recorded a one-line fix — "set
+`atKey.namespace = namespace`" — and that was WRONG.** It would have broken
+every `send()` that works today. The ciphertext binding is computed over
+`'${atKey.key}.${atKey.namespace}'`, deliberately split-invariant so writer and
+reader agree, and setting only the namespace changes the joined name. Measured:
+
+```
+                     sender          receiver (parses the wire)
+today                "buzz.wavi"     "buzz.wavi"        match
++ namespace only     "buzz.buzz.wavi"  "buzz.wavi"      MISMATCH — nothing decrypts
++ namespace, key=""  ".buzz.wavi"    "buzz.wavi"        MISMATCH
+first-dot split      "a.b.c"         "a.b.c"            match
+```
+
+The first-dot split holds for every case tried (`wavi`, `buzz.wavi`, `a.b.c`,
+`id.foo.bar.my_app`) precisely because the join is split-invariant: the sender
+cutting at the first dot and the receiver at the last produce the same name.
+The wire key is unchanged, so this is not a cross-version break; what changes is
+that the content key is conveyed at the level the caller named, and a receiver
+that has not yet got it parks and re-drives
 ([14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it)).
 
 `send()` is public, documented and not deprecated, and two example programs use
 it (`example/bin/notifications.dart`, `example/bin/dockerstats_publish.dart`) —
 both with dotted namespaces, so both take the wrong-scope arm rather than the
 refusal.
+
+### 14.36 `send()`'s command is hand-rolled where a tested builder exists
+
+`send()` writes its own `notify:` command into a `StringBuffer` rather than
+using `NotifyVerbBuilder`, which is what every other notification path goes
+through. It is the duplication that let
+[14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given)
+happen: the builder path resolves a namespace before encrypting, and `send()`
+never reached it.
+
+The swap is nearly free, but not free. Measured, same inputs:
+
+```
+hand-built today   notify:id:X:ttln:900000:isEncrypted:false:@bob:a.b.c@alice:payload
+NotifyVerbBuilder  notify:id:X:notifier:SYSTEM:ttln:900000:isEncrypted:false:@bob:a.b.c@alice:payload
+```
+
+Byte-identical **except** `:notifier:SYSTEM`, which `buildCommand` writes
+unconditionally. So this is a wire change, not a refactor, and it does not ride
+along with a behaviour fix — it gets its own commit and its own functional-pack
+run. The argument that it is safe (every `notify()` call already sends that
+token, so the atServer sees it constantly) is an argument, not evidence.
+
+⚠️ **`useAtKeyToString = true` is required.** With it false the builder writes
+`:${atKey.key}`, and since 14.35 the name is split across `key` and `namespace`,
+so the wire key would become `@bob:a@alice` — measured. `atKey.toString()`
+yields `@bob:a.b.c@alice` under either `namespaceAware` setting.
+
+When it lands, pin the built command as a raw literal rather than asserting it
+`contains` fragments: a wire shape is frozen, and an intended change should have
+to edit the pin.
 
 ### 14.34 An unexplained intermittent in `self_enrollment_retrofit_live_test.dart`
 
@@ -1189,6 +1237,7 @@ measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.35  | `send()` splits its name at the first dot, and says what the parameter is | DONE 2026-08-17 — gkc ruled the parameter is `<id>.<namespace>` and poorly named; `namespace` deprecated for `idAndNamespace`, a dot-free name now throws at the call site. Unit **1401 (2)**, analyze exit 0. The one-line fix this row first proposed was measured WRONG — it would have changed the ciphertext binding. Body: [14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given) |
 | 14.33  | Closed as mis-stated: the refusal it named is unreachable | CLOSED 2026-08-17 — `shared_key.*` is written by a raw `UpdateVerbBuilder` at a `Secondary`, downstream of a refusal that fires before `provider.encrypt`, so it can never reach it. No client-side blocker remains for R-2. The real gap it was standing in front of is [14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given). Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17) amended in place. Detail: [14.33](detail/implementation-plan.md#1433-closed-the-shared_key-refusal-was-never-reachable) |
 | 14.30  | A notification that outruns its key is parked and re-driven | DONE 2026-08-17 — ruling [106.5](detail/decisions.md#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17); proven live end to end (parked → asked → answered → filed → re-driven → decrypted). Three further defects fixed on the way, all invisible to unit tests. Body: [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) |
 | 14.32  | An in-process `_apsk` write no longer clobbers a just-minted advertisement | DONE 2026-08-17 — ruling [102.2](detail/decisions.md#1022-the-in-process-window-is-closed-by-serialising-the-writers-2026-08-17); proven live, `_apsk.primary` ends on the mldsa65 array where it ended on bare RSA. Body: [14.32](#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers) |

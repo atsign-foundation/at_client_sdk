@@ -38,7 +38,7 @@ Future<void> sender(AtClient atClient, Set<Atsign>? otherAtSigns) async {
       stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
       return atClient.notificationService.send(
         to: otherAtsign,
-        namespace: namespace,
+        idAndNamespace: namespace,
         body: msg,
       );
     }),
@@ -52,7 +52,7 @@ Future<void> sender(AtClient atClient, Set<Atsign>? otherAtSigns) async {
       stdout.writeln('-> Sending $msg to $otherAtsign on $namespace');
       return atClient.notificationService.send(
         to: otherAtsign,
-        namespace: namespace,
+        idAndNamespace: namespace,
         body: msg,
       );
     }),

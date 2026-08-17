@@ -560,10 +560,41 @@ class NotificationServiceImpl extends NotificationService {
     }
   }
 
+  /// The record's name below the owner, from whichever parameter carried it.
+  ///
+  /// Rejects a name with no interior dot rather than letting it through. Such a
+  /// name has no namespace, so no post-quantum scheme can serve it and the
+  /// write falls back to legacy — which a client that refuses legacy then
+  /// declines, three layers below the call, in a message about encryption
+  /// rather than about the argument. An id in no namespace is not something
+  /// this method can send, and saying so here is the only place a caller can
+  /// act on it.
+  static String _requireOneName(String? idAndNamespace, String? namespace) {
+    final name = idAndNamespace ?? namespace;
+    if (idAndNamespace != null && namespace != null) {
+      throw ArgumentError(
+          'Supply idAndNamespace or namespace, not both — they name the same '
+          'value and namespace is the deprecated spelling.');
+    }
+    if (name == null || name.isEmpty) {
+      throw ArgumentError('You must supply idAndNamespace.');
+    }
+    final dot = name.indexOf('.');
+    if (dot <= 0 || dot == name.length - 1) {
+      throw ArgumentError(
+          'idAndNamespace must be an id and a namespace joined by a dot, with '
+          'both non-empty — for example "order42.orders.my_app". Got "$name". '
+          'The part after the first dot is the namespace, and it is what the '
+          'notification is encrypted under.');
+    }
+    return name;
+  }
+
   @override
   Future<String> send({
     required Atsign to,
-    required String namespace,
+    String? idAndNamespace,
+    @Deprecated('Renamed to idAndNamespace') String? namespace,
     String body = '',
     bool shouldEncrypt = true,
     Duration expiration = NotificationService.defaultExpiration,
@@ -575,9 +606,28 @@ class NotificationServiceImpl extends NotificationService {
       throw ArgumentError(
           'You must supply recipientCacheExpiration when cacheAtRecipient is true');
     }
-    final String key = '$to:$namespace$atSign';
+    // ignore: deprecated_member_use_from_same_package
+    final String name = _requireOneName(idAndNamespace, namespace);
+    final String key = '$to:$name$atSign';
     final AtKey atKey = AtKey.fromString(key);
     atKey.metadata.namespaceAware = false;
+    // The name is an id and a namespace joined by a dot, so the split is at the
+    // FIRST dot — everything after it is the namespace, and the namespace is
+    // what scopes the encryption key.
+    //
+    // `AtKey.fromString` cannot be left to do this: it cuts at the LAST dot, so
+    // it hands back `a.b` + `c` where the caller said `a` + `b.c`, and for a
+    // two-segment name it leaves no namespace at all — which every
+    // post-quantum provider declines, sending the write to legacy.
+    //
+    // Overwriting the two fields does not disturb the ciphertext binding: it is
+    // computed over the name and namespace rejoined, precisely because writer
+    // and reader split it differently, so both sides still derive
+    // `$name`.
+    final int dot = name.indexOf('.');
+    atKey
+      ..key = name.substring(0, dot)
+      ..namespace = name.substring(dot + 1);
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
