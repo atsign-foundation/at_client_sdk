@@ -8429,7 +8429,7 @@ advertisement stays — it versions the payload, not the wrapper.
 `{payload, signature, hashingAlgo, signingAlgo}` shape from its own copy in
 `noports_core`, signs with the encryption keypair and fetches `getRemotePK`
 rather than `_apsk`, so it consumes nothing this deletes — as
-[14.7](../implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape)
+[14.7](implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape)
 already established. The atServer is unaffected for a different reason: it
 stores `metadata` and `apsk` verbatim and has no opinion on either.
 

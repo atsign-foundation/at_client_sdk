@@ -41,8 +41,10 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
-| [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
+| [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) | A notification needing a not-yet-filed nskey private is dropped without retry | Cause found 2026-08-17: the conveyed private is filed by an unawaited startup. Park-and-re-drive designed, not built |
+| [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor) | Under `disallowLegacyEncryption` the monitor never connects, and retries forever | Diagnosed live 2026-08-17. The refusal is R-2's known gap; the listener dying from it is not |
+| [14.32](#1432-a-primary-clients-mldsa-signing-key-is-not-visible-to-its-verifiers) | A `primary` client signs ML-DSA-65 while its published `_apsk` still advertises `rsa2048` | Diagnosed live 2026-08-17; the transport of the republish is the open question |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
 
 ### 14.30 A content notification can outrun the key that opens it
@@ -85,6 +87,82 @@ with `no nskey private held`; the ring's read-miss self-heal fired at `12.819`,
 `startupComplete`, so it proves what the row claims — a second enrollment opens
 what was conveyed to it — and does **not** cover the drop above. Nothing yet
 tests the park path, because nothing implements it.
+
+### 14.31 A refused watermark write permanently disables the monitor
+
+`Monitor.stayConnected` calls `getLastNotificationTime()` **before** issuing
+`monitor:`, and its first-call branch **writes** a seed record
+(`local:lastreceivednotification.<ns>@<atSign>`). Under
+`disallowLegacyEncryption` that put throws `LegacyEncryptionRefusedException`,
+the exception escapes to the connect handler, and the monitor closes and
+retries with backoff — **forever**. The client is silently deaf. The same
+refusal hits `lastreceivedservercommitid`, the sync watermark.
+
+That these writes are refused is **already known and owed to R-2** —
+`ReleasePosture.postQuantum()`'s own dartdoc names "the sync and notification
+watermarks" among them. What is new is the blast radius: one refused internal
+write does not fail one write, it takes the notification listener out
+altogether.
+
+**Measured** on `nskey_self_notify_live_test.dart` at `56f69577a`, three arms,
+same rig:
+
+| arm | `refusing to encrypt` | test |
+|-----|----------------------|------|
+| both enrollments `migration` | 0 | pass |
+| receiver `postQuantum` | 10 | pass |
+| both `postQuantum` | 18 | fail |
+
+⚠️ The receiver-only pass is timing luck — ten refusals happened in it too. It
+is not evidence that one PQ client is safe.
+
+⛔ **Not PKAM**, which is where three earlier guesses went. Every enrollment
+authenticates `rsa2048` under both postures, with no signing-algorithm
+resolution warnings: `signingAlgoOf` prefers the key-material resolution, and
+the posture moves the *signing* key, never the authentication key.
+
+**Owed:** R-2 has to decide what happens to namespace-less internal writes.
+Independently of that decision, a refused internal write should not be able to
+disable the listener — the watermark is an optimisation (it exists so a restart
+does not replay history), and failing to seed it is survivable in a way that
+never connecting is not.
+
+### 14.32 A `primary` client's ML-DSA signing key is not visible to its verifiers
+
+An approver built `postQuantum` (so `rollout2`, `inUseSigningAlgorithms =
+{mldsa65}`) conveys correctly — both `__ssenv` envelopes are written — and the
+receiving enrollment refuses every one of them:
+
+```
+the envelope is signed under "ML-DSA-65" and the published _apsk advertises
+"rsa2048" — no algorithm in common, so there is no signature here this key
+can check
+```
+
+`waitForApproval` then times out at 30s with *"No conveyed apkamSymmetricKey
+arrived … the approver is running a client that does not convey"*, which names
+the wrong side: it conveys, and what it wrote cannot be verified.
+
+The approver is the atSign's own client, so it has **no enrollment id** and
+mints under the `primary` pseudo-enrollment. It does mint and does try to
+publish — `Minted mldsa65 signing key(s) for primary; publishing before
+filing`, then `publishPublicSigningKey: what is published is not what this
+client holds - republishing` — and `enroll:update` is sent **zero** times,
+correctly, because there is no enrollment record to update. Yet a verifier
+reading `public:_apsk.primary.a.__e@alice🛠` still saw `rsa2048` throughout the
+30s.
+
+**Open, and it is one question:** by what transport does the `primary`
+republish reach the atServer? A local-first put reaches it only when sync gets
+round to it, while the envelope it authenticates goes out remote-first with a
+notification — a value and the key that verifies it travelling by different
+transports, which is a race by construction. Establish whether the republish
+lands remotely at all before choosing a fix.
+
+⚠️ This is **not** [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor).
+That one is a refused internal write killing the monitor; this one is an
+advertisement a verifier cannot see. Both surfaced from the same posture and
+they have nothing else in common.
 
 ### 14.29 The residuals 14.25 surfaced
 
@@ -251,7 +329,7 @@ rulings 2 and 3 are amended in place.
 | 25 | A `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) |
 | 26 | *(closed)* revocation visibility — an `EnrollmentManager` cache race, fixed in at_server `16dd457f`. ⚠️ This cell said "a proven test-instrument failure" until 2026-08-15; that was the 2026-08-11 ruling the root-cause overturned | [14.9](detail/implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly) |
 | 27 | ✅ **DONE 2026-08-15** — domain separation on the signed envelope, per-use `typ` plus a root-link prefix ([`decisions.md` 103](detail/decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15)) | [14.8](detail/implementation-plan.md#148-domain-separation-on-the-signed-envelope) |
-| 28 | NoPorts' own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) |
+| 28 | NoPorts' own copy of the envelope shape | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) |
 | 29 | The four audit residuals — perf ceiling on a real low-end device, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
 | 30 | `deprecated_member_use` findings across the workspace (340 at_client, 183 at_onboarding_cli, 110 at_auth, 28 at_lookup) | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
 | 31 | Pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) |
@@ -767,145 +845,6 @@ enrollment holding an off-size RSA key from authenticating. That is a change to
 what verifies on the authentication path, not a refactor. Any sweep that
 touches signing has to decide this deliberately; the rest of the findings
 (models, `apkamPublicKey`, collection APIs) are ordinary migrations.
-
-
-### 14.7 NoPorts carries its own copy of the envelope shape
-
-`sshnoports/packages/dart/noports_core/lib/src/common/validation_utils.dart`
-produces the same `{payload, signature, hashingAlgo, signingAlgo}` shape with
-the same re-encoding behaviour. It does not import at_client's functions — it
-signs with the encryption keypair and fetches `getRemotePK` rather than
-`_apsk` — so a migration here does not break it. But "nobody has this shape
-deployed" is wrong, and if the pitch becomes "our envelopes are RFC 7515" then
-NoPorts is a separately-owned second migration to name rather than discover.
-
-
----
-
-## PARKED
-
-Set aside deliberately. A row here exists to stop someone building it, so
-the reason is the point of the row.
-
-| Item  | What it is                                      | Why it is parked                                                                                    |
-|-------|-------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| 14.26 | A false comment in at_server's `at_metadata_builder`  | ⛔ **NOT PART OF D1** (gkc, 2026-08-16). It lands in at_server, off `trunk`, and nothing in D1 waits on it. Detail: [14.26](detail/implementation-plan.md#1426-a-comment-in-at_server-is-now-false) |
-| 14.1  | The signing root's `keys[]` shape               | SUPERSEDED by decisions 101 and 14.22. Kept for the reasoning; two of its conclusions are now false |
-| 14.13 | A passive-by-default flag                       | FOLDED AWAY 2026-08-11 into the rollout axis (14.18 step 19). Kept for its survey                   |
-| 14.21 | The signing root cannot be rotated              | RULED the same day by decisions 101. Kept so 14.22 is legible against it                            |
-| 14.23 | Per-generation nskey records                    | ⛔ REJECTED — do NOT build. 14.24 shipped instead; the body is kept so it is not re-derived          |
-| KE-2  | `enroll:update` + a multi-kpid receiver         | Blocks the two skipped acceptance rows. Issue #2133                                                 |
-| B-3   | `selfEncryptionKey` + `shared_key.*` retirement | Ecosystem-gated by decisions 37. Issue #2128                                                        |
-| KF-1  | `.atKeys`-at-rest protection + backup/restore   | Off the GA critical path. Issue #2129                                                               |
-| S-5   | at_auth 4.0.0 WASM barrel split                 | Off the GA critical path                                                                            |
-| S-6   | Consumer constraint bumps onto at_auth ^4.0.0   | Follows S-5                                                                                         |
-| R-2   | at_client 4.0.0 posture defaults                | After D1. A pure default-flip: 4.0 is identical to final-3.x code                                   |
-| D2-1  | Carve `at/pqmls` + D1-E shape fixes             | D2, out of D1                                                                                       |
-
----
-
-## DONE
-
-One row each; the detail is in
-[`detail/implementation-plan.md`](detail/implementation-plan.md). The third
-column reports what the plan **records**, which is not always what was
-measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none).
-
-| Item   | What it delivered                                       | State as the plan records it                                                                                         |
-|--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| 14.25  | Nine project entries reconciled against the tree | DONE 2026-08-16 — burn-down right about 4, headings stale for SS-1c and SS-4, real residuals in SS-2/B-1/S-3 (now [14.29](#1429-the-residuals-1425-surfaced)). Detail: [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
-| 14.28  | Live PQ proofs that no use case names | DONE 2026-08-16 — 9 uncited PQ live files ruled on: 5 became UC-B5.8–B5.12, 4 were already covered. Detail: [14.28](detail/implementation-plan.md#1428-live-pq-proofs-that-no-use-case-names) |
-| 14.27  | The ledger's append-only rot, corrected | DONE 2026-08-16 — 11 rulings amended in the body and LIVE in the index, both citation debts discharged, and a test now asserts each. Detail: [14.27](detail/implementation-plan.md#1427-the-ledgers-remaining-append-only-rot) |
-| 14.24  | The nskey mint elects a winner; the lock became an election token with a cooldown | DONE 2026-08-16 — seven rows, proven live at functional **166/166 `EXIT=0`**. Detail: [14.24](detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) |
-| P-1    | at_chops stateless core + HPKE                          | SATISFIED — at_chops 3.3.0 published 2026-06-23                                                                      |
-| P-2    | `mldsa65` wired into the verification branch            | SATISFIED — published 2026-07-17                                                                                     |
-| P-3    | `public:pqpublickey` + X-Wing-preferred enrollment wrap | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
-| S-1    | at_auth `AtKeys`/`AtKeysIo` extended in place           | SATISFIED — at_auth 3.3.0 published                                                                                  |
-| S-2    | `CryptoContext.keys` additive field                     | SATISFIED on trunk 2026-07-17; residual is the at_client publish                                                     |
-| S-3    | Updatable `.atKeys` / keychain via injected `AtKeysIo`  | States PARTLY LANDED — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                 |
-| SS-0   | WP-SS substrate baseline                                | SATISFIED — merged 2026-07-17                                                                                        |
-| SS-1a  | at_commons enroll grammar + flattened `listns`          | SATISFIED — at_commons 5.12.0 published 2026-07-04                                                                   |
-| SS-1b  | atServer stores/returns `EnrollParams.metadata`         | SATISFIED — merged 2026-07-07                                                                                        |
-| SS-1c  | Client wired to the live verbs + flattened parser       | States live drive owed — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)               |
-| SS-2   | Substrate wired into AtClient + server wake-up          | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
-| SS-3   | Substrate hardening + `signingAlgo` verify              | LANDED — at_server#2739 merged 2026-08-10                                                                            |
-| SS-4   | nskey minting + signing-root lifecycle                  | States ABOUT HALF LANDED — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)             |
-| B-1    | The nskey data path — providers + cold start            | No status stated; the D1 centrepiece — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
-| RF-1   | `requestSecret(name)` confirm                           | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
-| RF-SRV | atServer authenticated self-retrofit enroll             | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
-| RF-2b  | PQ ML-DSA APKAM mint + self-retrofit                    | LANDED 2026-08-05 (decisions 43)                                                                                     |
-| RF-2c  | Retrofit orchestration + full e2e                       | LANDED 2026-08-05 (decisions 44)                                                                                     |
-| R-1    | `disallowLegacyEncryption`                              | DELIVERED 2026-08-05; scope shrunk by decisions 36                                                                   |
-| SH-1   | Key-material self-heal                                  | LANDED 2026-08-05                                                                                                    |
-| B-2    | nskey rotation + revocation                             | LANDED 2026-08-06                                                                                                    |
-| KE-1   | Selectable KEM + negotiated construction                | LANDED 2026-08-07                                                                                                    |
-| ON-1   | PQ-native greenfield onboarding + opt-out               | ACCEPTANCE COMPLETE 2026-08-08 (decisions 52)                                                                        |
-| IS-1   | Inter-server FROM/POL signature swap RSA → ML-DSA-65    | PR #2683                                                                                                             |
-| 14.2   | A version on the two signed payloads                    | DONE — `3c2eddbe6`                                                                                                   |
-| 14.3   | JWS for the signed envelope, one shape, no flag         | DONE 2026-08-09 (decisions 60)                                                                                       |
-| 14.4   | A `suites` list on the key package                      | DONE — `1688ed69d`, corrected `c9f8580da`                                                                            |
-| 14.5   | Write-side envelope version selector in at_chops        | DONE — `1688ed69d`                                                                                                   |
-| 14.6   | `metadata.keyPackage` stops being a one-way door        | Client caller landed 2026-08-13                                                                                      |
-| 14.8   | Domain separation on the signed envelope                | DONE 2026-08-15 (decisions 103)                                                                                      |
-| 14.9   | A revoked enrollment could still authenticate           | ROOT-CAUSED 2026-08-12; fixed in at_server `16dd457f`                                                                |
-| 14.10  | UC-B0.1 needed a legacy atServer image                  | RESOLVED 2026-08-08 via the `vip-p3.15.0` pin                                                                        |
-| 14.20  | Building rulings 98 and 99                              | DONE — every row built; owes nothing                                                                                 |
-| 14.22  | Making the signing root rotatable                       | DONE 2026-08-15 — all seven rows                                                                                     |
-
----
-
-## Re-deriving the state
-
-
-Run these rather than trusting the table. Each answers one row.
-
-```bash
-# row 1: which 14.22 rows have landed? Row 1 landed when this file started
-# composing apskAdvertisement; row 2 is unbuilt for as long as the prefix
-# still names one algorithm.
-git grep -n "keyIdPrefix =\|apskAdvertisement" -- packages/at_client/lib/src/crypto/nskey/
-
-# row 11: which 14.19 items are still open? (~~struck~~ ones are done)
-# ⚠️ Against detail/, NOT this file. The items moved there in the restructure
-# and this copy was left pointing here, where it matches nothing: it printed
-# ZERO and exited 1 while the answer was 17, so a reader working down this
-# block concluded there was no open work. Fixed 2026-08-16.
-awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
-  | grep -cE "^[0-9]+\. \*\*"     # 17 open
-awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
-  | grep -cE "^[0-9]+\. ~~"       # 5 struck
-
-# rows 3-9: the stage-5 table, which owns steps 23-31
-awk '/^\*\*Stage 5/,/^\*\*Stage 6/' docs/projects/pq/implementation-plan.md
-
-# acceptance: what is skipped, and on which blocker.
-# Anchor on "}, skip:" — a bare "skip:" also matches catalogue_test.dart's and
-# manifest.dart's prose ABOUT skips and reports 5 where the answer is 2.
-grep -rn "}, skip:" packages/at_client/test/acceptance/*_test.dart
-grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
-
-# row 2 and row 12: the external gates. The at_auth release is a pub.dev
-# question; the atServer image gate is gkc's call and is NOT to be checked
-# against atsigncompany/virtualenv:vip (ruled 2026-08-13).
-
-# rails, all four packages. EACH FIGURE CARRIES THE COMMIT IT WAS MEASURED AT —
-# a block with one date at the bottom invites reading every number as current,
-# and three of these five were re-measured 15 commits after the other two.
-cd packages/at_client         && dart analyze lib test       # exit 0, 351 info  @9debd5a01+14.24
-cd packages/at_client         && dart test --concurrency=1   # 1350 (2 skipped)  @9debd5a01+14.24
-cd packages/at_client         && dart test test/acceptance --concurrency=1  # 66 (2)  @9debd5a01+14.24
-cd packages/at_auth           && dart test --concurrency=1   # 312              @7c6b3e7f2
-cd packages/at_onboarding_cli && dart test --concurrency=1   # 39               @7c6b3e7f2
-cd tests/at_functional_test   && bash runLocal.sh            # 166/166 EXIT=0   @9debd5a01+14.24
-# ✅ The functional figure is now measured against the REBUILT
-# `at_virtual_env:local` (2026-08-16), which the previous 165/165 was not — that
-# one predated the rebuild and was never a claim about the image on this
-# machine. 166 is 165 plus the cooldown row 14.24 added.
-# ⚠️ at_auth and at_onboarding_cli were NOT re-measured here and still carry
-# @7c6b3e7f2. Do not read the block as one date.
-# Every figure in this project has been wrong at least once by being carried
-# forward — the COMMAND is the value here, not the number beside it.
-```
 
 
 ### After D1
