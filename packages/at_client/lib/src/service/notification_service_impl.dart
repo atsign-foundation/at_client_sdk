@@ -290,7 +290,31 @@ class NotificationServiceImpl extends NotificationService {
             logger.warning('Failed to save last received notification ID: $e');
           }
         }
-        _streamListeners.forEach((notificationConfig, streamController) async {
+        // ⚠️ A `for` loop, not `_streamListeners.forEach`. `Map.forEach` takes
+        // a **void** callback and discards the Future an `async` one returns,
+        // so every `await` below ran detached: transforms for successive
+        // notifications interleaved and the enclosing `for (var n in notifs)`
+        // ran ahead of them.
+        //
+        // What awaiting buys is ORDERED delivery, which the values depend on:
+        // a content key is conveyed before the value citing it, and a
+        // subscriber that processes them out of order sees a value it cannot
+        // open. It also means a transform whose Future is abandoned can no
+        // longer produce no delivery, no drop and no log line at once.
+        //
+        // No test demonstrates the old behaviour losing a notification. It was
+        // changed because the discarded Future is a defect on its face, and
+        // because a live failure that looked like it (a self notification the
+        // monitor received and the subscriber never saw) sent three
+        // investigations here. That failure turned out to be something else
+        // entirely, and this change did not fix it.
+        //
+        // `.toList()` because the map may now be mutated while this awaits —
+        // a subscriber registering or cancelling mid-notification would
+        // otherwise throw ConcurrentModificationError.
+        for (final entry in _streamListeners.entries.toList()) {
+          final notificationConfig = entry.key;
+          final streamController = entry.value;
           try {
             var transformedNotification =
                 await NotificationResponseTransformer(atClient)
@@ -315,7 +339,7 @@ class NotificationServiceImpl extends NotificationService {
             logger.warning('Dropping notification ${n.key} for subscriber '
                 '(regex "${notificationConfig.regex}"): $e');
           }
-        });
+        }
       }
     } catch (e) {
       logger.severe('unexpected error:${e.toString()}'

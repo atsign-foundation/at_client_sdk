@@ -4,6 +4,7 @@
 
 import 'dart:async';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_client/at_client_mixins.dart';
@@ -32,6 +33,7 @@ import 'test_utils.dart';
 void main() {
   late AtClient approver;
   late String atSign;
+  late InMemoryAtKeysIo approverKeysIo;
 
   // Unique per run, and it does two jobs. The atServer refuses a second
   // enrollment carrying an already-approved `(appName, deviceName)`, and an
@@ -43,7 +45,30 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    final manager = await TestUtils.initAtClient(atSign, namespace);
+    // ⚠️ The approver needs an `AtKeysIo`, and this is the whole test.
+    //
+    // Approval conveys **the approver's FILED nskey privates, read from
+    // AtKeys** — `nskey_convey_at_approval_test.dart` pins both arms, the
+    // second being "an approver with no atKeysIo approves cleanly and conveys
+    // none". Without a keyfile the minted private is never filed, so every
+    // enrollment approved here starts with nothing and has to *pull* the
+    // private from a peer. That pull is asynchronous, the content notification
+    // beats it, and the notification is dropped for want of a key that arrives
+    // seconds later.
+    //
+    // Three runs and a ruling went into that symptom before the cause turned
+    // out to be this line. The push paths are built and work; the earlier
+    // version of this test disabled them.
+    approverKeysIo = InMemoryAtKeysIo();
+    await approverKeysIo.write(atSign, AtKeys());
+    // ⚠️ The approver stays on the DEFAULT (migration) posture. Building it
+    // postQuantum made `waitForApproval` time out with "No conveyed
+    // apkamSymmetricKey arrived … the approver is running a client that does
+    // not convey" — the posture changes what the approver is willing to write,
+    // and the enrollment handshake depends on those writes. Only the SENDER
+    // needs to write PQ, and posture is per-client.
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        atKeysIo: approverKeysIo);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -59,26 +84,8 @@ void main() {
         namespaces: {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
       );
 
-  /// Puts [client] on the nskey data path for [namespace].
-  Future<PublishedNskeyKeyRing> onNskeyPath(AtClient client) async {
-    final ring = PublishedNskeyKeyRing(client);
-    client.getPreferences()!.crypto = CryptoConfig.nskey(keyRing: ring);
-    return ring;
-  }
-
   test('a self notification reaches a second enrollment and decrypts',
       timeout: Timeout(Duration(minutes: 3)),
-      // ⛔ SKIPPED because the product cannot do this yet, not because the test
-      // is unfinished. It is the characterisation of decisions 106: the
-      // notification reaches the second enrollment and is dropped with
-      // `no nskey private held`, 0.6s before the private it needs arrives.
-      // Kept in the pack so the defect has an executable description — remove
-      // the skip when 14.30 is fixed and this becomes the regression guard.
-      //
-      // Everything up to the final two assertions passes, so un-skipping is
-      // also the cheapest way to re-measure the race.
-      skip: 'decisions 106 / plan 14.30 — a content notification can outrun '
-          'the nskey private that opens it, and is dropped without retry',
       () async {
     // ⚠️ Raised HERE, not in `setUpAll`. `TestUtils.initAtClient` sets
     // `AtSignLogger.root_level` as its first statement, so a level set before
@@ -108,7 +115,21 @@ void main() {
     //
     // Minting first is also what UC-A3.4 describes: alice1 and alice2 are both
     // already PQ when the notification is sent.
-    final approverRing = PublishedNskeyKeyRing(approver);
+    // ⚠️⚠️ `privateFiling` is what makes the mint durable, and without it
+    // nothing downstream works. Its own dartdoc: *"Null keeps privates in
+    // memory only — **a fixture posture**"*. A ring built as
+    // `PublishedNskeyKeyRing(client)` mints, publishes the public half, and
+    // keeps the private in RAM, so it never reaches `AtKeys` — and approval
+    // conveys *the approver's FILED privates*, of which there are then none.
+    //
+    // Two omissions had to be fixed to get here and each looked complete on
+    // its own: the approver needed an `AtKeysIo`, AND the ring needed telling
+    // to use it. A keyfile with a null filing changes nothing whatsoever.
+    final approverRing = PublishedNskeyKeyRing(
+      approver,
+      privateFiling:
+          NskeyPrivateFiling(keysIo: approverKeysIo, atSign: atSign),
+    );
     approver.getPreferences()!.crypto =
         CryptoConfig.nskey(keyRing: approverRing);
     await approverRing.mintAndPublish(namespace);
@@ -125,9 +146,63 @@ void main() {
     expect(receiver.kpid, isNot(sender.kpid),
         reason: 'different key packages, so the content key has to be '
             'conveyed rather than already held');
+    // ⚠️ The two above compare fields of the enrollment RESPONSES, which differ
+    // whatever the client cache does with them. Only these compare the clients:
+    // if `AtClientImpl`'s cache handed back one object twice, the "second
+    // enrollment" would be the sender talking to itself over its own
+    // connection, and every assertion below would pass for that reason.
+    expect(identical(sender.client, receiver.client), isFalse,
+        reason: 'two enrollments must be two clients, or this row proves '
+            'nothing about delivery to a sibling enrollment');
+    expect(receiver.client.enrollmentId, receiver.enrollmentId,
+        reason: 'the receiving CLIENT must carry the receiving enrollment id — '
+            'that id is what the atServer authorizes the monitor connection '
+            'against');
+    expect(sender.client.enrollmentId, sender.enrollmentId);
 
-    await onNskeyPath(sender.client);
-    await onNskeyPath(receiver.client);
+    // ⚠️ Both clients' PQ startup must have RUN before anything is notified.
+    //
+    // `AtClientImpl` fires it with `unawaited(_pqBootstrap!.startup())`, and
+    // `PqClientBootstrap._collectConveyedKeys` — whose own dartdoc calls itself
+    // "the only route by which a conveyed nskey private reaches the keyfile" —
+    // is its second step. So `enrol` hands back a client that does not yet hold
+    // the private conveyed to it at approval, and anything sealed to that
+    // generation in the meantime cannot be opened.
+    //
+    // Measured, from the run that found it (client clock):
+    //   12.609–12.637  receiver's sweep reads and deletes its __ssenv envelopes
+    //   12.682         sender notifies
+    //   12.684         receiver's monitor receives the treaty
+    //   12.703         DROPPED: "no nskey private held … generation 7ee3a…"
+    //   12.819         ring's read-miss self-heal: "Asked the other
+    //                  enrollments for the nskey private …"
+    // The heal is 116 ms too late, because a dropped notification is not
+    // retried. That gap is real and it is NOT this row's claim — UC-A3.4 is
+    // that a second enrollment can open what was conveyed to it, not that a
+    // notification outrunning its key eventually heals. Waiting here is what
+    // makes the row test its own claim instead of the heal path's timing.
+    //
+    // `startupComplete` is the documented handle for exactly this
+    // ("Awaitable via [pqBootstrap]'s `startupComplete` for callers that need
+    // the tail to have run") and never completes with an error, so this cannot
+    // turn a step's failure into a hang.
+    await (sender.client as AtClientImpl).pqBootstrap!.startupComplete;
+    await (receiver.client as AtClientImpl).pqBootstrap!.startupComplete;
+
+    // ⚠️ Deliberately NOT setting `preference.crypto` on either enrollment.
+    //
+    // An earlier version installed `CryptoConfig.nskey(keyRing:
+    // PublishedNskeyKeyRing(client))` on both — a BARE ring, with no
+    // `privateFiling` and no `requestConveyance` — over the top of the one
+    // `PqClientBootstrap` had already wired. That silently removed the read
+    // path's self-heal (`decisions.md` 38: "a miss on an own generation
+    // broadcasts a pull, so a record that arrived before its key stops being
+    // permanently unreadable and becomes merely early") and the ability to
+    // file a conveyed private at all.
+    //
+    // Left alone, a client resolves the nskey providers through the era
+    // default, which uses `_pqBootstrap.ring` — filing and self-heal
+    // included. That is UC-B5.8's claim, and this row depends on it.
 
     final key = AtKey()
       ..key = 'treaty$runId'
@@ -161,51 +236,67 @@ void main() {
     // sibling enrollment does not.
     final seen = <String>[];
     final received = Completer<AtNotification>();
+    final monitorProvenLive = Completer<void>();
     final subscription =
         notifications.subscribe(shouldDecrypt: true).listen((n) {
       seen.add(n.key);
+      if (!monitorProvenLive.isCompleted) monitorProvenLive.complete();
       if (n.key.contains('treaty$runId') && !received.isCompleted) {
         received.complete(n);
       }
     });
     addTearDown(subscription.cancel);
 
-    // The SENDER's own monitor, watched too. With the receiver's monitor
-    // proven live by statsNotification and the treaty still absent, three
-    // explanations remain and this separates them: the atServer delivers self
-    // notifications to no monitor at all, or only to the sending enrollment's,
-    // or it filters by enrollment. Only the last two put anything on the
-    // sender's stream.
-    final senderSeen = <String>[];
-    final senderNotifications =
-        sender.client.notificationService as NotificationServiceImpl;
-    final senderSubscription =
-        senderNotifications.subscribe(shouldDecrypt: false).listen((n) {
-      senderSeen.add(n.key);
-    });
-    addTearDown(senderSubscription.cancel);
-    if (senderNotifications.monitor.currentState !=
-        NotificationListenerState.listening) {
-      await senderNotifications.monitor.currentStateStream
-          .firstWhere((s) => s == NotificationListenerState.listening)
-          .timeout(const Duration(seconds: 30), onTimeout: () => throw StateError(
-              "the sender's monitor never reached `listening`, so its stream "
-              'proves nothing either way'));
-    }
+    // ⚠️ Wait until THIS listener has been handed a notification, before
+    // notifying anything. Nothing weaker is sufficient, and this test spent
+    // several runs proving it.
+    //
+    // The atServer's inbound notification stream is a **broadcast** stream and
+    // `MonitorVerbHandler` subscribes to it when it processes the `monitor:`
+    // command, so a notification enqueued before that instant is never
+    // delivered to that connection at all — a broadcast stream has no backlog.
+    // The only recovery is the `monitor:…:<epochMillis>` form, which replays
+    // from the store; the client sends an epoch only once it has a
+    // last-received-notification time, which a first-ever monitor does not.
+    //
+    // The atServer's own log for the failing run, to the millisecond:
+    //   00:20:51.343  enqueue … (@alice🛠:treaty….selfntfy…@alice🛠)
+    //   00:20:51.345  RCVD: monitor:selfNotifications      <- 2.9ms too late
+    // The notification was then delivered exactly once, 29 seconds later, to a
+    // different client whose monitor did carry an epoch.
+    //
+    // `currentListenerState == listening` is NOT this gate: the Monitor sets it
+    // straight after writing the command, which says nothing about the atServer
+    // having processed it. A notification actually arriving does.
+    //
+    // `statsNotification` is what satisfies this in practice — the atServer
+    // emits one every ~11s to every listening monitor, and an empty-regex
+    // subscription receives it. That makes it a readiness signal *and* the
+    // positive control asserted after the wait.
+    await monitorProvenLive.future.timeout(
+      Duration(seconds: 60),
+      onTimeout: () => throw StateError(
+          'no notification of any kind reached the listener within 60s, so the '
+          'monitor is not up; notifying now would repeat the race this gate '
+          'exists to close'),
+    );
 
-    if (notifications.monitor.currentState !=
-        NotificationListenerState.listening) {
-      await notifications.monitor.currentStateStream
-          .firstWhere((s) => s == NotificationListenerState.listening)
-          .timeout(const Duration(seconds: 30),
-              onTimeout: () => throw StateError(
-                  "the receiver's monitor never reached `listening`, so the "
-                  'notification below would be created into a window nothing '
-                  'is watching'));
-    }
-
-    final result = await sender.client.notificationService
-        .notify(NotificationParams.forUpdate(key, value: value));
+    // ⚠️ The provider is chosen PER CALL, not by posture. Building the
+    // enrollments with `ReleasePosture.postQuantum()` did make writes PQ — and
+    // broke the monitor: under it the receiver's monitor received nothing at
+    // all, not even `statsNotification`, and the sender's never reached
+    // `listening`. The monitor authenticates on its own socket, so a posture
+    // that moves the signing algorithm takes that connection with it. Recorded
+    // separately; it is not this row's business.
+    //
+    // `AtClientPreference`'s own doc licenses this: "a per-call algorithm
+    // overrides the posture's value for that one axis". The migration default
+    // already READS nskey (`CryptoConfig.readsNskeyWritesLegacy`), so only the
+    // write needed moving.
+    final result = await sender.client.notificationService.notify(
+        NotificationParams.forUpdate(key,
+            value: value,
+            cryptoProviderId: symmetricAesGcmCryptoProviderId));
     expect(result.notificationStatusEnum, NotificationStatusEnum.delivered);
 
     final notification = await received.future.timeout(
@@ -213,13 +304,9 @@ void main() {
       onTimeout: () => throw StateError(
           'the treaty notification did not reach the second enrollment within '
           '90s, and the notify above reported `delivered`.\n'
-          "  receiver's monitor saw ${seen.length}: $seen\n"
-          "  sender's monitor saw ${senderSeen.length}: $senderSeen\n"
-          '${seen.every((k) => k.startsWith("statsNotification")) && seen.isNotEmpty ? "  The receiver's monitor IS receiving (statsNotification "
-              "arrives), so this is not a monitor-readiness problem." : "  The receiver's monitor may not be receiving at all."} '
-          '${senderSeen.any((k) => k.contains("treaty")) ? "The SENDER saw it, so delivery is scoped to the "
-              "sending enrollment." : "Neither monitor saw it, so the atServer "
-              "appears not to deliver a self notification to any monitor."}'),
+          "  the monitor saw ${seen.length}: $seen\n"
+          '${seen.isNotEmpty ? "  It IS receiving, so this is not monitor readiness." : "  It received NOTHING, not even statsNotification, so the "
+              "monitor is not up and this says nothing about delivery."}'),
     );
 
     // The positive control, asserted rather than assumed: if the monitor never

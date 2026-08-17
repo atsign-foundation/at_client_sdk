@@ -3,6 +3,8 @@ import 'dart:typed_data';
 
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/client/request_options.dart'
+    show GetRequestOptions;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show ckConveyanceKey;
@@ -163,7 +165,7 @@ class SymmetricAesGcmProvider
     }
 
     final ck = cache.get(owner, namespace, ckKid) ??
-        await _resolveFromLocalConveyance(
+        await _resolveFromConveyance(
             context, atKey, owner, namespace, ckKid);
     if (ck == null) {
       throw ContentKeyUnavailableException(
@@ -228,35 +230,72 @@ class SymmetricAesGcmProvider
       (await ckManager?.resolver.resolve(owner, namespace))?.namespace ??
       namespace;
 
-  /// Second chance on a cache miss: the conveyance record may already be in
-  /// local storage, just never opened by this process. Reading it routes back
-  /// through the `at/nskey` provider, which decapsulates and caches as a side
-  /// effect — so the CK is looked up again rather than taken from the read.
+  /// Second chance on a cache miss: read the conveyance record so the
+  /// `at/nskey` provider decapsulates and caches it as a side effect, then
+  /// look the CK up again rather than taking it from the read.
   ///
-  /// A record that simply is not there is not an error — that is the ordinary
-  /// out-of-order-sync case, and the caller retries. A record that *is* there
-  /// and will not open is the opposite, and is re-thrown: a failed AEAD, a
-  /// malformed envelope or a kid collision means tampering or corruption, and
-  /// this is the only place the key layer can raise that alarm. Reporting it
-  /// as "not yet synced" would hide it behind advice to keep polling.
-  Future<ContentKey?> _resolveFromLocalConveyance(
+  /// **Local storage first, then the atServer.** The remote leg is not an
+  /// optimisation and not a fallback for exotic cases: a value delivered
+  /// remote-only — which every notification is — cites a conveyance its sender
+  /// wrote *remote-first* for exactly that reason, so the record is on the
+  /// atServer before the value arrives and may not reach local storage until
+  /// sync gets round to it. Reading only locally leaves the value
+  /// undecryptable for that whole window.
+  ///
+  /// ⚠️ That window ends in data loss, not a retry. This doc used to say "the
+  /// caller retries"; one caller is `NotificationServiceImpl`, which **drops**
+  /// a notification it cannot transform and never re-delivers it. So a
+  /// local-only read here is not a slow path, it is a lost value.
+  ///
+  /// Measured in `nskey_self_notify_live_test.dart`, one delivery: local read
+  /// attempted and missed, the remote leg answered 0.2 ms later, and sync
+  /// pulled the same record into local storage **23 ms after** the value had
+  /// already needed it.
+  ///
+  /// A record that is nowhere is not an error: the caller reports the key as
+  /// unavailable. A record that *is* there and will not open is the opposite
+  /// and is re-thrown from either leg — a failed AEAD, a malformed envelope or
+  /// a kid collision means tampering or corruption, and this is the only place
+  /// the key layer can raise that alarm. Reporting it as "not yet synced"
+  /// would hide it behind advice to keep polling.
+  Future<ContentKey?> _resolveFromConveyance(
     CryptoContext context,
     AtKey value,
     String owner,
     String namespace,
     String ckKid,
   ) async {
-    try {
-      await context.atClient.get(conveyanceKeyFor(value, ckKid, namespace));
-    } on AtDecryptionException {
-      rethrow;
-    } on StateError {
-      // ContentKeyCache.put refuses two distinct CKs claiming one kid.
-      rethrow;
-    } catch (_) {
-      return null;
+    final conveyance = conveyanceKeyFor(value, ckKid, namespace);
+
+    /// Returns true when the record was read and opened. A read that finds
+    /// nothing returns false; a record that will not open still throws.
+    Future<bool> read({required bool remote}) async {
+      try {
+        await context.atClient.get(conveyance,
+            getRequestOptions: remote
+                ? (GetRequestOptions()..useRemoteAtServer = true)
+                : null);
+        return true;
+      } on AtDecryptionException {
+        rethrow;
+      } on StateError {
+        // ContentKeyCache.put refuses two distinct CKs claiming one kid.
+        rethrow;
+      } catch (_) {
+        return false;
+      }
     }
-    return cache.get(owner, namespace, ckKid);
+
+    if (await read(remote: false)) {
+      final local = cache.get(owner, namespace, ckKid);
+      if (local != null) return local;
+    }
+    // Not local, or local but for a different kid: ask the atServer, where the
+    // sender's remote-first write put it.
+    if (await read(remote: true)) {
+      return cache.get(owner, namespace, ckKid);
+    }
+    return null;
   }
 
   /// The at-key the CK for [value] was conveyed under — see [ckConveyanceKey],
