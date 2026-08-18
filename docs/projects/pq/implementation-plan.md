@@ -1324,13 +1324,16 @@ touches signing has to decide this deliberately; the rest of the findings
 
 ### After D1
 
-The release programme, in order, and **not** part of D1 initial development:
-publish **at_chops 3.6.0** → **at_commons 5.16.0** → **at_auth 3.4.0** →
-**at_client's GA minor** → **R-2**, the 4.0.0 posture flip (a pure
-default-flip: 4.0 is identical to final-3.x *code*).
+The release programme is **not** part of D1 initial development, and it ends
+with **R-2**, the 4.0.0 posture flip (a pure default-flip: 4.0 is identical to
+final-3.x *code*).
 
-⚠️ Check pub.dev against every touched pubspec before acting on that ladder —
-a same-value version bump merges silently.
+**The ordered publish list lives in one place:**
+[detail/implementation-plan.md — what still has to be published, in order](detail/implementation-plan.md#what-still-has-to-be-published-in-order).
+It is not restated here. This block used to carry its own copy, as did
+[#1889](https://github.com/atsign-foundation/at_client_sdk/issues/1889), and
+all three drifted: two of them were still naming an at_commons slot 3 releases
+behind.
 
 ✅ **The first rung is settled: at_chops publishes as 3.6.0, a minor**
 ([decisions 109](detail/decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18),
@@ -1476,13 +1479,16 @@ cd tests/at_functional_test   && bash runLocal.sh            # 166/166 EXIT=0   
 
 ### After D1
 
-The release programme, in order, and **not** part of D1 initial development:
-publish **at_chops 3.6.0** → **at_commons 5.16.0** → **at_auth 3.4.0** →
-**at_client's GA minor** → **R-2**, the 4.0.0 posture flip (a pure
-default-flip: 4.0 is identical to final-3.x *code*).
+The release programme is **not** part of D1 initial development, and it ends
+with **R-2**, the 4.0.0 posture flip (a pure default-flip: 4.0 is identical to
+final-3.x *code*).
 
-⚠️ Check pub.dev against every touched pubspec before acting on that ladder —
-a same-value version bump merges silently.
+**The ordered publish list lives in one place:**
+[detail/implementation-plan.md — what still has to be published, in order](detail/implementation-plan.md#what-still-has-to-be-published-in-order).
+It is not restated here. This block used to carry its own copy, as did
+[#1889](https://github.com/atsign-foundation/at_client_sdk/issues/1889), and
+all three drifted: two of them were still naming an at_commons slot 3 releases
+behind.
 
 ✅ **The first rung is settled: at_chops publishes as 3.6.0, a minor**
 ([decisions 109](detail/decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18),

@@ -1640,6 +1640,35 @@ out of scope here** — see [roadmap.md](../roadmap.md) for the D2 trajectory.
   extend-in-place bakes before the barrel cut.
 - `at_client` stays **minor 3.14.x** through D1 GA; the v4 flip (R-2) is the final gated cutover.
 
+#### What still has to be published, in order
+
+**This is the single reference for publish order.** `implementation-plan.md`'s
+`After D1` block and [#1889](https://github.com/atsign-foundation/at_client_sdk/issues/1889)
+point here rather than restating it, because they each carried their own copy
+and all three drifted apart.
+
+Measured 2026-08-19 against pub.dev and every pubspec in the tree. Re-derive
+before acting: a same-value version bump merges with no conflict, so a number
+here can be attached to different content than the one on pub.dev.
+
+| Order | Package | In-tree | Published | Note |
+|-------|---------|---------|-----------|------|
+| 1 | `at_chops` | **3.6.0** | 3.5.0 | Stays a **minor** — [decisions 109](decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18). Two source-breaking changes, neither with a consumer |
+| 2 | `at_commons` | **5.16.0** | 5.15.0 | Opened for `Metadata.copy()` |
+| 3 | `at_auth` | **3.4.0** | 3.3.0 | ⚠️ Carries 3 source-breaking changes and its own major question is **open** — ruling 109 settles at_chops only |
+| 4 | `at_client` | **3.14.1** | 3.14.0 | ⚠️ The GA release carries the whole nskey data path, so re-derive the slot at publish time. A patch bump understates it; row 7 below assumes a minor |
+| 5 | `at_onboarding_cli` | **1.17.0** | 1.16.0 | Already open in-tree, independently of S-6 |
+| 6 | `at_client_flutter` | **1.1.5** | 1.1.4 | Already open in-tree, independently of S-6 |
+| 7 | `at_cli_commons` | 3.1.1 | 3.1.1 | **No version opened yet.** Needs one before it can take the new constraints |
+
+`at_lookup` is **not** on this list: in-tree 3.6.1 equals published 3.6.1, and
+nothing in the remaining work touches it. Opening 3.6.2 is gkc's call and
+ruling 109 removed the reason to.
+
+The table below is the historical record of how each slot was reached, kept
+because its row numbers are cited elsewhere. Read it for provenance, not for
+what to publish next.
+
 **Package versions & release sequencing** (single reference — publish in dependency order; two majors —
 `at_auth` 4.0 (S-5, WASM split) and `at_client` 4.0 (R-2, the flag flip) — at different times):
 
@@ -1649,7 +1678,7 @@ out of scope here** — see [roadmap.md](../roadmap.md) for the D2 trajectory.
 | 2  | `at_chops`          | minor `3.3.0 → 3.4.0` **(published 2026-07-17, done)** | P-2 | #2030 (`at_chops_ffi` barrel + `AtPqc` + `AtSignatureAlgorithm`) landed the 3.4.0 bump on trunk 2026-07-03 (+ #2046); P-2's `mldsa65` verify branch (#2056, 07-06) and #2039 (AES-GCM FFI, 07-09) folded into the same slot, which then published. Minor under the one-time semver exemption ([decisions.md](decisions.md) 2026-07-03) |
 | 2b | `at_chops`          | minor `3.4.1 → 3.5.0` **(published 2026-08-11, done)** | — (trunk) | `RsaSignatureAlgo`; PQ key/ciphertext/signature length validation across both backends; `MlDsa65FfiAlgo.verifyBytes` throws `StateError` on an incapable libcrypto. **Not a PQ-program release** — it took the version number the spike had been claiming, which is why row 3 moved up |
 | 3  | `at_chops`          | minor `3.5.0 → 3.6.0` **(in-tree, UNPUBLISHED)** | KE-1 | `AtKemAlgorithm.newSeed` + `keyPairFromSeed`; `MlKem1024PureDartAlgo`; `pqSeal ver 0x03` (RFC 9180 at KEM `0x0042` / HKDF-SHA384 / AES-256-GCM); RFC 9180 Base mode as `ver 0x02`; `HkdfSha384`; `ChaCha20Poly1305Algo`. ⚠️ **MINOR because the two seed methods are abstract members on the exported `AtKemAlgorithm`** — an external `implements` must add them. at_client pins `^3.6.0`, and workspace resolution hides the gap |
-| 4  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal. *(at_commons has since published 5.13.0, 2026-07-17, outside this program.)* |
+| 4  | `at_commons`        | minor `5.11.0 → 5.12.0` **(published 2026-07-04, done)** | SS-1a | `EnrollParams.metadata` + `signingAlgo`; flattened `listns`; pkam `mldsa65` literal. *(at_commons has since published 5.13.0, 5.14.0 and 5.15.0 outside this programme, and 5.16.0 is open in-tree — see the ordered list above.)* |
 | 5  | `at_auth`           | minor `3.2.0 → 3.3.0` **(published stable 2026-07-17, done)** | S-1 | additive: extend `AtKeys` in place (deprecate legacy); `AtKeysIo` runtime persistence; `InMemoryAtKeysIo`. The rc1 → stable promotion is **closed** (re-verified against pub.dev 2026-08-08), so S-6 and SS-2's at_auth work have the stable version they pin against |
 | 5b | `at_auth`           | minor `3.3.0 → 3.4.0` **(in-tree, UNPUBLISHED)** | KE-1, ON-1 | opened 2026-08-03 (`936241d8f`): `KeyAlgorithmType.mlKem1024`; the `.atKeys` passphrase envelope derives from a random per-file salt (was salted with the passphrase itself). **This is the open at_auth slot** — ON-1's `mintLegacyMaterial` folds in here rather than opening a new version |
 | 6  | `at_auth`           | **major `3.4.x → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
@@ -4243,13 +4272,13 @@ cd tests/at_functional_test   && ./runLocal.sh               # 165/165
 
 ### 15.3 After D1
 
-The release programme, in order, and **not** part of D1 initial development:
-publish **at_chops 3.6.0** → **at_commons 5.16.0** → **at_auth 3.4.0** →
-**at_client's GA minor** → **R-2**, the 4.0.0 posture flip (a pure
-default-flip: 4.0 is identical to final-3.x *code*).
+The release programme is **not** part of D1 initial development, and it ends
+with **R-2**, the 4.0.0 posture flip (a pure default-flip: 4.0 is identical to
+final-3.x *code*).
 
-⚠️ Check pub.dev against every touched pubspec before acting on that ladder —
-a same-value version bump merges silently.
+The ordered publish list is
+[above, in section 10(a)](#what-still-has-to-be-published-in-order), and is not
+restated here.
 
 ---
 
