@@ -1486,8 +1486,10 @@ touches signing has to decide this deliberately; the rest of the findings
 ### After D1
 
 The release programme is **not** part of D1 initial development, and it ends
-with **R-2**, the 4.0.0 posture flip (a pure default-flip: 4.0 is identical to
-final-3.x *code*).
+with **R-2**, the 4.0.0 posture flip: the default `PqPosture` becomes
+`pqActive` ([ruling 113](detail/decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18)).
+Still a pure default-flip carrying no code of its own, so anything the posture
+needs lands in D1 before it.
 
 **The ordered publish list lives in one place:**
 [detail/implementation-plan.md — what still has to be published, in order](detail/implementation-plan.md#what-still-has-to-be-published-in-order).
@@ -1523,7 +1525,7 @@ the reason is the point of the row.
 | KF-1  | `.atKeys`-at-rest protection + backup/restore        | Off the GA critical path. Issue #2129 |
 | S-5   | at_auth 4.0.0 WASM barrel split                      | Off the GA critical path |
 | S-6   | Consumer constraint bumps onto at_auth ^4.0.0        | Follows S-5 |
-| R-2   | at_client 4.0.0 posture defaults                     | After D1. A pure default-flip: 4.0 is identical to final-3.x code |
+| R-2   | at_client 4.0.0 posture defaults                     | After D1, and now after 14.39. **The default `PqPosture` becomes `pqActive`** ([ruling 113](detail/decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18)) — one value, replacing the two coupled edits it used to be. Still a pure default-flip carrying no code of its own. Issue #2016 |
 | D2-1  | Carve `at/pqmls` + D1-E shape fixes                  | D2, out of D1 |
 
 ---
@@ -1656,8 +1658,10 @@ cd tests/at_functional_test   && bash runLocal.sh            # 166/166 EXIT=0   
 ### After D1
 
 The release programme is **not** part of D1 initial development, and it ends
-with **R-2**, the 4.0.0 posture flip (a pure default-flip: 4.0 is identical to
-final-3.x *code*).
+with **R-2**, the 4.0.0 posture flip: the default `PqPosture` becomes
+`pqActive` ([ruling 113](detail/decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18)).
+Still a pure default-flip carrying no code of its own, so anything the posture
+needs lands in D1 before it.
 
 **The ordered publish list lives in one place:**
 [detail/implementation-plan.md — what still has to be published, in order](detail/implementation-plan.md#what-still-has-to-be-published-in-order).

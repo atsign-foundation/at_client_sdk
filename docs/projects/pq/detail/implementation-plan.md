@@ -4532,8 +4532,10 @@ cd tests/at_functional_test   && ./runLocal.sh               # 165/165
 ### 15.3 After D1
 
 The release programme is **not** part of D1 initial development, and it ends
-with **R-2**, the 4.0.0 posture flip (a pure default-flip: 4.0 is identical to
-final-3.x *code*).
+with **R-2**, the 4.0.0 posture flip: the default `PqPosture` becomes
+`pqActive` ([ruling 113](decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18)).
+Still a pure default-flip carrying no code of its own, so anything the posture
+needs lands in D1 before it.
 
 The ordered publish list is
 [above, in section 10(a)](#what-still-has-to-be-published-in-order), and is not
