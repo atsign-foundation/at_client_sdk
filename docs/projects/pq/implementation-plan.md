@@ -1432,7 +1432,7 @@ measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state
 | B-2    | nskey rotation + revocation                             | LANDED 2026-08-06                                                                                                    |
 | KE-1   | Selectable KEM + negotiated construction                | LANDED 2026-08-07                                                                                                    |
 | ON-1   | PQ-native greenfield onboarding + opt-out               | ACCEPTANCE COMPLETE 2026-08-08 (decisions 52)                                                                        |
-| IS-1   | Inter-server FROM/POL signature swap RSA → ML-DSA-65    | PR #2683                                                                                                             |
+| IS-1   | Inter-server FROM/POL signature swap RSA → ML-DSA-65    | ⏳ **PR [#2683](https://github.com/atsign-foundation/at_server/pull/2683) is OPEN** — verified against GitHub 2026-08-18, not merged. This cell said only `PR #2683`, which reads as delivery and asserted no state at all |
 | 14.2   | A version on the two signed payloads                    | DONE — `3c2eddbe6`                                                                                                   |
 | 14.3   | JWS for the signed envelope, one shape, no flag         | DONE 2026-08-09 (decisions 60)                                                                                       |
 | 14.4   | A `suites` list on the key package                      | DONE — `1688ed69d`, corrected `c9f8580da`                                                                            |
