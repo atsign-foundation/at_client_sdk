@@ -43,6 +43,62 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.37](#1437-retire-the-0x01-seal-version) | Retire `pqSeal` version `0x01` — two commits, in order | Nothing. [Ruling 110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18) settled it; only the order is constrained |
+| [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — 2 code fixes and a test repair | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
+
+### 14.38 `activate_cli` cannot administer a PQ-native atSign
+
+Found 2026-08-18 driving `activate_cli` against a throwaway virtualenv.
+Evidence, reproduction and the rejected alternatives are in
+[#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161); this
+row is the work.
+
+An atSign activated with `--signingAlgoType mldsa65` cannot then run `otp` or
+`list`: both fail with `RangeError`, because the connection signs the PKAM
+challenge as RSA-2048 with an ML-DSA key. `otp` is where a second enrollment
+starts, so a PQ-native atSign cannot enrol a second app.
+
+at_client resolves the algorithm correctly and `RemoteSecondary` stamps it on
+the lookup. `AtOnboardingServiceImpl._initAtClient` then overwrites it from the
+preference at `at_onboarding_service_impl.dart:139`. The comment above that
+line says activation has no key material to resolve from, which is true for the
+`onboard` caller and false for the `authenticate` caller, and the method serves
+both.
+
+**Three changes, agreed with gkc 2026-08-18.**
+
+1. **Delete** the overwrite at `at_onboarding_service_impl.dart:139`. It is
+   redundant rather than misplaced: `RemoteSecondary` already sets the lookup
+   from `signingAlgoOf(client)`, which falls back to the preference when
+   nothing was resolved, and `AtOnboardingPreference extends AtClientPreference`
+   with the same object reaching the client. Verified, so activation is
+   unaffected.
+2. **Fix `at_client_impl.dart:1584`**, the file-stream `RemoteSecondary`, which
+   passes neither `signingAlgoType` nor `enrollmentId` and signs with the same
+   default.
+3. **Repair** `tests/at_onboarding_cli_functional_tests/test/pq_native_onboard_test.dart`
+   rather than adding a test beside it. It runs the defective line today and
+   passes anyway, because it sets `preference.signingAlgoType` to `mldsa65`
+   itself, so the overwrite writes the right value back, and because it drives
+   its remote command on the activation client rather than the one from the
+   fresh `authenticate()`. Leave the preference at its default so key-material
+   resolution is the only thing that can make it pass, drive a remote operation
+   on the freshly authenticated client, and keep an rsa2048 arm in the same run
+   so the two provably differ.
+
+⚠️ **Not doing, deliberately.** `AtLookupImpl.signingAlgoType` still initialises
+to `rsa2048` (`at_lookup_impl.dart:739`), so any site that forgets authenticates
+with the wrong routine silently. Making it required at construction would let
+the compiler enumerate every site, but at_lookup's in-tree 3.6.1 equals its
+published 3.6.1, so touching it opens 3.6.2, which
+[decisions 109](detail/decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18)
+established is not needed. This rides the next at_lookup version whenever one
+opens for another reason.
+
+`--signingAlgoType` also stays a silent no-op on non-onboard commands, which
+build their preference through `create_at_client_cli.dart` without copying it.
+Once the overwrite is gone it has no effect there anyway, and a posture
+argument covering legacy / rollout 1 / rollout 2 is under discussion which may
+replace the flag.
 
 ### 14.37 Retire the `0x01` seal version
 
