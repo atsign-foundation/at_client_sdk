@@ -98,14 +98,16 @@ at_client's built-in. `--signingAlgoType` is replaced by it and removed. No
 `--disallowLegacyEncryption` anywhere. `at_onboarding_cli` majors when it takes
 at_client 4.x.
 
-⚠️ **One sibling-repo dependency, verified 2026-08-18.** Client-driven retrofit
-rests on the atServer exempting the atSign's FIRST enrollment from the retrofit
-cap, and that exemption is **at_server PR #2755, still open** — only the
-720-hour grace itself is on at_server trunk. Until #2755 merges, an
-auto-retrofit caps the first enrollment like any other, which locks out any
-copy of the keyfile most users actually hold. Do not make client-driven
-retrofit the default before it lands. Re-derive:
+✅ **The sibling-repo dependency is merged, and still unreleased.**
+Client-driven retrofit rests on the atServer exempting the atSign's FIRST
+enrollment from the retrofit cap. That merged as at_server **PR #2755** on
+2026-08-18 (`c2260e640`) and is on at_server `trunk`, so the design gate is
+lifted. It is in **no release** — at_server's newest tag is `c3.16.1` of
+2026-08-13 — so **test against a freshly built `at_virtual_env:local`**;
+`atsigncompany/virtualenv:vip` cannot contain it and a green there proves
+nothing about capping. Re-derive both halves:
 `git -C ~/dev/atsign/repos/at_server grep -c preserveFirstEnrollmentOnRetrofit origin/trunk -- packages/at_secondary_server/lib`
+and `gh release list -R atsign-foundation/at_server --limit 3`
 
 **Public-data signatures.** ⚠️ **Nothing verifies `metadata.dataSignature`
 today** — not at_client, not the atServer — so this builds the first verifier

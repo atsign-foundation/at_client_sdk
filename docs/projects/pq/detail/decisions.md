@@ -10880,15 +10880,25 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
    laggard stranded past the window recovers by ordinary OTP enrollment. That
    much is **on at_server trunk**, verified 2026-08-18.
 
-   ⚠️ **The first-enrollment exemption is NOT.** `preserveFirstEnrollmentOnRetrofit`
-   — which keeps the atSign's CRAM-minted root enrollment out of the cap, so
-   retiring it stays an explicit `enroll:revoke` — exists only on at_server
-   **PR #2755, still open**. Until that merges, an auto-retrofit at start caps
-   the first enrollment like any other, and the copied-keyfile lockout applies
-   to the very keyfile most users hold. **Client-driven retrofit should not
-   become the default before #2755 lands.** The grace default is also
-   code-only, absent from `config.yaml`, so an operator reading that file will
-   not find it.
+   ⚠️ **The first-enrollment exemption is MERGED BUT UNRELEASED.**
+   `preserveFirstEnrollmentOnRetrofit` — which keeps the atSign's CRAM-minted
+   root enrollment out of the cap, so retiring it stays an explicit
+   `enroll:revoke` — merged as at_server **PR #2755** on 2026-08-18
+   (`c2260e640`) and is on at_server `trunk`. It is in **no release**:
+   at_server's newest tag is `c3.16.1` of 2026-08-13, five days older than the
+   merge.
+
+   So the design gate is lifted and the *testing* one is not. A merge and a
+   published artefact are different events: `atsigncompany/virtualenv:vip`
+   cannot contain this, so anything exercising retrofit capping runs against a
+   freshly built `at_virtual_env:local` and a green against the published image
+   says nothing about it. Without the exemption an auto-retrofit caps the
+   atSign's own root, and the copied-keyfile lockout applies to the very
+   keyfile most users hold — which is what the release, not the merge, finally
+   settles for real deployments.
+
+   The grace default is also code-only, absent from `config.yaml`, so an
+   operator reading that file will not find it.
 4. **`disallowLegacyEncryption` is posture-only.** The `AtClientPreference`
    override is removed, which **overturns [70](#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)'s
    "individual flags still win"** for this flag, and **redefines R-2**
