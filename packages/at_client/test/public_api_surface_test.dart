@@ -69,6 +69,24 @@ void main() {
       expect(preference.posture.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(preference.disallowLegacyEncryption, true);
     });
+
+    test('the in-use signing set can be built by an outside caller', () {
+      // SigningAlgoType is an at_chops type, show-narrowed onto this barrel
+      // for the same reason as EnrollmentKeyExchangeMode: the preference asks
+      // for a Set of them and `AtClientImpl.signingAlgoType` hands one back,
+      // so without it a caller is asked for a set it cannot build and given a
+      // value it cannot name. This file imports at_client and nothing else, so
+      // if the export goes, the file stops compiling.
+      final preference = AtClientPreference(
+          inUseSigningAlgorithms: const {SigningAlgoType.mldsa65});
+
+      expect(preference.inUseSigningAlgorithms, {SigningAlgoType.mldsa65});
+      // Named against a stage whose default is a DIFFERENT algorithm, so the
+      // assertion cannot pass on the default it would have taken anyway.
+      final rollout1 =
+          AtClientPreference(signingRollout: SigningRollout.rollout1);
+      expect(rollout1.inUseSigningAlgorithms, {SigningAlgoType.rsa2048});
+    });
   });
 
   // The group above proves the REQUIRED symbols are reachable — it catches a
@@ -127,6 +145,9 @@ const Set<String> _atClientBarrelExports = {
   // holds one, and its per-axis override must be nameable without importing
   // at_auth directly.
   'package:at_auth/at_auth.dart',
+  // show-narrowed to SigningAlgoType: AtClientPreference.inUseSigningAlgorithms
+  // takes a set of them and AtClientImpl.signingAlgoType returns one.
+  'package:at_chops/at_chops.dart',
   'package:at_client/src/response/at_notification.dart',
   'package:at_client/src/response/enrollment.dart',
   // show-narrowed to EnrollmentConveyanceException: approve() throws it after

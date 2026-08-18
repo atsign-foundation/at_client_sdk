@@ -3128,8 +3128,29 @@ its own. None blocks anything.
     which is a small deliberate diff on a published package rather than
     something to fold into another step's commit.
 
-13. **`SigningAlgoType` is not reachable from at_client's barrel, so naming an
-    in-use signing algorithm needs a second import.** An app writing
+13. ~~**`SigningAlgoType` is not reachable from at_client's barrel, so naming
+    an in-use signing algorithm needs a second import.**~~ **REOPENED AND FIXED
+    2026-08-18**, by the precedent this item itself named: show-narrowed onto
+    the barrel exactly as `EnrollmentKeyExchangeMode` is.
+
+    ⚠️ **This item was recorded as examined-and-deliberately-left, and that is
+    a decision, not an oversight — it was reversed because its premise changed
+    on the day, not because the next reader disagreed with it.** What changed:
+    item 12 shipped, so `AtOnboardingPreference` now takes
+    `inUseSigningAlgorithms` and the population that must name the type grew
+    from at_client apps to the whole CLI fleet. The at_cli_commons README
+    gained a line telling consumers to import at_chops for it, which is the
+    wart made visible. And the "new inconsistency" argument below is weaker
+    than it read: of the two knobs it cites, `signingAlgoType` is
+    **deprecated** and `retrofitAuthenticationAlgo` is a derived getter on
+    `ReleasePosture`, not something an app sets — while
+    `AtClientImpl.signingAlgoType` is a public getter **returning** the type,
+    so a caller was already handed a value it could not name.
+
+    Pinned in `public_api_surface_test.dart`, which imports at_client and
+    nothing else; removing the export stops that file compiling, reproducing
+    the item's own 2026-08-13 probe. The exported-file golden moved in the same
+    commit, which is the review. What it used to say: "An app writing
     `AtClientPreference(inUseSigningAlgorithms: {SigningAlgoType.mldsa65})` must
     import `package:at_chops/at_chops.dart` as well as at_client. Verified by
     probe 2026-08-13: a test importing only `package:at_client/at_client.dart`
@@ -4276,7 +4297,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 11 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 10 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 

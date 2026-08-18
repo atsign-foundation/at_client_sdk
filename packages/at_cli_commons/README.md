@@ -65,9 +65,9 @@ final pref = AtOnboardingPreference(
 ```
 
 `posture`, `disallowLegacyEncryption`, `signingRollout` and
-`inUseSigningAlgorithms` are all available there, and each is optional.
-Naming `inUseSigningAlgorithms` needs `SigningAlgoType`, which at_client does
-not export — import it from `package:at_chops/at_chops.dart`.
+`inUseSigningAlgorithms` are all available there, and each is optional. Every
+type they take — including `SigningAlgoType` — is nameable from
+`package:at_client/at_client.dart` alone.
 
 ## Where to go next
 

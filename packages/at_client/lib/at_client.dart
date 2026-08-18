@@ -21,6 +21,12 @@ export 'package:at_client/src/preference/release_posture.dart';
 // find. Composing an enrollment request from it still goes through
 // `package:at_auth`.
 export 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
+// The signing algorithm only. `AtClientPreference.inUseSigningAlgorithms`
+// takes a set of these and `AtClientImpl.signingAlgoType` returns one, so a
+// caller that only imports at_client is handed a value it cannot name and
+// asked for a set it cannot build. Everything else about signing — key pairs,
+// signers, hashing — still comes from `package:at_chops`.
+export 'package:at_chops/at_chops.dart' show SigningAlgoType;
 export 'package:at_client/src/response/at_notification.dart';
 export 'package:at_client/src/response/enrollment.dart';
 // The exception only: approve() throws it after a server-side approval whose

@@ -1,4 +1,11 @@
 ## 3.14.1
+- feat: `SigningAlgoType` is exported from the barrel, show-narrowed from
+  at_chops exactly as `EnrollmentKeyExchangeMode` is from at_auth.
+  `AtClientPreference.inUseSigningAlgorithms` asks for a `Set` of them and
+  `AtClientImpl.signingAlgoType` returns one, so an app importing only
+  at_client was handed a value it could not name and asked for a set it could
+  not build. Everything else about signing — key pairs, signers, hashing —
+  still comes from `package:at_chops`.
 - fix: `PublishedNskeyKeyRing` also derives its read-miss self-heal. A ring
   holding a filing now broadcasts the pull for a generation it is missing even
   when no `requestConveyance` was supplied, built lazily on the miss so a
