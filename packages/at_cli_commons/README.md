@@ -54,6 +54,21 @@ final atClient = (await CLIBase.fromCommandLineArgs(
 // pref.someCustomField is untouched.
 ```
 
+The post-quantum rollout flags are **final at construction** — what a client
+writes must not change meaning while it is running — so those are named in the
+constructor rather than assigned afterwards:
+
+```dart
+final pref = AtOnboardingPreference(
+  posture: const ReleasePosture.postQuantum(),
+)..someCustomField = 'my value';
+```
+
+`posture`, `disallowLegacyEncryption`, `signingRollout` and
+`inUseSigningAlgorithms` are all available there, and each is optional.
+Naming `inUseSigningAlgorithms` needs `SigningAlgoType`, which at_client does
+not export — import it from `package:at_chops/at_chops.dart`.
+
 ## Where to go next
 
 - [`at_client`](../at_client) — the SDK whose `AtClient` this produces
