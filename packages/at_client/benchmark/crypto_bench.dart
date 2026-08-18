@@ -100,8 +100,9 @@ Future<void> prewarm() async {
   final pair = await xwing.generateKeyPair();
   final ck = payload(32);
   for (var i = 0; i < 3; i++) {
-    await pqOpen(
-        xwing, pair.secretKey, await pqSeal(xwing, pair.publicKey, ck));
+    await pqOpen(xwing, pair.secretKey,
+        await pqSeal(xwing, pair.publicKey, ck, info: conveyanceInfo),
+        info: conveyanceInfo);
   }
 
   final mldsa = MlDsa65PureDartAlgo();
@@ -127,6 +128,16 @@ Uint8List payload(int bytes) =>
     Uint8List.fromList(List<int>.generate(bytes, (i) => i % 256));
 
 AESKey aesKey() => AESKey(base64Encode(payload(32)));
+
+/// The key-schedule binding a CK conveyance is sealed under.
+///
+/// `pqSeal` requires `info` and deliberately offers no default, so a bench has
+/// to choose one. This mirrors the shape production seals under —
+/// `<providerId>:<owner>:<namespace>`, built by `NskeyProvider._info` — rather
+/// than the empty binding, because `info` is an HKDF input and an empty one
+/// would measure a shorter key schedule than any real conveyance pays for.
+final Uint8List conveyanceInfo =
+    Uint8List.fromList(utf8.encode('nskey:@benchmark:bench'));
 
 Future<List<Timing>> perRecord(int iterations) async {
   final results = <Timing>[];
@@ -167,15 +178,18 @@ Future<List<Timing>> perConveyance(int iterations) async {
   final xwing = XWingPureDartAlgo.instance;
   final pair = await xwing.generateKeyPair();
   final ck = payload(32); // a content key is what actually gets conveyed
-  final envelope = await pqSeal(xwing, pair.publicKey, ck);
+  final envelope =
+      await pqSeal(xwing, pair.publicKey, ck, info: conveyanceInfo);
 
-  results.add(await measure('nskey  X-Wing pqSeal (CK conveyance)',
-      'per (owner, namespace)', () async => pqSeal(xwing, pair.publicKey, ck),
+  results.add(await measure(
+      'nskey  X-Wing pqSeal (CK conveyance)',
+      'per (owner, namespace)',
+      () async => pqSeal(xwing, pair.publicKey, ck, info: conveyanceInfo),
       iterations: iterations));
   results.add(await measure(
       'nskey  X-Wing pqOpen (CK conveyance)',
       'per (owner, namespace)',
-      () async => pqOpen(xwing, pair.secretKey, envelope),
+      () async => pqOpen(xwing, pair.secretKey, envelope, info: conveyanceInfo),
       iterations: iterations));
   results.add(await measure('nskey  X-Wing keygen', 'per key generation',
       () async => xwing.generateKeyPair(),
