@@ -1808,17 +1808,33 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   can differ, so appending a signature under a stronger algorithm carrying
   another kid makes a caller act on a signer whose signature was never checked.
 
-- **UC-G1.8 · the auth key stays verifiable after rollout 2.**
-  *Given* an envelope signed at rollout 1 by the APKAM auth key.
-  *When* the enrollment moves to rollout 2 and republishes `_apsk` as an array.
-  *Then* the stored envelope still verifies, against the auth key's
-  `retired` entry.
-  *And* this holds when the retained entry names the **same algorithm** as the
-  active one, which is what a post-quantum-native enrollment publishes: its
-  auth key is ML-DSA and so is the key it mints. The verifier resolves the
-  algorithm first and then tries every key advertised under it, rather than the
-  first — proven in `packages/at_client/test/jws_envelope_test.dart`, group
-  "one algorithm, several advertised keys".
+- **UC-G1.8 · the rollout-1 signing key stays verifiable after rollout 2, even
+  under its own algorithm.**
+  *Given* an envelope signed at rollout 1 by the enrollment's **RSA-2048
+  signing key** — the one it holds from birth, minted before it submitted and
+  advertised bare in place of the APKAM authentication key.
+  *When* the enrollment moves to rollout 2: it mints ML-DSA-65, retires the RSA
+  key and republishes `_apsk` as an array.
+  *Then* the stored envelope still verifies, against the RSA key's `retired`
+  entry.
+  *And* this holds when a retained entry names the **same algorithm** as an
+  active one — two generations of one algorithm, `sign:<algo>:1` retired beside
+  `sign:<algo>:2` active. The verifier resolves the algorithm first and then
+  tries every key advertised under it rather than the first, proven in
+  `packages/at_client/test/jws_envelope_test.dart`, test "an envelope signed by
+  the retained key still verifies".
+
+  ⚠️ **This row named the APKAM authentication key, and no code path can put
+  that key in `_apsk` as `retired`.** `apskEntries` adds the authentication key
+  on exactly one condition — the entry list being empty — and adds it
+  **active**; the only thing that stamps `retired` is fed from
+  `AtKeys.retiredSigningKeysFor`, which selects `sign:` keyIds while the APKAM
+  keypair is filed under `auth:`. The Given was impossible too: at rollout 1
+  the enrollment holds its own signing key from birth, so the auth key never
+  signs and there is no envelope of its to preserve — [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
+  ruling 2 reversed the retention this row was written against. The cited group
+  was real but proved something else: two **ML-DSA signing** keys sharing an
+  algorithm, not the auth key. Corrected 2026-08-18.
 
 - **UC-G1.9 · a retired algorithm still verifies history.**
   *Given* an algorithm dropped from the in-use set.

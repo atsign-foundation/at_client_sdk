@@ -916,6 +916,20 @@ place with what it used to say.
 
 ### 14.17 Signature agility — what is built, and what is owed
 
+✅ **COMPLETE 2026-08-18.** Steps 1–5 are done and step 6 is out of scope by
+gkc's ruling. The last piece to land was step 5's signed-envelope 3×3
+(UC-G1.15), which is what makes
+[`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
+a measurement rather than a ruling.
+
+⚠️ **This entry spent five days claiming steps 4 and 5 were owed after they had
+shipped**, because it was written 2026-08-11 and never re-read against the tree
+while [14.18](#1418-the-remaining-d1-initial-development-sequence) built the
+work. The individual strikes below say what each row used to claim. The reason
+nothing caught it is worth more than the corrections: the `UC-G1.x` rows this
+entry is accepted against are the one cluster of the catalogue no rail checks —
+`manifest.dart`'s regexes hard-code `UC-[ABC]`.
+
 The design landed 2026-08-11 as [`decisions.md` 91](detail/decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11),
 [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
 and [`acceptance.md` 16](acceptance.md#16-g1--signature-agility-and-the-rollout-matrix).
@@ -1137,15 +1151,11 @@ This entry is the owed half; the rulings are the contract.
    shared scenario, because 3.14.0's `wrapAndSign` returns a `Map` where this
    tree's returns a `SignedEnvelope` and 3.14.0 ships no `lib/src/signing/` —
    a shared file would not compile on the published arm.
-6. **`enroll:update` parity for every other atServer implementation** — needs
-   its own tracking issue so it cannot silently diverge. **Still owed, and
-   sized 2026-08-18:** at_server `trunk` has the verb across
-   `enroll_verb_handler.dart`, `enroll_datastore_value.dart` and
-   `apkam_signature_verifier.dart`, with `enroll_update_test.dart` driving it.
-   The other implementation's `EnrollVerbHandler` switches on
-   `request`/`list`/`fetch`/`approve`/`deny`/`revoke`/`unrevoke`/`delete` and
-   has no `update` case. A `gh issue list` over at_server for "enroll" (exit 0,
-   15 rows) found nothing tracking it.
+6. ~~**`enroll:update` parity for every other atServer implementation.**~~
+   ⛔ **OUT OF SCOPE — gkc, 2026-08-18.** Do not re-raise it, and do not file a
+   tracking issue for it. Recorded here rather than deleted because it was
+   raised three times in one session, each time from re-reading this row as
+   owed.
 
 ⚠️ **"Still owed: an `mldsa65` arm on the rotation tests" was struck 2026-08-18.**
 The sentence dated from 2026-08-11 and the arm has since been written:
