@@ -2337,12 +2337,25 @@ It turned out the three behaviours are inseparable *by construction*, which is
 stronger than the paragraph above asked for. Only the first is a decision: the
 array form and the second signature are both consequences of the enrollment
 holding a second key (`apskValueOf` emits the bare string only for a single
-active `rsa2048` entry, and `wrapAndSign` signs with every key the keyfile
-holds). So the stage does not switch three flags — it names the position, and
+active `rsa2048` entry, and `wrapAndSign` signs with every *active* signing key
+the keyfile holds for the enrollment — retired keys are advertised, not signed
+with). So the stage does not switch three flags — it names the position, and
 supplies the default for the one piece of state all three read,
 `AtClientPreference.inUseSigningAlgorithms`. The posture derives that set from
 the stage rather than storing both, because two stored fields are two controls
 over one behaviour.
+
+**The ladder swaps; it never overlaps** ([`decisions.md`
+108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)).
+Each stage's default set holds at most one algorithm — `{}`, `{rsa2048}`,
+`{mldsa65}` — so **no posture this SDK ships emits a two-signature envelope**.
+`wrapAndSign`'s "all of them rather than the strongest" is a capability an
+application reaches by passing an explicit two-member set, not a position on
+the ladder. It is safe to swap because *reading* is not staged: a client at
+`rollout1` verifies a `rollout2` peer's `mldsa65` envelope perfectly well, so
+there is no verifier an overlap would rescue. What a swap does not lose is
+history — the retired key stays advertised, which is what keeps envelopes
+signed before the swap verifiable.
 
 `rollout1` mints an **ML-DSA-65 authentication** keypair and a fresh
 **RSA-2048 signing** keypair, and `_apsk` advertises the *signing* key. So it

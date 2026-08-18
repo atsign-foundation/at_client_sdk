@@ -7821,9 +7821,21 @@ memory was wrong.
 
 ## 91. Signature agility: the APKAM auth key stops being the enrollment's signing key (2026-08-11)
 
-**Status:** accepted as a design ruling. Nothing is built; this section is the
-specification the work is written against, and the mechanism is named here
-because no defect is being fixed — this reverses a scope decision, the same way
+**Status:** accepted as a design ruling, and **built**. ⚠️ **This line read
+"Nothing is built" until 2026-08-18, and had been false since 2026-08-13** —
+the same failure [68](#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
+carried until the day before, and for the same reason: a status line is written
+once, at the moment it is true, and nothing takes you back to it. What landed is
+[14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+steps 6-19 plus rows B1-B3 of ruling 98 — the typed keyfile, the `_apsk` array
+composer and reader, the multi-signature envelope, the strength order, the
+`enroll:update` caller, the in-use signing set, the minter, and the
+`SigningRollout` axis. Read the individual rulings below for what each one's
+implementation amended; several were narrowed on evidence.
+
+The section is still the specification the work is written against, and the
+mechanism was named here because no defect was being fixed — this reverses a
+scope decision, the same way
 [section 68](#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
 did.
 
@@ -7893,8 +7905,11 @@ superseded kpid is not retired) is the same shape as ruling 9 below.
 and 10 above is **`retired`** — use-neutral, because `use` already names the
 operation and the same value has to serve encapsulation keys
 ([95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
-ruling 6). Nothing composes an `apsk` yet, so no record carries either
-spelling.
+ruling 6). ⚠️ **This read "Nothing composes an `apsk` yet, so no record
+carries either spelling" until 2026-08-18.** `signing/apsk_composition.dart` is
+that composer — `apskEntries` builds the entry list and `apskValueOf` spells it,
+emitting the bare string only for a single active `rsa2048` entry — and it is
+shared by every publisher of the record, so both spellings are in use.
 
 ### 91.4 What is released, and therefore what must still be read
 
@@ -10463,3 +10478,56 @@ genuinely is refused is a key-construction bug in `NotificationService.send()`
 (plan 14.35). Measured both arms: `send(namespace:"wavi")` throws
 `LegacyEncryptionRefusedException`, `send(namespace:"buzz.wavi")` seals but
 scopes to `wavi`.
+
+## 108. The signing rollout swaps algorithms; it never overlaps them (2026-08-18)
+
+**The ruling.** `SigningRollout`'s three stages each default the in-use signing
+set to at most one algorithm — `{}`, `{rsa2048}`, `{mldsa65}` — and that is
+deliberate. There is no stage whose set is `{rsa2048, mldsa65}`, so **no
+posture this SDK ships ever emits an envelope carrying two signatures.** The
+multi-signature writer stays a capability an application opts into by passing
+an explicit two-member `AtClientPreference.inUseSigningAlgorithms`, which the
+constructor accepts; it is not a position on the ladder.
+
+**Why a swap is safe where an overlap would be needed.** The staging exists so
+a build never *writes* something the fleet cannot *read*, and reading is not
+staged: this tree's verifier is ungated, so a client sitting at `rollout1` —
+signing `rsa2048` — verifies an `mldsa65` envelope from a `rollout2` peer
+perfectly well. What `rollout1` buys is the atServer dependency and the fleet's
+position, not a verification capability its peers lack. An overlap would be the
+answer to a *verifier* that cannot handle the new algorithm, and that verifier
+is the released build, which cannot exchange an envelope with this tree in
+either direction under any stage — an incompatibility already accepted by
+[95](#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+and pinned in `released_envelope_incompatibility_test.dart`.
+
+**What this rules out, so it is not re-derived.** Giving `rollout2` the set
+`{rsa2048, mldsa65}` to carry both signatures through the transition was put
+and declined. It would make every rollout-2 envelope twice the size and twice
+the signing cost for a reader that no stage lacks, and it would put a second
+active key in `_apsk` — forcing the array form — for the whole of the stage
+rather than only where an app asked for it.
+
+**What stays true regardless.** A *retired* key is still advertised, and that is
+what keeps envelopes signed before a swap verifiable. The swap therefore loses
+no history: at `rollout2`, `reconcileSigningKeys` retires `rsa2048` and mints
+`mldsa65`, and the advertisement carries active-`mldsa65` beside
+retired-`rsa2048`. That two-entry advertisement is the one plural `_apsk` a
+shipped posture does produce, and it is a plural *advertisement*, not a plural
+*signature*.
+
+**Measured, at `cc6ef7cab`.** `SigningRollout.defaultInUseSigningAlgorithms`
+(`release_posture.dart:49-57`) has three arms of size 0, 1 and 1.
+`EnvelopeSigning.wrapAndSign` passes `await signingKeys` wholesale
+(`envelope_signing.dart:56`), and `ApkamSigning.signingKeys` returns the
+enrollment's held *active* signing keys — `AtKeys.signingKeysFor` requires
+`status == active` on both halves (`at_keys.dart:417-420`) — falling back to
+the single APKAM authentication key when there are none. So the signature count
+equals the number of active signing keys, floor one, and no stage files two.
+
+**Ruled by gkc 2026-08-18**, after the alternative — an overlapping `rollout2`
+— was put and declined. Raised by a source audit of plan
+[14.17](../implementation-plan.md#1417-signature-agility--what-is-built-and-what-is-owed),
+which found `wrapAndSign`'s own comment describing the overlap as the operating
+mode (*"an envelope carrying both is readable by the peer that has upgraded and
+by the peer that has not"*) while no stage could produce one.

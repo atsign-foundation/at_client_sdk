@@ -148,7 +148,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [88]  | Phase 7: mintAndPublish is the cold-start mint, and stops calling itself the rotation       | 2026-08-11 | LIVE                      |
 | [89]  | Phase 7: the section symbol keeps the two jobs it is good at                                | 2026-08-11 | LIVE                      |
 | [90]  | Phase 7: a refusal the approval wait cannot resolve stops being silent                      | 2026-08-11 | LIVE                      |
-| [91]  | Signature agility: the APKAM auth key stops being the enrollment's signing key              | 2026-08-11 | AMENDED 2026-08-13        |
+| [91]  | Signature agility: the APKAM auth key stops being the enrollment's signing key              | 2026-08-11 | AMENDED 2026-08-18        |
 | [92]  | The spike takes trunk, and two published version numbers move underneath it                 | 2026-08-11 | LIVE                      |
 | [93]  | The D1 remaining-work sequence, and the rollout axis becomes real                           | 2026-08-11 | AMENDED 2026-08-15        |
 | [94]  | Three records advertise keys, and only one of them speaks the vocabulary                    | 2026-08-11 | AMENDED 2026-08-12        |
@@ -165,6 +165,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [105] | The nskey mint elects a winner                                                              | 2026-08-16 | LIVE                      |
 | [106] | A notification that outruns its key is dropped, not parked                                  | 2026-08-16 | AMENDED 2026-08-17        |
 | [107] | A `local:` record is not encrypted, and the legacy refusal exempts it                       | 2026-08-17 | AMENDED 2026-08-17        |
+| [108] | The signing rollout swaps algorithms; it never overlaps them                                | 2026-08-18 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -274,3 +275,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [105]: detail/decisions.md#105-the-nskey-mint-elects-a-winner-2026-08-16
 [106]: detail/decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16
 [107]: detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17
+[108]: detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18
