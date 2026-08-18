@@ -44,6 +44,68 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.37](#1437-retire-the-0x01-seal-version) | Retire `pqSeal` version `0x01` — two commits, in order | Nothing. [Ruling 110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18) settled it; only the order is constrained |
 | [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — 2 code fixes and a test repair | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
+| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — the rename, the 3 postures, client-driven retrofit, the algorithm lists, and public-data signature verification | Nothing. Design settled by [ruling 113](detail/decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18); large, and it changes R-2's definition |
+
+### 14.39 `PqPosture` and the rollout it drives
+
+Design settled with gkc on 2026-08-18 and recorded as
+[ruling 113](detail/decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18),
+which carries the posture matrix, the 8 rulings and the reasoning. This row is
+the work, which is large and touches at_client, at_auth and at_onboarding_cli.
+
+**The class.** `ReleasePosture` becomes `PqPosture` with 3 pre-built constants
+— `legacy` (default), `pqReady`, `pqActive` — and a program may build and
+inject its own. `SigningRollout` is deleted, replaced by `authenticationKeyAlgorithm`
+and `dataSigningKeyAlgorithms`. `mintLegacyMaterial` becomes an axis pinned true
+in all three. Construction rejects `disallowLegacyEncryption` true where
+`writesPqByDefault` is false, since such a posture refuses its own writes.
+
+**The behaviour.** A posture is a floor and never downgrades: key material wins
+for authenticating and reading. The client drives its own retrofit at start, in
+the same shape as the nskey mint — every start, non-blocking, local state
+checked first, failure retried next start, usable meanwhile. Nothing is needed
+for capping; the atServer's 720-hour grace already re-arms per sibling and
+exempts the first enrollment.
+
+**The narrowing.** `disallowLegacyEncryption` becomes posture-only and its
+`AtClientPreference` override goes, which overturns ruling 70's
+individual-flags-win for that flag and **redefines R-2**
+([#2016](https://github.com/atsign-foundation/at_client_sdk/issues/2016)) as
+"the default posture becomes `pqActive`". That issue needs rewriting when this
+lands.
+
+**The lists.** Posture supplies defaults, `AtClientPreference` holds the values.
+Two are needed and neither exists in the right shape: a receiver-side list of
+what this atSign publishes for others to seal to, which is today the singular
+`keyEstablishmentAlgo` and is the same singularity as
+[14.37's sibling](#1437-retire-the-0x01-seal-version) issue
+[#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135); and a
+sender-side list of what it will seal to, today `static const` in
+`SecretSharingAlgos`. Verification and decryption stay maximal and are never
+posture-settable, so *reads are universal* holds by construction.
+
+**The rename.** Every parameter, variable and class says whether it means the
+PKAM authentication signing key or the data signing key. Scope is at_client and
+at_onboarding_cli. at_chops' `AtSigningInput.signingAlgoType` is deliberately
+left alone — 165 hits across 48 files, unambiguous in context, and it would open
+an at_chops version ruling 109 avoided. Measured blast radius for the rest:
+`ReleasePosture` 112 hits in 23 files, `SigningRollout` 77 in 20, `signingRollout`
+77 in 19, `inUseSigningAlgorithms` 95 in 22, `retrofitAuthenticationAlgo` 13 in 6.
+⚠️ The acceptance rows `UC-C1.x` and ruling 70 move in the same commit.
+
+**The CLI.** `--posture legacy|pqReady|pqActive` on every command, defaulting to
+at_client's built-in. No `--disallowLegacyEncryption` anywhere.
+`at_onboarding_cli` majors when it takes at_client 4.x.
+
+**Public-data signatures.** ⚠️ **Nothing verifies `metadata.dataSignature`
+today** — not at_client, not the atServer — so this builds the first verifier
+rather than extending one. `pqActive` signs with the enrollment's data signing
+key in the `_apsk` envelope form, and the verifier walks the signer's `_apsk`
+through the approval chain to `pq_signing_root`. `pqReady` changes nothing.
+Verification runs automatically on public reads, non-fatally, with the outcome
+exposed; it wants the signer's `_apsk` cached or every public read pays a remote
+lookup on another atSign. Both forms are read, and the legacy form permanently,
+because every public record a released at_client signed sits on a live atSign.
 
 ### 14.38 `activate_cli` cannot administer a PQ-native atSign
 

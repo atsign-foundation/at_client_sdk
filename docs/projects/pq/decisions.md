@@ -170,6 +170,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | LIVE                      |
 | [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
 | [112] | An unreadable key source is not an empty one                                                | 2026-08-18 | LIVE                      |
+| [113] | PqPosture replaces ReleasePosture, and drives the rollout                                   | 2026-08-18 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -284,3 +285,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [110]: detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18
 [111]: detail/decisions.md#111-a-key-ring-files-where-its-client-files-2026-08-18
 [112]: detail/decisions.md#112-an-unreadable-key-source-is-not-an-empty-one-2026-08-18
+[113]: detail/decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18

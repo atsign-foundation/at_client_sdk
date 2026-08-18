@@ -10792,3 +10792,142 @@ another — applied to the code that is the standing example of breaking it.
 Proven by the mutation that restores the old behaviour: answering null for every
 failure reddens exactly the raise row, and both absence rows stay green, as they
 must.
+
+## 113. PqPosture replaces ReleasePosture, and drives the rollout (2026-08-18)
+
+**Ruled by gkc**, in a grilling on 2026-08-18. `ReleasePosture` becomes
+**`PqPosture`**: one class, an axis per decision, three pre-built constants, and
+a program may build its own and inject it. The three constants are `legacy`
+(the current default), `pqReady` (rollout 1) and `pqActive` (rollout 2).
+
+### What each posture is
+
+| Axis | `legacy` | `pqReady` | `pqActive` |
+|------|----------|-----------|------------|
+| PKAM authentication key | rsa2048 | mldsa65 | mldsa65 |
+| Separate data signing key | none, the authentication key signs | rsa2048 | mldsa65, with rsa2048 kept `retired` |
+| `seedNamespaceKeys` | false | true | true |
+| Key package published for secret sharing | no | yes | yes |
+| `keyExchangeMode` | legacy | pq | pq |
+| `writesPqByDefault` | false | false | true |
+| `disallowLegacyEncryption` | false | false | true |
+| `mintLegacyMaterial` | true | true | true |
+| Drives retrofit | no | full | full from legacy, partial from `pqReady` |
+| Public-data signature | legacy key and form | legacy key and form | enrollment signing key, `_apsk` envelope form |
+
+`pqReady` is the stage where the credentials move and the data path does not:
+mint namespace keys, authenticate with ML-DSA, publish a key package, keep
+RSA-2048 for data signing, and go on writing legacy data. `pqActive` changes
+exactly two things against it — the data signing key becomes ML-DSA, and the
+PQ path becomes the default for encryption.
+
+`seedNamespaceKeys` needed no new reasoning. Its own dartdoc already described
+this stage: *"clients minting and publishing while still writing legacy, so
+that by the time post-quantum writes are switched on the keys are already
+everywhere"*. It was written for `pqReady` before `pqReady` had a name.
+
+### Eight rulings
+
+1. **A posture is a floor, never a downgrade.** Key material wins for
+   authenticating and reading. `legacy` means "do not drive an upgrade", not
+   "return to legacy", so a client built against an older at_client cannot
+   un-retrofit an atSign that has moved.
+2. **The client drives retrofit itself, at start**, in the same shape as the
+   nskey mint ([18.7](#187-when-minting-happens)):
+   attempted every start, non-blocking, local state checked first so it is a
+   no-op once done, failure logged and retried next start, and the client stays
+   usable at its current level meanwhile. `selfRetrofit` is already idempotent,
+   which is what makes every-start safe.
+3. **Capping needs nothing built.** The atServer already caps the superseded
+   enrollment on a `apkamSelfEnrollmentGraceHours` default of **720 hours**,
+   re-arms it on each sibling retrofit so the parent retires one grace period
+   after the *last* clone upgrades, exempts the atSign's first enrollment
+   entirely, and never extends past the enrollment's own expiry. A laggard
+   stranded past the window recovers by ordinary OTP enrollment.
+4. **`disallowLegacyEncryption` is posture-only.** The `AtClientPreference`
+   override is removed, which **overturns [70](#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)'s
+   "individual flags still win"** for this flag, and **redefines R-2**
+   ([#2016](https://github.com/atsign-foundation/at_client_sdk/issues/2016))
+   from "flip the flag and move the era default" to "the default posture
+   becomes `pqActive`".
+5. **`mintLegacyMaterial` becomes an axis**, pinned true in all three, so a
+   custom posture can flip it when the stop-release needs to. Follows
+   `keyExchangeMode`'s precedent of an at_auth type carried by an at_client
+   posture.
+6. **`SigningRollout` is deleted, replaced by two named axes** —
+   `authenticationKeyAlgorithm` and `dataSigningKeyAlgorithms` (a set, empty
+   meaning the authentication key signs). The enum stated both facts by
+   implication and its name said "signing" for one of them, which is the
+   ambiguity this ruling exists partly to remove.
+7. **Every parameter, variable and class says which key it means** — the
+   enrollment's PKAM *authentication* signing key, or its *data* signing key.
+   The rename covers at_client and at_onboarding_cli. at_chops'
+   `AtSigningInput.signingAlgoType` is left alone: 165 hits across 48 files,
+   unambiguous in its own context, and touching it opens an at_chops version
+   [109](#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18)
+   established we do not need.
+8. **Algorithm lists are posture-defaulted and preference-held**, the shape
+   `inUseSigningAlgorithms` already has, so
+   [50.3](#503-the-kem-is-configured-the-construction-is-negotiated)
+   stands: which KEM an atSign publishes is a deployment choice, not a rollout
+   stage. Two lists are needed and neither exists in the right shape:
+   a **receiver-side** list of what this atSign publishes for others to seal to
+   (today the singular `AtClientPreference.keyEstablishmentAlgo` — the same
+   singularity as [#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135)
+   and KE-2), and a **sender-side** list of what it is prepared to seal to
+   (today `SecretSharingAlgos.keyAlgos` and `suites`, both `static const`).
+   Verification and decryption stay maximal and are never posture-settable, so
+   cross-cutting invariant 1, *reads are universal*, holds by construction.
+
+**A deliberate asymmetry, recorded so it is not read as an oversight.**
+`disallowLegacyEncryption` is posture-only with no escape hatch while the
+algorithm lists keep one. A safety flag whose override defeats its purpose is
+not the same kind of thing as deployment policy, and a FIPS deployment choosing
+ML-KEM has nothing to do with which rollout stage it is at.
+
+**A coupling the class enforces at construction:** `disallowLegacyEncryption`
+cannot be true where `writesPqByDefault` is false, since such a posture would
+refuse its own writes. A custom `PqPosture` combining them is rejected rather
+than accepted and left to fail at the first put.
+
+### The CLI
+
+`--posture legacy|pqReady|pqActive`, honoured on **every** command and
+defaulting to the built-in default of the at_client it was compiled against.
+Not activation-only: a posture means the same thing wherever a client is
+created, and because a posture is a floor and retrofit is idempotent, running
+any command at a higher posture upgrades the atSign coherently. The
+activation-only alternative was rejected because
+[#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) had just
+shown what a flag that silently does nothing on most commands costs.
+
+There is no `--disallowLegacyEncryption` argument anywhere, per ruling 4.
+`at_onboarding_cli` takes a major version when it takes up at_client 4.x.
+
+### Public-data signatures
+
+Public data is signed into `metadata.dataSignature` by
+`put_request_transformer.dart:84`, using the encryption private key. **Nothing
+verifies it** — not at_client, not the atServer. The field is written, carried
+through sync and notify, stored, and never checked. So this is not extending a
+verifier, it is writing the first one.
+
+- **`pqActive` signs with the enrollment's data signing key in the `_apsk`
+  envelope form.** A verifier fetches the signer's `_apsk` and follows the
+  approval chain to `pq_signing_root`, which is what turns "enrollment E4 said
+  this" into "@alice said this". Signing with the root directly was rejected:
+  the root private is held only by fully privileged enrollments, so a
+  namespace-scoped enrollment could no longer write public data at all.
+- **`pqReady` changes nothing here.** Its principle is that the credential
+  peers verify does not move, so the legacy key and the legacy form both stay.
+- **The verifier reads both forms, and the legacy form permanently.** Every
+  public record a released at_client ever signed sits on a live atSign, so
+  legacy verification never retires. The reader ships before any writer emits
+  the new form, which costs nothing here because the writer is behind
+  `pqActive` and the default posture is `legacy`.
+- **Verification runs automatically on public reads, non-fatally**, with the
+  outcome exposed on the result. Opt-in was rejected as the shape that produced
+  an unverified signature field in the first place; failing the read was
+  rejected because a rotated key would start breaking reads that work today.
+  It wants the signer's `_apsk` cached, or every public read pays a remote
+  lookup on someone else's atServer.
