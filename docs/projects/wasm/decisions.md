@@ -148,14 +148,72 @@ Dart consumers pay nothing.
 
 ### D-9 — Keys cross the JS boundary as strings; events as callbacks (2026-08-13)
 
-`AtKey` and `AtValue` are never materialised in JavaScript. Keys cross as the wire form
-(`public:phone.wavi@bob`); metadata crosses as a plain object.
+`AtKey` and `AtValue` are never materialised in JavaScript.
 
-**Why.** `AtKey` has no JSON codec — every codec in
+**Amended 2026-08-18.** As ruled 2026-08-13, keys crossed as the wire form
+(`public:phone.wavi@bob`) because `AtKey` has no JSON codec — every codec in
 `packages/at_commons/lib/src/keystore/at_key.dart` belongs to `Metadata` (`:627`/`:661`)
-or `AppMetadata` (`:852`/`:862`) — and `AtKey.fromString` is lossy on metadata.
-Separately, `Stream` has no JS bridge in any Dart SDK, official or community, so every
-event surface is `subscribe(cb) → unsubscribe`.
+or `AppMetadata` (`:852`/`:862`) — and `AtKey.fromString` is lossy on metadata. **D-10
+removes the flat plane those wire-form keys belonged to**, so the rationale changes: it is
+no longer "keys cross as strings because they have no codec," it is **"no raw key plane is
+exposed at all,"** codec or not. `AtKey`/`AtValue` remain excluded either way; the reason
+is now structural rather than a workaround for a missing codec.
+
+Separately, and unaffected by D-10/D-11: `Stream` has no JS bridge in any Dart SDK,
+official or community, so every event surface is `subscribe(cb) → unsubscribe` — including
+`AtCollection`'s eight stream-returning members (`js-api.md` §5.2 F-findings).
+
+### D-10 — Collections are the sole JS/TS data plane; the flat plane is removed (2026-08-18)
+
+The flat key/value plane specified in the original `js-api.md` §5.2
+(`put`/`get`/`putBinary`/`getBinary`/`delete`/`exists`/`getKeys`/`getMeta`/`putMeta`) is
+**removed** from the JS/TS surface, not deprecated in place. `AtCollection<T>`
+(`packages/at_client/lib/src/collections/collections.dart`) is the sole data plane. A JS
+consumer cannot address a raw protocol key.
+
+**Why.** Two things changed since D-9 was ruled: `AtCollection<T>` shipped in `at_client`
+3.12.0 (`df1272374`, 2026-04-27) as the supported successor to the deprecated
+`at_collection/` tree, and it is JSON end-to-end — `CItem.toJson()` emits
+`{'type', 'obj'}`, persisted with `jsonEncode` — so it costs nothing to bridge that the
+flat plane's wire-string keys did not already cost. Retaining both would mean documenting
+and testing two parallel data-access idioms for one protocol; retaining only the flat
+plane would mean shipping the weaker, more Dart-specific API to the audience (JS/TS
+developers) least equipped to work around it.
+
+**Retained, not part of the flat plane removed:** `create`/`close` (lifecycle),
+`waitUntilCaughtUp`/`isInSync` (`SyncService` — collections read a local synced store and
+are silently stale without it), `notify`/`notificationStatus` (`NotificationService` —
+sending to another atSign is not a collection write). See `js-api.md` §5.3.
+
+**Cost, stated honestly.** A JS/Dart mixed fleet loses the ability to read/write arbitrary
+protocol keys from JS. This is accepted because no consumer profile in `js-api.md` §0
+(browser SPA, Node service, TS AI agent) has asked for raw key access — all three want
+structured, typed records.
+
+### D-11 — The Dart gear is typed via a declared `typeTag`; app types are never compiled into `at_client_web` (2026-08-18)
+
+The JS and Dart gears mesh at exactly one point: the wire `typeTag`, a plain `String`.
+Layer B (`plans/wasm/api-designing.md` §2.3) holds the machinery for declaring and
+honouring tags; it never contains an app-specific collection type (`Todo`, `BlogPost`).
+
+**Why.** Measured (§2.6 below): `_rehydrate` looks up factories by the tag stored on the
+envelope (string-keyed, JS-compatible), but `_resolveType` stamps the write-side tag from
+`obj.runtimeType` (a reified Dart `Type`, not JS-compatible). An untyped JS binding — one
+`AtCollection<dynamic>` with TS generics as compile-time phantoms — would therefore write
+every record under `type: 'n/a'`, making a JS client and a Dart client unable to share a
+collection as equals. That is a product defect, not a binding nicety, so the untyped
+design is rejected in favour of a facade that requires a declared tag per collection.
+
+**Cost, stated honestly, and left open.** Honouring a declared tag on writes requires
+overriding `_resolveType`, which upstream does not expose today. Until an additive
+`writeTypeTag` ships upstream (preferred) or the facade adopts a bounded carrier-class
+shim (fallback, verified mechanically viable via `CItem.toJson()`/`jsonEncode`), **the JS
+surface is read-compatible with typed Dart peers but not write-compatible.** See
+`js-api.md` §11 JS-7 and §5.2.
+
+**Bound.** Compiling app types into `at_client_web` — even as an opt-in — is rejected
+outright: it would force every JS app into a Dart build step, destroying the
+`npm install` story this entire project exists to deliver.
 
 ---
 
@@ -228,6 +286,40 @@ tables in [`js-api.md`](js-api.md) §1. The load-bearing results:
 - **dart2js on Node hangs silently without `globalThis.self = globalThis`** — Node has
   neither `self` nor `MutationObserver`, so Dart's microtask scheduler never runs and
   every Promise stays pending. No error is raised.
+
+### 2.6 The collections API's write/read asymmetry (2026-08-18)
+
+Measured against `packages/at_client/lib/src/collections/collections.dart` at HEAD. Drives
+D-10/D-11 and `js-api.md` §5. **✓** = re-grepped at plan time; two line numbers reported by
+initial exploration disagreed (`wherePath` at both `:3486` and `:4486`) — `:3486` is
+confirmed correct and is the only one recorded below.
+
+| # | Finding | Consequence |
+| --- | --- | --- |
+| F1 | Omitting **both** `fromJson` and `typeTag` is supported — `AtClient.collection()`'s pairing check (`:581-596`) fires only on an XOR. Precedent: `example/bin/collections_primitives.dart:18-27` uses `AtCollection<Map>` with neither. | Untyped binding is *possible*. D-11 declines it in favour of a declared-tag design — see F3. |
+| F2 | **Read path is string-keyed.** `_rehydrate` (`:3033-3062`) looks up `_factoriesByTag[type]` from the tag on the stored envelope. Unknown tag → one `_logger.warning` + raw cast, **no throw**. | Reads degrade gracefully; a JS collection can read data written by a typed Dart peer. `CItem.type` (`:4726`) is the discriminator. |
+| F3 | **Write path is `Type`-keyed.** `_resolveType` (`:2960` ✓) does `_factoriesByType[obj.runtimeType]`; anything unregistered stamps `'n/a'`. | **The finding D-11 is built on.** An untyped JS binding cannot write a meaningful type tag — a JS and Dart client cannot share a collection as equals without an additive change. |
+| F4 | The `Predicate` AST is introspectable but **not serializable** — no `toJson`/`fromJson`, `CmpPredicate._` is private (`:4261`), `PathField.extract` is a live Dart closure (`path` is metadata only, `:4151-4155`). | A path-based query DSL must be built in Layer B (pure Dart), not bound directly — JS gets `.where(path, op, value)`, never the AST. |
+| F5 | `PredicateOp` has 13 members (`:4204-4218` ✓); `like`/`inSet`/`between`/`contains`/`startsWith` throw `UnimplementedError` (`:4305-4307` ✓). | Must never appear in the `.d.ts` as working — `js-api.md` §9. |
+| F6 | `Atsign` is `extension type Atsign._(String)` — **erased to `String` at runtime** (`at_commons-5.9.0/lib/atsign.dart:6`). `toAtsign()` normalises (lowercase, prepend `@`, strip right-side dots) and throws `InvalidAtSignException`. | No JS wrapper type needed, but normalisation must route through Dart or keys mismatch silently. |
+| F7 | **No `dispose()` on `AtCollection`.** Fields at `:439`/`:447` say "Held so a future `dispose()` can cancel cleanly"; `availableEvents`' scheduler runs for the collection's lifetime (`:2786-2788`). | The facade must rely on the `(namespace, eventSource)` cache (`at_client_impl.dart:256`) rather than constructing per JS object — bounds, does not eliminate, a subscription leak. |
+| F8 | `CEvent` is deliberately **not sealed** (`:5077`) — new subtypes ship in minors. | The JS discriminated union needs a default/unknown branch, permanently. |
+| F9 | Collections code has zero direct `dart:io`, but requires `AtClient`, and `at_client_spec.dart:1` imports `dart:io`. | Not a new blocker — exactly what Phases 1–5 exist to remove. |
+| F10 | `orderBy` (`:3496` ✓) and `thenBy` (`:3521` ✓) take `Comparable Function(CItem<T>)` closures. **No path-based ordering variant exists upstream.** | Any `orderByPath` in the facade is a Layer B invention that must be labelled as such, not attributed to upstream. |
+| F11 | `SubSpec` is `const`-constructible but its only opener is `_openOnForTest` (`collections_test_hooks.dart:168`, `@visibleForTesting`, **not exported** from the barrel). | `watchWithTree` is unbindable today — `js-api.md` §9 excludes it, blocked on an upstream export rather than a design choice. |
+| F12 | `CItem.toJson()` emits `{'type', 'obj'}` and the caller `jsonEncode`s it (`:4809`, `:1088` ✓); `jsonEncode` invokes `toJson()` on a non-primitive payload. | Confirms the carrier-class shim (D-11's fallback route) is mechanically viable, bounded by a fixed ceiling of concurrent tags per isolate. |
+
+**Stability, both readings recorded.** `AtCollection`'s class doc (`:58-62`) declares
+*"Status: stable"* and names its compatibility mechanisms (`interface class` modifier,
+`final` event subclasses, pre-allocated enum slack); there is no `@experimental`. Against
+that: the API is roughly four months old (born `df1272374`, 2026-04-27), took a breaking
+change 2 days after introduction (`fb4c96587`, mandatory `typeTag`), reworked
+`EventSource` semantics since, ships 7 correctness fixes in the current 3.14.1, and has
+**zero functional/e2e coverage** — all 209 tests in `packages/at_client/test/` are
+mocktail unit tests against `MockAtClient`; nothing in `tests/at_functional_test/` or
+`tests/at_end2end_test/` references it. `js-api.md` §10 marks the JS-side collections
+surface unstable/0.x on this basis — attributed to the gap in *this project's* boundary
+validation, not to a dispute of upstream's stability contract.
 
 ---
 
@@ -343,10 +435,12 @@ dart2wasm, where `dart.library.html` is false. Under dart2js it is **true**, so 
 resolve to its real IndexedDB backend rather than the no-op stub — a different outcome,
 and possibly a working one. Re-ask against D-7's target before acting on OQ-9.
 
-The JS/TS-surface questions (**JS-1..JS-5** — `cryptography`'s path under dart2js,
-whether `AtCollection` is exposed, whether to ship a dart2wasm build too, whether
-`at_client_web` keeps both jobs, and who owns the npm release) live in
-[`js-api.md`](js-api.md) §11.
+The JS/TS-surface questions (**JS-1..JS-8** — `cryptography`'s path under dart2js,
+whether `AtCollection` is exposed (JS-2, **resolved** 2026-08-18 — see D-10), whether to
+ship a dart2wasm build too, whether `at_client_web` keeps both jobs, who owns the npm
+release, throw-vs-return-tuple for the error surface, upstream `writeTypeTag` vs. a
+carrier-class shim for write-compatibility (JS-7), and the `AtClientManager` singleton
+blocking multi-instance JS clients (JS-8)) live in [`js-api.md`](js-api.md) §11.
 
 **Answered.** *Does `package:sqlite3`'s web entry point compile under dart2wasm?*
 **Yes** — Dart 3.11.3, `sqlite3` 2.9.4, with a negative control that failed as
@@ -369,3 +463,7 @@ covered by T3.1 and X1. Note D-7 makes this the *less* critical of the two paths
 | 2026-08-13 | Ceded `at_auth` to the PQ program's S-5/S-6; tasks I4–I8 removed from this backlog.                                                                                                                 |
 | 2026-08-13 | Measured the JS/TS language boundary (§2.5) and the dart2js library matrix (§2.4); confirmed no Dart web compiler gates `dart:io`.                                                                  |
 | 2026-08-13 | **D-7..D-9 ruled.** dart2js is the JS/TS compile target; the facade lives in `at_client_web` with D-4 unamended; keys cross as strings and events as callbacks. `js-api.md` added as the sixth doc. |
+| 2026-08-18 | Added JS-6 (throw vs. return-tuple, supabase-js precedent) to `js-api.md` §11. |
+| 2026-08-18 | `plans/wasm/api-designing.md` written: the three-layer Dart facade split (Layer A/B/C) and the Axis A/B/C reference-SDK survey. `plans/wasm/key-storage.md` written, depending on the split. |
+| 2026-08-18 | Measured the collections API's write/read asymmetry (§2.6, F1–F12) against `packages/at_client/lib/src/collections/collections.dart`. |
+| 2026-08-18 | **D-9 amended, D-10 and D-11 ruled.** Collections (`AtCollection<T>`) become the sole JS/TS data plane; the flat key/value plane from the original §5.2 is removed, not deprecated in place. The Dart gear is typed via a declared `typeTag`; app types are never compiled into `at_client_web`. Write-compatibility with typed Dart peers is left open pending an upstream `writeTypeTag` or a bounded carrier-class shim (JS-7). `js-api.md` §5–§11 rewritten to match; `plans/wasm/api-designing.md` §2.3/§2.4/§2.6 rewritten for the collections-shaped Layer B. JS-2 resolved; JS-8 (the `AtClientManager` singleton blocking multi-instance clients) recorded. |

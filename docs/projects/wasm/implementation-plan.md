@@ -275,30 +275,66 @@ Now verified **by execution** under T2.3 rather than by compile.
 
 ## 8. Phase 6 — the JS/TS facade (J)
 
-Design in [`js-api.md`](js-api.md); rulings D-7..D-9 in [`decisions.md`](decisions.md).
+Design in [`js-api.md`](js-api.md) and [`plans/wasm/api-designing.md`](../../../plans/wasm/api-designing.md)
+(the Dart-side Layer A/B/C split); rulings D-7..D-11 in [`decisions.md`](decisions.md).
 Builds on W1. Adds no Dart package — everything lands inside `at_client_web`.
 
-- **J1 — The facade.** `packages/at_client_web/lib/src/js/`: an `@JSExport` class
-  wrapping the ~25-method surface from [`js-api.md`](js-api.md) §5.2. Every async member
-  returns `JSPromise<…>`; every collection returns `JSArray`/`JSUint8Array`. No Dart type
-  escapes. → T6.3
+**Rewritten 2026-08-18 for the collections pivot (D-10, D-11).** J1 previously described
+a flat ~25-method surface; that surface is removed, not extended. `AtCollection<T>`
+(`packages/at_client/lib/src/collections/collections.dart`) is now the sole facade target.
+
+- **J1 — Layer B, the collections-shaped facade.** `packages/at_client_web/lib/at_easy.dart`
+  (pure Dart, zero interop imports — `api-designing.md` §2.3): `AtEasy.collection<T>()`,
+  `AtEasyCollection<T>` (`create`/`update`/`share`/`remove`/`where`/`watch`), `AtEasyItem<T>`
+  (`data`, not `obj` — the ergonomic fix), `AtEasyQuery<T>`. `where(path, op, value)` builds
+  the `PathField`/`Predicate` AST internally — `Predicate` is not serializable upstream
+  (private `CmpPredicate._`, closure `PathField.extract`), so this bridge is Layer B's job,
+  never Layer C's. Namespace auto-qualification and `expiration` defaulting live here too.
+  → T6.3
+- **J1a — The declared-`typeTag` registry (D-11).** Layer B tracks `(name, type)` →
+  collection, enforcing the tag as mandatory at `collection()` call time. Ships with
+  write-compatibility documented as open (JS-7): every JS-written record stamps `'n/a'` on
+  the wire until route A (upstream `writeTypeTag`) or route B (a bounded carrier-class
+  shim, verified viable via `CItem.toJson()`/`jsonEncode`) lands. Do not silently attempt
+  route B without a decision recorded in `decisions.md` — it has a real ceiling.
+- **J1b — Verify `subCollection`'s `fromJson`/`typeTag` XOR check.** `js-api.md` §5.4
+  measured the omit-both escape (F1) only for the root `AtClient.collection()`; confirm
+  `subCollection` behaves identically before binding it.
 - **J2 — Error mapping.** Catch on the Dart side and rethrow a structured `AtError` with
-  a stable `code`. The default boxed rejection must never reach a consumer. → T6.4
-- **J3 — Event surfaces.** `subscribe(cb) → unsubscribe` for notifications and data
-  events; `Stream` has no JS bridge. → T6.5
+  a stable `code`. The default boxed rejection must never reach a consumer.
+  **`CollectionOpException`/`OpResult`/`OpFailure` fold into this same model** — a batch
+  partial-failure surfaces as one `AtError`, never a second thrown/returned shape
+  (`js-api.md` §6). → T6.4
+- **J3 — Event surfaces.** `subscribe(cb) → unsubscribe` for notifications and all eight
+  `AtCollection` stream-returning members; `Stream` has no JS bridge. **`CEvent` is not
+  sealed upstream (`:5077`)** — the encoder must map an unknown subtype to a generic
+  `'unknown'` event, never drop it or throw. → T6.5
 - **J4 — The TS-supplied `KeyStore` seam.** Adapt a JS object behind the Dart storage
-  interface, so Node consumers supply storage without a Dart package. → T6.6
+  interface, so Node consumers supply storage without a Dart package. Owned jointly with
+  [`plans/wasm/key-storage.md`](../../../plans/wasm/key-storage.md). → T6.6
 - **J5 — Entry point.** `packages/at_client_web/web/at_client_js.dart` — the `main()`
   that installs the facade on the global scope. Compiled with `dart compile js`; keep the
   dart2wasm build green in CI to preserve the option.
-- **J6 — npm package.** `packages/at_client_web/npm/` — `package.json`, a hand-written
-  `index.js` (which **must** set `globalThis.self` before load, or every Promise hangs on
-  Node) and `index.d.ts`. Ship the `.js.map`.
+- **J6 — npm package.** `packages/at_client_web/npm/` — `package.json` **generated**, not
+  hand-committed (verified dart-sass practice, `js-api.md` §8); `index.js` sets
+  `globalThis.self` before load (or every Promise hangs on Node) **and wraps the raw
+  `@JSExport` object in a real ES class** (private constructor, static `create()`) so
+  `instanceof`/`new` behave correctly — `@JSExport` gives instance members only, no
+  prototype chain. `index.d.ts` stays hand-written (documentation value; dart-sass
+  precedent). Ship the `.js.map`.
 - **J7 — T6 harness**, timeout-bounded throughout, plus a sample TS consumer that
-  `tsc --noEmit` type-checks against the published typings. → T6.1, T6.2, T6.7
+  `tsc --noEmit` type-checks against the published typings. Extend T6.3 to cover
+  `CItem`/`CEvent`/`Predicate` (not just `Future`/`Stream`/`List`/`Uint8List`), and add a
+  gate asserting a JS-written record carries its declared `typeTag` correctly once J1a's
+  route is chosen. → T6.1, T6.2, T6.7
 - **J8 — Resolve JS-1**: measure which implementation `cryptography` selects under
   dart2js and whether Web Crypto removes the deferred Argon2id work
   ([`design.md`](design.md) §2.10).
+- **J9 — Resolve JS-7**: raise the additive `writeTypeTag` change upstream; fall back to
+  J1a's carrier-class shim only if declined.
+- **J10 — Resolve JS-8**: ship the `AtClientManager` singleton documented as one atSign
+  per page/process, plus a Layer B `AtFailure.alreadyInitialised` on a second distinct
+  atSign (~10 lines) — converts silent state corruption into a clear error.
 
 ---
 
