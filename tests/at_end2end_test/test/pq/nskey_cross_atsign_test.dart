@@ -1,6 +1,12 @@
 @Tags(['pq'])
 library;
 
+// The PQ bootstrap is @experimental; reaching for it is the point here. The
+// property under test is that a client wired the way an application wires one
+// can read what a peer sealed to it, and only the client's own bootstrap
+// builds that wiring.
+// ignore_for_file: experimental_member_use
+
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart' show XWingKeyPair;
@@ -46,7 +52,23 @@ void main() {
         .setCurrentAtSign(atSign, namespace, preference);
     final client = manager.atClient;
 
-    final ring = PublishedNskeyKeyRing(client);
+    // The client's OWN ring, not one built here.
+    //
+    // ⚠️ **Hand-building `PublishedNskeyKeyRing(client)` is what broke this
+    // file.** A bare ring has no `NskeyPrivateFiling` — that is derived from
+    // the client's `AtKeysIo`, and only `PqClientBootstrap` does the
+    // derivation — so every private minted lived in one ring object's memory
+    // and nowhere else. This helper is called repeatedly and each call built a
+    // fresh ring, so the second one adopted a generation whose private the
+    // first had held and discarded.
+    //
+    // It passed for as long as each call MINTED rather than adopted. When
+    // minting became adopt-what-is-published — correct, because re-minting
+    // rotates a key out from under peers who already fetched it — the gap
+    // opened. `TestSuiteInitializer` supplies the durable key source this
+    // depends on, at first construction, which is the only point it can be
+    // supplied at.
+    final ring = (client as AtClientImpl).pqBootstrap!.ring;
     client.getPreferences()!.crypto = CryptoConfig.nskey(keyRing: ring);
     await ring.mintAndPublish(namespace);
     await E2ESyncService.getInstance().syncData(client.syncService);
@@ -440,6 +462,15 @@ void main() {
         sync: true);
 
     final aliceSide = await nskeyClient(alice);
+
+    // Alice's ring is the client's own now and survives the atSign switches
+    // this file makes, so it may hold bob's GENUINE advertisement from earlier
+    // — fetched, verified and cached well inside `advertisementTtl`. Sealing
+    // to that cached key is correct behaviour and would make this row pass
+    // without ever meeting the substitution it exists to detect. Dropping the
+    // entry forces the fetch the assertion is actually about.
+    aliceSide.ring.forgetRemote(bob, namespace);
+
     await expectLater(
       aliceSide.client.put(
           AtKey()

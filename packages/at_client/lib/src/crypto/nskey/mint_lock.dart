@@ -90,8 +90,19 @@ class MintLock {
   /// ⚠️ Correct only against an atServer that stops refusing a create once the
   /// record has expired; an older one keeps refusing well past the ttl, which
   /// would make the cooldown effectively permanent.
+  /// [ownLockIsNotContention] lets a caller whose critical section is
+  /// **idempotent** proceed when the lock it meets is one this same enrollment
+  /// took earlier in the cooldown.
+  ///
+  /// Off by default, and that default is the important half. The cooldown
+  /// deliberately binds **rotation** — a rotation is not idempotent, it
+  /// overwrites on purpose, and rate-limiting it is the point of holding the
+  /// lock for the full ttl rather than releasing it. A caller that opts in
+  /// must be one that reads what is published before writing, so meeting its
+  /// own token costs a re-read rather than a second key.
   Future<T?> withLock<T>(
-      AtKey lockKey, Future<T> Function(MintLease lease) mint) async {
+      AtKey lockKey, Future<T> Function(MintLease lease) mint,
+      {bool ownLockIsNotContention = false}) async {
     final ttlMillis = lockKey.metadata.ttl;
     if (ttlMillis == null || ttlMillis <= 0) {
       // Refused rather than defaulted. Nothing deletes this record now, so a
@@ -103,7 +114,8 @@ class MintLock {
     }
     // Stamped before the request goes out — see [MintLease.expiresAt].
     final leaseFrom = DateTime.now();
-    if (!await _take(lockKey)) {
+    if (!await _take(lockKey,
+        ownLockIsNotContention: ownLockIsNotContention)) {
       _logger.info('Another enrollment holds $lockKey; re-reading rather than '
           'waiting for it');
       return null;
@@ -111,12 +123,22 @@ class MintLock {
     return mint(MintLease(leaseFrom.add(Duration(milliseconds: ttlMillis))));
   }
 
-  Future<bool> _take(AtKey lockKey) async {
+  /// This client's identity in a lock record.
+  ///
+  /// The enrollment is the grain the lock is about — the contention it exists
+  /// to resolve is between an atSign's own enrollments — so an enrollment
+  /// meeting its own token is not contention. A client with no enrollment id
+  /// authenticates as the owner and there is only ever one of those, so the
+  /// sentinel below is equally distinct from any enrollment's id.
+  String get _holder => atClient.enrollmentId ?? 'primary';
+
+  Future<bool> _take(AtKey lockKey,
+      {required bool ownLockIsNotContention}) async {
     try {
       await atClient.getRemoteSecondary()!.executeVerb(
           UpdateVerbBuilder()
             ..atKey = lockKey
-            ..value = DateTime.now().toUtc().toIso8601String(),
+            ..value = _holder,
           sync: false);
       return true;
     } catch (e) {
@@ -124,6 +146,42 @@ class MintLock {
       // precisely the contention signal. Anything else that stops us taking
       // the lock is equally a reason not to mint.
       _logger.finer('Could not take $lockKey: $e');
+      if (!ownLockIsNotContention) return false;
+      return _isOwnLock(lockKey);
+    }
+  }
+
+  /// Whether the lock that refused us is one **this enrollment** already holds.
+  ///
+  /// The winner never releases — the ttl does — so for the whole cooldown a
+  /// client that mints and then re-enters loses the election to *itself*, and
+  /// takes the loser path: it re-reads the advertisement rather than
+  /// reconciling, and a loser is not guaranteed to hold the private half of
+  /// what it reads. With a two-minute ttl that window covers an ordinary
+  /// restart, so the case is not exotic.
+  ///
+  /// Proceeding here is safe because the critical section is idempotent: every
+  /// caller reads what is published before minting, so an owner re-entering
+  /// returns the existing record rather than rotating it out from under a peer
+  /// that already fetched it. What the cooldown protects against is a *second
+  /// enrollment* minting, and that is unchanged.
+  ///
+  /// A read that cannot say whose lock it is answers false — the lock's whole
+  /// purpose is to refuse when ownership is unclear.
+  Future<bool> _isOwnLock(AtKey lockKey) async {
+    try {
+      final held = await atClient.getRemoteSecondary()!.executeCommand(
+          'llookup:${lockKey.toString()}\n',
+          auth: true);
+      if (held == null || !held.startsWith('data:')) return false;
+      final value = held.replaceFirst('data:', '').trim();
+      if (value != _holder) return false;
+      _logger.info('$lockKey is this enrollment\'s own lock, taken earlier in '
+          'its cooldown — proceeding rather than treating ourselves as a '
+          'loser');
+      return true;
+    } catch (e) {
+      _logger.finer('Could not read $lockKey to check ownership: $e');
       return false;
     }
   }

@@ -25,6 +25,46 @@ class TestSuiteInitializer {
     return _singleton;
   }
 
+  /// The atSigns whose nskey keyfile this process has already seeded.
+  final _seeded = <String>{};
+
+  /// A durable key source for [atSign], so nskey privates outlive the client.
+  ///
+  /// ⚠️ **Supplied HERE and nowhere later, because it cannot be.**
+  /// `AtClientImpl.create` memoises one client per atSign in
+  /// `atClientInstanceMap` and assigns `_atKeysIo` only while constructing, so
+  /// a later `setCurrentAtSign(..., atKeysIo: ...)` hands it to a cached
+  /// instance that ignores it. This is the first construction, and therefore
+  /// the only place it takes effect.
+  ///
+  /// Without it `PqClientBootstrap` gets `keysIo: null`, builds no
+  /// `NskeyPrivateFiling`, and every nskey private lives only in the ring's
+  /// memory — which the e2e suites discard constantly, because each atSign
+  /// switch stops the outgoing client and builds a new one. A client would
+  /// then adopt its own published advertisement holding no private for it, and
+  /// every read of something sealed to that generation fails with "no nskey
+  /// private held for ...". That is not a property of the product: it is what
+  /// a client with no key source is documented to be, and an application has
+  /// one.
+  ///
+  /// Seeded once per atSign and only when absent. `NskeyPrivateFiling.read`
+  /// answers null on any read failure, so a keyfile that does not exist looks
+  /// exactly like one holding no private — and re-seeding would discard every
+  /// private already filed, which is the whole point of it being durable.
+  Future<AtKeysIo> _nskeyKeyfileFor(
+      String atSign, AtClientPreference preference) async {
+    final keysIo = FileAtKeysIo(
+        filePath: (a) => '${preference.hiveStoragePath}/$a.nskey.atKeys');
+    if (_seeded.add(atSign)) {
+      try {
+        await keysIo.read(atSign);
+      } on Object {
+        await keysIo.write(atSign, AtKeys());
+      }
+    }
+    return keysIo;
+  }
+
   /// Brings [atSign] up on [manager], defaulting to the process-wide singleton.
   ///
   /// Pass a dedicated manager to keep this atSign's client alive alongside
@@ -75,6 +115,7 @@ class TestSuiteInitializer {
       var atClientManager = await (manager ?? AtClientManager.getInstance())
           .setCurrentAtSign(atSign, namespace, atClientPreference,
               atChops: atChops,
+              atKeysIo: await _nskeyKeyfileFor(atSign, atClientPreference),
               enrollmentId: atAuthResponse?.atAuthKeys?.enrollmentId);
       // Set Encryption Keys for currentAtSign
       await AtEncryptionKeysLoader.getInstance()

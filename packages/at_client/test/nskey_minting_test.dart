@@ -29,7 +29,8 @@ class _SpentLeaseLock extends MintLock {
 
   @override
   Future<T?> withLock<T>(
-          AtKey lockKey, Future<T> Function(MintLease lease) mint) =>
+          AtKey lockKey, Future<T> Function(MintLease lease) mint,
+          {bool ownLockIsNotContention = false}) =>
       mint(MintLease(DateTime.now().subtract(const Duration(seconds: 1))));
 }
 
