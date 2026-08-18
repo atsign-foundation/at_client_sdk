@@ -72,6 +72,15 @@ const _liveFiles = <String>[
   'seal-spec.md',
 ];
 
+
+/// A status marker inside a code span is a CITATION of a past status, not a
+/// status. Both guards below strip code spans before matching, because the
+/// correction for a stale label routinely quotes the label it replaced — and
+/// a checker that counts the quotation reports the defect it just fixed. This
+/// project has been caught by the code-span version of this before, in an
+/// anchor checker.
+String _withoutCodeSpans(String s) => s.replaceAll(RegExp(r'`[^`]*`'), '');
+
 void main() {
   group('no LINKED heading is duplicated', () {
     // ⚠️ [_headingSlugs] returns a Set, so a heading written twice in one file
@@ -345,12 +354,12 @@ void main() {
               RegExp('^#{3,4} ${RegExp.escape(id)}[ \n]', multiLine: true)
                   .firstMatch(text);
           if (heading == null) continue;
-          final body = text
+          final body = _withoutCodeSpans(text
               .substring(heading.start)
               .split('\n')
               .skip(1)
               .take(5)
-              .join(' ');
+              .join(' '));
           final hit = done.firstMatch(body);
           if (hit != null) wrong.add('$id: body opens "${hit.group(0)}"');
         }
@@ -360,6 +369,60 @@ void main() {
               'Move the row to DONE — the body is the thing somebody wrote '
               'while doing the work, and the row is the thing every count '
               'reads:\n  ${wrong.join('\n  ')}');
+    });
+  });
+
+  group('a row that says done does not point at a section that says partly', () {
+    /// The inverse of the guard above, and the one that survived it.
+    ///
+    /// 14.6 sat in the DONE table while its own body opened "Status: RESOLVED
+    /// in design, PARTLY BUILT" and went on to name what was still owed. It
+    /// was survivable only because the owed half is also tracked under KE-2 in
+    /// PARKED — but a reader working the DONE table would never learn that.
+    ///
+    /// Only the body's OPENING lines are read, because a finished row's later
+    /// prose routinely recounts what used to be owed.
+    test('no DONE row names a section whose body says it is partial', () {
+      final plan = _read('implementation-plan.md');
+      final detail = _read('detail/implementation-plan.md');
+
+      final doneStart = plan.indexOf('\n## DONE\n') + '\n## DONE\n'.length;
+      expect(doneStart, greaterThan(0), reason: 'the DONE table did not parse');
+      final rest = plan.substring(doneStart);
+      final endOfTable = rest.indexOf('\n## ');
+      final done = endOfTable == -1 ? rest : rest.substring(0, endOfTable);
+
+      final rows = RegExp(r'^\| (14\.\d+)\s', multiLine: true)
+          .allMatches(done)
+          .map((m) => m.group(1)!)
+          .toList();
+      expect(rows, isNotEmpty,
+          reason: 'no DONE rows parsed, so this guard checks nothing');
+
+      final partial =
+          RegExp(r'\bPARTLY (BUILT|DONE)\b|\bMOSTLY DONE\b|\bstill owed\b');
+      final wrong = <String>[];
+      for (final id in rows) {
+        for (final text in [plan, detail]) {
+          final heading =
+              RegExp('^#{3,4} ${RegExp.escape(id)}[ \n]', multiLine: true)
+                  .firstMatch(text);
+          if (heading == null) continue;
+          final body = _withoutCodeSpans(text
+              .substring(heading.start)
+              .split('\n')
+              .skip(1)
+              .take(5)
+              .join(' '));
+          final hit = partial.firstMatch(body);
+          if (hit != null) wrong.add('$id: body opens "${hit.group(0)}"');
+        }
+      }
+      expect(wrong, isEmpty,
+          reason: 'a DONE row points at a section that says it is partial. '
+              'Either the body is stale or the row is — and if the owed half '
+              'is tracked somewhere else, the row has to say where, because '
+              'nobody reading DONE will go looking:\n  ${wrong.join('\n  ')}');
     });
   });
 

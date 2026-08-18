@@ -2042,7 +2042,7 @@ which landed at `f3cfda4d4` as `ver = 0x02`
 
 ### 14.6 The enrollment record's `metadata.keyPackage` is a one-way door
 
-**Status: RESOLVED in design, PARTLY BUILT 2026-08-11. The door opens.** `enroll:update` ([`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
+**Status: BUILT on both sides, 2026-08-13. The door opens, and it has a handle each side.** ⚠️ This read `PARTLY BUILT 2026-08-11` until 2026-08-18, while the row sat in **DONE** — the inverse of the drift that left 14.17 in TODO, and survivable only because the remaining half is tracked under **KE-2** in PARKED, where nobody reading DONE would look. What this item owed is built; what remains is a *consumer*, and that is KE-2's scope, not this one's. `enroll:update` ([`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
 ruling 13, superseding `enroll:updateMetadata` in
 [`decisions.md` 68](decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10))
 reaches `metadata` — along with `apkamPublicKey`, `signingAlgo` and `apsk` —
