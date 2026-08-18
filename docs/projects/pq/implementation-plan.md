@@ -61,11 +61,33 @@ in all three. Construction rejects `disallowLegacyEncryption` true where
 `writesPqByDefault` is false, since such a posture refuses its own writes.
 
 **The behaviour.** A posture is a floor and never downgrades: key material wins
-for authenticating and reading. The client drives its own retrofit at start, in
-the same shape as the nskey mint — every start, non-blocking, local state
-checked first, failure retried next start, usable meanwhile. Nothing is needed
-for capping; the atServer's 720-hour grace already re-arms per sibling and
-exempts the first enrollment.
+for authenticating and reading. Nothing is needed for capping; the atServer's
+720-hour grace already re-arms per sibling and exempts the first enrollment.
+
+⛔ **Client-driven retrofit at start is OWED and BLOCKED, measured 2026-08-19.**
+Ruling 2 asks for it "in the same shape as the nskey mint", and that shape does
+not fit, for three reasons found by opening the code rather than inferred:
+
+1. **`selfRetrofit` replaces the client.** It ends in
+   `AtClientManager.fromAuthSession(...)` and returns a **new**
+   `AtClientManager` under a **new enrollment id**. A `PqClientBootstrap` step
+   belongs to the client being replaced, so "the client stays usable at its
+   current level meanwhile" and "the step succeeded" cannot both hold the way
+   they do for the mint.
+2. **It needs an `AtAuthSession`, which needs an `AtKeysIo`.** The bootstrap
+   holds an `AtClient`. A client constructed without a key source cannot write
+   the new keyfile at all — the same inertness `SigningKeyMinting` has — so the
+   step would be silently a no-op for exactly the clients least able to notice.
+3. **It needs `appName` and `deviceName`, and `AtClientPreference` carries
+   neither** (`appName` exists on `atClientParticulars` and is nullable;
+   there is no `deviceName`). They are not free-form either: the atServer
+   refuses a `(appName, deviceName)` pair that is already approved, so an
+   every-start retrofit needs a deterministic pair plus the local marker ruling
+   2 already calls for — or it mints a fresh enrollment per start.
+
+**Nothing is half-built for this** — `selfRetrofit` has no production caller at
+all today; every call site in the tree is a test. What the row needs first is a
+ruling from gkc on 1 and 3.
 
 **The narrowing.** `disallowLegacyEncryption` becomes posture-only and its
 `AtClientPreference` override goes, which overturns ruling 70's
