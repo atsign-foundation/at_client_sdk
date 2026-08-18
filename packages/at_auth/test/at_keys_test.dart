@@ -89,11 +89,18 @@ void main() {
       expect(typed['atsignKeys'], hasLength(1));
     });
 
-    test('a legacy document round-trips byte-identically through a new build',
+    test('a legacy document round-trips field-for-field through a new build',
         () {
-      // Read, change nothing, write. The bytes must match, because a build
-      // that rewrites files it only opened makes every upgrade look like a
-      // migration.
+      // Read, change nothing, write. Every field must come back with the same
+      // value and no field may be added, because a build that rewrites files
+      // it only opened makes every upgrade look like a migration.
+      //
+      // Field-for-field, NOT byte-identical, and the name says so: this
+      // compares two Maps, and Dart's Map equality ignores key order. The
+      // emitter has one fixed field order, so a legacy file written elsewhere
+      // comes back with the same entries in a different sequence. The test
+      // said "byte-identically" until 2026-08-18, which is what made an
+      // acceptance row claiming byte identity read as already proven.
       final reread = AtKeys.fromJson(Map<String, dynamic>.from(encryptedAtKeysMap))
         ..atsign = '@alice🛠'.toAtsign();
       expect(reread.toJson(), equals(encryptedAtKeysMap));

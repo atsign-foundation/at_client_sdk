@@ -1680,30 +1680,79 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
 
 ### 16.2 The keyfile rows
 
-- **UC-G1.1 · the enrollment id is derived, not stored.**
-  *Given* a keyfile holding one active `privateAuthentication` material.
-  *When* a client reads it with no enrollment id supplied.
-  *Then* it authenticates as that material's enrollment, and no
-  `activeEnrollmentId` field exists anywhere in the document.
+- **UC-G1.1 · the derivation is offered, not applied.**
+  *Given* a keyfile holding exactly one active `privateAuthentication`
+  material.
+  *When* a caller asks `AtKeys.resolveAuthenticatingEnrollment()`.
+  *Then* it returns that material's enrollment id; with two it throws naming
+  both; with none it returns null.
+  *And* authentication does **not** apply it: handed a request with no
+  enrollment id, `AtAuthImpl.authenticate` uses the flat stored
+  `AtKeys.enrollmentId` — on a retrofitted file deliberately the legacy
+  enrollment, not the active typed material's.
 
-- **UC-G1.2 · a retrofit leaves exactly one active authentication key.**
+  ⚠️ **This row read "the enrollment id is derived, not stored", and asserted
+  that a client reading with no id supplied authenticates as the active
+  material's enrollment. Both halves were false.** The implicit derivation it
+  described (`AtKeys.activeEnrollmentId`) existed for three days — added
+  2026-08-11, the day this row was written, and deleted 2026-08-14 by
+  [`decisions.md` 100](detail/decisions.md#100-the-seven-shapes-ruling-99-left-open-2026-08-14)
+  ruling 1, which replaced guessing with a resolver you invoke by name.
+  `resolveAuthenticatingEnrollment()` has **zero production callers**, which is
+  the point of it rather than a gap. Corrected 2026-08-18.
+
+- **UC-G1.2 · a retrofit leaves exactly one active authentication key, and
+  touches nothing legacy.**
   *Given* a legacy keyfile that then retrofits.
   *When* the retrofit completes.
-  *Then* the legacy APKAM material is `retired`, the new one is `active`, the
-  file-wide invariant holds, and UC-G1.1's derivation returns the **new**
-  enrollment id.
+  *Then* the new APKAM material is `active` under the new enrollment id and is
+  the only active `privateAuthentication` in the document; the legacy APKAM
+  keypair is left in the flat fields **byte-identical and statusless**; and
+  UC-G1.1's resolver returns the new enrollment id.
+
+  ⚠️ **This row said "the legacy APKAM material is `retired`", and there is no
+  such material to retire.** The legacy keypair lives in the flat
+  `apkamPublicKey`/`apkamPrivateKey` fields, which are `AtBytes?` with no
+  status field at all; the retrofit leaves them untouched so the capped legacy
+  enrollment goes on authenticating, and the legacy enrollment is capped by the
+  atServer rather than by the client. The file-wide invariant does hold, but
+  **vacuously** — `refuseSecondLiveEnrollment` only ever sees typed materials,
+  so the flat key is invisible to it. A scenario written to the old wording
+  would have gone red, or worse prompted someone to clear those fields, which
+  is exactly what the byte-identical legacy round-trip forbids. Corrected
+  2026-08-18.
 
 - **UC-G1.3 · retirement frees the slot.**
   *Given* an active `privateAuthentication` for enrollment E.
   *When* it is retired and a replacement filed under the same enrollment.
-  *Then* `addKey` accepts it — the arm that throws today. The contrast arm (two
-  active for one enrollment) must still throw.
+  *Then* `addKey` accepts it under a **new** keyId, because the invariants
+  count only `active` material. A replacement re-using the retired key's keyId
+  is still refused — that check is status-blind. Contrast arm: without the
+  retire, the add throws from `AtKeysAssurance.refuseSecondLiveEnrollment`.
 
-- **UC-G1.4 · a legacy keyfile round-trips byte-identically.**
+  ⚠️ **This row said "— the arm that throws today", and that clause was false
+  92 minutes after it was written**: `c7e2ccef4` made both invariants
+  status-aware the same evening. [`decisions.md` 91](detail/decisions.md#913-the-rulings)
+  ruling 4 still carried the same stale probe result and is amended in place.
+  Corrected 2026-08-18.
+
+- **UC-G1.4 · opening a legacy keyfile does not upgrade it.**
   *Given* a `.atKeys` file in the pure legacy shape.
   *When* a new build reads it, changes nothing, and flushes.
-  *Then* the file is byte-identical, with no `version` key added. A
-  `version: 1` file holding `keys: []` comes back as pure legacy.
+  *Then* the re-emitted document holds the same fields with the same values and
+  **no `version`, `atsign`, `enrollments` or `atsignKeys` key** — every
+  self-encrypted field's ciphertext unchanged, and only the key **order** may
+  differ, because the emitter has one fixed order. A `version: 1` document
+  carrying a top-level `keys` array is **refused by name**, not read as legacy.
+
+  ⚠️ **Both of this row's sentences were wrong.** It promised the file comes
+  back *byte-identical*, which a foreign-ordered legacy file does not — the
+  guarantee is field-for-field. And it said "a `version: 1` file holding
+  `keys: []` comes back as pure legacy", which is now the **opposite** of the
+  code: since `cb3848b4d` (2026-08-14) `AtKeys.fromJson` throws on
+  `containsKey('keys')`, empty array included, because reading it would file
+  the material as legacy metadata and authenticate as the wrong enrollment.
+  Corrected 2026-08-18.
 
 ### 16.3 The wire rows
 
@@ -1712,12 +1761,34 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   string, from that release's `mixins/apkam_signing.dart`.
   *When* a current build verifies an envelope from that enrollment.
   *Then* it succeeds, reading the record as a single `rsa2048` entry. The
-  writer arm must show the current build never emits that shape.
+  writer arm must show the current build **still emits** that shape:
+  `bareApskValueOf` spells a single active `rsa2048` entry as the bare string,
+  which is what keeps `now` and `rollout1` readable by un-upgraded peers
+  ([`decisions.md` 98.1](detail/decisions.md#981-the-stages)); only a second
+  key, or a non-`rsa2048` key, forces the array.
 
-- **UC-G1.6 · an unversioned envelope still verifies.**
-  *Given* an envelope with a bare `signature` and no `v`.
-  *When* a current build verifies it.
-  *Then* it succeeds.
+  ⚠️ **The writer sentence read "never emits that shape" and was inverted.**
+  The current build emits it deliberately, under the default posture, and
+  ruling 98.1 requires it. A writer arm written to the old wording would have
+  asserted the opposite of a property the rollout depends on. Corrected
+  2026-08-18; the sentence it was copied from, in ruling 91.4's release table,
+  is amended in the same sweep.
+
+- **UC-G1.6 · an unversioned envelope is refused, and the refusal names why.**
+  *Given* (a) the released 3.14.0 flat envelope — a bare `signature` sibling of
+  the payload, no `v` — and (b) a current-shape envelope whose protected header
+  omits `v`.
+  *When* a current build reads (a) and verifies (b).
+  *Then* (a) is refused at parse, and (b) is refused at verify naming the
+  version it read. There is deliberately no tolerant reading.
+
+  ⚠️ **This row said an unversioned envelope "still verifies", and the code
+  refuses it twice over.** [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
+  deleted the predecessor shapes rather than carrying them, so
+  `SignedEnvelope.fromJson` requires a non-empty top-level `signatures` array
+  and a document whose signature is a flat sibling of the payload never
+  parses. The tree already pins this row's exact opposite as an accepted break,
+  in `released_envelope_incompatibility_test.dart`. Corrected 2026-08-18.
 
 - **UC-G1.7 · the verifier takes the strongest and does not fall back.**
   *Given* an envelope carrying valid `rsa2048` and **corrupted** `mldsa65`
@@ -1786,8 +1857,15 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   *When* it sends `enroll:update` with a new `apkamPublicKey`, `signingAlgo`
   and a valid `apkamPublicKeySignature`.
   *Then* the record's key is replaced, the id, appName, deviceName, namespaces
-  and approval state are untouched, `_apsk` is rewritten from the request's
-  `apsk`, and the **new** key authenticates while the old one no longer does.
+  and approval state are untouched, and the **new** key authenticates while the
+  old one no longer does. `_apsk` is **not** rewritten: this request names three
+  fields and `apsk` is not one of them, so the client sends none and the
+  atServer leaves the record's own value alone.
+
+  ⚠️ **This row claimed "`_apsk` is rewritten from the request's `apsk`"**,
+  which its own *When* forbids — a rotation sends `apkamPublicKey`,
+  `signingAlgo` and `apkamPublicKeySignature`, and nothing else. Corrected
+  2026-08-18.
 
 - **UC-G1.11 · proof of possession is required.**
   *Given* the same request with `apkamPublicKeySignature` absent, or signed by
@@ -1796,16 +1874,33 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   missing signature and a wrong one must each be refused, and the valid arm
   must succeed, or the test is comparing a case with itself.
 
-- **UC-G1.12 · namespaces and approval state stay out of reach.**
-  *Given* an `enroll:update` naming `namespaces` or an approval state.
-  *Then* it is refused. This is the privilege-escalation guard, so the refusal
-  is asserted by its own error rather than by "it failed".
+- **UC-G1.12 · namespaces stay out of reach, and approval state has no reach
+  to stay out of.**
+  *Given* an `enroll:update` naming `namespaces`.
+  *Then* the atServer refuses it by its own named error, not by "it failed" —
+  this is the privilege-escalation guard.
+  *And* the client cannot name either one: the update request carries no field
+  for namespaces or approval state at all.
 
-- **UC-G1.13 · self-only and approved-only.**
+  ⚠️ **This row paired the two as though they were the same guard.** They are
+  not: there is **no approval-state field anywhere on the request**, so no
+  request can name one and nothing refuses one. A scenario written literally
+  against the old wording would have looked for a refusal that cannot exist.
+  Corrected 2026-08-18.
+
+- **UC-G1.13 · self-only.**
   *Given* an `enroll:update` for enrollment E sent on a connection
-  authenticated as a different enrollment, as the owner, or over legacy PKAM.
-  *Then* each is refused. Repeated for pending, denied, revoked and expired
-  targets.
+  authenticated as a different enrollment, and separately on one carrying no
+  enrollment id at all.
+  *Then* each is refused, by the self-only check.
+
+  ⚠️ **This row promised two guards and its *Given* can only ever reach one.**
+  The self-only check runs **before the target record is fetched**, so the
+  target's approval state is never read on any path the row describes — the
+  four repeats over pending, denied, revoked and expired targets are the same
+  measurement four times, and none of them exercises an approved-only guard.
+  Corrected 2026-08-18; the approved-only property belongs to the *caller's*
+  own enrollment and is a different row.
 
 ### 16.5 The rollout matrix
 
