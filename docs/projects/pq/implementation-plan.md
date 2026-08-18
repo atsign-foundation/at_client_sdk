@@ -1414,6 +1414,15 @@ One row each; the detail is in
 column reports what the plan **records**, which is not always what was
 measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none).
 
+⚠️ **So not every row here says "done", and the heading names this section's
+place in the TODO / DONE / PARKED triad rather than every row's state.** Six
+project rows record *no status* or a partial one and point at 14.25; **IS-1
+records an OPEN PR** (`at_server#2683`, verified against GitHub 2026-08-18).
+That is deliberate and the column header says so — but do not read a row's
+presence here as delivery. What is actually left for D1 is
+[14.18](#1418-the-remaining-d1-initial-development-sequence)'s steps, not the
+absence of a row from this table.
+
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
 | 14.15  | Pre-PR rails checklist                                  | DONE 2026-08-10 — the compose-image item is struck in the body and nothing needs reverting before a PR. It stayed in TODO until 2026-08-18 because the section opened with a condition instead of a status. The external gate it names is step 32's blocker |
