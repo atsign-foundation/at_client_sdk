@@ -119,6 +119,22 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-C1.5  | The retrofit axis: an argless retrofit follows the posture                          | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.6  | The grouped posture: one value moves all five axes                                  | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.7  | The signing-set axis: which keys an enrollment holds                                | PROVEN    | `c1_rollout_test.dart`       |
+| UC-G1.1   | The derivation is offered, not applied                                             | PROVEN    | `g1_keyfile_test.dart` |
+| UC-G1.2   | A retrofit leaves one active auth key, touching nothing legacy                     | PROVEN    | `g1_keyfile_test.dart` |
+| UC-G1.3   | Retirement frees the slot                                                          | PROVEN    | `g1_keyfile_test.dart` |
+| UC-G1.4   | Opening a legacy keyfile does not upgrade it                                       | PROVEN    | `g1_keyfile_test.dart` |
+| UC-G1.5   | A bare-string `_apsk` still verifies, and is still emitted                         | PROVEN    | `g1_wire_test.dart` |
+| UC-G1.6   | An unversioned envelope is refused, and the refusal names why                      | PROVEN    | `g1_wire_test.dart` |
+| UC-G1.7   | The verifier takes the strongest and does not fall back                            | PROVEN    | `g1_wire_test.dart` |
+| UC-G1.8   | The rollout-1 signing key stays verifiable after rollout 2                         | PROVEN    | `g1_wire_test.dart` |
+| UC-G1.9   | A retired algorithm still verifies history                                         | PROVEN    | `g1_wire_test.dart` |
+| UC-G1.9a  | The client mints what the in-use set names, advertising first                      | PROVEN    | `g1_wire_test.dart` |
+| UC-G1.10  | `enroll:update` rekey keeps the enrollment id                                      | PROVEN    | `g1_enroll_update_test.dart` |
+| UC-G1.11  | Proof of possession is required                                                    | PROVEN    | `g1_enroll_update_test.dart` |
+| UC-G1.12  | Namespaces stay out of reach                                                       | PROVEN    | `g1_enroll_update_test.dart` |
+| UC-G1.13  | `enroll:update` is self-only                                                       | PROVEN    | `g1_enroll_update_test.dart` |
+| UC-G1.14  | Rollout 1 is invisible to a deployed peer                                          | PROVEN    | `g1_rollout_matrix_test.dart` |
+| UC-G1.15  | Every rollout stage verifies every other stage's envelope                          | PROVEN    | `g1_rollout_matrix_test.dart` |
 
 ---
 
@@ -1680,7 +1696,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
 
 ### 16.2 The keyfile rows
 
-- **UC-G1.1 · the derivation is offered, not applied.**
+#### UC-G1.1 — the derivation is offered, not applied
   *Given* a keyfile holding exactly one active `privateAuthentication`
   material.
   *When* a caller asks `AtKeys.resolveAuthenticatingEnrollment()`.
@@ -1701,8 +1717,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   `resolveAuthenticatingEnrollment()` has **zero production callers**, which is
   the point of it rather than a gap. Corrected 2026-08-18.
 
-- **UC-G1.2 · a retrofit leaves exactly one active authentication key, and
-  touches nothing legacy.**
+#### UC-G1.2 — a retrofit leaves exactly one active authentication key, and touches nothing legacy
   *Given* a legacy keyfile that then retrofits.
   *When* the retrofit completes.
   *Then* the new APKAM material is `active` under the new enrollment id and is
@@ -1722,7 +1737,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   is exactly what the byte-identical legacy round-trip forbids. Corrected
   2026-08-18.
 
-- **UC-G1.3 · retirement frees the slot.**
+#### UC-G1.3 — retirement frees the slot
   *Given* an active `privateAuthentication` for enrollment E.
   *When* it is retired and a replacement filed under the same enrollment.
   *Then* `addKey` accepts it under a **new** keyId, because the invariants
@@ -1736,7 +1751,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   ruling 4 still carried the same stale probe result and is amended in place.
   Corrected 2026-08-18.
 
-- **UC-G1.4 · opening a legacy keyfile does not upgrade it.**
+#### UC-G1.4 — opening a legacy keyfile does not upgrade it
   *Given* a `.atKeys` file in the pure legacy shape.
   *When* a new build reads it, changes nothing, and flushes.
   *Then* the re-emitted document holds the same fields with the same values and
@@ -1756,7 +1771,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
 
 ### 16.3 The wire rows
 
-- **UC-G1.5 · a bare-string `_apsk` still verifies.**
+#### UC-G1.5 — a bare-string `_apsk` still verifies
   *Given* an `_apsk` published by at_client **3.13.0** — a bare public-key
   string, from that release's `mixins/apkam_signing.dart`.
   *When* a current build verifies an envelope from that enrollment.
@@ -1774,7 +1789,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   2026-08-18; the sentence it was copied from, in ruling 91.4's release table,
   is amended in the same sweep.
 
-- **UC-G1.6 · an unversioned envelope is refused, and the refusal names why.**
+#### UC-G1.6 — an unversioned envelope is refused, and the refusal names why
   *Given* (a) the released 3.14.0 flat envelope — a bare `signature` sibling of
   the payload, no `v` — and (b) a current-shape envelope whose protected header
   omits `v`.
@@ -1790,7 +1805,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   parses. The tree already pins this row's exact opposite as an accepted break,
   in `released_envelope_incompatibility_test.dart`. Corrected 2026-08-18.
 
-- **UC-G1.7 · the verifier takes the strongest and does not fall back.**
+#### UC-G1.7 — the verifier takes the strongest and does not fall back
   *Given* an envelope carrying valid `rsa2048` and **corrupted** `mldsa65`
   signatures, against an `_apsk` advertising both.
   *When* a build that implements ML-DSA verifies it.
@@ -1808,8 +1823,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   can differ, so appending a signature under a stronger algorithm carrying
   another kid makes a caller act on a signer whose signature was never checked.
 
-- **UC-G1.8 · the rollout-1 signing key stays verifiable after rollout 2, even
-  under its own algorithm.**
+#### UC-G1.8 — the rollout-1 signing key stays verifiable after rollout 2, even under its own algorithm
   *Given* an envelope signed at rollout 1 by the enrollment's **RSA-2048
   signing key** — the one it holds from birth, minted before it submitted and
   advertised bare in place of the APKAM authentication key.
@@ -1836,7 +1850,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   was real but proved something else: two **ML-DSA signing** keys sharing an
   algorithm, not the auth key. Corrected 2026-08-18.
 
-- **UC-G1.9 · a retired algorithm still verifies history.**
+#### UC-G1.9 — a retired algorithm still verifies history
   *Given* an algorithm dropped from the in-use set.
   *Then* new envelopes carry no signature of it, its `_apsk` entry remains with
   `status: retired`, and an envelope signed with it before the drop still
@@ -1854,8 +1868,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   matrix copies a fresh keyfile per cell, so every cell measures a client born
   at its stage and none moves between two.
 
-- **UC-G1.9a · the client mints what the in-use set names, advertising before
-  filing.**
+#### UC-G1.9a — the client mints what the in-use set names, advertising before filing
   *Given* an enrollment holding no signing key of its own and a preference
   whose in-use set names one.
   *When* the client starts.
@@ -1868,7 +1881,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
 
 ### 16.4 `enroll:update` rows
 
-- **UC-G1.10 · rekey keeps the enrollment id.**
+#### UC-G1.10 — rekey keeps the enrollment id
   *Given* an approved enrollment authenticated on its own connection.
   *When* it sends `enroll:update` with a new `apkamPublicKey`, `signingAlgo`
   and a valid `apkamPublicKeySignature`.
@@ -1883,15 +1896,14 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   `signingAlgo` and `apkamPublicKeySignature`, and nothing else. Corrected
   2026-08-18.
 
-- **UC-G1.11 · proof of possession is required.**
+#### UC-G1.11 — proof of possession is required
   *Given* the same request with `apkamPublicKeySignature` absent, or signed by
   a key other than the one being installed.
   *Then* the atServer refuses and the record is unchanged. Both arms run: a
   missing signature and a wrong one must each be refused, and the valid arm
   must succeed, or the test is comparing a case with itself.
 
-- **UC-G1.12 · namespaces stay out of reach, and approval state has no reach
-  to stay out of.**
+#### UC-G1.12 — namespaces stay out of reach, and approval state has no reach to stay out of
   *Given* an `enroll:update` naming `namespaces`.
   *Then* the atServer refuses it by its own named error, not by "it failed" —
   this is the privilege-escalation guard.
@@ -1904,7 +1916,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   against the old wording would have looked for a refusal that cannot exist.
   Corrected 2026-08-18.
 
-- **UC-G1.13 · self-only.**
+#### UC-G1.13 — self-only
   *Given* an `enroll:update` for enrollment E sent on a connection
   authenticated as a different enrollment, and separately on one carrying no
   enrollment id at all.
@@ -2016,7 +2028,7 @@ capability-before-active is unaffected and lives in
 [`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11);
 what is gone is the claim that this matrix demonstrates it.
 
-- **UC-G1.15 · every rollout stage verifies every other stage's envelope.**
+#### UC-G1.15 — every rollout stage verifies every other stage's envelope
   *Given* a sender and a receiver, each at one of `now`, `rollout1`,
   `rollout2` — nine cells, both halves this tree.
   *When* the sender signs an envelope at its stage, leaves it on the atServer,
@@ -2040,7 +2052,7 @@ what is gone is the claim that this matrix demonstrates it.
   Proven in `tests/at_functional_test/test/pq_rollout_matrix_test.dart`, test
   `UC-G1.15`.
 
-- **UC-G1.14 · rollout 1 is invisible to a deployed peer.**
+#### UC-G1.14 — rollout 1 is invisible to a deployed peer
   *Given* a sender at rollout 1 — an ML-DSA-65 authentication key and a freshly
   minted RSA-2048 signing key.
   *When* a **published-arm** client (at_client 3.14.0, resolved from pub.dev)

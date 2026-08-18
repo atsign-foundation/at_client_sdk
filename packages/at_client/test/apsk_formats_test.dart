@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, KeyEntryStatus, apskAdvertisement;
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/src/signing/apsk_composition.dart'
+    show apskEntries, apskValueOf;
 import 'package:at_client/src/signing/envelope_signature.dart';
 import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:test/test.dart';
@@ -34,6 +37,21 @@ void main() {
       expect(parsed.publicKey, 'MIIBIjANBgkq-not-really-but-bare',
           reason: 'the bare form is what every published _apsk carries today, '
               'and what NoPorts parses — it must round-trip untouched');
+    });
+
+    test('a bare value reads as exactly ONE active rsa2048 entry', () {
+      // The clause UC-G1.5 turns on and the one nothing asserted: not merely
+      // that the bare form is read, but that it is read as a SINGLE active
+      // entry. A reader that produced two, or one marked retired, would still
+      // satisfy the verbatim test above while changing what a verifier
+      // selects on.
+      const bare = 'MIIBIjANBgkq-not-really-but-bare';
+      final parsed = parseApskValue(bare);
+
+      expect(parsed.keys, hasLength(1));
+      expect(parsed.keys.single.alg, SigningAlgoType.rsa2048);
+      expect(parsed.keys.single.status, KeyEntryStatus.active);
+      expect(parsed.keys.single.pub, bare);
     });
 
     test('a structured value that advertises no keys is refused', () {
@@ -130,6 +148,73 @@ void main() {
               'the array must fail their parse loudly, never mis-read — which '
               'is why a plain-legacy enrollment publishes the bare form and '
               'not this');
+    });
+  });
+
+  group('the writer still emits the bare form', () {
+    // UC-G1.5's writer arm, and it asserts the OPPOSITE of what that row said
+    // until 2026-08-18. The row read "the current build never emits that
+    // shape"; the build emits it deliberately, under the default posture,
+    // because a single active rsa2048 entry is exactly what an un-upgraded
+    // peer can still parse. Only a second key, or a non-rsa2048 key, forces
+    // the array.
+    // Valid base64: `ApskSigningKey.forPublicKey` derives each entry's `kid`
+    // by decoding the key, so a placeholder that is not base64 fails in the
+    // composer rather than in the assertion.
+    final pub = base64Encode(utf8.encode('rsa-public-half'));
+
+    ApkamSigningKeys rsa(String p) => ApkamSigningKeys(
+        algorithm: SigningAlgoType.rsa2048, publicKey: p, privateKey: 'priv');
+
+    test('one active rsa2048 key is spelled bare, not as the array', () {
+      final value = apskValueOf(apskEntries(
+          signing: const [], retired: const [], authentication: rsa(pub)));
+
+      expect(value, pub);
+      expect(value, isNot(startsWith('{')),
+          reason: 'a bare-RSA consumer base64-decodes this value; JSON where '
+              'a bare key would do breaks everything already deployed');
+    });
+
+    test('a second key forces the array — so the assertion above discriminates',
+        () {
+      // The control. Without it the test above is satisfied by a writer that
+      // can only ever emit the bare form, and the rule it names would be
+      // untested rather than proven.
+      final value = apskValueOf(apskEntries(
+          signing: [rsa(pub), rsa(base64Encode(utf8.encode('second')))],
+          retired: const [],
+          authentication: null));
+
+      expect(value, startsWith('{'));
+    });
+
+    test('and a non-rsa2048 key forces it too', () {
+      final value = apskValueOf(apskEntries(
+          signing: [
+            ApkamSigningKeys(
+                algorithm: SigningAlgoType.mldsa65,
+                publicKey: base64Encode(utf8.encode('mldsa-public-half')),
+                privateKey: 'priv')
+          ],
+          retired: const [],
+          authentication: null));
+
+      expect(value, startsWith('{'));
+    });
+
+    test('what it emits bare reads back as what it wrote', () {
+      // The round trip, which is the property the row is really about: this
+      // writer's output is this reader's input, and a change to either that
+      // did not move the other would show up here.
+      final value = apskValueOf(apskEntries(
+          signing: const [], retired: const [], authentication: rsa(pub)));
+      final parsed = parseApskValue(value);
+
+      expect(parsed.keys, hasLength(1));
+      expect(parsed.keys.single.alg, SigningAlgoType.rsa2048);
+      expect(parsed.keys.single.status, KeyEntryStatus.active);
+      expect(parsed.keys.single.pub, pub);
     });
   });
 

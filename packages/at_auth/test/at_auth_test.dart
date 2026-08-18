@@ -97,6 +97,30 @@ void main() {
       expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
     });
 
+    test('with no enrollment id supplied, the FLAT stored one is used',
+        () async {
+      // UC-G1.1's second clause. `AtKeys.resolveAuthenticatingEnrollment()`
+      // derives the enrollment from the unique active privateAuthentication
+      // material and is deliberately NOT applied here: authentication
+      // defaults to the flat, stored, deprecated `AtKeys.enrollmentId`.
+      //
+      // The fixture is what makes this discriminate. It is a pure legacy
+      // keyfile - flat fields and a stored enrollmentId, no typed material -
+      // so the resolver's answer is null while the stored id is real. A build
+      // that had quietly switched to the derivation would authenticate as
+      // null here rather than as the id below.
+      final atKeys = await fileAtKeysIo.read('@alice🛠'.toAtsign());
+
+      expect(atKeys.resolveAuthenticatingEnrollment(), isNull,
+          reason: 'the fixture holds no typed authentication material, so the '
+              'derivation has nothing to resolve — which is what makes the '
+              'assertion below about the STORED field specifically');
+      // ignore: deprecated_member_use_from_same_package
+      expect(atKeys.enrollmentId, testEnrollmentId,
+          reason: 'and the stored field is what a no-id request falls back '
+              'to, per AtAuthImpl.authenticate');
+    });
+
     test(
         'validateAtServer honours overallTimeout instead of running all retries',
         () async {

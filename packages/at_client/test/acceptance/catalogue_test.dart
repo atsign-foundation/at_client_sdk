@@ -76,6 +76,43 @@ void main() {
         reason: 'skip: refers to a constant blockers.dart does not declare');
   });
 
+  test('no use-case heading is invisible to the id pattern', () {
+    // The guard that watches the guard.
+    //
+    // Narrowing `ucIdPattern` does NOT turn this suite red — it turns it
+    // silently green, because the rows it stops admitting disappear from the
+    // catalogue's view along with the scenarios that cite them, and the row
+    // counts still reconcile because they are counted per FILE rather than per
+    // id. Measured 2026-08-18: reverting the class to `UC-[ABC]` with sixteen
+    // `UC-G1.x` rows and scenarios in place left the whole suite passing.
+    //
+    // That is how the G cluster went a week describing deleted code while
+    // every rail was green. So this reads the headings with a DELIBERATELY
+    // permissive pattern and asserts the real one admits each — a cluster can
+    // only leave the catalogue on purpose, by deleting its rows.
+    final permissive = RegExp(r'^#{2,4} +(?:[\d.]+ +)?(UC-[A-Z]+\d+\.\d+[a-z]?) +— ',
+        multiLine: true);
+    final admitted = RegExp('^$ucIdPattern\$');
+
+    final headings = permissive
+        .allMatches(catalogueFile().readAsStringSync())
+        .map((m) => m.group(1)!)
+        .toSet();
+
+    expect(headings, isNotEmpty,
+        reason: 'the permissive pattern found no use-case headings at all, so '
+            'this guard is checking nothing — it has stopped matching the '
+            'catalogue rather than the catalogue having emptied');
+
+    final invisible = headings.where((id) => !admitted.hasMatch(id)).toSet();
+    expect(invisible, isEmpty,
+        reason: 'these use cases have headings the catalogue guards cannot '
+            'see, because ucIdPattern does not admit them. Nothing else goes '
+            'red for this: they simply stop being checked, and their rows are '
+            'then free to drift from the tree. Widen ucIdPattern, or delete '
+            'the rows deliberately');
+  });
+
   test('the README row counts match the scenarios', () {
     final rows = scenarioCount();
     final skipped = skippedCount();

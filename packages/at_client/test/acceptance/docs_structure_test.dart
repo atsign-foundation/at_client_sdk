@@ -250,7 +250,11 @@ void main() {
 
   group('the catalogue status table says what the scenarios do', () {
     // Rows look like: | UC-A2.5 | ... | BLOCKED | `ke2` |
-    final row = RegExp(r'^\|\s*(UC-[ABC]\d+\.\d+)\s*\|[^|]*\|\s*(\w[\w ]*?)\s*\|',
+    // The id shape comes from manifest.dart so widening the catalogue to a
+    // new cluster is one edit. This guard used to spell it out itself, and
+    // adding the G cluster reddened it here — a place that reads as unrelated
+    // to "the catalogue gained rows".
+    final row = RegExp('^\\|\\s*($ucIdPattern)\\s*\\|[^|]*\\|\\s*(\\w[\\w ]*?)\\s*\\|',
         multiLine: true);
 
     test('every table row is a use case the catalogue defines', () {
@@ -321,7 +325,7 @@ void main() {
             ..._read(f).split('\n').map((l) => '$f $l'),
         ];
 
-    final ucId = RegExp(r'UC-[ABC]\d+\.\d+');
+    final ucId = RegExp(ucIdPattern);
 
     test('every use case the plan cites is one the catalogue defines', () {
       final defined = catalogueUseCases().map((u) => u.id).toSet();
@@ -343,7 +347,7 @@ void main() {
         () {
       final status = <String, String>{
         for (final m in RegExp(
-                r'^\|\s*(UC-[ABC]\d+\.\d+)\s*\|[^|]*\|\s*(\w[\w ]*?)\s*\|',
+                '^\\|\\s*($ucIdPattern)\\s*\\|[^|]*\\|\\s*(\\w[\\w ]*?)\\s*\\|',
                 multiLine: true)
             .allMatches(_read('acceptance.md')))
           m.group(1)!: m.group(2)!.trim(),

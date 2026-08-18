@@ -117,7 +117,7 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## The catalogue
 
-**63 rows** — the catalogue's 53 use cases become 53 scenarios (UC-A5.1 splits
+**79 rows** — the catalogue's 53 use cases become 53 scenarios (UC-A5.1 splits
 and UC-C1.3 is withdrawn, both below), plus 10 cross-cutting invariants.
 
 | Cluster                       | Scenarios                        | Blocked on   |
@@ -158,7 +158,7 @@ the 45** rows as the catalogue stood then, and no data-path row could go green u
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**2 of the 63** rows are skipped, and the burn-down went back above zero on
+**2 of the 79** rows are skipped, and the burn-down went back above zero on
 2026-08-10 rather than drifting there. `enroll:updateMetadata` was ruled
 ([`decisions.md` 68](../../../../docs/projects/pq/decisions.md)) and brought two
 new rows with it — UC-A2.5 and UC-A2.6 — so the catalogue grew by two use cases

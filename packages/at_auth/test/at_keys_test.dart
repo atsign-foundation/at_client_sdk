@@ -112,6 +112,46 @@ void main() {
         throwsA(isA<AtKeysUnsupportedVersionException>()),
       );
     });
+
+    test('a version 1 document carrying a top-level keys array is refused', () {
+      // The shape at_auth 3.3.0 wrote before the document grouped by
+      // enrollment. It is refused rather than read, because `keys` is no
+      // longer reserved: parsing one would sweep the whole array into
+      // `metadata` as a legacy value, leave the document reading as untyped,
+      // and authenticate from the flat block as the LEGACY enrollment while
+      // the live enrollment's credentials sat unread beside it.
+      //
+      // The empty array matters as much as a populated one, and is the arm
+      // that reads as harmless — 3.3.0 emitted `keys: []` on any flush of a
+      // file holding no typed material.
+      final shapes = <List<Object?>>[
+        [],
+        [
+          {'keyId': 'auth:rsa2048:1'}
+        ],
+      ];
+      for (final keys in shapes) {
+        expect(
+          () => AtKeys.fromJson(
+              {'version': 1, 'atsign': '@alice', 'keys': keys}),
+          throwsA(isA<AtKeysValidationException>().having(
+              (e) => e.message, 'message', contains('top-level "keys" array'))),
+          reason: 'refused by its own message, not by any validation throw: '
+              'a test satisfied by an unrelated exception would stay green '
+              'through a change that removed this guard',
+        );
+      }
+    });
+
+    test('and the same document without it parses', () {
+      // The control arm. Without it the assertion above is satisfied by a
+      // `fromJson` that refuses everything, and the guard it names could be
+      // deleted with the test still red for a different reason.
+      final keys = AtKeys.fromJson(
+          {'version': 1, 'atsign': '@alice', 'enrollments': <Object?>[]});
+      expect(keys.atsign, '@alice'.toAtsign());
+      expect(keys.keys, isEmpty);
+    });
   });
 
   group('AtKeys AtChops transformers', () {

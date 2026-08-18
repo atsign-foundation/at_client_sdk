@@ -37,6 +37,10 @@ const scenarioFiles = <String>[
   'b4_mixed_cross_test.dart',
   'b5_edge_cases_test.dart',
   'c1_rollout_test.dart',
+  'g1_keyfile_test.dart',
+  'g1_wire_test.dart',
+  'g1_enroll_update_test.dart',
+  'g1_rollout_matrix_test.dart',
   'cross_cutting_test.dart',
 ];
 
@@ -71,18 +75,49 @@ class UseCase {
   String toString() => '$id — $title';
 }
 
+/// The shape of a use-case id, in ONE place.
+///
+/// ⚠️ **Widening the catalogue to a new cluster means widening this, and
+/// nothing else.** It used to be spelled out in every regex that needed it —
+/// three here and three in `docs_structure_test.dart` — and the ledger's note
+/// about the last widening says "both of them, doc-side and test-side" because
+/// there were two at the time. By 2026-08-18 there were six, the note still
+/// said two, and adding the `G` cluster went red in a place that looked
+/// unrelated: the status-table guard, whose own copy nobody had thought to
+/// grep for.
+///
+/// The optional trailing letter is for a row inserted between two that were
+/// already numbered — `UC-G1.9a` sits between 9 and 10 and is its own use
+/// case. It does NOT capture the `(a)`/`(b)` suffix a SCENARIO uses to split
+/// one row into two, because a bracket is not a letter: those still resolve to
+/// the row they split.
+const ucIdPattern = r'UC-[ABCG]\d+\.\d+[a-z]?';
+
 /// Every heading that DEFINES a use case. The number prefix is optional
 /// because the catalogue's first cluster has none.
+///
+/// ⚠️ **The letter class is what decides which clusters are enforced at all.**
+/// It read `[ABC]` until 2026-08-18, so the sixteen `UC-G1.x` rows in
+/// [acceptance.md section 16] were invisible to every check here — no heading
+/// had to exist, no scenario had to cite one, and nothing compared the rows to
+/// the tree. Eleven of the twelve that were then checked turned out to describe
+/// code that had been deleted or reversed. Widening a cluster into this class
+/// is what makes it real; adding rows to the document is not.
 final _definition = RegExp(
-    r'^#{2,4} +(?:[\d.]+ +)?(UC-[ABC]\d+\.\d+) +— +(.*)$',
+    '^#{2,4} +(?:[\\d.]+ +)?($ucIdPattern) +— +(.*)\$',
     multiLine: true);
 
 /// A use-case id anywhere at all, definitions and cross-references alike.
-final _mention = RegExp(r'UC-[ABC]\d+\.\d+');
+/// The optional trailing letter is for a row inserted between two that were
+/// already numbered — `UC-G1.9a` sits between 9 and 10 and is its own use
+/// case, not a variant. It does NOT capture the `(a)`/`(b)` suffix a SCENARIO
+/// uses to split one row into two, because a bracket is not a letter: those
+/// still resolve to the row they split.
+final _mention = RegExp(ucIdPattern);
 
 /// The same id at the start of a `test('UC-…')` name — the quote is what keeps
 /// this to scenario names and out of the Given/When/Then prose.
-final _scenarioName = RegExp(r"test\(\s*'(UC-[ABC]\d+\.\d+)");
+final _scenarioName = RegExp("test\\(\\s*'($ucIdPattern)");
 
 /// Any `test(` at all, however its name is written.
 final _anyScenario = RegExp(r'\btest\(');

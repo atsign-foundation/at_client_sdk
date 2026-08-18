@@ -466,6 +466,41 @@ void main() {
               'message', contains('claims envelope version'))));
     });
 
+    test('a protected header with NO version is refused, naming the absence',
+        () async {
+      // The other half of the version guard, and the one nothing covered.
+      // A released 3.14.0 envelope has no `v` at all, and the reason it never
+      // reaches here is that it does not parse — its signature is a flat
+      // sibling of the payload rather than an entry in a `signatures` array.
+      // This is the same absence arriving in a shape that DOES parse, which
+      // is the case a tolerant reader would quietly accept.
+      final envelope = rsaEnvelope().claiming({
+        'alg': 'RS256',
+        // Carried deliberately: the type is checked before the version, so a
+        // header that dropped it would be refused for the wrong reason and
+        // this test would be green without ever reaching the version.
+        'typ': 'at-app+jws',
+        'kid': 'enroll-1',
+      });
+
+      // The fixture really does omit it. Without this the test passes
+      // identically against a `claiming` that quietly kept the version, and
+      // the absence it names would never have been on the wire.
+      expect(unb64u(envelope.signature.protected), isNot(contains('"v"')));
+
+      await expectLater(
+          () => verifyEnvelope(envelope,
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+              expecting: EnvelopeType.app),
+          throwsA(isA<AtSigningVerificationException>().having(
+              (e) => e.message,
+              'message',
+              // `"null"` specifically, not just the prefix: a reader that had
+              // learned to default a missing version to 1 would still satisfy
+              // a match on `claims envelope version` alone.
+              contains('claims envelope version "null"'))));
+    });
+
     test('the producer refuses a signing algorithm it has no mapping for', () {
       expect(
           () => signEnvelope(payload,
