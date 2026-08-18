@@ -10695,6 +10695,24 @@ case that survives the derivation: a client that genuinely has no key source.
 Not refused, because a fixture may legitimately mint into memory, and because
 refusing would equally refuse the client that has been given nowhere to write.
 
+**Extended the same day: the ask is derived too.** As first ruled this covered
+only the filing, and 14.19 item 24 recorded the gap — `requestConveyance` stayed
+null unless a caller supplied it, so a hand-built ring minted, filed and read
+correctly and still met a missing generation as a permanent miss rather than
+broadcasting the pull [38](#38-key-material-self-heals-mint-if-absent-else-pull-2026-08-05)
+requires. A ring holding a filing now derives the ask as well, **lazily on the
+miss** — which is what makes a default possible at all, since reaching the
+substrate in the constructor would build it in every fixture that only ever
+reads. `AtClientSecretSharing.forClient` is Expando-cached per client, so the
+derived ask uses the same instance the bootstrap holds rather than a rival one,
+and both callers share one body (`requestAndFileNskeyPrivate`) so the two heals
+cannot diverge. What the bootstrap still supplies and nothing derives is the
+**gate**: only it knows `PqStartupGates.askOnReadMiss`.
+
+The ask is gated on the *filing*, not on the client: asking with nowhere to file
+leaves the reply in the in-memory secret store, which repairs the client at its
+next start and reads meanwhile as a heal that ran and did nothing.
+
 **What this does not do.** It does not make two rings share one filing.
 [62](#62-pqclientbootstrap-one-owner-for-the-pq-startup-2026-08-10)'s "one
 filing per client" is a rule about *events* — a private filed by one object is

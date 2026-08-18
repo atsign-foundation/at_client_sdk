@@ -358,6 +358,39 @@ void main() {
 
       expect(asked, isEmpty);
     });
+
+    test('a ring built from the client alone asks too', () async {
+      // The shape an app gets from `PublishedNskeyKeyRing(client)`. Before
+      // this it could file what it minted and still never ask for what it was
+      // missing, so a record that arrived ahead of its key was permanently
+      // unreadable rather than merely early — the quieter half of the same
+      // defect the derived filing closed.
+      //
+      // Asserted through `asksOnReadMiss` rather than by counting substrate
+      // traffic: the derived ask reaches `AtClientSecretSharing.forClient`,
+      // and a unit fixture that stood one up would be testing the double.
+      // What has to be true here is that a miss has somewhere to go at all.
+      final atClient = client();
+      final io = InMemoryAtKeysIo();
+      await io.write(atSign, AtKeys());
+      when(() => atClient.atKeysIo).thenReturn(io);
+
+      expect(PublishedNskeyKeyRing(atClient).asksOnReadMiss, isTrue);
+    });
+
+    test('and a client with no key source still asks nothing', () async {
+      // The control, and the reason the ask is gated on the filing rather than
+      // on the client: an answer with nowhere to land leaves the reply in the
+      // in-memory secret store, which repairs the client at its NEXT start and
+      // reads meanwhile as a heal that ran and did nothing.
+      final atClient = client();
+
+      expect(PublishedNskeyKeyRing(atClient).asksOnReadMiss, isFalse);
+      expect(PublishedNskeyKeyRing(atClient).privateFiling, isNull,
+          reason: 'the two answers have one cause, and a future change that '
+              'derived a filing without an ask would pass the row above while '
+              'leaving this one true');
+    });
   });
 }
 

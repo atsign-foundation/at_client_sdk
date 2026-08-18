@@ -197,14 +197,13 @@ void main() {
     // the one `PqClientBootstrap` had already wired — which removed both the
     // filing and the read path's self-heal.
     //
-    // ⚠️ **A bare ring now derives its filing, but NOT its
-    // `requestConveyance`** (`decisions.md` 111), so the self-heal is still
-    // exactly what a substituted ring loses: `decisions.md` 38's "a miss on an
-    // own generation broadcasts a pull, so a record that arrived before its
-    // key stops being permanently unreadable and becomes merely early". The
-    // filing half being fixed makes this the QUIETER failure than it was, not
-    // a smaller one — the ring still reads, so nothing looks wrong until a
-    // record arrives ahead of its key.
+    // ⚠️ **A bare ring now derives both its filing and its read-miss ask**
+    // (`decisions.md` 111), so a substituted ring keeps `decisions.md` 38's
+    // self-heal — "a miss on an own generation broadcasts a pull, so a record
+    // that arrived before its key stops being permanently unreadable and
+    // becomes merely early". What it still loses is the `privatesFiled`
+    // events: a filing is per instance, so a private filed by the bootstrap's
+    // ring announces to nobody listening on this one.
     //
     // Left alone, a client resolves the nskey providers through the era
     // default, which uses `_pqBootstrap.ring` — filing and self-heal

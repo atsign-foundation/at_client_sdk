@@ -1,4 +1,13 @@
 ## 3.14.1
+- fix: `PublishedNskeyKeyRing` also derives its read-miss self-heal. A ring
+  holding a filing now broadcasts the pull for a generation it is missing even
+  when no `requestConveyance` was supplied, built lazily on the miss so a
+  read-only fixture never reaches the substrate. It shares one body with
+  `PqClientBootstrap`'s, and uses the same per-client
+  `AtClientSecretSharing.forClient` instance, so a client that got its ring
+  from the bootstrap and one that built its own heal identically. A ring with
+  no filing still asks nothing: an answer with nowhere to land repairs the
+  client at its next start rather than this one.
 - fix: `PublishedNskeyKeyRing` now derives its `NskeyPrivateFiling` from the
   client's own `AtKeysIo` when the caller names none, so
   `PublishedNskeyKeyRing(client)` files the namespace privates it mints instead

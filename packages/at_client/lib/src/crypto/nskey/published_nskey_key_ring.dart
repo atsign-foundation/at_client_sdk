@@ -13,6 +13,10 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
+import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
+    show AtClientSecretSharing;
+import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
+    show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/key_package.dart'
     show KeyEntryStatus;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
@@ -24,6 +28,44 @@ import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
 final _logger = AtSignLogger('PublishedNskeyKeyRing');
+
+/// Asks this atSign's other enrollments for one missing nskey private, then
+/// waits for a holder to answer and **files** the answer.
+///
+/// One body, two callers — `PqClientBootstrap` and the default a ring builds
+/// for itself — because the two halves are not separable. Asking alone puts
+/// the reply in the in-memory secret store and nothing files it from there
+/// mid-session: `NskeyPrivateFiling.filePending` runs at start and says so
+/// itself. A heal that only broadcast would repair the client at its *next*
+/// start, measured live 2026-08-17 with the holder replying correctly and the
+/// answer sitting unfiled.
+///
+/// The wait is unawaited and best-effort: a holder may be offline for a long
+/// time and a read must not block on one.
+Future<void> requestAndFileNskeyPrivate(
+  PairwiseSecretSharing sharing,
+  NskeyPrivateFiling? filing,
+  String namespace,
+  String secretName, {
+  required AtSignLogger logger,
+  Duration timeout = const Duration(minutes: 5),
+}) async {
+  await sharing.requestSecretsFromNamespace(namespace, names: [secretName]);
+  unawaited(sharing
+      .waitForSecret(namespace, secretName, timeout: timeout)
+      .then((secret) async => await filing?.file(secret) ?? false)
+      .then((filed) {
+    if (filed) {
+      logger.info('Filed the nskey private $namespace:$secretName that a '
+          'holder conveyed on request');
+    }
+  }).catchError((Object e) {
+    // info, not warning: no holder replying within the window is ordinary
+    // (they may all be offline), and the next start asks again.
+    logger.info('No holder conveyed $namespace:$secretName within the wait; '
+        'the next start asks again: $e');
+  }));
+}
 
 /// Checks that a fetched advertisement really came from the atSign that claims
 /// it, before anything is encapsulated to it.
@@ -249,13 +291,17 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// failing forever. The request is store-and-forward: any current holder
   /// answers when it next runs.
   ///
-  /// ⚠️ **Null means this ring does not ask at all**, and that is the one
-  /// piece of a client's wiring [privateFiling] does not derive for it: a ring
-  /// built from an `AtClient` alone files what it mints and still reads a
-  /// generation it holds nothing for as a permanent miss. Supplying it is
-  /// `PqClientBootstrap`'s job, and the supplier owns waiting for the answer
-  /// and filing it — see the warning on [_askForMissingPrivate], which is
-  /// where the arrival path this used to claim turned out not to exist.
+  /// Null here does **not** mean silence: a ring with a [privateFiling]
+  /// derives its own ask — see [_ask] — so a client built from an `AtClient`
+  /// alone heals like one wired by `PqClientBootstrap`. What the bootstrap
+  /// supplies that cannot be derived is the **gate**: only it knows
+  /// `PqStartupGates.askOnReadMiss`, and passing null with no filing to derive
+  /// from is what turns asking off.
+  ///
+  /// Whoever supplies it owns waiting for the answer and filing it — see
+  /// [requestAndFileNskeyPrivate], which both callers share, and the warning
+  /// on [_askForMissingPrivate], where the arrival path this field's dartdoc
+  /// used to claim turned out not to exist.
   final Future<void> Function(String namespace, String secretName)?
       _requestConveyance;
 
@@ -773,8 +819,38 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return null;
   }
 
+  /// How this ring asks, supplied or derived.
+  ///
+  /// Built on the miss rather than in the constructor, which is the whole
+  /// reason a default is possible at all: reaching the substrate eagerly would
+  /// construct it in every fixture that only ever reads. `forClient` is
+  /// per-client cached, so a ring that derives its own ask uses the **same**
+  /// `AtClientSecretSharing` the bootstrap holds rather than a rival one.
+  ///
+  /// Null when there is nowhere to file the answer. Asking without filing
+  /// leaves the reply in the in-memory secret store and repairs the client at
+  /// its next start rather than this one, which reads as a heal that worked
+  /// and did nothing.
+  Future<void> Function(String namespace, String secretName)? get _ask {
+    final supplied = _requestConveyance;
+    if (supplied != null) return supplied;
+    final filing = privateFiling;
+    if (filing == null) return null;
+    return (namespace, secretName) => requestAndFileNskeyPrivate(
+        AtClientSecretSharing.forClient(_atClient), filing,
+        namespace, secretName,
+        logger: _logger);
+  }
+
+  /// Whether a read miss on an own generation will broadcast a pull.
+  ///
+  /// The mechanism a test asserts instead of the substrate traffic: a ring
+  /// that answers false here cannot heal, however the rest of it is wired.
+  @visibleForTesting
+  bool get asksOnReadMiss => _ask != null;
+
   void _askForMissingPrivate(String namespace, String nskeyKid) {
-    final ask = _requestConveyance;
+    final ask = _ask;
     if (ask == null) return;
     // One broadcast per generation per instance: every conveyance of a synced
     // backlog fails through here in a burst, and N identical requests buy

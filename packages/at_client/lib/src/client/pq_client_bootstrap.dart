@@ -14,7 +14,7 @@ import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
 import 'package:at_client/src/crypto/nskey/pq_signing_root.dart'
     show PqSigningRoot;
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart'
-    show PublishedNskeyKeyRing;
+    show PublishedNskeyKeyRing, requestAndFileNskeyPrivate;
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
@@ -167,30 +167,19 @@ class PqClientBootstrap {
       // with the holder replying correctly and the answer sitting unfiled.
       //
       // The startup path already waits and files (`NskeySeeding`); this does
-      // the same, so the two agree. Unawaited and best-effort: a holder may be
-      // offline for a long time and a read must not block on it.
+      // the same, so the two agree.
+      //
+      // The body is `requestAndFileNskeyPrivate`, shared with the default the
+      // ring builds for itself when nobody supplies one — the same wait, the
+      // same filing, the same logging, so a client that reached the ring
+      // through the bootstrap and one that did not heal identically. What is
+      // passed here rather than derived is the GATE: only the bootstrap knows
+      // `askOnReadMiss`, and a ring given null asks nothing.
       requestConveyance: (keysIo == null || !gates.askOnReadMiss)
           ? null
-          : (namespace, secretName) async {
-              await sharing
-                  .requestSecretsFromNamespace(namespace, names: [secretName]);
-              unawaited(sharing
-                  .waitForSecret(namespace, secretName,
-                      timeout: const Duration(minutes: 5))
-                  .then((secret) async => await filing?.file(secret) ?? false)
-                  .then((filed) {
-                if (filed) {
-                  _logger.info('Filed the nskey private $namespace:'
-                      '$secretName that a holder conveyed on request');
-                }
-              }).catchError((Object e) {
-                // info, not warning: no holder replying within the window is
-                // ordinary (they may all be offline), and the next start asks
-                // again.
-                _logger.info('No holder conveyed $namespace:$secretName '
-                    'within the wait; the next start asks again: $e');
-              }));
-            },
+          : (namespace, secretName) => requestAndFileNskeyPrivate(
+              sharing, filing, namespace, secretName,
+              logger: _logger),
     );
     seeding = NskeySeeding(
       atClient: _atClient,

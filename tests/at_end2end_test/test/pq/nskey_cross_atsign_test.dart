@@ -62,10 +62,10 @@ void main() {
     // correct, since re-minting rotates a key out from under peers who have
     // already fetched it — the gap opened.
     //
-    // ⚠️ **A bare ring now derives its filing from the client's `AtKeysIo`,
-    // so that half is fixed at the source** (`decisions.md` 111). What the
-    // bootstrap's ring still uniquely carries is `requestConveyance` — the
-    // read path's self-heal — and being the one instance whose `privatesFiled`
+    // ⚠️ **A bare ring now derives both its filing and its read-miss ask from
+    // the client** (`decisions.md` 111), so neither half is fixed here any
+    // more. What the bootstrap's ring still uniquely carries is the
+    // `askOnReadMiss` gate and being the one instance whose `privatesFiled`
     // events the notification service is subscribed to. So this stays the
     // client's own ring, and `TestSuiteInitializer` still has to supply the
     // key source at first construction, which is the only point it takes.
