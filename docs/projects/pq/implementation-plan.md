@@ -34,7 +34,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
-| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **9** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **10** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
@@ -803,7 +803,7 @@ rulings 2 and 3 are amended in place.
 | 28 | NoPorts' own copy of the envelope shape | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) |
 | 29 | **Three** audit residuals — perf ceiling on a real low-end device, SS-4 interrupted-mint resume, IS-1 record-name drift. ⚠️ This read **four**, including UC-A3.4's live self-direction, until 2026-08-18 — 14.16's own body has marked that ✅ DONE since 2026-08-17 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
 | 30 | `deprecated_member_use` findings across the workspace (340 at_client, 183 at_onboarding_cli, 110 at_auth, 28 at_lookup) | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
-| 31 | Pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) |
+| 31 | ✅ **DONE — nothing owed since 2026-08-10.** The one item (the functional pack's compose hardcoding a local image) is struck in the body; the external gate it names is step 32's blocker, not a checklist entry. This row carried no state until 2026-08-18, which in this table reads as open | [14.15](#1415-pre-pr-rails-checklist) |
 
 Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128),
 open), **KF-1** ([#2129](https://github.com/atsign-foundation/at_client_sdk/issues/2129),
@@ -830,7 +830,7 @@ ladder — a same-value version bump merges silently.)
 
 ### 14.19 Small items, raised 2026-08-12 and not yet acted on
 
-**9 open, 16 struck** — ⚠️ **re-derive both, never read them here.** This
+**10 open, 16 struck** — ⚠️ **re-derive both, never read them here.** This
 header said `11 open, 12 struck` until 2026-08-18, and the TODO row three
 paragraphs up said 9 the whole time: the count turned out to have **four**
 homes, not the two a correction had been updating. (Was 17 open on 2026-08-17,

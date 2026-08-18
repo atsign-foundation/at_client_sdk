@@ -3558,6 +3558,25 @@ its own. None blocks anything.
     construction-time caller given an explicit tolerant wrapper — but that
     changes what a client does at start, so it wants a ruling first.
 
+26. **The plan-status guards read only the first five lines of a section, so a
+    status stated lower down is invisible to them.** Both guards added
+    2026-08-18 to `docs_structure_test.dart` — TODO-row-vs-done-body and
+    DONE-row-vs-partial-body — take `.skip(1).take(5)` of the section under the
+    heading. That is deliberate: a finished section's later prose routinely
+    recounts what used to be owed, and reading further produces false
+    positives. But it means a section whose status sits below the window is not
+    checked at all. **Measured the same day**: 14.15 sat in TODO for eight days
+    with its single item struck; its body opened with a *condition* ("No PR
+    opens until … One thing must still be true by then:") and the done marker
+    was on roughly the seventh line, so the guard passed it. It was found by
+    hand, deriving the remaining-D1 sequence for a summary.
+
+    Two candidate fixes, neither obviously right: widen the window and accept
+    false positives, or require every `### 14.x` section to OPEN with a status
+    line and check that instead — which is a convention change across ~30
+    sections and would want a ruling. Recorded so the guards' coverage is not
+    mistaken for completeness.
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.
@@ -4308,7 +4327,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 9 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 10 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
