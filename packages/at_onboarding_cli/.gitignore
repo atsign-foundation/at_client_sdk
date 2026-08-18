@@ -11,3 +11,9 @@ lib/src/config/config_util.dart
 /lib/config/
 /lib/src/config_utils/
 **/storage/
+
+# Keyfiles the tests generate. Each test deletes its own in a tearDown, so
+# these only survive a run that was killed — but a generated .atKeys sitting
+# untracked is exactly what a bulk `git add -A` publishes, and the two live
+# test packages already ignore theirs.
+test/*.atKeys

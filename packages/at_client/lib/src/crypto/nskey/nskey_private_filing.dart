@@ -5,6 +5,7 @@ import 'dart:typed_data' show Uint8List;
 import 'package:at_auth/at_auth.dart'
     show
         AtKeys,
+        AtKeysSourceAbsentException,
         AtKeysIo,
         AtKeysMaterial,
         CryptographicKeyType,
@@ -221,6 +222,36 @@ class NskeyPrivateFiling {
     return true;
   }
 
+
+  /// Reads the key source, separating "nothing here yet" from "this process
+  /// cannot read what is here".
+  ///
+  /// Null means a genuine absence — no key source has been written for this
+  /// atSign — and every caller answers it as "holds nothing", which is the
+  /// truth. Anything else is re-thrown after being logged at `severe`,
+  /// because the material may well exist and be unreadable: a truncated or
+  /// corrupt document, a passphrase that was not supplied, a validation
+  /// refusal. Reporting that as "holds nothing" is what made an unreadable
+  /// keyfile indistinguishable from an empty one, and since the notification
+  /// park landed it presents as a message held for a filing that can never
+  /// arrive.
+  ///
+  /// `severe` and not `warning`: it is unactionable from here and permanent
+  /// until somebody repairs the file. `finer` is where it used to sit, which
+  /// is below every level any pack runs at.
+  Future<AtKeys?> _readSourceOrNull(String context) async {
+    try {
+      return await keysIo.read(atSign);
+    } on AtKeysSourceAbsentException {
+      return null;
+    } catch (e) {
+      _logger.severe('Cannot read this atSign\'s key source while looking up '
+          '$context, so no nskey private can be found — the material may be '
+          'present and unreadable rather than absent: $e');
+      rethrow;
+    }
+  }
+
   /// The **decapsulation key** for `(namespace, nskeyKid)`, or null if this
   /// client does not hold it — expanded from the stored seed, ready for
   /// `pqOpen`.
@@ -228,8 +259,13 @@ class NskeyPrivateFiling {
   /// Read from `AtKeys` rather than from memory, so it survives the restart
   /// that is the whole reason for filing it there.
   Future<NskeyDecapsulationKey?> read(String namespace, String nskeyKid) async {
+    // OUTSIDE the try below, deliberately. That catch names one cause — "no
+    // nskey private" — and a key source this process cannot read is a
+    // different one; leaving the source read inside it is what turned an
+    // unreadable keyfile into an absence in the first place.
+    final keys = await _readSourceOrNull('$namespace:$nskeyKid');
+    if (keys == null) return null;
     try {
-      final keys = await keysIo.read(atSign);
       final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
           CryptographicKeyType.privateDecapsulation);
       if (material == null) return null;
@@ -269,8 +305,9 @@ class NskeyPrivateFiling {
   /// [read] is the expanded flavour for opening; this is the durable one for
   /// conveying.
   Future<NskeySeed?> readSeed(String namespace, String nskeyKid) async {
+    final keys = await _readSourceOrNull('$namespace:$nskeyKid');
+    if (keys == null) return null;
     try {
-      final keys = await keysIo.read(atSign);
       final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
           CryptographicKeyType.privateDecapsulation);
       if (material == null) return null;
@@ -291,13 +328,18 @@ class NskeyPrivateFiling {
   /// *answer* with is what it holds, not what it is authorised for.
   Future<Map<String, Map<String, NskeySeed>>> readAll() async {
     const prefix = nskeyKeyfileIdPrefix;
-    final AtKeys keys;
+    final AtKeys? keys;
     try {
-      keys = await keysIo.read(atSign);
+      keys = await _readSourceOrNull('every held private');
     } catch (e) {
+      // Tolerated HERE and nowhere else: the one caller runs during client
+      // construction, and a client that cannot be built at all is worse than
+      // one that starts holding nothing. `_readSourceOrNull` has already said
+      // so at `severe`, so the failure is on the record rather than swallowed.
       _logger.finer('No nskey privates held ($e)');
       return const {};
     }
+    if (keys == null) return const {};
     final held = <String, Map<String, NskeySeed>>{};
     // The atSign's own container: an nskey private is a namespace key, filed
     // with no enrollment, and every enrollment holding the grant reads the
@@ -329,8 +371,9 @@ class NskeyPrivateFiling {
   /// before the last rotation.
   Future<Map<String, NskeySeed>> readAllFor(String namespace) async {
     final prefix = keyIdFor(namespace, '');
+    final keys = await _readSourceOrNull(namespace);
+    if (keys == null) return const {};
     try {
-      final keys = await keysIo.read(atSign);
       return {
         for (final material in keys.atSignKeys)
           if (material.keyPartType ==

@@ -24,7 +24,10 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   Future<AtKeys> read(String atsign) async {
     final file = File(filePath!(atsign));
     if (!file.existsSync()) {
-      throw AtException(
+      // Typed, so a caller can tell "no keyfile yet" from "a keyfile this
+      // process cannot read". Both used to arrive as a bare AtException and
+      // the only way to separate them was the message text.
+      throw AtKeysSourceAbsentException(
           'provided keys file does not exist. Please check whether the file path ${file.path} is valid');
     }
 

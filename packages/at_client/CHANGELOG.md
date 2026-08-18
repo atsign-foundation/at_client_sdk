@@ -1,4 +1,15 @@
 ## 3.14.1
+- fix: `NskeyPrivateFiling`'s readers no longer report an unreadable key source
+  as "holds nothing". `read`, `readSeed` and `readAllFor` answer null only for
+  a genuine absence — nothing written for this atSign, or no such entry — and
+  raise anything else after logging at `severe`, so a corrupt keyfile, a
+  missing passphrase or a validation refusal is no longer indistinguishable
+  from a cold start. Since the notification park landed that ambiguity
+  presented as a message held for a filing that could never arrive. `readAll`
+  alone still tolerates it, because its caller runs during client construction
+  and a client that cannot be built is worse than one that starts holding
+  nothing — the failure is on the record at `severe` either way. Needs at_auth's
+  `AtKeysSourceAbsentException`.
 - feat: `SigningAlgoType` is exported from the barrel, show-narrowed from
   at_chops exactly as `EnrollmentKeyExchangeMode` is from at_auth.
   `AtClientPreference.inUseSigningAlgorithms` asks for a `Set` of them and

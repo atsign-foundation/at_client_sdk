@@ -10738,3 +10738,57 @@ file changed between the arms**: `test/pq` went 15 passed / 2 failed to 17
 passed / 0 failed, "adopted and hold no private half" 13 → 0, parked
 notifications 2 → 0, and alice's keyfile gained the `nskey.e2e_test.…` entry
 whose absence was the whole defect.
+
+## 112. An unreadable key source is not an empty one (2026-08-18)
+
+`NskeyPrivateFiling`'s four readers each wrapped the whole body — the key-source
+read included — in one `try` whose `catch` logged at `finer` and answered null.
+So a keyfile that was corrupt, truncated, locked, or encrypted under a
+passphrase this client was not given returned exactly what a keyfile holding no
+such entry returns, and at `finer` the difference was invisible in every pack.
+
+**Why it stopped being cosmetic.** Before
+[14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it)
+the caller above dropped the notification; now it **parks** it, waiting for a
+filing signal. A genuine absence is a message that is merely early, and the
+park is exactly right for it. An unreadable keyfile produces the identical
+symptom and the identical park — for a filing that can never arrive, because
+nothing is coming to repair the file. The ambiguity turned a permanent fault
+into an indefinite wait, which is the worse of the two failures and the quieter
+one.
+
+**The split is three ways, not two.** "The source threw" was never the same
+question as "the material is absent":
+
+1. **No key source yet** — nothing written for this atSign. A cold start.
+   Answer null, quietly.
+2. **Source readable, entry not present** — the ordinary miss the self-heal is
+   built on. Answer null, quietly.
+3. **Anything else** — the material may be present and unreadable. Log at
+   `severe` naming the source, and **raise**.
+
+**It took an at_auth change to make case 1 nameable.** `InMemoryAtKeysIo` already
+threw a typed `AtKeysNotInMemoryException`, but `FileAtKeysIo` signalled "no
+keyfile" with a bare `AtException` carrying a message — so separating case 1
+from case 3 in at_client would have meant matching on message text. at_auth now
+has `AtKeysSourceAbsentException`, thrown by `FileAtKeysIo.read` for a missing
+file, with `AtKeysNotInMemoryException` extending it. **Additive**: it is a new
+subtype of the exception that path already threw, so it is not a fourth break
+against at_auth's open major-version question.
+
+**`readAll` is the one deliberate exception**, and it is not a lapse. Its caller
+runs during client construction, and a client that cannot be built at all is
+worse than one that starts holding nothing — so it catches and answers empty.
+The failure is still on the record at `severe`, because the shared reader logs
+before it rethrows.
+
+**The fix was incomplete on the first pass, and the test caught it.** Splitting
+the source read out was not enough while each reader's own `catch` still stood
+around it: the rethrow was swallowed by the very handler that names "no nskey
+private". The source read now happens **outside** that `try`, which is the
+general rule — a catch that names one cause must not be able to answer for
+another — applied to the code that is the standing example of breaking it.
+
+Proven by the mutation that restores the old behaviour: answering null for every
+failure reddens exactly the raise row, and both absence rows stay green, as they
+must.

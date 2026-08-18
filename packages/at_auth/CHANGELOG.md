@@ -1,4 +1,12 @@
 ## 3.4.0
+- feat: `AtKeysSourceAbsentException` — the one read failure that means "this
+  atSign has no key source yet" rather than "this process cannot read what is
+  there". `FileAtKeysIo.read` throws it for a missing file and
+  `AtKeysNotInMemoryException` now extends it, so a caller can tell a cold
+  start from a truncated document, a passphrase that was not supplied, or a
+  validation refusal. **Additive, not a fourth break**: it is a new subtype of
+  the `AtException` that path already threw, so every existing `catch` still
+  catches it.
 - feat: `AtKeys.keyIdPrefix(role, algorithm)` and
   `AtKeys.isRoleKeyId(keyId, role)` — the `<role>:<algorithm>:<generation>`
   keyId grammar, composed and parsed in one place.
