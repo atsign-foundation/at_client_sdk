@@ -10591,3 +10591,67 @@ exists for either to break, not that neither is a break. If an external
 `implements AtKemAlgorithm` is ever found, this ruling is the thing to re-open.
 at_chops carries no `@experimental` annotations, so that licence is not what
 this rests on.
+
+## 110. The `0x01` seal version is retired; stop emitting before removing (2026-08-18)
+
+**Ruled by gkc.** `pqSeal` version `0x01` — the `x-wing-hpke-v1` suite, X-Wing
+with the bespoke `atPQv1-base` key schedule (HKDF-SHA256) and AES-256-GCM — is
+to be retired. `0x02` and `0x03` are RFC 9180 Base mode verbatim, checked
+against the IETF HPKE working group's published vectors; `0x01`'s own dartdoc
+says it is "not RFC 9180" and warns off any expectation of interop. Carrying a
+homegrown key schedule beside two standard ones earns nothing.
+
+**Nothing current chooses it.** `SecretSharingAlgos.suites` is
+`[xWingRfc9180, mlKem1024Rfc9180, xWingHpke]`, sender-preference order, and
+`suiteForKeyAlgo(xWing)` returns the RFC 9180 suite. Since
+`openableSuitesFor(xWing)` advertises both, `bestSuiteBetween` stops at `0x02`
+before it ever reaches `0x01`. at_client does not fall through to the default
+either: `pqSealToBase64` makes `version` required and both call sites
+(`nskey_provider.dart:174`, `pairwise_secret_sharing.dart:275`) pass a
+negotiated value. So between two current builds `0x01` is unreachable.
+
+**The one compatibility claim, and why it is void.** On `origin/trunk`
+`SecretSharingAlgos.suites` is `[xWingHpke]` — `0x01` alone — and at_client
+3.14.0 is published carrying that substrate, so a released client advertises
+only `0x01` and a current sender would negotiate down to it. That is the case
+the version exists for. It does not hold: `SecretSharingAlgos` is annotated
+`@experimental` on trunk as well as on this branch, so the published package
+disclaims exactly this compatibility. The marker is the test, not publication:
+at_client 3.14.0 being on pub.dev does not create an obligation the annotation
+withdraws. [94](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)
+settled that, and its sub-ruling 4 is where the reasoning lives.
+
+**Three weaker reasons, recorded so they are not re-derived as new.** Dropping
+`0x01` leaves no X-Wing + AES-GCM construction, since `0x02` pairs X-Wing with
+ChaCha20-Poly1305 (the only AEAD the working group publishes `0x647A` vectors
+for) and `0x03` is ML-KEM-1024; whether that costs anything is a performance
+question, and the budget has never been measured on the hardware the criterion
+names (#2153). `seal-spec.md` and `pq_seal_v1.json`'s 95 conformance rows
+document `0x01` as the byte-level spec a second implementation builds from, and
+no second implementation exists — the only consumer is at_chops' own
+`pq_seal_conformance_test.dart`. And `pqSealDefaultVersion` is still `0x01`, so
+the default has to move, though nothing in the tree reads it.
+
+**The downgrade argument was examined and does not stand.** Keeping `0x01` in
+`openableSuitesFor(xWing)` means every holder advertises a bespoke construction
+a sender can be steered to, which is the shape [section 50](#50-two-kems-by-configuration-one-construction-by-negotiation-2026-08-07)
+quotes NIST's concern about. It is untidy rather than exploitable: the nskey
+advertisement is APKAM-signed and verified before sealing, and a key package
+verifies against its enrollment's `_apsk`, so an attacker cannot narrow a
+published suites list without holding the enrollment's key.
+
+**The order, which is the part that matters.** Stop *emitting* before removing:
+take `xWingHpke` out of `SecretSharingAlgos.suites` first, leaving it in
+`openableSuitesFor` so anything already sealed still opens, and only then drop
+the row from at_chops' `_versions`, the constant from
+`pqSealSupportedVersions`, the entry from `sealVersionFor`, and the default
+from `pqSealDefaultVersion`. That is the same reader-first shape
+[76](#76-the-nskey-advertises-one-kem-key-2026-08-10) uses. `seal-spec.md`,
+`pq_seal_v1.json` and `pq_seal_conformance_test.dart` move in the commit that
+removes the version, not before it.
+
+Removing a supported version turns records already written into permanent
+`PqOpenFailure.versionMismatch` failures, which is why the two steps are
+separate. Nothing outside this tree holds a `0x01` envelope today, and
+`__ssenv` entries expire at 7 days regardless, so the window costs nothing —
+but the order is what makes it safe to be wrong about that.
