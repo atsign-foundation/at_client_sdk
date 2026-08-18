@@ -37,22 +37,23 @@ void main() {
               'the argument and dropped it would still pass the line above');
     });
 
-    test('and each flag can be named against the posture that implies it', () {
-      // The mixture case the superclass documents: an explicitly set flag
+    test('and each axis can be named against the posture that implies it', () {
+      // The mixture case the superclass documents: an explicitly set axis
       // beats the group it came from. Without forwarding there was no way to
       // express it at all from a CLI app.
       final preference = AtOnboardingPreference(
         posture: PqPosture.pqActive,
-        disallowLegacyEncryption: false,
         authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
         dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048},
       );
 
-      expect(preference.disallowLegacyEncryption, isFalse);
       expect(preference.authenticationKeyAlgorithm, SigningAlgoType.rsa2048,
           reason: 'a deployment whose atServer cannot verify ML-DSA PKAM yet '
               'says so here without giving up the rest of the stage');
       expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
+      expect(preference.disallowLegacyEncryption, isTrue,
+          reason: 'and the one axis with no override stays where the posture '
+              'put it, however many of its neighbours are named');
     });
 
     test('the mutable fields are untouched by the new constructor', () {

@@ -30,17 +30,20 @@ void main() {
   });
 
   test('UC-C1.2 · the refusal axis: the posture disallows legacy writes', () {
-    // GIVEN a preference built with PqPosture.pqActive and no
-    //       explicit disallowLegacyEncryption argument.
+    // GIVEN a preference built with PqPosture.pqActive.
     // WHEN  a write would fall back to the legacy provider.
     // THEN  it is refused (LegacyEncryptionRefusedException), because the
-    //       posture set the flag — and an explicit argument still wins.
+    //       posture set the flag — and nothing but a posture can set it.
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'pqActive sets disallowLegacyEncryption',
         proves: 'the posture reaches the flag');
     provenIn('packages/at_client/test/pq_posture_test.dart',
-        'an explicit disallowLegacyEncryption beats the posture, both ways',
-        proves: 'the per-axis override contract');
+        'disallowLegacyEncryption has no per-preference override',
+        proves: 'the deliberate exception to the per-axis override contract');
+    provenIn('packages/at_client/test/disallow_legacy_encryption_test.dart',
+        'the only way to set it is a posture that writes post-quantum',
+        proves: 'the coupling: a posture asking for the refusal must write '
+            'post-quantum, or it refuses its own writes');
     provenIn('packages/at_client/test/disallow_legacy_encryption_test.dart',
         'a client configured to write legacy',
         proves: 'what the flag does once set: the legacy write is refused');

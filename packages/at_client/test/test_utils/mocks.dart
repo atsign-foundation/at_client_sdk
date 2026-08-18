@@ -61,11 +61,11 @@ class MockAtClient extends Mock implements AtClient {
 /// A client that refuses to encrypt new data with the legacy provider.
 ///
 /// Its own class rather than a cascade on [MockAtClient] because
-/// `disallowLegacyEncryption` is final — a flag governing what a client may
-/// write must not be flippable mid-run.
+/// `disallowLegacyEncryption` is final and posture-only — a flag governing
+/// what a client may write must not be flippable mid-run.
 class StrictMockAtClient extends Mock implements AtClient {
   final AtClientPreference _preference =
-      AtClientPreference(disallowLegacyEncryption: true);
+      AtClientPreference(posture: PqPosture.pqActive);
 
   @override
   AtClientPreference getPreferences() => _preference;

@@ -168,18 +168,26 @@ void main() {
       expect(preference.disallowLegacyEncryption, true);
     });
 
-    test('an explicit disallowLegacyEncryption beats the posture, both ways',
-        () {
+    test('disallowLegacyEncryption has no per-preference override', () {
+      // The deliberate asymmetry of ruling 113: the algorithm lists keep an
+      // escape hatch and this does not, because a safety flag whose override
+      // defeats its purpose is not the same kind of thing as deployment
+      // policy. There is no constructor argument to test, so what is asserted
+      // is that the posture is the only thing that moves it.
+      expect(AtClientPreference().disallowLegacyEncryption, false);
+      expect(AtClientPreference(posture: PqPosture.pqReady)
+              .disallowLegacyEncryption,
+          false);
+      expect(AtClientPreference(posture: PqPosture.pqActive)
+              .disallowLegacyEncryption,
+          true);
+      // Naming the other axes explicitly does not move it either, which is
+      // what makes this posture-only rather than merely posture-defaulted.
       expect(
           AtClientPreference(
                   posture: PqPosture.pqActive,
-                  disallowLegacyEncryption: false)
-              .disallowLegacyEncryption,
-          false,
-          reason: 'the posture supplies defaults; a flag the app set itself '
-              'is the app\'s decision for that one axis');
-      expect(
-          AtClientPreference(disallowLegacyEncryption: true)
+                  authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
+                  dataSigningKeyAlgorithms: const {})
               .disallowLegacyEncryption,
           true);
     });

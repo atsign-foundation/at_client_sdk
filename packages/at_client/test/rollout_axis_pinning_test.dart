@@ -26,15 +26,29 @@ void main() {
   AtClientPreference preference(
           {PqPosture? posture,
           SigningAlgoType? authenticationKeyAlgorithm,
-          Set<SigningAlgoType>? dataSigningKeyAlgorithms,
-          bool? disallowLegacyEncryption}) =>
+          Set<SigningAlgoType>? dataSigningKeyAlgorithms}) =>
       AtClientPreference(
           posture: posture ?? PqPosture.legacy,
           authenticationKeyAlgorithm: authenticationKeyAlgorithm,
-          dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
-          disallowLegacyEncryption: disallowLegacyEncryption)
+          dataSigningKeyAlgorithms: dataSigningKeyAlgorithms)
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
+
+  /// The smallest posture that refuses legacy writes.
+  ///
+  /// It cannot be "the default with one flag flipped": `PqPosture` rejects
+  /// refusing legacy writes while still writing legacy by default, so
+  /// `writesPqByDefault` moves with it **by construction**. That is why the
+  /// rows below never expect this axis to be reported alone.
+  final strict = PqPosture(
+    authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
+    dataSigningKeyAlgorithms: const {},
+    seedNamespaceKeys: false,
+    keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
+    writesPqByDefault: true,
+    disallowLegacyEncryption: true,
+    mintLegacyMaterial: true,
+  );
 
   group('what counts as the same settings', () {
     test('two separately built default preferences are interchangeable', () {
@@ -103,13 +117,26 @@ void main() {
       final now = preference();
 
       expect(
-          now.rolloutDifferencesFrom(
-              preference(disallowLegacyEncryption: true)),
-          [contains('disallowLegacyEncryption')]);
-      expect(
           now.rolloutDifferencesFrom(preference(
               dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})),
           [contains('dataSigningKeyAlgorithms')]);
+      expect(
+          now.rolloutDifferencesFrom(
+              preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+          [contains('authenticationKeyAlgorithm')]);
+    });
+
+    test('the refusal never moves alone, and both halves are reported', () {
+      // Not two mistakes but one. `disallowLegacyEncryption` is posture-only
+      // and coupled to `writesPqByDefault`, so a diagnostic naming just the
+      // refusal would send a reader looking for a setting nobody could have
+      // written on its own.
+      expect(
+          preference().rolloutDifferencesFrom(preference(posture: strict)),
+          containsAll([
+            contains('posture.writesPqByDefault'),
+            contains('disallowLegacyEncryption'),
+          ]));
     });
 
     test('the two key axes move independently, and are reported that way', () {
@@ -152,10 +179,10 @@ void main() {
 
     test('the difference reads as asked-versus-running', () {
       final running = preference();
-      final asked = preference(disallowLegacyEncryption: true);
+      final asked = preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65);
 
       expect(running.rolloutDifferencesFrom(asked).single,
-          'disallowLegacyEncryption (asked true, running false)',
+          'authenticationKeyAlgorithm (asked mldsa65, running rsa2048)',
           reason: 'the caller is the one holding a preference it expected to '
               'take effect, so the message states its side first');
     });
@@ -247,7 +274,7 @@ void main() {
 
       await expectLater(
           manager.setCurrentAtSign(
-              atSign, 'wavi', preference(disallowLegacyEncryption: true)),
+              atSign, 'wavi', preference(posture: strict)),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('disallowLegacyEncryption'))));
 

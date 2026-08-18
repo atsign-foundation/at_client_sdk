@@ -1574,12 +1574,17 @@ and B already own.
 
 ### 15.2 UC-C1.2 — The refusal axis: the posture disallows legacy writes
 
-- **Given:** a preference built with `PqPosture.pqActive` and no
-  explicit `disallowLegacyEncryption` argument.
+- **Given:** a preference built with `PqPosture.pqActive`.
 - **When:** a write would fall back to the legacy provider.
 - **Then:** it is refused (`LegacyEncryptionRefusedException`) because the
-  posture set the flag; an explicit constructor argument beats the posture in
-  both directions.
+  posture set the flag.
+- **And:** nothing but a posture can set it. There is no constructor argument
+  and no setter, which is the deliberate exception to the per-axis override
+  contract the other axes keep — a safety flag whose escape hatch defeats its
+  purpose is not the same kind of thing as deployment policy.
+- **And:** a posture asking for the refusal must also write post-quantum by
+  default, or it is rejected at construction for refusing its own writes. So
+  this axis never moves alone.
 
 ### 15.3 UC-C1.3 — WITHDRAWN: there is no envelope axis
 

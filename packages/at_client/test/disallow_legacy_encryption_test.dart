@@ -1,3 +1,5 @@
+import 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/legacy/legacy_encryption.dart';
 import 'package:mocktail/mocktail.dart';
@@ -236,7 +238,7 @@ void main() {
     test('the cold-start legacy fallback does not survive it', () {
       expect(
           AtClientImpl.mayFallBackToLegacy(
-              AtClientPreference(disallowLegacyEncryption: true)
+              AtClientPreference(posture: PqPosture.pqActive)
                 ..allowLegacyCryptoFallback = true),
           isFalse,
           reason: 'the two switches say opposite things and the flag wins — a '
@@ -254,15 +256,48 @@ void main() {
   });
 
   group('immutability', () {
-    test('there is no setter', () {
-      final preference = AtClientPreference(disallowLegacyEncryption: true);
+    test('there is no setter, and no constructor argument either', () {
+      final preference = AtClientPreference(posture: PqPosture.pqActive);
 
       expect(preference.disallowLegacyEncryption, isTrue);
       // A flag governing what a client may write must not be flippable
       // mid-run, or "was that record written under the guarantee?" has no
       // answer. `final` is how that is enforced, and this asserts the default
-      // stays where the era says it is.
+      // stays where the posture says it is.
       expect(AtClientPreference().disallowLegacyEncryption, isFalse);
+    });
+
+    test('the only way to set it is a posture that writes post-quantum', () {
+      // Posture-only, with no escape hatch: a safety flag whose override
+      // defeats its purpose is not the same kind of thing as deployment
+      // policy, which is why the algorithm lists keep theirs and this does
+      // not. The asymmetry is deliberate and recorded in ruling 113.
+      expect(
+          PqPosture(
+            authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
+            dataSigningKeyAlgorithms: const {},
+            seedNamespaceKeys: false,
+            keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
+            writesPqByDefault: true,
+            disallowLegacyEncryption: true,
+            mintLegacyMaterial: true,
+          ).disallowLegacyEncryption,
+          isTrue,
+          reason: 'a bespoke posture can still ask for the refusal without '
+              'adopting the whole of pqActive');
+      // And it cannot be asked for while the client goes on writing legacy,
+      // which is the combination that would refuse its own writes.
+      expect(
+          () => PqPosture(
+                authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
+                dataSigningKeyAlgorithms: const {},
+                seedNamespaceKeys: false,
+                keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
+                writesPqByDefault: false,
+                disallowLegacyEncryption: true,
+                mintLegacyMaterial: true,
+              ),
+          throwsArgumentError);
     });
   });
 }

@@ -18,9 +18,13 @@ class AtClientPreference {
   /// Never encrypt *new* data with the legacy (pre-post-quantum) provider:
   /// take a post-quantum path, or refuse the write.
   ///
-  /// **Default false in 3.x, true in 4.0.** Set it early to be certain nothing
-  /// this app writes is harvestable today and decryptable by a quantum
-  /// computer later; leave it alone to keep the SDK's own migration schedule.
+  /// ⚠️ **Set by [posture] alone.** There is no constructor argument and no
+  /// setter: unlike the algorithm lists, this axis has no per-preference
+  /// override, because a safety flag whose escape hatch defeats its purpose is
+  /// not the same kind of thing as deployment policy. An app that wants it on
+  /// ahead of the release schedule adopts [PqPosture.pqActive], or builds a
+  /// posture that says so — and such a posture must write post-quantum by
+  /// default, or it would refuse its own writes.
   ///
   /// What it governs is exactly one thing: **legacy encryption of new data.**
   /// - Legacy **reads** are always available. History has to keep opening, and
@@ -35,10 +39,10 @@ class AtClientPreference {
   /// switches say opposite things ("reach this recipient however you can" and
   /// "never write legacy") and this one wins.
   ///
-  /// **Final at construction.** There is no setter, and the value cannot be
-  /// changed for a live client: a flag that governs what a client is allowed
-  /// to write must not be flippable mid-run, or "was that record written under
-  /// the guarantee?" has no answer.
+  /// **Final at construction**, and the value cannot be changed for a live
+  /// client: a flag that governs what a client is allowed to write must not be
+  /// flippable mid-run, or "was that record written under the guarantee?" has
+  /// no answer.
   ///
   /// Expect refusals in 3.x. The SDK still writes several of its own records
   /// under the legacy provider — a shared key for a legacy recipient most
@@ -51,10 +55,11 @@ class AtClientPreference {
   /// [PqPosture.pqReady] or [PqPosture.pqActive] to run a later stage today,
   /// or a posture of your own for a combination none of them expresses.
   ///
-  /// Individual axes still win: an explicit [disallowLegacyEncryption],
-  /// [authenticationKeyAlgorithm] or [dataSigningKeyAlgorithms] argument, an
-  /// assigned [crypto], or a per-call algorithm each override the posture's
-  /// value for that one axis.
+  /// Individual axes still win: an explicit [authenticationKeyAlgorithm] or
+  /// [dataSigningKeyAlgorithms] argument, an assigned [crypto], or a per-call
+  /// algorithm each override the posture's value for that one axis.
+  /// [disallowLegacyEncryption] is the deliberate exception and is settable
+  /// only through the posture.
   ///
   /// Final at construction, like [disallowLegacyEncryption] and for the same
   /// reason: what a client writes must not change meaning mid-run. A client
@@ -105,11 +110,9 @@ class AtClientPreference {
 
   AtClientPreference(
       {this.posture = PqPosture.legacy,
-      bool? disallowLegacyEncryption,
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms})
-      : disallowLegacyEncryption =
-            disallowLegacyEncryption ?? posture.disallowLegacyEncryption,
+      : disallowLegacyEncryption = posture.disallowLegacyEncryption,
         authenticationKeyAlgorithm =
             authenticationKeyAlgorithm ?? posture.authenticationKeyAlgorithm,
         dataSigningKeyAlgorithms = _signableOrRefuse(

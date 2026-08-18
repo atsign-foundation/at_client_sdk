@@ -6558,11 +6558,16 @@ ruling 1) — the paragraph below still describes `EnvelopeSigning.envelopeVersi
 resolving per-signer → posture → v1, and none of that mechanism exists; there is
 one shape and a constant. The in-use signing set ([section 91.3](#913-the-rulings)
 ruling 16) took the vacated fifth slot, so the heading's count is right again by
-coincidence rather than because these five stand.* `PqPosture` (at_client, main
-barrel) has exactly two constructors and no general one: `migration()` is
-the 3.x column of the 56.4 table, `postQuantum()` the 4.0 column, and a
-deployment wanting a mixture sets the individual flag beside the posture
-rather than minting a hybrid no release ever shipped. It rides
+coincidence rather than because these five stand.* ~~`PqPosture` (at_client, main barrel) has exactly two constructors and no
+general one: `migration()` is the 3.x column of the 56.4 table,
+`postQuantum()` the 4.0 column, and a deployment wanting a mixture sets the
+individual flag beside the posture rather than minting a hybrid no release
+ever shipped.~~ ⚠️ **Replaced by
+[113](#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18):**
+there are now three constants — `legacy`, `pqReady`, `pqActive` — and a general
+constructor a program calls for a mixture, so minting a hybrid is the supported
+answer rather than the thing to avoid. `disallowLegacyEncryption` is the one
+axis a preference can no longer set beside the posture. It rides
 `AtClientPreference(posture:)` — final at construction, like
 `disallowLegacyEncryption` and for the same reason — and is consulted at
 each axis's home: the era adoption site picks `CryptoConfig.nskey` vs

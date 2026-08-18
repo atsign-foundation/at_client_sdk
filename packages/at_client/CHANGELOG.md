@@ -1,4 +1,13 @@
 ## 3.14.1
+- **BREAKING** feat: `disallowLegacyEncryption` is settable only through the
+  posture. The `AtClientPreference` constructor argument is removed, which
+  overturns ruling 70's "individual flags still win" for this one flag.
+  - A safety flag whose escape hatch defeats its purpose is not the same kind
+    of thing as deployment policy, which is why the algorithm lists keep their
+    per-preference override and this does not.
+  - An app that wants the refusal adopts `PqPosture.pqActive`, or builds a
+    posture that asks for it — and such a posture must write post-quantum by
+    default, so the flag never moves on its own.
 - **BREAKING** feat: the rollout posture is `PqPosture`, with three pre-built
   constants and a constructor a program can call for a combination none of them
   expresses. `legacy` is the default, `pqReady` moves the credentials while the
