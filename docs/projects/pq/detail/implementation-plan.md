@@ -3471,6 +3471,25 @@ its own. None blocks anything.
     substrate licence that covers at_client's secret-sharing code does not
     cover this.
 
+24. **A ring built from an `AtClient` alone still does not ask for a private
+    it is missing.**
+    [`decisions.md` 111](decisions.md#111-a-key-ring-files-where-its-client-files-2026-08-18)
+    made `PublishedNskeyKeyRing(client)` derive its `NskeyPrivateFiling` from
+    the client's own `AtKeysIo`, so what such a ring mints is durable. It did
+    **not** derive `requestConveyance`, which stays null unless a caller
+    supplies it, and `_askForMissingPrivate` returns immediately when it is —
+    so an app that hand-builds a ring and installs it as its `CryptoConfig`
+    silently loses ruling 38's read-miss self-heal, and a record that arrived
+    ahead of its key is permanently unreadable rather than merely early.
+    **Quieter than before 111, not smaller**: the ring now mints, files and
+    reads correctly, so nothing looks wrong until that one case arrives.
+    Deriving it takes more than the filing did — `AtClientSecretSharing`, a
+    gate equivalent to `PqStartupGates.askOnReadMiss`, and the wait-and-file
+    that `PqClientBootstrap` supplies, since the ask alone repairs the client
+    only at its next start. The alternative is to stop offering the shape and
+    have a client's `CryptoConfig` ring come from the bootstrap and nowhere
+    else.
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.
@@ -4221,7 +4240,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 11 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 12 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
@@ -4243,7 +4262,7 @@ Run these rather than trusting the table. Each answers one row.
 git grep -n "keyIdPrefix =\|apskAdvertisement" -- packages/at_client/lib/src/crypto/nskey/
 
 # row 11: which 14.19 items are still open? (~~struck~~ ones are done)
-awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/implementation-plan.md \
+awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
   | grep -E "^[0-9]+\. \*\*"
 
 # rows 3-9: the stage-5 table, which owns steps 23-31
