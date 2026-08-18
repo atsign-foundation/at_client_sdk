@@ -10535,3 +10535,59 @@ equals the number of active signing keys, floor one, and no stage files two.
 which found `wrapAndSign`'s own comment describing the overlap as the operating
 mode (*"an envelope carrying both is readable by the peer that has upgraded and
 by the peer that has not"*) while no stage could produce one.
+
+## 109. at_chops 3.6.0 stays a minor; no major bump for this release (2026-08-18)
+
+**Ruled by gkc**, reversing the in-principle position of 2026-08-13 that the two
+source-breaking changes in 3.6.0 should force a major. The 4.0.0 bump had been
+built that morning and reverted the same day, so nothing in the tree ever
+carried it. 3.6.0 stands.
+
+**The two breaks, and what each actually costs.**
+
+`pqSeal` and `pqOpen` took `info` from `Uint8List? info` to
+`required Uint8List info`. That is source-breaking for any caller that omitted
+it. Measured 2026-08-18 against `origin/trunk`: at_client has exactly 2 call
+sites, `pairwise_secret_sharing.dart:191` and `:398`, and both already pass
+`info: _sealInfo`, a non-nullable `static final Uint8List`. They are also the
+only `pqSeal`/`pqOpen` call sites anywhere in the repository outside at_chops
+itself.
+
+`AtKemAlgorithm` gained the abstract members `newSeed()` and
+`keyPairFromSeed()`. That is source-breaking for any external
+`implements AtKemAlgorithm`, and `at_algorithm.dart` is exported from the
+published barrel, so the type is public API. Every implementer in this tree is
+inside at_chops (4 backends via `KemSeedMixin`, plus `_FixedKem` in at_chops'
+own test); no other package in the repository implements it. No holder outside
+this tree has been named, and the interface is only useful to someone adding a
+KEM backend to at_chops.
+
+**The measurement that settled it.** at_client from `origin/trunk` was compiled
+against at_chops from `gkc-pq-d1-spike`, both extracted with `git archive` into
+a scratch directory, at_client made standalone and at_chops supplied through a
+path override. `dart pub get` resolved (lock records at_chops 3.6.0 from the
+path), `dart analyze lib` exit 0 with no errors, `dart analyze lib test` exit 0,
+`dart compile kernel` over a probe importing the barrel and
+`pairwise_secret_sharing.dart` exit 0, and `dart test --concurrency=1` gave 648
+passed and 39 skipped. The single load failure was `catalogue_test.dart`
+throwing `could not locate the repo root`, which is the scratch extraction
+missing `docs/`, not a compile error.
+
+The rig was checked rather than trusted: adding a second required parameter to
+`pqSeal` in the scratch at_chops turned the compile red at
+`pairwise_secret_sharing.dart:191:42` with *"Required named parameter
+'controlProbeMustBreak' must be provided"*, quoting the call site under test.
+Restored byte-identical afterwards and re-run green.
+
+**What this saves.** A major would have forced 6 workspace members to widen
+their constraints in the same commit or `dart pub get` fails outright, since pub
+validates every member against the single resolved version. One of those is
+at_lookup, whose in-tree 3.6.1 equals the published 3.6.1, so touching it would
+have needed 3.6.2 opened. None of that is now required.
+
+**What stays true.** Both changes are still breaking, and both are still
+labelled `breaking:` in at_chops' CHANGELOG. The judgement is that no consumer
+exists for either to break, not that neither is a break. If an external
+`implements AtKemAlgorithm` is ever found, this ruling is the thing to re-open.
+at_chops carries no `@experimental` annotations, so that licence is not what
+this rests on.

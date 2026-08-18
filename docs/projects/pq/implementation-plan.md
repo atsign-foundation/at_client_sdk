@@ -1275,13 +1275,15 @@ default-flip: 4.0 is identical to final-3.x *code*).
 ⚠️ Check pub.dev against every touched pubspec before acting on that ladder —
 a same-value version bump merges silently.
 
-⚠️ **The first rung is contested and this line is not the ruling.** gkc has
-ruled *in principle* that at_chops' next release should be a **major**, not
-3.6.0: 3.6.0 carries two source-breaking changes. The 4.0.0 bump was built and
-**reverted** on 2026-08-13, so the decision exists in principle and not in the
-tree, and nothing in TODO owns it. Settle it before publishing at_chops, and
-note that six constraints must widen together or `pub get` fails, and at_lookup
-needs at_chops 3.6.2.
+✅ **The first rung is settled: at_chops publishes as 3.6.0, a minor**
+([decisions 109](detail/decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18),
+gkc 2026-08-18). This reverses the in-principle position of 2026-08-13, and the
+4.0.0 bump built and reverted that day is not to be re-attempted. 3.6.0 does
+carry two source-breaking changes, and the judgement is that no consumer exists
+for either to break: trunk's at_client compiles and tests green against this
+branch's at_chops, and every `AtKemAlgorithm` implementer sits inside at_chops.
+So the 6 workspace constraints do **not** have to widen together, and at_lookup
+does **not** need 3.6.2 opened.
 
 ## PARKED
 
@@ -1425,10 +1427,12 @@ default-flip: 4.0 is identical to final-3.x *code*).
 ⚠️ Check pub.dev against every touched pubspec before acting on that ladder —
 a same-value version bump merges silently.
 
-⚠️ **The first rung is contested and this line is not the ruling.** gkc has
-ruled *in principle* that at_chops' next release should be a **major**, not
-3.6.0: 3.6.0 carries two source-breaking changes. The 4.0.0 bump was built and
-**reverted** on 2026-08-13, so the decision exists in principle and not in the
-tree, and nothing in TODO owns it. Settle it before publishing at_chops, and
-note that six constraints must widen together or `pub get` fails, and at_lookup
-needs at_chops 3.6.2.
+✅ **The first rung is settled: at_chops publishes as 3.6.0, a minor**
+([decisions 109](detail/decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18),
+gkc 2026-08-18). This reverses the in-principle position of 2026-08-13, and the
+4.0.0 bump built and reverted that day is not to be re-attempted. 3.6.0 does
+carry two source-breaking changes, and the judgement is that no consumer exists
+for either to break: trunk's at_client compiles and tests green against this
+branch's at_chops, and every `AtKemAlgorithm` implementer sits inside at_chops.
+So the 6 workspace constraints do **not** have to widen together, and at_lookup
+does **not** need 3.6.2 opened.
