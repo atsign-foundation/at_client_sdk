@@ -305,6 +305,64 @@ void main() {
     });
   });
 
+  group('a row that says owed does not point at a section that says done', () {
+    /// The one shape a cold read caught and nothing here could.
+    ///
+    /// 14.17 sat in the TODO table reading "the owed half" for a whole day
+    /// while its own section body opened "✅ COMPLETE 2026-08-18", and there
+    /// was no DONE row for it either. Every command that counts open work
+    /// keys on the ROW, so it counted an item that had shipped — honestly,
+    /// which is what makes it dangerous. The plan's own re-derivation warning
+    /// names this shape; nothing enforced it.
+    ///
+    /// The check is deliberately one-directional. A section with no done
+    /// marker is not evidence of anything, so only "row says owed, body says
+    /// done" is a failure. On an intended change, move the row — do not
+    /// soften the body.
+    test('no TODO row names a section whose body declares itself done', () {
+      final plan = _read('implementation-plan.md');
+      final detail = _read('detail/implementation-plan.md');
+
+      final todoStart = plan.indexOf('\n## TODO\n') + '\n## TODO\n'.length;
+      expect(todoStart, greaterThan(0), reason: 'the TODO table did not parse');
+      final rest = plan.substring(todoStart);
+      final todo = rest.substring(0, rest.indexOf('\n## '));
+
+      final rows = RegExp(r'^\| \[(14\.\d+)\]', multiLine: true)
+          .allMatches(todo)
+          .map((m) => m.group(1)!)
+          .toList();
+      expect(rows, isNotEmpty,
+          reason: 'no TODO rows parsed, so this guard checks nothing — the '
+              'probe that first found 14.17 reported zero rows because its '
+              'range ended on the heading that opened it');
+
+      final done = RegExp(r'✅|\bDONE\b|\bCOMPLETE\b|\bCLOSED\b');
+      final wrong = <String>[];
+      for (final id in rows) {
+        for (final text in [plan, detail]) {
+          final heading =
+              RegExp('^#{3,4} ${RegExp.escape(id)}[ \n]', multiLine: true)
+                  .firstMatch(text);
+          if (heading == null) continue;
+          final body = text
+              .substring(heading.start)
+              .split('\n')
+              .skip(1)
+              .take(5)
+              .join(' ');
+          final hit = done.firstMatch(body);
+          if (hit != null) wrong.add('$id: body opens "${hit.group(0)}"');
+        }
+      }
+      expect(wrong, isEmpty,
+          reason: 'a TODO row points at a section that says it is finished. '
+              'Move the row to DONE — the body is the thing somebody wrote '
+              'while doing the work, and the row is the thing every count '
+              'reads:\n  ${wrong.join('\n  ')}');
+    });
+  });
+
   group('the plan and the catalogue agree about what is done', () {
     /// The status column in `acceptance.md` is derived from the scenario
     /// files, so it is the one status in the doc set that cannot lie. These
