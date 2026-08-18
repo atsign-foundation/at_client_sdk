@@ -10872,12 +10872,23 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
    no-op once done, failure logged and retried next start, and the client stays
    usable at its current level meanwhile. `selfRetrofit` is already idempotent,
    which is what makes every-start safe.
-3. **Capping needs nothing built.** The atServer already caps the superseded
-   enrollment on a `apkamSelfEnrollmentGraceHours` default of **720 hours**,
-   re-arms it on each sibling retrofit so the parent retires one grace period
-   after the *last* clone upgrades, exempts the atSign's first enrollment
-   entirely, and never extends past the enrollment's own expiry. A laggard
-   stranded past the window recovers by ordinary OTP enrollment.
+3. **Capping needs almost nothing built, and the exception is a sibling-repo
+   dependency.** The atServer caps the superseded enrollment on an
+   `apkamSelfEnrollmentGraceHours` default of **720 hours**, re-arms it on each
+   sibling retrofit so the parent retires one grace period after the *last*
+   clone upgrades, and never extends past the enrollment's own expiry. A
+   laggard stranded past the window recovers by ordinary OTP enrollment. That
+   much is **on at_server trunk**, verified 2026-08-18.
+
+   ⚠️ **The first-enrollment exemption is NOT.** `preserveFirstEnrollmentOnRetrofit`
+   — which keeps the atSign's CRAM-minted root enrollment out of the cap, so
+   retiring it stays an explicit `enroll:revoke` — exists only on at_server
+   **PR #2755, still open**. Until that merges, an auto-retrofit at start caps
+   the first enrollment like any other, and the copied-keyfile lockout applies
+   to the very keyfile most users hold. **Client-driven retrofit should not
+   become the default before #2755 lands.** The grace default is also
+   code-only, absent from `config.yaml`, so an operator reading that file will
+   not find it.
 4. **`disallowLegacyEncryption` is posture-only.** The `AtClientPreference`
    override is removed, which **overturns [70](#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)'s
    "individual flags still win"** for this flag, and **redefines R-2**
@@ -10937,6 +10948,13 @@ shown what a flag that silently does nothing on most commands costs.
 
 There is no `--disallowLegacyEncryption` argument anywhere, per ruling 4.
 `at_onboarding_cli` takes a major version when it takes up at_client 4.x.
+
+**`--signingAlgoType` is replaced by `--posture` and removed.** It named the
+PKAM *authentication* key while reading like the data signing key, which is the
+ambiguity ruling 7 exists to remove; it silently did nothing on every command
+but `onboard` ([#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161));
+and every activation it can express is expressible as a posture. An app needing
+a combination no pre-built posture offers builds its own `PqPosture`.
 
 ### Public-data signatures
 

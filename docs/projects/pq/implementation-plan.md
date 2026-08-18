@@ -94,8 +94,18 @@ an at_chops version ruling 109 avoided. Measured blast radius for the rest:
 ⚠️ The acceptance rows `UC-C1.x` and ruling 70 move in the same commit.
 
 **The CLI.** `--posture legacy|pqReady|pqActive` on every command, defaulting to
-at_client's built-in. No `--disallowLegacyEncryption` anywhere.
-`at_onboarding_cli` majors when it takes at_client 4.x.
+at_client's built-in. `--signingAlgoType` is replaced by it and removed. No
+`--disallowLegacyEncryption` anywhere. `at_onboarding_cli` majors when it takes
+at_client 4.x.
+
+⚠️ **One sibling-repo dependency, verified 2026-08-18.** Client-driven retrofit
+rests on the atServer exempting the atSign's FIRST enrollment from the retrofit
+cap, and that exemption is **at_server PR #2755, still open** — only the
+720-hour grace itself is on at_server trunk. Until #2755 merges, an
+auto-retrofit caps the first enrollment like any other, which locks out any
+copy of the keyfile most users actually hold. Do not make client-driven
+retrofit the default before it lands. Re-derive:
+`git -C ~/dev/atsign/repos/at_server grep -c preserveFirstEnrollmentOnRetrofit origin/trunk -- packages/at_secondary_server/lib`
 
 **Public-data signatures.** ⚠️ **Nothing verifies `metadata.dataSignature`
 today** — not at_client, not the atServer — so this builds the first verifier
