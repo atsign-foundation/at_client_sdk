@@ -96,7 +96,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A4.3  | Multi-enrollment both ends                                                          | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A4.4  | Cross-atSign notification (encrypted value)                                         | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A4.5  | A sender follows the recipient's advertised algorithm, not its own preference       | PROVEN    | `a4_shared_data_test.dart`   |
-| UC-A4.6  | The construction is negotiated from `suites`, and an absent list means the original | PROVEN    | `a4_shared_data_test.dart`   |
+| UC-A4.6  | The construction is negotiated from `suites`, and no shared entry is a refusal | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A4.7  | No mutually supported construction is a refusal, not a guess                        | PROVEN    | `a4_shared_data_test.dart`   |
 | UC-A5.1  | Rotate a namespace key (post-compromise)                                            | PROVEN    | `a5_rotation_test.dart`      |
 | UC-A5.2  | Per-enrollment auth revocation                                                      | PROVEN    | `a5_rotation_test.dart`      |
@@ -798,18 +798,21 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   per-message KEM negotiation to attack, which is what SP 800-227 section 4.6.3 warns
   about when a protocol introduces additional choices ("could also introduce
   vulnerabilities (e.g. in the form of downgrade attacks)"). What *is* negotiated is the
-  construction over that KEM — [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-an-absent-list-means-the-original).
+  construction over that KEM — [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-no-shared-entry-is-a-refusal).
 
-### 5.6 UC-A4.6 — The construction is negotiated from `suites`, and an absent list means the original
+### 5.6 UC-A4.6 — The construction is negotiated from `suites`, and no shared entry is a refusal
 
 - **Given:** two recipients holding the **same X-Wing key**, differing only in what their
-  advertised record claims: one lists `x-wing-rfc9180-v1`, the other's record predates the
-  `suites` field entirely.
+  advertised record claims: one lists `x-wing-rfc9180-v1`, the other lists only the
+  retired `x-wing-hpke-v1`.
 - **When:** `alice1` seals to each.
 - **Then:**
-  - the peer that lists RFC 9180 receives `pqSeal ver 0x02`; the peer whose record
-    predates the field receives `ver 0x01`, because an absent field means **exactly the
-    one construction that existed when it was written**;
+  - the peer that lists RFC 9180 receives `pqSeal ver 0x02`; the peer that lists only
+    the retired construction is **refused**, because the two share no entry and sealing
+    this client's own preference anyway would hand that peer a record it cannot open.
+    ⚠️ Until `0x01` was retired this arm received `ver 0x01` instead — the negotiation
+    is unchanged, only its outcome for a narrow peer. An advertisement carrying **no**
+    `suites` field at all is refused at the parse, and always has been on this branch;
   - the payload's declared suite and the envelope's version byte **agree**. Both matter,
     and separately — the declared suite is what a receiver accepts on, the version byte
     is what it dispatches the KEM on, and a disagreement between them opens as an AEAD
@@ -821,8 +824,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     holder's statement about itself, and a newer holder may name a construction we do not
     implement yet.
 - **Then (this is what moves the wire without a flag day):** two clients that both
-  advertise RFC 9180 now exchange `0x02` where they exchanged `0x01`, with no
-  readers-upgrade-first migration. That is the whole reason the field exists.
+  advertise RFC 9180 exchanged `0x02` where they had exchanged `0x01`, with no
+  readers-upgrade-first migration — and that is what later made it safe to drop `0x01`
+  outright. That is the whole reason the field exists.
 - **Verification note:** both arms must be asserted against the **same** key, so the only
   thing differing between them is what the record claims. Two arms that differ in key
   *and* claim prove nothing about the claim.

@@ -223,6 +223,67 @@ substrate node structure is recorded in [decisions.md](decisions.md).
 
 ## 3. Phase A — PQ primitives & enrollment key (P-1, P-2, P-3)
 
+### 14.37 The `0x01` seal version, removed outright
+
+Closed 2026-08-18. [Ruling 110](decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18)
+retired the version and is amended in place with the reasoning below; this
+entry is what the work turned out to be.
+
+**Why one commit rather than the ruled two.** The staged order — stop emitting,
+then remove — protects records already sealed under `0x01`. There are none that
+matter, and for a stronger reason than "nothing outside this tree holds one":
+the `nskey` subsystem that writes the durable, never-cleaned-up `__ck`
+conveyance **does not exist on `trunk`** (0 files against 38 on this branch,
+measured against a 2874-file listing), so no published build can create one.
+The only `0x01` a published 3.14.0 can write is a pairwise `__ssenv` envelope,
+and those carry `envelopeTtl = Duration(days: 7)`. Staging would have bought
+nothing and left a window in which something could still emit one.
+
+**⚠️ The row's commit 1 was mis-specified, and the error is worth keeping.** It
+read *"drop `xWingHpke` from `SecretSharingAlgos.suites` … and leave it in
+`openableSuitesFor(xWing)` so a holder still advertises that it can open one"*.
+Both halves were backwards:
+
+- **Emission does not read `suites`.** Both seal sites take their sender
+  preference from `openableSuitesFor` — `nskey_provider.dart`'s
+  `_sealVersionFor` and `pairwise_secret_sharing.dart`'s `sendEnvelope`. The
+  prescribed edit would have changed nothing about what gets emitted.
+- **The advertisement partly does.** `openableSuitesForAll` iterates `suites`,
+  so `key_package.dart` and `nskey_key_ring.dart` derive through it while
+  `published_nskey_key_ring.dart` calls `openableSuitesFor` directly. The edit
+  would have narrowed three advertisement sites and left two — and that list
+  reaches the wire on `enroll:request`, pinned as a raw literal.
+
+The cause is legible: `openableSuitesFor` served both roles and **had no
+dartdoc of its own**. The block describing it ran into the next function's with
+no blank line between, so it attached to `bestSuiteBetween` and the sentence
+that would have stopped both seal sites using an advertisement list as a sender
+list was one member away from where anyone would look. That is repaired, and
+the doc now says outright that it is an advertisement list.
+
+**What went.** `xWingHpke` and its wire id, the `0x01` row of at_chops'
+`_versions`, `_SealVersion.custom` with its `suiteLabel` and `_customAead`, the
+custom branch of `_deriveKeyAndNonce` and the `_u8`/`_concat` helpers only it
+used, `pq_seal_conformance_test.dart` and its 95-row `pq_seal_v1.json`.
+`pqSealDefaultVersion` moved to `0x02` rather than being deleted: removing a
+public const from at_chops is a separate API decision, and nothing reads the
+default because `pqSealToBase64` makes `version` required.
+
+**What changed shape rather than going away.** Two tests that asserted the
+`0x01` fallback now assert the refusal that replaces it, against the same
+fixtures — `pairwise_secret_sharing_test.dart` and `nskey_kem_selection_test.dart`
+— and the refusal is asserted by its message, which names both suite lists.
+`seal-spec.md` lost the ~200 lines specifying `0x01` and became the Atsign
+envelope around RFC 9180. UC-A4.6's title said *"an absent list means the
+original"*; an absent list has been refused at the parse since
+`legacyNskeySuites` was deleted, so that title was already false and is now
+about no-overlap instead.
+
+**The consequence, stated plainly.** `trunk`'s `suites` is `[xWingHpke]` alone,
+so a current build and a published 3.14.0 build share no construction and
+cross-version secret sharing refuses rather than downgrading. Intended under
+`@experimental`, and loud: both seal sites throw.
+
 ### P-1 — at_chops 3.3.0: stateless core + HPKE — **SATISFIED (published 2026-06-23)** · at_chops · S
 **Goal:** ship the publishable `at_chops` minor everything pins. **Done:** `at_chops` **3.3.0 was published
 to pub.dev on 2026-06-23** (`pqSeal`/`pqOpen` HPKE + the stateless surface + `@Deprecated AtChopsImpl` shim).

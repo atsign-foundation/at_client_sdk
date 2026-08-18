@@ -1,4 +1,24 @@
 ## 3.14.1
+- **BREAKING**: the `x-wing-hpke-v1` sealing suite is removed —
+  `SecretSharingAlgos.xWingHpke` is gone, `suites` and `openableSuitesFor` no
+  longer name it, and `sealVersionFor('x-wing-hpke-v1')` returns null. A peer
+  advertising only that suite now shares no construction with this build, so
+  sending to it is refused rather than downgraded, and the refusal names both
+  suite lists. See at_chops 3.6.0 for why the version went.
+
+  This narrows the `suites` list emitted in the enrollment key package on
+  `enroll:request` to `["x-wing-rfc9180-v1"]` for an X-Wing holder.
+
+  ⚠️ at_client 3.14.0 advertises `x-wing-hpke-v1` alone, so a build on this
+  version and a published 3.14.0 build can no longer share secrets with each
+  other. The secret-sharing substrate is `@experimental` and disclaims exactly
+  this compatibility.
+- fix: `SecretSharingAlgos.openableSuitesFor` had no dartdoc of its own. The
+  block describing it was separated from the following member's by no blank
+  line, so it attached to that one instead. It now says in its own doc that it
+  is an ADVERTISEMENT list — what a holder claims it can open — and not a
+  sender's preference order, which is how both seal sites came to use it as
+  one.
 - fix: `NskeyPrivateFiling`'s readers no longer report an unreadable key source
   as "holds nothing". `read`, `readSeed` and `readAllFor` answer null only for
   a genuine absence — nothing written for this atSign, or no such entry — and

@@ -1,4 +1,23 @@
 ## 3.6.0
+- **BREAKING**: `pqSeal` version `0x01` — the `atPQv1-base` construction,
+  X-Wing under a bespoke HKDF-SHA256 key schedule with AES-256-GCM — is
+  removed. `pqSealSupportedVersions` is now `{0x02, 0x03}` and
+  `pqSealDefaultVersion` is `0x02`. An envelope carrying `ver 0x01` opens as
+  `PqOpenFailure.versionMismatch`.
+
+  It shared its KEM with `0x02`, so it was duplication rather than algorithm
+  diversity; `0x02` and `0x03` are RFC 9180 Base mode verbatim and attested by
+  the IETF working group's own vectors, where `0x01` had only vectors this
+  project generated for itself. Its one distinctive feature was AES-256-GCM in
+  place of ChaCha20-Poly1305, and what these envelopes carry is a 32-byte
+  content key, at which size the KEM dominates the AEAD — while `0x03` keeps
+  AES-GCM in the suite set regardless.
+
+  `0x01` was the only user of the bespoke key schedule, so this removes the
+  last non-RFC-9180 construction from the package, along with
+  `pq_seal_conformance_test.dart` and its self-generated `pq_seal_v1.json`
+  vectors. Safe to remove rather than deprecate because no released build
+  contains the subsystem that writes durable records sealed this way.
 - feat: add `SigningAlgoType.strongestFirst` and `SigningAlgoType.strongestOf`
   — the order a verifier uses to choose which of several signatures on one
   envelope to check, and the lookup over it. Purely additive: two static

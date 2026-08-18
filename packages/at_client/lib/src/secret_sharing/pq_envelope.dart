@@ -28,10 +28,11 @@ import 'package:meta/meta.dart';
 /// because a shared binding is the one bug a shared seal path could introduce,
 /// and a default is how it would arrive — by a call site saying nothing rather
 /// than by anyone choosing it. `version` because at_chops defaults it to
-/// `pqSealDefaultVersion` (`0x01`, the pre-RFC-9180 construction) while both
-/// callers here negotiate it from what the recipient says it can open; a
-/// default would let a new call site quietly emit `0x01` to a peer that had
-/// agreed on something else.
+/// `pqSealDefaultVersion` while both callers here negotiate it from what the
+/// recipient says it can open; a default would let a new call site quietly
+/// emit whatever this build happens to prefer to a peer that had agreed on
+/// something else. The versions differ by KEM, so that is not a downgrade but
+/// an unopenable record.
 ///
 /// Throws `PqSealException` if the recipient key is the wrong length or the
 /// version is one this build cannot emit.

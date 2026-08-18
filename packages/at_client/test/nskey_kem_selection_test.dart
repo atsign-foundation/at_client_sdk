@@ -75,7 +75,7 @@ void main() {
       expect(base64Decode(wire).first, 0x02);
     });
 
-    test('and falls back for an owner whose advertisement predates suites',
+    test('and refuses an owner that only opens the retired construction',
         () async {
       // The arm that makes the one above safe. Same key, same KEM — the only
       // difference is what the advertisement says it can open, which is what a
@@ -87,7 +87,7 @@ void main() {
           NskeyAdvertisement.single(
             publicKey: pair.publicKey,
             alg: SecretSharingAlgos.xWing,
-            suites: const [SecretSharingAlgos.xWingHpke],
+            suites: const ['x-wing-hpke-v1'],
           ),
           pair.secretKey);
       final provider = NskeyProvider(
@@ -97,12 +97,12 @@ void main() {
       final ck = ContentKey(Uint8List(32));
       final atKey = conveyanceKey();
 
-      final wire = await provider.encrypt(context, atKey, ck.toBase64());
-
-      expect(base64Decode(wire).first, 0x01,
-          reason: 'an owner that never claimed RFC 9180 must not be sent it — '
-              'the conveyance would be unopenable and nothing would say why');
-      expect(await provider.decrypt(context, atKey, wire), ck.toBase64());
+      // This arm used to assert the conveyance went out at `0x01`. That
+      // version is retired, so the two now share no construction at all, and
+      // the contract for that is a refusal: an owner sent a construction it
+      // never claimed would fail on ITS side as an AEAD error naming nothing.
+      await expectLater(provider.encrypt(context, atKey, ck.toBase64()),
+          throwsA(isA<AtEncryptionException>()));
     });
 
     test('no shared construction is a refusal, not a guess', () async {

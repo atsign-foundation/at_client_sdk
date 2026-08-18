@@ -10648,21 +10648,44 @@ advertisement is APKAM-signed and verified before sealing, and a key package
 verifies against its enrollment's `_apsk`, so an attacker cannot narrow a
 published suites list without holding the enrollment's key.
 
-**The order, which is the part that matters.** Stop *emitting* before removing:
-take `xWingHpke` out of `SecretSharingAlgos.suites` first, leaving it in
-`openableSuitesFor` so anything already sealed still opens, and only then drop
-the row from at_chops' `_versions`, the constant from
-`pqSealSupportedVersions`, the entry from `sealVersionFor`, and the default
-from `pqSealDefaultVersion`. That is the same reader-first shape
-[76](#76-the-nskey-advertises-one-kem-key-2026-08-10) uses. `seal-spec.md`,
-`pq_seal_v1.json` and `pq_seal_conformance_test.dart` move in the commit that
-removes the version, not before it.
+**Amended 2026-08-18: removed outright, in one commit. The staged order below
+was dropped.** gkc reframed the question from *how do we retire this safely* to
+*is there any value in `0x01` over `0x02` at all* — and if not, remove it now so
+it can never reach production. There is none. The two share a KEM (X-Wing), so
+`0x01` is duplication rather than diversity and hedges nothing `0x02` does not;
+the genuine hedge is `0x03`'s different KEM. `0x02` is attested by the working
+group's vectors where `0x01` had only vectors we generated for ourselves. The
+one real difference is AES-256-GCM against ChaCha20-Poly1305, and what is sealed
+is a 32-byte content key, at which size the KEM dominates the AEAD by orders of
+magnitude — while `0x03` keeps AES-GCM in the system anyway. Against that,
+`0x01` was the only user of `_SealVersion.custom`, so retiring it removed the
+last homegrown key schedule from the tree.
 
-Removing a supported version turns records already written into permanent
-`PqOpenFailure.versionMismatch` failures, which is why the two steps are
-separate. Nothing outside this tree holds a `0x01` envelope today, and
-`__ssenv` entries expire at 7 days regardless, so the window costs nothing —
-but the order is what makes it safe to be wrong about that.
+**What made one commit safe, rather than two.** The staged order existed solely
+to protect records already sealed under `0x01`, since removing a supported
+version turns them into permanent `PqOpenFailure.versionMismatch` failures. The
+decisive fact is stronger than "nothing outside this tree holds one": the
+`nskey` subsystem — which writes the durable, never-cleaned-up `__ck`
+conveyance — **does not exist on `trunk` at all** (0 files against 38 on this
+branch, measured against a 2874-file listing). No published build can create
+one, so there is no holder because there is no writer. What a published 3.14.0
+*can* write at `0x01` is a pairwise `__ssenv` envelope, and those carry
+`envelopeTtl = Duration(days: 7)`. Staging would only have left a window in
+which something could still emit `0x01`, which is the opposite of the intent.
+
+⚠️ **This section previously prescribed two commits**: take `xWingHpke` out of
+`SecretSharingAlgos.suites` first, leaving it in `openableSuitesFor` so anything
+already sealed still opens, and only then drop the version. That first step was
+also mis-specified — neither seal site reads `suites`; both take their sender
+preference from `openableSuitesFor`, so it would have narrowed the
+*advertisement* while leaving emission untouched. The retirement removed both
+together instead.
+
+**The consequence, stated plainly.** A current build and a published 3.14.0
+build now share no construction, because `trunk`'s `suites` is `[xWingHpke]`
+alone. Cross-version secret sharing therefore **refuses** rather than silently
+downgrading. That is the intended outcome under `@experimental`, and the
+refusal is loud — both seal sites throw, naming both suite lists.
 
 ## 111. A key ring files where its client files (2026-08-18)
 

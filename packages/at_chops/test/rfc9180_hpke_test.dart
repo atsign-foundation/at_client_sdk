@@ -1,10 +1,11 @@
 /// RFC 9180 Base-mode key schedule, against the IETF HPKE working group's
 /// published vector for the suite `ver = 0x02` emits.
 ///
-/// This is the difference between the two constructions in this package.
-/// `atPQv1-base`'s vectors are self-generated, because no third party
-/// publishes any; these are the working group's, mirrored by the Go standard
-/// library, and neither we nor anyone at Atsign produced a byte of them.
+/// These are the working group's own vectors, mirrored by the Go standard
+/// library: neither we nor anyone at Atsign produced a byte of them. That is
+/// what every construction in this package is now attested by — the one that
+/// had only self-generated vectors, `atPQv1-base`, was removed rather than
+/// kept beside them.
 library;
 
 import 'dart:convert';

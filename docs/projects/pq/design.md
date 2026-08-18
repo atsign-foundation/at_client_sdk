@@ -252,11 +252,14 @@ sealing **constructions the owner can open**, which `alg` does not determine —
 opens every construction built on that KEM, and which of those the holder implements
 depends on its build. The sender takes the strongest entry both sides list and derives
 the `pqSeal` version from it, so the conveyance version is negotiated rather than
-fixed: a modern X-Wing owner receives `0x02`, one whose advertisement predates the
-field receives `0x01`, ML-KEM-1024 receives `0x03`, and no overlap is a refusal. The
-published list is derived from **the generation's own KEM**, never from what this build
-supports, and the absent-field default must never grow — unlike a key package, an
-advertisement is fetched by *senders*, who act on the claim immediately. See
+fixed: an X-Wing owner receives `0x02`, ML-KEM-1024 receives `0x03`, and no overlap is
+a refusal. ⚠️ This sentence also gave "one whose advertisement predates the field
+receives `0x01`" until 2026-08-18, when `0x01` was retired: such an owner now shares no
+construction and is refused like any other no-overlap peer. The published list is
+derived from **the generation's own KEM**, never from what this build supports, and an
+advertisement carrying no list at all is refused at the parse rather than defaulted —
+unlike a key package, an advertisement is fetched by *senders*, who act on the claim
+immediately. See
 [`decisions.md` 50.3](detail/decisions.md#503-the-kem-is-configured-the-construction-is-negotiated).
 
 ### 1.4 the nskey and the signing root

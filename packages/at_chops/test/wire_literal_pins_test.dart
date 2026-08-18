@@ -3,8 +3,8 @@
 ///
 /// The seal family (version bytes, envelope framing, key schedules) is
 /// already pinned hard — byte-exact golden envelopes in pq_hpke_test.dart,
-/// the atPQv1-base vectors in pq_seal_conformance_test.dart, and third-party
-/// IETF WG vectors in rfc9180_hpke_test.dart. What this file pins is the
+/// and third-party IETF WG vectors in rfc9180_hpke_test.dart. What this file
+/// pins is the
 /// residue those leave open: values every test elsewhere asserts through the
 /// very enum members and constants a refactor would rename, so a changed
 /// VALUE keeps the whole suite green while changing the wire.
@@ -45,14 +45,17 @@ void main() {
   });
 
   group('the pqSeal version-byte vocabulary', () {
-    test('the default emitted version is 0x01', () {
-      expect(pqSealDefaultVersion, 0x01);
+    test('the default emitted version is 0x02', () {
+      expect(pqSealDefaultVersion, 0x02);
     });
 
-    test('the supported set is exactly {0x01, 0x02, 0x03}', () {
-      // The FULL set, not membership: widening it silently changes every
-      // default computed from it, with no emitting site having changed.
-      expect(pqSealSupportedVersions, {0x01, 0x02, 0x03});
+    test('the supported set is exactly {0x02, 0x03}', () {
+      // The FULL set, not membership: NARROWING it turns records already
+      // sealed under the dropped version into permanent versionMismatch
+      // failures, and widening it silently changes every default computed
+      // from it — with no emitting site having changed either way. 0x01 was
+      // dropped deliberately; nothing published could write a durable one.
+      expect(pqSealSupportedVersions, {0x02, 0x03});
     });
   });
 

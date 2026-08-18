@@ -234,7 +234,7 @@ void main() {
     expect(payload.keys.toList(), ['v', 'createdAt', 'keys', 'suites'],
         reason: 'the payload — frozen forever');
     expect(payload['v'], 1);
-    expect(payload['suites'], ['x-wing-rfc9180-v1', 'x-wing-hpke-v1']);
+    expect(payload['suites'], ['x-wing-rfc9180-v1']);
 
     final keys = (payload['keys'] as List).cast<Map<String, dynamic>>();
     expect(keys, hasLength(1),

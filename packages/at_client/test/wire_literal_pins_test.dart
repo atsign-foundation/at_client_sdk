@@ -596,7 +596,7 @@ void main() {
           '{"v":1,"createdAt":"2026-06-11T00:00:00.000Z",'
           '"keys":[{"kid":"b5d4045c3f466fa9","use":"enc","alg":"x-wing",'
           '"pub":"QUJD"}],'
-          '"suites":["x-wing-rfc9180-v1","x-wing-hpke-v1"]}');
+          '"suites":["x-wing-rfc9180-v1"]}');
     });
 
     // Two constants used to be pinned here against ever growing:
@@ -609,7 +609,6 @@ void main() {
     test('the protocol ids, as raw strings', () {
       expect(SecretSharingAlgos.xWing, 'x-wing');
       expect(SecretSharingAlgos.mlKem1024, 'ml-kem-1024');
-      expect(SecretSharingAlgos.xWingHpke, 'x-wing-hpke-v1');
       expect(SecretSharingAlgos.xWingRfc9180, 'x-wing-rfc9180-v1');
       expect(SecretSharingAlgos.mlKem1024Rfc9180, 'ml-kem-1024-rfc9180-v1');
       expect(SecretSharingAlgos.useEnc, 'enc');
@@ -618,11 +617,13 @@ void main() {
     test('the preference orders are frozen — they decide negotiation', () {
       expect(SecretSharingAlgos.keyAlgos, ['x-wing', 'ml-kem-1024']);
       expect(SecretSharingAlgos.suites,
-          ['x-wing-rfc9180-v1', 'ml-kem-1024-rfc9180-v1', 'x-wing-hpke-v1']);
+          ['x-wing-rfc9180-v1', 'ml-kem-1024-rfc9180-v1']);
     });
 
     test('suite → seal version byte, with literals on both sides', () {
-      expect(SecretSharingAlgos.sealVersionFor('x-wing-hpke-v1'), 0x01);
+      expect(SecretSharingAlgos.sealVersionFor('x-wing-hpke-v1'), isNull,
+          reason: 'the retired id maps to no version, so an advertisement '
+              'still naming it cannot be sealed to');
       expect(SecretSharingAlgos.sealVersionFor('x-wing-rfc9180-v1'), 0x02);
       expect(SecretSharingAlgos.sealVersionFor('ml-kem-1024-rfc9180-v1'), 0x03);
       expect(SecretSharingAlgos.sealVersionFor('x-wing-hpke-v2'), isNull);
@@ -630,7 +631,7 @@ void main() {
 
     test('keyAlgo → suites, the lists enrollment records freeze', () {
       expect(SecretSharingAlgos.openableSuitesFor('x-wing'),
-          ['x-wing-rfc9180-v1', 'x-wing-hpke-v1']);
+          ['x-wing-rfc9180-v1']);
       expect(SecretSharingAlgos.openableSuitesFor('ml-kem-1024'),
           ['ml-kem-1024-rfc9180-v1']);
       expect(SecretSharingAlgos.openableSuitesFor('kyber-1024-v9'), isEmpty);

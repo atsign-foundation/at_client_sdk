@@ -5,8 +5,7 @@ import 'at_aead.dart';
 
 /// RFC 9180 HPKE, **Base mode**, single-shot.
 ///
-/// This is the real thing, unlike `pqSeal`'s `atPQv1-base` — the key schedule
-/// below is RFC 9180 §5.1 verbatim, and its outputs are checked against the
+/// The key schedule below is RFC 9180 §5.1 verbatim, and its outputs are checked against the
 /// IETF HPKE working group's published vectors for KEM `0x647A` in
 /// `test/rfc9180_hpke_test.dart`. Those are bytes nobody at Atsign produced,
 /// which is the whole reason for having it.

@@ -117,9 +117,9 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
   /// flag day: every conveyance already written stays readable, but a reader
   /// on a build that predates the new construction would find new ones
   /// unopenable, with nothing having told the writer to hold off. An
-  /// advertisement published before the field existed declares
-  /// [legacyNskeySuites], so those owners keep receiving `0x01` — which is
-  /// exactly what they can open.
+  /// advertisement that declares no `suites` at all is refused at the parse
+  /// rather than defaulted: guessing on an owner's behalf is how a sender
+  /// comes to seal something the owner cannot unwrap.
   ///
   /// No overlap is a refusal, not a fallback to this build's preference: the
   /// owner would get a conveyance it cannot unwrap, and the failure would

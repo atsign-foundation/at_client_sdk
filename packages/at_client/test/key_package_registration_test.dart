@@ -141,10 +141,7 @@ void main() {
       expect(encKey.alg, SecretSharingAlgos.xWing);
       expect(base64Decode(encKey.pub),
           hasLength(XWingPureDartAlgo.publicKeyLength));
-      expect(pkg.suites, [
-        SecretSharingAlgos.xWingRfc9180,
-        SecretSharingAlgos.xWingHpke,
-      ]);
+      expect(pkg.suites, [SecretSharingAlgos.xWingRfc9180]);
     });
 
     test('a client configured for ML-KEM-1024 mints and advertises it',
@@ -441,17 +438,18 @@ void main() {
         // A holder that has upgraded past this build, plus an entry this build
         // has never heard of — kept, because it is the holder's claim about
         // itself, not ours.
-        'suites': ['x-wing-hpke-v2', SecretSharingAlgos.xWingHpke, 7],
+        'suites': ['x-wing-hpke-v2', 'x-wing-hpke-v1', 7],
       }, enrollmentId: 'enroll-x');
 
-      expect(pkg.suites, ['x-wing-hpke-v2', SecretSharingAlgos.xWingHpke],
+      expect(pkg.suites, ['x-wing-hpke-v2', 'x-wing-hpke-v1'],
           reason: 'non-String entries are dropped the same way malformed key '
-              'entries are, rather than throwing');
-      expect(pkg.bestSuiteFor(['x-wing-hpke-v2', SecretSharingAlgos.xWingHpke]),
+              'entries are, rather than throwing. Both survivors are now '
+              'unknown to this build — one never existed, one was retired — '
+              'and unknown is exactly what must be kept');
+      expect(pkg.bestSuiteFor(['x-wing-hpke-v2', 'x-wing-hpke-v1']),
           'x-wing-hpke-v2',
           reason: 'the sender\'s order decides, strongest first');
-      expect(pkg.bestSuiteFor([SecretSharingAlgos.xWingHpke]),
-          SecretSharingAlgos.xWingHpke);
+      expect(pkg.bestSuiteFor(['x-wing-hpke-v1']), 'x-wing-hpke-v1');
     });
 
     test('no overlap is null rather than a guess', () {
@@ -483,11 +481,10 @@ void main() {
               pub: 'cA=='),
         ],
       );
-      expect(xWingPayload['suites'],
-          [SecretSharingAlgos.xWingRfc9180, SecretSharingAlgos.xWingHpke],
-          reason: 'an X-Wing private opens both X-Wing constructions — the '
-              'difference between them is the key schedule and the AEAD, not '
-              'the decapsulation');
+      expect(xWingPayload['suites'], [SecretSharingAlgos.xWingRfc9180],
+          reason: 'the advertisement names every construction an X-Wing '
+              'private can open, and since the bespoke one was retired that '
+              'is exactly the RFC 9180 suite');
       expect(xWingPayload['suites'],
           isNot(contains(SecretSharingAlgos.mlKem1024Rfc9180)),
           reason: 'and nothing it holds can open an ML-KEM-1024 envelope');

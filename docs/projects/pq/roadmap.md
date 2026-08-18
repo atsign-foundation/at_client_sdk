@@ -37,7 +37,7 @@ the canonical home rather than duplicating it.
 | [`design.md`](design.md) | Detailed designs by subsystem — the D1 `nskey` data-path key shapes / 3 providers / `appMetadata` / CK model / cold-start / FS + rotation levers; the secret-sharing substrate (`kpid`, `__ssenv`, `SecretStore`, push/pull, `enroll:listns`, the enrollment record + self-retrofit flow); at_chops primitives; the `CryptoProvider` seam / key stores / WASM split; and the worked walkthroughs (NoPorts, at_talk). Build-level notes with `file:line`. |
 | [`acceptance.md`](acceptance.md) | The given/when/then use-case catalogue (A1.x–A5.x, B0.x–B5.x) with concrete at-keys plus the impl/verify steps and the test harness. |
 | [`decisions.md`](decisions.md) | The decision **index** — one row per ruling, with date and status, and nothing else. Since 2026-08-16 it is deliberately bodyless, so grepping it returns headlines; the reasoning behind every choice is in [`detail/decisions.md`](detail/decisions.md), under a `## <number>.` heading matching the row. |
-| [`seal-spec.md`](seal-spec.md) | The byte-level `atPQv1-base` seal specification a second implementation builds from, paired with `packages/at_chops/test/vectors/pq_seal_v1.json`. |
+| [`seal-spec.md`](seal-spec.md) | The Atsign seal envelope around RFC 9180 — which suite each version byte names, the framing and the error model — paired with the IETF working group's vectors under `packages/at_chops/test/vectors/`. |
 
 ## The two major deliverables (D1 / D2)
 

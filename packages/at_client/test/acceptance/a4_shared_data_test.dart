@@ -139,10 +139,13 @@ void main() {
       //       what their advertised record claims: one lists
       //       x-wing-rfc9180-v1, the other's record predates the suites field.
       // WHEN  alice1 seals to each.
-      // THEN  the peer that lists RFC 9180 receives ver 0x02 and the peer whose
-      //       record predates the field receives ver 0x01, because an absent
-      //       field means EXACTLY the one construction that existed when it was
-      //       written. The payload's declared suite and the envelope's version
+      // THEN  the peer that lists RFC 9180 receives ver 0x02, and the peer
+      //       that lists only the retired x-wing-hpke-v1 is REFUSED — there is
+      //       no shared construction, and sealing this client's preference
+      //       anyway would hand it a record it cannot open. (Until 0x01 was
+      //       retired this arm received 0x01 instead; the negotiation is the
+      //       same, only its outcome for a narrow peer changed.) The payload's
+      //       declared suite and the envelope's version
       //       byte agree — the declared suite is what a receiver accepts on and
       //       the version byte is what it dispatches the KEM on, and a
       //       disagreement opens as an AEAD failure naming neither side. The
@@ -150,15 +153,16 @@ void main() {
       //       intersection, so a suite the key cannot decapsulate can never be
       //       selected. Unrecognised entries survive a parse, because the list
       //       is the holder's statement about itself. This is what moved the
-      //       wire from 0x01 to 0x02 with no readers-upgrade-first migration.
+      //       wire from 0x01 to 0x02 with no readers-upgrade-first migration,
+      //       and then let 0x01 be dropped outright.
       provenIn(
         'packages/at_client/test/pairwise_secret_sharing_test.dart',
         'negotiates RFC 9180 with a peer whose package says it opens it',
-        proves: 'the upper arm. Its pair, "falls back to the original '
-            'construction for a peer that predates it", is asserted against '
-            'the SAME X-Wing key, so the only thing differing between the two '
-            'arms is what the package claims — two arms differing in key AND '
-            'claim would prove nothing about the claim.',
+        proves: 'the upper arm. Its pair, "refuses a peer that only opens '
+            'the retired construction", is asserted against the SAME X-Wing '
+            'key, so the only thing differing between the two arms is what '
+            'the package claims — two arms differing in key AND claim would '
+            'prove nothing about the claim.',
       );
       provenIn(
         'tests/at_functional_test/test/secret_sharing_delivery_test.dart',

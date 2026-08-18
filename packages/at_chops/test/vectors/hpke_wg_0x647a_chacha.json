@@ -2,7 +2,7 @@
  "_provenance": {
   "source": "https://raw.githubusercontent.com/hpkewg/hpke-pq/main/test-vectors.json",
   "fetched": "2026-08-06",
-  "note": "The IETF HPKE working group's vector for mode 0 (base), KEM 0x647A, KDF 0x0001 (HKDF-SHA256), AEAD 0x0003 (ChaCha20-Poly1305) \u2014 the exact suite ver=0x02 emits. Unlike pq_seal_v1.json these are NOT self-generated: nobody at Atsign produced them, and Go 1.26 vendors the same file."
+  "note": "The IETF HPKE working group's vector for mode 0 (base), KEM 0x647A, KDF 0x0001 (HKDF-SHA256), AEAD 0x0003 (ChaCha20-Poly1305) \u2014 the exact suite ver=0x02 emits. These are NOT self-generated: nobody at Atsign produced them, and Go 1.26 vendors the same file."
  },
  "mode": 0,
  "kem_id": 25722,

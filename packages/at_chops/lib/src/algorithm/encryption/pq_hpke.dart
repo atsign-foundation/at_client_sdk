@@ -4,19 +4,20 @@
 /// The envelope framing is Atsign-Protocol-internal at every version; what
 /// `ver` selects is the construction inside it (one table row each, see
 /// `_versions`):
-///   - `0x01`, the default: HPKE-*style* — X-Wing with the custom
-///     `atPQv1-base` key schedule (HKDF-SHA256) and AES-256-GCM. Not RFC
-///     9180; do not expect interop with off-the-shelf HPKE implementations.
-///   - `0x02` and `0x03`: genuine RFC 9180 Base-mode key schedules (§5.1
-///     verbatim, in `rfc9180_hpke.dart`), checked against the IETF HPKE
-///     working group's published vectors.
+///   - `0x02` and `0x03`: RFC 9180 Base-mode key schedules (§5.1 verbatim,
+///     in `rfc9180_hpke.dart`), checked against the IETF HPKE working group's
+///     published vectors. They differ in their KEM, which is why they are
+///     separate versions rather than one version carrying a suite field.
 ///
 /// The KEM's 32-byte shared secret is already uniformly random, so the KDF
 /// step provides context binding ([info]) and AEAD key/nonce derivation —
 /// not randomness extraction.
 ///
-/// Byte-level specification: `docs/projects/pq/seal-spec.md`, with
-/// cross-implementation vectors in `test/vectors/pq_seal_v1.json`.
+/// Byte-level specification: `docs/projects/pq/seal-spec.md`. Every version
+/// is attested by the working group's own vectors
+/// (`test/vectors/hpke_wg_0x647a_chacha.json`,
+/// `test/vectors/hpke_wg_0x0042_mlkem1024.json`) rather than by any this
+/// project generated for itself.
 library;
 
 import 'dart:typed_data';
@@ -25,7 +26,6 @@ import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:meta/meta.dart' show visibleForTesting;
 
-import '../hashing/hkdf.dart';
 import 'at_aead.dart';
 import 'rfc9180_hpke.dart';
 
@@ -36,7 +36,7 @@ import 'rfc9180_hpke.dart';
 /// no way to discover what its recipients can open. Prefer passing
 /// `pqSeal(version:)` from a caller that knows — the key package's advertised
 /// suites, say — over changing the default.
-const int pqSealDefaultVersion = 0x01;
+const int pqSealDefaultVersion = 0x02;
 
 /// All versions [pqOpen] can decrypt, and therefore all [pqSeal] will emit.
 ///
@@ -44,41 +44,31 @@ const int pqSealDefaultVersion = 0x01;
 /// old ones until every peer has upgraded past them, because a removed
 /// version turns records already written into permanent
 /// [PqOpenFailure.versionMismatch] failures.
-const Set<int> pqSealSupportedVersions = {0x01, 0x02, 0x03};
+///
+/// `0x01` — X-Wing under the bespoke `atPQv1-base` schedule — was removed
+/// under that rule rather than in spite of it. The subsystem that writes
+/// durable sealed records does not exist in any published build, so no peer
+/// held one to upgrade past; the published envelopes that could carry it are
+/// the pairwise ones, and those expire on a 7-day ttl.
+const Set<int> pqSealSupportedVersions = {0x02, 0x03};
 
 /// What one wire version means: how the AEAD key and nonce are derived, and
 /// which AEAD seals the body.
 ///
-/// A row carries either [suite] (an RFC 9180 ciphersuite, whose §5.1 schedule
-/// derives and whose `suite_id`-inside-every-label is the version's domain
-/// separation) or [suiteLabel] (the custom raw-concatenation schedule, whose
-/// distinct label is what keeps that version's HKDF-derived keys
-/// domain-separated from every other version's).
+/// Every row is an RFC 9180 ciphersuite, whose §5.1 schedule derives and whose
+/// `suite_id`-inside-every-label is the version's domain separation. A row
+/// could once carry a bespoke label naming a raw-concatenation schedule
+/// instead; `0x01` was the only version that did, and with it gone the suite
+/// is the whole of what a row is.
 final class _SealVersion {
-  /// The RFC 9180 ciphersuite this version derives and seals with; null for
-  /// the custom-schedule version.
-  final HpkeSuite? suite;
+  /// The RFC 9180 ciphersuite this version derives and seals with.
+  final HpkeSuite suite;
 
-  /// The custom schedule's domain-separation label; null for RFC 9180
-  /// versions, which must never be given one — relabelling an envelope across
-  /// versions has to keep failing in both directions.
-  final String? suiteLabel;
+  const _SealVersion.rfc9180(this.suite);
 
-  final AtAeadAlgorithm _customAead;
-
-  const _SealVersion.rfc9180(HpkeSuite this.suite)
-      : suiteLabel = null,
-        // Unused on this arm: the suite names its own AEAD.
-        _customAead = const AesGcm256Aead();
-
-  const _SealVersion.custom(
-      {required String this.suiteLabel, required AtAeadAlgorithm aead})
-      : suite = null,
-        _customAead = aead;
-
-  /// The suite's AEAD where there is a suite, so the cipher cannot diverge
-  /// from the `suite_id` the vectors pin; the row's own otherwise.
-  AtAeadAlgorithm get aead => suite?.aead ?? _customAead;
+  /// Always the suite's own AEAD, so the cipher cannot diverge from the
+  /// `suite_id` the working group's vectors pin.
+  AtAeadAlgorithm get aead => suite.aead;
 }
 
 /// The version table — one row per wire version, keyed by the `ver` byte.
@@ -90,10 +80,6 @@ final class _SealVersion {
 /// [pqSealSupportedVersions] is the public face of this table's key set; a
 /// unit test pins them equal.
 const Map<int, _SealVersion> _versions = {
-  // HPKE-style over X-Wing: the custom `atPQv1-base` schedule. `0x01` is
-  // X-Wing's alone — there is no ML-KEM `atPQv1-base` envelope and there
-  // never was one.
-  0x01: _SealVersion.custom(suiteLabel: 'atPQv1-base', aead: AesGcm256Aead()),
   // RFC 9180 at the hybrid suite — ChaCha20-Poly1305 because it is the only
   // AEAD the HPKE working group publishes `0x647A` vectors for.
   0x02: _SealVersion.rfc9180(HpkeSuite.xWingHkdfSha256ChaCha20Poly1305),
@@ -262,18 +248,19 @@ Future<Uint8List> pqOpen(
   }
 }
 
-/// The AEAD key and nonce [pqSeal] derives from a KEM shared secret — the
-/// `atPQv1-base` key schedule, exposed so a conformance suite can check it
-/// directly.
+/// The AEAD key and nonce [pqSeal] derives from a KEM shared secret, exposed so
+/// a conformance suite can check the schedule directly.
 ///
 /// A second implementation that disagrees here produces envelopes this one
 /// cannot open, and the failure arrives as an AEAD authentication error that
 /// says nothing about which side is wrong. Comparing the schedule's own output
 /// turns that into a one-line diff.
 ///
-/// [version] selects the suite label, so a caller can check a version this
-/// build still reads but no longer emits. See
-/// `docs/projects/pq/seal-spec.md` and `test/vectors/pq_seal_v1.json`.
+/// [version] selects the suite, so a caller can check a version this build
+/// still reads but no longer emits. Every supported version now derives
+/// through RFC 9180 §5.1, so the authority is the RFC and the working group's
+/// vectors in `test/vectors/`; see `docs/projects/pq/seal-spec.md` for the
+/// envelope around it.
 @visibleForTesting
 ({Uint8List key, Uint8List nonce}) pqSealDeriveKeyAndNonce(
   Uint8List sharedSecret, {
@@ -292,10 +279,8 @@ class _DerivedKey {
   _DerivedKey(this.key, this.nonce);
 }
 
-/// Derives the AEAD key and nonce from the KEM [ss] per [version]'s table
-/// row: RFC 9180's schedule where the row has a suite, else the custom
-/// schedule bound to the row's label and the caller's [info] (two HKDF labels,
-/// `0x01`/`0x02`, keep key and nonce independent).
+/// Derives the AEAD key and nonce from the KEM [ss] per [version]'s table row,
+/// using RFC 9180's own §5.1 schedule bound to the caller's [info].
 _DerivedKey _deriveKeyAndNonce(Uint8List ss, int version, Uint8List? info) {
   final _SealVersion? row = _versions[version];
   if (row == null) {
@@ -303,32 +288,9 @@ _DerivedKey _deriveKeyAndNonce(Uint8List ss, int version, Uint8List? info) {
         'no key schedule for version 0x${version.toRadixString(16)} — this '
         'build knows ${pqSealSupportedVersions.map((v) => '0x${v.toRadixString(16)}').join(', ')}');
   }
-  final HpkeSuite? suite = row.suite;
-  if (suite != null) {
-    // RFC 9180 Base mode, verbatim. Both suites are checked against the IETF
-    // HPKE working group's published vectors in test/rfc9180_hpke_test.dart —
-    // bytes nobody here produced, which is the difference between these
-    // versions and 0x01.
-    final ks = hpkeKeyScheduleBase(suite, ss, info: info);
-    return _DerivedKey(ks.key, ks.baseNonce);
-  }
-  final Uint8List suiteInfo = _concat([
-    Uint8List.fromList(row.suiteLabel!.codeUnits),
-    info ?? Uint8List(0),
-  ]);
-  final Uint8List key = HkdfSha256.deriveKey(ss,
-      info: _concat([suiteInfo, _u8(0x01)]), length: 32);
-  final Uint8List nonce = HkdfSha256.deriveKey(ss,
-      info: _concat([suiteInfo, _u8(0x02)]), length: row.aead.nonceLength);
-  return _DerivedKey(key, nonce);
-}
-
-Uint8List _u8(int b) => Uint8List.fromList([b]);
-
-Uint8List _concat(List<Uint8List> parts) {
-  final out = BytesBuilder(copy: false);
-  for (final p in parts) {
-    out.add(p);
-  }
-  return out.toBytes();
+  // RFC 9180 Base mode, verbatim, at every version. Both suites are checked
+  // against the IETF HPKE working group's published vectors in
+  // test/rfc9180_hpke_test.dart — bytes nobody here produced.
+  final ks = hpkeKeyScheduleBase(row.suite, ss, info: info);
+  return _DerivedKey(ks.key, ks.baseNonce);
 }

@@ -251,8 +251,8 @@ void main() {
             'selects the provider id and the seal version, asserted on the '
             'envelope\'s first byte rather than on a label. Its siblings carry '
             'the negotiation arms ("the hybrid negotiates RFC 9180 with an '
-            'owner that advertises it" against "and falls back for an owner '
-            'whose advertisement predates suites", both against the same key) '
+            'owner that advertises it" against "and refuses an owner that '
+            'only opens the retired construction", both against the same key) '
             'and the refusals ("no shared construction is a refusal, not a '
             'guess"; "a provider will not seal to the other KEM").',
       );

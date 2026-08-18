@@ -5,7 +5,7 @@
 /// chain contains no draft: FIPS 203 for the KEM itself. The vector below is
 /// third-party — the working group's, mirrored by Go's standard library — so
 /// conformance here is attested by somebody other than us, unlike the
-/// self-generated `pq_seal_v1.json` rows.
+/// vectors nobody at Atsign generated.
 library;
 
 import 'dart:convert';

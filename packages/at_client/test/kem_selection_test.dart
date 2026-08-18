@@ -24,11 +24,13 @@ void main() {
       expect(SecretSharingAlgos.kemForSuite('x-wing-hpke-v9'), isNull);
     });
 
-    test('both X-Wing suites open with the same KEM', () {
-      // They differ in key schedule and AEAD, not in decapsulation — so a
-      // holder of one X-Wing key opens envelopes at either version.
-      expect(SecretSharingAlgos.kemForSuite(SecretSharingAlgos.xWingHpke),
-          same(XWingPureDartAlgo.instance));
+    test('each live suite maps to its own KEM, and the retired one to none',
+        () {
+      // 'x-wing-hpke-v1' is spelled out rather than named: the constant is
+      // gone, and a holder can still put the string in its advertisement.
+      expect(SecretSharingAlgos.kemForSuite('x-wing-hpke-v1'), isNull,
+          reason: 'a retired suite must resolve to no KEM, so an envelope '
+              'claiming it is refused rather than decapsulated');
       expect(SecretSharingAlgos.kemForSuite(SecretSharingAlgos.xWingRfc9180),
           same(XWingPureDartAlgo.instance));
       expect(SecretSharingAlgos.kemForSuite(SecretSharingAlgos.mlKem1024Rfc9180),

@@ -42,7 +42,6 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
-| [14.37](#1437-retire-the-0x01-seal-version) | Retire `pqSeal` version `0x01` — two commits, in order | Nothing. [Ruling 110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18) settled it; only the order is constrained |
 | [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — 2 code fixes and a test repair | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
 | [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — the rename, the 3 postures, client-driven retrofit, the algorithm lists, and public-data signature verification | Nothing. Design settled by [ruling 113](detail/decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18); large, and it changes R-2's definition |
 
@@ -161,47 +160,6 @@ build their preference through `create_at_client_cli.dart` without copying it.
 Once the overwrite is gone it has no effect there anyway, and a posture
 argument covering legacy / rollout 1 / rollout 2 is under discussion which may
 replace the flag.
-
-### 14.37 Retire the `0x01` seal version
-
-[Ruling 110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18)
-(gkc, 2026-08-18) retires `pqSeal` version `0x01` — the `x-wing-hpke-v1` suite,
-X-Wing under the bespoke `atPQv1-base` key schedule with AES-256-GCM. `0x02` and
-`0x03` are RFC 9180 Base verbatim and checked against the IETF working group's
-vectors, so the homegrown schedule earns nothing beside them. The ruling has the
-reasoning, including the four arguments for keeping it and why none carries;
-this row is the work.
-
-**Two commits, and the order is the whole of it.**
-
-Commit 1 stops anything emitting `0x01`. Drop `xWingHpke` from
-`SecretSharingAlgos.suites` in `packages/at_client/lib/src/secret_sharing/algo_ids.dart`,
-and leave it in `openableSuitesFor(xWing)` so a holder still advertises that it
-can open one. Nothing changes for two current builds, which already negotiate
-`0x02` first; what goes is the path that reaches `0x01` at all.
-
-Commit 2 removes the version, once nothing can be sealing under it: the row from
-at_chops' `_versions`, the constant from `pqSealSupportedVersions`, the entry
-from `SecretSharingAlgos.sealVersionFor`, `xWingHpke` from `openableSuitesFor`
-and its declaration, and `pqSealDefaultVersion` moves off `0x01`. Nothing in the
-tree reads that default — `pqSealToBase64` makes `version` required and both
-call sites pass a negotiated value — so moving it is bookkeeping rather than a
-fleet decision, whatever its dartdoc says about raising it.
-
-`docs/projects/pq/seal-spec.md`, `packages/at_chops/test/vectors/pq_seal_v1.json`
-and `pq_seal_conformance_test.dart` move with commit 2, not before it. The spec
-exists so a second implementation can build `0x01`; retiring the version retires
-the reason for the document.
-
-⚠️ **Why the two commits are separate.** Removing a supported version turns any
-record already sealed under it into a permanent `PqOpenFailure.versionMismatch`.
-Nothing outside this tree holds a `0x01` envelope today and `__ssenv` entries
-expire at 7 days regardless, so the window costs nothing — the split is what
-makes it safe to have been wrong about that.
-
-**Sweep with it.** `at_chops`' CHANGELOG needs an entry, and `design.md` and
-`acceptance.md` both name the three versions; `acceptance.md` cites `seal-spec.md`
-for "the three versions and what each is attested by", which becomes two.
 
 ### 14.30 A content notification can outrun the key that opens it
 
@@ -1557,6 +1515,7 @@ absence of a row from this table.
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.37  | `pqSeal` version `0x01` removed outright, and the last homegrown key schedule with it | DONE 2026-08-18 — **one commit, not the two this row prescribed.** gkc reframed it from *retire safely* to *is there any value in `0x01` over `0x02`* — there is none: same KEM, so no diversity; self-generated vectors against the working group's; and its only distinctive feature, AES-256-GCM, is immaterial on a 32-byte content key. `_SealVersion.custom` had no other user, so `atPQv1-base` left the tree entirely. ⚠️ The two-commit plan's first step was also **mis-specified** — it named `SecretSharingAlgos.suites`, which neither seal site reads. Ruling [110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18) amended in place. Detail: [14.37](detail/implementation-plan.md#1437-the-0x01-seal-version-removed-outright) |
 | 14.15  | Pre-PR rails checklist                                  | DONE 2026-08-10 — the compose-image item is struck in the body and nothing needs reverting before a PR. It stayed in TODO until 2026-08-18 because the section opened with a condition instead of a status. The external gate it names is step 32's blocker |
 | 14.17  | Signature agility, and the G1 cluster joins the catalogue | DONE 2026-08-18 — steps 1–5 done, step 6 out of scope by gkc's ruling; the last piece was the signed-envelope 3×3. ⚠️ **This row sat in TODO reading "the owed half" for the rest of that day**, while the section's own body said COMPLETE — the shape the plan's own re-derivation warning names, where a body says closed and the heading nothing keys on says open. A cold read caught it. The section heading moved with this row. Body: [14.17](#1417-signature-agility--complete) |
 | 14.36  | `send()` composes its command with `NotifyVerbBuilder`, and finally has live coverage | DONE 2026-08-17 — the hand-rolled `notify:` string is gone; `useAtKeyToString = true` is required, since the name is split across `key` and `namespace`. One wire delta, `:notifier:SYSTEM`. **`send()` had no live test at all before this**, so the wire delta was landed with one added rather than on the inference that `notify()` already sends the token. The architecture guard moved with it: requiring `toAtProtocolFragment` in this file would now force the hand-rolled command back, so it asserts the absence of one instead. Body: [14.36](#1436-sends-command-is-hand-rolled-where-a-tested-builder-exists) |

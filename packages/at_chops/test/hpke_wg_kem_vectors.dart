@@ -36,9 +36,9 @@
 /// content-identical, so Go 1.26's `crypto/hpke.MLKEM768X25519()` is an
 /// independent oracle for the same bytes.
 ///
-/// Only the KEM-level fields are used. The rest of each row exercises the
-/// RFC 9180 key schedule, which `pqSeal` does not implement — it uses its own
-/// `atPQv1-base` schedule. Both rows are `aead_id: 3` (ChaCha20-Poly1305);
+/// Only the KEM-level fields are used; the rest of each row exercises the
+/// RFC 9180 key schedule, which `rfc9180_hpke.dart` covers directly. Both rows
+/// are `aead_id: 3` (ChaCha20-Poly1305);
 /// there is no AES-GCM row at this KEM.
 ///
 /// `ikmR` is deliberately absent: HPKE derives `skRm` from it via a

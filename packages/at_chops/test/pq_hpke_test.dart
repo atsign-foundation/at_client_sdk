@@ -162,8 +162,10 @@ void main() {
     });
 
     test('declared ctLen overruns envelope → malformedEnvelope', () async {
-      // ver=0x01, ctLen=0xffff, but only a few bytes follow.
-      final bad = Uint8List.fromList([0x01, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 7]);
+      // ver=0x02, ctLen=0xffff, but only a few bytes follow. The version
+      // just has to be one this build supports, or the version check fires
+      // first and the framing is never reached.
+      final bad = Uint8List.fromList([0x02, 0xff, 0xff, 1, 2, 3, 4, 5, 6, 7]);
       expect(() => pqOpen(xwing, XWingVector1.seed, bad, info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
     });
@@ -175,7 +177,7 @@ void main() {
       // uncaught error on nothing worse than a bad input.
       final ctLen = 8;
       final bad = Uint8List.fromList(
-          [0x01, 0x00, ctLen, ...List.filled(ctLen + 16 + 4, 0)]);
+          [0x02, 0x00, ctLen, ...List.filled(ctLen + 16 + 4, 0)]);
       expect(() => pqOpen(xwing, XWingVector1.seed, bad, info: _noInfo),
           _opensWith(PqOpenFailure.malformedEnvelope));
     });
@@ -204,11 +206,12 @@ void main() {
   });
 
   group('known-answer vectors (byte-exact)', () {
-    // Golden envelopes are pinned, computed once by composing the
-    // already-vector-verified HkdfSha256 + AesGcm256EncryptionAlgo. They lock
-    // the seal construction (HKDF key schedule + AES-256-GCM body) against
-    // accidental drift. To regenerate after an intentional construction change,
-    // seal with a _FixedKem double (see below) and print the envelope hex.
+    // The golden envelope is pinned to lock the ENVELOPE FRAMING
+    // (ver || ctLen || kemCt || body) against accidental drift. The key
+    // schedule inside it is RFC 9180's and is pinned separately, and better,
+    // by the working group's own vectors in rfc9180_hpke_test.dart. To
+    // regenerate after an intentional construction change, seal with a
+    // _FixedKem double (see below) and print the envelope hex.
 
     test('fixed-KEM construction KAT: seal is deterministic + opens', () async {
       final ss = Uint8List.fromList(List<int>.generate(32, (i) => i)); // [0x00..0x1f]
@@ -218,8 +221,8 @@ void main() {
       final aad = _utf8('kat-aad');
 
       const goldenHex =
-          '010008aabbccddeeff0011bc05df489e9772f4f4afd413e0a05318e3b5b989d2'
-          '29f909f3607bf9731afb4988c8bd5608bc';
+          '020008aabbccddeeff0011970d4ed3fadb16aed84c9352c9eb630ba40407775f'
+          'b373a3e8fce05c3b788f6a941f3b172527';
 
       // _FixedKem ignores both keys — any value is valid here.
       final envelope = await pqSeal(_FixedKem(ss, ct), Uint8List(0), pt,
@@ -231,57 +234,36 @@ void main() {
       expect(opened, equals(pt));
     });
 
-    test('X-Wing end-to-end KAT: open spec-vector envelope', () async {
-      // Envelope = ver || ctLen || XWingVector1.ct || AEAD(body), where the
-      // AEAD key/nonce derive from the vector's expected shared secret. Opening
-      // it drives real XWingPureDartAlgo.decapsulate(seed, ct) → expectedSs.
-      const goldenHex = '010460'
-          'b83aa828d4d62b9a83ceffe1d3d3bb1ef31264643c070c5798927e41fb07914a'
-          '273f8f96e7826cd5375a283d7da885304c5de0516a0f0654243dc5b97f8bfeb8'
-          '31f68251219aabdd723bc6512041acbaef8af44265524942b902e68ffd23221c'
-          'da70b1b55d776a92d1143ea3a0c475f63ee6890157c7116dae3f62bf72f60acd'
-          '2bb8cc31ce2ba0de364f52b8ed38c79d719715963a5dd3842d8e8b43ab704e47'
-          '59b5327bf027c63c8fa857c4908d5a8a7b88ac7f2be394d93c3706ddd4e698cc'
-          '6ce370101f4d0213254238b4a2e8821b6e414a1cf20f6c1244b699046f5a01ca'
-          'a0a1a55516300b40d2048c77cc73afba79afeea9d2c0118bdf2adb8870dc328c'
-          '5516cc45b1a2058141039e2c90a110a9e16b318dfb53bd49a126d6b73f215787'
-          '517b8917cc01cabd107d06859854ee8b4f9861c226d3764c87339ab16c3667d2'
-          'f49384e55456dd40414b70a6af841585f4c90c68725d57704ee8ee7ce6e2f9be'
-          '582dbee985e038ffc346ebfb4e22158b6c84374a9ab4a44e1f91de5aac5197f8'
-          '9bc5e5442f51f9a5937b102ba3beaebf6e1c58380a4a5fedce4a4e5026f88f52'
-          '8f59ffd2db41752b3a3d90efabe463899b7d40870c530c8841e8712b733668ed'
-          '033adbfafb2d49d37a44d4064e5863eb0af0a08d47b3cc888373bc05f7a33b84'
-          '1bc2587c57eb69554e8a3767b7506917b6b70498727f16eac1a36ec8d8cfaf75'
-          '1549f2277db277e8a55a9a5106b23a0206b4721fa9b3048552c5bd5b594d6e24'
-          '7f38c18c591aea7f56249c72ce7b117afcc3a8621582f9cf71787e183dee0936'
-          '7976e98409ad9217a497df888042384d7707a6b78f5f7fb8409e3b5351753734'
-          '61b776002d799cbad62860be70573ecbe13b246e0da7e93a52168e0fb6a9756b'
-          '895ef7f0147a0dc81bfa644b088a9228160c0f9acf1379a2941cd28c06ebc80e'
-          '44e17aa2f8177010afd78a97ce0868d1629ebb294c5151812c583daeb8868522'
-          '0f4da9118112e07041fcc24d5564a99fdbde28869fe0722387d7a9a4d16e1cc8'
-          '555917e09944aa5ebaaaec2cf62693afad42a3f518fce67d273cc6c9fb5472b3'
-          '80e8573ec7de06a3ba2fd5f931d725b493026cb0acbd3fe62d00e4c790d965d7'
-          'a03a3c0b4222ba8c2a9a16e2ac658f572ae0e746eafc4feba023576f08942278'
-          'a041fb82a70a595d5bacbf297ce2029898a71e5c3b0d1c6228b485b1ade509b3'
-          '5fbca7eca97b2132e7cb6bc465375146b7dceac969308ac0c2ac89e7863eb894'
-          '3015b24314cafb9c7c0e85fe543d56658c213632599efabfc1ec49dd8c88547b'
-          'b2cc40c9d38cbd3099b4547840560531d0188cd1e9c23a0ebee0a03d5577d66b'
-          '1d2bcb4baaf21cc7fef1e03806ca96299df0dfbc56e1b2b43e4fc20c37f834c4'
-          'af62127e7dae86c3c25a2f696ac8b589dec71d595bfbe94b5ed4bc07d800b330'
-          '796fda89edb77be0294136139354eb8cd37591578f9c600dd9be8ec6219fdd50'
-          '7adf3397ed4d68707b8d13b24ce4cd8fb22851bfe9d632407f31ed6f7cb1600d'
-          'e56f17576740ce2a32fc5145030145cfb97e63e0e41d354274a079d3e6fb2e15'
-          'e98b9f949b3fd7ac46409929b534041096d59e43504fcccebc3648f104308a21'
-          '283ef973b7';
+    test('X-Wing end-to-end KAT: the published ct opens with the real KEM',
+        () async {
+      // Sealed through a _FixedKem pinned to the published vector's (ss, ct),
+      // then opened with the REAL XWingPureDartAlgo and the published seed.
+      // That is the whole assertion: the open only succeeds if
+      // decapsulate(seed, ct) reproduces expectedSs, because the AEAD key
+      // derives from it.
+      //
+      // This replaced a hand-composed golden envelope when `0x01` was retired.
+      // The golden could not simply be re-pinned: pqSeal takes its ciphertext
+      // from the KEM, which is randomised, so the old value had been assembled
+      // by hand. Driving it through _FixedKem asserts the same property
+      // without anyone hand-rolling an envelope, and asserts it against the
+      // real decapsulation rather than against bytes we wrote down.
+      final pt = _utf8('x-wing end-to-end KAT');
+      final info = _utf8('xwing-kat-info');
+      final aad = _utf8('xwing-kat-aad');
 
-      final envelope = fromHex(goldenHex);
+      final envelope = await pqSeal(
+          _FixedKem(XWingVector1.expectedSs, XWingVector1.ct), Uint8List(0), pt,
+          info: info, aad: aad);
+
       // sanity: kemCt slice equals the published X-Wing vector ciphertext.
-      expect(toHex(Uint8List.sublistView(envelope, 3, 3 + XWingVector1.ct.length)),
+      expect(
+          toHex(Uint8List.sublistView(envelope, 3, 3 + XWingVector1.ct.length)),
           equals(toHex(XWingVector1.ct)));
 
       final opened = await pqOpen(xwing, XWingVector1.seed, envelope,
-          info: _utf8('xwing-kat-info'), aad: _utf8('xwing-kat-aad'));
-      expect(opened, equals(_utf8('x-wing end-to-end KAT')));
+          info: info, aad: aad);
+      expect(opened, equals(pt));
     });
   });
 }

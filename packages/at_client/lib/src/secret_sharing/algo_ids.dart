@@ -22,13 +22,6 @@ class SecretSharingAlgos {
   /// harvest-now-decrypt-later resistant.
   static const String xWing = 'x-wing';
 
-  /// HPKE-style sealing suite — X-Wing KEM + HKDF-SHA256 + AES-256-GCM, as
-  /// implemented by at_chops `pqSeal`/`pqOpen`. The envelope's `sealed`
-  /// field carries the whole construction (KEM ciphertext, the HKDF-derived
-  /// AEAD key schedule, authenticated ciphertext and tag); the envelope's
-  /// `suite` field records which construction produced it.
-  static const String xWingHpke = 'x-wing-hpke-v1';
-
   /// Pure ML-KEM-1024 (FIPS 203), IANA HPKE KEM id `0x0042` — the **no-hybrid**
   /// option.
   ///
@@ -67,7 +60,6 @@ class SecretSharingAlgos {
   static const List<String> suites = [
     xWingRfc9180,
     mlKem1024Rfc9180,
-    xWingHpke,
   ];
 
   /// The `pqSeal` envelope version a suite maps to.
@@ -77,7 +69,6 @@ class SecretSharingAlgos {
   /// defaulting: sealing under a guessed construction produces a record the
   /// recipient cannot open, and the failure would surface on their side.
   static int? sealVersionFor(String suite) => switch (suite) {
-        xWingHpke => 0x01,
         xWingRfc9180 => 0x02,
         mlKem1024Rfc9180 => 0x03,
         _ => null,
@@ -98,18 +89,6 @@ class SecretSharingAlgos {
         _ => null,
       };
 
-  /// Every suite a holder of a [keyAlgo] key can **open**, in [suites] order.
-  ///
-  /// Wider than [suiteForKeyAlgo] because a KEM key opens every construction
-  /// built on that KEM, not only the one a sender would choose: an X-Wing
-  /// private unwraps both the RFC 9180 suite and the original `atPQv1-base`
-  /// one, since the difference between them is the key schedule and the AEAD,
-  /// not the decapsulation.
-  ///
-  /// An unrecognised [keyAlgo] yields nothing rather than everything. A holder
-  /// must never claim a suite on the strength of a key this build cannot
-  /// identify — the claim would be acted on by a sender, and the failure would
-  /// arrive on the holder's side as an AEAD error.
   /// The construction two parties settle on: the first of [senderSuites] that
   /// [recipientSuites] also declares, or null when they share none.
   ///
@@ -132,8 +111,22 @@ class SecretSharingAlgos {
     return null;
   }
 
+  /// Every suite a holder of a [keyAlgo] key can **open**, in [suites] order.
+  ///
+  /// ⚠️ This is an ADVERTISEMENT list — what a holder claims it can unwrap —
+  /// and not a sender's preference order. A sender narrowing what it will
+  /// EMIT must not narrow this, or holders stop claiming constructions they
+  /// can still open.
+  ///
+  /// Wider than [suiteForKeyAlgo] because a KEM key opens every construction
+  /// built on that KEM, not only the one a sender would choose.
+  ///
+  /// An unrecognised [keyAlgo] yields nothing rather than everything. A holder
+  /// must never claim a suite on the strength of a key this build cannot
+  /// identify — the claim would be acted on by a sender, and the failure would
+  /// arrive on the holder's side as an AEAD error.
   static List<String> openableSuitesFor(String keyAlgo) => switch (keyAlgo) {
-        xWing => const [xWingRfc9180, xWingHpke],
+        xWing => const [xWingRfc9180],
         mlKem1024 => const [mlKem1024Rfc9180],
         _ => const [],
       };
@@ -192,10 +185,9 @@ class SecretSharingAlgos {
   /// The receive path's counterpart to [kemFor]: `pqOpen` reads the version
   /// byte itself, but the KEM instance is the caller's to supply, and an
   /// envelope sealed under one KEM handed to the other fails as an
-  /// indistinguishable AEAD error. Both X-Wing suites map to the same KEM —
-  /// they differ in key schedule and AEAD, not in decapsulation.
+  /// indistinguishable AEAD error.
   static AtKemAlgorithm? kemForSuite(String suite) => switch (suite) {
-        xWingHpke || xWingRfc9180 => XWingPureDartAlgo.instance,
+        xWingRfc9180 => XWingPureDartAlgo.instance,
         mlKem1024Rfc9180 => MlKem1024PureDartAlgo.instance,
         _ => null,
       };

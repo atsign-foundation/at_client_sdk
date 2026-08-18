@@ -326,30 +326,37 @@ void main() {
               'opens by the version and this client accepts by the suite');
     });
 
-    test('falls back to the original construction for a peer that predates it',
-        () async {
+    test('refuses a peer that only opens the retired construction', () async {
       // Same X-Wing key, so the only thing that differs between these two
       // arms is what the package says it can open. That is the whole point of
       // the `suites` field: without it a second construction could only be
       // introduced by upgrading every reader first.
+      //
+      // This arm used to assert the opposite — that such a peer was sent
+      // `0x01`. Retiring that version makes the pair share no construction,
+      // and the contract for no overlap is a refusal rather than a downgrade:
+      // sealing this client's own preference anyway would hand the peer a
+      // record it cannot open, failing on ITS side as an opaque AEAD error.
       final legacyPeer = KeyPackage.fromPayload({
         'v': 1,
         'createdAt': DateTime.now().toUtc().toIso8601String(),
         'keys': sharerB.myKeyPackage.keys.map((k) => k.toJson()).toList(),
-        // Declares only the older construction. It used to say this by
-        // OMITTING the field; a package that names no suites is refused now,
-        // so a narrow peer has to state its narrowness.
-        'suites': [SecretSharingAlgos.xWingHpke],
+        // Declares only the retired construction, by its raw wire id: this
+        // build no longer has a constant for it, which is the point.
+        'suites': const ['x-wing-hpke-v1'],
       }, enrollmentId: sharerB.enrollmentId);
-      expect(legacyPeer.suites, [SecretSharingAlgos.xWingHpke]);
+      expect(legacyPeer.suites, ['x-wing-hpke-v1'],
+          reason: 'a suite this build does not know is still kept — the list '
+              'is the holder\'s claim about itself, not ours');
 
-      await sharerA.sendEnvelope(legacyPeer, 'myapp', {'a': 1});
-
-      final sent = sentConstruction(sharerB.kpid);
-      expect(sent.suite, SecretSharingAlgos.xWingHpke);
-      expect(sent.version, 0x01,
-          reason: 'a peer that never claimed RFC 9180 must not be sent it — '
-              'it would reject the suite and the payload would be lost');
+      await expectLater(
+          sharerA.sendEnvelope(legacyPeer, 'myapp', {'a': 1}),
+          throwsA(isA<StateError>().having((e) => e.message, 'message',
+              allOf(contains('x-wing-hpke-v1'),
+                  contains('x-wing-rfc9180-v1')))),
+          reason: 'no shared construction must refuse rather than seal '
+              'something the peer cannot open — and the refusal must name '
+              'both lists, or the operator cannot tell which side is narrow');
     });
 
     test('two ML-KEM-1024 clients exchange the no-hybrid construction',
@@ -602,7 +609,7 @@ void main() {
         fromKpid: sharerA.kpid,
         fromEnrollmentId: 'enroll-a',
         toKpid: 'some-other-kpid', // payload disagrees with the key name below
-        suite: SecretSharingAlgos.xWingHpke,
+        suite: SecretSharingAlgos.xWingRfc9180,
         kid: sharerB.kpid,
         sealed: 'xx',
       );
@@ -695,7 +702,7 @@ void main() {
         fromKpid: sharerA.kpid,
         fromEnrollmentId: 'enroll-a',
         toKpid: 'a-kpid-nobody-here-holds',
-        suite: SecretSharingAlgos.xWingHpke,
+        suite: SecretSharingAlgos.xWingRfc9180,
         kid: 'a-kpid-nobody-here-holds',
         sealed: 'xx',
       );
