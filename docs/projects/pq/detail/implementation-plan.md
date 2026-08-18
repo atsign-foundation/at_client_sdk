@@ -2414,7 +2414,26 @@ place (the layer-3 AAD literal, and UC-A3.4 below).
    ceiling pinned when the harness lands. The harness exists and has been run —
    but only on a 16-core arm64 Mac, which is the opposite of the device the
    criterion names. Until it is re-run, "performance is measured, not assumed"
-   is not yet true. B-1's own unmet acceptance requirement (#2010).
+   is not yet true. ⚠️ **This ended "B-1's own unmet acceptance requirement
+   (#2010)" until 2026-08-18, and #2010 is CLOSED** — its closing note splits
+   the requirement out to
+   [#2153](https://github.com/atsign-foundation/at_client_sdk/issues/2153),
+   which is open and is now this residual's only home; it appeared nowhere else
+   in this plan.
+   ⚠️ **And the harness did not build for six days.** `26705b6a0` (2026-08-12)
+   made `pqSeal`/`pqOpen`'s `info` required without updating
+   `benchmark/crypto_bench.dart`, leaving five `missing_required_argument`
+   errors. Nothing local caught it: the package's routine command is
+   `dart analyze lib test`, which never looks in `benchmark/`. CI's at_client
+   job runs a **bare** `dart analyze` from that same directory, which does — so
+   this would have failed the first PR carved out of this branch. It has not
+   failed one yet, because CI has never run on `gkc-pq-d1-spike` at all
+   (`gh run list --branch` returns zero rows against a control that returns
+   rows). Fixed 2026-08-18: the five call sites pass a binding of the shape
+   production seals under, and the bench builds, runs and passes the format
+   gate. A harness that does not compile is a stronger version of the finding
+   this residual already records — the budget was not merely measured on the
+   wrong device, it could not be measured at all.
 2. ✅ **UC-A3.4's self direction is live, DONE 2026-08-17.** It had been
    unit-only — both live notify tests were alice→bob and the alice1→alice2 case
    was asserted against a `MockAtClient`, while the plan claimed both A3.4 and
@@ -2435,11 +2454,24 @@ place (the layer-3 AAD literal, and UC-A3.4 below).
    and this line said "still dropped" until 2026-08-18. It is held until the
    generation it needs is filed, bounded by `maxParked`/`parkTtl` with every
    eviction logged at `warning`.
-3. **SS-4: an interrupted mint does not resume.** The acceptance bullet asks
-   that it resume rather than re-generate; there is no persisted in-progress
-   marker, so it starts over. Worth deciding whether that is still required —
-   the mint lock and the immutable create may already make re-generation safe,
-   and the acceptance text predates both (#2087).
+3. **SS-4: the *nskey* mint does not resume an interrupted mint. The signing
+   root's does.** ⚠️ This said "an interrupted mint does not resume" of SS-4 as
+   a whole until 2026-08-18; SS-4 covers two mints and they differ. The
+   **signing-root** mint resumes: `pq_signing_root.dart:392` reads the keyfile
+   and, where a crash left a pair filed but unpublished, finishes the publish
+   with that pair instead of generating a new one — "The crash between filing
+   and publishing: finish the publish with the pair already filed". That landed
+   in `7e62e613a` on 2026-08-05, **four days before this residual was written**,
+   which is why the general form was wrong on the day it was recorded. The
+   **nskey** mint does not: `_mint` always generates a fresh seed
+   (`published_nskey_key_ring.dart:559`, `NskeySeed(kem.newSeed())`) and never
+   reads back a filed-but-unpublished pair — and because it files the private
+   *before* publishing the advertisement by design (`:574`, "Durable BEFORE the
+   advertisement goes out"), a crash in exactly that window orphans the filed
+   private. Still worth deciding whether resume is required there rather than
+   assuming it: the mint lock and the election
+   ([decisions 105](decisions.md#105-the-nskey-mint-elects-a-winner-2026-08-16))
+   have both landed since, and may make re-generation safe (#2087).
 4. **IS-1's record name drifted from its issue.** Deliverables 1 and 3 name
    `pq_signing_publickey@<atSign>`; that string appears nowhere in the
    implementation. The issue needs correcting against the code before anyone

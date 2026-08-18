@@ -37,7 +37,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **10** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
-| [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
+| [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
@@ -677,9 +677,20 @@ They are collected here because a residual left inside a project entry is
 invisible to anyone working the TODO table.
 
 - **SS-2 — the atServer's `__ssenv` behaviour.** It does not exist server-side
-  at all, so DEP4's update-put auto-notify is unbuilt. ⚠️ Needs parity across
-  every atServer implementation in the same sweep. Re-derive:
-  `git -C ~/dev/atsign/repos/at_server grep -n "__ssenv"` (zero today).
+  at all, so DEP4's update-put auto-notify is unbuilt — but it is **deferred,
+  not owed**: [the 2026-08-03 ruling](detail/implementation-plan.md#ss-2--substrate-wired-into-atclient--server-wake-up-key-package-in-request-new-device-conveyance-only--at_secondary_server-at_client-at_auth-at_commons--l--2085)
+  took DEP4 off SS-2 once the correctness argument behind it was withdrawn, so
+  what is left here is a pure optimisation and `sendWakeUpNotification` stays
+  `true` until it lands. ⚠️ Needs parity across every atServer implementation
+  in the same sweep, which is a clean starting state rather than unfinished
+  homework: `__ssenv` is a zero in all three implementations, so none has a
+  divergent version to reconcile. ⚠️ **Re-derive against all three, not just
+  the first** — this named only `at_server` until 2026-08-18, which answers a
+  question about one repo:
+  `git -C ~/dev/atsign/repos/<repo> grep -c "__ssenv"` for `at_server`,
+  `java_at_server` and `at_java`. Zero in each as of 2026-08-18, each run
+  beside a control that matched, since an unvalidated grep and a true absence
+  print the same nothing.
 - **B-1 — none left of the two.** ✅ Both closed since, and re-verified
   2026-08-18. This bullet used to read *"two left: everything beyond envelope
   delivery (`pushSecretToNames…`); and UC-A3.4's self direction, owed rather
@@ -858,7 +869,7 @@ rulings 2 and 3 are amended in place.
 | 27 | ✅ **DONE 2026-08-15** — domain separation on the signed envelope, per-use `typ` plus a root-link prefix ([`decisions.md` 103](detail/decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15)) | [14.8](detail/implementation-plan.md#148-domain-separation-on-the-signed-envelope) |
 | 28 | NoPorts' own copy of the envelope shape | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) |
 | 29 | **Three** audit residuals — perf ceiling on a real low-end device, SS-4 interrupted-mint resume, IS-1 record-name drift. ⚠️ This read **four**, including UC-A3.4's live self-direction, until 2026-08-18 — 14.16's own body has marked that ✅ DONE since 2026-08-17 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
-| 30 | `deprecated_member_use` findings across the workspace (340 at_client, 183 at_onboarding_cli, 110 at_auth, 28 at_lookup) | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
+| 30 | `deprecated_member_use` findings across the workspace (345 at_client, 183 at_onboarding_cli, 110 at_auth, 28 at_lookup) | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
 | 31 | ✅ **DONE — nothing owed since 2026-08-10.** The one item (the functional pack's compose hardcoding a local image) is struck in the body; the external gate it names is step 32's blocker, not a checklist entry. This row carried no state until 2026-08-18, which in this table reads as open | [14.15](#1415-pre-pr-rails-checklist) |
 
 Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128),
@@ -1386,13 +1397,16 @@ deprecated-but-still-required APIs — the `AtChops` compatibility shim,
 `AtSigningInput`, `apkamPublicKey` — so clearing them means migrating call
 sites, which is a code change rather than a lint sweep and wants its own pass.
 
-**Re-measured 2026-08-13** (the heading said 299 and named only at_client). Per
-package, `dart analyze lib test` from each package directory, counted with
-`grep -c deprecated_member_use`:
+**Re-measured 2026-08-18** (⚠️ **re-run it rather than quoting the table** —
+`at_client` read 340 here from 2026-08-13 until this measurement, and the
+heading said 299 and named only at_client before that). Per package,
+`dart analyze lib test` from each package directory, exit code printed
+separately, counted with `grep -c deprecated_member_use`. Every package exited
+0, and only `at_client` moved:
 
 | package | findings |
 |---|---|
-| `at_client` | 340 |
+| `at_client` | 345 |
 | `at_onboarding_cli` | 183 |
 | `at_auth` | 110 |
 | `at_lookup` | 28 |

@@ -1657,8 +1657,11 @@ registration write are gone. Driving it against the **live** verb is SS-1c
 
 `at_server` is a sibling repo present locally. **DEP1–DEP3 landed on 2026-07-07**
 (at_server #2685, plus #2687 / #2696 / #2698 / #2710 — SS-1b); **DEP4 (the `__ssenv`
-update-put auto-notify wake-up) remains unimplemented** and is owned by SS-2
-([#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)).
+update-put auto-notify wake-up) remains unimplemented, and is deferred rather
+than owed** ([#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085)).
+⚠️ This read "and is owned by SS-2" until 2026-08-18, contradicting the very
+plan it points at: a ruling of 2026-08-03, recorded in SS-2's own plan entry,
+took DEP4 off SS-2 when the correctness argument behind it was withdrawn.
 
 - **DEP1 — `enroll:listns:<ns>` gated discovery verb** (effort **L**).
   Enum + regex + handler + gate per [§2.3](#23-the-enrolllistns-verb--enrollparamsmetadata). Returns the **flattened**
@@ -1680,10 +1683,15 @@ update-put auto-notify wake-up) remains unimplemented** and is owned by SS-2
   `at_chops_impl.dart:284`); at_commons widens the pkam
   `signingAlgo` literal (`syntax.dart:10`). Legacy single-string record → `rsa2048`
   on `fromJson`; legacy `atPkamPublicKey` mirror preserved.
-- **DEP4 — atServer auto-notify on `__ssenv` puts** (effort **M**; delivered inside
-  SS-2 per [`implementation-plan.md`](implementation-plan.md) — the auto-notify itself
-  is additive and could ship independently, but the client
-  `sendWakeUpNotification=false` default-flip is sequenced in SS-2). On an `update`
+- **DEP4 — atServer auto-notify on `__ssenv` puts** (effort **M**; ⚠️ **deferred,
+  not owed by SS-2.** This read "delivered inside SS-2 per
+  [`implementation-plan.md`](implementation-plan.md)" until 2026-08-18, which that
+  plan has contradicted since 2026-08-03. The auto-notify is still additive and
+  could ship independently; what changed is that the race it was to close —
+  a wake-up outrunning the envelope — was fixed client-side by writing the
+  envelope remote-first, leaving DEP4 a pure optimisation. So the client
+  `sendWakeUpNotification` default stays **true** rather than flipping to false
+  in SS-2). On an `update`
   put to a key whose name contains the full
   `.__ssenv.` segment, enqueue a value-less self-notification (`NotificationType.self`,
   `opType=update`), model on `_storeNotification` (`enroll_verb_handler.dart:529-560`)
