@@ -2545,11 +2545,16 @@ than it looks** (both re-verified against the source 2026-08-11):
      whose message reads *"the published `_apsk` is a `<algo>` key"*. The
      singular is baked into the behaviour and the diagnostic, so this work
      changes an existing refusal rather than extending a permissive path.
-   - **The strength order** beside `SigningAlgoType` in at_chops, with its
-     raw-literal tripwire. No ordering exists anywhere in at_chops or at_client
-     today, so [UC-G1.7](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix)
-     ("the verifier takes the strongest and does not fall back") has nothing to
-     run against.
+   - ~~**The strength order** beside `SigningAlgoType` in at_chops, with its
+     raw-literal tripwire~~ — ✅ **BUILT 2026-08-13** as [14.18 step 7](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence):
+     `SigningAlgoType.strongestFirst` and `strongestOf` at
+     `packages/at_chops/lib/src/algorithm/algo_type.dart:37`, with
+     `packages/at_chops/test/signing_strength_test.dart` as the tripwire, and
+     [UC-G1.7](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix)
+     ("the verifier takes the strongest and does not fall back") reads PROVEN in
+     the catalogue. This bullet said "no ordering exists anywhere in at_chops or
+     at_client today" for 5 days after it shipped, which left the plan claiming
+     an at_chops obligation it did not have.
    - ~~**The `enroll:update` caller** and its PoP signature~~ — ✅ **BUILT
      2026-08-13** as [14.18 step 16](#1418-the-remaining-d1-initial-development-sequence):
      `AtEnrollment.update`, `EnrollmentUpdateRequest`, `EnrollmentUpdater` and
