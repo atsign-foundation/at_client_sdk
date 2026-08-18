@@ -1398,9 +1398,10 @@ The `to.kpid != kpid` self-check was already fixed: `_isSelf` compares `enrollme
 ([14.18](#1418-the-remaining-d1-initial-development-sequence) step 16) — so what is still owed is
 the part that gives it something to send: **minting** a new KEM key, **marking the old one retired**
 and **republishing the package**. Nothing rotates yet, and nothing calls `update` in production.
-⚠️ **[#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133)'s title still reads
-`enroll:updateMetadata`**, the name superseded by ruling 13 — the issue has not been retitled or
-given a status block since the client half landed.
+✅ **[#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133) was retitled to
+`enroll:update` and given a status block on 2026-08-18**, which is also when `blockers.dart`'s `ke2`
+constant stopped saying "neither half is built" — it had said so since the client half landed, and it
+is the string anyone greps to find out what KE-2 owes.
 **Acceptance → [acceptance.md](../acceptance.md):** UC-A2.5 (a package gains a second KEM key; a peer negotiates
 to it; envelopes at the old kpid still open) and UC-A2.6 (a foreign enrollment, and an owner connection, are
 both refused).

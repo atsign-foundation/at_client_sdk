@@ -1231,20 +1231,20 @@ needs at_chops 3.6.2.
 Set aside deliberately. A row here exists to stop someone building it, so
 the reason is the point of the row.
 
-| Item  | What it is                                      | Why it is parked                                                                                    |
-|-------|-------------------------------------------------|-----------------------------------------------------------------------------------------------------|
-| 14.26 | A false comment in at_server's `at_metadata_builder`  | ⛔ **NOT PART OF D1** (gkc, 2026-08-16). It lands in at_server, off `trunk`, and nothing in D1 waits on it. Detail: [14.26](detail/implementation-plan.md#1426-a-comment-in-at_server-is-now-false) |
-| 14.1  | The signing root's `keys[]` shape               | SUPERSEDED by decisions 101 and 14.22. Kept for the reasoning; two of its conclusions are now false |
-| 14.13 | A passive-by-default flag                       | FOLDED AWAY 2026-08-11 into the rollout axis (14.18 step 19). Kept for its survey                   |
-| 14.21 | The signing root cannot be rotated              | RULED the same day by decisions 101. Kept so 14.22 is legible against it                            |
-| 14.23 | Per-generation nskey records                    | ⛔ REJECTED — do NOT build. 14.24 shipped instead; the body is kept so it is not re-derived          |
-| KE-2  | `enroll:update` + a multi-kpid receiver         | Blocks the two skipped acceptance rows. Issue #2133                                                 |
-| B-3   | `selfEncryptionKey` + `shared_key.*` retirement | Ecosystem-gated by decisions 37. Issue #2128                                                        |
-| KF-1  | `.atKeys`-at-rest protection + backup/restore   | Off the GA critical path. Issue #2129                                                               |
-| S-5   | at_auth 4.0.0 WASM barrel split                 | Off the GA critical path                                                                            |
-| S-6   | Consumer constraint bumps onto at_auth ^4.0.0   | Follows S-5                                                                                         |
-| R-2   | at_client 4.0.0 posture defaults                | After D1. A pure default-flip: 4.0 is identical to final-3.x code                                   |
-| D2-1  | Carve `at/pqmls` + D1-E shape fixes             | D2, out of D1                                                                                       |
+| Item  | What it is                                           | Why it is parked |
+|-------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| 14.26 | A false comment in at_server's `at_metadata_builder` | ⛔ **NOT PART OF D1** (gkc, 2026-08-16). It lands in at_server, off `trunk`, and nothing in D1 waits on it. Detail: [14.26](detail/implementation-plan.md#1426-a-comment-in-at_server-is-now-false) |
+| 14.1  | The signing root's `keys[]` shape                    | SUPERSEDED by decisions 101 and 14.22. Kept for the reasoning; two of its conclusions are now false |
+| 14.13 | A passive-by-default flag                            | FOLDED AWAY 2026-08-11 into the rollout axis (14.18 step 19). Kept for its survey |
+| 14.21 | The signing root cannot be rotated                   | RULED the same day by decisions 101. Kept so 14.22 is legible against it |
+| 14.23 | Per-generation nskey records                         | ⛔ REJECTED — do NOT build. 14.24 shipped instead; the body is kept so it is not re-derived |
+| KE-2  | The `enroll:update` **writer**                       | Verb merged to at_server `trunk`; the client receiver answers at every held kpid. Owed: nothing mints a second KEM key and re-advertises, so a package cannot gain one — which is what blocks the two skipped acceptance rows. Issue #2133 |
+| B-3   | Stop **conveying** the legacy `selfEncryptionKey`    | Narrower than it reads: the key's *use* is retired by the release cadence (R-2 flips `disallowLegacyEncryption`), so this is only relaxing `enroll:approve` to accept an approval that omits `encryptedDefaultSelfEncryptionKey` — every atServer implementation, one sweep — then ceasing to mint and convey it. Ecosystem-gated by decisions 37. Issue #2128 |
+| KF-1  | `.atKeys`-at-rest protection + backup/restore        | Off the GA critical path. Issue #2129 |
+| S-5   | at_auth 4.0.0 WASM barrel split                      | Off the GA critical path |
+| S-6   | Consumer constraint bumps onto at_auth ^4.0.0        | Follows S-5 |
+| R-2   | at_client 4.0.0 posture defaults                     | After D1. A pure default-flip: 4.0 is identical to final-3.x code |
+| D2-1  | Carve `at/pqmls` + D1-E shape fixes                  | D2, out of D1 |
 
 ---
 

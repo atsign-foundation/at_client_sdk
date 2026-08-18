@@ -41,12 +41,27 @@ const _functional = 'layer: tests/at_functional_test';
 // Blocked on a project
 // ---------------------------------------------------------------------------
 
-/// UC-A2.5 / UC-A2.6 — `enroll:updateMetadata` and the multi-kpid receiver.
+/// UC-A2.5 / UC-A2.6 — the `enroll:update` writer (decisions.md 68).
 ///
-/// Both rows need the verb to exist on the atServer and the client to hold more
-/// than one KEM keypair; neither half is built (decisions.md 68). The layer is
-/// the functional pack rather than e2e for the reason UC-B4.2 established: it
-/// runs against the virtualenv container in CI as well as locally, drives more
-/// than one enrollment of one atSign in a single file, and can activate an
-/// atSign from CRAM — none of which the e2e pack can do.
-const ke2 = 'blocked: KE-2 (enroll:updateMetadata + multi-kpid) · $_functional';
+/// ⚠️ **Corrected 2026-08-18. This constant used to say the verb did not exist
+/// and neither half was built, and both claims were false** — which is the
+/// failure the second lesson above describes, arriving at the constant that
+/// carries the warning.
+///
+/// What is built: the verb is merged to at_server `trunk` as **`enroll:update`**
+/// — self-only, refusing `namespaces` so an enrollment cannot widen its own
+/// grant, and merging `metadata` by named key rather than replacing the map.
+/// The client receiver already answers at every kpid it holds
+/// (`keyPackageMaterials`, `EnvelopeAddressing.regexForAny` on both the sweep
+/// and subscribe paths, and `encKeyFor(envelope.kid)` selecting the secret).
+///
+/// What these two rows still wait on is the client **writer**: nothing mints a
+/// second KEM keypair for an existing enrollment, re-signs its key package with
+/// both keys and sends it. Until something does, a package cannot gain a key,
+/// so neither row has a mechanism to assert against.
+///
+/// The layer is the functional pack rather than e2e for the reason UC-B4.2
+/// established: it runs against the virtualenv container in CI as well as
+/// locally, drives more than one enrollment of one atSign in a single file, and
+/// can activate an atSign from CRAM — none of which the e2e pack can do.
+const ke2 = 'blocked: KE-2 (the enroll:update writer) · $_functional';
