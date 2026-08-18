@@ -3096,8 +3096,19 @@ its own. None blocks anything.
     authenticates — which is why the advertisement path step 18 needs is
     usable as it stands.
 
-12. **No at_onboarding_cli app can set any posture flag**, so "app-settable"
-    is false for the whole CLI fleet. `AtOnboardingPreference extends
+12. ~~**No at_onboarding_cli app can set any posture flag**~~ — **FIXED
+    2026-08-18.** `AtOnboardingPreference` now declares a forwarding
+    constructor taking `posture`, `disallowLegacyEncryption`, `signingRollout`
+    and `inUseSigningAlgorithms` as `super.` parameters, so the whole CLI fleet
+    can set them; every parameter is optional and the superclass supplies each
+    default, so `AtOnboardingPreference()` means what it always did. Only the
+    construction-final flags are forwarded — the mutable fields beside them
+    stay assignable and are not repeated. **Proven by the mutation that is the
+    plausible wrong fix**: a constructor that takes the same arguments and
+    drops them reddens two of the four rows, and the no-arg compatibility row
+    correctly stays green. ⚠️ **`SigningAlgoType` is still not exported from
+    at_client's barrel (item 13)**, so an app naming that one flag imports
+    at_chops directly. What it used to say: "`AtOnboardingPreference extends
     AtClientPreference` and declares **no constructor**
     (`at_onboarding_cli/lib/src/util/at_onboarding_preference.dart:6`), so it
     inherits the implicit no-arg one and every construction-final flag —
@@ -3471,24 +3482,25 @@ its own. None blocks anything.
     substrate licence that covers at_client's secret-sharing code does not
     cover this.
 
-24. **A ring built from an `AtClient` alone still does not ask for a private
-    it is missing.**
-    [`decisions.md` 111](decisions.md#111-a-key-ring-files-where-its-client-files-2026-08-18)
-    made `PublishedNskeyKeyRing(client)` derive its `NskeyPrivateFiling` from
-    the client's own `AtKeysIo`, so what such a ring mints is durable. It did
-    **not** derive `requestConveyance`, which stays null unless a caller
-    supplies it, and `_askForMissingPrivate` returns immediately when it is —
-    so an app that hand-builds a ring and installs it as its `CryptoConfig`
-    silently loses ruling 38's read-miss self-heal, and a record that arrived
-    ahead of its key is permanently unreadable rather than merely early.
-    **Quieter than before 111, not smaller**: the ring now mints, files and
-    reads correctly, so nothing looks wrong until that one case arrives.
-    Deriving it takes more than the filing did — `AtClientSecretSharing`, a
-    gate equivalent to `PqStartupGates.askOnReadMiss`, and the wait-and-file
-    that `PqClientBootstrap` supplies, since the ask alone repairs the client
-    only at its next start. The alternative is to stop offering the shape and
-    have a client's `CryptoConfig` ring come from the bootstrap and nowhere
-    else.
+24. ~~**A ring built from an `AtClient` alone still does not ask for a private
+    it is missing.**~~ **FIXED 2026-08-18, hours after it was raised, under
+    [`decisions.md` 111](decisions.md#111-a-key-ring-files-where-its-client-files-2026-08-18).**
+    111 derived the `NskeyPrivateFiling`; the ask stayed null unless a caller
+    supplied it, so an app that hand-built a ring and installed it as its
+    `CryptoConfig` silently lost ruling 38's read-miss self-heal — quieter than
+    before 111 rather than smaller, since the ring minted, filed and read
+    correctly and nothing looked wrong until a record arrived ahead of its key.
+    A ring with a filing now derives the ask as well, lazily on the miss:
+    `AtClientSecretSharing.forClient` is Expando-cached per client, so the
+    derived ask uses the **same** substrate instance the bootstrap holds rather
+    than a rival. The two callers share one body,
+    `requestAndFileNskeyPrivate`, so the bootstrap's heal and the derived one
+    cannot diverge. What the bootstrap still supplies and nothing derives is
+    the **gate** — only it knows `PqStartupGates.askOnReadMiss`. Pinned by
+    `asksOnReadMiss` in `nskey_self_heal_test.dart`, with the control that a
+    client holding no key source still asks nothing, because an answer with
+    nowhere to land repairs the client at its next start and reads meanwhile
+    as a heal that ran and did nothing.
 
 #### 14.19.1 Things that LOOK like defects and are not
 
@@ -4240,7 +4252,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 12 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 10 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 

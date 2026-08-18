@@ -1,4 +1,13 @@
 ## 1.17.0
+- feat: `AtOnboardingPreference` takes the flags `AtClientPreference` fixes at
+  construction — `posture`, `disallowLegacyEncryption`, `signingRollout` and
+  `inUseSigningAlgorithms`. It declared no constructor, and those fields are
+  final in the superclass, so a CLI application could neither pass them nor
+  assign them afterwards: the whole fleet ran on the defaults with no way off
+  them, `at_cli_commons` consumers included. Every parameter is optional and
+  the superclass supplies each default, so `AtOnboardingPreference()` is
+  unchanged. Naming `inUseSigningAlgorithms` needs `SigningAlgoType`, which
+  at_client does not export — import it from at_chops.
 - fix: `authenticate()` hands its key source to the AtClient it creates. It
   built a `FileAtKeysIo` for `AtAuth` and then created the client without one,
   so every consumer — including everything built on `at_cli_commons` — got a
