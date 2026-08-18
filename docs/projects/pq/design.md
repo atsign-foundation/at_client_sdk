@@ -13,7 +13,7 @@
 > ```bash
 > # 98: the rollout axis and what each stage keeps active
 > sed -n '/enum SigningRollout/,/^}/p' \
->   packages/at_client/lib/src/preference/release_posture.dart
+>   packages/at_client/lib/src/preference/pq_posture.dart
 > # 99: material grouped by enrollment, the atSign's own keys outside it
 > git grep -n "_enrollments\|atSignKeys\|'atsignKeys'" \
 >   -- packages/at_auth/lib/src/keys/at_keys.dart
@@ -630,8 +630,8 @@ keypair, its own namespaces. Apps migrate independently and never have to agree.
    nskey data path. **The SDK never decides to write PQ — the app tells it
    to**, implicitly by riding the 4.x default, or explicitly by naming a
    `crypto` config — or, since
-   [`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10),
-   by building its preference with `ReleasePosture.postQuantum()`, which runs
+   [`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10),
+   by building its preference with `PqPosture.postQuantum()`, which runs
    the 4.0 flag defaults (era config, `disallowLegacyEncryption`, pq enrollment
    key exchange, ML-DSA retrofits) on a 3.x build. It carried a fifth, the JWS
    envelope wrapper, until
@@ -2259,11 +2259,11 @@ Three separate things, deliberately in three places:
 |-------|-------|-----------|
 | Strength order | at_chops, beside `SigningAlgoType` | A protocol fact every implementation must agree on, including the atServer |
 | Verifiable set | derived from what the at_chops build implements | A build cannot claim an algorithm it cannot run |
-| In-use-for-signing set | `AtClientPreference.inUseSigningAlgorithms`, defaulted by `ReleasePosture` | A rollout decision, which is what posture carries |
+| In-use-for-signing set | `AtClientPreference.inUseSigningAlgorithms`, defaulted by `PqPosture` | A rollout decision, which is what posture carries |
 
 The in-use set is a `Set<SigningAlgoType>`, final at construction and
-unmodifiable, defaulting to `{}` under `ReleasePosture.migration()` and
-`{mldsa65}` under `ReleasePosture.postQuantum()`. Empty is not "unsigned": an
+unmodifiable, defaulting to `{}` under `PqPosture.migration()` and
+`{mldsa65}` under `PqPosture.postQuantum()`. Empty is not "unsigned": an
 enrollment with no signing key of its own signs with its APKAM authentication
 key, and that is the key `_apsk` advertises for exactly as long as it is the
 signer. It is **not** retained once the enrollment holds signing keys
@@ -2328,7 +2328,7 @@ it holds and advertising it bare, which is what that posture publishes.
 
 ### 9.7 Rollout gate
 
-One `ReleasePosture` axis switches all three writer behaviours together: mint
+One `PqPosture` axis switches all three writer behaviours together: mint
 separate signing keys, publish the array, emit multi-signature envelopes. A
 build doing any one without the others emits something the fleet cannot handle,
 so they do not get independent flags.
@@ -2340,7 +2340,7 @@ gate — which is why the *advertisement* stays the bare string an un-upgraded
 peer parses — but the key it names changes, and the stage carries an atServer
 dependency (ML-DSA PKAM) that `now` does not.
 
-**The axis is `SigningRollout`,** on `ReleasePosture.signingRollout` and
+**The axis is `SigningRollout`,** on `PqPosture.signingRollout` and
 overridable per `AtClientPreference`. It names a position — `now`, `rollout1`,
 `rollout2` — rather than the mechanism it switches.
 

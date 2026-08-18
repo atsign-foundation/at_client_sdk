@@ -127,7 +127,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [68]  | The enrollment record stops being a one-way door: `enroll:updateMetadata`                   | 2026-08-10 | AMENDED 2026-08-13        |
 | [68b] | Workstream B(ii): approvals anchor to the root                                              | 2026-08-10 | LIVE                      |
 | [69]  | Workstream B(iii): the retrofit selector, and the KEM the retrofit froze wrong              | 2026-08-10 | AMENDED 2026-08-13        |
-| [70]  | Workstream A capstone: ReleasePosture, the five flags as one value                          | 2026-08-10 | AMENDED 2026-08-13        |
+| [70]  | Workstream A capstone: PqPosture, the five flags as one value                               | 2026-08-10 | AMENDED 2026-08-13        |
 | [71]  | Phase 5 begins: the CLI's handshake copy is deleted                                         | 2026-08-10 | LIVE                      |
 | [72]  | Phase 5: the keyfile store's double stops lying, and the lock's three races close           | 2026-08-10 | LIVE                      |
 | [73]  | Phase 5: `AtEnrollmentImpl` splits into submitter, approver, handshake                      | 2026-08-10 | LIVE                      |
@@ -170,7 +170,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | AMENDED 2026-08-18        |
 | [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
 | [112] | An unreadable key source is not an empty one                                                | 2026-08-18 | LIVE                      |
-| [113] | PqPosture replaces ReleasePosture, and drives the rollout                                   | 2026-08-18 | LIVE                      |
+| [113] | PqPosture: three postures, and the rollout they drive                                       | 2026-08-18 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -242,7 +242,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 [68]: detail/decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10
 [68b]: detail/decisions.md#68b-workstream-bii-approvals-anchor-to-the-root-2026-08-10
 [69]: detail/decisions.md#69-workstream-biii-the-retrofit-selector-and-the-kem-the-retrofit-froze-wrong-2026-08-10
-[70]: detail/decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10
+[70]: detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10
 [71]: detail/decisions.md#71-phase-5-begins-the-clis-handshake-copy-is-deleted-2026-08-10
 [72]: detail/decisions.md#72-phase-5-the-keyfile-stores-double-stops-lying-and-the-locks-three-races-close-2026-08-10
 [73]: detail/decisions.md#73-phase-5-atenrollmentimpl-splits-into-submitter-approver-handshake-2026-08-10
@@ -285,4 +285,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [110]: detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18
 [111]: detail/decisions.md#111-a-key-ring-files-where-its-client-files-2026-08-18
 [112]: detail/decisions.md#112-an-unreadable-key-source-is-not-an-empty-one-2026-08-18
-[113]: detail/decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18
+[113]: detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18

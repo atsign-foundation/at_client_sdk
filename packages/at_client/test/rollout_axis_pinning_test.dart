@@ -23,12 +23,12 @@ void main() {
   const atSign = '@alice';
 
   AtClientPreference preference(
-          {ReleasePosture? posture,
+          {PqPosture? posture,
           SigningRollout? signingRollout,
           Set<SigningAlgoType>? inUseSigningAlgorithms,
           bool? disallowLegacyEncryption}) =>
       AtClientPreference(
-          posture: posture ?? const ReleasePosture.migration(),
+          posture: posture ?? const PqPosture.migration(),
           signingRollout: signingRollout,
           inUseSigningAlgorithms: inUseSigningAlgorithms,
           disallowLegacyEncryption: disallowLegacyEncryption)
@@ -45,13 +45,13 @@ void main() {
     });
 
     test('a posture built without const is still the same posture', () {
-      // ReleasePosture declares no ==, so comparing two of them compares
+      // PqPosture declares no ==, so comparing two of them compares
       // identity, and only const instances are canonicalized. Comparing the
       // posture as an object would make this pair a mismatch, on a difference
       // that does not exist.
-      final canonical = preference(posture: const ReleasePosture.migration());
+      final canonical = preference(posture: const PqPosture.migration());
       // ignore: prefer_const_constructors
-      final built = preference(posture: ReleasePosture.migration());
+      final built = preference(posture: PqPosture.migration());
 
       expect(identical(canonical.posture, built.posture), isFalse,
           reason: 'the control: if these were the same instance the row below '
@@ -124,7 +124,7 @@ void main() {
       // rather than instead of it.
       final differences = preference()
           .rolloutDifferencesFrom(
-              preference(posture: const ReleasePosture.postQuantum()));
+              preference(posture: const PqPosture.postQuantum()));
 
       expect(
           differences,
@@ -155,7 +155,7 @@ void main() {
       // documented contract. So these two agree on the stage and differ only
       // on what the posture itself carries.
       final postured = preference(
-          posture: const ReleasePosture.postQuantum(),
+          posture: const PqPosture.postQuantum(),
           signingRollout: SigningRollout.now,
           inUseSigningAlgorithms: const {});
       final plain = preference(signingRollout: SigningRollout.now);
@@ -263,7 +263,7 @@ void main() {
       expect(
           () => AtClientImpl.refuseChangedRolloutAxes(
               running: null,
-              asked: preference(posture: const ReleasePosture.postQuantum()),
+              asked: preference(posture: const PqPosture.postQuantum()),
               cacheKey: atSign),
           returnsNormally);
     });

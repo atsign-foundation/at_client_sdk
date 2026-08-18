@@ -164,7 +164,7 @@ maps each UC cluster to its test layer and owning project.
 [Section 15](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564) (Part C)
 comes last because it asserts the *mechanism that drives* Parts A and B into
 production — each of the five rollout flag axes in isolation, and the grouped
-`ReleasePosture` — rather than any crypto behaviour of its own.
+`PqPosture` — rather than any crypto behaviour of its own.
 
 **Lane discipline — what this doc does NOT do.** This doc states *what must be
 true* and *how to test it*; it does not re-explain *how the mechanism works*.
@@ -1542,7 +1542,7 @@ restates project IDs, and only as a coverage map):
 | A2.4 / A3.5 / A4.5 / A4.6 / A4.7 (KEM selection + construction negotiation)      | **KE-1**                        |
 | B0.x / B1.x / B2.x / B3.x / B4.x / B5.x                                         | **RF-2c** (retrofit) + **RF-SRV** (server self-enroll — on the GA critical path per [`decisions.md` 40](detail/decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)); the B3.x/B4.x data-path halves are built (B-1 + the decisions-36 ladder; R-1's surviving scope is the `disallowLegacyEncryption` flag) |
 
-| C1.x (the rollout driven by flags: era, refusal, envelope, key exchange, retrofit, grouped posture) | **Workstream A** (the rollout-posture capstone, [`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)) — landed; the default-flip these rows will then guard is **R-2** |
+| C1.x (the rollout driven by flags: era, refusal, envelope, key exchange, retrofit, grouped posture) | **Workstream A** (the rollout-posture capstone, [`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)) — landed; the default-flip these rows will then guard is **R-2** |
 
 Project names follow the `implementation-plan.md` scheme (RF-SRV / RF-2b /
 RF-2c); Workstreams A and B are the cross-cutting strands of the "make it
@@ -1558,14 +1558,14 @@ right" pass rather than numbered projects.
 From the PQ project's view, at_client 4.0 is final-3.x code with different flag
 defaults, so every stage of the rollout must be reachable from this codebase by
 flag manipulation: each of the five axes flipped in isolation, and all five as
-the grouped `ReleasePosture`. These rows assert the mechanism itself — the
+the grouped `PqPosture`. These rows assert the mechanism itself — the
 posture reaching each flag's natural home, and every axis remaining
 individually overridable — not the underlying crypto behaviours, which Parts A
 and B already own.
 
 ### 15.1 UC-C1.1 — The era axis: a postured client writes PQ by default
 
-- **Given:** a client built with `ReleasePosture.postQuantum()` and no
+- **Given:** a client built with `PqPosture.postQuantum()` and no
   app-named `crypto` config.
 - **When:** its era `CryptoConfig` is adopted at construction.
 - **Then:** new writes default to the nskey data path (the AES-GCM provider),
@@ -1574,7 +1574,7 @@ and B already own.
 
 ### 15.2 UC-C1.2 — The refusal axis: the posture disallows legacy writes
 
-- **Given:** a preference built with `ReleasePosture.postQuantum()` and no
+- **Given:** a preference built with `PqPosture.postQuantum()` and no
   explicit `disallowLegacyEncryption` argument.
 - **When:** a write would fall back to the legacy provider.
 - **Then:** it is refused (`LegacyEncryptionRefusedException`) because the
@@ -1587,9 +1587,9 @@ and B already own.
 ruling 1. Do not write this test: it asserts a mechanism that is being deleted.
 
 It read: *given a client whose preference carries
-`ReleasePosture.postQuantum()`, when any signer wraps a payload with no
+`PqPosture.postQuantum()`, when any signer wraps a payload with no
 per-signer version assigned, then the envelope goes out in the JWS (v2) shape*.
-Every clause of it is void — `envelopeVersion` stops being a `ReleasePosture`
+Every clause of it is void — `envelopeVersion` stops being a `PqPosture`
 axis, there is one envelope shape rather than a postured choice between two,
 and the trailing claim that a key package "freezes the threaded version in the
 write-once `metadata.keyPackage`" was already false once `enroll:update`
@@ -1603,7 +1603,7 @@ on failure.
 ### 15.4 UC-C1.4 — The key-exchange axis: the posture names pq enrollment
 
 - **Given:** a submitter composing an `AtEnrollmentRequest` under
-  `ReleasePosture.postQuantum()`. Submission goes through `package:at_auth`,
+  `PqPosture.postQuantum()`. Submission goes through `package:at_auth`,
   which cannot read a preference, so the posture's value is applied by
   whoever builds the request — together with the two things pq mode requires
   (the key-package builder and the symmetric-key resolver).
@@ -1616,7 +1616,7 @@ on failure.
 ### 15.5 UC-C1.5 — The retrofit axis: an argless retrofit follows the posture
 
 - **Given:** a legacy atSign and a preference carrying
-  `ReleasePosture.postQuantum()`.
+  `PqPosture.postQuantum()`.
 - **When:** `selfRetrofit` runs with no `signingAlgo` argument.
 - **Then:** the minted enrollment is ML-DSA. Under the migration posture the
   same call mints RSA — the two postures resolve into different per-algorithm
@@ -1625,7 +1625,7 @@ on failure.
 ### 15.6 UC-C1.6 — The grouped posture: one value moves all five axes
 
 - **Given:** nothing but
-  `AtClientPreference(posture: const ReleasePosture.postQuantum())`.
+  `AtClientPreference(posture: const PqPosture.postQuantum())`.
 - **When:** a client, its signers, its enrollment submissions and its
   retrofits are built from that one preference.
 - **Then:** all five axes run the 4.0 defaults — the pinned columns of the
@@ -1636,7 +1636,7 @@ on failure.
 
 ### 15.7 UC-C1.7 — The signing-set axis: which keys an enrollment holds
 
-- **Given:** a preference built with `ReleasePosture.postQuantum()` and no
+- **Given:** a preference built with `PqPosture.postQuantum()` and no
   explicit `inUseSigningAlgorithms` argument.
 - **When:** the set is read.
 - **Then:** it is `{mldsa65}`, while a migration-postured preference's is
@@ -1654,7 +1654,7 @@ on failure.
   is reachable only through the preference, there being two postures and no
   general constructor.
 
-Covered by `packages/at_client/test/release_posture_test.dart`.
+Covered by `packages/at_client/test/pq_posture_test.dart`.
 
 ## 16. G1 · Signature agility and the rollout matrix
 
@@ -1990,7 +1990,7 @@ the other's reader:
 This is not a rollout-2 effect and no stage avoids it. Step 3 replaced the
 released envelope — a flat
 `{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` map — with RFC
-7515 general serialization, and deleted the envelope as a `ReleasePosture`
+7515 general serialization, and deleted the envelope as a `PqPosture`
 axis, so `now` emits the new shape too.
 
 **It is accepted rather than fixed**, on what the released reader actually is:

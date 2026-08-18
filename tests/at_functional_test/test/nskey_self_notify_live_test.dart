@@ -287,7 +287,7 @@ void main() {
     );
 
     // ⚠️ The provider is chosen PER CALL, not by posture. Building the
-    // enrollments with `ReleasePosture.postQuantum()` did make writes PQ — and
+    // enrollments with `PqPosture.postQuantum()` did make writes PQ — and
     // broke the monitor: under it the receiver's monitor received nothing at
     // all, not even `statsNotification`, and the sender's never reached
     // `listening`. The monitor authenticates on its own socket, so a posture

@@ -65,7 +65,7 @@ void main() {
       // imports at_client. Composing an enrollment request from it still
       // goes through package:at_auth.
       final preference =
-          AtClientPreference(posture: const ReleasePosture.postQuantum());
+          AtClientPreference(posture: const PqPosture.postQuantum());
       expect(preference.posture.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(preference.disallowLegacyEncryption, true);
     });
@@ -140,8 +140,8 @@ const Set<String> _atClientBarrelExports = {
   'package:at_client/src/listener/connectivity_listener.dart',
   'package:at_client/src/manager/at_client_manager.dart',
   'package:at_client/src/preference/at_client_preference.dart',
-  'package:at_client/src/preference/release_posture.dart',
-  // show-narrowed to EnrollmentKeyExchangeMode: ReleasePosture.keyExchangeMode
+  'package:at_client/src/preference/pq_posture.dart',
+  // show-narrowed to EnrollmentKeyExchangeMode: PqPosture.keyExchangeMode
   // holds one, and its per-axis override must be nameable without importing
   // at_auth directly.
   'package:at_auth/at_auth.dart',

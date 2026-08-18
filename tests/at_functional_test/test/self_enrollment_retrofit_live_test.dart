@@ -325,7 +325,7 @@ void main() {
     final manager = await selfRetrofit(
         session: session,
         preference: TestUtils.getPreference(atSign,
-            posture: const ReleasePosture.postQuantum()),
+            posture: const PqPosture.postQuantum()),
         appName: 'rf2b-app',
         deviceName: 'rf2d-${Uuid().v4().hashCode}',
         namespaces: {namespace: 'rw'},

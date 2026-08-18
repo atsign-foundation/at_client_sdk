@@ -1,7 +1,7 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
-import 'package:at_client/src/preference/release_posture.dart';
+import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show canSignEnvelopeWith;
@@ -47,8 +47,8 @@ class AtClientPreference {
   final bool disallowLegacyEncryption;
 
   /// The post-quantum rollout posture this client runs under — the five
-  /// rollout flags set as a group. Defaults to [ReleasePosture.migration],
-  /// the 3.x posture; pass [ReleasePosture.postQuantum] to run the 4.0
+  /// rollout flags set as a group. Defaults to [PqPosture.migration],
+  /// the 3.x posture; pass [PqPosture.postQuantum] to run the 4.0
   /// defaults today.
   ///
   /// Individual flags still win: an explicit [disallowLegacyEncryption] or
@@ -61,7 +61,7 @@ class AtClientPreference {
   /// asking for it with a preference naming a different one is **refused** —
   /// see [rolloutDifferencesFrom]. It used to be ignored, which left the
   /// caller running on the stage it thought it had left.
-  final ReleasePosture posture;
+  final PqPosture posture;
 
   /// Which algorithms this client keeps an **active signing key** for — the
   /// keys that sign what its enrollment attests to, which is a different job
@@ -70,7 +70,7 @@ class AtClientPreference {
   /// Not to be confused with [signingAlgoType], which is that authentication
   /// key's algorithm and is resolved from the key material rather than chosen.
   ///
-  /// **Empty in 3.x, `{mldsa65}` in 4.0** ([ReleasePosture]). Empty is not
+  /// **Empty in 3.x, `{mldsa65}` in 4.0** ([PqPosture]). Empty is not
   /// "unsigned": with no signing key of its own an enrollment signs with its
   /// APKAM authentication key, whose public half is published as this
   /// enrollment's signing key and stays published afterwards, because it is
@@ -104,7 +104,7 @@ class AtClientPreference {
   final SigningRollout signingRollout;
 
   AtClientPreference(
-      {this.posture = const ReleasePosture.migration(),
+      {this.posture = const PqPosture.migration(),
       bool? disallowLegacyEncryption,
       SigningRollout? signingRollout,
       Set<SigningAlgoType>? inUseSigningAlgorithms})
@@ -132,13 +132,13 @@ class AtClientPreference {
   /// test would refuse every one of them.
   ///
   /// ⚠️ **The posture is compared by what it MEANS, not as an object**, for
-  /// the same reason one step further down: [ReleasePosture] declares no `==`,
+  /// the same reason one step further down: [PqPosture] declares no `==`,
   /// so comparing two of them is an identity test, and a caller writing
-  /// `ReleasePosture.migration()` without `const` gets an instance that is not
+  /// `PqPosture.migration()` without `const` gets an instance that is not
   /// the canonical one. Two behaviourally identical postures would then read as
   /// a mismatch. What is compared is the pair of posture fields nothing else
-  /// carries — [ReleasePosture.writesPqByDefault] and
-  /// [ReleasePosture.keyExchangeMode] — beside the three effective axes, which
+  /// carries — [PqPosture.writesPqByDefault] and
+  /// [PqPosture.keyExchangeMode] — beside the three effective axes, which
   /// is the whole of what a posture can change.
   ///
   /// [crypto] is deliberately **not** here: it is adopted from the incoming

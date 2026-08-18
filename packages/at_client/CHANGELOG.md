@@ -530,7 +530,7 @@
     pair to the key-package builder. Its dartdoc now names both ways to get
     the call wrong by hand — omitting the key package, and advertising one
     key while signing the package with another.
-- **BREAKING** feat: `ReleasePosture.retrofitSigningAlgo` becomes
+- **BREAKING** feat: `PqPosture.retrofitSigningAlgo` becomes
   `retrofitAuthenticationAlgo`, and is now **derived** from `signingRollout`
   rather than stored — so both named constructors take one argument fewer.
   `SigningRollout` gains `defaultRetrofitAuthenticationAlgo` beside
@@ -559,7 +559,7 @@
   - One active `rsa2048` entry still spells as the bare public-key string, so
     a released reader cannot tell a rollout-1 sender from a `now` one —
     measured against at_client 3.14.0 rather than argued.
-  - `ReleasePosture.migration()` and `.postQuantum()` are unaffected: they
+  - `PqPosture.migration()` and `.postQuantum()` are unaffected: they
     are `now` and `rollout2`.
 - feat: the published `_apsk` record advertises the keys that sign for an
   enrollment now plus the signing keys it has **retired**. The APKAM
@@ -604,7 +604,7 @@
   copy waiting on its own conveyance.
 - feat: `SigningRollout` — where a build stands in the rollout that separates
   an enrollment's signing keys from its APKAM authentication key: `now`,
-  `rollout1`, `rollout2`. It rides `ReleasePosture.signingRollout` and is
+  `rollout1`, `rollout2`. It rides `PqPosture.signingRollout` and is
   overridable per `AtClientPreference`, and `inUseSigningAlgorithms` derives
   its default from it. The posture derives that set rather than storing both,
   because two stored fields are two controls over one behaviour; where an app
@@ -645,7 +645,7 @@
   client keeps an active signing key for, which is a different job from
   `signingAlgoType`'s APKAM authentication key. A `Set<SigningAlgoType>`,
   final at construction and held unmodifiable, defaulted from a new fifth
-  `ReleasePosture` axis: empty in the 3.x posture and `{mldsa65}` in the 4.0
+  `PqPosture` axis: empty in the 3.x posture and `{mldsa65}` in the 4.0
   one. Empty is not "unsigned" — an enrollment with no signing key of its own
   signs with its APKAM authentication key, whose public half is published as
   its signing key and stays published, because that is what verifies
@@ -911,7 +911,7 @@
   and `SymmetricAesGcmProvider` each decline a namespace-less key — so the
   resolved provider falls back to legacy and the AES file key inside the
   `FileTransferObject` travels RSA-wrapped. A client that set
-  `disallowLegacyEncryption` (including via `ReleasePosture.postQuantum()`)
+  `disallowLegacyEncryption` (including via `PqPosture.postQuantum()`)
   gets `LegacyEncryptionRefusedException` from the notify instead. The file
   bytes themselves are AES-encrypted and unaffected; it is the key conveyance
   that stays classical. Giving the SDK's own namespace-less writes a reserved
@@ -925,8 +925,8 @@
   holding the live generation, and rotation is the revocation lever. No
   behaviour change — `mintAndPublish` is the cold-start mint, `rotate` is the
   rotation lever, and the doc now says so.
-- feat: `ReleasePosture` — the four post-quantum rollout flags as one value,
-  set on `AtClientPreference(posture:)`. `ReleasePosture.migration()` (the
+- feat: `PqPosture` — the four post-quantum rollout flags as one value,
+  set on `AtClientPreference(posture:)`. `PqPosture.migration()` (the
   default) is the 3.x column of the rollout table; `postQuantum()` runs the
   4.0 defaults today: the era `CryptoConfig` writes PQ, legacy writes are
   refused, the posture names the pq enrollment key exchange, and an argless

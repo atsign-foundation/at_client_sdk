@@ -28,7 +28,7 @@ void main() {
 
     test('a posture given here reaches the client behaviour it implies', () {
       final preference =
-          AtOnboardingPreference(posture: const ReleasePosture.postQuantum());
+          AtOnboardingPreference(posture: const PqPosture.postQuantum());
 
       expect(preference.posture.writesPqByDefault, isTrue);
       expect(preference.disallowLegacyEncryption, isTrue,
@@ -42,7 +42,7 @@ void main() {
       // beats the group it came from. Without forwarding there was no way to
       // express it at all from a CLI app.
       final preference = AtOnboardingPreference(
-        posture: const ReleasePosture.postQuantum(),
+        posture: const PqPosture.postQuantum(),
         disallowLegacyEncryption: false,
         signingRollout: SigningRollout.rollout1,
         inUseSigningAlgorithms: const {SigningAlgoType.rsa2048},

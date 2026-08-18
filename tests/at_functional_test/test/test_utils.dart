@@ -23,11 +23,11 @@ class TestUtils {
   /// final at construction — a test cannot set either on the returned
   /// instance.
   static AtClientPreference getPreference(String atsign,
-      {ReleasePosture? posture, SigningRollout? signingRollout}) {
+      {PqPosture? posture, SigningRollout? signingRollout}) {
     var preference = posture == null && signingRollout == null
         ? AtClientPreference()
         : AtClientPreference(
-            posture: posture ?? const ReleasePosture.migration(),
+            posture: posture ?? const PqPosture.migration(),
             signingRollout: signingRollout);
     preference.hiveStoragePath = 'test/hive/client/$atsign';
     preference.commitLogPath = 'test/hive/client/$atsign';

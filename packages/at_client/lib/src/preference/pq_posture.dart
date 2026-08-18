@@ -83,7 +83,7 @@ enum SigningRollout {
   /// stays; this one does not repeat the mistake.
   ///
   /// Derived here beside [defaultInUseSigningAlgorithms] rather than stored
-  /// on [ReleasePosture]: two stored fields would be two controls over one
+  /// on [PqPosture]: two stored fields would be two controls over one
   /// position, and an operator who set the stage but forgot the algorithm
   /// would land in a state no release defines with nothing to tell them.
   SigningAlgoType get defaultRetrofitAuthenticationAlgo => switch (this) {
@@ -137,7 +137,7 @@ enum SigningRollout {
 /// posture means "the defaults of a release", and an app that wants a mixture
 /// sets the individual flag it cares about beside the posture rather than
 /// minting a hybrid posture no release ever shipped.
-class ReleasePosture {
+class PqPosture {
   /// Whether the era `CryptoConfig` a client adopts writes post-quantum by
   /// default (`CryptoConfig.nskey`) or keeps writes legacy while reading
   /// everything (`CryptoConfig.readsNskeyWritesLegacy`).
@@ -199,7 +199,7 @@ class ReleasePosture {
   /// what makes it safe for un-upgraded peers, but it names a different key
   /// and the stage carries an atServer dependency (ML-DSA PKAM) that [now]
   /// does not.
-  const ReleasePosture.migration()
+  const PqPosture.migration()
       : writesPqByDefault = false,
         disallowLegacyEncryption = false,
         keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
@@ -254,7 +254,7 @@ class ReleasePosture {
   /// the rollout-1 **signing** key staying advertised as `retired` after it
   /// stops signing — a key is retained for what it signed, and this posture's
   /// predecessor signed with that one.
-  const ReleasePosture.postQuantum()
+  const PqPosture.postQuantum()
       : writesPqByDefault = true,
         disallowLegacyEncryption = true,
         keyExchangeMode = EnrollmentKeyExchangeMode.pq,

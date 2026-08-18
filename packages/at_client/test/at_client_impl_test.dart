@@ -444,7 +444,7 @@ void main() {
     test('the postQuantum posture makes PQ writes the adopted era default',
         () async {
       AtClientPreference preferences =
-          AtClientPreference(posture: const ReleasePosture.postQuantum())
+          AtClientPreference(posture: const PqPosture.postQuantum())
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/path';
       AtChops chops = AtChopsImpl(mockAtChopsKeys);

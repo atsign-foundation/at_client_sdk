@@ -60,7 +60,7 @@ constructor rather than assigned afterwards:
 
 ```dart
 final pref = AtOnboardingPreference(
-  posture: const ReleasePosture.postQuantum(),
+  posture: const PqPosture.postQuantum(),
 )..someCustomField = 'my value';
 ```
 

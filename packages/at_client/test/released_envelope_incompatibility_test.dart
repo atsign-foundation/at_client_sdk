@@ -9,7 +9,7 @@ import 'package:test/test.dart';
 /// Step 3 replaced the released envelope — a flat
 /// `{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` map — with
 /// RFC 7515 general serialization, and deleted the envelope as a
-/// `ReleasePosture` axis, so no stage emits the old shape. Neither build can
+/// `PqPosture` axis, so no stage emits the old shape. Neither build can
 /// read the other's envelope.
 ///
 /// gkc ruled that **accepted rather than fixed**

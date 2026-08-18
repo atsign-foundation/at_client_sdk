@@ -14,7 +14,7 @@ import 'package:test/test.dart';
 void main() {
   group('the posture values are the release contract', () {
     test('migration is the 3.x column of the rollout table', () {
-      const p = ReleasePosture.migration();
+      const p = PqPosture.migration();
       expect(p.writesPqByDefault, false);
       expect(p.disallowLegacyEncryption, false);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
@@ -27,7 +27,7 @@ void main() {
     });
 
     test('postQuantum is the 4.0 column of the rollout table', () {
-      const p = ReleasePosture.postQuantum();
+      const p = PqPosture.postQuantum();
       expect(p.writesPqByDefault, true);
       expect(p.disallowLegacyEncryption, true);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
@@ -43,7 +43,7 @@ void main() {
   group('the preference applies the posture at construction', () {
     test('a bare preference runs the migration posture', () {
       final preference = AtClientPreference();
-      expect(preference.posture, same(const ReleasePosture.migration()),
+      expect(preference.posture, same(const PqPosture.migration()),
           reason: 'the 3.x defaults are the defaults — an app that names '
               'nothing rides the SDK\'s own migration schedule');
       expect(preference.disallowLegacyEncryption, false);
@@ -51,7 +51,7 @@ void main() {
 
     test('postQuantum sets disallowLegacyEncryption', () {
       final preference =
-          AtClientPreference(posture: const ReleasePosture.postQuantum());
+          AtClientPreference(posture: const PqPosture.postQuantum());
       expect(preference.disallowLegacyEncryption, true);
     });
 
@@ -59,7 +59,7 @@ void main() {
         () {
       expect(
           AtClientPreference(
-                  posture: const ReleasePosture.postQuantum(),
+                  posture: const PqPosture.postQuantum(),
                   disallowLegacyEncryption: false)
               .disallowLegacyEncryption,
           false,
@@ -106,8 +106,8 @@ void main() {
       // Two stored fields would be two controls over one behaviour, and the
       // day they disagreed one would be a lie with no way to tell which.
       for (final posture in [
-        const ReleasePosture.migration(),
-        const ReleasePosture.postQuantum()
+        const PqPosture.migration(),
+        const PqPosture.postQuantum()
       ]) {
         expect(posture.inUseSigningAlgorithms,
             posture.signingRollout.defaultInUseSigningAlgorithms);
@@ -137,7 +137,7 @@ void main() {
         () {
       expect(
           AtClientPreference(
-                  posture: const ReleasePosture.migration(),
+                  posture: const PqPosture.migration(),
                   signingRollout: SigningRollout.rollout2)
               .inUseSigningAlgorithms,
           {SigningAlgoType.mldsa65},
@@ -157,12 +157,12 @@ void main() {
     test('follows the posture, and an explicit set beats it both ways', () {
       expect(AtClientPreference().inUseSigningAlgorithms, isEmpty);
       expect(
-          AtClientPreference(posture: const ReleasePosture.postQuantum())
+          AtClientPreference(posture: const PqPosture.postQuantum())
               .inUseSigningAlgorithms,
           {SigningAlgoType.mldsa65});
       expect(
           AtClientPreference(
-                  posture: const ReleasePosture.postQuantum(),
+                  posture: const PqPosture.postQuantum(),
                   inUseSigningAlgorithms: const {})
               .inUseSigningAlgorithms,
           isEmpty);

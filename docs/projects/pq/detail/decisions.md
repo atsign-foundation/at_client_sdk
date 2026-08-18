@@ -5227,7 +5227,7 @@ per-operation flags still override per call):
 |---|---|---|---|
 | Crypto era default | `Expando` keyed by `AtClient` ([section 27.2](#272-why-it-stopped-being-a-constant) — never the shared preference) | reads-nskey, writes-legacy | writes-PQ |
 | `disallowLegacyEncryption` | `AtClientPreference`, final at construction | false | true |
-| Signing rollout position | `ReleasePosture.signingRollout`, overridable per `AtClientPreference`; the in-use signing set derives from it ([section 91.3](#913-the-rulings) rulings 16–17) | `now` (set `{}`) | `rollout2` (set `{mldsa65}`) |
+| Signing rollout position | `PqPosture.signingRollout`, overridable per `AtClientPreference`; the in-use signing set derives from it ([section 91.3](#913-the-rulings) rulings 16–17) | `now` (set `{}`) | `rollout2` (set `{mldsa65}`) |
 | `EnrollmentKeyExchangeMode` | `AtEnrollmentRequest` | legacy | pq |
 | Retrofit signing algorithm | per-retrofit parameter ([section 56.3](#563-three-retrofit-modes-and-the-signing-algorithm-selector)) | RSA | ML-DSA |
 
@@ -6539,11 +6539,17 @@ keyfile material, and RSA PKAM under the new id — beside the existing
 ML-DSA row, which also exercises per-algo idempotence live since both
 rows share one keyfile.
 
-## 70. Workstream A capstone: ReleasePosture, the five flags as one value (2026-08-10)
+## 70. Workstream A capstone: PqPosture, the five flags as one value (2026-08-10)
 
 **Status:** accepted and landed. The convenience posture helper the 56.4
 ruling promised — the five rollout axes, each still an independent flag in
 its natural home, settable as a group.
+
+⚠️ **The class was called `ReleasePosture` when this was ruled**, and
+[113](#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
+renamed it to `PqPosture` — which is what this entry says throughout, the
+heading included. 113 also overturns the "individual flags still win" clause
+below, for `disallowLegacyEncryption` alone.
 
 *Amended 2026-08-13 during implementation: two of the axes this entry describes
 have moved. The signed-envelope version stopped being an axis
@@ -6552,7 +6558,7 @@ ruling 1) — the paragraph below still describes `EnvelopeSigning.envelopeVersi
 resolving per-signer → posture → v1, and none of that mechanism exists; there is
 one shape and a constant. The in-use signing set ([section 91.3](#913-the-rulings)
 ruling 16) took the vacated fifth slot, so the heading's count is right again by
-coincidence rather than because these five stand.* `ReleasePosture` (at_client, main
+coincidence rather than because these five stand.* `PqPosture` (at_client, main
 barrel) has exactly two constructors and no general one: `migration()` is
 the 3.x column of the 56.4 table, `postQuantum()` the 4.0 column, and a
 deployment wanting a mixture sets the individual flag beside the posture
@@ -7319,12 +7325,12 @@ mechanism-with-no-operator shape.
 Nothing to build. pq mode is not dark: it is selectable through
 `AtEnrollmentRequest.pq(...)`, which requires the two companions it cannot
 work without, and it is exercised live by the functional pack's
-`enrollment_pq_key_exchange_live_test.dart`. `ReleasePosture.keyExchangeMode`
+`enrollment_pq_key_exchange_live_test.dart`. `PqPosture.keyExchangeMode`
 carries the release default for the app that builds the request — `legacy`
 in 3.x, `pq` under `postQuantum()` — which is exactly the Workstream A
 table, and exactly what the field's own dartdoc already described.
 
-One imprecision fixed with it: `ReleasePosture.postQuantum()`'s summary read
+One imprecision fixed with it: `PqPosture.postQuantum()`'s summary read
 "enrollments exchange their symmetric key post-quantum" alongside four
 things the posture really does apply by itself. It now says that this one
 takes effect when the app builds its request from the value — the same
@@ -7906,8 +7912,8 @@ superseded kpid is not retired) is the same shape as ruling 9 below.
 | 13 | **Section 68's `enroll:updateMetadata` is renamed `enroll:update`** and widened to reach `apkamPublicKey`, `signingAlgo`, `apsk` and `metadata`. Nothing is built, so the wire token is still free and never will be again; a name saying "metadata" while reaching `apkamPublicKey` generates wrong assumptions for years. *Read as of its date: the window this ruling used closed when the verb shipped. `enroll:update` is merged to at_server `trunk` — self-only, refusing `namespaces`, merging `metadata` by named key — and its client caller landed 2026-08-13, so the token is now spent exactly as this ruling intended.* **`namespaces` and the approval state stay out of reach permanently** — the operation is self-only, so reaching namespaces would let an enrollment grant itself scope |
 | 14 | **`EnrollParams.apkamPublicKeySignature`** carries a signature by the **new** private key over `enrollmentId\|apkamPublicKey\|signingAlgo`, verified against the new public key in the same request. Without it a compromised-but-authenticated client can install a public key whose private half it does not hold, locking out the legitimate holder while the record looks valid. No nonce: the operation is self-only and the old key stops authenticating after the rotation, so a replay can only be sent by the current holder — section 68 ruling 2's own argument that rollback is self-harm rather than an attack. **The signature is `AtSigningMode.pkam` with `HashingAlgoType.sha256`**, not `AtSigningMode.data`: `data` mode signs with the *encryption* keypair, so it cannot express possession of an APKAM signing key at all, and `pkam` is the mode PKAM verification already uses, so both sides frame the bytes identically. Learned from a red test rather than from reading — the first implementation chose `data` and failed with "Encryption keypair required for signing" |
 | 15 | **The strength order is an explicit ordered list beside `SigningAlgoType` in at_chops** — `mldsa65` > `ecc_secp256r1` > `rsa2048` — pinned by a raw-literal tripwire test in the style of `KeyAlgorithmType`'s. *Amended 2026-08-13 during implementation: the order shipped **total**, over all five members — `mldsa65` > `rsa4096` > `ed25519` > `ecc_secp256r1` > `rsa2048` — because a partial order leaves the choice undefined for exactly the pair nobody thought about, and the tripwire fails on a new member left unplaced.* It is a protocol fact every implementation must agree on. The **verifiable** set is derived from what the at_chops build implements, so a build cannot claim an algorithm it cannot run |
-| 16 | **The in-use-for-signing set is app-settable on `AtClientPreference`, defaulted by `ReleasePosture`,** and SDK releases move that default. When the in-use set names an algorithm the enrollment holds no key for, the client mints one locally at start, files it and publishes it — which a signing keypair can do precisely because it needs no server approval, unlike the auth key. *Four things this ruling left open were settled on gkc's ruling 2026-08-13, when `AtClientPreference.inUseSigningAlgorithms` landed. **The defaults are `{}` in 3.x and `{mldsa65}` in 4.0.** Empty in 3.x because an enrollment holding a signing key of its own holds **two** keys — that one and the APKAM authentication key, which ruling 10 keeps published for as long as the envelopes it signed must verify — and two keys cannot be advertised as the bare public-key string every deployed reader understands, so a non-empty 3.x default would publish an array at clients whose peers refuse it. ⚠️ **That clause was overtaken 2026-08-14 by [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 2**: the auth key is no longer retained, so an enrollment holding one signing key advertises **one** entry, not two. The `{}` 3.x default outlives the reason given for it — 98 ruling 6 sets the stage defaults to `{}` / `{rsa2048}` / `{mldsa65}`, and what keeps rollout 1's single entry deployed-readable is that the entry is `rsa2048` and active, which is the bare form. ML-DSA **alone** in 4.0, with no RSA beside it: ruling 11 has the verifier take the strongest algorithm the envelope and the advertisement share, so a second, weaker signature is only ever the one passed over — it would cost a key, an advertisement entry and a signature per envelope to be ignored, and what keeps older envelopes verifiable is ruling 10's retained auth key rather than a weaker key in this set. ⚠️ **Also overtaken by [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 2**: nothing retains the auth key now. What keeps an older envelope verifiable is the **retired signing key** that signed it, which stays advertised under 98 exactly as ruling 9 always required — the ML-DSA-alone conclusion is unchanged, only the mechanism named for it. **A `Set`, not a list**, because membership is the whole meaning: signatures are emitted in the strongest-first order the keyfile is read in, never in the preference's order. **Final at construction and unmodifiable**, like `disallowLegacyEncryption` and for the same reason — and unmodifiable specifically because a caller retaining the set it passed could otherwise add to it after the check. **An algorithm this build cannot sign an envelope under is refused at construction** (`ArgumentError`), not skipped: skipping quietly leaves an app that asked for a post-quantum signature believing it has one while every signature it produced was classical, which is ruling 15's "a build cannot claim an algorithm it cannot run" from the app's side.* *A fifth thing was settled when the minting landed: **the client publishes the advertisement BEFORE filing the key**, which is the reverse of the nskey rule and the reverse of the obvious order. Filing first makes the client sign under a key its `_apsk` does not name, and since envelopes are stored durably and verified on every read, each one written before the publish lands is unverifiable for good — with nothing to retry it, because the next start finds the key held and mints nothing. Publishing first leaves an advertised key nobody holds, which nothing signs with and which disappears at the next publish, the advertisement being composed from what the keyfile holds. `NskeyPrivateFiling.store` files before publishing for the mirror-image reason: an encapsulation key published without its private has senders sealing data nobody can open.* |
-| 17 | **The rollout position is a named axis, `SigningRollout` (`now` / `rollout1` / `rollout2`),** on `ReleasePosture.signingRollout` and overridable per `AtClientPreference`. *Ruled by gkc 2026-08-13 and built the same day, after the alternative — folding the axis away — was put and declined. The finding that prompted the question stands and is recorded here because it shapes what the axis is: the three rollout-2 writer behaviours are inseparable **by construction**, not by three flags agreeing. Only minting is a decision; the array form and the multi-signature envelope are consequences of the enrollment holding a second key. So the axis names a position and supplies the default for the one piece of state all three read (ruling 16's set) — and `ReleasePosture` **derives** that set from the stage rather than storing both, since two stored fields are two controls over one behaviour and the day they disagree one is a lie with no way to tell which. Where an app names both explicitly the **set** is what the client obeys, which is the same contract every other axis has. ~~`rollout1` writes exactly what `now` writes, deliberately: the reader half needs no gate, so what that value carries is the fleet's position — the peers have upgraded — which no client can observe for itself.~~ ⚠️ **That clause was REVERSED 2026-08-14 by [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) and built out the same day (rows B1 and B3): rollout 1 authenticates with ML-DSA-65 and advertises a fresh RSA-2048 signing key of its own, so it writes something `now` does not.** What survives is the *reason* the advertisement stays readable — a single active `rsa2048` entry is still the bare string — and the fleet-position point, which is why the stage is an operator's value rather than one the SDK derives. It is reachable only through the preference, because there are two postures and no general constructor, and an unreachable enum value would be a rollout position nothing could ever be in.* |
+| 16 | **The in-use-for-signing set is app-settable on `AtClientPreference`, defaulted by `PqPosture`,** and SDK releases move that default. When the in-use set names an algorithm the enrollment holds no key for, the client mints one locally at start, files it and publishes it — which a signing keypair can do precisely because it needs no server approval, unlike the auth key. *Four things this ruling left open were settled on gkc's ruling 2026-08-13, when `AtClientPreference.inUseSigningAlgorithms` landed. **The defaults are `{}` in 3.x and `{mldsa65}` in 4.0.** Empty in 3.x because an enrollment holding a signing key of its own holds **two** keys — that one and the APKAM authentication key, which ruling 10 keeps published for as long as the envelopes it signed must verify — and two keys cannot be advertised as the bare public-key string every deployed reader understands, so a non-empty 3.x default would publish an array at clients whose peers refuse it. ⚠️ **That clause was overtaken 2026-08-14 by [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 2**: the auth key is no longer retained, so an enrollment holding one signing key advertises **one** entry, not two. The `{}` 3.x default outlives the reason given for it — 98 ruling 6 sets the stage defaults to `{}` / `{rsa2048}` / `{mldsa65}`, and what keeps rollout 1's single entry deployed-readable is that the entry is `rsa2048` and active, which is the bare form. ML-DSA **alone** in 4.0, with no RSA beside it: ruling 11 has the verifier take the strongest algorithm the envelope and the advertisement share, so a second, weaker signature is only ever the one passed over — it would cost a key, an advertisement entry and a signature per envelope to be ignored, and what keeps older envelopes verifiable is ruling 10's retained auth key rather than a weaker key in this set. ⚠️ **Also overtaken by [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 2**: nothing retains the auth key now. What keeps an older envelope verifiable is the **retired signing key** that signed it, which stays advertised under 98 exactly as ruling 9 always required — the ML-DSA-alone conclusion is unchanged, only the mechanism named for it. **A `Set`, not a list**, because membership is the whole meaning: signatures are emitted in the strongest-first order the keyfile is read in, never in the preference's order. **Final at construction and unmodifiable**, like `disallowLegacyEncryption` and for the same reason — and unmodifiable specifically because a caller retaining the set it passed could otherwise add to it after the check. **An algorithm this build cannot sign an envelope under is refused at construction** (`ArgumentError`), not skipped: skipping quietly leaves an app that asked for a post-quantum signature believing it has one while every signature it produced was classical, which is ruling 15's "a build cannot claim an algorithm it cannot run" from the app's side.* *A fifth thing was settled when the minting landed: **the client publishes the advertisement BEFORE filing the key**, which is the reverse of the nskey rule and the reverse of the obvious order. Filing first makes the client sign under a key its `_apsk` does not name, and since envelopes are stored durably and verified on every read, each one written before the publish lands is unverifiable for good — with nothing to retry it, because the next start finds the key held and mints nothing. Publishing first leaves an advertised key nobody holds, which nothing signs with and which disappears at the next publish, the advertisement being composed from what the keyfile holds. `NskeyPrivateFiling.store` files before publishing for the mirror-image reason: an encapsulation key published without its private has senders sealing data nobody can open.* |
+| 17 | **The rollout position is a named axis, `SigningRollout` (`now` / `rollout1` / `rollout2`),** on `PqPosture.signingRollout` and overridable per `AtClientPreference`. *Ruled by gkc 2026-08-13 and built the same day, after the alternative — folding the axis away — was put and declined. The finding that prompted the question stands and is recorded here because it shapes what the axis is: the three rollout-2 writer behaviours are inseparable **by construction**, not by three flags agreeing. Only minting is a decision; the array form and the multi-signature envelope are consequences of the enrollment holding a second key. So the axis names a position and supplies the default for the one piece of state all three read (ruling 16's set) — and `PqPosture` **derives** that set from the stage rather than storing both, since two stored fields are two controls over one behaviour and the day they disagree one is a lie with no way to tell which. Where an app names both explicitly the **set** is what the client obeys, which is the same contract every other axis has. ~~`rollout1` writes exactly what `now` writes, deliberately: the reader half needs no gate, so what that value carries is the fleet's position — the peers have upgraded — which no client can observe for itself.~~ ⚠️ **That clause was REVERSED 2026-08-14 by [98](#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) and built out the same day (rows B1 and B3): rollout 1 authenticates with ML-DSA-65 and advertises a fresh RSA-2048 signing key of its own, so it writes something `now` does not.** What survives is the *reason* the advertisement stays readable — a single active `rsa2048` entry is still the bare string — and the fleet-position point, which is why the stage is an operator's value rather than one the SDK derives. It is reachable only through the preference, because there are two postures and no general constructor, and an unreachable enum value would be a rollout position nothing could ever be in.* |
 
 **Renamed 2026-08-12:** the `status` value spelled `verifyOnly` in rulings 8, 9
 and 10 above is **`retired`** — use-neutral, because `use` already names the
@@ -7966,7 +7972,7 @@ verified against the bare-string record, and no separate signing keys are
 minted yet. Every verifier in the fleet gains the ability to read what rollout
 2 will emit, before anything emits it.
 
-**Rollout 2 is active,** gated by a single new `ReleasePosture` axis switching
+**Rollout 2 is active,** gated by a single new `PqPosture` axis switching
 all three writer behaviours together: mint separate signing keys, publish the
 array, emit multi-signature envelopes. One flag rather than three, because a
 build doing any one without the others emits something the fleet cannot
@@ -8069,8 +8075,8 @@ A walk through every remaining D1 item, ruling each. Recorded because the
 sequence itself is a decision — several of these were ordered wrongly, and one
 was carried as an open server defect it had already been proven not to be.
 
-**1. `now|rollout1|rollout2` is ONE NEW AXIS on `ReleasePosture`,** alongside
-the five [70](#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)
+**1. `now|rollout1|rollout2` is ONE NEW AXIS on `PqPosture`,** alongside
+the five [70](#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)
 established. Not a harness-only construct and not a fourth dimension.
 
 The consequence worth stating separately: **[14.13](implementation-plan.md#1413-a-passive-by-default-flag-surveyed-not-built)'s
@@ -8391,7 +8397,7 @@ enrollment id. (⚠️ **`typ` joined them 2026-08-15**,
 this paragraph records what 95 ruled, so it is annotated rather than rewritten.) Everything else goes: `signedEnvelopeVersion` (the tagged v1
 shape), `jwsEnvelopeVersion` (RFC 7515 **Flattened**), `envelopeVersionOf`'s
 dispatch, the `wrapperFields` ternary in `ApkamSignedAdvertisedKeys.verify`, and
-`envelopeVersion` as a `ReleasePosture` axis.
+`envelopeVersion` as a `PqPosture` axis.
 
 **This supersedes [91](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11)
 ruling 12**, which collapsed the envelope to a bespoke
@@ -8907,11 +8913,11 @@ the other half: two stored fields would be two controls over one position, and
 an operator who set the stage but forgot the algorithm would land in a state no
 release defines with nothing to tell them.
 
-**7. `ReleasePosture.retrofitSigningAlgo` is renamed
+**7. `PqPosture.retrofitSigningAlgo` is renamed
 `retrofitAuthenticationAlgo`.** It selects the algorithm of the key that
 *authenticates*, in the one subsystem whose entire premise is that
 authenticating and signing are different keys. The rename is free —
-`ReleasePosture` does not exist in at_client 3.14.0, verified.
+`PqPosture` does not exist in at_client 3.14.0, verified.
 
 **8. The wire field `EnrollParams.signingAlgo` keeps its name; its dartdoc is
 corrected.** It is documented as "the signing algorithm of `apkamPublicKey`" —
@@ -8957,9 +8963,9 @@ Two shapes the build settled that the ruling did not state:
   `setCurrentAtSign` — so an identity test would refuse every one of them and
   this would be a break rather than a check.
 - **The posture is compared by what it MEANS**, not as an object.
-  `ReleasePosture` declares no `==`, so comparing two of them is an identity
+  `PqPosture` declares no `==`, so comparing two of them is an identity
   test, and only `const` instances are canonicalized: a caller writing
-  `ReleasePosture.migration()` without `const` would be refused over a
+  `PqPosture.migration()` without `const` would be refused over a
   difference that does not exist. What is compared is the two posture fields
   nothing else carries — `writesPqByDefault` and `keyExchangeMode` — beside the
   three effective axes, which is the whole of what a posture can change.
@@ -10529,7 +10535,7 @@ shipped posture does produce, and it is a plural *advertisement*, not a plural
 *signature*.
 
 **Measured, at `cc6ef7cab`.** `SigningRollout.defaultInUseSigningAlgorithms`
-(`release_posture.dart:49-57`) has three arms of size 0, 1 and 1.
+(`pq_posture.dart:49-57`) has three arms of size 0, 1 and 1.
 `EnvelopeSigning.wrapAndSign` passes `await signingKeys` wholesale
 (`envelope_signing.dart:56`), and `ApkamSigning.signingKeys` returns the
 enrollment's held *active* signing keys — `AtKeys.signingKeysFor` requires
@@ -10827,11 +10833,12 @@ Proven by the mutation that restores the old behaviour: answering null for every
 failure reddens exactly the raise row, and both absence rows stay green, as they
 must.
 
-## 113. PqPosture replaces ReleasePosture, and drives the rollout (2026-08-18)
+## 113. PqPosture: three postures, and the rollout they drive (2026-08-18)
 
-**Ruled by gkc**, in a grilling on 2026-08-18. `ReleasePosture` becomes
-**`PqPosture`**: one class, an axis per decision, three pre-built constants, and
-a program may build its own and inject it. The three constants are `legacy`
+**Ruled by gkc**, in a grilling on 2026-08-18. The rollout posture class —
+`ReleasePosture` until this ruling renamed it — becomes **`PqPosture`**: one
+class, an axis per decision, three pre-built constants, and a program may build
+its own and inject it. The three constants are `legacy`
 (the current default), `pqReady` (rollout 1) and `pqActive` (rollout 2).
 
 ### What each posture is
@@ -10900,7 +10907,7 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
    The grace default is also code-only, absent from `config.yaml`, so an
    operator reading that file will not find it.
 4. **`disallowLegacyEncryption` is posture-only.** The `AtClientPreference`
-   override is removed, which **overturns [70](#70-workstream-a-capstone-releaseposture-the-five-flags-as-one-value-2026-08-10)'s
+   override is removed, which **overturns [70](#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)'s
    "individual flags still win"** for this flag, and **redefines R-2**
    ([#2016](https://github.com/atsign-foundation/at_client_sdk/issues/2016))
    from "flip the flag and move the era default" to "the default posture
