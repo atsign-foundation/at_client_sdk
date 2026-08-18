@@ -962,7 +962,7 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~The bench harness `acceptance.md` says lands with B-1~~ — **built 2026-08-04**, `packages/at_client/benchmark/crypto_bench.dart`. Reports three **separately-based** groups and refuses to combine them: *per record* (what every put/get pays once a CK exists — AES-256-GCM vs the legacy AES-256-CTR path), *per (owner, namespace) conveyance* (where PQ actually costs something — X-Wing `pqSeal`/`pqOpen` vs RSA-2048 wrap, paid **once** and then covering every record in scope), and *per authentication* (the ML-DSA-65 ↔ RSA-2048 signature swap). Mixing them is what would produce a headline "PQ is N% slower" from incomparable denominators. **The desktop baseline is now recorded** in [decisions 28](decisions.md#28-the-pq-performance-budget-measured-2026-08-04) — the harness had been run when it was built, but its numbers were never written down, so the acceptance row was asking for a budget that existed nowhere a reader could find it. Headline: at the 256 B size that dominates real traffic, GCM costs **3 µs** more than CTR; the ML-DSA sign a client pays per authentication is **2.7 ms**. **The ceiling is still NOT pinned:** `acceptance.md` requires one reference *low-end* device and the recorded run is a 16-core arm64 Mac, which is the opposite. Nothing here is a regression gate — one desktop run is a baseline, not a threshold | **B-1** |
 | ~~`at_chops` `pqOpen` lets an `ArgumentError` escape~~ — **fixed in at_chops 3.4.2** (unpublished): a wrong-length secret key or KEM ciphertext now arrives as `PqOpenException(malformedEnvelope)`. `NskeyProvider`'s client-side guard stays until at_client's floor rises past 3.4.1 | `at_chops` |
 | ~~The CK cache and the owner's own nskey privates are process memory only~~ — **half of this was wrong.** Content keys are a genuine cache: the read path re-fetches the `__ck` conveyance record and re-opens it, so a restart costs a round trip, not data. The nskey private is the real exposure, and [decisions.md 21](decisions.md#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) ruling 1 files it into `AtKeys` on arrival. **Owed:** implement that filing, plus the current-`ckKid` pointer (ruling 2) so a restart stops minting a fresh CK per destination | **SS-3** / **SS-4** |
-| ~~`B-1e` does not work~~ — **found and fixed 2026-08-04** ([decisions.md 26](decisions.md#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04)). The two-client harness exposed it on its first run: the content-key conveyance was written local-first, so it reached the recipient's atServer only via sync — 31 seconds later in the captured reproduction — while the notification went out immediately over the monitor. The receive path raised `ContentKeyUnavailableException` correctly and the dispatch loop swallowed it at `finer`, dropping the notification silently with no retry. Both notify entry points now route the conveyance remote-first (the same rule as the `__ssenv` ordering fix), and the dispatch `catch` logs at `warning`. **UC-A4.4 is met**, live-covered in `tests/at_end2end_test/test/pq/nskey_notify_test.dart` (split out of `concurrent_notify_test.dart` 2026-08-08). **UC-A3.4 is NOT** — corrected 2026-08-09: both live notify tests are alice→bob, so the SELF direction (alice1→alice2) is asserted against a mock only. The harness limitation that made it unwritable is gone — `ConcurrentClients` and `EnrolledClient` both exist — so it is owed rather than blocked (#2093). Still open, recorded in 26.3: a notification whose transform throws is gone, with nothing re-delivering it when the missing piece lands |
+| ~~`B-1e` does not work~~ — **found and fixed 2026-08-04** ([decisions.md 26](decisions.md#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04)). The two-client harness exposed it on its first run: the content-key conveyance was written local-first, so it reached the recipient's atServer only via sync — 31 seconds later in the captured reproduction — while the notification went out immediately over the monitor. The receive path raised `ContentKeyUnavailableException` correctly and the dispatch loop swallowed it at `finer`, dropping the notification silently with no retry. Both notify entry points now route the conveyance remote-first (the same rule as the `__ssenv` ordering fix), and the dispatch `catch` logs at `warning`. **UC-A4.4 is met**, live-covered in `tests/at_end2end_test/test/pq/nskey_notify_test.dart` (split out of `concurrent_notify_test.dart` 2026-08-08). ~~**UC-A3.4 is NOT** — corrected 2026-08-09: both live notify tests are alice→bob, so the SELF direction (alice1→alice2) is asserted against a mock only … owed rather than blocked (#2093)~~ — ✅ **UC-A3.4's self direction is live-proven** (`tests/at_functional_test/test/nskey_self_notify_live_test.dart`, "a self notification reaches a second enrollment and decrypts"). ~~Still open, recorded in 26.3: a notification whose transform throws is gone, with nothing re-delivering it when the missing piece lands~~ — ✅ **for the case that names, closed by the park and re-drive** ([14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it), [decisions 106.5](decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16)). ⚠️ The park is typed to `NskeyPrivateUnavailableException` alone (`notification_service_impl.dart:539`), so a transform that throws anything else is still gone with nothing re-delivering it |
 | An enrollment authorised for one namespace must be unable to **decrypt** another's nskey data, not merely unable to fetch it. Not testable yet and deliberately not written: nskey privates are per-ring in-memory until the substrate conveys them, so a second enrollment cannot decapsulate anything at all — the crypto half of the assertion would pass vacuously while the test read as covering it | **SS-4** |
 | ~~The notify **receive** half has no live coverage~~ — **closed 2026-08-04.** It did need harness work rather than a test, and the lever was `AtClientManager`'s public constructor: one manager per atSign, each owning its own client, `notificationService` and `syncService`, with `AtClientImpl`'s cache keyed by atSign so two *different* atSigns never collide. `ConcurrentClients` (`lib/src/concurrent_clients.dart`) plus `concurrent_notify_test.dart` now show a monitor on bob receiving and **decrypting** what alice sent, live — the existing `notify_test.dart` had worked around the limitation by switching atSigns and polling `notifyList`, which reads the atServer's queue and exercises neither the monitor nor decryption. Negative control run: reinstating the singleton fails with `@alice stopped=true` from `open`'s own guard. **The constraint to respect:** while a `ConcurrentClients` is open, nothing may call `getInstance().setCurrentAtSign` for either atSign — the cached `AtClientImpl` would be handed a fresh `notificationService`, and the symptom is a subscription that never fires, which reads as a product defect | `at_end2end_test` |
 | ~~Rename the atSign-level key in code, delete the `root-pqpublickey` variant~~ — **done.** `NskeyRecipientKind` has one member; no Dart source says `pqpublickey`; the cold-start throw now states why there is no PQ target rather than promising a fallback | **B-1c** |
@@ -2424,10 +2424,13 @@ place (the layer-3 AAD literal, and UC-A3.4 below).
    atSign with no `ttr`, so it was always a remote lookup), and the
    notification dispatch loop awaits its transforms instead of discarding them
    via `Map.forEach`. What the row does **not** cover is a notification that
-   outruns its key, which is still dropped
-   ([decisions 106](decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16),
-   [14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it))
-   (#2093).
+   outruns its key — ⚠️ **which is no longer dropped**: 14.30 shipped the park
+   and re-drive
+   ([decisions 106.5](decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16),
+   [14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it)),
+   and this line said "still dropped" until 2026-08-18. It is held until the
+   generation it needs is filed, bounded by `maxParked`/`parkTtl` with every
+   eviction logged at `warning`.
 3. **SS-4: an interrupted mint does not resume.** The acceptance bullet asks
    that it resume rather than re-generate; there is no persisted in-progress
    marker, so it starts over. Worth deciding whether that is still required —
@@ -3502,6 +3505,27 @@ its own. None blocks anything.
     nowhere to land repairs the client at its next start and reads meanwhile
     as a heal that ran and did nothing.
 
+25. **`NskeyPrivateFiling`'s readers answer "not held" for every failure,
+    including an unreadable keyfile.** `read`, `readSeed`, `readAll` and
+    `readAllFor` each wrap the `keysIo.read` in a `try` whose `catch` logs at
+    `finer` and returns null or `const {}`. A keyfile that is corrupt,
+    truncated, locked by another process or encrypted under a passphrase this
+    client was not given is therefore indistinguishable from one that simply
+    holds no private for the generation asked about — and at `finer` the
+    difference is invisible in every pack, since the functional runner sets the
+    root level to `info` at best. The caller above turns it into
+    `NskeyPrivateUnavailableException`, which since 14.30 **parks** the
+    notification waiting for a filing that can never arrive, so a keyfile
+    problem now presents as a message that is merely late.
+    ⚠️ Raised 2026-08-18 while tracing two e2e failures whose symptom was
+    exactly this shape, and left deliberately rather than fixed: telling a
+    genuine absence from a failure needs a decision about what a reader should
+    DO with the second, and a read path's error handler must not repair
+    anything. The likely shape is to keep answering null for "no such entry"
+    and let an I/O or decode failure propagate, with `readAll`'s
+    construction-time caller given an explicit tolerant wrapper — but that
+    changes what a client does at start, so it wants a ruling first.
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.
@@ -4252,7 +4276,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 10 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 11 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
@@ -4472,11 +4496,15 @@ burn-down was right about all four. Two were not:
   **recorded on the enrollment**. ML-DSA PKAM has been passing live for days
   against `at_virtual_env:local` while this paragraph said it could not work,
   and nobody reconciled the two.
-- **B-1** owes everything beyond envelope delivery (`pushSecretToNames…`), a
-  unit fixture that backs local storage and the atServer with **one map** so it
-  cannot see a local-first-vs-remote-first defect on the read side, and
+- ~~**B-1** owes everything beyond envelope delivery (`pushSecretToNames…`), a
+  unit fixture that backs local storage and the atServer with **one map** …, and
   UC-A3.4's self direction — owed rather than blocked since `ConcurrentClients`
-  landed ([#2093](https://github.com/atsign-foundation/at_client_sdk/issues/2093)).
+  landed~~ ([#2093](https://github.com/atsign-foundation/at_client_sdk/issues/2093))
+  — ✅ **all three closed**, the fixture on 2026-08-16 and the other two by
+  2026-08-18. ⚠️ **This bullet is the finding below happening to itself**: it
+  claimed work was owed that had since been done, in the very section whose
+  conclusion is that every wrong entry was wrong in that direction. Re-read
+  2026-08-18; see [14.29](../implementation-plan.md#1429-the-residuals-1425-surfaced).
 
 **The general finding, which is why this is worth a body.** Every wrong entry
 was wrong in the *safe-looking* direction: three claimed work was owed that had

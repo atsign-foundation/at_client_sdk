@@ -82,7 +82,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [23]  | UC-A2.1: reversing the enrollment key exchange                                              | 2026-08-04 | LIVE                      |
 | [24]  | How the approval chain terminates at the root                                               | 2026-08-04 | LIVE                      |
 | [25]  | The substrate's arrival path had never run                                                  | 2026-08-04 | LIVE                      |
-| [26]  | UC-A4.4: a conveyance that loses the race to its own announcement                           | 2026-08-04 | LIVE                      |
+| [26]  | UC-A4.4: a conveyance that loses the race to its own announcement                           | 2026-08-04 | AMENDED 2026-08-18        |
 | [27]  | The era default: read the new scheme everywhere, write it once                              | 2026-08-04 | LIVE                      |
 | [28]  | The PQ performance budget, measured                                                         | 2026-08-04 | LIVE                      |
 | [29]  | UC-A3.2 describes a mint trigger that was never built                                       | 2026-08-04 | LIVE                      |

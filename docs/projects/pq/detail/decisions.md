@@ -2349,6 +2349,14 @@ transform throws is gone. Closing that properly means either re-delivering when 
 lands, or carrying enough with the notification that it does not need a second fetch at all.
 Recorded as open; the warning-level log is what will make it visible next time.
 
+⚠️ **Amended 2026-08-18: the first of those two was built.** 14.30's park and
+re-drive holds a notification until the generation it needs is filed and then
+delivers it, so "there is still no retry" above is false for the case this
+section was written about. It remains true for every other cause: the park is
+typed to `NskeyPrivateUnavailableException` alone
+(`notification_service_impl.dart:539`), so a transform throwing anything else
+is dropped exactly as described.
+
 ### 26.4 Status
 
 UC-A3.4 and UC-A4.4 are **met**, live-covered in `concurrent_notify_test.dart`, which asserts
@@ -10285,7 +10293,7 @@ accepted once the ttl has lapsed.
 
 ## 106. A notification that outruns its key is dropped, not parked (2026-08-16)
 
-**In brief:** ⚠️ *a notification needing an nskey private the receiver has not yet **filed** is dropped and never retried; the private was pushed on time and is filed moments later*
+**In brief:** *a notification needing an nskey private the receiver has not yet **filed** was dropped and never retried; the private was pushed on time and is filed moments later.* ⚠️ **Past tense since [106.5](#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17) ruled it and 14.30 built it** — this line read "is dropped and never retried" until 2026-08-18, which is the finding's title carried into a status claim. The heading stays as the name of what was measured.
 
 Found while writing UC-A3.4's **self** direction live — a row the catalogue then
 carried as PROVEN against a `MockAtClient` and a hand-built frame. That row is
