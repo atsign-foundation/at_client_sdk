@@ -10539,7 +10539,7 @@ equals the number of active signing keys, floor one, and no stage files two.
 
 **Ruled by gkc 2026-08-18**, after the alternative — an overlapping `rollout2`
 — was put and declined. Raised by a source audit of plan
-[14.17](../implementation-plan.md#1417-signature-agility--what-is-built-and-what-is-owed),
+[14.17](../implementation-plan.md#1417-signature-agility--complete),
 which found `wrapAndSign`'s own comment describing the overlap as the operating
 mode (*"an envelope carrying both is readable by the peer that has upgraded and
 by the peer that has not"*) while no stage could produce one.
