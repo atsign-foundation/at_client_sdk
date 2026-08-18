@@ -1,4 +1,20 @@
 ## 1.17.0
+- **BREAKING** feat: `--posture legacy|pqReady|pqActive` on **every** command,
+  replacing `--signingAlgoType`, which is removed.
+  - It named the PKAM *authentication* key while reading like the data signing
+    key, and it silently did nothing on every command but `onboard`
+    ([#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161)) —
+    which is why the replacement is honoured everywhere rather than at
+    activation alone. A posture means the same thing wherever a client is
+    created.
+  - It has no default. An unnamed `--posture` leaves whatever the at_client
+    this was built against defaults to, so the binary is not pinned to the
+    stage that was current on the day it was compiled.
+  - Activation reads `AtClientPreference.authenticationKeyAlgorithm` — the
+    posture's axis — rather than the deprecated `signingAlgoType`. Every
+    activation the old argument could express is expressible as a posture, and
+    an app needing a combination none of the three offers builds its own
+    `PqPosture`.
 - feat: `AtOnboardingPreference` takes the flags `AtClientPreference` fixes at
   construction — `posture`, `disallowLegacyEncryption`,
   `authenticationKeyAlgorithm` and

@@ -133,10 +133,12 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
     _atLookUp?.enrollmentId = enrollmentId;
-    // Activation-time: there is no key material to resolve from yet, which is
-    // the one case the deprecated preference field still exists to serve.
-    // ignore: deprecated_member_use
-    _atLookUp?.signingAlgoType = atOnboardingPreference.signingAlgoType;
+    // Activation-time: there is no key material to resolve from yet, so the
+    // posture's axis is what says which algorithm to mint under. It replaced
+    // the deprecated preference field, which named the same key while reading
+    // like the data signing one.
+    _atLookUp?.signingAlgoType =
+        atOnboardingPreference.authenticationKeyAlgorithm;
     _atLookUp?.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
     atClient ??= atClientManager.atClient;
     _atLookUp!.atChops = atChops;
@@ -224,11 +226,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // is a third, classical option this package already supports, and treating
     // it as post-quantum would silently mint an ML-DSA APKAM for a caller who
     // asked for an elliptic-curve one.
-    final bool pqNative =
-        // Activation-time input — what to mint, not what to sign with; there
-        // is no key material yet for the resolution that supersedes the field.
-        // ignore: deprecated_member_use
-        atOnboardingPreference.signingAlgoType == SigningAlgoType.mldsa65;
+    final bool pqNative = atOnboardingPreference.authenticationKeyAlgorithm ==
+        SigningAlgoType.mldsa65;
     if (pqNative) {
       makeActivationPqNative(atOnboardingRequest,
           atSign: _atSign.toString(),

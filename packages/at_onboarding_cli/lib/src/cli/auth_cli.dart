@@ -1083,7 +1083,13 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     throw ArgumentError('Invalid root server domain: $e');
   }
 
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
+  // The posture rides the constructor, not a cascade: it is final in
+  // AtClientPreference, and every axis it supplies is fixed at construction.
+  // An unnamed --posture leaves the superclass's own default in place rather
+  // than the CLI restating one, so this binary rides the rollout schedule of
+  // the at_client it was built against.
+  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference(
+      posture: AuthCliArgs.postureIn(ar) ?? PqPosture.legacy)
     ..rootDomain = rootDomain.rootDomain
     ..rootPort = rootDomain.rootPort
     ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
@@ -1091,12 +1097,7 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
     ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
     ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
     ..hashingAlgoType =
-        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType])
-    // Only consulted at activation; `auth` resolves the algorithm from the
-    // keyfile. ArgParser has already rejected anything not in the enum.
-    // ignore: deprecated_member_use
-    ..signingAlgoType =
-        SigningAlgoType.values.byName(ar[AuthCliArgs.argNameSigningAlgoType]);
+        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
 
   final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
   String lastProgressEventType = '';

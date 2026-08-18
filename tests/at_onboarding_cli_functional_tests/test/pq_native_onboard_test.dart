@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart' show PqPosture;
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
@@ -31,18 +32,22 @@ void main() {
   final String keysDir = testKeysDir;
   final String keysFilePath = testKeysFile(atSign);
 
-  AtOnboardingPreference preference() => AtOnboardingPreference()
-    ..rootDomain = 'vip.ve.atsign.zone'
-    ..hiveStoragePath = 'test/storage/hive/$atSign'
-    ..commitLogPath = 'test/storage/hive/$atSign/commit'
-    ..namespace = 'wavi'
-    ..cramSecret = at_demos.cramKeyMap[atSign]
-    ..atKeysFilePath = keysFilePath
-    ..downloadPath = keysDir
-    ..appName = 'wavi'
-    ..deviceName = 'pq-cli'
-    // The one line an app adds to become post-quantum.
-    ..signingAlgoType = SigningAlgoType.mldsa65;
+  // The posture rides the constructor, which is the whole point: an app
+  // becomes post-quantum by naming a stage, not by setting an algorithm on a
+  // preference the activation path may or may not read. Setting the old
+  // deprecated field here made this test pass whether or not the resolution
+  // worked, because the value it asserted was the one it had written.
+  AtOnboardingPreference preference() =>
+      AtOnboardingPreference(posture: PqPosture.pqReady)
+        ..rootDomain = 'vip.ve.atsign.zone'
+        ..hiveStoragePath = 'test/storage/hive/$atSign'
+        ..commitLogPath = 'test/storage/hive/$atSign/commit'
+        ..namespace = 'wavi'
+        ..cramSecret = at_demos.cramKeyMap[atSign]
+        ..atKeysFilePath = keysFilePath
+        ..downloadPath = keysDir
+        ..appName = 'wavi'
+        ..deviceName = 'pq-cli';
 
   setUp(() {
     // AtAuth.onboard refuses if a keyfile already exists, so a leftover from an
@@ -53,7 +58,7 @@ void main() {
     }
   });
 
-  test('a CLI activation with signingAlgoType mldsa65 is PQ-native', () async {
+  test('a CLI activation under the pqReady posture is PQ-native', () async {
     final service = AtOnboardingServiceImpl(atSign, preference());
     expect(await service.onboard(), true);
 

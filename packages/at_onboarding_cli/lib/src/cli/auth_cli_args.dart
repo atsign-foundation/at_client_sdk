@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart' show PqPosture;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:meta/meta.dart';
@@ -121,7 +122,28 @@ class AuthCliArgs {
   static const argNameAutoApproveExisting = 'approve-existing';
   static const argNamePassPhrase = 'passPhrase';
   static const argNameHashingAlgoType = 'hashingAlgoType';
-  static const argNameSigningAlgoType = 'signingAlgoType';
+  static const argNamePosture = 'posture';
+
+  /// The postures a `--posture` argument may name, and what each one is.
+  ///
+  /// A map rather than a switch so the parser's `allowed` list and the
+  /// resolution below cannot drift: adding a posture here is the whole change.
+  static const Map<String, PqPosture> postureNames = {
+    'legacy': PqPosture.legacy,
+    'pqReady': PqPosture.pqReady,
+    'pqActive': PqPosture.pqActive,
+  };
+
+  /// The posture [results] names, or null when it named none.
+  ///
+  /// Null rather than `PqPosture.legacy`: "the caller said nothing" and "the
+  /// caller asked for the default stage" are the same today and will not be
+  /// after R-2, and a CLI that resolved them to the same value here would go
+  /// on running the old default through the flip.
+  static PqPosture? postureIn(ArgResults results) {
+    final named = results[argNamePosture];
+    return named == null ? null : postureNames[named];
+  }
   static const argNameMaxRetries = 'max-retries';
   static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
   static const argNameYes = 'yes';
@@ -308,14 +330,23 @@ class AuthCliArgs {
         mandatory: false,
         defaultsTo: HashingAlgoType.argon2id.name,
         hide: hide);
-    // Takes effect at ACTIVATION only. Every later connection resolves the
-    // algorithm from the keyfile, so there is nothing to pass on `auth`.
-    p.addOption(argNameSigningAlgoType,
-        help: 'APKAM signing algorithm to mint at activation. mldsa65 makes '
-            'the atSign post-quantum from the start. Defaults to rsa2048',
+    // Honoured on EVERY command, not activation alone. A posture means the
+    // same thing wherever a client is created, and because a posture is a
+    // floor and retrofit is idempotent, running any command at a higher one
+    // upgrades the atSign coherently. It replaced --signingAlgoType, which
+    // named the PKAM authentication key while reading like the data signing
+    // key, and silently did nothing on every command but onboard (#2161).
+    //
+    // No defaultsTo, deliberately: an unset posture means "whatever the
+    // at_client this was compiled against defaults to", so the CLI does not
+    // pin itself to the stage that was current on the day it was written.
+    p.addOption(argNamePosture,
+        help: 'How far into the post-quantum rollout to run. legacy drives no '
+            'upgrade; pqReady moves the credentials and keeps writes legacy; '
+            'pqActive makes post-quantum writes the default. Defaults to the '
+            'built-in default of the at_client this was built against',
         mandatory: false,
-        allowed: SigningAlgoType.values.map((a) => a.name),
-        defaultsTo: SigningAlgoType.rsa2048.name,
+        allowed: postureNames.keys,
         hide: hide);
     return p;
   }

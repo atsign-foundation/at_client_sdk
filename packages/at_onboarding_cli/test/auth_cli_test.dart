@@ -1,7 +1,9 @@
 import 'dart:io';
 
+import 'package:args/args.dart' show ArgParserException;
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_client/at_client.dart' show PqPosture;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli_args.dart';
@@ -12,6 +14,8 @@ import 'at_onboarding_cli_test.dart';
 
 void main() {
   final baseDirPath = 'test/keys';
+
+  postureArgumentTests();
 
   group('A group of tests to verify write permission of apkam file path', () {
     final dirPath = '$baseDirPath/@alice-apkam-keys.atKeys';
@@ -244,4 +248,84 @@ AtKeys _getAtAuthKeysFromAtChopsKeys(AtChopsKeys atChopsKeys) {
   }
 
   return atAuthKeys;
+}
+
+/// `--posture`, which replaced `--signingAlgoType`.
+///
+/// Ruling 113's CLI section: honoured on **every** command, not activation
+/// alone. `--signingAlgoType` silently did nothing on every command but
+/// `onboard` ([#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161)),
+/// which is what that ruling exists to stop happening again — so the rows
+/// below check the argument reaches the parsers that were previously left out,
+/// not just the one that always worked.
+void postureArgumentTests() {
+  final args = AuthCliArgs();
+
+  group('the posture argument', () {
+    test('every command parser accepts it, not activation alone', () {
+      // The specific defect #2161 recorded. Each of these is a command a user
+      // can run, and a posture means the same thing at all of them.
+      final parsers = {
+        'onboard': args.createOnboardCommandParser(),
+        'status': args.createStatusCommandParser(),
+        'enroll': args.createEnrollCommandParser(),
+        'approve': args.createApproveCommandParser(),
+        'deny': args.createDenyCommandParser(),
+      };
+      for (final entry in parsers.entries) {
+        expect(entry.value.options.containsKey(AuthCliArgs.argNamePosture),
+            isTrue,
+            reason: '${entry.key} does not accept --posture, so a user who '
+                'passes it there is silently ignored - the exact shape #2161 '
+                'was filed for');
+      }
+    });
+
+    test('the retired argument is gone from every one of them', () {
+      for (final parser in [
+        args.createOnboardCommandParser(),
+        args.createStatusCommandParser(),
+        args.createEnrollCommandParser(),
+      ]) {
+        expect(parser.options.containsKey('signingAlgoType'), isFalse,
+            reason: 'it named the PKAM authentication key while reading like '
+                'the data signing key, and every activation it could express '
+                'is expressible as a posture');
+      }
+    });
+
+    test('each name resolves to its posture, as raw strings', () {
+      // Raw literals: these three strings are the CLI's published vocabulary,
+      // and reading them back off the map they are defined in would follow an
+      // accidental rename silently.
+      expect(AuthCliArgs.postureNames.keys.toList(),
+          ['legacy', 'pqReady', 'pqActive']);
+      expect(AuthCliArgs.postureNames['legacy'], same(PqPosture.legacy));
+      expect(AuthCliArgs.postureNames['pqReady'], same(PqPosture.pqReady));
+      expect(AuthCliArgs.postureNames['pqActive'], same(PqPosture.pqActive));
+    });
+
+    test('an unnamed posture stays null rather than resolving to legacy', () {
+      // "The caller said nothing" and "the caller asked for the default stage"
+      // are the same value today and will not be after R-2. Collapsing them
+      // here would leave this binary running the old default through the flip.
+      final parsed = args.createStatusCommandParser().parse([]);
+      expect(AuthCliArgs.postureIn(parsed), isNull);
+    });
+
+    test('a named posture is the one that comes back', () {
+      final parsed =
+          args.createStatusCommandParser().parse(['--posture', 'pqActive']);
+      expect(AuthCliArgs.postureIn(parsed), same(PqPosture.pqActive));
+    });
+
+    test('an unknown posture is refused by the parser', () {
+      expect(
+          () => args.createStatusCommandParser().parse(['--posture', 'rollout2']),
+          throwsA(isA<ArgParserException>().having((e) => e.message, 'message',
+              contains('not an allowed value'))),
+          reason: 'the old stage names are exactly what a user would try, and '
+              'a silently accepted one would run the default stage');
+    });
+  });
 }

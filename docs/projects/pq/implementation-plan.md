@@ -108,10 +108,17 @@ an at_chops version ruling 109 avoided. Measured blast radius for the rest:
 77 in 19, `dataSigningKeyAlgorithms` 95 in 22, `retrofitAuthenticationAlgo` 13 in 6.
 ⚠️ The acceptance rows `UC-C1.x` and ruling 70 move in the same commit.
 
-**The CLI.** `--posture legacy|pqReady|pqActive` on every command, defaulting to
-at_client's built-in. `--signingAlgoType` is replaced by it and removed. No
-`--disallowLegacyEncryption` anywhere. `at_onboarding_cli` majors when it takes
-at_client 4.x.
+**The CLI.** ✅ **DONE.** `--posture legacy|pqReady|pqActive` on every command,
+with **no default** — an unnamed posture leaves at_client's own, so the binary
+is not pinned to the stage current when it was compiled. `--signingAlgoType` is
+removed, and activation reads the posture's `authenticationKeyAlgorithm`
+instead. There is no `--disallowLegacyEncryption` anywhere.
+`at_onboarding_cli` majors when it takes at_client 4.x.
+
+⚠️ **`pq_native_onboard_test.dart` set `preference.signingAlgoType` itself**, so
+it asserted the value it had just written and passed whether or not the
+resolution mechanism worked — the shape [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign)
+recorded. It now names `PqPosture.pqReady` and nothing else.
 
 ✅ **The sibling-repo dependency is merged, and still unreleased.**
 Client-driven retrofit rests on the atServer exempting the atSign's FIRST
