@@ -207,13 +207,37 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     this.advertisementStaleGrace = const Duration(minutes: 15),
     MintLock? mintLock,
     this.lockTtl = mintLockTtl,
-    this.privateFiling,
+    NskeyPrivateFiling? privateFiling,
     Future<void> Function(String namespace, String secretName)?
         requestConveyance,
   })  : verifier = verifier ?? ApkamSignedAdvertisedKeys(_atClient),
         mintLock = mintLock ?? MintLock(_atClient),
+        privateFiling = privateFiling ?? _filingFor(_atClient),
         _requestConveyance = requestConveyance,
         _signer = AtClientEnvelopeSigner(_atClient);
+
+  /// The filing a ring builds for itself when its caller named none.
+  ///
+  /// A client that was handed an `AtKeysIo` has already said where its key
+  /// material belongs, and an nskey private is the one kind that cannot be
+  /// re-derived or re-fetched: minting it anywhere else discards it. So the
+  /// client's own key source is the default, and null means the client has
+  /// none — not that this ring should keep privates in memory beside a
+  /// keyfile that was there all along.
+  ///
+  /// Composed here rather than shared with whatever else the client built, so
+  /// a ring is constructible from an `AtClient` alone. Two filings over one
+  /// keyfile are safe — `AtKeysIo.update` serialises the read-mutate-write
+  /// across processes, and [NskeyPrivateFiling.store] is idempotent — but
+  /// they carry separate `privatesFiled` streams, so a caller that needs a
+  /// filing's *events* must pass the instance it is listening to.
+  static NskeyPrivateFiling? _filingFor(AtClient atClient) {
+    final keysIo = atClient.atKeysIo;
+    if (keysIo == null) return null;
+    final atSign = atClient.getCurrentAtSign();
+    if (atSign == null) return null;
+    return NskeyPrivateFiling(keysIo: keysIo, atSign: atSign);
+  }
 
   /// Broadcasts a pull request for a missing own-atSign private, when
   /// [privateHalf] comes up empty for a generation this atSign has published.
@@ -223,12 +247,15 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// private that opens it — a new enrollment that missed the mint-time push
   /// is the ordinary case, not an edge — and the reader asks rather than
   /// failing forever. The request is store-and-forward: any current holder
-  /// answers when it next runs, the answer is filed by the arrival path, and
-  /// the next read finds it.
+  /// answers when it next runs.
   ///
-  /// Injectable so tests observe the ask without a live substrate; null wires
-  /// the real one lazily (constructing it eagerly would pull the substrate
-  /// into every fixture that only ever reads).
+  /// ⚠️ **Null means this ring does not ask at all**, and that is the one
+  /// piece of a client's wiring [privateFiling] does not derive for it: a ring
+  /// built from an `AtClient` alone files what it mints and still reads a
+  /// generation it holds nothing for as a permanent miss. Supplying it is
+  /// `PqClientBootstrap`'s job, and the supplier owns waiting for the answer
+  /// and filing it — see the warning on [_askForMissingPrivate], which is
+  /// where the arrival path this used to claim turned out not to exist.
   final Future<void> Function(String namespace, String secretName)?
       _requestConveyance;
 
@@ -257,9 +284,15 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   final Duration lockTtl;
 
   /// Where a minted private is made durable **before** its public half is
-  /// published. Null keeps privates in memory only — a fixture posture, since
-  /// a published key whose private did not survive the process leaves senders
-  /// sealing to something nobody can open.
+  /// published.
+  ///
+  /// Defaults to a filing over the client's own `AtKeysIo` — see [_filingFor].
+  /// It is null only for a client that has no key source at all, and [_mint]
+  /// says so at `severe` when it mints anyway: a published key whose private
+  /// did not survive the process leaves every sender sealing to something
+  /// nobody can open, and no later repair recovers what was written in
+  /// between. Pass an instance to share one filing's `privatesFiled` events
+  /// with the rest of a client's wiring.
   final NskeyPrivateFiling? privateFiling;
 
   @override
@@ -509,6 +542,19 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
             'could not store the nskey private for $owner:$namespace, so its '
             'public half is deliberately not published');
       }
+    } else {
+      // No filing and no key source to build one from, so this generation is
+      // published with its private held in memory and nowhere else. Said at
+      // `severe` and not refused: a fixture may legitimately mint into memory,
+      // and refusing here would also refuse the client that has genuinely been
+      // given nowhere to write. But it is the loudest failure this class has —
+      // an unwritable `AtKeysIo` already shouts one level down, and holding no
+      // key source at all is the worse of the two.
+      _logger.severe('Minting the nskey for $owner:$namespace with nowhere to '
+          'file its private: this client has no AtKeysIo and no filing was '
+          'supplied, so the private is held in memory only. Peers will seal to '
+          'the published key, and every value they seal becomes permanently '
+          'unreadable when this process ends');
     }
 
     await _signer.publishPublicSigningKey();

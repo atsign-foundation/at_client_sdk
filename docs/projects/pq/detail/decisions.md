@@ -10655,3 +10655,60 @@ Removing a supported version turns records already written into permanent
 separate. Nothing outside this tree holds a `0x01` envelope today, and
 `__ssenv` entries expire at 7 days regardless, so the window costs nothing —
 but the order is what makes it safe to be wrong about that.
+
+## 111. A key ring files where its client files (2026-08-18)
+
+`PublishedNskeyKeyRing(client)` — the constructor with nothing but an
+`AtClient` — produced a ring holding no `NskeyPrivateFiling`, which would mint
+and publish a namespace key whose private lived in that object's memory and
+nowhere else. It now derives the filing from the client's own `AtKeysIo`, so
+`privateFiling: null` means the client has no key source at all rather than
+"this ring declines to use the one it has".
+
+**What it cost.** Two end-to-end failures, neither of which looked like this.
+
+`era_default_read_test.dart` mints alice's `e2e_test` key through a bare ring.
+The advertisement reached her atServer; the private never reached her keyfile,
+which held one entry — `nskey.app_1.e2e_test.…` — and nothing for `e2e_test`.
+Every client for the rest of the run adopted the published generation and
+warned it held no private for it, thirteen times, and the one test that read
+something bob had sealed to her failed with `no nskey private held for
+@alice🛠:e2e_test generation 7a88d04714763706`. The suite that did the damage
+passed. What failed was two suites later, in a file that does nothing wrong.
+
+`nskey_notify_test.dart` installs a bare ring as the client's crypto config.
+Bob's keyfile **did** hold the generation the notification was sealed to,
+filed 1.1 s earlier by his bootstrap; the ring doing the reading could not see
+it, so the notification parked waiting for a private that was already on disk
+and the monitor timed out at 60 s.
+
+**Twelve of twelve hand-built call sites named no filing**, across both live
+packs. That is not twelve mistakes. The field's own dartdoc read *"Null keeps
+privates in memory only — a fixture posture"*, which is a licence, and every
+caller took it. The document was the defect, and it moves in the same commit.
+
+**The asymmetry that hid it.** `NskeyPrivateFiling.store` already logs
+`severe` when the `AtKeysIo` it was handed cannot persist. A ring with *no*
+filing is strictly worse — the same lost material, with no keyfile involved at
+all — and was silent at every level. `_mint` now says it at `severe` for the
+case that survives the derivation: a client that genuinely has no key source.
+Not refused, because a fixture may legitimately mint into memory, and because
+refusing would equally refuse the client that has been given nowhere to write.
+
+**What this does not do.** It does not make two rings share one filing.
+[62](#62-pqclientbootstrap-one-owner-for-the-pq-startup-2026-08-10)'s "one
+filing per client" is a rule about *events* — a private filed by one object is
+not announced to a subscriber on another — and that is unchanged: a caller
+that needs `privatesFiled` still passes the instance it is listening to, as
+`PqClientBootstrap`, `NskeyRotation` and `EnvelopeEnrollmentConveyance` all
+do. Deriving is about *durability*, where two filings over one keyfile are
+safe: `AtKeysIo.update` serialises the read-mutate-write across processes and
+`store` is idempotent.
+
+**Proven both ways.** Removing the derivation reddens exactly the new unit row
+in `nskey_minting_test.dart` and no other, with the failure text quoting that
+row's own reason string. The live differential is the e2e pack with **no test
+file changed between the arms**: `test/pq` went 15 passed / 2 failed to 17
+passed / 0 failed, "adopted and hold no private half" 13 → 0, parked
+notifications 2 → 0, and alice's keyfile gained the `nskey.e2e_test.…` entry
+whose absence was the whole defect.

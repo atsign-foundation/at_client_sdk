@@ -1,4 +1,14 @@
 ## 3.14.1
+- fix: `PublishedNskeyKeyRing` now derives its `NskeyPrivateFiling` from the
+  client's own `AtKeysIo` when the caller names none, so
+  `PublishedNskeyKeyRing(client)` files the namespace privates it mints instead
+  of holding them in memory and publishing a key nobody can open after the
+  process ends. Passing `privateFiling:` still wins, and is still what a caller
+  needs when it subscribes to `privatesFiled` — two filings over one keyfile
+  share the material but not the events. A ring that ends up with no filing at
+  all, meaning the client has no key source, now says so at `severe` while it
+  mints; it used to be silent, which was quieter than the strictly better case
+  of an `AtKeysIo` that cannot persist.
 - fix: a failed `enroll:fetch` now throws `AtKeyNotFoundException` naming the
   enrollment id and the cause. Both catch arms logged at `finer` and fell
   through to a null-check on the result, so an unreachable atServer surfaced as

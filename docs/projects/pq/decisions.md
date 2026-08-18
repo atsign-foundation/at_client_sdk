@@ -168,6 +168,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [108] | The signing rollout swaps algorithms; it never overlaps them                                | 2026-08-18 | LIVE                      |
 | [109] | at_chops 3.6.0 stays a minor; no major bump for this release                                | 2026-08-18 | LIVE                      |
 | [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | LIVE                      |
+| [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -280,3 +281,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [108]: detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18
 [109]: detail/decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18
 [110]: detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18
+[111]: detail/decisions.md#111-a-key-ring-files-where-its-client-files-2026-08-18

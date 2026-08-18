@@ -115,16 +115,17 @@ void main() {
     //
     // Minting first is also what UC-A3.4 describes: alice1 and alice2 are both
     // already PQ when the notification is sent.
-    // ⚠️⚠️ `privateFiling` is what makes the mint durable, and without it
-    // nothing downstream works. Its own dartdoc: *"Null keeps privates in
-    // memory only — **a fixture posture**"*. A ring built as
-    // `PublishedNskeyKeyRing(client)` mints, publishes the public half, and
-    // keeps the private in RAM, so it never reaches `AtKeys` — and approval
-    // conveys *the approver's FILED privates*, of which there are then none.
+    // ⚠️ A filing is what makes the mint durable, and without one nothing
+    // downstream works: approval conveys *the approver's FILED privates*, and
+    // a mint that kept its private in RAM leaves none to convey. Two omissions
+    // had to be fixed to get here and each looked complete on its own — the
+    // approver needed an `AtKeysIo`, AND the ring needed telling to use it.
     //
-    // Two omissions had to be fixed to get here and each looked complete on
-    // its own: the approver needed an `AtKeysIo`, AND the ring needed telling
-    // to use it. A keyfile with a null filing changes nothing whatsoever.
+    // The second is no longer required: a ring derives its filing from the
+    // client's own `AtKeysIo` (`decisions.md` 111), and this client was given
+    // `approverKeysIo` at construction. Named explicitly all the same, because
+    // this row is about what the approver holds and the assertion should not
+    // depend on a default to be reading the same keyfile.
     final approverRing = PublishedNskeyKeyRing(
       approver,
       privateFiling:
@@ -192,13 +193,18 @@ void main() {
     // ⚠️ Deliberately NOT setting `preference.crypto` on either enrollment.
     //
     // An earlier version installed `CryptoConfig.nskey(keyRing:
-    // PublishedNskeyKeyRing(client))` on both — a BARE ring, with no
-    // `privateFiling` and no `requestConveyance` — over the top of the one
-    // `PqClientBootstrap` had already wired. That silently removed the read
-    // path's self-heal (`decisions.md` 38: "a miss on an own generation
-    // broadcasts a pull, so a record that arrived before its key stops being
-    // permanently unreadable and becomes merely early") and the ability to
-    // file a conveyed private at all.
+    // PublishedNskeyKeyRing(client))` on both — a bare ring, over the top of
+    // the one `PqClientBootstrap` had already wired — which removed both the
+    // filing and the read path's self-heal.
+    //
+    // ⚠️ **A bare ring now derives its filing, but NOT its
+    // `requestConveyance`** (`decisions.md` 111), so the self-heal is still
+    // exactly what a substituted ring loses: `decisions.md` 38's "a miss on an
+    // own generation broadcasts a pull, so a record that arrived before its
+    // key stops being permanently unreadable and becomes merely early". The
+    // filing half being fixed makes this the QUIETER failure than it was, not
+    // a smaller one — the ring still reads, so nothing looks wrong until a
+    // record arrives ahead of its key.
     //
     // Left alone, a client resolves the nskey providers through the era
     // default, which uses `_pqBootstrap.ring` — filing and self-heal

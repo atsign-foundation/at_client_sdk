@@ -54,20 +54,21 @@ void main() {
 
     // The client's OWN ring, not one built here.
     //
-    // ⚠️ **Hand-building `PublishedNskeyKeyRing(client)` is what broke this
-    // file.** A bare ring has no `NskeyPrivateFiling` — that is derived from
-    // the client's `AtKeysIo`, and only `PqClientBootstrap` does the
-    // derivation — so every private minted lived in one ring object's memory
-    // and nowhere else. This helper is called repeatedly and each call built a
-    // fresh ring, so the second one adopted a generation whose private the
-    // first had held and discarded.
+    // Hand-building `PublishedNskeyKeyRing(client)` is what broke this file:
+    // a bare ring held no `NskeyPrivateFiling`, so every private it minted
+    // lived in that one object's memory and nowhere else, and this helper
+    // builds a fresh ring per call. It passed for as long as each call MINTED
+    // rather than adopted; when minting became adopt-what-is-published —
+    // correct, since re-minting rotates a key out from under peers who have
+    // already fetched it — the gap opened.
     //
-    // It passed for as long as each call MINTED rather than adopted. When
-    // minting became adopt-what-is-published — correct, because re-minting
-    // rotates a key out from under peers who already fetched it — the gap
-    // opened. `TestSuiteInitializer` supplies the durable key source this
-    // depends on, at first construction, which is the only point it can be
-    // supplied at.
+    // ⚠️ **A bare ring now derives its filing from the client's `AtKeysIo`,
+    // so that half is fixed at the source** (`decisions.md` 111). What the
+    // bootstrap's ring still uniquely carries is `requestConveyance` — the
+    // read path's self-heal — and being the one instance whose `privatesFiled`
+    // events the notification service is subscribed to. So this stays the
+    // client's own ring, and `TestSuiteInitializer` still has to supply the
+    // key source at first construction, which is the only point it takes.
     final ring = (client as AtClientImpl).pqBootstrap!.ring;
     client.getPreferences()!.crypto = CryptoConfig.nskey(keyRing: ring);
     await ring.mintAndPublish(namespace);

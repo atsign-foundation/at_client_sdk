@@ -161,6 +161,53 @@ void main() {
     expect(published, hasLength(1));
   });
 
+  test('a ring built from the client alone files into the client\'s keyfile',
+      () async {
+    // The shape every hand-built ring has: `PublishedNskeyKeyRing(client)`,
+    // naming no filing. It has to be durable anyway, because the client was
+    // handed an AtKeysIo and an nskey private is the one kind of material that
+    // cannot be re-fetched or re-derived — a ring that kept it in memory
+    // beside a keyfile that was there all along publishes a key that stops
+    // opening anything the moment the process ends.
+    final c = client();
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, AtKeys());
+    when(() => c.client.atKeysIo).thenReturn(io);
+
+    final ring = PublishedNskeyKeyRing(c.client);
+    expect(ring.privateFiling, isNotNull,
+        reason: 'the mechanism: a ring given no filing derives one from the '
+            'client. Without this the read below could pass on the ring\'s '
+            'own in-memory copy and prove nothing about durability');
+
+    final advertisement = await ring.mintAndPublish(namespace);
+
+    // Read through a SEPARATE filing over the same key source, standing for
+    // the next process: what is being asserted is that the seed reached the
+    // keyfile, not that the ring that minted it remembers it.
+    expect(
+        await NskeyPrivateFiling(keysIo: io, atSign: atSign)
+            .read(namespace, advertisement.nskeyKid),
+        isNotNull);
+  });
+
+  test('and a client with no key source mints into memory only', () async {
+    // The control for the row above, and the posture a mocked fixture has:
+    // `atKeysIo` unstubbed, so mocktail answers null and there is nothing to
+    // derive a filing from. Minting still succeeds — refusing would refuse
+    // every fixture — and `_mint` says so at `severe`, which this does not
+    // assert because a log line is not a testable interface.
+    final c = client();
+
+    final ring = PublishedNskeyKeyRing(c.client);
+    expect(ring.privateFiling, isNull);
+
+    final advertisement = await ring.mintAndPublish(namespace);
+    expect(advertisement.nskeyKid, isNotEmpty);
+    expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true),
+        hasLength(1));
+  });
+
   test('the published advertisement emits its exact wire shape — raw literals',
       () async {
     // Emitter pin, frozen forever for both halves — the payload and the
