@@ -314,6 +314,58 @@ void main() {
     });
   });
 
+  group('the catalogue summary counts its own table', () {
+    /// The headline sentence above `acceptance.md`'s status table.
+    ///
+    /// The table is generated against the scenarios and cannot drift. This
+    /// sentence is prose, and nothing checked it: it read "50 PROVEN · 2
+    /// BLOCKED · 1 WITHDRAWN across 53 use cases and 53 scenarios" while the
+    /// table under it held 69 rows. The 16-row gap was exactly the UC-G1.x
+    /// cluster, added the same day 14.17 landed — a cold read found it, five
+    /// sweeps of my own did not, and `catalogue_test.dart` never looked at
+    /// this line because it validates the headings instead.
+    test('the summary sentence agrees with the table and the scenarios', () {
+      final acceptance = _read('acceptance.md');
+
+      final headline = RegExp(
+              r'\*\*(\d+) PROVEN · (\d+) BLOCKED · (\d+) WITHDRAWN\*\* across '
+              r'(\d+) use cases and (\d+) scenarios')
+          .firstMatch(acceptance);
+      expect(headline, isNotNull,
+          reason: 'the summary sentence did not parse, so this guard checks '
+              'nothing — it is the sentence beginning "Today that is"');
+
+      final rows = RegExp(r'^\| (UC-[^|]+)\|[^|]*\|\s*(\w+)\s*\|',
+              multiLine: true)
+          .allMatches(acceptance)
+          .map((m) => m.group(2)!)
+          .toList();
+      expect(rows, isNotEmpty, reason: 'the status table did not parse');
+
+      int count(String s) => rows.where((r) => r == s).length;
+      expect(
+        [
+          int.parse(headline!.group(1)!),
+          int.parse(headline.group(2)!),
+          int.parse(headline.group(3)!),
+          int.parse(headline.group(4)!),
+          int.parse(headline.group(5)!),
+        ],
+        [
+          count('PROVEN'),
+          count('BLOCKED'),
+          count('WITHDRAWN'),
+          rows.length,
+          scenarioCount(),
+        ],
+        reason: 'the summary sentence disagrees with what it summarises. '
+            'Derive all five from the table and scenarioCount() — the first '
+            'correction to this line got the scenario figure wrong by doing '
+            'arithmetic on the sentence it was replacing',
+      );
+    });
+  });
+
   group('a row that says owed does not point at a section that says done', () {
     /// The one shape a cold read caught and nothing here could.
     ///

@@ -831,7 +831,11 @@ ladder — a same-value version bump merges silently.)
 
 ### 14.19 Small items, raised 2026-08-12 and not yet acted on
 
-**11 open, 12 struck** (was 17 open on 2026-08-17, before items 1, 3, 16, 17 and
+**9 open, 16 struck** — ⚠️ **re-derive both, never read them here.** This
+header said `11 open, 12 struck` until 2026-08-18, and the TODO row three
+paragraphs up said 9 the whole time: the count turned out to have **four**
+homes, not the two a correction had been updating. (Was 17 open on 2026-08-17,
+before items 1, 3, 16, 17 and
 19 were fixed, 22 was struck as a false positive, and 15 was struck as the
 closure it had already recorded in its own body since 2026-08-15). Each is real
 and verified at the time of writing, and each is too small to be a step of its
@@ -1259,8 +1263,15 @@ ML-DSA PKAM (owner's call, 2026-08-08). One thing must still be true by then:
 
 ### 14.14 A client with no enrollment id is treated as fully privileged
 
-`AtClientImpl._resolveFullPrivilege()` returns **true unconditionally when
-`enrollmentId == null`**, and `ApkamSigning.enrollmentId` substitutes the
+`EnrollmentRecordPrivilegeResolver.isFullyPrivileged()`
+(`service/enrollment_privilege_resolver.dart`) returns **true unconditionally
+when `enrollmentId == null`**, ⚠️ **and its own dartdoc now argues the case this
+item still frames as an open question** — *"a client with no enrollment id is
+authenticating with the atSign's own keys, which is full privilege by
+construction rather than by grant."* The behaviour is unchanged. This item cited
+`AtClientImpl._resolveFullPrivilege()` until 2026-08-18, a name that had been
+moved verbatim on 2026-08-10 (`289bbe453`) and exists in no source file —
+`git grep` finds it only in these docs. Also, and `ApkamSigning.enrollmentId` substitutes the
 sentinel `'primary'` when there is none. So a legacy PKAM client that happens to
 hold an `AtKeysIo` publishes `public:_apsk.primary.a.__e@<atSign>` and signs
 approval-chain links as `"primary"`.
@@ -1463,9 +1474,9 @@ git grep -n "keyIdPrefix =\|apskAdvertisement" -- packages/at_client/lib/src/cry
 # ZERO and exited 1 while the answer was 17, so a reader working down this
 # block concluded there was no open work. Fixed 2026-08-16.
 awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
-  | grep -cE "^[0-9]+\. \*\*"     # 11 open at 2026-08-18 — RUN IT, do not read it
+  | grep -cE "^[0-9]+\. \*\*"     # RUN IT. A number written here is a fifth home
 awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
-  | grep -cE "^[0-9]+\. ~~"       # 12 struck at 2026-08-18 — likewise
+  | grep -cE "^[0-9]+\. ~~"       # likewise. Both said 11/12 on 2026-08-18 against an actual 9/16
 
 # rows 3-9: the stage-5 table, which owns steps 23-31
 awk '/^\*\*Stage 5/,/^\*\*Stage 6/' docs/projects/pq/implementation-plan.md

@@ -2364,8 +2364,12 @@ of `signing_root_pull_two_enrollments_test` and `nskey_rotation_live_test`.
 
 ### 14.14 A client with no enrollment id is treated as fully privileged
 
-`AtClientImpl._resolveFullPrivilege()` returns **true unconditionally when
-`enrollmentId == null`**, and `ApkamSigning.enrollmentId` substitutes the
+`EnrollmentRecordPrivilegeResolver.isFullyPrivileged()`
+(`service/enrollment_privilege_resolver.dart`) returns **true unconditionally
+when `enrollmentId == null`**. ⚠️ Its own dartdoc now argues the case this item
+frames as open — *"full privilege by construction rather than by grant."* The
+behaviour is unchanged; the name moved verbatim on 2026-08-10 (`289bbe453`),
+and this cited the old one until 2026-08-18. Also, and `ApkamSigning.enrollmentId` substitutes the
 sentinel `'primary'` when there is none. So a legacy PKAM client that happens to
 hold an `AtKeysIo` publishes `public:_apsk.primary.a.__e@<atSign>` and signs
 approval-chain links as `"primary"`.

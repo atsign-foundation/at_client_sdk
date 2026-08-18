@@ -49,8 +49,21 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**50 PROVEN · 2 BLOCKED · 1 WITHDRAWN** across 53 use cases and 53 scenarios —
-`UC-A5.1` has two.
+**66 PROVEN · 2 BLOCKED · 1 WITHDRAWN** across 69 use cases and 79 scenarios —
+several rows carry more than one.
+
+⚠️ **This sentence said `50 · 2 · 1` across 53 until 2026-08-18**, when a cold
+read counted the table under it. The 16 missing rows are exactly the `UC-G1.x`
+cluster, added the same day 14.17 landed: the table below is generated against
+the scenarios and cannot drift, and this line is prose that nothing checked. It
+is checked now — `docs_structure_test.dart` derives all four numbers from the
+table and from `manifest.dart`, and fails when they disagree.
+
+⚠️ The scenario figure is **79, not 70**: my first correction inferred it from
+the old sentence's own arithmetic (`53 use cases and 53 scenarios — UC-A5.1 has
+two`), which is the same mistake in the other direction. It comes from
+`scenarioCount()`, which counts every registered file — including the ten
+cross-cutting rows whose test names carry no `UC-` at all.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
 `manifest.dart` parses them, and `catalogue_test.dart` fails when they and the
