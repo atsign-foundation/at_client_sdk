@@ -1112,18 +1112,31 @@ This entry is the owed half; the rulings are the contract.
    [`acceptance.md` 16.5](acceptance.md#165-the-rollout-matrix) records what it
    used to say.
 
-   **What is genuinely owed is the signed-envelope grid**, which that matrix
-   does not touch: `git grep 'wrapAndSign\|signEnvelope\|verifyEnvelope' --
-   tests/pq_matrix` returns nothing, against `EnvelopeSigning` as a positive
-   control, so the sixteen green cells are not evidence about envelope
-   verification. It is a `now`/`rollout1`/`rollout2` 3×3 because a released
-   client and this tree cannot exchange an envelope in either direction under
-   any stage, and **its value is in the rollout-2 row** — the cells where an
-   `mldsa65`-signed envelope meets a receiver that signs `rsa2048` or nothing.
-   Under [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
-   those cells must **pass**: the ladder swaps rather than overlaps precisely
-   because verification is ungated, and this grid is what turns that from a
-   ruling into a measurement.
+   ✅ **The signed-envelope grid closed it the same day.** It was the one piece
+   of this row genuinely owed — the 4×4 does not touch the envelope path at all
+   (`git grep 'wrapAndSign\|signEnvelope\|verifyEnvelope' -- tests/pq_matrix`
+   returned nothing, against `EnvelopeSigning` as a positive control), so the
+   sixteen green cells were not evidence about envelope verification. Built as
+   UC-G1.15: nine cells over `now`/`rollout1`/`rollout2`, each signing at the
+   sender's stage and verifying at the receiver's through a real `_apsk` fetch.
+   It is a 3×3 rather than a fourth row and column because a released client and
+   this tree cannot exchange an envelope in either direction under any stage.
+
+   **`rollout2 → rollout1` passes**, which is what turns
+   [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
+   from a ruling into a measurement: strongest signer, weakest verifier, and no
+   overlap needed because verification is ungated.
+
+   ⚠️ **The nine cells are not what proves the stages differ, and this is
+   measured rather than argued.** Mutating `rollout2` to resolve as `rollout1`
+   leaves **all nine passing** — a sender signing RSA-2048 verifies everywhere
+   too. What catches it is the algorithm assertion: `rollout2 → rollout2` must
+   be exactly `['ML-DSA-65']`, `now → now` must not contain it. Both arms in one
+   session: the mutation reddens naming `['RS256']`, the revert is green.
+   The envelope half lives in `current/lib/envelope_exchange.dart`, not the
+   shared scenario, because 3.14.0's `wrapAndSign` returns a `Map` where this
+   tree's returns a `SignedEnvelope` and 3.14.0 ships no `lib/src/signing/` —
+   a shared file would not compile on the published arm.
 6. **`enroll:update` parity for every other atServer implementation** — needs
    its own tracking issue so it cannot silently diverge. **Still owed, and
    sized 2026-08-18:** at_server `trunk` has the verb across

@@ -21,10 +21,13 @@ import 'test_utils.dart';
 /// `tests/pq_matrix/README.md` describes the layout;
 /// `docs/projects/pq/decisions.md` 96 rules it.
 ///
-/// The envelope exchange is deliberately **not** here. A released client and
-/// this tree cannot exchange an envelope in either direction under any stage,
-/// which is measured, pinned and accepted rather than fixed
+/// The envelope exchange rides the nine cells where **both** halves are this
+/// tree, and is asserted separately below. It cannot be a fourth row and
+/// column: a released client and this tree cannot exchange an envelope in
+/// either direction under any stage, which is measured, pinned and accepted
+/// rather than fixed
 /// ([`decisions.md` 95](../../../docs/projects/pq/decisions.md) rulings 2–3).
+/// So the envelope grid is a `now`/`rollout1`/`rollout2` 3×3 inside the 4×4.
 void main() {
   final senderAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
   final receiverAtSign =
@@ -245,6 +248,88 @@ void main() {
       });
     }
   }
+
+  test('UC-G1.15 · every rollout stage verifies every other stage\'s envelope',
+      () async {
+    // The 3×3 the data-path matrix does not reach. Each cell signs an envelope
+    // at the sender's stage, leaves it on the atServer, and has the receiver
+    // fetch the sender's `_apsk` and verify it with its own build.
+    //
+    // Under `docs/projects/pq/detail/decisions.md` 108 the ladder SWAPS
+    // algorithms rather than overlapping them — no stage's in-use set holds
+    // two — so a rollout-2 sender emits ML-DSA-65 alone and a rollout-1
+    // receiver, which signs RSA-2048, must still verify it. That is the whole
+    // claim: verification is ungated, so a swap needs no overlap to be safe.
+    // These nine cells are what turns that ruling into a measurement.
+    const armStages = ['now', 'rollout1', 'rollout2'];
+
+    final verdicts = <String, Map<String, Object?>>{};
+    for (final senderStage in armStages) {
+      for (final receiverStage in armStages) {
+        final cell = await runCell(
+            senderStage: senderStage, receiverStage: receiverStage);
+
+        final sent = (cell.sent['envelope'] as Map?)?.cast<String, Object?>();
+        final got = (cell.result['envelope'] as Map?)?.cast<String, Object?>();
+        final where = '$senderStage → $receiverStage';
+
+        expect(sent, isNotNull,
+            reason: '$where: the sender reported no envelope at all. Every '
+                'cell of this grid signs one, so a missing report is the '
+                'harness failing rather than a stage behaving differently');
+        expect(got, isNotNull, reason: '$where: the receiver reported none');
+        expect(got!['verified'], true,
+            reason: '$where: verification failed — ${got['errorType']}: '
+                '${got['error']}. Under decisions 108 every cell must verify, '
+                'because the ladder swaps algorithms and reading is not '
+                'staged; a red cell here means a receiver at one stage cannot '
+                'read a sender at another, which is the breakage the staging '
+                'exists to prevent');
+        expect(got['algs'], sent!['algs'],
+            reason: '$where: the receiver verified an envelope carrying '
+                '${got['algs']} while the sender emitted ${sent['algs']} — '
+                'the two processes are not looking at the same document');
+
+        verdicts[where] = got;
+      }
+    }
+
+    // The mechanism assertion. Without it these nine cells pass exactly as
+    // well for a harness in which no stage does anything — the failure this
+    // matrix has already had once, in the row below, and the reason that row
+    // now carries two positive controls of its own.
+    //
+    // `algs` is the JOSE name on the wire, so this reads what was actually
+    // signed rather than what the stage was asked for.
+    expect(verdicts['rollout2 → rollout2']!['algs'], ['ML-DSA-65'],
+        reason: 'a rollout-2 sender mints an ML-DSA-65 signing key and signs '
+            'with it alone. If this is RSA the stage never reached the signer '
+            'and every cell above is comparing a case with itself');
+    expect(verdicts['now → now']!['algs'], isNot(contains('ML-DSA-65')),
+        reason: 'a now sender files no signing key of its own and signs with '
+            'its APKAM authentication key, so it must NOT emit ML-DSA-65 — '
+            'the control that makes the assertion above discriminate');
+
+    // The cell the ruling is actually about: strongest signer, weakest
+    // verifier. Called out separately from the loop because it is the one a
+    // reader comes here to check.
+    expect(verdicts['rollout2 → rollout1']!['verified'], true,
+        reason: 'a receiver that signs RSA-2048 must verify an ML-DSA-65 '
+            'envelope. This is the cell an overlapping ladder would have '
+            'existed to rescue, and decisions 108 rules it needs no rescue');
+    expect(verdicts['rollout2 → now']!['verified'], true,
+        reason: 'and so must a receiver that files no signing key at all');
+
+    // Each signature names exactly one — the ladder swaps, so nothing this
+    // harness runs should ever produce two. A second entry here would mean a
+    // stage started overlapping, which is a design change, not a passing test.
+    for (final entry in verdicts.entries) {
+      expect((entry.value['algs'] as List).length, 1,
+          reason: '${entry.key}: no rollout stage names two algorithms, so no '
+              'envelope from one should carry two signatures. Two means the '
+              'in-use set gained a member and decisions 108 needs revisiting');
+    }
+  });
 
   test('UC-G1.14 · rollout 1 is invisible to a deployed peer', () async {
     // Every cell runs here rather than reading what the matrix loop left

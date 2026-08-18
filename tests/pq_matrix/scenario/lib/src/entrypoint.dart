@@ -31,6 +31,7 @@ Future<void> runArm(
   required Set<String> stages,
   required PreferenceFor preferenceFor,
   Attach attach = attachWithoutKeySource,
+  ExchangeStep? step,
 }) async {
   // at_client logs to stdout. The protocol carries its own sentinel so a log
   // line cannot be parsed as one, but a quiet run is easier to read when a
@@ -70,9 +71,9 @@ Future<void> runArm(
 
     switch (role) {
       case Role.sender:
-        await runSender(client, exchange);
+        await runSender(client, exchange, step: step);
       case Role.receiver:
-        await runReceiver(client, exchange);
+        await runReceiver(client, exchange, step: step);
     }
     // The client holds a live connection and a sync timer; nothing here waits
     // on them, and the driver has what it came for.

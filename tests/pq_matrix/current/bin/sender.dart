@@ -1,5 +1,7 @@
 import 'package:pq_matrix_current/arm.dart'
     show attachWithKeyfile, currentPreference;
+import 'package:pq_matrix_current/envelope_exchange.dart'
+    show signEnvelopeForPeer;
 import 'package:pq_matrix_scenario/pq_matrix_scenario.dart';
 
 /// This tree's sender, at whichever stage of the auth/signing split it is told.
@@ -14,4 +16,10 @@ Future<void> main(List<String> args) => runArm(
       stages: const {'now', 'rollout1', 'rollout2'},
       preferenceFor: currentPreference,
       attach: attachWithKeyfile,
+      // The envelope grid rides the cells this arm is both halves of. It is
+      // passed here rather than written into the shared scenario because the
+      // published arm cannot compile it, and it is a step rather than a call
+      // in this file because its ordering constraint — before the notification
+      // — belongs with the sequence it is part of.
+      step: signEnvelopeForPeer,
     );

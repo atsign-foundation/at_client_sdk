@@ -57,13 +57,30 @@ those apart. One scenario removes the second reason.
 The 4×4 is over the **data path**: a real notification, multiple puts and gets.
 All sixteen cells pass.
 
-The **signed-envelope** exchange is a `now`/`rollout1`/`rollout2` 3×3, because
-a released client and this tree cannot exchange an envelope in either
-direction, under any stage — measured, both errors pinned, and accepted rather
-than fixed. [`acceptance.md` 16.5](../../docs/projects/pq/acceptance.md#165-the-rollout-matrix)
+The **signed-envelope** exchange is a `now`/`rollout1`/`rollout2` 3×3, built
+2026-08-18 and riding the nine cells where both halves are this tree. It is a
+3×3 rather than a fourth row and column because a released client and this tree
+cannot exchange an envelope in either direction, under any stage — measured,
+both errors pinned, and accepted rather than fixed. [`acceptance.md` 16.5](../../docs/projects/pq/acceptance.md#165-the-rollout-matrix)
 has the reasoning and
 [`decisions.md` 95](../../docs/projects/pq/detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 rulings 2 and 3 have the amendment that finding forced.
+
+It lives in `current/lib/envelope_exchange.dart` rather than in `scenario/`,
+and that is forced rather than tidy: 3.14.0's `wrapAndSign` returns a
+`Map<String, Object?>` where this tree's returns a `SignedEnvelope`, and 3.14.0
+ships no `lib/src/signing/` at all, so a file in the shared package that signed
+an envelope would fail to compile on the published arm and take the whole
+matrix down rather than the rows it applies to. The shared package carries only
+the `ExchangeStep` hook that says *when* an arm's own step runs — before the
+sender's notification, after the receiver's reads — because that ordering is a
+property of the sequence, not of either arm.
+
+⚠️ **The grid's nine cells are not what proves the stages differ.** Mutating
+`rollout2` to resolve as `rollout1` leaves all nine passing, because a sender
+signing RSA-2048 verifies everywhere too. The algorithm assertion is the one
+that discriminates, and a change here that drops it would leave a grid that
+passes for an inert harness.
 
 ## Running it by hand
 

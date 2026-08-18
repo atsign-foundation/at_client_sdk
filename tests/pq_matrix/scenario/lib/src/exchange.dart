@@ -84,12 +84,30 @@ AtKey _sharedKey(String name, ExchangeSpec spec,
       ..sharedWith = to
       ..sharedBy = from;
 
+/// An arm's own extra work inside a cell, run at the point in the sequence
+/// where it is safe.
+///
+/// Returns whatever it wants reported, or null to report nothing. It exists
+/// because the **envelope** half of the matrix is not shared code: 3.14.0's
+/// `wrapAndSign` returns a `Map` and this tree's returns a `SignedEnvelope`,
+/// and 3.14.0 ships no `lib/src/signing/` at all, so a file in this package
+/// that signed an envelope would not compile on the published arm and would
+/// take the whole matrix down rather than the rows it applies to.
+///
+/// The ordering is why it is a hook here rather than a call in each `bin/`:
+/// the sender's step has to land **before** the notification (the receiver
+/// starts reading the moment it wakes) and the receiver's **after** its reads.
+/// Both constraints live in this file, so the hook is invoked from this file.
+typedef ExchangeStep = Future<Map<String, Object?>?> Function(
+    AtClient client, ExchangeSpec spec);
+
 /// Writes this cell's records and announces them.
 ///
 /// Each put is read back before the next one is written: a put that returns
 /// true and stored something else fails here, next to the write, rather than
 /// as an unexplained mismatch in the other process.
-Future<void> runSender(AtClient client, ExchangeSpec spec) async {
+Future<void> runSender(AtClient client, ExchangeSpec spec,
+    {ExchangeStep? step}) async {
   final me = client.getCurrentAtSign()!;
   final written = <String>[];
 
@@ -109,6 +127,11 @@ Future<void> runSender(AtClient client, ExchangeSpec spec) async {
     written.add(spec.recordName(n));
   }
 
+  // Before the notification, because the receiver starts reading as soon as it
+  // wakes: anything this step writes has to be on the atServer by then, for
+  // the same reason the puts are.
+  final stepResult = step == null ? null : await step(client, spec);
+
   // The notification last, and only once every record it announces is on the
   // atServer.
   final wake = _sharedKey(spec.wakeName, spec, from: me, to: spec.peerAtSign);
@@ -123,6 +146,7 @@ Future<void> runSender(AtClient client, ExchangeSpec spec) async {
     // back rather than reported from memory: UC-G1.14's claim is about the
     // published record, and a client's idea of what it published is not that.
     'apsk': await readApsk(client),
+    if (stepResult != null) ...stepResult,
   });
 }
 
@@ -220,7 +244,8 @@ class _ReleasedApskReader with ApkamSigning, EnvelopeSigning {
 /// the driver will not start the sender until it sees that line. Notification
 /// streams are broadcast and do not replay, so a receiver that subscribes after
 /// the sender has run waits for an event that has already been and gone.
-Future<void> runReceiver(AtClient client, ExchangeSpec spec) async {
+Future<void> runReceiver(AtClient client, ExchangeSpec spec,
+    {ExchangeStep? step}) async {
   final me = client.getCurrentAtSign()!;
   final arrived = Completer<AtNotification>();
   final StreamSubscription<AtNotification> subscription = client
@@ -259,10 +284,16 @@ Future<void> runReceiver(AtClient client, ExchangeSpec spec) async {
       read.add(spec.recordName(n));
     }
 
+    // After the reads, so a step that fails cannot be mistaken for the data
+    // path failing — by here every record this cell announced has been read
+    // back and compared.
+    final stepResult = step == null ? null : await step(client, spec);
+
     emit(MatrixVerb.result, {
       'atSign': me,
       'read': read,
       'notification': wake.id,
+      if (stepResult != null) ...stepResult,
       // What this build makes of the SENDER's advertisement. On the published
       // arm this is at_client 3.14.0's own verdict, which is the only thing
       // that can say a deployed peer is unaffected by the sender's stage.

@@ -1875,11 +1875,23 @@ the accepted-break ruling in
 [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 rests on exactly this visibility.
 
-**The `now`/`rollout1`/`rollout2` envelope grid is not built.** The functional
-matrix drives the data path only and says so in its own header. The three
-stages emit byte-identical envelopes today — nothing files per-algorithm
-signing material until rollout 2 mints it — so the grid's value is in the
-rollout-2 row, and it is owed rather than done.
+**The `now`/`rollout1`/`rollout2` envelope grid is built** — UC-G1.15 below,
+2026-08-18. ⚠️ **This paragraph read "is not built … owed rather than done"
+until then**, and its reasoning was half wrong as well: it said the three
+stages emit byte-identical envelopes because "nothing files per-algorithm
+signing material until rollout 2 mints it". Rollout 2 *does* mint it, on this
+harness, because the `current/` arm attaches with an `AtKeysIo` — which is the
+one difference the README calls out as the reason the arms are not
+interchangeable. Measured: a `rollout2` sender's envelope carries `ML-DSA-65`
+and a `now` sender's carries `RS256`.
+
+The grid rides the nine cells where both halves are this tree, and its value is
+indeed in the rollout-2 row: under
+[`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
+the ladder swaps algorithms rather than overlapping them, so `rollout2 →
+rollout1` — strongest signer, weakest verifier — is the cell an overlapping
+ladder would have existed to rescue. It passes, which is what makes 108 a
+measurement rather than a ruling.
 
 ⚠️ This section previously showed two failing cells,
 `rollout 2 → published` and `rollout 2 → now`, both attributed to
@@ -1892,6 +1904,30 @@ receiver reads the array as readily as a `rollout1` one. The argument for
 capability-before-active is unaffected and lives in
 [`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11);
 what is gone is the claim that this matrix demonstrates it.
+
+- **UC-G1.15 · every rollout stage verifies every other stage's envelope.**
+  *Given* a sender and a receiver, each at one of `now`, `rollout1`,
+  `rollout2` — nine cells, both halves this tree.
+  *When* the sender signs an envelope at its stage, leaves it on the atServer,
+  and the receiver fetches the sender's `_apsk` and verifies it with its own
+  build.
+  *Then* every cell verifies, and the algorithms the receiver saw are the ones
+  the sender emitted.
+
+  **The cell this exists for is `rollout2 → rollout1`**: an ML-DSA-65 signature
+  read by a client that signs RSA-2048. It passes, which is what
+  [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
+  rests on — a swap is safe precisely because verification is not staged.
+
+  ⚠️ **Nine green cells do not on their own prove anything about the stages**,
+  and that is not hypothetical here: mutating `rollout2` to resolve as
+  `rollout1` leaves **all nine cells passing**, because a sender signing
+  RSA-2048 verifies everywhere too. What catches it is the algorithm assertion
+  — `rollout2 → rollout2` must be exactly `['ML-DSA-65']` and `now → now` must
+  not contain it. Measured 2026-08-18, both arms in one session: the mutation
+  reddens on that assertion naming `['RS256']`, and the revert is green.
+  Proven in `tests/at_functional_test/test/pq_rollout_matrix_test.dart`, test
+  `UC-G1.15`.
 
 - **UC-G1.14 · rollout 1 is invisible to a deployed peer.**
   *Given* a sender at rollout 1 — an ML-DSA-65 authentication key and a freshly
