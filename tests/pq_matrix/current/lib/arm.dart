@@ -18,7 +18,7 @@ import 'package:pq_matrix_scenario/pq_matrix_scenario.dart' show ClientSpec;
 /// published arm's equivalent ignores its stage argument because it has
 /// nothing to map it to.
 ///
-/// `inUseSigningAlgorithms` is deliberately **not** set beside it. It is
+/// `dataSigningKeyAlgorithms` is deliberately **not** set beside it. It is
 /// derived from the stage, and setting both would be two controls over one
 /// behaviour with no way to tell which was lying on the day they disagreed.
 AtClientPreference currentPreference(ClientSpec spec, String stage) =>

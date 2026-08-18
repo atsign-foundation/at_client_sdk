@@ -45,12 +45,12 @@ void main() {
         posture: const PqPosture.postQuantum(),
         disallowLegacyEncryption: false,
         signingRollout: SigningRollout.rollout1,
-        inUseSigningAlgorithms: const {SigningAlgoType.rsa2048},
+        dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048},
       );
 
       expect(preference.disallowLegacyEncryption, isFalse);
       expect(preference.signingRollout, SigningRollout.rollout1);
-      expect(preference.inUseSigningAlgorithms, {SigningAlgoType.rsa2048});
+      expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
     });
 
     test('the mutable fields are untouched by the new constructor', () {

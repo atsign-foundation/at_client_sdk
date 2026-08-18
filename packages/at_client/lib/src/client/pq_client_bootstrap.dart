@@ -52,7 +52,7 @@ class PqStartupGates {
   });
 
   /// Active: brings this enrollment's signing keys into line with
-  /// `AtClientPreference.inUseSigningAlgorithms` — minting, advertising and
+  /// `AtClientPreference.dataSigningKeyAlgorithms` — minting, advertising and
   /// filing one for every algorithm the set names and the enrollment does not
   /// hold, and retiring every one it holds that the set no longer names.
   /// Inert while that set is empty, which is the 3.x default, so this gate

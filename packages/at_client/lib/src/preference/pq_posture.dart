@@ -43,10 +43,10 @@ enum SigningRollout {
   /// `retired` so that everything **that key** signed still verifies.
   rollout2;
 
-  /// What [AtClientPreference.inUseSigningAlgorithms] defaults to at this
+  /// What [AtClientPreference.dataSigningKeyAlgorithms] defaults to at this
   /// stage. The set is the thing a client obeys; this is where its default
   /// comes from, so a stage and a behaviour cannot drift apart.
-  Set<SigningAlgoType> get defaultInUseSigningAlgorithms => switch (this) {
+  Set<SigningAlgoType> get defaultDataSigningKeyAlgorithms => switch (this) {
         // No signing key of its own: the authentication key signs, and `_apsk`
         // advertises that key — which is what every released build does.
         SigningRollout.now => const {},
@@ -60,7 +60,7 @@ enum SigningRollout {
   /// birth, minted before it submits and advertised in place of its APKAM
   /// authentication key.
   ///
-  /// Derived from [defaultInUseSigningAlgorithms] being non-empty rather than
+  /// Derived from [defaultDataSigningKeyAlgorithms] being non-empty rather than
   /// listed again: they are one fact — an enrollment that keeps an active
   /// signing key is one that holds a signing key — and stating it twice is
   /// two controls over one position.
@@ -69,7 +69,7 @@ enum SigningRollout {
   /// keeps active.** The advertisement has to stay the bare string an
   /// un-upgraded peer can parse; a stage wanting ML-DSA reaches it by retiring
   /// the RSA key afterwards, not by skipping it.
-  bool get mintsOwnSigningKey => defaultInUseSigningAlgorithms.isNotEmpty;
+  bool get mintsOwnSigningKey => defaultDataSigningKeyAlgorithms.isNotEmpty;
 
   /// The algorithm of the **authentication** key a retrofit mints at this
   /// stage — the default for `selfRetrofit`'s `signingAlgo` parameter and,
@@ -82,7 +82,7 @@ enum SigningRollout {
   /// field falls back to `rsa2048` — a silent wrong-algorithm PKAM. The name
   /// stays; this one does not repeat the mistake.
   ///
-  /// Derived here beside [defaultInUseSigningAlgorithms] rather than stored
+  /// Derived here beside [defaultDataSigningKeyAlgorithms] rather than stored
   /// on [PqPosture]: two stored fields would be two controls over one
   /// position, and an operator who set the stage but forgot the algorithm
   /// would land in a state no release defines with nothing to tell them.
@@ -120,8 +120,8 @@ enum SigningRollout {
 ///   exactly as the request's own documentation describes.
 /// - **Where the auth/signing split stands** — [signingRollout], the one
 ///   value both remaining defaults derive from:
-///   [SigningRollout.defaultInUseSigningAlgorithms] for
-///   [AtClientPreference.inUseSigningAlgorithms], and
+///   [SigningRollout.defaultDataSigningKeyAlgorithms] for
+///   [AtClientPreference.dataSigningKeyAlgorithms], and
 ///   [SigningRollout.defaultRetrofitAuthenticationAlgo] for what a
 ///   self-retrofit's **authentication** key is minted as. An explicit
 ///   constructor argument, or an explicit `signingAlgo` at the retrofit call,
@@ -156,7 +156,7 @@ class PqPosture {
   /// The **authentication** key's algorithm a retrofit mints under this
   /// posture when the caller names none — **derived** from [signingRollout],
   /// never stored beside it, for the same reason
-  /// [inUseSigningAlgorithms] is.
+  /// [dataSigningKeyAlgorithms] is.
   ///
   /// ⚠️ **A posture is not always the effective stage.** An app may set
   /// [AtClientPreference.signingRollout] beside a posture, and then the
@@ -174,10 +174,10 @@ class PqPosture {
   ///
   /// Two fields would be two controls over one behaviour, and the day they
   /// disagreed one of them would be a lie with no way to tell which. See
-  /// [AtClientPreference.inUseSigningAlgorithms] for what naming an algorithm
+  /// [AtClientPreference.dataSigningKeyAlgorithms] for what naming an algorithm
   /// means and what an empty set leaves in place.
-  Set<SigningAlgoType> get inUseSigningAlgorithms =>
-      signingRollout.defaultInUseSigningAlgorithms;
+  Set<SigningAlgoType> get dataSigningKeyAlgorithms =>
+      signingRollout.defaultDataSigningKeyAlgorithms;
 
   /// The 3.x defaults — the migration under way.
   ///
@@ -187,7 +187,7 @@ class PqPosture {
   /// shape, emitted under every posture.
   ///
   /// [signingRollout] is [SigningRollout.now] for the same reason, so
-  /// [inUseSigningAlgorithms] is empty: the enrollment holds no signing key of
+  /// [dataSigningKeyAlgorithms] is empty: the enrollment holds no signing key of
   /// its own, its APKAM authentication key signs, and `_apsk` advertises that
   /// key as the bare public key string everything deployed can read.
   ///
@@ -245,7 +245,7 @@ class PqPosture {
   /// them — ship in the **same release line as the posture itself**, so its
   /// peers must be on at least that release, not merely "any 3.x".
   ///
-  /// [inUseSigningAlgorithms] is ML-DSA alone, and RSA is deliberately not
+  /// [dataSigningKeyAlgorithms] is ML-DSA alone, and RSA is deliberately not
   /// beside it. A verifier takes the strongest algorithm the envelope and the
   /// signer's advertisement have in common, so a second, weaker signature is
   /// only ever the one that is passed over: it would cost a key, an

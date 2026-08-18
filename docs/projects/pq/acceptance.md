@@ -1637,7 +1637,7 @@ on failure.
 ### 15.7 UC-C1.7 — The signing-set axis: which keys an enrollment holds
 
 - **Given:** a preference built with `PqPosture.postQuantum()` and no
-  explicit `inUseSigningAlgorithms` argument.
+  explicit `dataSigningKeyAlgorithms` argument.
 - **When:** the set is read.
 - **Then:** it is `{mldsa65}`, while a migration-postured preference's is
   empty — an enrollment that mints no signing key of its own keeps signing

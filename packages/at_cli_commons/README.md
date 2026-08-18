@@ -65,7 +65,7 @@ final pref = AtOnboardingPreference(
 ```
 
 `posture`, `disallowLegacyEncryption`, `signingRollout` and
-`inUseSigningAlgorithms` are all available there, and each is optional. Every
+`dataSigningKeyAlgorithms` are all available there, and each is optional. Every
 type they take — including `SigningAlgoType` — is nameable from
 `package:at_client/at_client.dart` alone.
 

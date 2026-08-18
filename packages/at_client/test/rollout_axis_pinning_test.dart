@@ -25,12 +25,12 @@ void main() {
   AtClientPreference preference(
           {PqPosture? posture,
           SigningRollout? signingRollout,
-          Set<SigningAlgoType>? inUseSigningAlgorithms,
+          Set<SigningAlgoType>? dataSigningKeyAlgorithms,
           bool? disallowLegacyEncryption}) =>
       AtClientPreference(
           posture: posture ?? const PqPosture.migration(),
           signingRollout: signingRollout,
-          inUseSigningAlgorithms: inUseSigningAlgorithms,
+          dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
           disallowLegacyEncryption: disallowLegacyEncryption)
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
@@ -61,11 +61,11 @@ void main() {
     });
 
     test('the same set built in a different order is the same set', () {
-      final one = preference(inUseSigningAlgorithms: const {
+      final one = preference(dataSigningKeyAlgorithms: const {
         SigningAlgoType.mldsa65,
         SigningAlgoType.rsa2048
       });
-      final other = preference(inUseSigningAlgorithms: const {
+      final other = preference(dataSigningKeyAlgorithms: const {
         SigningAlgoType.rsa2048,
         SigningAlgoType.mldsa65
       });
@@ -99,8 +99,8 @@ void main() {
           [contains('disallowLegacyEncryption')]);
       expect(
           now.rolloutDifferencesFrom(preference(
-              inUseSigningAlgorithms: const {SigningAlgoType.rsa2048})),
-          [contains('inUseSigningAlgorithms')]);
+              dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})),
+          [contains('dataSigningKeyAlgorithms')]);
     });
 
     test('naming a stage moves the set it derives, and both are reported', () {
@@ -113,7 +113,7 @@ void main() {
               preference(signingRollout: SigningRollout.rollout1)),
           [
             'signingRollout (asked rollout1, running now)',
-            'inUseSigningAlgorithms (asked {rsa2048}, running {})',
+            'dataSigningKeyAlgorithms (asked {rsa2048}, running {})',
           ]);
     });
 
@@ -133,7 +133,7 @@ void main() {
             contains('posture.keyExchangeMode'),
             contains('signingRollout'),
             contains('disallowLegacyEncryption'),
-            contains('inUseSigningAlgorithms'),
+            contains('dataSigningKeyAlgorithms'),
           ]),
           reason: 'one posture moves five axes, and a diagnostic naming only '
               'the first would send a reader looking for one setting');
@@ -157,7 +157,7 @@ void main() {
       final postured = preference(
           posture: const PqPosture.postQuantum(),
           signingRollout: SigningRollout.now,
-          inUseSigningAlgorithms: const {});
+          dataSigningKeyAlgorithms: const {});
       final plain = preference(signingRollout: SigningRollout.now);
 
       final differences = postured.rolloutDifferencesFrom(plain);
@@ -246,9 +246,9 @@ void main() {
 
       expect(
           () => client.setPreferences(
-              preference(inUseSigningAlgorithms: const {SigningAlgoType.mldsa65})),
+              preference(dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65})),
           throwsA(isA<ArgumentError>().having(
-              (e) => '$e', 'message', contains('inUseSigningAlgorithms'))));
+              (e) => '$e', 'message', contains('dataSigningKeyAlgorithms'))));
 
       // The control: everything outside the rollout axes is still replaced,
       // which is what this method is for.

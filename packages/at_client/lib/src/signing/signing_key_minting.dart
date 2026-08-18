@@ -17,7 +17,7 @@ import 'package:at_commons/atsign.dart' show AtsignString;
 import 'package:at_utils/at_utils.dart' show AtSignLogger, AtUtils;
 
 /// Brings an enrollment's signing keys into line with
-/// [AtClientPreference.inUseSigningAlgorithms] — minting one for every
+/// [AtClientPreference.dataSigningKeyAlgorithms] — minting one for every
 /// algorithm the set names and the enrollment does not hold, and retiring
 /// every one it holds that the set no longer names.
 ///
@@ -115,7 +115,7 @@ class SigningKeyMinting with ApkamSigning {
     const nothing =
         (minted: <SigningAlgoType>[], retired: <SigningAlgoType>[]);
 
-    final wanted = atClient.getPreferences()?.inUseSigningAlgorithms ??
+    final wanted = atClient.getPreferences()?.dataSigningKeyAlgorithms ??
         const <SigningAlgoType>{};
     if (wanted.isEmpty) return nothing;
 

@@ -79,7 +79,7 @@ void main() {
     when(() => atClient.getCurrentAtSign()).thenReturn(atSign);
     when(() => atClient.atKeysIo).thenReturn(keysIo);
     when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
-        inUseSigningAlgorithms: const {SigningAlgoType.mldsa65}));
+        dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65}));
 
     final remoteSecondary = MockRemoteSecondary();
     atLookUp = MockAtLookUp();
@@ -213,7 +213,7 @@ void main() {
       // running — the breakage rollout 1 exists to prevent, arriving from
       // the heal path instead of the request path.
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
-          inUseSigningAlgorithms: const {SigningAlgoType.rsa2048}));
+          dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048}));
 
       expect(await mint(), [SigningAlgoType.rsa2048]);
 
@@ -234,7 +234,7 @@ void main() {
 
     test('several algorithms are advertised strongest first', () async {
       when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
-          inUseSigningAlgorithms: const {
+          dataSigningKeyAlgorithms: const {
             SigningAlgoType.rsa2048,
             SigningAlgoType.mldsa65
           }));
@@ -309,7 +309,7 @@ void main() {
   group('a stage transition', () {
     void inUse(Set<SigningAlgoType> algorithms) {
       when(() => atClient.getPreferences()).thenReturn(
-          AtClientPreference(inUseSigningAlgorithms: algorithms));
+          AtClientPreference(dataSigningKeyAlgorithms: algorithms));
     }
 
     Future<AtKeys> keyfile() async => keysIo.read(atSign);

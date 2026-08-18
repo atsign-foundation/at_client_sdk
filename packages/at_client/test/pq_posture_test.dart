@@ -20,7 +20,7 @@ void main() {
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
       expect(p.retrofitAuthenticationAlgo, SigningAlgoType.rsa2048);
       expect(p.signingRollout, SigningRollout.now);
-      expect(p.inUseSigningAlgorithms, isEmpty,
+      expect(p.dataSigningKeyAlgorithms, isEmpty,
           reason: 'no signing key of its own: the APKAM authentication key '
               'signs, and _apsk advertises that key as the bare public key '
               'string every deployed reader understands');
@@ -33,7 +33,7 @@ void main() {
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(p.retrofitAuthenticationAlgo, SigningAlgoType.mldsa65);
       expect(p.signingRollout, SigningRollout.rollout2);
-      expect(p.inUseSigningAlgorithms, {SigningAlgoType.mldsa65},
+      expect(p.dataSigningKeyAlgorithms, {SigningAlgoType.mldsa65},
           reason: 'ML-DSA alone: a verifier takes the strongest algorithm the '
               'envelope and the advertisement share, so a second, weaker key '
               'would cost a signature per envelope to be passed over');
@@ -76,14 +76,14 @@ void main() {
     test('each stage names the set a client at that stage signs with', () {
       // Raw literals: these three are the rollout's contract, and a pin that
       // read them back through the enum would follow an accidental edit.
-      expect(SigningRollout.now.defaultInUseSigningAlgorithms, isEmpty);
-      expect(SigningRollout.rollout1.defaultInUseSigningAlgorithms,
+      expect(SigningRollout.now.defaultDataSigningKeyAlgorithms, isEmpty);
+      expect(SigningRollout.rollout1.defaultDataSigningKeyAlgorithms,
           {SigningAlgoType.rsa2048},
           reason: 'rollout 1 holds one rsa2048 SIGNING key, which is exactly '
               'what the bare _apsk string can express — so an un-upgraded '
               'peer reads it unchanged while the AUTHENTICATION key moves to '
               'ML-DSA underneath');
-      expect(SigningRollout.rollout2.defaultInUseSigningAlgorithms,
+      expect(SigningRollout.rollout2.defaultDataSigningKeyAlgorithms,
           {SigningAlgoType.mldsa65});
     });
 
@@ -109,8 +109,8 @@ void main() {
         const PqPosture.migration(),
         const PqPosture.postQuantum()
       ]) {
-        expect(posture.inUseSigningAlgorithms,
-            posture.signingRollout.defaultInUseSigningAlgorithms);
+        expect(posture.dataSigningKeyAlgorithms,
+            posture.signingRollout.defaultDataSigningKeyAlgorithms);
         expect(posture.retrofitAuthenticationAlgo,
             posture.signingRollout.defaultRetrofitAuthenticationAlgo,
             reason: 'the retrofit algorithm derives from the stage too — it '
@@ -128,7 +128,7 @@ void main() {
           AtClientPreference(signingRollout: SigningRollout.rollout1);
 
       expect(preference.signingRollout, SigningRollout.rollout1);
-      expect(preference.inUseSigningAlgorithms, {SigningAlgoType.rsa2048},
+      expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048},
           reason: 'and the stage supplies its set, so the enrollment holds a '
               'signing key of its own from birth');
     });
@@ -139,14 +139,14 @@ void main() {
           AtClientPreference(
                   posture: const PqPosture.migration(),
                   signingRollout: SigningRollout.rollout2)
-              .inUseSigningAlgorithms,
+              .dataSigningKeyAlgorithms,
           {SigningAlgoType.mldsa65},
           reason: 'the stage supplies the set when the app names no set');
       expect(
           AtClientPreference(
                   signingRollout: SigningRollout.rollout2,
-                  inUseSigningAlgorithms: const {SigningAlgoType.rsa2048})
-              .inUseSigningAlgorithms,
+                  dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})
+              .dataSigningKeyAlgorithms,
           {SigningAlgoType.rsa2048},
           reason: 'the set is what the client obeys — naming both is naming a '
               'mixture on purpose');
@@ -155,22 +155,22 @@ void main() {
 
   group('the in-use signing set', () {
     test('follows the posture, and an explicit set beats it both ways', () {
-      expect(AtClientPreference().inUseSigningAlgorithms, isEmpty);
+      expect(AtClientPreference().dataSigningKeyAlgorithms, isEmpty);
       expect(
           AtClientPreference(posture: const PqPosture.postQuantum())
-              .inUseSigningAlgorithms,
+              .dataSigningKeyAlgorithms,
           {SigningAlgoType.mldsa65});
       expect(
           AtClientPreference(
                   posture: const PqPosture.postQuantum(),
-                  inUseSigningAlgorithms: const {})
-              .inUseSigningAlgorithms,
+                  dataSigningKeyAlgorithms: const {})
+              .dataSigningKeyAlgorithms,
           isEmpty);
       expect(
           AtClientPreference(
-              inUseSigningAlgorithms: const {
+              dataSigningKeyAlgorithms: const {
                 SigningAlgoType.rsa2048
-              }).inUseSigningAlgorithms,
+              }).dataSigningKeyAlgorithms,
           {SigningAlgoType.rsa2048});
     });
 
@@ -180,16 +180,16 @@ void main() {
       // classical one has no way to notice.
       expect(
           () => AtClientPreference(
-              inUseSigningAlgorithms: const {SigningAlgoType.ecc_secp256r1}),
+              dataSigningKeyAlgorithms: const {SigningAlgoType.ecc_secp256r1}),
           throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
               'message', contains('mldsa65, rsa2048'))));
       expect(
           () => AtClientPreference(
-              inUseSigningAlgorithms: const {SigningAlgoType.ed25519}),
+              dataSigningKeyAlgorithms: const {SigningAlgoType.ed25519}),
           throwsArgumentError);
       expect(
           () => AtClientPreference(
-              inUseSigningAlgorithms: const {SigningAlgoType.rsa4096}),
+              dataSigningKeyAlgorithms: const {SigningAlgoType.rsa4096}),
           throwsArgumentError);
       // The two this build does sign under, named as literals: a set derived
       // from what canSignEnvelopeWith answers would follow the signer's
@@ -197,8 +197,8 @@ void main() {
       // this release.
       for (final signable in [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048]) {
         expect(
-            AtClientPreference(inUseSigningAlgorithms: {signable})
-                .inUseSigningAlgorithms,
+            AtClientPreference(dataSigningKeyAlgorithms: {signable})
+                .dataSigningKeyAlgorithms,
             {signable});
       }
     });
@@ -209,10 +209,10 @@ void main() {
       // would otherwise be a way past it.
       final requested = <SigningAlgoType>{SigningAlgoType.rsa2048};
       final preference =
-          AtClientPreference(inUseSigningAlgorithms: requested);
+          AtClientPreference(dataSigningKeyAlgorithms: requested);
       requested.add(SigningAlgoType.ecc_secp256r1);
-      expect(preference.inUseSigningAlgorithms, {SigningAlgoType.rsa2048});
-      expect(() => preference.inUseSigningAlgorithms.add(SigningAlgoType.mldsa65),
+      expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
+      expect(() => preference.dataSigningKeyAlgorithms.add(SigningAlgoType.mldsa65),
           throwsUnsupportedError);
     });
   });

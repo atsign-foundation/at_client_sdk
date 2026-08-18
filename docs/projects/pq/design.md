@@ -2259,7 +2259,7 @@ Three separate things, deliberately in three places:
 |-------|-------|-----------|
 | Strength order | at_chops, beside `SigningAlgoType` | A protocol fact every implementation must agree on, including the atServer |
 | Verifiable set | derived from what the at_chops build implements | A build cannot claim an algorithm it cannot run |
-| In-use-for-signing set | `AtClientPreference.inUseSigningAlgorithms`, defaulted by `PqPosture` | A rollout decision, which is what posture carries |
+| In-use-for-signing set | `AtClientPreference.dataSigningKeyAlgorithms`, defaulted by `PqPosture` | A rollout decision, which is what posture carries |
 
 The in-use set is a `Set<SigningAlgoType>`, final at construction and
 unmodifiable, defaulting to `{}` under `PqPosture.migration()` and
@@ -2352,7 +2352,7 @@ active `rsa2048` entry, and `wrapAndSign` signs with every *active* signing key
 the keyfile holds for the enrollment — retired keys are advertised, not signed
 with). So the stage does not switch three flags — it names the position, and
 supplies the default for the one piece of state all three read,
-`AtClientPreference.inUseSigningAlgorithms`. The posture derives that set from
+`AtClientPreference.dataSigningKeyAlgorithms`. The posture derives that set from
 the stage rather than storing both, because two stored fields are two controls
 over one behaviour.
 

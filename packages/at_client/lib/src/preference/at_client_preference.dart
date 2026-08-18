@@ -52,7 +52,7 @@ class AtClientPreference {
   /// defaults today.
   ///
   /// Individual flags still win: an explicit [disallowLegacyEncryption] or
-  /// [inUseSigningAlgorithms] argument, an assigned [crypto], or a per-call
+  /// [dataSigningKeyAlgorithms] argument, an assigned [crypto], or a per-call
   /// algorithm each override the posture's value for that one axis.
   ///
   /// Final at construction, like [disallowLegacyEncryption] and for the same
@@ -86,17 +86,17 @@ class AtClientPreference {
   /// still exist?" without an answer. A [Set] rather than a list because
   /// membership is the whole of the meaning — the order signatures are emitted
   /// in is the strongest-first order the keyfile is read in, never this one.
-  final Set<SigningAlgoType> inUseSigningAlgorithms;
+  final Set<SigningAlgoType> dataSigningKeyAlgorithms;
 
   /// Where this client stands in the rollout that separates an enrollment's
   /// signing keys from its APKAM authentication key — a **position**, and the
-  /// source of [inUseSigningAlgorithms]' default.
+  /// source of [dataSigningKeyAlgorithms]' default.
   ///
   /// [SigningRollout.rollout1] is the value a deployment sets here rather than
   /// on the posture: it says the fleet's readers have upgraded, which no client
   /// can observe for itself, and it changes nothing this client writes.
   ///
-  /// **When both this and [inUseSigningAlgorithms] are given explicitly, the
+  /// **When both this and [dataSigningKeyAlgorithms] are given explicitly, the
   /// set is what the client obeys.** Only the stage's default reaches
   /// behaviour, so naming both is naming a mixture on purpose — the same
   /// contract every other axis has, where an explicitly set flag beats the
@@ -107,13 +107,13 @@ class AtClientPreference {
       {this.posture = const PqPosture.migration(),
       bool? disallowLegacyEncryption,
       SigningRollout? signingRollout,
-      Set<SigningAlgoType>? inUseSigningAlgorithms})
+      Set<SigningAlgoType>? dataSigningKeyAlgorithms})
       : disallowLegacyEncryption =
             disallowLegacyEncryption ?? posture.disallowLegacyEncryption,
         signingRollout = signingRollout ?? posture.signingRollout,
-        inUseSigningAlgorithms = _signableOrRefuse(inUseSigningAlgorithms ??
+        dataSigningKeyAlgorithms = _signableOrRefuse(dataSigningKeyAlgorithms ??
             (signingRollout ?? posture.signingRollout)
-                .defaultInUseSigningAlgorithms);
+                .defaultDataSigningKeyAlgorithms);
 
   /// Where [other] would change what a **running** client does — one line per
   /// differing axis, empty when the two are interchangeable.
@@ -161,15 +161,15 @@ class AtClientPreference {
     compare('disallowLegacyEncryption', other.disallowLegacyEncryption,
         disallowLegacyEncryption);
 
-    final asked = other.inUseSigningAlgorithms;
-    final running = inUseSigningAlgorithms;
+    final asked = other.dataSigningKeyAlgorithms;
+    final running = dataSigningKeyAlgorithms;
     if (asked.length != running.length || !asked.containsAll(running)) {
       // Rendered strongest-first so both sides read in one order — a Set
       // iterates in insertion order, so two equal sets built by different
       // routes would otherwise print differently and read as a difference.
       String spell(Set<SigningAlgoType> algorithms) =>
           '{${SigningAlgoType.strongestFirst.where(algorithms.contains).map((a) => a.name).join(', ')}}';
-      differences.add('inUseSigningAlgorithms (asked ${spell(asked)}, '
+      differences.add('dataSigningKeyAlgorithms (asked ${spell(asked)}, '
           'running ${spell(running)})');
     }
     return differences;
@@ -189,7 +189,7 @@ class AtClientPreference {
             .where(canSignEnvelopeWith)
             .map((signableAlgorithm) => signableAlgorithm.name)
             .join(', ');
-        throw ArgumentError.value(algorithm.name, 'inUseSigningAlgorithms',
+        throw ArgumentError.value(algorithm.name, 'dataSigningKeyAlgorithms',
             'this build signs under $signable');
       }
     }

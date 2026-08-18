@@ -8,7 +8,7 @@ class AtOnboardingPreference extends AtClientPreference {
   ///
   /// Without this the class inherited the implicit no-arg constructor, and
   /// since `posture`, `disallowLegacyEncryption`, `signingRollout` and
-  /// `inUseSigningAlgorithms` are all final in the superclass, **no CLI
+  /// `dataSigningKeyAlgorithms` are all final in the superclass, **no CLI
   /// application could set any of them** — not by assignment afterwards, which
   /// the finality forbids, and not at construction, which took no arguments.
   /// They are final for a reason worth keeping: what a client writes must not
@@ -26,7 +26,7 @@ class AtOnboardingPreference extends AtClientPreference {
     super.posture,
     super.disallowLegacyEncryption,
     super.signingRollout,
-    super.inUseSigningAlgorithms,
+    super.dataSigningKeyAlgorithms,
   });
 
   /// specify path of .atKeysFile containing encryption keys

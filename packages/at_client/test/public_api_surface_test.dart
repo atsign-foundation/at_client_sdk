@@ -78,14 +78,14 @@ void main() {
       // value it cannot name. This file imports at_client and nothing else, so
       // if the export goes, the file stops compiling.
       final preference = AtClientPreference(
-          inUseSigningAlgorithms: const {SigningAlgoType.mldsa65});
+          dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65});
 
-      expect(preference.inUseSigningAlgorithms, {SigningAlgoType.mldsa65});
+      expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.mldsa65});
       // Named against a stage whose default is a DIFFERENT algorithm, so the
       // assertion cannot pass on the default it would have taken anyway.
       final rollout1 =
           AtClientPreference(signingRollout: SigningRollout.rollout1);
-      expect(rollout1.inUseSigningAlgorithms, {SigningAlgoType.rsa2048});
+      expect(rollout1.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
     });
   });
 
@@ -145,7 +145,7 @@ const Set<String> _atClientBarrelExports = {
   // holds one, and its per-axis override must be nameable without importing
   // at_auth directly.
   'package:at_auth/at_auth.dart',
-  // show-narrowed to SigningAlgoType: AtClientPreference.inUseSigningAlgorithms
+  // show-narrowed to SigningAlgoType: AtClientPreference.dataSigningKeyAlgorithms
   // takes a set of them and AtClientImpl.signingAlgoType returns one.
   'package:at_chops/at_chops.dart',
   'package:at_client/src/response/at_notification.dart',

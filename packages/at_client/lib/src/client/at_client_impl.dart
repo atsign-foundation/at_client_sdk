@@ -902,7 +902,7 @@ class AtClientImpl implements AtClient {
   /// which are **refused** when they differ.
   ///
   /// Naming the replacement rather than being handed one does not make the
-  /// change possible: `posture`, `signingRollout`, `inUseSigningAlgorithms`
+  /// change possible: `posture`, `signingRollout`, `dataSigningKeyAlgorithms`
   /// and `disallowLegacyEncryption` are final at construction because the
   /// substrate reads them once, at a startup that has already run by the time
   /// anyone can call this. Accepting them here would leave the client

@@ -21,7 +21,7 @@ export 'package:at_client/src/preference/pq_posture.dart';
 // find. Composing an enrollment request from it still goes through
 // `package:at_auth`.
 export 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
-// The signing algorithm only. `AtClientPreference.inUseSigningAlgorithms`
+// The signing algorithm only. `AtClientPreference.dataSigningKeyAlgorithms`
 // takes a set of these and `AtClientImpl.signingAlgoType` returns one, so a
 // caller that only imports at_client is handed a value it cannot name and
 // asked for a set it cannot build. Everything else about signing — key pairs,

@@ -32,7 +32,7 @@
   `AtKeysSourceAbsentException`.
 - feat: `SigningAlgoType` is exported from the barrel, show-narrowed from
   at_chops exactly as `EnrollmentKeyExchangeMode` is from at_auth.
-  `AtClientPreference.inUseSigningAlgorithms` asks for a `Set` of them and
+  `AtClientPreference.dataSigningKeyAlgorithms` asks for a `Set` of them and
   `AtClientImpl.signingAlgoType` returns one, so an app importing only
   at_client was handed a value it could not name and asked for a set it could
   not build. Everything else about signing — key pairs, signers, hashing —
@@ -460,7 +460,7 @@
   one record with two readers is two chances to describe it differently.
 - feat!: asking for a client that already exists with a preference naming
   different rollout settings — `posture`, `signingRollout`,
-  `inUseSigningAlgorithms` or `disallowLegacyEncryption` — now **throws** an
+  `dataSigningKeyAlgorithms` or `disallowLegacyEncryption` — now **throws** an
   `ArgumentError` naming every differing axis. All four are final at
   construction, so the choice was between refusing and ignoring, and ignoring
   left the caller writing, signing and enrolling under a stage it thought it
@@ -492,7 +492,7 @@
     reaches it is an enrollment created before that, or a client whose in-use
     set has changed since the last start.
 - feat!: a client start now **retires** a signing key whose algorithm has left
-  `AtClientPreference.inUseSigningAlgorithms`, as well as minting the ones it
+  `AtClientPreference.dataSigningKeyAlgorithms`, as well as minting the ones it
   names. `SigningKeyMinting.mintMissing` is renamed `reconcileSigningKeys` and
   returns what it minted **and** what it retired; the startup gate is still
   `PqStartupGates.mintInUseSigningKeys`.
@@ -534,7 +534,7 @@
   `retrofitAuthenticationAlgo`, and is now **derived** from `signingRollout`
   rather than stored — so both named constructors take one argument fewer.
   `SigningRollout` gains `defaultRetrofitAuthenticationAlgo` beside
-  `defaultInUseSigningAlgorithms`.
+  `defaultDataSigningKeyAlgorithms`.
   - It selects the algorithm of the key that **authenticates**, in the one
     subsystem whose entire premise is that authenticating and signing are
     different keys. The wire field it feeds (`EnrollParams.signingAlgo`)
@@ -605,14 +605,14 @@
 - feat: `SigningRollout` — where a build stands in the rollout that separates
   an enrollment's signing keys from its APKAM authentication key: `now`,
   `rollout1`, `rollout2`. It rides `PqPosture.signingRollout` and is
-  overridable per `AtClientPreference`, and `inUseSigningAlgorithms` derives
+  overridable per `AtClientPreference`, and `dataSigningKeyAlgorithms` derives
   its default from it. The posture derives that set rather than storing both,
   because two stored fields are two controls over one behaviour; where an app
   names both, the set is what the client obeys. `rollout1` writes exactly what
   `now` writes — the reader half of this rollout needs no gate — and carries
   the fleet's position instead, which no client can observe for itself.
 - feat: a client mints, advertises and files a signing key of its own for every
-  algorithm `AtClientPreference.inUseSigningAlgorithms` names and its
+  algorithm `AtClientPreference.dataSigningKeyAlgorithms` names and its
   enrollment does not hold — a ninth PQ startup step, `mintInUseSigningKeys`,
   gated by `PqStartupGates` and inert while that set is empty, which is the 3.x
   default. A signing keypair can be minted unilaterally: unlike the APKAM
@@ -641,7 +641,7 @@
   is byte-for-byte what it published before, so nothing changes until something
   mints. `apskEntries` and `apskValueOf` are the one composition, shared by
   both publishers of that record.
-- feat: `AtClientPreference.inUseSigningAlgorithms` — which algorithms this
+- feat: `AtClientPreference.dataSigningKeyAlgorithms` — which algorithms this
   client keeps an active signing key for, which is a different job from
   `signingAlgoType`'s APKAM authentication key. A `Set<SigningAlgoType>`,
   final at construction and held unmodifiable, defaulted from a new fifth

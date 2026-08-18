@@ -105,7 +105,7 @@ void main() {
 
   test('UC-C1.7 · the signing-set axis: which keys an enrollment holds', () {
     // GIVEN a preference built with PqPosture.postQuantum() and no
-    //       explicit inUseSigningAlgorithms argument.
+    //       explicit dataSigningKeyAlgorithms argument.
     // WHEN  the set is read.
     // THEN  it is {mldsa65}, while a migration-postured preference's is empty
     //       — an enrollment that mints no signing key of its own keeps signing
