@@ -44,6 +44,48 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
+| [14.37](#1437-retire-the-0x01-seal-version) | Retire `pqSeal` version `0x01` — two commits, in order | Nothing. [Ruling 110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18) settled it; only the order is constrained |
+
+### 14.37 Retire the `0x01` seal version
+
+[Ruling 110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18)
+(gkc, 2026-08-18) retires `pqSeal` version `0x01` — the `x-wing-hpke-v1` suite,
+X-Wing under the bespoke `atPQv1-base` key schedule with AES-256-GCM. `0x02` and
+`0x03` are RFC 9180 Base verbatim and checked against the IETF working group's
+vectors, so the homegrown schedule earns nothing beside them. The ruling has the
+reasoning, including the four arguments for keeping it and why none carries;
+this row is the work.
+
+**Two commits, and the order is the whole of it.**
+
+Commit 1 stops anything emitting `0x01`. Drop `xWingHpke` from
+`SecretSharingAlgos.suites` in `packages/at_client/lib/src/secret_sharing/algo_ids.dart`,
+and leave it in `openableSuitesFor(xWing)` so a holder still advertises that it
+can open one. Nothing changes for two current builds, which already negotiate
+`0x02` first; what goes is the path that reaches `0x01` at all.
+
+Commit 2 removes the version, once nothing can be sealing under it: the row from
+at_chops' `_versions`, the constant from `pqSealSupportedVersions`, the entry
+from `SecretSharingAlgos.sealVersionFor`, `xWingHpke` from `openableSuitesFor`
+and its declaration, and `pqSealDefaultVersion` moves off `0x01`. Nothing in the
+tree reads that default — `pqSealToBase64` makes `version` required and both
+call sites pass a negotiated value — so moving it is bookkeeping rather than a
+fleet decision, whatever its dartdoc says about raising it.
+
+`docs/projects/pq/seal-spec.md`, `packages/at_chops/test/vectors/pq_seal_v1.json`
+and `pq_seal_conformance_test.dart` move with commit 2, not before it. The spec
+exists so a second implementation can build `0x01`; retiring the version retires
+the reason for the document.
+
+⚠️ **Why the two commits are separate.** Removing a supported version turns any
+record already sealed under it into a permanent `PqOpenFailure.versionMismatch`.
+Nothing outside this tree holds a `0x01` envelope today and `__ssenv` entries
+expire at 7 days regardless, so the window costs nothing — the split is what
+makes it safe to have been wrong about that.
+
+**Sweep with it.** `at_chops`' CHANGELOG needs an entry, and `design.md` and
+`acceptance.md` both name the three versions; `acceptance.md` cites `seal-spec.md`
+for "the three versions and what each is attested by", which becomes two.
 
 ### 14.30 A content notification can outrun the key that opens it
 
