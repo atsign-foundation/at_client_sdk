@@ -48,6 +48,7 @@ void main() {
     writesPqByDefault: true,
     disallowLegacyEncryption: true,
     mintLegacyMaterial: true,
+    sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
   );
 
   group('what counts as the same settings', () {
@@ -74,6 +75,7 @@ void main() {
         writesPqByDefault: false,
         disallowLegacyEncryption: false,
         mintLegacyMaterial: true,
+        sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
       ));
 
       expect(identical(canonical.posture, built.posture), isFalse,

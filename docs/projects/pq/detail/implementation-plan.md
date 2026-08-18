@@ -1463,6 +1463,16 @@ and **republishing the package**. Nothing rotates yet, and nothing calls `update
 `enroll:update` and given a status block on 2026-08-18**, which is also when `blockers.dart`'s `ke2`
 constant stopped saying "neither half is built" — it had said so since the client half landed, and it
 is the string anyone greps to find out what KE-2 owes.
+⚠️ **The receiver-side algorithm list is KE-2's, ruled 2026-08-19.**
+[Ruling 113](decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
+ruling 8 asks for two posture-defaulted algorithm lists. The **sender-side** one
+shipped with 14.39 (`sealsToKeyAlgorithms`). The **receiver-side** one —
+widening `AtClientPreference.keyEstablishmentAlgo` from one algorithm to a list
+— lands here instead, because what it needs is not a field but this row's
+missing writer: mint a second KEM key, mark the first retired, republish. A
+list on the preference before that writer exists would carry entries nothing
+acts on.
+
 **Acceptance → [acceptance.md](../acceptance.md):** UC-A2.5 (a package gains a second KEM key; a peer negotiates
 to it; envelopes at the old kpid still open) and UC-A2.6 (a foreign enrollment, and an owner connection, are
 both refused).

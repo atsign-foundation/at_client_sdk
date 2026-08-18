@@ -190,8 +190,8 @@ class NskeyAdvertisement {
     return null;
   }
 
-  /// The entry a sender on this build should encapsulate to: the strongest
-  /// algorithm it implements that this advertisement offers.
+  /// The entry a sender willing to seal under [sealsTo] should encapsulate to:
+  /// the first of those algorithms this advertisement offers.
   ///
   /// Not `keys.single`. A writer emits one key today, but the list exists so
   /// that a newer one can offer two, and a reader that assumed one would throw
@@ -199,10 +199,21 @@ class NskeyAdvertisement {
   /// shape before any writer produces it, or the capability can never be turned
   /// on without breaking every peer that has not upgraded.
   ///
-  /// [SecretSharingAlgos.keyAlgos] is strongest-first, so an owner offering
-  /// both gets sealed to under the better one without either side negotiating.
+  /// [sealsTo] is strongest-first, so an owner offering both gets sealed to
+  /// under the better one without either side negotiating. Null when the owner
+  /// offers nothing on that list — which for a *narrowed*
+  /// `AtClientPreference.sealsToKeyAlgorithms` is the deployment's own refusal
+  /// arriving, not a broken advertisement.
+  PackageKey? usableFor(List<String> sealsTo) => bestKeyFor(sealsTo);
+
+  /// [usableFor] over everything this build can encapsulate to.
+  ///
+  /// The read-side answer, and the one the getters below give: what this
+  /// advertisement means as a document does not depend on which subset a
+  /// particular sender is willing to use. A *sender* asks [usableFor] with the
+  /// preference's list instead.
   PackageKey get _usable =>
-      bestKeyFor(SecretSharingAlgos.keyAlgos) ??
+      usableFor(SecretSharingAlgos.keyAlgos) ??
       (throw StateError(
           'this advertisement offers no key this build can encapsulate to. A '
           'verified advertisement always offers one, so this came from '

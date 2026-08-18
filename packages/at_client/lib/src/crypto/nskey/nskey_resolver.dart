@@ -1,4 +1,6 @@
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart';
+import 'package:at_commons/at_commons.dart' show AtEncryptionException;
 
 /// An nskey found for a namespace, and the namespace it was actually found at.
 ///
@@ -37,7 +39,18 @@ class NskeyResolver {
   /// re-probes every level it does not hold a key at.
   final Duration missMemory;
 
-  NskeyResolver(this.keyRing, {this.missMemory = const Duration(minutes: 15)});
+  /// Which of an owner's advertised KEM keys this client is willing to seal
+  /// to, strongest first — `AtClientPreference.sealsToKeyAlgorithms`.
+  ///
+  /// Defaulted here because a caller constructing a resolver without a
+  /// preference in hand has no basis to choose, and everything this build can
+  /// seal under refuses nobody — which is what a caller that said nothing
+  /// meant. A client passes its preference's list.
+  final List<String> sealsToKeyAlgorithms;
+
+  NskeyResolver(this.keyRing,
+      {this.missMemory = const Duration(minutes: 15),
+      this.sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos});
 
   /// `owner|namespace` → when it was found to hold no key.
   ///
@@ -58,11 +71,26 @@ class NskeyResolver {
       final hit = await keyRing.currentPublic(owner, candidate);
       if (hit != null) {
         _missedAt.remove(_scope(owner, candidate));
+        final key = hit.usableFor(sealsToKeyAlgorithms);
+        if (key == null) {
+          // Refused rather than walked past. Walking on would seal under a
+          // BROADER namespace's key — a different content-key scope than the
+          // caller asked for — arrived at silently because of a rule this
+          // client set. And it is refused rather than reported as a cold
+          // start, or a deployment that narrowed the list reads its own
+          // configuration as the recipient having published nothing.
+          throw AtEncryptionException(
+              '$owner:$candidate advertises '
+              '${hit.keys.map((k) => k.alg).toSet().join(', ')} and this '
+              'client will seal to ${sealsToKeyAlgorithms.join(', ')} - no '
+              'algorithm in common, so nothing is sealed. Widen '
+              'AtClientPreference.sealsToKeyAlgorithms to reach this owner');
+        }
         return (
           namespace: candidate,
-          nskeyKid: hit.nskeyKid,
-          publicKey: hit.publicKey,
-          alg: hit.alg,
+          nskeyKid: key.kid,
+          publicKey: key.pubBytes,
+          alg: key.alg,
         );
       }
       _missedAt[_scope(owner, candidate)] = DateTime.now();

@@ -11,6 +11,7 @@ import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
 import 'package:at_client/src/manager/at_client_manager.dart';
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -650,13 +651,19 @@ class AtClientImpl implements AtClient {
     // default keeps writes legacy, the 4.0 posture makes post-quantum writes
     // the default. Both read everything. An app-named `crypto` still wins —
     // adoptEraDefault leaves it alone either way.
-    final writesPq =
-        _preference?.posture.writesPqByDefault ?? false;
+    final writesPq = _preference?.posture.writesPqByDefault ?? false;
+    // The one caller that HAS a preference, so the one that narrows the
+    // seal-to list if this deployment asked for that. Everywhere further down
+    // defaults to the full list, which refuses nobody.
+    final sealsTo =
+        _preference?.sealsToKeyAlgorithms ?? SecretSharingAlgos.keyAlgos;
     CryptoConfig.adoptEraDefault(
       this,
       writesPq
-          ? CryptoConfig.nskey(keyRing: _pqBootstrap!.ring)
-          : CryptoConfig.readsNskeyWritesLegacy(keyRing: _pqBootstrap!.ring),
+          ? CryptoConfig.nskey(
+              keyRing: _pqBootstrap!.ring, sealsToKeyAlgorithms: sealsTo)
+          : CryptoConfig.readsNskeyWritesLegacy(
+              keyRing: _pqBootstrap!.ring, sealsToKeyAlgorithms: sealsTo),
     );
   }
 

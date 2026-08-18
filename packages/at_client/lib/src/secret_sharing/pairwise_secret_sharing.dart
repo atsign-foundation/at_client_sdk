@@ -234,12 +234,19 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     String appNamespace,
     Map<String, dynamic> payload,
   ) async {
-    final PackageKey? recipientKey = to.bestKeyFor(SecretSharingAlgos.keyAlgos);
+    // What this client is willing to seal to, not merely what it can: a
+    // deployment that narrowed the list is refusing on purpose, and the
+    // message names the list so the refusal is not read as the recipient's
+    // fault.
+    final sealsTo = atClient.getPreferences()?.sealsToKeyAlgorithms ??
+        SecretSharingAlgos.keyAlgos;
+    final PackageKey? recipientKey = to.bestKeyFor(sealsTo);
     if (recipientKey == null) {
       throw StateError(
           'Key package ${to.enrollmentId}/${to.apkamId} advertises no key '
-          'with a supported algorithm (supported: '
-          '${SecretSharingAlgos.keyAlgos})');
+          'this client will seal to (it advertises '
+          '${to.keys.map((k) => k.alg).toSet().join(', ')}; this client seals '
+          'to ${sealsTo.join(', ')})');
     }
 
     // Everything about the construction comes from the RECIPIENT, not from

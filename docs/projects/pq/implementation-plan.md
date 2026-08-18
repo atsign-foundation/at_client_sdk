@@ -75,13 +75,28 @@ individual-flags-win for that flag and **redefines R-2**
 lands.
 
 **The lists.** Posture supplies defaults, `AtClientPreference` holds the values.
-Two are needed and neither exists in the right shape: a receiver-side list of
-what this atSign publishes for others to seal to, which is today the singular
-`keyEstablishmentAlgo` and is the same singularity as
-[14.37's sibling](detail/implementation-plan.md#1437-the-0x01-seal-version-removed-outright) issue
-[#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135); and a
-sender-side list of what it will seal to, today `static const` in
-`SecretSharingAlgos`. Verification and decryption stay maximal and are never
+
+✅ **The sender-side list is DONE** — `PqPosture.sealsToKeyAlgorithms` and
+`AtClientPreference.sealsToKeyAlgorithms`, identical in all three stages
+because which KEM is acceptable is a deployment decision rather than a rollout
+position ([ruling 50.3](detail/decisions.md#503-the-kem-is-configured-the-construction-is-negotiated)).
+It is **ordering first**: a sender picks the first entry a recipient
+advertises. Narrowing it is the deployment choosing to refuse, and the refusal
+names both sides so a FIPS-only operator does not read their own configuration
+as the recipient having published nothing. `NskeyResolver` refuses rather than
+walking up to a broader namespace's key, since walking on would change the
+content-key scope silently. Consulted at both sender-choice sites:
+`NskeyResolver.resolve` (through `CkManager` and the era `CryptoConfig`) and
+`PairwiseSecretSharing.sendEnvelope`.
+
+⛔ **The receiver-side list is NOT part of this row** — ruled with gkc
+2026-08-19. `AtClientPreference.keyEstablishmentAlgo` stays singular. The
+multi-key *reader* shipped 2026-08-13, so what widening it needs is the
+**writer**: mint a second key, retire the first, republish. That is KE-2's
+remaining half ([#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133),
+effort L), with [#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135)
+tracking the singularity. A list here before that writer exists would have
+entries nothing acts on. Verification and decryption stay maximal and are never
 posture-settable, so *reads are universal* holds by construction.
 
 **The rename.** Every parameter, variable and class says whether it means the

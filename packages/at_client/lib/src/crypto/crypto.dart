@@ -191,8 +191,17 @@ class CryptoConfig {
   ///
   /// [keyRing] supplies the namespace key material. Until the secret-sharing
   /// substrate delivers it, that is a fixture.
-  factory CryptoConfig.nskey({required NskeyKeyRing keyRing}) =>
-      _nskeySet(keyRing, symmetricAesGcmCryptoProviderId);
+  ///
+  /// [sealsToKeyAlgorithms] is which of a destination's advertised KEM keys
+  /// this client will seal to — `AtClientPreference.sealsToKeyAlgorithms`.
+  /// Defaulted to everything this build can seal under, which refuses nobody,
+  /// because a caller assembling a config without a preference in hand has no
+  /// basis to narrow it.
+  factory CryptoConfig.nskey(
+          {required NskeyKeyRing keyRing,
+          List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos}) =>
+      _nskeySet(keyRing, symmetricAesGcmCryptoProviderId,
+          sealsToKeyAlgorithms);
 
   /// The nskey providers wired for **reading**, with writes still going out
   /// under [legacyCryptoProviderId].
@@ -210,13 +219,14 @@ class CryptoConfig {
   /// produces records every other client must already be able to read. So the
   /// read side goes first everywhere, and the write side flips once.
   factory CryptoConfig.readsNskeyWritesLegacy(
-          {required NskeyKeyRing keyRing}) =>
-      _nskeySet(keyRing, legacyCryptoProviderId);
+          {required NskeyKeyRing keyRing,
+          List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos}) =>
+      _nskeySet(keyRing, legacyCryptoProviderId, sealsToKeyAlgorithms);
 
   /// One [ContentKeyCache] shared by the manager and both providers — the
   /// coupling [CryptoConfig.nskey] exists to enforce.
-  static CryptoConfig _nskeySet(
-      NskeyKeyRing keyRing, String defaultProviderId) {
+  static CryptoConfig _nskeySet(NskeyKeyRing keyRing, String defaultProviderId,
+      List<String> sealsToKeyAlgorithms) {
     final cache = ContentKeyCache();
     return CryptoConfig(
       defaultProviderId: defaultProviderId,
@@ -238,7 +248,10 @@ class CryptoConfig {
             keyAlgo: SecretSharingAlgos.mlKem1024),
         SymmetricAesGcmProvider(
           cache: cache,
-          ckManager: CkManager(cache: cache, keyRing: keyRing),
+          ckManager: CkManager(
+              cache: cache,
+              keyRing: keyRing,
+              sealsToKeyAlgorithms: sealsToKeyAlgorithms),
         ),
       ],
     );

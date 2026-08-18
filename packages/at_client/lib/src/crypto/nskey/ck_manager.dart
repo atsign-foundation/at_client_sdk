@@ -5,6 +5,8 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/request_options.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/nskey/current_ck_pointer.dart';
+import 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
+import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 
@@ -37,12 +39,26 @@ class CkManager {
   /// record behind each time.
   final CurrentCkPointer? pointer;
 
+  /// Which of a destination's advertised KEM keys this client is willing to
+  /// seal to, strongest first — `AtClientPreference.sealsToKeyAlgorithms`.
+  ///
+  /// Defaulted here, and only here, because a caller building a manager
+  /// without a preference in hand has no basis to choose: everything this
+  /// build can seal under refuses nobody, which is the behaviour a caller that
+  /// said nothing meant. A client passes its preference's list, and a narrowed
+  /// one is the deployment choosing to refuse.
+  final List<String> sealsToKeyAlgorithms;
+
   CkManager(
       {required this.cache,
       required this.keyRing,
       NskeyResolver? resolver,
+      this.sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
       this.pointer = const CurrentCkPointer()})
-      : resolver = resolver ?? NskeyResolver(keyRing);
+      : resolver = resolver ??
+            NskeyResolver(keyRing, sealsToKeyAlgorithms: sealsToKeyAlgorithms);
+
+
 
   /// Ensure `(destination, namespace)` has a current CK sealed to the
   /// destination's *live* nskey generation, minting and conveying one if not.
@@ -71,7 +87,6 @@ class CkManager {
       throw NamespaceKeyUnavailableException(owner, namespace);
     }
     final ckNs = advertised.namespace;
-
     final current = cache.current(owner, ckNs);
     if (current != null &&
         cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid) {

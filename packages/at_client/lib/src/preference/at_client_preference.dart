@@ -108,15 +108,44 @@ class AtClientPreference {
   /// key material rather than chosen.
   final SigningAlgoType authenticationKeyAlgorithm;
 
+  /// The key-establishment algorithms this client will **seal to**, strongest
+  /// first — the sender's side of the choice, defaulted by [posture].
+  ///
+  /// Not to be confused with [keyEstablishmentAlgo], which is what this atSign
+  /// *publishes* for others to seal to. That one is about this atSign's own
+  /// key; this one is about which of a **recipient's** advertised keys this
+  /// client is willing to use.
+  ///
+  /// ⚠️ **Narrowing it is choosing to refuse.** The default names everything
+  /// this build can seal under, so no recipient is turned away by accident.
+  /// Drop an entry and a recipient advertising only that algorithm shares no
+  /// construction with this client: the write is refused rather than
+  /// downgraded, and the two atSigns cannot exchange data at all. A
+  /// FIPS-constrained deployment accepts that; nobody else should.
+  ///
+  /// **Final at construction and held unmodifiable**, like
+  /// [dataSigningKeyAlgorithms] and for the same reason: an app that could
+  /// widen it mid-run would leave "could this client have sealed to that
+  /// recipient?" without an answer, and a list the caller still holds a
+  /// reference to would be a way past the check below.
+  ///
+  /// Naming an algorithm this build cannot seal under is **refused at
+  /// construction**, so a deployment that misspells one finds out where it
+  /// wrote it rather than at the first refused write.
+  final List<String> sealsToKeyAlgorithms;
+
   AtClientPreference(
       {this.posture = PqPosture.legacy,
       SigningAlgoType? authenticationKeyAlgorithm,
-      Set<SigningAlgoType>? dataSigningKeyAlgorithms})
+      Set<SigningAlgoType>? dataSigningKeyAlgorithms,
+      List<String>? sealsToKeyAlgorithms})
       : disallowLegacyEncryption = posture.disallowLegacyEncryption,
         authenticationKeyAlgorithm =
             authenticationKeyAlgorithm ?? posture.authenticationKeyAlgorithm,
         dataSigningKeyAlgorithms = _signableOrRefuse(
-            dataSigningKeyAlgorithms ?? posture.dataSigningKeyAlgorithms) {
+            dataSigningKeyAlgorithms ?? posture.dataSigningKeyAlgorithms),
+        sealsToKeyAlgorithms = _sealableOrRefuse(
+            sealsToKeyAlgorithms ?? posture.sealsToKeyAlgorithms) {
     // Defaulted in the body rather than the initializer list because the field
     // is mutable: an app may still turn seeding on or off after construction,
     // and the posture only decides where it starts.
@@ -172,6 +201,11 @@ class AtClientPreference {
         authenticationKeyAlgorithm.name);
     compare('disallowLegacyEncryption', other.disallowLegacyEncryption,
         disallowLegacyEncryption);
+    // Order is meaning here, unlike the signing set: it decides which of a
+    // recipient's advertised keys is picked, so two lists holding the same
+    // algorithms in a different order are two different clients.
+    compare('sealsToKeyAlgorithms', '${other.sealsToKeyAlgorithms}',
+        '$sealsToKeyAlgorithms');
 
     final asked = other.dataSigningKeyAlgorithms;
     final running = dataSigningKeyAlgorithms;
@@ -185,6 +219,21 @@ class AtClientPreference {
           'running ${spell(running)})');
     }
     return differences;
+  }
+
+  /// [algorithms] unmodifiable, or an [ArgumentError] naming the first member
+  /// this build cannot seal under.
+  ///
+  /// Unmodifiable for the same reason as [_signableOrRefuse]'s set: the check
+  /// runs once, and a list the caller retains would otherwise be a way past it.
+  static List<String> _sealableOrRefuse(List<String> algorithms) {
+    for (final algorithm in algorithms) {
+      if (!SecretSharingAlgos.keyAlgos.contains(algorithm)) {
+        throw ArgumentError.value(algorithm, 'sealsToKeyAlgorithms',
+            'this build seals to ${SecretSharingAlgos.keyAlgos.join(', ')}');
+      }
+    }
+    return List.unmodifiable(algorithms);
   }
 
   /// [algorithms] unmodifiable, or an [ArgumentError] naming the first member
@@ -420,6 +469,21 @@ class AtClientPreference {
 
   /// Which key-establishment algorithm this atSign **mints and advertises** —
   /// an id from [SecretSharingAlgos.keyAlgos].
+  ///
+  /// The receiver's side of the choice. [sealsToKeyAlgorithms] is the sender's:
+  /// this decides what others seal to when they write to this atSign, that
+  /// decides which of *their* advertised keys this client will use.
+  ///
+  /// ⚠️ **Singular, while the advertisement it feeds is already plural.** The
+  /// multi-key reader shipped 2026-08-13 — an advertisement carries
+  /// `keys: [{kid, alg, pub}]` and a holder answers at every kpid it holds —
+  /// but nothing yet mints a second one, so this stays one algorithm. Widening
+  /// it is the writer half of KE-2
+  /// ([#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133),
+  /// with [#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135)
+  /// tracking the singularity): minting a second key, marking the first
+  /// retired, and republishing. A list here before that exists would have
+  /// entries nothing acts on.
   ///
   /// Two options, and the choice is a deployment's rather than a message's:
   ///

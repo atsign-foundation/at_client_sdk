@@ -1,5 +1,6 @@
 import 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_client/src/secret_sharing/algo_ids.dart';
 
 /// How far into the post-quantum rollout a client runs — every rollout axis
 /// set as one value.
@@ -40,6 +41,8 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 ///   explicit [AtClientPreference.crypto] always wins.
 /// - **Whether legacy writes are refused** — [disallowLegacyEncryption].
 /// - **Whether onboarding mints legacy material** — [mintLegacyMaterial].
+/// - **Which key-establishment algorithms this client will seal to** —
+///   [sealsToKeyAlgorithms].
 ///
 /// Two rows of the rollout table are deliberately **not** fields here. A key
 /// package published for secret sharing is a consequence of [keyExchangeMode]
@@ -119,6 +122,29 @@ class PqPosture {
   /// controls every client of its namespaces, can flip it deliberately.
   final bool mintLegacyMaterial;
 
+  /// The key-establishment algorithms this client will seal to, strongest
+  /// first — the **sender's** side of the choice.
+  ///
+  /// Ordering, and only incidentally restriction. A sender picks the first of
+  /// these that the recipient advertises, so the order is a preference over
+  /// what a recipient offers rather than a judgement that one is stronger:
+  /// the two are chosen for different reasons, and which an atSign *publishes*
+  /// is its own configuration, not this.
+  ///
+  /// ⚠️ **Narrowing it is choosing to refuse.** The default is everything this
+  /// build can seal under, so nobody is refused by accident; drop an entry and
+  /// a recipient advertising only that algorithm has no construction in common
+  /// with this client, and the write is refused rather than downgraded. That
+  /// is the point for a deployment under a FIPS-only rule, and it is a real
+  /// cost — the two atSigns then cannot exchange data at all. Which is why the
+  /// default never imposes it.
+  ///
+  /// Identical in all three released stages, deliberately: which KEM is
+  /// acceptable is a **deployment** decision, not a rollout position, so the
+  /// stages have nothing to say about it. It is an axis so a deployment can
+  /// state it in the same place as everything else it states.
+  final List<String> sealsToKeyAlgorithms;
+
   /// A posture no released stage defines.
   ///
   /// Every axis is required: a defaulted one would hide the axes a caller
@@ -132,6 +158,7 @@ class PqPosture {
     required bool writesPqByDefault,
     required bool disallowLegacyEncryption,
     required bool mintLegacyMaterial,
+    required List<String> sealsToKeyAlgorithms,
   }) {
     if (disallowLegacyEncryption && !writesPqByDefault) {
       throw ArgumentError.value(
@@ -148,6 +175,7 @@ class PqPosture {
       writesPqByDefault: writesPqByDefault,
       disallowLegacyEncryption: disallowLegacyEncryption,
       mintLegacyMaterial: mintLegacyMaterial,
+      sealsToKeyAlgorithms: sealsToKeyAlgorithms,
     );
   }
 
@@ -159,6 +187,7 @@ class PqPosture {
     required this.writesPqByDefault,
     required this.disallowLegacyEncryption,
     required this.mintLegacyMaterial,
+    required this.sealsToKeyAlgorithms,
   });
 
   /// The default: classical throughout, and driving no upgrade.
@@ -176,6 +205,7 @@ class PqPosture {
     writesPqByDefault: false,
     disallowLegacyEncryption: false,
     mintLegacyMaterial: true,
+    sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
   );
 
   /// **The credentials move and the data path does not.**
@@ -199,6 +229,7 @@ class PqPosture {
     writesPqByDefault: false,
     disallowLegacyEncryption: false,
     mintLegacyMaterial: true,
+    sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
   );
 
   /// Post-quantum by default: the split is complete and the data path has
@@ -240,5 +271,6 @@ class PqPosture {
     writesPqByDefault: true,
     disallowLegacyEncryption: true,
     mintLegacyMaterial: true,
+    sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
   );
 }

@@ -1,4 +1,25 @@
 ## 3.14.1
+- feat: `AtClientPreference.sealsToKeyAlgorithms` — which of a recipient's
+  advertised KEM keys this client is willing to seal to, strongest first,
+  defaulted from a new `PqPosture` axis and identical in all three stages
+  because which KEM is acceptable is a deployment decision rather than a
+  rollout position.
+  - **Ordering first.** A sender picks the first entry the recipient
+    advertises, which is what `SecretSharingAlgos.keyAlgos` was already doing
+    as a `static const`; the default is that same list, so nobody is refused
+    who was not refused before.
+  - **Narrowing it is choosing to refuse.** Drop an entry and a recipient
+    advertising only that algorithm shares no construction with this client:
+    the write is refused rather than downgraded, and the two atSigns cannot
+    exchange data at all. The refusal names what each side offered, so a
+    FIPS-constrained deployment does not read its own configuration as the
+    recipient having published nothing.
+  - `NskeyResolver` refuses rather than walking up to a broader namespace's
+    key when the level it found offers nothing on the list — walking on would
+    change which namespace scopes the content key, silently, because of a rule
+    this client set.
+  - Naming an algorithm this build cannot seal under is refused at
+    construction, and the list is held unmodifiable.
 - **BREAKING** feat: `disallowLegacyEncryption` is settable only through the
   posture. The `AtClientPreference` constructor argument is removed, which
   overturns ruling 70's "individual flags still win" for this one flag.

@@ -109,6 +109,7 @@ void main() {
         writesPqByDefault: true,
         disallowLegacyEncryption: false,
         mintLegacyMaterial: false,
+        sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
       );
       expect(custom.mintLegacyMaterial, false,
           reason: 'the axis exists so the stop-release can flip it');
@@ -128,6 +129,7 @@ void main() {
                 writesPqByDefault: false,
                 disallowLegacyEncryption: true,
                 mintLegacyMaterial: true,
+                sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
               ),
           throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
               'message', contains('refuses its own writes'))));
@@ -146,6 +148,7 @@ void main() {
             writesPqByDefault: true,
             disallowLegacyEncryption: false,
             mintLegacyMaterial: true,
+            sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
           ).writesPqByDefault,
           true);
     });
@@ -299,6 +302,79 @@ void main() {
       requested.add(SigningAlgoType.ecc_secp256r1);
       expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
       expect(() => preference.dataSigningKeyAlgorithms.add(SigningAlgoType.mldsa65),
+          throwsUnsupportedError);
+    });
+  });
+
+  group('the seal-to list', () {
+    test('every released stage names the same list, as a raw literal', () {
+      // Raw ids rather than SecretSharingAlgos.keyAlgos: reading the value
+      // back through the constant it is defaulted from would follow an edit to
+      // that constant silently, and what a released stage seals to is a claim
+      // about this release. Order is meaning - it decides which of a
+      // recipient's advertised keys is picked.
+      for (final p in [
+        PqPosture.legacy,
+        PqPosture.pqReady,
+        PqPosture.pqActive
+      ]) {
+        expect(p.sealsToKeyAlgorithms, ['x-wing', 'ml-kem-1024']);
+      }
+    });
+
+    test('the stages agree because it is a deployment choice, not a stage', () {
+      // Ruling 50.3, restated as an assertion: which KEM an atSign will use is
+      // where it is deployed, not how far through the rollout it is. If a
+      // future stage ever differs here, that ruling moved and this row is the
+      // place it has to be argued.
+      expect(PqPosture.pqActive.sealsToKeyAlgorithms,
+          PqPosture.legacy.sealsToKeyAlgorithms);
+    });
+
+    test('narrowing it is honoured, and is the only way to refuse a peer', () {
+      final fipsOnly = AtClientPreference(
+          sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]);
+
+      expect(fipsOnly.sealsToKeyAlgorithms, [SecretSharingAlgos.mlKem1024]);
+      // The default refuses nobody, which is what makes narrowing a decision
+      // rather than an accident.
+      expect(AtClientPreference().sealsToKeyAlgorithms,
+          containsAll([SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]));
+    });
+
+    test('reordering it is a different client, not an equal one', () {
+      // Unlike the signing set, where membership is the whole meaning. Here
+      // the order decides which of two advertised keys a sender picks, so two
+      // lists holding the same ids in a different order behave differently.
+      final strongestFirst = AtClientPreference();
+      final reversed = AtClientPreference(
+          sealsToKeyAlgorithms:
+              strongestFirst.sealsToKeyAlgorithms.reversed.toList());
+
+      expect(strongestFirst.rolloutDifferencesFrom(reversed),
+          [contains('sealsToKeyAlgorithms')]);
+    });
+
+    test('an algorithm this build cannot seal under is refused', () {
+      // At construction, where the deployment wrote it - not at the first
+      // write to a peer, by which time the misspelling looks like the peer's
+      // advertisement being wrong.
+      expect(
+          () => AtClientPreference(sealsToKeyAlgorithms: const ['ml-kem-768']),
+          throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
+              'message', contains('x-wing, ml-kem-1024'))));
+    });
+
+    test('the list a caller keeps cannot be added to afterwards', () {
+      final requested = <String>[SecretSharingAlgos.mlKem1024];
+      final preference =
+          AtClientPreference(sealsToKeyAlgorithms: requested);
+      requested.add(SecretSharingAlgos.xWing);
+
+      expect(preference.sealsToKeyAlgorithms, [SecretSharingAlgos.mlKem1024],
+          reason: 'the check runs once, so a list the caller still holds a '
+              'reference to would be a way past it');
+      expect(() => preference.sealsToKeyAlgorithms.add(SecretSharingAlgos.xWing),
           throwsUnsupportedError);
     });
   });

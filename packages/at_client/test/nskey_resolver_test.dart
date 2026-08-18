@@ -33,6 +33,59 @@ void main() {
     );
   }
 
+  group('what this client is willing to seal to', () {
+    test('the default reaches an owner advertising either KEM', () async {
+      // The control for the row below: with the full list this same owner
+      // resolves, so the refusal there is the narrowing and nothing else.
+      final r = resolver();
+      r.ring.seedPublicOnly(alice, 'todos',
+          publicKey: todosKey.publicKeyBytes);
+
+      expect((await r.resolver.resolve(alice, 'todos'))?.alg,
+          SecretSharingAlgos.xWing);
+    });
+
+    test('a narrowed list refuses, and the message names both sides', () async {
+      // The refusal a FIPS-only deployment asked for. It must not read as a
+      // cold start: the owner published a perfectly good key, and it is this
+      // client's own rule that will not use it.
+      final ring = _CountingRing();
+      final narrowed = NskeyResolver(ring,
+          sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]);
+      ring.seedPublicOnly(alice, 'todos',
+          publicKey: todosKey.publicKeyBytes);
+
+      await expectLater(
+          narrowed.resolve(alice, 'todos'),
+          throwsA(isA<AtEncryptionException>().having(
+              (e) => e.message, 'message',
+              allOf(
+                  contains(SecretSharingAlgos.xWing),
+                  contains(SecretSharingAlgos.mlKem1024),
+                  contains('sealsToKeyAlgorithms')))));
+    });
+
+    test('it refuses rather than walking up to a broader namespace', () async {
+      // Walking on would seal under a DIFFERENT namespace's key — another
+      // content-key scope than the caller asked for — arrived at silently
+      // because of a rule this client set. The parent key here is one the
+      // narrowed client would happily use, so only the refusal tells the two
+      // designs apart.
+      final ring = _CountingRing();
+      final narrowed = NskeyResolver(ring,
+          sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]);
+      ring.seedPublicOnly(alice, 'notes',
+          publicKey: deepKey.publicKeyBytes);
+      ring.seedPublicOnly(alice, 'medical.notes',
+          publicKey: todosKey.publicKeyBytes);
+
+      await expectLater(narrowed.resolve(alice, 'medical.notes'),
+          throwsA(isA<AtEncryptionException>()),
+          reason: 'the deeper level was the hit, and a hit this client will '
+              'not use is a refusal rather than a reason to keep walking');
+    });
+  });
+
   group('candidates', () {
     test('yields every level, most specific first', () {
       expect(NskeyResolver.candidates('d.c.b.a').toList(),
