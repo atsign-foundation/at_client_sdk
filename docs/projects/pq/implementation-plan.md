@@ -43,7 +43,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
-| [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv`, three B-1 residuals, three small S-3 items — none blocking | — |
+| [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.37](#1437-retire-the-0x01-seal-version) | Retire `pqSeal` version `0x01` — two commits, in order | Nothing. [Ruling 110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18) settled it; only the order is constrained |
 
 ### 14.37 Retire the `0x01` seal version
@@ -616,8 +616,9 @@ would pin it on the serialisation.
 
 ### 14.29 The residuals 14.25 surfaced
 
-Three project entries owe work that the D1 burn-down never listed, found
-2026-08-16 by reading all nine against the tree ([14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)).
+**Two** project entries owe work the D1 burn-down never listed — it was three
+until 2026-08-18, when B-1's pair turned out to have shipped. Found 2026-08-16
+by reading all nine against the tree ([14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)).
 They are collected here because a residual left inside a project entry is
 invisible to anyone working the TODO table.
 
@@ -625,24 +626,46 @@ invisible to anyone working the TODO table.
   at all, so DEP4's update-put auto-notify is unbuilt. ⚠️ Needs parity across
   every atServer implementation in the same sweep. Re-derive:
   `git -C ~/dev/atsign/repos/at_server grep -n "__ssenv"` (zero today).
-- **B-1 — two left.** Everything beyond envelope delivery
-  (`pushSecretToNames…`); and UC-A3.4's self direction, owed rather than
-  blocked since `ConcurrentClients` landed
+- **B-1 — none left of the two.** ✅ Both closed since, and re-verified
+  2026-08-18. This bullet used to read *"two left: everything beyond envelope
+  delivery (`pushSecretToNames…`); and UC-A3.4's self direction, owed rather
+  than blocked since `ConcurrentClients` landed"*
   ([#2093](https://github.com/atsign-foundation/at_client_sdk/issues/2093)).
+  UC-A3.4's self direction is built and **live-green** —
+  `nskey_self_notify_live_test.dart`, "a self notification reaches a second
+  enrollment and decrypts", passing in the functional pack. The substrate's
+  pull flow is driven live by `nskey_park_and_redrive_live_test.dart` and
+  `signing_root_pull_two_enrollments_test.dart`, and **eight** functional
+  files now run two real enrollments — so the "waits on SS-2" clause on the
+  live-coverage row was wrong as well as the count: two enrollments never
+  needed `__ssenv`.
   ✅ **The fixture blind spot is closed** (2026-08-16):
   `buildRemoteBackedMockClient` takes an optional `localData`, and with it a
   local-first read of a key only the atServer holds misses instead of
   succeeding. Opt-in, because the nine callers that predate it specify the
   single-store default.
-- **S-3 — three, all small.** A migration test on a v(N-1) fixture; a keychain
-  round-trip on a real device, **blocked** because this repo has no
-  `integration_test` harness and at_client_flutter's tests mock the platform
-  channel; and `LocalKeystoreAtKeysIo`, still "not needed at this time".
+- **S-3 — two, both small.** This said **three**; the migration test exists.
+  `at_keys_test.dart` covers the only N-1 there is — `AtKeys.supportedVersion`
+  is still `1`, so the predecessor is the unversioned legacy document, and it
+  is pinned three ways: legacy fallback on a versionless file, no version
+  stamped onto a file that gained only an atsign, and a field-for-field
+  round trip. What remains: a keychain round-trip on a real device,
+  **blocked** because this repo has no `integration_test` harness and
+  at_client_flutter's tests mock the platform channel; and
+  `LocalKeystoreAtKeysIo`, still "not needed at this time" — named in four
+  docs and in no source file.
 
 ⚠️ **None of these blocks D1's remaining sequence**, which is why they were
 survivable as residuals. The B-1 fixture item was the one with teeth — a fake
 that cannot distinguish local from remote is exactly the shape that let the
 nskey mint read local storage — and it is now closed.
+
+**Re-read against the tree 2026-08-18**, two days after they were written, and
+**three of the six had shipped without anything striking them.** Only SS-2
+survives intact: `git -C ~/dev/atsign/repos/at_server grep -c "__ssenv"` still
+matches nothing, with a positive control run to prove the grep reaches the
+repo. That ratio is the finding — a residual parked inside a project entry
+falsifies quietly, because the work that closes it is filed somewhere else.
 
 ### 14.18 The remaining D1 initial-development sequence
 
@@ -1382,7 +1405,7 @@ measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state
 | 14.30  | A notification that outruns its key is parked and re-driven | DONE 2026-08-17 — ruling [106.5](detail/decisions.md#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17); proven live end to end (parked → asked → answered → filed → re-driven → decrypted). Three further defects fixed on the way, all invisible to unit tests. Body: [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it) |
 | 14.32  | An in-process `_apsk` write no longer clobbers a just-minted advertisement | DONE 2026-08-17 — ruling [102.2](detail/decisions.md#1022-the-in-process-window-is-closed-by-serialising-the-writers-2026-08-17); proven live, `_apsk.primary` ends on the mldsa65 array where it ended on bare RSA. Body: [14.32](#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers) |
 | 14.31  | A `local:` record is not encrypted, and the legacy refusal exempts it | DONE 2026-08-17 — six related defects, not one; the listener no longer dies from a refused watermark. Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17). Body: [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor) |
-| 14.25  | Nine project entries reconciled against the tree | DONE 2026-08-16 — burn-down right about 4, headings stale for SS-1c and SS-4, real residuals in SS-2/B-1/S-3 (now [14.29](#1429-the-residuals-1425-surfaced)). Detail: [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
+| 14.25  | Nine project entries reconciled against the tree | DONE 2026-08-16 — burn-down right about 4, headings stale for SS-1c and SS-4, real residuals in SS-2/B-1/S-3 (now [14.29](#1429-the-residuals-1425-surfaced)). ⚠️ Re-read 2026-08-18: **B-1's are gone** and S-3 is down to two, so what this row surfaced was two-thirds transient. Detail: [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
 | 14.28  | Live PQ proofs that no use case names | DONE 2026-08-16 — 9 uncited PQ live files ruled on: 5 became UC-B5.8–B5.12, 4 were already covered. Detail: [14.28](detail/implementation-plan.md#1428-live-pq-proofs-that-no-use-case-names) |
 | 14.27  | The ledger's append-only rot, corrected | DONE 2026-08-16 — 11 rulings amended in the body and LIVE in the index, both citation debts discharged, and a test now asserts each. Detail: [14.27](detail/implementation-plan.md#1427-the-ledgers-remaining-append-only-rot) |
 | 14.24  | The nskey mint elects a winner; the lock became an election token with a cooldown | DONE 2026-08-16 — seven rows, proven live at functional **166/166 `EXIT=0`**. Detail: [14.24](detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) |
