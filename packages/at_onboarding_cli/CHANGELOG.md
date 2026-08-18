@@ -1,6 +1,7 @@
 ## 1.17.0
 - feat: `AtOnboardingPreference` takes the flags `AtClientPreference` fixes at
-  construction — `posture`, `disallowLegacyEncryption`, `signingRollout` and
+  construction — `posture`, `disallowLegacyEncryption`,
+  `authenticationKeyAlgorithm` and
   `dataSigningKeyAlgorithms`. It declared no constructor, and those fields are
   final in the superclass, so a CLI application could neither pass them nor
   assign them afterwards: the whole fleet ran on the defaults with no way off

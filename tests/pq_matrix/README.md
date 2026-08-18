@@ -15,7 +15,7 @@ the layout is ruled in [`decisions.md` 96](../../docs/projects/pq/detail/decisio
 | Package | Resolves at_client | Serves stages |
 |---------|--------------------|---------------|
 | `scenario/` | whichever arm consumes it | — (library) |
-| `current/`  | `../../../packages/at_client` by path | `now`, `rollout1`, `rollout2` |
+| `current/`  | `../../../packages/at_client` by path | `legacy`, `pqReady`, `pqActive` |
 | `published/`| hosted **3.14.0**, lockfile committed | `published` |
 
 **None of the three is a workspace member.** `packages/at_client` is in the
@@ -39,13 +39,14 @@ it cannot reach for anything 3.14.0 lacks.
 Exactly two things are arm-specific, and both are arguments the shared code
 takes rather than code it contains:
 
-1. **The preference.** `current/` maps the stage name to a `SigningRollout`.
+1. **The preference.** `current/` maps the stage name to a `PqPosture` and
+   takes its two key axes.
    `published/` cannot: 3.14.0 has no such type, which is precisely what makes
    it a measurement of the released build rather than a simulation of one.
 2. **The attach.** `current/` supplies an `AtKeysIo`; 3.14.0's
    `setCurrentAtSign` has no parameter for one. This looks cosmetic and is not
    — `SigningKeyMinting` is inert for a client with no key source, so a
-   `rollout2` arm attached without one would mint nothing, publish nothing, and
+   `pqActive` arm attached without one would mint nothing, publish nothing, and
    pass every cell while measuring an inert client.
 
 That boundary is the point. Two hand-written programs differ for two possible
@@ -57,7 +58,7 @@ those apart. One scenario removes the second reason.
 The 4×4 is over the **data path**: a real notification, multiple puts and gets.
 All sixteen cells pass.
 
-The **signed-envelope** exchange is a `now`/`rollout1`/`rollout2` 3×3, built
+The **signed-envelope** exchange is a `legacy`/`pqReady`/`pqActive` 3×3, built
 2026-08-18 and riding the nine cells where both halves are this tree. It is a
 3×3 rather than a fourth row and column because a released client and this tree
 cannot exchange an envelope in either direction, under any stage — measured,
@@ -77,7 +78,7 @@ sender's notification, after the receiver's reads — because that ordering is a
 property of the sequence, not of either arm.
 
 ⚠️ **The grid's nine cells are not what proves the stages differ.** Mutating
-`rollout2` to resolve as `rollout1` leaves all nine passing, because a sender
+`pqActive` to resolve as `pqReady` leaves all nine passing, because a sender
 signing RSA-2048 verifies everywhere too. The algorithm assertion is the one
 that discriminates, and a change here that drops it would leave a grid that
 passes for an inert harness.
@@ -93,7 +94,7 @@ cd ../current && dart pub get
 
 # receiver, then sender, against a running virtualenv
 dart run current/bin/receiver.dart \
-  --stage rollout2 --atsign '@bob🛠' --peer '@alice🛠' \
+  --stage pqActive --atsign '@bob🛠' --peer '@alice🛠' \
   --run-id abc123 --storage /tmp/pqm/bob
 
 dart run published/bin/sender.dart \

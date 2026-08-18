@@ -7330,7 +7330,7 @@ carries the release default for the app that builds the request — `legacy`
 in 3.x, `pq` under `postQuantum()` — which is exactly the Workstream A
 table, and exactly what the field's own dartdoc already described.
 
-One imprecision fixed with it: `PqPosture.postQuantum()`'s summary read
+One imprecision fixed with it: `PqPosture.pqActive`'s summary read
 "enrollments exchange their symmetric key post-quantum" alongside four
 things the posture really does apply by itself. It now says that this one
 takes effect when the app builds its request from the value — the same
@@ -8965,7 +8965,7 @@ Two shapes the build settled that the ruling did not state:
 - **The posture is compared by what it MEANS**, not as an object.
   `PqPosture` declares no `==`, so comparing two of them is an identity
   test, and only `const` instances are canonicalized: a caller writing
-  `PqPosture.migration()` without `const` would be refused over a
+  `PqPosture.legacy` without `const` would be refused over a
   difference that does not exist. What is compared is the two posture fields
   nothing else carries — `writesPqByDefault` and `keyExchangeMode` — beside the
   three effective axes, which is the whole of what a posture can change.

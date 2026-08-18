@@ -46,14 +46,15 @@ class AtClientPreference {
   /// this flag.
   final bool disallowLegacyEncryption;
 
-  /// The post-quantum rollout posture this client runs under — the five
-  /// rollout flags set as a group. Defaults to [PqPosture.migration],
-  /// the 3.x posture; pass [PqPosture.postQuantum] to run the 4.0
-  /// defaults today.
+  /// How far into the post-quantum rollout this client runs — every rollout
+  /// axis set as a group. Defaults to [PqPosture.legacy]; pass
+  /// [PqPosture.pqReady] or [PqPosture.pqActive] to run a later stage today,
+  /// or a posture of your own for a combination none of them expresses.
   ///
-  /// Individual flags still win: an explicit [disallowLegacyEncryption] or
-  /// [dataSigningKeyAlgorithms] argument, an assigned [crypto], or a per-call
-  /// algorithm each override the posture's value for that one axis.
+  /// Individual axes still win: an explicit [disallowLegacyEncryption],
+  /// [authenticationKeyAlgorithm] or [dataSigningKeyAlgorithms] argument, an
+  /// assigned [crypto], or a per-call algorithm each override the posture's
+  /// value for that one axis.
   ///
   /// Final at construction, like [disallowLegacyEncryption] and for the same
   /// reason: what a client writes must not change meaning mid-run. A client
@@ -88,32 +89,36 @@ class AtClientPreference {
   /// in is the strongest-first order the keyfile is read in, never this one.
   final Set<SigningAlgoType> dataSigningKeyAlgorithms;
 
-  /// Where this client stands in the rollout that separates an enrollment's
-  /// signing keys from its APKAM authentication key — a **position**, and the
-  /// source of [dataSigningKeyAlgorithms]' default.
+  /// The algorithm this client's APKAM **authentication** key is minted under
+  /// when a retrofit names none — the key that proves possession on a
+  /// connection, which only the atServer verifies.
   ///
-  /// [SigningRollout.rollout1] is the value a deployment sets here rather than
-  /// on the posture: it says the fleet's readers have upgraded, which no client
-  /// can observe for itself, and it changes nothing this client writes.
+  /// Not to be confused with [dataSigningKeyAlgorithms], which is what the
+  /// enrollment signs *content* with and which every peer verifies. The two
+  /// keys have different audiences and move on different schedules, which is
+  /// why they are two axes rather than one stage name.
   ///
-  /// **When both this and [dataSigningKeyAlgorithms] are given explicitly, the
-  /// set is what the client obeys.** Only the stage's default reaches
-  /// behaviour, so naming both is naming a mixture on purpose — the same
-  /// contract every other axis has, where an explicitly set flag beats the
-  /// group it came from.
-  final SigningRollout signingRollout;
+  /// Not to be confused with [signingAlgoType] either: that is the algorithm
+  /// of the authentication key this client actually holds, resolved from the
+  /// key material rather than chosen.
+  final SigningAlgoType authenticationKeyAlgorithm;
 
   AtClientPreference(
-      {this.posture = const PqPosture.migration(),
+      {this.posture = PqPosture.legacy,
       bool? disallowLegacyEncryption,
-      SigningRollout? signingRollout,
+      SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms})
       : disallowLegacyEncryption =
             disallowLegacyEncryption ?? posture.disallowLegacyEncryption,
-        signingRollout = signingRollout ?? posture.signingRollout,
-        dataSigningKeyAlgorithms = _signableOrRefuse(dataSigningKeyAlgorithms ??
-            (signingRollout ?? posture.signingRollout)
-                .defaultDataSigningKeyAlgorithms);
+        authenticationKeyAlgorithm =
+            authenticationKeyAlgorithm ?? posture.authenticationKeyAlgorithm,
+        dataSigningKeyAlgorithms = _signableOrRefuse(
+            dataSigningKeyAlgorithms ?? posture.dataSigningKeyAlgorithms) {
+    // Defaulted in the body rather than the initializer list because the field
+    // is mutable: an app may still turn seeding on or off after construction,
+    // and the posture only decides where it starts.
+    seedNamespaceKeys = posture.seedNamespaceKeys;
+  }
 
   /// Where [other] would change what a **running** client does — one line per
   /// differing axis, empty when the two are interchangeable.
@@ -134,12 +139,15 @@ class AtClientPreference {
   /// ⚠️ **The posture is compared by what it MEANS, not as an object**, for
   /// the same reason one step further down: [PqPosture] declares no `==`,
   /// so comparing two of them is an identity test, and a caller writing
-  /// `PqPosture.migration()` without `const` gets an instance that is not
+  /// `PqPosture.legacy` without `const` gets an instance that is not
   /// the canonical one. Two behaviourally identical postures would then read as
   /// a mismatch. What is compared is the pair of posture fields nothing else
   /// carries — [PqPosture.writesPqByDefault] and
   /// [PqPosture.keyExchangeMode] — beside the three effective axes, which
   /// is the whole of what a posture can change.
+  ///
+  /// [seedNamespaceKeys] is not compared: it is mutable, so it was never one
+  /// of the axes fixed at construction that this refusal exists to protect.
   ///
   /// [crypto] is deliberately **not** here: it is adopted from the incoming
   /// preference rather than refused, so that a provider registered after first
@@ -157,7 +165,8 @@ class AtClientPreference {
         posture.writesPqByDefault);
     compare('posture.keyExchangeMode', other.posture.keyExchangeMode.name,
         posture.keyExchangeMode.name);
-    compare('signingRollout', other.signingRollout.name, signingRollout.name);
+    compare('authenticationKeyAlgorithm', other.authenticationKeyAlgorithm.name,
+        authenticationKeyAlgorithm.name);
     compare('disallowLegacyEncryption', other.disallowLegacyEncryption,
         disallowLegacyEncryption);
 
@@ -399,9 +408,11 @@ class AtClientPreference {
   /// everywhere; gating it on the PQ path being active would seed nothing
   /// until the very moment seeding stopped being useful.
   ///
-  /// Off by default while the data path is experimental — minting publishes a
-  /// permanent, discoverable record on the atSign, which is not something to
-  /// start doing behind an app's back.
+  /// **Defaulted from [posture]** — false under [PqPosture.legacy], true from
+  /// [PqPosture.pqReady] on — and assignable afterwards, unlike the axes fixed
+  /// at construction. Minting publishes a permanent, discoverable record on
+  /// the atSign, which is why the default stage does not start doing it behind
+  /// an app's back.
   bool seedNamespaceKeys = false;
 
   /// Which key-establishment algorithm this atSign **mints and advertises** —

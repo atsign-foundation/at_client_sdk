@@ -256,7 +256,7 @@ class CryptoConfig {
   /// The era default is chosen by the client's `PqPosture` at
   /// construction — [CryptoConfig.readsNskeyWritesLegacy] under the
   /// migration posture (the 3.x default), [CryptoConfig.nskey] under
-  /// `PqPosture.postQuantum` — built once per client, adopted by
+  /// `PqPosture.pqActive` — built once per client, adopted by
   /// [adoptEraDefault], and looked up here. Moving the fleet default is
   /// therefore an edit to the default posture and nowhere else. It stopped
   /// being a constant because the nskey providers hold per-atSign state

@@ -11,8 +11,8 @@
 > does rather than what it was about to do:
 >
 > ```bash
-> # 98: the rollout axis and what each stage keeps active
-> sed -n '/enum SigningRollout/,/^}/p' \
+> # 98: the rollout axes and what each stage keeps active
+> sed -n '/^class PqPosture/,/^}/p' \
 >   packages/at_client/lib/src/preference/pq_posture.dart
 > # 99: material grouped by enrollment, the atSign's own keys outside it
 > git grep -n "_enrollments\|atSignKeys\|'atsignKeys'" \
@@ -631,7 +631,7 @@ keypair, its own namespaces. Apps migrate independently and never have to agree.
    to**, implicitly by riding the 4.x default, or explicitly by naming a
    `crypto` config — or, since
    [`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10),
-   by building its preference with `PqPosture.postQuantum()`, which runs
+   by building its preference with `PqPosture.pqActive`, which runs
    the 4.0 flag defaults (era config, `disallowLegacyEncryption`, pq enrollment
    key exchange, ML-DSA retrofits) on a 3.x build. It carried a fifth, the JWS
    envelope wrapper, until
@@ -2259,11 +2259,11 @@ Three separate things, deliberately in three places:
 |-------|-------|-----------|
 | Strength order | at_chops, beside `SigningAlgoType` | A protocol fact every implementation must agree on, including the atServer |
 | Verifiable set | derived from what the at_chops build implements | A build cannot claim an algorithm it cannot run |
-| In-use-for-signing set | `AtClientPreference.dataSigningKeyAlgorithms`, defaulted by `PqPosture` | A rollout decision, which is what posture carries |
+| Data signing set | `AtClientPreference.dataSigningKeyAlgorithms`, defaulted by `PqPosture` | A rollout decision, which is what posture carries |
 
 The in-use set is a `Set<SigningAlgoType>`, final at construction and
-unmodifiable, defaulting to `{}` under `PqPosture.migration()` and
-`{mldsa65}` under `PqPosture.postQuantum()`. Empty is not "unsigned": an
+unmodifiable, defaulting to `{}` under `PqPosture.legacy` and
+`{mldsa65}` under `PqPosture.pqActive`. Empty is not "unsigned": an
 enrollment with no signing key of its own signs with its APKAM authentication
 key, and that is the key `_apsk` advertises for exactly as long as it is the
 signer. It is **not** retained once the enrollment holds signing keys
@@ -2333,16 +2333,19 @@ separate signing keys, publish the array, emit multi-signature envelopes. A
 build doing any one without the others emits something the fleet cannot handle,
 so they do not get independent flags.
 
-**Rollout 1 is a writer position**, not a reader-only one: the enrollment
+**`pqReady` is a writer position**, not a reader-only one: the enrollment
 authenticates with ML-DSA-65 and owns a fresh RSA-2048 signing key from before
 it submits, and that signing key is what `_apsk` advertises. A reader needs no
 gate — which is why the *advertisement* stays the bare string an un-upgraded
 peer parses — but the key it names changes, and the stage carries an atServer
-dependency (ML-DSA PKAM) that `now` does not.
+dependency (ML-DSA PKAM) that `legacy` does not.
 
-**The axis is `SigningRollout`,** on `PqPosture.signingRollout` and
-overridable per `AtClientPreference`. It names a position — `now`, `rollout1`,
-`rollout2` — rather than the mechanism it switches.
+**The axes are `PqPosture.authenticationKeyAlgorithm` and
+`PqPosture.dataSigningKeyAlgorithms`,** each overridable per
+`AtClientPreference`. They were one enum, `SigningRollout`, until
+[ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
+split them: the enum stated both facts by implication, and its name said
+"signing" for the one of them that means *authentication*.
 
 It turned out the three behaviours are inseparable *by construction*, which is
 stronger than the paragraph above asked for. Only the first is a decision: the
@@ -2350,11 +2353,8 @@ array form and the second signature are both consequences of the enrollment
 holding a second key (`apskValueOf` emits the bare string only for a single
 active `rsa2048` entry, and `wrapAndSign` signs with every *active* signing key
 the keyfile holds for the enrollment — retired keys are advertised, not signed
-with). So the stage does not switch three flags — it names the position, and
-supplies the default for the one piece of state all three read,
-`AtClientPreference.dataSigningKeyAlgorithms`. The posture derives that set from
-the stage rather than storing both, because two stored fields are two controls
-over one behaviour.
+with). So the posture does not switch three flags — it supplies the default for the
+one piece of state all three read, `AtClientPreference.dataSigningKeyAlgorithms`.
 
 **The ladder swaps; it never overlaps** ([`decisions.md`
 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)).
@@ -2363,17 +2363,16 @@ Each stage's default set holds at most one algorithm — `{}`, `{rsa2048}`,
 `wrapAndSign`'s "all of them rather than the strongest" is a capability an
 application reaches by passing an explicit two-member set, not a position on
 the ladder. It is safe to swap because *reading* is not staged: a client at
-`rollout1` verifies a `rollout2` peer's `mldsa65` envelope perfectly well, so
+`pqReady` verifies a `pqActive` peer's `mldsa65` envelope perfectly well, so
 there is no verifier an overlap would rescue. What a swap does not lose is
 history — the retired key stays advertised, which is what keeps envelopes
 signed before the swap verifiable.
 
-`rollout1` mints an **ML-DSA-65 authentication** keypair and a fresh
+`pqReady` mints an **ML-DSA-65 authentication** keypair and a fresh
 **RSA-2048 signing** keypair, and `_apsk` advertises the *signing* key. So it
-writes something `now` does not, and carries an atServer dependency (ML-DSA
-PKAM) that `now` does not.
+writes something `legacy` does not, and carries an atServer dependency (ML-DSA
+PKAM) that `legacy` does not.
 
 What the stage also carries is the *fleet's* position — the peers' readers have
 upgraded — which no client can observe for itself, and which is the
-precondition for anyone moving to `rollout2`. It is reachable only through
-`AtClientPreference`, since there are two postures and no general constructor.
+precondition for anyone moving to `pqActive`.

@@ -7,8 +7,8 @@ class AtOnboardingPreference extends AtClientPreference {
   /// Forwards every flag `AtClientPreference` fixes at construction.
   ///
   /// Without this the class inherited the implicit no-arg constructor, and
-  /// since `posture`, `disallowLegacyEncryption`, `signingRollout` and
-  /// `dataSigningKeyAlgorithms` are all final in the superclass, **no CLI
+  /// since `posture`, `disallowLegacyEncryption`, `authenticationKeyAlgorithm`
+  /// and `dataSigningKeyAlgorithms` are all final in the superclass, **no CLI
   /// application could set any of them** — not by assignment afterwards, which
   /// the finality forbids, and not at construction, which took no arguments.
   /// They are final for a reason worth keeping: what a client writes must not
@@ -25,7 +25,7 @@ class AtOnboardingPreference extends AtClientPreference {
   AtOnboardingPreference({
     super.posture,
     super.disallowLegacyEncryption,
-    super.signingRollout,
+    super.authenticationKeyAlgorithm,
     super.dataSigningKeyAlgorithms,
   });
 

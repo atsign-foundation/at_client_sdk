@@ -21,13 +21,13 @@ import 'package:pq_matrix_scenario/pq_matrix_scenario.dart' show ExchangeSpec;
 /// This arm only. The published arm cannot compile any of it: 3.14.0's
 /// `wrapAndSign` returns a `Map<String, Object?>` where this tree's returns a
 /// `SignedEnvelope`, and 3.14.0 ships no `lib/src/signing/` at all — which is
-/// also why the envelope grid is a `now`/`rollout1`/`rollout2` 3×3 rather than
+/// also why the envelope grid is a `legacy`/`pqReady`/`pqActive` 3×3 rather than
 /// a fourth row and column of the data-path matrix.
 ///
 /// What the grid is for: under
 /// `docs/projects/pq/detail/decisions.md` 108 the rollout ladder **swaps**
-/// algorithms rather than overlapping them, so a `rollout2` sender emits an
-/// ML-DSA-65 signature alone and a `rollout1` receiver — which signs RSA-2048 —
+/// algorithms rather than overlapping them, so a `pqActive` sender emits an
+/// ML-DSA-65 signature alone and a `pqReady` receiver — which signs RSA-2048 —
 /// must still verify it. That is a claim about an ungated verifier, and this is
 /// the measurement that settles it.
 
@@ -55,7 +55,7 @@ AtKey _envelopeKey(ExchangeSpec spec,
 /// A grid whose cells only assert "verified" passes just as well for a harness
 /// where no stage does anything — which is how the previous version of this
 /// matrix came to assert a property no cell exercised. The driver compares
-/// these across stages, so a `rollout2` cell that quietly signed RSA-2048
+/// these across stages, so a `pqActive` cell that quietly signed RSA-2048
 /// fails on the algorithm before anything gets as far as verifying.
 Future<Map<String, Object?>?> signEnvelopeForPeer(
     AtClient client, ExchangeSpec spec) async {

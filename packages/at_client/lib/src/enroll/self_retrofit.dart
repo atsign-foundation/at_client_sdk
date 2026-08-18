@@ -74,13 +74,13 @@ final _logger = AtSignLogger('selfRetrofit');
 /// against a released atServer, so the name stays and this says what it does.
 ///
 /// A per-operation parameter rather than a preference. When the caller names
-/// none, [AtClientPreference.signingRollout] decides via
-/// [SigningRollout.defaultRetrofitAuthenticationAlgo]: `rsa2048` at
-/// [SigningRollout.now], `mldsa65` at `rollout1` and `rollout2`.
+/// none, [AtClientPreference.authenticationKeyAlgorithm] decides: `rsa2048`
+/// under [PqPosture.legacy], `mldsa65` under [PqPosture.pqReady] and
+/// [PqPosture.pqActive].
 ///
-/// ⚠️ **The preference's stage, not the posture's.** An app may set
-/// `signingRollout` beside a posture, and the preference's value is then where
-/// the client stands.
+/// ⚠️ **The preference's value, not the posture's.** An app may set
+/// `authenticationKeyAlgorithm` beside a posture, and the preference's value is
+/// then what this client mints under.
 ///
 /// A fully privileged `rsa2048` retrofit still files an ML-DSA-65
 /// `pq_signing_root`: the root is the **atSign's**, not this enrollment's, and
@@ -109,12 +109,11 @@ Future<AtClientManager> selfRetrofit({
         'the self-retrofit submits on the session\'s authenticated AtLookUp');
   }
 
-  // The preference's stage, not the posture's. An app may set
-  // `signingRollout` beside a posture, and then that value is where the client
-  // actually stands — reading `posture.signingRollout` here would retrofit a
-  // rollout-1 client under `now`'s algorithm and never say so.
-  final algo =
-      signingAlgo ?? preference.signingRollout.defaultRetrofitAuthenticationAlgo;
+  // The preference's value, not the posture's. An app may set
+  // `authenticationKeyAlgorithm` beside a posture, and then that value is what
+  // the client mints under — reading `posture.authenticationKeyAlgorithm` here
+  // would retrofit under the posture's algorithm and never say so.
+  final algo = signingAlgo ?? preference.authenticationKeyAlgorithm;
 
   // Minted here, before the request, because the enrollment must own it from
   // its first byte: `_apsk` advertises this key and the key package is signed
@@ -126,7 +125,7 @@ Future<AtClientManager> selfRetrofit({
   // upgrade, and a single active rsa2048 entry is the one `_apsk` spelling
   // every deployed reader parses. Moving the signing key to ML-DSA is a later
   // stage, which retires this one rather than skipping it.
-  final advertisedSigningKey = preference.signingRollout.mintsOwnSigningKey
+  final advertisedSigningKey = preference.dataSigningKeyAlgorithms.isNotEmpty
       ? _freshRsaSigningKey()
       : null;
 

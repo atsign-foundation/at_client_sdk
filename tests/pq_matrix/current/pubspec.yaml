@@ -2,7 +2,7 @@ name: pq_matrix_current
 publish_to: none
 description: >-
   The rollout matrix's stage-parameterised arm: this tree's at_client, driven
-  through now / rollout1 / rollout2.
+  through legacy / pqReady / pqActive.
 version: 1.0.0
 
 # Deliberately NOT a workspace member. It resolves the workspace packages by

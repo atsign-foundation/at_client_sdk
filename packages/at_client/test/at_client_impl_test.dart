@@ -420,7 +420,7 @@ void main() {
               'the preference still holds the untouched marker');
     });
 
-    test('the migration posture keeps writes legacy in the adopted era set',
+    test('the legacy posture keeps writes legacy in the adopted era set',
         () async {
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
@@ -441,10 +441,10 @@ void main() {
           reason: 'reading PQ records is unconditional in every posture');
     });
 
-    test('the postQuantum posture makes PQ writes the adopted era default',
+    test('the pqActive posture makes PQ writes the adopted era default',
         () async {
       AtClientPreference preferences =
-          AtClientPreference(posture: const PqPosture.postQuantum())
+          AtClientPreference(posture: PqPosture.pqActive)
             ..hiveStoragePath = 'test/hive'
             ..commitLogPath = 'test/hive/path';
       AtChops chops = AtChopsImpl(mockAtChopsKeys);

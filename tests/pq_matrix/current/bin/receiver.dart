@@ -9,7 +9,7 @@ import 'package:pq_matrix_scenario/pq_matrix_scenario.dart';
 Future<void> main(List<String> args) => runArm(
       args,
       role: Role.receiver,
-      stages: const {'now', 'rollout1', 'rollout2'},
+      stages: const {'legacy', 'pqReady', 'pqActive'},
       preferenceFor: currentPreference,
       attach: attachWithKeyfile,
       // Verifies the peer's envelope after the data-path reads, so a

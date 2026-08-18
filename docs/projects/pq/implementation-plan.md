@@ -360,7 +360,7 @@ retries with backoff — **forever**. The client is silently deaf. The same
 refusal hits `lastreceivedservercommitid`, the sync watermark.
 
 That these writes are refused is **already known and owed to R-2** —
-`PqPosture.postQuantum()`'s own dartdoc names "the sync and notification
+`PqPosture.pqActive`'s own dartdoc names "the sync and notification
 watermarks" among them. What is new is the blast radius: one refused internal
 write does not fail one write, it takes the notification listener out
 altogether.
@@ -433,8 +433,8 @@ The one namespace-less write that genuinely is refused is
 
 ### 14.32 A `primary` client's ML-DSA signing key is not visible to its verifiers
 
-An approver built `postQuantum` (so `rollout2`, `dataSigningKeyAlgorithms =
-{mldsa65}`) conveys correctly — both `__ssenv` envelopes are written — and the
+An approver built `pqActive` (so `dataSigningKeyAlgorithms = {mldsa65}`)
+conveys correctly — both `__ssenv` envelopes are written — and the
 receiving enrollment refuses every one of them:
 
 ```
@@ -1292,14 +1292,16 @@ This entry is the owed half; the rulings are the contract.
    [14.18](#1418-the-remaining-d1-initial-development-sequence) step 19, and
    built out further by rows B1 and B3 on 2026-08-14. ⚠️ **This item read "the
    axis has no name yet" until 2026-08-18, and had been false for five days.**
-   The axis is `SigningRollout` — `now` / `rollout1` / `rollout2` — on
-   `PqPosture.signingRollout` (`pq_posture.dart:154`), overridable at
-   `AtClientPreference.signingRollout` (`at_client_preference.dart:104`), and
-   read in production by `self_retrofit.dart:117`, `signing_key_minting.dart`
-   and the `_apsk` composer. Its premise was wrong as well as its status:
-   the stage does **not** switch three flags. Only minting is a decision; the
-   array form and the second signature are consequences of how many keys the
-   keyfile holds, and the stage supplies one default,
+   The axes are `PqPosture.authenticationKeyAlgorithm` and
+   `PqPosture.dataSigningKeyAlgorithms`, each overridable on
+   `AtClientPreference`, and read in production by `self_retrofit.dart`,
+   `signing_key_minting.dart` and the `_apsk` composer. They were one enum,
+   `SigningRollout` (`now`/`rollout1`/`rollout2`), until
+   [ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
+   split them. Its premise was wrong as well as its status: the stage does
+   **not** switch three flags. Only minting is a decision; the array form and
+   the second signature are consequences of how many keys the keyfile holds,
+   and the posture supplies one default,
    `AtClientPreference.dataSigningKeyAlgorithms`.
    [`design.md` 9.7](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
    has said so since it was written, which is where this row should have been
@@ -1310,7 +1312,7 @@ This entry is the owed half; the rulings are the contract.
    20–22: the two stage-parameterised executables are `tests/pq_matrix/`
    (`scenario/`, `current/`, `published/`), driven by
    `tests/at_functional_test/test/pq_rollout_matrix_test.dart` as a **4×4**
-   matrix over `published`/`now`/`rollout1`/`rollout2`. All sixteen cells pass,
+   matrix over `published`/`legacy`/`pqReady`/`pqActive`. All sixteen cells pass,
    and the "failing cell asserted by its specific error" this row asks for no
    longer exists — both cells were measured out of existence on 2026-08-14 and
    [`acceptance.md` 16.5](acceptance.md#165-the-rollout-matrix) records what it
@@ -1321,21 +1323,22 @@ This entry is the owed half; the rulings are the contract.
    (`git grep 'wrapAndSign\|signEnvelope\|verifyEnvelope' -- tests/pq_matrix`
    returned nothing, against `EnvelopeSigning` as a positive control), so the
    sixteen green cells were not evidence about envelope verification. Built as
-   UC-G1.15: nine cells over `now`/`rollout1`/`rollout2`, each signing at the
+   UC-G1.15: nine cells over `legacy`/`pqReady`/`pqActive`, each signing at the
    sender's stage and verifying at the receiver's through a real `_apsk` fetch.
    It is a 3×3 rather than a fourth row and column because a released client and
    this tree cannot exchange an envelope in either direction under any stage.
 
-   **`rollout2 → rollout1` passes**, which is what turns
+   **`pqActive → pqReady` passes**, which is what turns
    [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
    from a ruling into a measurement: strongest signer, weakest verifier, and no
    overlap needed because verification is ungated.
 
    ⚠️ **The nine cells are not what proves the stages differ, and this is
-   measured rather than argued.** Mutating `rollout2` to resolve as `rollout1`
+   measured rather than argued.** Mutating `pqActive` to resolve as `pqReady`
    leaves **all nine passing** — a sender signing RSA-2048 verifies everywhere
-   too. What catches it is the algorithm assertion: `rollout2 → rollout2` must
-   be exactly `['ML-DSA-65']`, `now → now` must not contain it. Both arms in one
+   too. What catches it is the algorithm assertion: `pqActive → pqActive` must
+   be exactly `['ML-DSA-65']`, `legacy → legacy` must not contain it. Both arms
+   in one
    session: the mutation reddens naming `['RS256']`, the revert is green.
    The envelope half lives in `current/lib/envelope_exchange.dart`, not the
    shared scenario, because 3.14.0's `wrapAndSign` returns a `Map` where this

@@ -268,8 +268,8 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
    both directions; a mixed pair stays legacy *in that direction only*, by the
    app's own choice of fallback.
 4. **Retire legacy, then the v4 default flip** — lazy re-encrypt on touch, then
-   `at_client 4.0` flips its default posture from `PqPosture.migration()`
-   to `PqPosture.postQuantum()`: one edit moving all five rollout axes at
+   `at_client 4.0` flips its default posture from `PqPosture.legacy`
+   to `PqPosture.pqActive`: one edit moving all seven rollout axes at
    once (era config, `disallowLegacyEncryption`, the in-use signing set,
    enrolment key exchange, retrofit signing algorithm), which is why the flag
    and the era default can no longer be flipped apart

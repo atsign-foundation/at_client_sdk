@@ -13,7 +13,7 @@ import 'package:pq_matrix_scenario/pq_matrix_scenario.dart';
 Future<void> main(List<String> args) => runArm(
       args,
       role: Role.sender,
-      stages: const {'now', 'rollout1', 'rollout2'},
+      stages: const {'legacy', 'pqReady', 'pqActive'},
       preferenceFor: currentPreference,
       attach: attachWithKeyfile,
       // The envelope grid rides the cells this arm is both halves of. It is

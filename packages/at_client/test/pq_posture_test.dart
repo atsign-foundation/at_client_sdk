@@ -3,55 +3,168 @@ import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
 
-/// The rollout posture: the five flags of `docs/projects/pq/decisions.md`
-/// 56.4 as one value, and the contract that an explicitly set flag always
-/// beats it.
+/// The rollout posture: every rollout axis as one value, three constants that
+/// name the stages the release programme moves through, and the contract that
+/// an explicitly set axis always beats the group it came from.
 ///
-/// The two postures' values are pinned here as literals because they ARE the
-/// release contract — "3.x defaults" and "4.0 defaults" are claims apps plan
-/// deployments around, and a pin that read the values back through the type
-/// would follow an accidental edit silently.
+/// The three postures' values are pinned here as literals because they ARE the
+/// release contract — apps plan deployments around what a stage means — and a
+/// pin that read the values back through the type would follow an accidental
+/// edit silently. An intended change edits the pin in the same commit, and
+/// that edit is the review.
 void main() {
   group('the posture values are the release contract', () {
-    test('migration is the 3.x column of the rollout table', () {
-      const p = PqPosture.migration();
-      expect(p.writesPqByDefault, false);
-      expect(p.disallowLegacyEncryption, false);
-      expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
-      expect(p.retrofitAuthenticationAlgo, SigningAlgoType.rsa2048);
-      expect(p.signingRollout, SigningRollout.now);
+    test('legacy drives no upgrade', () {
+      const p = PqPosture.legacy;
+      expect(p.authenticationKeyAlgorithm, SigningAlgoType.rsa2048);
       expect(p.dataSigningKeyAlgorithms, isEmpty,
           reason: 'no signing key of its own: the APKAM authentication key '
               'signs, and _apsk advertises that key as the bare public key '
               'string every deployed reader understands');
+      expect(p.seedNamespaceKeys, false);
+      expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
+      expect(p.writesPqByDefault, false);
+      expect(p.disallowLegacyEncryption, false);
+      expect(p.mintLegacyMaterial, true);
     });
 
-    test('postQuantum is the 4.0 column of the rollout table', () {
-      const p = PqPosture.postQuantum();
-      expect(p.writesPqByDefault, true);
-      expect(p.disallowLegacyEncryption, true);
+    test('pqReady moves the credentials and not the data path', () {
+      const p = PqPosture.pqReady;
+      expect(p.authenticationKeyAlgorithm, SigningAlgoType.mldsa65,
+          reason: 'the quantum-forgeable credential moves FIRST: only the '
+              'atServer verifies it, and that is the operator\'s own '
+              'infrastructure, while every peer verifies the signing key');
+      expect(p.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048},
+          reason: 'one rsa2048 SIGNING key, which is exactly what the bare '
+              '_apsk string can express — so an un-upgraded peer reads the '
+              'advertisement unchanged while the AUTHENTICATION key moves to '
+              'ML-DSA underneath');
+      expect(p.seedNamespaceKeys, true);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
-      expect(p.retrofitAuthenticationAlgo, SigningAlgoType.mldsa65);
-      expect(p.signingRollout, SigningRollout.rollout2);
+      expect(p.writesPqByDefault, false,
+          reason: 'the whole point of this stage: keys move, data does not');
+      expect(p.disallowLegacyEncryption, false);
+      expect(p.mintLegacyMaterial, true);
+    });
+
+    test('pqActive is post-quantum by default', () {
+      // Every axis as a raw literal, like the two above: this is the stage an
+      // app adopts when it wants tomorrow's defaults today, and reading a
+      // value back through the type would follow an accidental edit silently.
+      const p = PqPosture.pqActive;
+      expect(p.authenticationKeyAlgorithm, SigningAlgoType.mldsa65);
       expect(p.dataSigningKeyAlgorithms, {SigningAlgoType.mldsa65},
           reason: 'ML-DSA alone: a verifier takes the strongest algorithm the '
               'envelope and the advertisement share, so a second, weaker key '
               'would cost a signature per envelope to be passed over');
+      expect(p.seedNamespaceKeys, true);
+      expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
+      expect(p.writesPqByDefault, true);
+      expect(p.disallowLegacyEncryption, true);
+      expect(p.mintLegacyMaterial, true);
+    });
+
+    test('and it changes exactly two things against pqReady', () {
+      // The claim ruling 113 makes about the last step of the ladder. Read
+      // back against pqReady rather than re-listed, because "exactly two" is
+      // a statement about the pair, not about either posture alone.
+      const p = PqPosture.pqActive;
+      const before = PqPosture.pqReady;
+
+      expect(p.dataSigningKeyAlgorithms,
+          isNot(before.dataSigningKeyAlgorithms));
+      expect(p.writesPqByDefault, isNot(before.writesPqByDefault));
+
+      expect(p.authenticationKeyAlgorithm, before.authenticationKeyAlgorithm);
+      expect(p.seedNamespaceKeys, before.seedNamespaceKeys);
+      expect(p.keyExchangeMode, before.keyExchangeMode);
+      expect(p.mintLegacyMaterial, before.mintLegacyMaterial);
+      // Refusing legacy writes is what "the PQ path is the default" means from
+      // the other side, so it moves WITH writesPqByDefault rather than being a
+      // third thing - and the class rejects the combination where it does not.
+      expect(p.disallowLegacyEncryption, isNot(before.disallowLegacyEncryption));
+    });
+
+    test('legacy material is minted at every released stage', () {
+      // Pinned as a group because the reason is a property of the set, not of
+      // any one member: the ecosystem floor decides when an atSign can stop
+      // holding legacy keys, and no client-side stage can know that.
+      for (final p in [
+        PqPosture.legacy,
+        PqPosture.pqReady,
+        PqPosture.pqActive
+      ]) {
+        expect(p.mintLegacyMaterial, true);
+      }
+    });
+  });
+
+  group('a program can build a posture of its own', () {
+    test('every axis is required, and the combination is honoured', () {
+      final custom = PqPosture(
+        authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+        dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048},
+        seedNamespaceKeys: true,
+        keyExchangeMode: EnrollmentKeyExchangeMode.pq,
+        writesPqByDefault: true,
+        disallowLegacyEncryption: false,
+        mintLegacyMaterial: false,
+      );
+      expect(custom.mintLegacyMaterial, false,
+          reason: 'the axis exists so the stop-release can flip it');
+      expect(custom.writesPqByDefault, true);
+      expect(custom.disallowLegacyEncryption, false);
+    });
+
+    test('a posture that would refuse its own writes is rejected', () {
+      // Rejected at construction rather than accepted and left to fail at the
+      // first put, where the app would read it as a data-path bug.
+      expect(
+          () => PqPosture(
+                authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+                dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65},
+                seedNamespaceKeys: true,
+                keyExchangeMode: EnrollmentKeyExchangeMode.pq,
+                writesPqByDefault: false,
+                disallowLegacyEncryption: true,
+                mintLegacyMaterial: true,
+              ),
+          throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
+              'message', contains('refuses its own writes'))));
+    });
+
+    test('the coupling is one-way — writing PQ without refusing legacy is fine',
+        () {
+      // The inverse is a real deployment: write post-quantum where you can and
+      // fall back where you must, which is what the era default does today.
+      expect(
+          PqPosture(
+            authenticationKeyAlgorithm: SigningAlgoType.mldsa65,
+            dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65},
+            seedNamespaceKeys: true,
+            keyExchangeMode: EnrollmentKeyExchangeMode.pq,
+            writesPqByDefault: true,
+            disallowLegacyEncryption: false,
+            mintLegacyMaterial: true,
+          ).writesPqByDefault,
+          true);
     });
   });
 
   group('the preference applies the posture at construction', () {
-    test('a bare preference runs the migration posture', () {
+    test('a bare preference runs the legacy posture', () {
       final preference = AtClientPreference();
-      expect(preference.posture, same(const PqPosture.migration()),
-          reason: 'the 3.x defaults are the defaults — an app that names '
-              'nothing rides the SDK\'s own migration schedule');
+      expect(preference.posture, same(PqPosture.legacy),
+          reason: 'the default stage is the default — an app that names '
+              'nothing rides the SDK\'s own rollout schedule');
       expect(preference.disallowLegacyEncryption, false);
+      expect(preference.authenticationKeyAlgorithm, SigningAlgoType.rsa2048);
+      expect(preference.dataSigningKeyAlgorithms, isEmpty);
+      expect(preference.seedNamespaceKeys, false);
     });
 
-    test('postQuantum sets disallowLegacyEncryption', () {
-      final preference =
-          AtClientPreference(posture: const PqPosture.postQuantum());
+    test('pqActive sets disallowLegacyEncryption', () {
+      final preference = AtClientPreference(posture: PqPosture.pqActive);
       expect(preference.disallowLegacyEncryption, true);
     });
 
@@ -59,7 +172,7 @@ void main() {
         () {
       expect(
           AtClientPreference(
-                  posture: const PqPosture.postQuantum(),
+                  posture: PqPosture.pqActive,
                   disallowLegacyEncryption: false)
               .disallowLegacyEncryption,
           false,
@@ -70,99 +183,64 @@ void main() {
               .disallowLegacyEncryption,
           true);
     });
+
+    test('seeding follows the posture and stays assignable afterwards', () {
+      expect(AtClientPreference(posture: PqPosture.pqReady).seedNamespaceKeys,
+          true,
+          reason: 'clients mint and publish while still writing legacy, so '
+              'that by the time PQ writes switch on the keys are already '
+              'everywhere');
+      expect(AtClientPreference(posture: PqPosture.pqActive).seedNamespaceKeys,
+          true);
+      // Mutable, unlike the axes fixed at construction: seeding changes what
+      // this client publishes about itself, not what it writes for others.
+      expect(
+          AtClientPreference(posture: PqPosture.pqReady)
+            ..seedNamespaceKeys = false,
+          isA<AtClientPreference>()
+              .having((p) => p.seedNamespaceKeys, 'seedNamespaceKeys', false));
+    });
   });
 
-  group('the signing rollout stage', () {
-    test('each stage names the set a client at that stage signs with', () {
-      // Raw literals: these three are the rollout's contract, and a pin that
-      // read them back through the enum would follow an accidental edit.
-      expect(SigningRollout.now.defaultDataSigningKeyAlgorithms, isEmpty);
-      expect(SigningRollout.rollout1.defaultDataSigningKeyAlgorithms,
-          {SigningAlgoType.rsa2048},
-          reason: 'rollout 1 holds one rsa2048 SIGNING key, which is exactly '
-              'what the bare _apsk string can express — so an un-upgraded '
-              'peer reads it unchanged while the AUTHENTICATION key moves to '
-              'ML-DSA underneath');
-      expect(SigningRollout.rollout2.defaultDataSigningKeyAlgorithms,
-          {SigningAlgoType.mldsa65});
-    });
-
-    test('each stage names the authentication algorithm a retrofit mints', () {
-      // The other half of the same position. Raw literals for the same
-      // reason, and the member name says AUTHENTICATION where the wire field
-      // it feeds (EnrollParams.signingAlgo) cannot be renamed.
-      expect(SigningRollout.now.defaultRetrofitAuthenticationAlgo,
-          SigningAlgoType.rsa2048);
-      expect(SigningRollout.rollout1.defaultRetrofitAuthenticationAlgo,
-          SigningAlgoType.mldsa65,
-          reason: 'the quantum-forgeable credential moves FIRST: only the '
-              'atServer verifies it, and that is the operator\'s own '
-              'infrastructure, while every peer verifies the signing key');
-      expect(SigningRollout.rollout2.defaultRetrofitAuthenticationAlgo,
+  group('the authentication key algorithm', () {
+    test('follows the posture, and an explicit value beats it', () {
+      expect(AtClientPreference(posture: PqPosture.pqReady)
+              .authenticationKeyAlgorithm,
+          SigningAlgoType.mldsa65);
+      expect(
+          AtClientPreference(
+                  posture: PqPosture.pqReady,
+                  authenticationKeyAlgorithm: SigningAlgoType.rsa2048)
+              .authenticationKeyAlgorithm,
+          SigningAlgoType.rsa2048,
+          reason: 'a deployment whose atServer cannot verify ML-DSA PKAM yet '
+              'says so here, without giving up the rest of the stage');
+      expect(
+          AtClientPreference(
+                  authenticationKeyAlgorithm: SigningAlgoType.mldsa65)
+              .authenticationKeyAlgorithm,
           SigningAlgoType.mldsa65);
     });
 
-    test('the posture derives its set from the stage, never storing both', () {
-      // Two stored fields would be two controls over one behaviour, and the
-      // day they disagreed one would be a lie with no way to tell which.
-      for (final posture in [
-        const PqPosture.migration(),
-        const PqPosture.postQuantum()
-      ]) {
-        expect(posture.dataSigningKeyAlgorithms,
-            posture.signingRollout.defaultDataSigningKeyAlgorithms);
-        expect(posture.retrofitAuthenticationAlgo,
-            posture.signingRollout.defaultRetrofitAuthenticationAlgo,
-            reason: 'the retrofit algorithm derives from the stage too — it '
-                'was a stored field until 2026-08-14, which is two controls '
-                'over one position');
-      }
-    });
-
-    test('rollout1 is reachable — a client can state the fleet has upgraded',
-        () {
-      // It cannot come from a posture: there are two postures and no general
-      // constructor, so without the preference argument this value would name
-      // a rollout position nothing could ever be in.
-      final preference =
-          AtClientPreference(signingRollout: SigningRollout.rollout1);
-
-      expect(preference.signingRollout, SigningRollout.rollout1);
-      expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048},
-          reason: 'and the stage supplies its set, so the enrollment holds a '
-              'signing key of its own from birth');
-    });
-
-    test('an explicit stage beats the posture, and an explicit set beats both',
-        () {
-      expect(
-          AtClientPreference(
-                  posture: const PqPosture.migration(),
-                  signingRollout: SigningRollout.rollout2)
-              .dataSigningKeyAlgorithms,
-          {SigningAlgoType.mldsa65},
-          reason: 'the stage supplies the set when the app names no set');
-      expect(
-          AtClientPreference(
-                  signingRollout: SigningRollout.rollout2,
-                  dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})
-              .dataSigningKeyAlgorithms,
-          {SigningAlgoType.rsa2048},
-          reason: 'the set is what the client obeys — naming both is naming a '
-              'mixture on purpose');
+    test('it is a separate axis from the data signing keys', () {
+      // The two moved together while they were one enum, and pqReady is the
+      // stage that exists precisely because they must not.
+      const p = PqPosture.pqReady;
+      expect(p.authenticationKeyAlgorithm, SigningAlgoType.mldsa65);
+      expect(p.dataSigningKeyAlgorithms, isNot(contains(SigningAlgoType.mldsa65)));
     });
   });
 
-  group('the in-use signing set', () {
+  group('the data signing set', () {
     test('follows the posture, and an explicit set beats it both ways', () {
       expect(AtClientPreference().dataSigningKeyAlgorithms, isEmpty);
       expect(
-          AtClientPreference(posture: const PqPosture.postQuantum())
+          AtClientPreference(posture: PqPosture.pqActive)
               .dataSigningKeyAlgorithms,
           {SigningAlgoType.mldsa65});
       expect(
           AtClientPreference(
-                  posture: const PqPosture.postQuantum(),
+                  posture: PqPosture.pqActive,
                   dataSigningKeyAlgorithms: const {})
               .dataSigningKeyAlgorithms,
           isEmpty);
@@ -217,6 +295,6 @@ void main() {
     });
   });
 
-  // The envelope shape was a fifth axis here until it stopped being a
-  // choice: there is one shape, so a posture has nothing to say about it.
+  // The envelope shape was an axis here until it stopped being a choice:
+  // there is one shape, so a posture has nothing to say about it.
 }

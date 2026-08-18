@@ -13,7 +13,7 @@ enum Role { sender, receiver }
 /// How an arm turns a stage name and a spec into a preference.
 ///
 /// The second version-specific step, and the reason the pair is
-/// stage-parameterised at all: the current arm reads a `SigningRollout` off
+/// stage-parameterised at all: the current arm reads a `PqPosture` off
 /// the stage name, and the published arm cannot, because 3.14.0 has no such
 /// type. Both are `AtClientPreference` by the time shared code sees them.
 typedef PreferenceFor = AtClientPreference Function(
@@ -24,7 +24,7 @@ typedef PreferenceFor = AtClientPreference Function(
 /// [stages] is what this build can honestly serve. A build asked for a stage
 /// outside it fails loudly rather than falling back: the driver spawning the
 /// wrong executable for a cell is precisely the bug that would make the
-/// published column agree with `now` for the wrong reason.
+/// published column agree with `legacy` for the wrong reason.
 Future<void> runArm(
   List<String> args, {
   required Role role,

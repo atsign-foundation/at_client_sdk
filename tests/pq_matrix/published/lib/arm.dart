@@ -5,7 +5,7 @@ import 'package:pq_matrix_scenario/pq_matrix_scenario.dart' show ClientSpec;
 /// nothing else.
 ///
 /// [stage] is ignored, and there is nothing here it could select.
-/// `SigningRollout` does not exist in at_client 3.14.0 — this arm has no knob
+/// `PqPosture` does not exist in at_client 3.14.0 — this arm has no knob
 /// to turn, which is exactly what makes it a measurement of the released build
 /// rather than a simulation of one. The parameter stays so the two arms
 /// present one shape to the shared entrypoint.

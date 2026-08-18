@@ -22,7 +22,7 @@ import 'package:at_demo_data/at_demo_data.dart'
 /// Everything about a client that does **not** depend on which at_client is
 /// resolved: which atSign, where its atServer is, where its storage goes.
 ///
-/// The stage lives outside this on purpose. `SigningRollout` does not exist in
+/// The stage lives outside this on purpose. `PqPosture` does not exist in
 /// 3.14.0, so a field naming one could not be in shared code at all — which is
 /// the constraint that keeps the two arms honest rather than an inconvenience.
 class ClientSpec {
@@ -51,7 +51,7 @@ class ClientSpec {
 /// a branch because the difference is not expressible in shared code: the
 /// current tree's `setCurrentAtSign` takes an `AtKeysIo` and 3.14.0's does
 /// not. It matters far more than its size suggests — a client with no key
-/// source performs zero post-quantum writes by design, so a `rollout2` arm
+/// source performs zero post-quantum writes by design, so a `pqActive` arm
 /// attached without one would mint nothing and the whole stage would measure
 /// an inert client.
 typedef Attach = Future<AtClientManager> Function(

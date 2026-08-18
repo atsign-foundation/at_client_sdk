@@ -64,13 +64,12 @@ void main() {
       // key-exchange value cannot be read or compared by an app that only
       // imports at_client. Composing an enrollment request from it still
       // goes through package:at_auth.
-      final preference =
-          AtClientPreference(posture: const PqPosture.postQuantum());
+      final preference = AtClientPreference(posture: PqPosture.pqActive);
       expect(preference.posture.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(preference.disallowLegacyEncryption, true);
     });
 
-    test('the in-use signing set can be built by an outside caller', () {
+    test('the data signing set can be built by an outside caller', () {
       // SigningAlgoType is an at_chops type, show-narrowed onto this barrel
       // for the same reason as EnrollmentKeyExchangeMode: the preference asks
       // for a Set of them and `AtClientImpl.signingAlgoType` hands one back,
@@ -81,11 +80,10 @@ void main() {
           dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65});
 
       expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.mldsa65});
-      // Named against a stage whose default is a DIFFERENT algorithm, so the
-      // assertion cannot pass on the default it would have taken anyway.
-      final rollout1 =
-          AtClientPreference(signingRollout: SigningRollout.rollout1);
-      expect(rollout1.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
+      // Named against a posture whose default is a DIFFERENT algorithm, so
+      // the assertion cannot pass on the default it would have taken anyway.
+      final pqReady = AtClientPreference(posture: PqPosture.pqReady);
+      expect(pqReady.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
     });
   });
 

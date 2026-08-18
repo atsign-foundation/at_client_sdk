@@ -1,4 +1,23 @@
 ## 3.14.1
+- **BREAKING** feat: the rollout posture is `PqPosture`, with three pre-built
+  constants and a constructor a program can call for a combination none of them
+  expresses. `legacy` is the default, `pqReady` moves the credentials while the
+  data path stays legacy, and `pqActive` makes post-quantum writes the default.
+  `SigningRollout` is deleted; `ReleasePosture` was renamed to `PqPosture`.
+  - The stage enum stated two facts by implication and its name said "signing"
+    for one of them. It is replaced by `authenticationKeyAlgorithm` and
+    `dataSigningKeyAlgorithms`, which say which key each means and can move
+    independently — the whole point of the middle stage.
+  - `mintLegacyMaterial` and `seedNamespaceKeys` become axes, so a posture
+    states them rather than leaving them to be set beside it.
+    `AtClientPreference.seedNamespaceKeys` now defaults from the posture and
+    stays assignable.
+  - A posture setting `disallowLegacyEncryption` without `writesPqByDefault` is
+    **rejected at construction**: it would refuse its own writes, and finding
+    that out at the first put reads as a data-path bug.
+  - `AtClientPreference.inUseSigningAlgorithms` is renamed
+    `dataSigningKeyAlgorithms`, and `signingRollout` is replaced by
+    `authenticationKeyAlgorithm`.
 - **BREAKING**: the `x-wing-hpke-v1` sealing suite is removed —
   `SecretSharingAlgos.xWingHpke` is gone, `suites` and `openableSuitesFor` no
   longer name it, and `sealVersionFor('x-wing-hpke-v1')` returns null. A peer
@@ -459,7 +478,7 @@
   reconciliation shares it rather than issuing a second `enroll:fetch`, since
   one record with two readers is two chances to describe it differently.
 - feat!: asking for a client that already exists with a preference naming
-  different rollout settings — `posture`, `signingRollout`,
+  different rollout settings — `posture`, `authenticationKeyAlgorithm`,
   `dataSigningKeyAlgorithms` or `disallowLegacyEncryption` — now **throws** an
   `ArgumentError` naming every differing axis. All four are final at
   construction, so the choice was between refusing and ignoring, and ignoring
@@ -509,58 +528,52 @@
     "every algorithm has left the set": a client there goes on signing with the
     key it holds and advertising it bare, and retiring would drop it to signing
     with its authentication key and turn the advertisement into an array.
-- feat: a `selfRetrofit` at `SigningRollout.rollout1` or beyond mints a fresh
-  RSA-2048 **signing** keypair before submitting, so the new enrollment owns
-  one from its first byte. `_apsk` advertises that key rather than the APKAM
-  authentication key, and the key package riding the same request is signed
-  with it. `SigningRollout` gains `mintsOwnSigningKey`;
-  `enrollmentKeyPackageBuilder` gains `advertisedSigningKey`.
+- feat: a `selfRetrofit` under a posture that names a data signing key mints a
+  fresh RSA-2048 **signing** keypair before submitting, so the new enrollment
+  owns one from its first byte. `_apsk` advertises that key rather than the
+  APKAM authentication key, and the key package riding the same request is
+  signed with it. `enrollmentKeyPackageBuilder` gains `advertisedSigningKey`.
   - Minting it at client start instead would leave a window in which the
-    record names the authentication key — which under rollout 1 is ML-DSA,
+    record names the authentication key — which from `pqReady` on is ML-DSA,
     and no un-upgraded peer can read it.
   - The package must be signed with the same key the record names: `_apsk` is
     what a peer verifies a key package against before sealing any secret to
     the enrollment. Signing with the APKAM key while advertising the signing
     key means the enrollment is created and then receives nothing.
-  - Always `rsa2048`, whatever the stage keeps active: the advertisement has
-    to stay the bare string an un-upgraded peer can parse. A stage wanting
-    ML-DSA reaches it by retiring the RSA key afterwards, not by skipping it.
+  - Always `rsa2048`, whatever the posture keeps active: the advertisement
+    has to stay the bare string an un-upgraded peer can parse. A posture
+    wanting ML-DSA reaches it by retiring the RSA key afterwards, not by
+    skipping it.
   - A PQ-native **activation** does the same: `makeActivationPqNative` mints
     the signing keypair, sets it on the onboarding request and hands the same
     pair to the key-package builder. Its dartdoc now names both ways to get
     the call wrong by hand — omitting the key package, and advertising one
     key while signing the package with another.
-- **BREAKING** feat: `PqPosture.retrofitSigningAlgo` becomes
-  `retrofitAuthenticationAlgo`, and is now **derived** from `signingRollout`
-  rather than stored — so both named constructors take one argument fewer.
-  `SigningRollout` gains `defaultRetrofitAuthenticationAlgo` beside
-  `defaultDataSigningKeyAlgorithms`.
+- **BREAKING** feat: the posture's retrofit algorithm is
+  `PqPosture.authenticationKeyAlgorithm`, having been `retrofitSigningAlgo`.
   - It selects the algorithm of the key that **authenticates**, in the one
     subsystem whose entire premise is that authenticating and signing are
     different keys. The wire field it feeds (`EnrollParams.signingAlgo`)
     keeps its name — renaming that is a multi-repo seam against a released
     atServer, where a stale reader seeing an absent field falls back to
     `rsa2048`, a silent wrong-algorithm PKAM.
-  - Derived, because two stored fields would be two controls over one
-    position, and an operator who set the stage but forgot the algorithm
-    would land in a state no release defines with nothing to tell them.
-  - fix: `selfRetrofit` read the **posture's** stage, so an app that set
-    `signingRollout` beside a posture would have retrofitted under the
-    posture's algorithm and said nothing. It now reads
-    `AtClientPreference.signingRollout`, which is the effective stage.
-- **BREAKING** feat: `SigningRollout.rollout1`'s default in-use signing set
-  becomes `{rsa2048}`, having been empty. A rollout-1 enrollment now mints,
-  advertises and files an RSA-2048 **signing** key of its own at client start,
-  and its `_apsk` names that key instead of its APKAM authentication key.
+  - fix: `selfRetrofit` read the **posture's** value, so an app that named an
+    algorithm beside a posture would have retrofitted under the posture's and
+    said nothing. It now reads `AtClientPreference.authenticationKeyAlgorithm`,
+    which is the effective one.
+- **BREAKING** feat: the middle stage's default data signing set is
+  `{rsa2048}`, having been empty. A `pqReady` enrollment mints, advertises and
+  files an RSA-2048 **signing** key of its own at client start, and its `_apsk`
+  names that key instead of its APKAM authentication key.
   - The two keys have different audiences, which is the whole reason the
     stage exists: only the **atServer** verifies the authentication key and
     it is the operator's own infrastructure, while **every peer** verifies
     the signing key and the fleet is not the operator's to upgrade.
   - One active `rsa2048` entry still spells as the bare public-key string, so
-    a released reader cannot tell a rollout-1 sender from a `now` one —
+    a released reader cannot tell a `pqReady` sender from a `legacy` one —
     measured against at_client 3.14.0 rather than argued.
-  - `PqPosture.migration()` and `.postQuantum()` are unaffected: they
-    are `now` and `rollout2`.
+  - `PqPosture.legacy` and `PqPosture.pqActive` are unaffected: their data
+    signing sets are empty and `{mldsa65}`.
 - feat: the published `_apsk` record advertises the keys that sign for an
   enrollment now plus the signing keys it has **retired**. The APKAM
   authentication key appears only while it *is* the signer — an enrollment
@@ -602,15 +615,12 @@
   says they belong to the atSign: one entry serves every enrollment holding
   the grant, rather than the same seed stored once per enrollment with each
   copy waiting on its own conveyance.
-- feat: `SigningRollout` — where a build stands in the rollout that separates
-  an enrollment's signing keys from its APKAM authentication key: `now`,
-  `rollout1`, `rollout2`. It rides `PqPosture.signingRollout` and is
-  overridable per `AtClientPreference`, and `dataSigningKeyAlgorithms` derives
-  its default from it. The posture derives that set rather than storing both,
-  because two stored fields are two controls over one behaviour; where an app
-  names both, the set is what the client obeys. `rollout1` writes exactly what
-  `now` writes — the reader half of this rollout needs no gate — and carries
-  the fleet's position instead, which no client can observe for itself.
+- feat: the rollout that separates an enrollment's signing keys from its APKAM
+  authentication key is carried by two independent `PqPosture` axes,
+  `authenticationKeyAlgorithm` and `dataSigningKeyAlgorithms`, each overridable
+  per `AtClientPreference`. They are two axes and not one stage name because
+  the keys have different audiences and move on different schedules — which is
+  the whole of what the middle stage is.
 - feat: a client mints, advertises and files a signing key of its own for every
   algorithm `AtClientPreference.dataSigningKeyAlgorithms` names and its
   enrollment does not hold — a ninth PQ startup step, `mintInUseSigningKeys`,
@@ -911,7 +921,7 @@
   and `SymmetricAesGcmProvider` each decline a namespace-less key — so the
   resolved provider falls back to legacy and the AES file key inside the
   `FileTransferObject` travels RSA-wrapped. A client that set
-  `disallowLegacyEncryption` (including via `PqPosture.postQuantum()`)
+  `disallowLegacyEncryption` (including via `PqPosture.pqActive`)
   gets `LegacyEncryptionRefusedException` from the notify instead. The file
   bytes themselves are AES-encrypted and unaffected; it is the key conveyance
   that stays classical. Giving the SDK's own namespace-less writes a reserved
@@ -926,7 +936,7 @@
   behaviour change — `mintAndPublish` is the cold-start mint, `rotate` is the
   rotation lever, and the doc now says so.
 - feat: `PqPosture` — the four post-quantum rollout flags as one value,
-  set on `AtClientPreference(posture:)`. `PqPosture.migration()` (the
+  set on `AtClientPreference(posture:)`. `PqPosture.legacy` (the
   default) is the 3.x column of the rollout table; `postQuantum()` runs the
   4.0 defaults today: the era `CryptoConfig` writes PQ, legacy writes are
   refused, the posture names the pq enrollment key exchange, and an argless

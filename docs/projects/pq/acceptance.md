@@ -130,7 +130,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-C1.3  | WITHDRAWN — there is no envelope axis                                               | WITHDRAWN | —                            |
 | UC-C1.4  | The key-exchange axis: the posture names pq enrollment                              | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.5  | The retrofit axis: an argless retrofit follows the posture                          | PROVEN    | `c1_rollout_test.dart`       |
-| UC-C1.6  | The grouped posture: one value moves all five axes                                  | PROVEN    | `c1_rollout_test.dart`       |
+| UC-C1.6  | The grouped posture: one value moves all seven axes                                 | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.7  | The signing-set axis: which keys an enrollment holds                                | PROVEN    | `c1_rollout_test.dart`       |
 | UC-G1.1   | The derivation is offered, not applied                                             | PROVEN    | `g1_keyfile_test.dart` |
 | UC-G1.2   | A retrofit leaves one active auth key, touching nothing legacy                     | PROVEN    | `g1_keyfile_test.dart` |
@@ -1557,7 +1557,7 @@ right" pass rather than numbered projects.
 
 From the PQ project's view, at_client 4.0 is final-3.x code with different flag
 defaults, so every stage of the rollout must be reachable from this codebase by
-flag manipulation: each of the five axes flipped in isolation, and all five as
+flag manipulation: each axis flipped in isolation, and all seven at once as
 the grouped `PqPosture`. These rows assert the mechanism itself — the
 posture reaching each flag's natural home, and every axis remaining
 individually overridable — not the underlying crypto behaviours, which Parts A
@@ -1565,7 +1565,7 @@ and B already own.
 
 ### 15.1 UC-C1.1 — The era axis: a postured client writes PQ by default
 
-- **Given:** a client built with `PqPosture.postQuantum()` and no
+- **Given:** a client built with `PqPosture.pqActive` and no
   app-named `crypto` config.
 - **When:** its era `CryptoConfig` is adopted at construction.
 - **Then:** new writes default to the nskey data path (the AES-GCM provider),
@@ -1574,7 +1574,7 @@ and B already own.
 
 ### 15.2 UC-C1.2 — The refusal axis: the posture disallows legacy writes
 
-- **Given:** a preference built with `PqPosture.postQuantum()` and no
+- **Given:** a preference built with `PqPosture.pqActive` and no
   explicit `disallowLegacyEncryption` argument.
 - **When:** a write would fall back to the legacy provider.
 - **Then:** it is refused (`LegacyEncryptionRefusedException`) because the
@@ -1587,7 +1587,7 @@ and B already own.
 ruling 1. Do not write this test: it asserts a mechanism that is being deleted.
 
 It read: *given a client whose preference carries
-`PqPosture.postQuantum()`, when any signer wraps a payload with no
+`PqPosture.pqActive`, when any signer wraps a payload with no
 per-signer version assigned, then the envelope goes out in the JWS (v2) shape*.
 Every clause of it is void — `envelopeVersion` stops being a `PqPosture`
 axis, there is one envelope shape rather than a postured choice between two,
@@ -1603,7 +1603,7 @@ on failure.
 ### 15.4 UC-C1.4 — The key-exchange axis: the posture names pq enrollment
 
 - **Given:** a submitter composing an `AtEnrollmentRequest` under
-  `PqPosture.postQuantum()`. Submission goes through `package:at_auth`,
+  `PqPosture.pqActive`. Submission goes through `package:at_auth`,
   which cannot read a preference, so the posture's value is applied by
   whoever builds the request — together with the two things pq mode requires
   (the key-package builder and the symmetric-key resolver).
@@ -1616,27 +1616,27 @@ on failure.
 ### 15.5 UC-C1.5 — The retrofit axis: an argless retrofit follows the posture
 
 - **Given:** a legacy atSign and a preference carrying
-  `PqPosture.postQuantum()`.
+  `PqPosture.pqActive`.
 - **When:** `selfRetrofit` runs with no `signingAlgo` argument.
-- **Then:** the minted enrollment is ML-DSA. Under the migration posture the
+- **Then:** the minted enrollment is ML-DSA. Under the legacy posture the
   same call mints RSA — the two postures resolve into different per-algorithm
   idempotence pools, which is what tells them apart live.
 
-### 15.6 UC-C1.6 — The grouped posture: one value moves all five axes
+### 15.6 UC-C1.6 — The grouped posture: one value moves all seven axes
 
 - **Given:** nothing but
-  `AtClientPreference(posture: const PqPosture.postQuantum())`.
+  `AtClientPreference(posture: PqPosture.pqActive)`.
 - **When:** a client, its signers, its enrollment submissions and its
   retrofits are built from that one preference.
-- **Then:** all five axes run the 4.0 defaults — the pinned columns of the
+- **Then:** all seven axes run the last stage's values — the pinned columns of the
   `decisions.md` 56.4 table — and each remains individually overridable
   (UC-C1.1, C1.2, C1.4, C1.5 and C1.7 prove the arms; C1.3 is withdrawn and
-  its axis no longer exists). A bare preference runs the migration posture,
+  its axis no longer exists). A bare preference runs the legacy posture,
   byte-identical to the pre-posture SDK.
 
 ### 15.7 UC-C1.7 — The signing-set axis: which keys an enrollment holds
 
-- **Given:** a preference built with `PqPosture.postQuantum()` and no
+- **Given:** a preference built with `PqPosture.pqActive` and no
   explicit `dataSigningKeyAlgorithms` argument.
 - **When:** the set is read.
 - **Then:** it is `{mldsa65}`, while a migration-postured preference's is
@@ -1647,29 +1647,31 @@ on failure.
   (anything but `mldsa65` and `rsa2048`) is refused where it is named, at
   construction — not skipped at signing time, which would leave an app that
   asked for a post-quantum signature holding a classical one.
-- **And:** the set is derived from a named rollout position,
-  `SigningRollout.now` / `.rollout1` / `.rollout2`, which the posture carries
-  and a preference can override. `rollout1` writes exactly what `now` writes —
-  the reader half needs no gate — and states the fleet's position instead. It
-  is reachable only through the preference, there being two postures and no
-  general constructor.
+- **And:** the set is one of two independent posture axes,
+  `dataSigningKeyAlgorithms` beside `authenticationKeyAlgorithm`, each carried
+  by the posture and overridable per preference. They are two axes rather than
+  one stage name because the keys have different audiences: only the atServer
+  verifies the authentication key, while every peer verifies the signing key.
 
 Covered by `packages/at_client/test/pq_posture_test.dart`.
 
 ## 16. G1 · Signature agility and the rollout matrix
 
 ⚠️ **The stages were redefined 2026-08-14 — [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14).**
-Rollout 1 moves the **authentication** key to ML-DSA-65 and mints a fresh
-**RSA-2048 signing key** to be advertised in its place, because only the
+The middle stage moves the **authentication** key to ML-DSA-65 and mints a
+fresh **RSA-2048 signing key** to be advertised in its place, because only the
 atServer verifies the authentication key while every peer verifies the signing
-key. Rows below written before that ruling may still describe rollout 1 as
-"reader capability only"; where they do, the ruling governs.
+key. Rows below written before that ruling may still describe it as "reader
+capability only"; where they do, the ruling governs. The stages were renamed
+`legacy`/`pqReady`/`pqActive` by
+[ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18),
+which also split the one enum that named them into two posture axes.
 
 | | auth key | signing key | `_apsk` |
 |---|---|---|---|
-| `now` | `rsa2048` | none — the auth key signs | bare RSA (the auth key) |
-| `rollout1` | `mldsa65` | `rsa2048` | bare RSA (the signing key) |
-| `rollout2` | `mldsa65` | `mldsa65` active, `rsa2048` retired | the array |
+| `legacy`   | `rsa2048` | none — the auth key signs | bare RSA (the auth key) |
+| `pqReady`  | `mldsa65` | `rsa2048` | bare RSA (the signing key) |
+| `pqActive` | `mldsa65` | `mldsa65` active, `rsa2048` retired | the array |
 
 Acceptance for [`decisions.md` 91](detail/decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11);
 design in [`design.md` 9](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
@@ -1682,7 +1684,8 @@ fixed identifier passes once and collides on the next run.
 ### 16.1 The harness
 
 Two stage-parameterised executables, a sender and a receiver, each taking
-`--stage published|now|rollout1|rollout2`, plus a driver that runs the matrix.
+`--stage published|legacy|pqReady|pqActive`, plus a driver that runs the
+matrix.
 
 **What the pair exercises** (ruled [`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)
 ruling 3) — the whole story, not the shapes:
@@ -1696,12 +1699,12 @@ ruling 3) — the whole story, not the shapes:
 
 **The `published` arm runs the last released at_client**, not a `--stage now`
 build of this tree. This closes what was previously recorded here as an
-un-mitigated known limit. One build simulating `now` exercises the stage logic
+un-mitigated known limit. One build simulating `legacy` exercises the stage logic
 and nothing else: both arms run the same code, so a bug in what a build
 predating this work does with a v1 envelope stays invisible to it. Simulating
 both sides of a compatibility claim inside one build proves nothing about the
 side nobody wrote — the published arm is the only thing that measures
-"`now` behaves identically to current legacy" rather than asserting it.
+"`legacy` behaves identically to current legacy" rather than asserting it.
 
 It earned that keep before a single cell ran. The arm exists to answer
 questions about the released build with a measurement, and the first one it
@@ -1710,7 +1713,7 @@ after all, and neither build can read the other's envelope
 ([16.5](#165-the-rollout-matrix)). **What the published arm proves is therefore
 the data path** — a real notification, multiple puts and gets — which is what a
 released peer and this tree genuinely share. The signed-envelope exchange is a
-`now`/`rollout1`/`rollout2` question.
+`legacy`/`pqReady`/`pqActive` question.
 
 ### 16.2 The keyfile rows
 
@@ -1796,7 +1799,7 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   *Then* it succeeds, reading the record as a single `rsa2048` entry. The
   writer arm must show the current build **still emits** that shape:
   `bareApskValueOf` spells a single active `rsa2048` entry as the bare string,
-  which is what keeps `now` and `rollout1` readable by un-upgraded peers
+  which is what keeps `legacy` and `pqReady` readable by un-upgraded peers
   ([`decisions.md` 98.1](detail/decisions.md#981-the-stages)); only a second
   key, or a non-`rsa2048` key, forces the array.
 
@@ -1969,15 +1972,15 @@ peer at any stage can send to or read from a peer at any other.
 | **rollout 2** | pass | pass | pass | pass |
 
 **The `published` row and column are the control.** They must behave
-identically to the `now` row and column in every cell. If `published` and `now`
-ever diverge on the data path, the `now` stage is not the faithful legacy
+identically to the `legacy` row and column in every cell. If `published` and `legacy`
+ever diverge on the data path, the `legacy` stage is not the faithful legacy
 simulation it claims to be, and every other result in the matrix is measured
 against the wrong baseline. That divergence is the finding, not a harness bug
 to work around.
 
 #### The signed-envelope exchange is a 3×3, and why
 
-The envelope exchange is a `now`/`rollout1`/`rollout2` question, because **a
+The envelope exchange is a `legacy`/`pqReady`/`pqActive` question, because **a
 released client and this tree cannot exchange an envelope in either direction,
 under any stage** — measured 2026-08-14 by cross-feeding each build's shape to
 the other's reader:
@@ -1991,7 +1994,7 @@ This is not a rollout-2 effect and no stage avoids it. Step 3 replaced the
 released envelope — a flat
 `{payload, signature, hashingAlgo, signingAlgo, enrollmentId}` map — with RFC
 7515 general serialization, and deleted the envelope as a `PqPosture`
-axis, so `now` emits the new shape too.
+axis, so `legacy` emits the new shape too.
 
 **It is accepted rather than fixed**, on what the released reader actually is:
 a same-atSign path only (both 3.14.0 call sites pass
@@ -2016,21 +2019,21 @@ the accepted-break ruling in
 [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
 rests on exactly this visibility.
 
-**The `now`/`rollout1`/`rollout2` envelope grid is built** — UC-G1.15 below,
+**The `legacy`/`pqReady`/`pqActive` envelope grid is built** — UC-G1.15 below,
 2026-08-18. ⚠️ **This paragraph read "is not built … owed rather than done"
 until then**, and its reasoning was half wrong as well: it said the three
 stages emit byte-identical envelopes because "nothing files per-algorithm
 signing material until rollout 2 mints it". Rollout 2 *does* mint it, on this
 harness, because the `current/` arm attaches with an `AtKeysIo` — which is the
 one difference the README calls out as the reason the arms are not
-interchangeable. Measured: a `rollout2` sender's envelope carries `ML-DSA-65`
-and a `now` sender's carries `RS256`.
+interchangeable. Measured: a `pqActive` sender's envelope carries `ML-DSA-65`
+and a `legacy` sender's carries `RS256`.
 
 The grid rides the nine cells where both halves are this tree, and its value is
 indeed in the rollout-2 row: under
 [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
-the ladder swaps algorithms rather than overlapping them, so `rollout2 →
-rollout1` — strongest signer, weakest verifier — is the cell an overlapping
+the ladder swaps algorithms rather than overlapping them, so `pqActive →
+pqReady` — strongest signer, weakest verifier — is the cell an overlapping
 ladder would have existed to rescue. It passes, which is what makes 108 a
 measurement rather than a ruling.
 
@@ -2040,31 +2043,32 @@ measurement rather than a ruling.
 were "the whole argument for capability-before-active". Both the cells and the
 error were wrong: `apskValueOf` publishes the array as a JSON **string**, so
 `getApkamPublicKey`'s `av.value is! String` guard never fires on it, and this
-tree's reader is ungated (step 19: "the reader half needs no gate"), so a `now`
-receiver reads the array as readily as a `rollout1` one. The argument for
+tree's reader is ungated (step 19: "the reader half needs no gate"), so a `legacy`
+receiver reads the array as readily as a `pqReady` one. The argument for
 capability-before-active is unaffected and lives in
 [`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11);
 what is gone is the claim that this matrix demonstrates it.
 
 #### UC-G1.15 — every rollout stage verifies every other stage's envelope
-  *Given* a sender and a receiver, each at one of `now`, `rollout1`,
-  `rollout2` — nine cells, both halves this tree.
+  *Given* a sender and a receiver, each at one of `legacy`, `pqReady`,
+  `pqActive` — nine cells, both halves this tree.
   *When* the sender signs an envelope at its stage, leaves it on the atServer,
   and the receiver fetches the sender's `_apsk` and verifies it with its own
   build.
   *Then* every cell verifies, and the algorithms the receiver saw are the ones
   the sender emitted.
 
-  **The cell this exists for is `rollout2 → rollout1`**: an ML-DSA-65 signature
+  **The cell this exists for is `pqActive → pqReady`**: an ML-DSA-65 signature
   read by a client that signs RSA-2048. It passes, which is what
   [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
   rests on — a swap is safe precisely because verification is not staged.
 
   ⚠️ **Nine green cells do not on their own prove anything about the stages**,
-  and that is not hypothetical here: mutating `rollout2` to resolve as
-  `rollout1` leaves **all nine cells passing**, because a sender signing
+  and that is not hypothetical here: mutating `pqActive` to resolve as
+  `pqReady` leaves **all nine cells passing**, because a sender signing
   RSA-2048 verifies everywhere too. What catches it is the algorithm assertion
-  — `rollout2 → rollout2` must be exactly `['ML-DSA-65']` and `now → now` must
+  — `pqActive → pqActive` must be exactly `['ML-DSA-65']` and `legacy →
+  legacy` must
   not contain it. Measured 2026-08-18, both arms in one session: the mutation
   reddens on that assertion naming `['RS256']`, and the revert is green.
   Proven in `tests/at_functional_test/test/pq_rollout_matrix_test.dart`, test
@@ -2076,13 +2080,13 @@ what is gone is the claim that this matrix demonstrates it.
   *When* a **published-arm** client (at_client 3.14.0, resolved from pub.dev)
   fetches that enrollment's `_apsk`.
   *Then* `getApkamPublicKey` returns a String which base64-decodes as an RSA
-  public key, exactly as it does for a `now` sender — so the released reader
+  public key, exactly as it does for a `legacy` sender — so the released reader
   cannot tell the two stages apart.
 
   ⚠️ **This row used to read "rollout 1 changes nothing on the wire", asserting
-  the envelopes and the `_apsk` were byte-identical to the `now`/`now` cell.**
+  the envelopes and the `_apsk` were byte-identical to the `legacy`/`legacy` cell.**
   That is false under [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14):
-  rollout 1 publishes a *different key* from `now` — its own signing key rather
+  rollout 1 publishes a *different key* from `legacy` — its own signing key rather
   than its authentication key — so the bytes differ by design. What must hold
   is the **form**, and only a released reader can settle that. Byte-identity
   was a claim about our own writer; this is a measurement against the reader

@@ -304,7 +304,7 @@ void main() {
   });
 
   test(
-      'the postQuantum posture decides an argless retrofit: no signingAlgo '
+      'the pqActive posture decides an argless retrofit: no signingAlgo '
       'anywhere, the enrollment is ML-DSA, and so is its key package',
       () async {
     // A keyfile of its own, so the retrofit MINTS under the posture rather
@@ -319,13 +319,13 @@ void main() {
     expect(auth.isSuccessful, true);
     final session = auth.session!;
 
-    // No signingAlgo argument. Under the migration posture (or the old
-    // parameter default) this call resolves rsa2048 and mints RSA — the
-    // assertions below are what tell the two apart.
+    // No signingAlgo argument. Under the legacy posture (or the old parameter
+    // default) this call resolves rsa2048 and mints RSA — the assertions below
+    // are what tell the two apart.
     final manager = await selfRetrofit(
         session: session,
-        preference: TestUtils.getPreference(atSign,
-            posture: const PqPosture.postQuantum()),
+        preference:
+            TestUtils.getPreference(atSign, posture: PqPosture.pqActive),
         appName: 'rf2b-app',
         deviceName: 'rf2d-${Uuid().v4().hashCode}',
         namespaces: {namespace: 'rw'},
@@ -366,7 +366,7 @@ void main() {
 
   test(
       'an argless retrofit under the default preference stays rsa2048 — the '
-      'migration posture is really consulted, not a constant', () async {
+      'legacy posture is really consulted, not a constant', () async {
     // Its own keyfile, for the same reason as the first arm: this one
     // resolves rsa2048, and the shared file is the mldsa65 arms'.
     String t5Path(String a) => 'test/testData/rf2b-t5$a.atKeys';

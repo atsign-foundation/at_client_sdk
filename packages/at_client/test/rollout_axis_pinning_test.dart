@@ -1,3 +1,4 @@
+import 'package:at_auth/at_auth.dart' show EnrollmentKeyExchangeMode;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:test/test.dart';
@@ -24,12 +25,12 @@ void main() {
 
   AtClientPreference preference(
           {PqPosture? posture,
-          SigningRollout? signingRollout,
+          SigningAlgoType? authenticationKeyAlgorithm,
           Set<SigningAlgoType>? dataSigningKeyAlgorithms,
           bool? disallowLegacyEncryption}) =>
       AtClientPreference(
-          posture: posture ?? const PqPosture.migration(),
-          signingRollout: signingRollout,
+          posture: posture ?? PqPosture.legacy,
+          authenticationKeyAlgorithm: authenticationKeyAlgorithm,
           dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
           disallowLegacyEncryption: disallowLegacyEncryption)
         ..hiveStoragePath = 'test/hive'
@@ -44,14 +45,22 @@ void main() {
       expect(preference().rolloutDifferencesFrom(preference()), isEmpty);
     });
 
-    test('a posture built without const is still the same posture', () {
-      // PqPosture declares no ==, so comparing two of them compares
-      // identity, and only const instances are canonicalized. Comparing the
-      // posture as an object would make this pair a mismatch, on a difference
-      // that does not exist.
-      final canonical = preference(posture: const PqPosture.migration());
-      // ignore: prefer_const_constructors
-      final built = preference(posture: PqPosture.migration());
+    test('a hand-built posture equal to a constant is the same posture', () {
+      // PqPosture declares no ==, so comparing two of them compares identity,
+      // and a program that builds its own posture gets an instance that is
+      // not one of the three constants. Comparing the posture as an object
+      // would make this pair a mismatch, on a difference that does not exist.
+      final canonical = preference(posture: PqPosture.legacy);
+      final built = preference(
+          posture: PqPosture(
+        authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
+        dataSigningKeyAlgorithms: const {},
+        seedNamespaceKeys: false,
+        keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
+        writesPqByDefault: false,
+        disallowLegacyEncryption: false,
+        mintLegacyMaterial: true,
+      ));
 
       expect(identical(canonical.posture, built.posture), isFalse,
           reason: 'the control: if these were the same instance the row below '
@@ -103,40 +112,42 @@ void main() {
           [contains('dataSigningKeyAlgorithms')]);
     });
 
-    test('naming a stage moves the set it derives, and both are reported', () {
-      // Not two mistakes but one: the in-use set defaults from the stage, so a
-      // caller that names only signingRollout has changed two axes. A
-      // diagnostic naming just the one it was handed would send a reader
-      // looking for a second setting nobody wrote.
+    test('the two key axes move independently, and are reported that way', () {
+      // They were one enum until ruling 113, and pqReady is the stage that
+      // exists precisely because they must not move together. A caller naming
+      // the authentication algorithm alone has changed ONE axis, and a
+      // diagnostic that also named the signing set would send a reader looking
+      // for a setting nobody wrote.
       expect(
           preference().rolloutDifferencesFrom(
-              preference(signingRollout: SigningRollout.rollout1)),
-          [
-            'signingRollout (asked rollout1, running now)',
-            'dataSigningKeyAlgorithms (asked {rsa2048}, running {})',
-          ]);
+              preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+          ['authenticationKeyAlgorithm (asked mldsa65, running rsa2048)']);
+      expect(
+          preference().rolloutDifferencesFrom(preference(
+              dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})),
+          ['dataSigningKeyAlgorithms (asked {rsa2048}, running {})']);
     });
 
     test('a posture difference is named by what it means', () {
       // The posture is compared through the two fields nothing else carries.
-      // Its other axes reach behaviour as signingRollout and
-      // disallowLegacyEncryption, which is why they are listed beside it
-      // rather than instead of it.
+      // Its other axes reach behaviour as authenticationKeyAlgorithm,
+      // dataSigningKeyAlgorithms and disallowLegacyEncryption, which is why
+      // they are listed beside it rather than instead of it.
       final differences = preference()
-          .rolloutDifferencesFrom(
-              preference(posture: const PqPosture.postQuantum()));
+          .rolloutDifferencesFrom(preference(posture: PqPosture.pqActive));
 
       expect(
           differences,
           containsAll([
             contains('posture.writesPqByDefault'),
             contains('posture.keyExchangeMode'),
-            contains('signingRollout'),
+            contains('authenticationKeyAlgorithm'),
             contains('disallowLegacyEncryption'),
             contains('dataSigningKeyAlgorithms'),
           ]),
-          reason: 'one posture moves five axes, and a diagnostic naming only '
-              'the first would send a reader looking for one setting');
+          reason: 'one posture moves five compared axes, and a diagnostic '
+              'naming only the first would send a reader looking for one '
+              'setting');
     });
 
     test('the difference reads as asked-versus-running', () {
@@ -151,18 +162,21 @@ void main() {
 
     test('a mixture of posture and explicit axis compares the effective value',
         () {
-      // signingRollout given explicitly beats the posture's, which is the
-      // documented contract. So these two agree on the stage and differ only
-      // on what the posture itself carries.
+      // An axis given explicitly beats the posture's, which is the documented
+      // contract. So these two agree on both key axes and differ only on what
+      // the posture itself carries.
       final postured = preference(
-          posture: const PqPosture.postQuantum(),
-          signingRollout: SigningRollout.now,
+          posture: PqPosture.pqActive,
+          authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
           dataSigningKeyAlgorithms: const {});
-      final plain = preference(signingRollout: SigningRollout.now);
+      final plain =
+          preference(authenticationKeyAlgorithm: SigningAlgoType.rsa2048);
 
       final differences = postured.rolloutDifferencesFrom(plain);
-      expect(differences.any((d) => d.contains('signingRollout')), isFalse,
-          reason: 'the effective stage is the same on both sides');
+      expect(
+          differences.any((d) => d.contains('authenticationKeyAlgorithm')),
+          isFalse,
+          reason: 'the effective algorithm is the same on both sides');
       expect(
           differences,
           containsAll([
@@ -180,11 +194,12 @@ void main() {
       expect(
           () => AtClientImpl.refuseChangedRolloutAxes(
               running: preference(),
-              asked: preference(signingRollout: SigningRollout.rollout1),
+              asked: preference(
+                  authenticationKeyAlgorithm: SigningAlgoType.mldsa65),
               cacheKey: '$atSign|enroll-a'),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', allOf(
-                  contains('signingRollout'),
+                  contains('authenticationKeyAlgorithm'),
                   contains('$atSign|enroll-a'),
                   contains('final at construction')))));
     });
@@ -205,10 +220,13 @@ void main() {
       final first = await AtClientImpl.create(atSign, 'wavi', preference());
 
       await expectLater(
-          AtClientImpl.create(atSign, 'wavi',
-              preference(signingRollout: SigningRollout.rollout1)),
-          throwsA(isA<ArgumentError>()
-              .having((e) => '$e', 'message', contains('signingRollout'))));
+          AtClientImpl.create(
+              atSign,
+              'wavi',
+              preference(
+                  authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+          throwsA(isA<ArgumentError>().having(
+              (e) => '$e', 'message', contains('authenticationKeyAlgorithm'))));
 
       // The control, on the same cached client: an equal preference is handed
       // back the client that already exists. Without this the row above passes
@@ -263,7 +281,7 @@ void main() {
       expect(
           () => AtClientImpl.refuseChangedRolloutAxes(
               running: null,
-              asked: preference(posture: const PqPosture.postQuantum()),
+              asked: preference(posture: PqPosture.pqActive),
               cacheKey: atSign),
           returnsNormally);
     });

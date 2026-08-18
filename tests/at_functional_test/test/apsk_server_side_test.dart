@@ -191,11 +191,13 @@ void main() {
       approver: approver,
       atSign: atSign,
       namespace: namespace,
-      // rollout 1, so the in-use set derives to {rsa2048} exactly as it does
-      // for an app that names a stage — rather than the set being handed over
-      // here, which would drive a preference no app would hold.
+      // One active rsa2048 signing key, which is what pqReady's default set
+      // holds. Named directly rather than by adopting the whole posture: the
+      // set is an app-facing axis in its own right, and pqReady would also
+      // move this enrollment's PKAM key to ML-DSA and its key exchange to pq,
+      // neither of which this test is about.
       preference: TestUtils.getPreference(atSign,
-          signingRollout: SigningRollout.rollout1),
+          dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048}),
       rootDomain: rootDomain,
       rootPort: TestUtils.rootServerPort,
       deviceName: 'apsk-heal-$runId',

@@ -60,11 +60,11 @@ constructor rather than assigned afterwards:
 
 ```dart
 final pref = AtOnboardingPreference(
-  posture: const PqPosture.postQuantum(),
+  posture: PqPosture.pqActive,
 )..someCustomField = 'my value';
 ```
 
-`posture`, `disallowLegacyEncryption`, `signingRollout` and
+`posture`, `disallowLegacyEncryption`, `authenticationKeyAlgorithm` and
 `dataSigningKeyAlgorithms` are all available there, and each is optional. Every
 type they take — including `SigningAlgoType` — is nameable from
 `package:at_client/at_client.dart` alone.
