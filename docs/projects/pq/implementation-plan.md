@@ -36,7 +36,6 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **9** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
-| [14.15](#1415-pre-pr-rails-checklist) | Pre-PR rails checklist | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Gates the stop-release |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
@@ -1240,8 +1239,16 @@ invisible — which is why it is struck here rather than deleted.
 
 ### 14.15 Pre-PR rails checklist
 
+✅ **NOTHING OWED, since 2026-08-10.** The single item is struck below. What
+remains is the external gate — the published atServer image verifying ML-DSA
+PKAM — and that is **step 32's blocker**, not a checklist entry. ⚠️ This section
+sat in the TODO table until 2026-08-18 because its opening read as a condition
+rather than a status, which also put the done marker outside the window the new
+TODO-row guard reads.
+
 No PR opens against this branch until the published atServer image verifies
-ML-DSA PKAM (owner's call, 2026-08-08). One thing must still be true by then:
+ML-DSA PKAM (owner's call, 2026-08-08). The one thing that had to be true by
+then:
 
 > ~~The functional pack's compose hardcodes a local image, so CI's
 > `docker compose pull` kills the job~~ — **done, verified 2026-08-10.** All
@@ -1409,6 +1416,7 @@ measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.15  | Pre-PR rails checklist                                  | DONE 2026-08-10 — the compose-image item is struck in the body and nothing needs reverting before a PR. It stayed in TODO until 2026-08-18 because the section opened with a condition instead of a status. The external gate it names is step 32's blocker |
 | 14.17  | Signature agility, and the G1 cluster joins the catalogue | DONE 2026-08-18 — steps 1–5 done, step 6 out of scope by gkc's ruling; the last piece was the signed-envelope 3×3. ⚠️ **This row sat in TODO reading "the owed half" for the rest of that day**, while the section's own body said COMPLETE — the shape the plan's own re-derivation warning names, where a body says closed and the heading nothing keys on says open. A cold read caught it. The section heading moved with this row. Body: [14.17](#1417-signature-agility--complete) |
 | 14.36  | `send()` composes its command with `NotifyVerbBuilder`, and finally has live coverage | DONE 2026-08-17 — the hand-rolled `notify:` string is gone; `useAtKeyToString = true` is required, since the name is split across `key` and `namespace`. One wire delta, `:notifier:SYSTEM`. **`send()` had no live test at all before this**, so the wire delta was landed with one added rather than on the inference that `notify()` already sends the token. The architecture guard moved with it: requiring `toAtProtocolFragment` in this file would now force the hand-rolled command back, so it asserts the absence of one instead. Body: [14.36](#1436-sends-command-is-hand-rolled-where-a-tested-builder-exists) |
 | 14.35  | `send()` splits its name at the first dot, and says what the parameter is | DONE 2026-08-17 — gkc ruled the parameter is `<id>.<namespace>` and poorly named; `namespace` deprecated for `idAndNamespace`, a dot-free name now throws at the call site. Unit **1401 (2)**, analyze exit 0. The one-line fix this row first proposed was measured WRONG — it would have changed the ciphertext binding. Body: [14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given) |
