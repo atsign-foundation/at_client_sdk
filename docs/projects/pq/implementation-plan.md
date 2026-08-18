@@ -34,7 +34,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
-| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **10** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **15** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
@@ -43,6 +43,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — 2 code fixes and a test repair | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
+| [14.40](#1440-at_clients-in-progress-heading-is-a-patch-and-now-carries-a-breaking-change) | Decide at_client's next version number — `## 3.14.1` now carries a BREAKING entry | Nothing but a ruling. The bump is gkc's call and was deliberately not taken |
 | [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — the rename, the 3 postures, client-driven retrofit, the algorithm lists, and public-data signature verification | Nothing. Design settled by [ruling 113](detail/decisions.md#113-pqposture-replaces-releaseposture-and-drives-the-rollout-2026-08-18); large, and it changes R-2's definition |
 
 ### 14.39 `PqPosture` and the rollout it drives
@@ -77,7 +78,7 @@ lands.
 Two are needed and neither exists in the right shape: a receiver-side list of
 what this atSign publishes for others to seal to, which is today the singular
 `keyEstablishmentAlgo` and is the same singularity as
-[14.37's sibling](#1437-retire-the-0x01-seal-version) issue
+[14.37's sibling](detail/implementation-plan.md#1437-the-0x01-seal-version-removed-outright) issue
 [#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135); and a
 sender-side list of what it will seal to, today `static const` in
 `SecretSharingAlgos`. Verification and decryption stay maximal and are never
@@ -105,6 +106,24 @@ Verification runs automatically on public reads, non-fatally, with the outcome
 exposed; it wants the signer's `_apsk` cached or every public read pays a remote
 lookup on another atSign. Both forms are read, and the legacy form permanently,
 because every public record a released at_client signed sits on a live atSign.
+
+### 14.40 at_client's in-progress heading is a patch, and now carries a breaking change
+
+Raised 2026-08-18 by the `0x01` removal, which added a **BREAKING** entry to
+at_client's `CHANGELOG.md` under its in-progress `## 3.14.1` heading. A patch
+version carrying a source-breaking change is the conflict; the entry itself is
+correct and stays.
+
+The break is real: `SecretSharingAlgos.xWingHpke` is gone, `suites` and
+`openableSuitesFor` no longer name it, and the `suites` list emitted on
+`enroll:request` narrows. What it costs is bounded by the same argument
+[decisions 109](detail/decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18)
+makes for at_chops — the substrate is `@experimental` and its only consumer is
+this repository — so this is a numbering question, not a blast-radius one.
+
+⛔ **Not acted on deliberately.** Version bumps are gkc's call and the standing
+rule is to fold entries under the in-progress heading rather than open a new
+one. Recorded here so the conflict is not discovered at publish time.
 
 ### 14.38 `activate_cli` cannot administer a PQ-native atSign
 
@@ -917,7 +936,7 @@ ladder — a same-value version bump merges silently.)
 
 ### 14.19 Small items, raised 2026-08-12 and not yet acted on
 
-**10 open, 16 struck** — ⚠️ **re-derive both, never read them here.** This
+**15 open, 16 struck** — ⚠️ **re-derive both, never read them here.** This
 header said `11 open, 12 struck` until 2026-08-18, and the TODO row three
 paragraphs up said 9 the whole time: the count turned out to have **four**
 homes, not the two a correction had been updating. (Was 17 open on 2026-08-17,
@@ -1584,7 +1603,10 @@ git grep -n "keyIdPrefix =\|apskAdvertisement" -- packages/at_client/lib/src/cry
 awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
   | grep -cE "^[0-9]+\. \*\*"     # RUN IT. A number written here is a fifth home
 awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \
-  | grep -cE "^[0-9]+\. ~~"       # likewise. Both said 11/12 on 2026-08-18 against an actual 9/16
+  | grep -cE "^[0-9]+\. ~~"       # likewise. NO NUMBER LIVES HERE: this comment
+  #                                 itself said "an actual 9/16" while the answer
+  #                                 was 10/16, so the warning about stale counts
+  #                                 was the fifth home carrying a stale count.
 
 # rows 3-9: the stage-5 table, which owns steps 23-31
 awk '/^\*\*Stage 5/,/^\*\*Stage 6/' docs/projects/pq/implementation-plan.md

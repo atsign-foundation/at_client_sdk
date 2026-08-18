@@ -675,14 +675,15 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     or 64 of them are valid for one KEM or the other, so the bytes alone cannot say which.
 - **Then (the version is negotiated, not fixed):** `suites` says which sealing
   constructions the owner can **open**, which `alg` does not determine — a KEM key opens
-  every construction built on that KEM. A modern X-Wing owner therefore receives
-  `ver 0x02`, an owner whose advertisement predates the field declares the one
-  construction that existed when it was written and keeps receiving `ver 0x01`, and
-  ML-KEM-1024 receives `ver 0x03`. That absent-field default **must never grow**: unlike
-  a key package, an advertisement is fetched by *senders*, who act on the claim
-  immediately.
+  every construction built on that KEM. An X-Wing owner therefore receives `ver 0x02`
+  and an ML-KEM-1024 owner `ver 0x03`, while an owner advertising only the retired
+  `x-wing-hpke-v1` shares no construction and is **refused**. ⚠️ This paragraph said such
+  an owner "keeps receiving `ver 0x01`" until 2026-08-18, when that version was retired.
+  An advertisement carrying **no** `suites` field is refused at the parse rather than
+  defaulted: unlike a key package, an advertisement is fetched by *senders*, who act on
+  the claim immediately, so nothing may be assumed on the owner's behalf.
 - **Cross-ref:** [`decisions.md` 50.3](detail/decisions.md#503-the-kem-is-configured-the-construction-is-negotiated);
-  [`seal-spec.md`](seal-spec.md) (the three versions and what each is attested by).
+  [`seal-spec.md`](seal-spec.md) (the two remaining versions and what each is attested by).
 
 - **Cross-ref:** `design.md` (nskey data path: 3 layers / 3 providers, CK model, the
   nskey + its eager publication).

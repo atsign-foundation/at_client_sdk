@@ -10551,7 +10551,18 @@ source-breaking changes in 3.6.0 should force a major. The 4.0.0 bump had been
 built that morning and reverted the same day, so nothing in the tree ever
 carried it. 3.6.0 stands.
 
-**The two breaks, and what each actually costs.**
+**Amended 2026-08-18: a third change joined this release, and the ruling still
+stands.** Retiring `pqSeal` version `0x01`
+([110](#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18))
+narrows `pqSealSupportedVersions` to `{0x02, 0x03}` and moves
+`pqSealDefaultVersion` to `0x02`. That is **behavioural** rather than
+source-breaking — no public symbol is removed from at_chops, and an envelope at
+the dropped version now opens as `PqOpenFailure.versionMismatch` — so the
+minor-versus-major reasoning below is unchanged by it: the consumer set is the
+same one, and it is empty outside this repository. This section previously read
+"The two breaks"; it enumerates the two source-breaking ones.
+
+**The two source breaks, and what each actually costs.**
 
 `pqSeal` and `pqOpen` took `info` from `Uint8List? info` to
 `required Uint8List info`. That is source-breaking for any caller that omitted

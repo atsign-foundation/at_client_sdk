@@ -3670,6 +3670,64 @@ its own. None blocks anything.
     sections and would want a ruling. Recorded so the guards' coverage is not
     mistaken for completeness.
 
+27. **Seven broken links in this doc set, all pre-dating 2026-08-18.** Found by
+    resolving every `](target)` across the eight PQ docs and attributing each
+    against the previous commit, so none of these came from the `0x01` removal.
+    `detail/implementation-plan.md` links `design.md`, `acceptance.md` and
+    `roadmap.md` as siblings when they are one level up — the `../` is missing —
+    plus three dangling `#anchors` there, and one in `detail/decisions.md`.
+    Re-derive rather than trusting this count: resolve each link target and each
+    `#anchor` against the headings of the file it lands in, skipping fenced code
+    blocks and the literal `](target#anchor)` that appears in prose as an
+    example. ⚠️ **The Markdown anchor hook only fires on the Edit tool**, so a
+    doc edited through a script or a shell heredoc is never checked — which is
+    how a dangling anchor reached a commit the same day.
+28. **`pqSealDefaultVersion` may not deserve to exist.** It moved from `0x01` to
+    `0x02` when `0x01` was retired, because deleting a public const from
+    at_chops is a wider API decision than that change needed. Nothing reads it:
+    `pqSealToBase64` makes `version` required and both call sites pass a
+    negotiated value. The argument for deleting it and making `version` required
+    on `pqSeal`/`pqOpen` is the one `info` already carries in its own dartdoc —
+    "a default is what made it reachable by saying nothing" — and it is sharper
+    here, because `0x02` and `0x03` differ by KEM, so a wrong default is an
+    unopenable record rather than a downgrade. Offered to gkc 2026-08-18 and not
+    taken; raise it whenever at_chops next opens for an API change.
+29. **`provenIn` cannot catch a rename it is not the citation for.** It asserts
+    `source.contains("'$testName")` for its `testName` argument only; the
+    `proves:` prose is documentation and is matched against nothing. Two
+    scenarios named live tests solely in that prose
+    (`a3_self_data_test.dart`, `a4_shared_data_test.dart`), so renaming those
+    tests broke nothing and went unnoticed until a hand sweep. Either stop
+    naming tests in `proves:`, or extend the check to quoted names inside it.
+    ⚠️ Worth deciding rather than drifting: the doc above `provenIn` promises
+    "rename or delete the live test and this goes red", which is true of the
+    argument and false of the prose, so the doc currently over-claims.
+
+30. **⛔ THE PLAN CONTRADICTS ITSELF ABOUT THE atSERVER IMAGE GATE, and the two
+    halves point opposite ways.** The re-derivation block in the live plan says
+    the gate "is gkc's call and is **NOT** to be checked against
+    `atsigncompany/virtualenv:vip` (ruled 2026-08-13)". SS-2's entry in this
+    file says the opposite — "**Before SS-2 opens a PR**, confirm vip has been
+    promoted and re-run the pack against it". One forbids the measurement the
+    other requires. ⚠️ **This matters more than its size**: 14.18 row 1 is
+    blocked on that gate, it is the last thing standing between here and the
+    end of D1 initial development, and a session reading only the second half
+    will run a check a ruling forbids. Wants a ruling from gkc, then whichever
+    half is wrong amended in place with what it used to say. Evidence that
+    prompted it: at_server's ML-DSA PKAM verification landed `648fe9fe`
+    (2026-08-11), `git tag --contains` gives `c3.16.0`/`c3.16.1`, and Docker
+    Hub reports `virtualenv:vip` `last_updated` 2026-08-15 — which suggests the
+    gate may already be liftable, but says nothing about whether checking it
+    that way is permitted.
+31. **`detail/` carries two stale copies of the `deprecated_member_use`
+    count.** Both read `340 at_client`, superseded by the 345 measured
+    2026-08-18 and recorded in the live file's two homes. They sit in the
+    demoted former plan, so they may be historical by design rather than
+    wrong — decide which, and if historical, date them. The general shape is
+    what to take from this: **that count now has at least four homes**, and a
+    correction that updates the two you have open leaves the others asserting
+    the old figure with equal confidence.
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.
