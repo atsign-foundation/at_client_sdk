@@ -458,7 +458,8 @@ void main() {
       );
     });
 
-    test('performance is measured, not assumed', () {
+    test('performance is measured, not assumed',
+        timeout: const Timeout(Duration(minutes: 2)), () {
       // PKAM-auth and put/get latency deltas vs the legacy RSA/AES path are
       // measured on one reference low-end device by a bench harness landed WITH
       // B-1. The harness is the durable artefact, re-run on every later
@@ -485,6 +486,23 @@ void main() {
                 'and prewarm is what stopped a 256 B encrypt measuring slower '
                 'than a 4096 B one');
       }
+
+      // Existence plus four identifiers cannot tell a working harness from a
+      // broken one, and this row's claim is that the instrument WORKS. So the
+      // instrument has to build. `pqSeal`/`pqOpen` made `info` required on
+      // 2026-08-12 without updating the bench, and every assertion above
+      // stayed green for six days while the harness had five
+      // missing_required_argument errors — because the routine local command
+      // is `dart analyze lib test`, which never looks in `benchmark/`.
+      final analyze = Process.runSync(
+        Platform.resolvedExecutable,
+        const ['analyze', 'benchmark'],
+        workingDirectory: '${repoRoot().path}/packages/at_client',
+      );
+      expect(analyze.exitCode, 0,
+          reason: 'the harness must BUILD, not merely contain the right '
+              'identifiers — a bench nobody can run pins nothing. '
+              '`dart analyze benchmark` said:\n${analyze.stdout}');
 
       // The bodies, not the index. `decisions.md` is one row per ruling; the
       // measured figures this guard exists for live under the ruling's own
