@@ -1,7 +1,12 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtKeysIo, authenticatorFor;
+import 'package:at_auth/at_auth.dart'
+    show
+        AtKeysIo,
+        authenticatorFor,
+        authenticatorForChops,
+        authenticatorForPrivateKey;
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
@@ -35,8 +40,15 @@ class RemoteSecondary implements Secondary {
     _installAuthenticator();
   }
 
-  /// The keystore an authenticator reads. Null keeps the existing behaviour.
+  /// The keystore an authenticator reads, when this client was given one.
   AtKeysIo? _atKeysIo;
+
+  /// The legacy credential, for a client that was given no keystore.
+  String? _privateKey;
+
+  /// The algorithm the constructor resolved, so an authenticator built from a
+  /// bare signer names the same one the lookup was told to use.
+  SigningAlgoType? _signingAlgoType;
 
   /// Hands the lookup an authenticator, so authentication is decided from the
   /// keystore rather than from credentials parked on at_lookup.
@@ -51,19 +63,56 @@ class RemoteSecondary implements Secondary {
   /// `EnrollmentApprover` reads that field for enrollment crypto, which is not
   /// authentication.
   void _installAuthenticator() {
-    final io = _atKeysIo;
     final lookUp = atLookUp;
     // `AtLookUp` does not declare the seam - that interface is frozen because
     // mocks implement it - so any other implementation keeps its behaviour.
-    if (io == null || lookUp is! AtLookupImpl) {
+    if (lookUp is! AtLookupImpl) {
       return;
     }
-    lookUp.authenticator = authenticatorFor(
-      io,
-      _atSign,
-      enrollmentId: lookUp.enrollmentId,
-      chops: _atChops,
-    );
+
+    final io = _atKeysIo;
+    if (io != null) {
+      lookUp.authenticator = authenticatorFor(
+        io,
+        _atSign,
+        enrollmentId: lookUp.enrollmentId,
+        chops: _atChops,
+      );
+      return;
+    }
+
+    // No keystore. The order from here is the ladder's own - atChops, then
+    // privateKey - so a client holding both authenticates with the same
+    // credential it did before. That precedence is stated rather than fallen
+    // into: an earlier version of this method left the private-key branch
+    // without a return, so the signer below silently overwrote it. The result
+    // was right by accident, which is a bad way to be right.
+    final chops = _atChops;
+    if (chops != null) {
+      lookUp.authenticator = authenticatorForChops(
+        _atSign,
+        chops,
+        enrollmentId: lookUp.enrollmentId,
+        signingAlgo: _signingAlgoType ?? SigningAlgoType.rsa2048,
+      );
+      return;
+    }
+
+    // The legacy credential, and precisely the caller the ladder existed for.
+    // Without this, deleting the ladder would make a keystore mandatory.
+    final privateKey = _privateKey;
+    if (privateKey != null) {
+      lookUp.authenticator = authenticatorForPrivateKey(
+        _atSign,
+        privateKey,
+        enrollmentId: lookUp.enrollmentId,
+      );
+      return;
+    }
+
+    // None of the three: nothing to authenticate with, so nothing is
+    // installed. That is a real mode - at_status_impl holds no key material at
+    // all, and an OTP enrollment submit routes through auth: false.
   }
 
   /// [signingAlgoType] overrides the preference's PKAM signing algorithm —
@@ -88,6 +137,7 @@ class RemoteSecondary implements Secondary {
       ..tlsKeysSavePath = preference.tlsKeysSavePath;
     _atChops = atChops;
     _atKeysIo = atKeysIo;
+    _privateKey = privateKey;
     this.atLookUp = atLookUp ??
         AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
             privateKey: privateKey,
@@ -103,6 +153,7 @@ class RemoteSecondary implements Secondary {
         signingAlgoType ?? preference.signingAlgoType;
     logger.finer(
         'signingAlgoType: $resolvedSigningAlgo hashingAlgoType: ${preference.hashingAlgoType}');
+    _signingAlgoType = resolvedSigningAlgo;
     this.atLookUp.signingAlgoType = resolvedSigningAlgo;
     this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
     this.atLookUp.atChops = atChops;

@@ -1,4 +1,10 @@
 ## 3.14.1
+- feat: `RemoteSecondary` installs an authenticator for all three credential
+  shapes, not just a keystore: an `AtKeysIo` if it has one, else the
+  preference's private key, else its `AtChops`. Only the first existed before,
+  which left every client built from a preference authenticating through
+  at_lookup's ladder - two thirds of the ladder traffic in a functional pass.
+  A client with none of the three keeps the existing behaviour.
 
 - feat: `RemoteSecondary` accepts an `AtKeysIo` and installs an
   `AtAuthenticator` on its lookup, so authentication is decided from the

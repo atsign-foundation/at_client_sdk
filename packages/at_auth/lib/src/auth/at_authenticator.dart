@@ -77,6 +77,55 @@ AtAuthenticator authenticatorFor(
           signingAlgo);
     };
 
+/// Authenticates with a signer the caller already holds, and no keystore.
+///
+/// The third shape at_lookup's ladder supported, after a keyfile and a bare
+/// private key: an `AtChops` set on the lookup, with nothing behind it. A
+/// client constructed from an `AtClientPreference` and an injected AtChops is
+/// exactly this, and it cannot use [authenticatorFor] because there is no
+/// keystore to read, nor [authenticatorForPrivateKey] because it holds no
+/// private key of its own - the key material is inside the AtChops.
+///
+/// [signingAlgo] defaults to rsa2048, which is what at_lookup signed with when
+/// nothing named an algorithm.
+AtAuthenticator authenticatorForChops(
+  String atSign,
+  AtChops chops, {
+  String? enrollmentId,
+  SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
+  HashingAlgoType hashingAlgo = HashingAlgoType.sha256,
+  Map<String, dynamic> clientConfig = const {},
+}) =>
+    (executor) async {
+      var fromResponse = await executor.sendSync((FromVerbBuilder()
+            ..atSign = atSign
+            ..clientConfig = Map<String, dynamic>.from(clientConfig))
+          .buildCommand());
+      if (fromResponse.isEmpty) {
+        return false;
+      }
+      fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
+      fromResponse = validatedFromChallenge(fromResponse, atSign);
+
+      final signingResult = chops.sign(AtSigningInput(fromResponse)
+        ..signingAlgoType = signingAlgo
+        ..hashingAlgoType = hashingAlgo
+        ..signingMode = AtSigningMode.pkam);
+
+      final pkamResponse = await executor.sendSync((PkamVerbBuilder()
+            ..signingAlgo = signingAlgo.name
+            ..hashingAlgo = hashingAlgo.name
+            ..enrollmentlId = enrollmentId
+            ..signature = signingResult.result)
+          .buildCommand());
+      if (pkamResponse == 'data:success') {
+        _logger.info('pkam auth success for $atSign');
+        return true;
+      }
+      throw UnAuthenticatedException(
+          'Failed connecting to $atSign. $pkamResponse');
+    };
+
 /// The legacy credential: a PKAM private key and nothing else.
 ///
 /// Reads no keystore, because a caller on this path has none - it holds a

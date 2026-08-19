@@ -193,6 +193,40 @@ void main() {
     });
   });
 
+  group('a signer and nothing else', () {
+    // The third shape the ladder supported, and the one every client in
+    // tests/at_functional_test has: an AtChops, no keyfile, no private key.
+    test('authenticates from an injected signer with no keystore', () async {
+      final executor = RecordingExecutor(['data:$challenge', 'data:success']);
+      final chops = AtChopsImpl(AtChopsKeys.create(
+          null,
+          AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
+              demo.pkamPrivateKeyMap[atSign]!)));
+
+      final ok = await authenticatorForChops(atSign, chops)(executor);
+
+      expect(ok, isTrue);
+      expect(executor.sent.last, startsWith('pkam:'));
+      expect(executor.sent.last, contains('signingAlgo:rsa2048'));
+    });
+
+    test('and refuses a challenge naming another atSign', () async {
+      final executor = RecordingExecutor([
+        'data:_9e8169dc-5618-44ec-ab43-1a5b2144c581@bob\u{1F6E0}'
+            ':c3d345fc-5691-4f90-bc34-17cba31f060f'
+      ]);
+      final chops = AtChopsImpl(AtChopsKeys.create(
+          null,
+          AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
+              demo.pkamPrivateKeyMap[atSign]!)));
+
+      await expectLater(
+          () => authenticatorForChops(atSign, chops)(executor),
+          throwsA(isA<UnAuthenticatedException>()));
+      expect(executor.sent, hasLength(1));
+    });
+  });
+
   group('refusals', () {
     test('a challenge that does not name this atSign is refused', () async {
       final io = InMemoryAtKeysIo();

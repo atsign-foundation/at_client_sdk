@@ -1,4 +1,12 @@
 ## 3.4.0
+- feat: add `authenticatorForChops`, the third credential shape at_lookup's
+  ladder supported: an `AtChops` and nothing else - no keyfile, no private
+  key, the material living inside the signer. A client built from an
+  `AtClientPreference` plus an injected AtChops is exactly this, and it can use
+  neither `authenticatorFor` (no keystore to read) nor
+  `authenticatorForPrivateKey` (no key of its own). Found because the
+  private-key path provably did not move the ladder count: predicted no change,
+  measured no change, and the model that explained why named this shape.
 - feat: add `authenticatorForPrivateKey`, the legacy credential as an
   authenticator - a PKAM private key and no keystore at all. That is the shape
   at_lookup's ladder supported, and without it deleting the ladder would make

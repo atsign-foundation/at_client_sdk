@@ -5,7 +5,16 @@ at_commons, `FakeAtServerSocket`, the `_stripPrompt` guard the harness found on
 its first use, the event-driven `read()`, and the `onNotification` seam.
 **Step 3 has landed too** — `AtAuthenticator`, `AtCommandExecutor`, and
 `AtLookupImpl` preferring an injected authenticator over the ladder.
-**Step 4 is part done**: `authenticatorFor` exists and at_auth's three sites
+**Step 4's production migration is COMPLETE.** Measured with all four
+authentication entry points instrumented: **250 of 257 authentications go
+through the injected seam**, `_process` never falls through to the ladder, and
+the remaining **7** are test files constructing an `AtLookupImpl` directly
+(`nskey_rotation_live_test` 3, plus one each in `apsk_server_side_test`,
+`copied_keyfile_test`, `enrollment_namespace_gate_test`,
+`enrollment_pq_key_exchange_live_test`). No `lib/` site reaches the ladder.
+Those seven can only change when step 5 removes the fields.
+
+Superseded reading of this row: `authenticatorFor` exists and at_auth's three sites
 use it. Measured against a live atServer with both routes logging at `shout`:
 **57 authentications through the injected route, 201 still through the
 ladder**. ⚠️ An earlier measurement said "4 ladder" - it was read at `finer`,
