@@ -1,11 +1,10 @@
 # One listener, two framings
 
-Status: design settled. **Step 1 of nine has landed**
-(`AtNetworkTimeouts.defaultResponseBudget` in at_commons, read by nothing yet),
-**and step 2's harness half** — `FakeAtServerSocket` plus the delivery and
-back-pressure tests. **Next is the rest of step 2**, the listener redesign, in
-[section 5](#5-order-of-work). This line is the only statement of progress;
-`git log` is the record of what landed. Owner: gkc.
+Status: design settled. **Steps 1 and 2 have landed** — the response budget in
+at_commons, `FakeAtServerSocket`, the `_stripPrompt` guard the harness found on
+its first use, the event-driven `read()`, and the `onNotification` seam.
+**Next is step 3**, the auth seam, in [section 5](#5-order-of-work). This line
+is the only statement of progress; `git log` is the record of what landed. Owner: gkc.
 Written against `gkc-pq-d1-spike` at `9f5da2ad0` and `origin/trunk` at
 `401e14d98`, 2026-08-19.
 
@@ -268,7 +267,7 @@ then the old path is deleted — so no package is uncompilable between commits.
 | 3   | Declare `AtAuthenticator` and `AtCommandExecutor`; accept and prefer an injected authenticator **alongside** the existing ladder. Nothing breaks yet.                                                                                | at_lookup      |
 | 4   | Supply the authenticators **from at_auth**, built over `AtKeysIo` — at_lookup still names none of it, and gains no dependency. at_auth, at_client and at_onboarding_cli switch to passing one. **at_tools' `at_cli` is the external case** — it sets `preference.privateKey` with no AtChops at all. | at_auth        |
 | 5   | Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` at `:744`, and **`at_chops` from the pubspec**.                                                                       | at_lookup      |
-| 6   | Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership.                                       | at_lookup      |
+| 6   | Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership. ⚠️ **Do not port `MultiplexedOutboundMessageListener` as written** - it truncates multi-line values (see [section 7](#7-corrections)). The framing that works is two passes: the notification check byte by byte, the `\n@` check only from the last newline on, as landed in step 2. | at_lookup      |
 | 7   | `withSecureSocket` in, constructor deprecated. Deprecate `MonitorClient` in the same commit — exported, zero consumers tree-wide, and its `_createNewConnection` bypasses `SecureSocketUtil` so it never got the connect timeouts.    | at_lookup      |
 | 8   | Migrate the 64 sites, compiler-enumerated. **Run `dart analyze` in `tests/at_functional_test` and `tests/at_end2end_test` separately** — 29 of the 64 live there, invisible to at_lookup's own analyze.                               | 9 packages     |
 | 9   | Monitor takes an `AtLookupMuxable` and loses its connection factory, PKAM auth, buffer, framing constants, overflow check, prompt stripping, `sendCommand`, backoff and heartbeat. **Wiring passes a fresh instance.**                | at_client      |
@@ -322,3 +321,4 @@ first version.
 | Install the authenticator on `authenticate()`          | **Held closure**       | Install stores the phase a second time, so it can disagree with at_auth's state — the derived-vs-stored hazard decision 9 invoked and 10 avoids.       |
 | Rebase drops at_lookup work silently                   | **Conflicts**          | Git reports `CONFLICT (modify/delete)`. The hazard is that it reads as "keep the file or not" and `git rm` discards 87 lines without showing a hunk.   |
 | Listener tests never enter the waiting path            | **7 do, 38 times**     | Measured by printing in the poll loop and running the suite: the whole `AtTimeOutException` group waits. The real gap is delivery — zero `StreamController` in at_lookup's tests, so nothing drives bytes through a socket. |
+| `gkc-fewer-connections`' listener is adoptable         | **Truncates values**   | Its byte loop starts at 0, so an internal `\n@` inside a `data:` value reads as the terminator. Measured by running that exact file over `data:the_key_is\n@bob:phone@alice\n@alice@`: it returns `data:the_key_is`. at_lookup's own `data contains new line character and @` test (`outbound_message_listener_test.dart:95`) would have caught it, so it never ran against this suite. |
