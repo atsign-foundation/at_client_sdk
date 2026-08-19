@@ -10880,6 +10880,42 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
    un-retrofit an atSign that has moved.
 2. **The client drives retrofit itself, at start**, in the same shape as the
    nskey mint ([18.7](#187-when-minting-happens)):
+
+   ⚠️ **SUPERSEDED IN PART, 2026-08-19, by SEQUENCING — read this before the
+   mechanics below.** Asked whether there was a sequencing issue, gkc ruled that
+   the retrofit is **awaited inside `AtClientImpl._init`**, before anything that
+   derives from the identity is built, rather than moved underneath a live
+   client afterwards. The trigger for the question was a real one: `_init`
+   fires the PQ startup **unawaited** as its last act, and `AtClientManager`
+   builds the notification and sync services *after* `_init` returns — so a
+   retrofit living in `startup()` would have raced the construction of both,
+   with nothing synchronising them.
+
+   Sequencing retires most of the mechanics below rather than amending them:
+   there is **no live re-point**, so no atomic cache re-file (`create()` simply
+   files under the identity `_init` settled), **no bounded in-run retry** (a
+   failed retrofit means the client comes up on the enrollment it had and the
+   next start tries again), and **no second startup pass or its guard** — the
+   bootstrap steps run once, after the id is settled, so no step can publish
+   under the old id. What survives is: the derivation of *whether* to retrofit,
+   the verbatim reuse of `appName`/`deviceName`/grants, "partial from `pqReady`
+   means no retrofit at all", and the explicit teardown of the connection the
+   retrofit was submitted on.
+
+   Two consequences worth naming rather than leaving to be rediscovered. First,
+   `selfRetrofit` could not be called from `_init` at all — it ends in
+   `AtClientManager.fromAuthSession`, which builds *another* client, whose own
+   `_init` would retrofit in turn; the identity half is now `retrofitIdentity`.
+   Second, the connection-identity fields added to `AtConnectionMetaData` in
+   at_lookup 3.7.0 were justified by the live re-point and are no longer needed
+   to verify one. They stay — they are the only way to ask a socket which
+   enrollment it holds, and `AtLookUp.enrollmentId` answers a different question
+   — but that is a weaker justification than the one that got them built.
+
+   **The mechanics below are retained as the design for a live re-point**, which
+   is what would be needed if a retrofit ever has to happen on a running client
+   rather than at start.
+
    attempted every start, non-blocking, local state checked first so it is a
    no-op once done, failure logged and retried next start, and the client stays
    usable at its current level meanwhile. `selfRetrofit` is already idempotent,

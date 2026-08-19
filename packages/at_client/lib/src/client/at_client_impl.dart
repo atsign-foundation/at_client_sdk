@@ -2,7 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:at_auth/at_auth.dart' show AtEnrollment, AtKeysIo;
+import 'package:at_auth/at_auth.dart'
+    show AtAuthSession, AtEnrollment, AtKeysIo;
+import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -487,8 +489,15 @@ class AtClientImpl implements AtClient {
       await atClientImpl._init(atLookUp: atLookUp);
     }
 
-    atClientInstanceMap[cacheKey] = atClientImpl;
-    return atClientInstanceMap[cacheKey];
+    // Not [cacheKey]: `_init` may have settled a different identity than the
+    // caller asked for, because a posture requiring a stronger authentication
+    // key retrofits the client before returning. Filing under the requested id
+    // would leave the cache holding a client under an enrollment it no longer
+    // authenticates as, and a later create() for the new id would build a
+    // second client for one enrollment.
+    final filedKey = instanceKey(currentAtSign, atClientImpl.enrollmentId);
+    atClientInstanceMap[filedKey] = atClientImpl;
+    return atClientInstanceMap[filedKey];
   }
 
   AtClientImpl._(
@@ -587,6 +596,10 @@ class AtClientImpl implements AtClient {
       enrollmentId: enrollmentId,
       signingAlgoType: signingAlgoType,
     );
+
+    // Settle which enrollment this client runs as, before anything that
+    // derives from it is built.
+    await _settleEnrollmentIdentity();
 
     // Using ??= because we may be injecting an EncryptionService
     _encryptionService ??= EncryptionService(_atSign);
@@ -1468,6 +1481,150 @@ class AtClientImpl implements AtClient {
           'key material: $e. Connections will authenticate with the '
           // ignore: deprecated_member_use_from_same_package
           'preference value (${_preference?.signingAlgoType}).');
+    }
+  }
+
+  /// Whether an enrollment authenticating with [held] must move to satisfy a
+  /// posture asking for [wanted].
+  ///
+  /// **A posture is a floor, never a downgrade.** Key material wins, so a
+  /// client built against an older at_client — or deliberately run at
+  /// `PqPosture.legacy` — cannot un-retrofit an atSign that has already moved.
+  /// `legacy` means "do not drive an upgrade", not "return to legacy".
+  ///
+  /// "Stronger" is at_chops' own total order rather than a judgement made
+  /// here: a signer and a verifier that disagreed about it would negotiate
+  /// against themselves.
+  @visibleForTesting
+  static bool retrofitIsDue(
+          {required SigningAlgoType wanted, required SigningAlgoType held}) =>
+      held != wanted && SigningAlgoType.strongestOf({wanted, held}) == wanted;
+
+  /// Settles the enrollment this client runs as, before anything that derives
+  /// from it is built.
+  ///
+  /// A posture is a floor. When it asks for a stronger authentication key than
+  /// this enrollment holds, the client retrofits itself and comes up on the new
+  /// enrollment. Whether to retrofit is **derived from key material, never
+  /// stored**: a stored flag would be a second control over one behaviour, and
+  /// the derivation reproduces every cell of the posture matrix on its own.
+  /// There is no preference opt-out.
+  ///
+  /// **Sequenced here rather than moved afterwards.** The monitor, the sync
+  /// service's own `RemoteSecondary` and the encryption service are all built
+  /// from this client's enrollment id *after* `_init` returns, so settling it
+  /// first makes every one of them correct by construction. Retrofitting a
+  /// live client instead would mean moving each of them underneath its holder,
+  /// and a connection missed that way goes on working for the atServer's
+  /// 720-hour grace — a half-moved client that looks healthy for a month and
+  /// then fails with nothing pointing back here.
+  ///
+  /// Nothing is fatal. A client that cannot retrofit comes up on the enrollment
+  /// it already had and tries again next start; `retrofitIdentity` is
+  /// idempotent per keyfile, which is what makes every-start safe. The cost is
+  /// paid once — the check below is local, so a client with nothing to do makes
+  /// no round trip at all.
+  Future<void> _settleEnrollmentIdentity() async {
+    final id = enrollmentId;
+    final keysIo = _atKeysIo;
+    if (id == null || keysIo == null) return;
+
+    final wanted = _preference!.authenticationKeyAlgorithm;
+    SigningAlgoType held;
+    try {
+      // A null resolution is not "unknown". `AtKeys.authenticationFor`
+      // documents it as the flat fields' RSA keypair, and at_lookup signs with
+      // `rsa2048` by default, so a legacy enrollment compares as rsa2048 —
+      // which is precisely the enrollment a PQ posture exists to move.
+      held = (await keysIo.read(_atSign)).authenticationAlgorithmFor(id) ??
+          SigningAlgoType.rsa2048;
+    } on Exception catch (e) {
+      _logger.warning('Could not read key material for enrollment $id, so '
+          'whether a retrofit is due cannot be decided. Coming up on $id: $e');
+      return;
+    }
+
+    if (!retrofitIsDue(wanted: wanted, held: held)) return;
+
+    _logger.info('Enrollment $id authenticates with ${held.name} and this '
+        'posture requires ${wanted.name}; retrofitting');
+
+    try {
+      // appName, deviceName and the grants come off the enrollment record
+      // rather than the preference: the new enrollment reuses them verbatim,
+      // because losing authority is a downgrade and would land silently, a
+      // namespace at a time. There is no escalation to weigh — the atServer
+      // refuses any grant the parent does not itself hold.
+      final enrollment = await localSecondary?.getEnrollmentDetails();
+      final appName = enrollment?.appName;
+      final deviceName = enrollment?.deviceName;
+      if (enrollment == null || appName == null || deviceName == null) {
+        _logger.warning('Enrollment $id is due a retrofit, but its record does '
+            'not name an app and device to carry over. Coming up on $id.');
+        return;
+      }
+      final grants = (enrollment.namespace ?? const <String, dynamic>{})
+          .map((namespace, access) => MapEntry(namespace, '$access'));
+
+      final newSession = await retrofitIdentity(
+        session: AtAuthSession(
+          atSign: _atSign,
+          rootDomain:
+              AtRootDomain(_preference!.rootDomain, _preference!.rootPort),
+          atKeysIo: keysIo,
+          namespace: _preference!.namespace,
+          enrollmentId: id,
+          // The retrofit submits on an already-authenticated connection, and
+          // this one is authenticated as the enrollment being retrofitted.
+          atLookUp: _remoteSecondary!.atLookUp,
+        ),
+        preference: _preference!,
+        appName: appName,
+        deviceName: deviceName,
+        namespaces: grants,
+      );
+
+      final newId = newSession.enrollmentId;
+      if (newId == null || newId == id) {
+        _logger.warning('The retrofit of $id returned no new enrollment id. '
+            'Coming up on $id.');
+        return;
+      }
+
+      enrollmentId = newId;
+      await _rederiveFromEnrollment(previousEnrollmentId: id);
+      _logger.info('Retrofitted $id to $newId; this client runs as $newId');
+    } on Exception catch (e) {
+      // The legacy enrollment is untouched by a failed retrofit — the atServer
+      // caps it on success, never before — so the client is fully usable.
+      _logger.warning('The retrofit of enrollment $id did not complete, so '
+          'this client comes up on $id and the next start will try again: $e');
+    }
+  }
+
+  /// Rebuilds everything `_init` derives from the enrollment id, after it has
+  /// changed. The old connection is closed explicitly: left open it stays
+  /// authenticated as the superseded enrollment for the atServer's grace
+  /// period.
+  Future<void> _rederiveFromEnrollment(
+      {required String previousEnrollmentId}) async {
+    await _resolveSigningAlgoFromKeyMaterial();
+    _atChops = await _createAtChops(_atSign);
+
+    final previous = _remoteSecondary;
+    _remoteSecondary = RemoteSecondary(
+      _atSign,
+      _preference!,
+      atChops: _atChops,
+      privateKey: _preference!.privateKey,
+      enrollmentId: enrollmentId,
+      signingAlgoType: signingAlgoType,
+    );
+    try {
+      await previous?.atLookUp.close();
+    } on Exception catch (e) {
+      _logger.warning('The connection authenticated as $previousEnrollmentId '
+          'could not be closed; it will idle out: $e');
     }
   }
 

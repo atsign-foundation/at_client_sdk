@@ -1,4 +1,22 @@
 ## 3.14.1
+- feat: a client whose posture requires a stronger authentication key than its
+  enrollment holds now retrofits itself during startup, and comes up on the new
+  enrollment. Whether to retrofit is derived from key material — the posture's
+  `authenticationKeyAlgorithm` against the enrollment's, by at_chops'
+  `strongestFirst` order — never stored, and there is no opt-out. A posture is a
+  floor: it never downgrades an atSign that has already moved.
+  - **Settled before anything that derives from it is built.** The monitor, the
+    sync service's own connection and the encryption service all read the
+    client's enrollment id after `_init` returns, so deciding it first makes
+    them correct by construction rather than something to move afterwards. A
+    connection missed by a later move goes on working for the atServer's
+    720-hour grace.
+  - Nothing is fatal and the check costs no round trip when there is nothing to
+    do: a client that cannot retrofit comes up on the enrollment it had and
+    tries again next start.
+- feat: `retrofitIdentity()` — the identity half of `selfRetrofit()`, which
+  submits the enrollment and authenticates under the new id without building a
+  client.
 - fix: a subscriber to `NotificationService.currentListenerStateStream` no
   longer depends on the `Monitor` object that was current when it subscribed.
   `NotificationServiceImpl` relays listener state from whichever monitor is

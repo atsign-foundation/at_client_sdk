@@ -44,7 +44,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — **partly overtaken 2026-08-19**: change 1 and half of change 3 shipped with 14.39's CLI commit; change 2 and the rest of 3 remain | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
 | [14.40](#1440-at_clients-in-progress-heading-is-a-patch-and-now-carries-a-breaking-change) | Decide at_client's next version number — `## 3.14.1` now carries a BREAKING entry | Nothing but a ruling. The bump is gkc's call and was deliberately not taken |
-| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Owed: client-driven retrofit at start** (designed, part-built 2026-08-19 — the two connection-identity foundations are in, the re-point itself is not) and **public-data signature verification** (undesigned) | Nothing. The at_lookup blocker is lifted: 3.7.0 carries the connection-identity fields |
+| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green, live packs not yet run. **Owed: public-data signature verification** (undesigned) | Nothing |
 
 ### 14.39 `PqPosture` and the rollout it drives
 
@@ -64,7 +64,26 @@ in all three. Construction rejects `disallowLegacyEncryption` true where
 for authenticating and reading. Nothing is needed for capping; the atServer's
 720-hour grace already re-arms per sibling and exempts the first enrollment.
 
-**Client-driven retrofit at start is DESIGNED and OWED**, ruled with gkc
+✅ **Client-driven retrofit at start is BUILT, 2026-08-19 — and it is SEQUENCED,
+not a live re-point.** Asked whether there was a sequencing issue, gkc ruled the
+retrofit is awaited inside `AtClientImpl._init`, before anything that derives
+from the identity exists. The monitor, the sync service's own `RemoteSecondary`
+and the encryption service are all built from the client's enrollment id *after*
+`_init` returns, so settling it first makes them correct by construction. That
+retires the live re-point, the atomic cache re-file, the bounded in-run retry
+and the second startup pass. `AtClientImpl.retrofitIsDue` carries the
+derivation; `retrofitIdentity` (split out of `selfRetrofit`, which could not be
+called from `_init` without building a second client) carries the submission.
+⚠️ **The success path has no unit coverage** — it needs a live atServer, so the
+functional and e2e packs are its only proof and they have not been run against
+this. What is unit-pinned is the derivation and the failure containment.
+
+⚠️ **`NotificationServiceImpl.repointMonitor()` now has no production caller**,
+sequencing having removed the need to move a live monitor. The listener-state
+relay beside it is a genuine fix and stays either way; the re-point method is a
+decision owed.
+
+The original design, now superseded in part, was ruled with gkc
 2026-08-19 and folded into
 [ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
 ruling 2, which carries the mechanics. In short: the **same** `AtClient`
