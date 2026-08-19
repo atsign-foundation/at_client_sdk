@@ -1,5 +1,15 @@
 ## 3.7.0
 
+- feat: `AtLookupImpl` accepts an injected authenticator. Two new types,
+  `AtAuthenticator` and `AtCommandExecutor`, let a caller hand over the whole
+  of authentication as one closure instead of handing at_lookup a credential
+  to store. at_lookup cannot name `AtKeys` or `AtKeysIo` - they live in
+  at_auth, which depends on at_lookup - so the keystore, the enrollment and
+  the signing algorithm stay on the caller's side of the seam. When set, the
+  authenticator is preferred over the existing
+  atChops/privateKey/cramSecret ladder; when absent, nothing changes. Both
+  routes work, and the ladder goes once every caller supplies one.
+
 - feat: `OutboundMessageListener` can route asynchronous notifications, via a
   new `onNotification` callback. The atServer frames the two kinds of message
   differently - a verb response ends with a newline and the ready prompt

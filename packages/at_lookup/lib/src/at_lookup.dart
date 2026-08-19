@@ -3,6 +3,35 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
+/// Performs one authentication on a connection that is already open, using
+/// [executor] to speak to the atServer, and returns whether it succeeded.
+///
+/// This is the whole of authentication reduced to one value. at_lookup cannot
+/// name `AtKeys` or `AtKeysIo` - they live in at_auth, which depends on
+/// at_lookup - so the credential, the enrollment and the signing algorithm all
+/// stay on the at_auth side of this typedef and none of them reach here.
+///
+/// Implementations are invoked once per connection that needs authenticating,
+/// so a closure held for an instance's life must decide afresh each time what
+/// credential applies: an instance that CRAM-onboards and then PKAM-
+/// authenticates is one instance and two answers.
+typedef AtAuthenticator = Future<bool> Function(AtCommandExecutor executor);
+
+/// The narrow view of a connection that an [AtAuthenticator] is given: enough
+/// to run a challenge-response, and nothing else.
+abstract interface class AtCommandExecutor {
+  /// Sends [command] and returns the atServer's reply.
+  ///
+  /// "Sync" names the channel, not the Dart semantics: verb responses are the
+  /// synchronous side of the connection, the side where a reply belongs to the
+  /// command that preceded it. Notifications are the asynchronous side and
+  /// never arrive here.
+  ///
+  /// Called from inside authentication, which already holds the
+  /// request/response mutex, so this must not take it again.
+  Future<String> sendSync(String command);
+}
+
 abstract interface class AtLookUp {
   /// update
   Future<bool> update(String key, String value,

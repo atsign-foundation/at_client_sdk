@@ -62,7 +62,7 @@ String validatedFromChallenge(String challenge, String atSign) {
   return challenge;
 }
 
-class AtLookupImpl implements AtLookUp {
+class AtLookupImpl implements AtLookUp, AtCommandExecutor {
   final logger = AtSignLogger('AtLookup');
 
   /// Listener for reading verb responses from the remote server
@@ -86,6 +86,19 @@ class AtLookupImpl implements AtLookUp {
   String? privateKey;
 
   String? cramSecret;
+
+  /// Takes over authentication entirely when set, in place of the
+  /// atChops/privateKey/cramSecret ladder below.
+  ///
+  /// The ladder asks "which credential do I hold?" in at_lookup, which is the
+  /// wrong place to ask: at_lookup cannot see an enrollment, a keystore or a
+  /// signing algorithm, so every credential it might use has to be handed to
+  /// it and stored here first. A caller that sets this hands over one closure
+  /// instead, and keeps all of that on its own side. See [AtAuthenticator].
+  ///
+  /// Both routes work while this exists. The ladder and the fields feeding it
+  /// go once every caller supplies an authenticator.
+  AtAuthenticator? authenticator;
 
   /// Permitted number of milliseconds before connection to atServer
   /// is deemed 'idle' and will be closed. The default is usually set to
@@ -486,6 +499,36 @@ class AtLookupImpl implements AtLookUp {
 
   final Mutex _pkamAuthenticationMutex = Mutex();
 
+  @override
+  Future<String> sendSync(String command) async {
+    await _sendCommand(command);
+    return messageListener.read();
+  }
+
+  /// Runs [authenticate] against this connection, under the same mutex the
+  /// ladder's own methods take.
+  Future<void> _authenticateWith(AtAuthenticator authenticate) async {
+    await createConnection();
+    try {
+      await _pkamAuthenticationMutex.acquire();
+      if (_connection!.getMetaData()!.isAuthenticated) {
+        return;
+      }
+      if (!await authenticate(this)) {
+        throw UnAuthenticatedException(
+            'Failed connecting to $_currentAtSign.'
+            ' The authenticator reported failure');
+      }
+      // The enrollment id still comes from this object, because the ladder
+      // still needs the field. When the ladder goes, so does the field, and
+      // the authenticator - which is the side that knows the enrollment -
+      // becomes the only thing that can supply it.
+      _recordAuthentication(enrollmentId: enrollmentId);
+    } finally {
+      _pkamAuthenticationMutex.release();
+    }
+  }
+
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
   /// secondary server. This method is executed for all verbs that requires authentication.
   /// @Deprecated('Use method pkamAuthenticate') Commenting deprecation since it causes issue in dart analyze in the caller
@@ -661,7 +704,9 @@ class AtLookupImpl implements AtLookUp {
       await requestResponseMutex.acquire();
 
       if (auth && _isAuthRequired()) {
-        if (_atChops != null) {
+        if (authenticator != null) {
+          await _authenticateWith(authenticator!);
+        } else if (_atChops != null) {
           logger.finer('calling pkam using atchops');
           await pkamAuthenticate(enrollmentId: enrollmentId);
         } else if (privateKey != null) {
