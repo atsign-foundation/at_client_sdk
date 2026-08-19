@@ -156,3 +156,70 @@ abstract interface class AtLookUp {
       'Removed with the credential ladder in the next major release.')
   String? get enrollmentId;
 }
+
+/// An [AtLookUp] that also carries the atServer's asynchronous notification
+/// stream, so one class knows both of the atServer's framings.
+///
+/// A verb response ends `\n@<atSign>@` — the newline, then the prompt saying
+/// the atServer is ready for the next command. A notification is not a reply
+/// to anything, so no prompt follows it and it ends at a bare `\n`. Everything
+/// that reads one of those framings has, until now, been written twice.
+///
+/// ## This does NOT make one connection safe for both
+///
+/// ⚠️ **Give this a connection of its own.** The notification stream and verb
+/// request-response must not share a socket today, and the flag that was
+/// supposed to make that safe does not work.
+///
+/// `MonitorVerbBuilder.multiplexed` documents itself as telling the atServer
+/// that a connection carries both, so that "the server will only send
+/// notifications once there is no request currently in progress". **No
+/// atServer implements it.** Measured against `at_server` `origin/trunk`:
+/// zero occurrences of the string in the entire repository, against a probe
+/// proven positive on `selfNotifications`, which returns 16. The monitor
+/// verb's syntax — shared by both sides, in at_commons — *does* capture
+/// `multiplexed` as a named group, so the atServer parses the flag, ignores
+/// it, and does not refuse it. Setting it buys nothing and reports success.
+///
+/// The consequence is concrete: the atServer's monitor handler subscribes to
+/// its notification stream and writes each notification to the connection as
+/// it arrives, with nothing gating that write on a request being in flight. A
+/// notification landing mid-response is appended to a buffer whose prefix is
+/// already `data:`, so the framing check — which tests that prefix — will not
+/// route it, and it is absorbed into the verb response instead. Corruption,
+/// not a dropped message, and only under concurrency.
+abstract interface class AtLookupMuxable implements AtLookUp {
+  /// Notifications from the atServer, as the raw lines it sent.
+  ///
+  /// **Single-subscription, deliberately.** A broadcast stream does not
+  /// buffer, ignores `pause()`, and drops anything arriving before a listener
+  /// attaches. Every one of those is data loss on a notification, and a
+  /// dropped notification is indistinguishable from one the atServer never
+  /// sent — so the failure gets attributed to the sender.
+  ///
+  /// Pausing this stream stops reading the socket, so back-pressure reaches
+  /// the atServer through TCP rather than being absorbed by an unbounded
+  /// buffer in this process.
+  Stream<String> get notifications;
+
+  /// Ask the atServer to start sending notifications on this connection.
+  ///
+  /// Connects and authenticates if required, then sends `monitor:`. Safe to
+  /// call when already notifying: it returns without re-sending.
+  Future<void> startNotifications({
+    String? regex,
+    int? lastNotificationTime,
+    bool selfNotificationsEnabled = true,
+  });
+
+  /// Stop notifications by dropping the connection carrying them.
+  ///
+  /// There is no verb that turns `monitor:` off — the atServer streams until
+  /// the connection goes away — so this closes it. [notifications] is closed
+  /// too, because a stream that can never produce another event should say so
+  /// rather than hang.
+  Future<void> stopNotifications();
+
+  /// Whether [startNotifications] is in force.
+  bool get isNotifying;
+}

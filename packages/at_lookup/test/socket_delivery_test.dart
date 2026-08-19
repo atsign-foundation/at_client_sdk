@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:at_lookup/at_lookup.dart';
+// Not in the barrel by design - decision 4 keeps the listener private
+// to the package, so tests reach it by path as the fake socket does.
+import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 
 import 'package:test/test.dart';
 
@@ -91,6 +94,86 @@ void main() {
           reason: 'resuming must reach the controller');
       expect(got, 'data:paused@alice',
           reason: 'resuming must deliver the bytes buffered while paused');
+    });
+
+    // The pair above pauses through the FAKE's handle on the subscription,
+    // which proves the controller honours pause but says nothing about the
+    // listener. These pause through the LISTENER, which is the handle
+    // production code has - `listen()` used to discard its subscription, so
+    // nothing in at_lookup could stop delivery at all.
+    test('the listener can stop delivery through its own subscription',
+        () async {
+      final rig = FakeAtServerRig();
+      String? got;
+      unawaited(rig.listener
+          .read(transientWaitTimeMillis: 5000, maxWaitMilliSeconds: 5000)
+          .then((v) => got = v));
+      await rig.socket.settle();
+
+      expect(rig.listener.isDeliveryPaused, isFalse,
+          reason: 'a fresh listener is delivering');
+      rig.listener.pauseDelivery();
+      expect(rig.socket.pauseCount, 1,
+          reason: 'pauseDelivery must reach the socket, not just set a flag - '
+              'if listen() discarded its subscription this is 0');
+      expect(rig.listener.isDeliveryPaused, isTrue);
+
+      await rig.socket.serverSends('data:held@alice\n@alice@');
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(got, isNull,
+          reason: 'bytes must not be delivered while the listener has paused '
+              'its own subscription');
+
+      rig.listener.resumeDelivery();
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(rig.listener.isDeliveryPaused, isFalse);
+      expect(got, 'data:held@alice',
+          reason: 'and must arrive once the listener resumes');
+    });
+
+    test('pauses are counted, so two need two resumes', () async {
+      // Measured, not assumed: StreamSubscription counts pauses. A design that
+      // pairs one resume against two pauses leaves the socket stopped for
+      // good, and the symptom is a hang with no error anywhere.
+      final rig = FakeAtServerRig();
+
+      rig.listener.pauseDelivery();
+      rig.listener.pauseDelivery();
+      rig.listener.resumeDelivery();
+      expect(rig.listener.isDeliveryPaused, isTrue,
+          reason: 'one resume must NOT undo two pauses');
+
+      rig.listener.resumeDelivery();
+      expect(rig.listener.isDeliveryPaused, isFalse,
+          reason: 'the second resume balances the second pause');
+    });
+
+    test('resuming a listener that never paused is harmless', () async {
+      final rig = FakeAtServerRig();
+
+      rig.listener.resumeDelivery();
+
+      expect(rig.listener.isDeliveryPaused, isFalse);
+      await rig.socket.serverSends('data:fine@alice\n@alice@');
+      expect(
+          await rig.listener
+              .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
+          'data:fine@alice',
+          reason: 'an unmatched resume must not disturb delivery');
+    });
+
+    test('pausing before listen() is a no-op, not a crash', () async {
+      // The muxable wires pause/resume to a stream controller, and a listener
+      // can be handed one before its socket exists. Null-safe by design.
+      final socket = FakeAtServerSocket();
+      final connection = OutboundConnectionImpl(socket);
+      final listener = OutboundMessageListener(connection);
+
+      expect(listener.isDeliveryPaused, isFalse);
+      expect(() => listener.pauseDelivery(), returnsNormally);
+      expect(() => listener.resumeDelivery(), returnsNormally);
+      expect(socket.pauseCount, 0,
+          reason: 'there is no subscription yet, so nothing to pause');
     });
   });
 

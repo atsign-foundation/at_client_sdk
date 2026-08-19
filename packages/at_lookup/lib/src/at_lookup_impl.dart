@@ -66,7 +66,7 @@ String validatedFromChallenge(String challenge, String atSign) {
   return challenge;
 }
 
-class AtLookupImpl implements AtLookUp, AtCommandExecutor {
+class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   final logger = AtSignLogger('AtLookup');
 
   /// Listener for reading verb responses from the remote server
@@ -336,6 +336,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor {
           host, port.toString(), _currentAtSign, _secureSocketConfig);
       //3. listen to server response
       messageListener = socketListenerFactory.createListener(_connection!);
+      // Re-established on every connection, because createConnection builds a
+      // fresh listener each time. Installed only when somebody has asked for
+      // the stream: with no controller there is nowhere to put a notification,
+      // and routing one into a void drops it silently.
+      if (_notificationController != null) {
+        messageListener.onNotification = _routeNotification;
+      }
       messageListener.listen();
       logger.info('New connection created OK');
     }
@@ -800,6 +807,122 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor {
   @override
   Future<void> close() async {
     await _connection?.close();
+  }
+
+  // ---------------------------------------------------------------------
+  // AtLookupMuxable - the second framing, on a connection of its own.
+  // See the warning on [AtLookupMuxable]: sharing one socket with verb
+  // traffic is NOT safe today, because no atServer implements the flag that
+  // was supposed to make it safe.
+  // ---------------------------------------------------------------------
+
+  /// Created on first read of [notifications], not in the constructor.
+  ///
+  /// Its existence is what tells [createConnection] to install the framing
+  /// seam, so a lookup nobody asked notifications of behaves exactly as it
+  /// always did - including leaving a stray notification in the buffer, which
+  /// is pinned by test as the behaviour the seam exists to fix.
+  StreamController<String>? _notificationController;
+
+  bool _isNotifying = false;
+
+  @override
+  bool get isNotifying => _isNotifying;
+
+  @override
+  Stream<String> get notifications {
+    _notificationController ??= StreamController<String>(
+      // Back-pressure that reaches the far end. A listener that stops reading
+      // stops the socket, so bytes pile up in the kernel buffer and TCP closes
+      // the window on the atServer - rather than being absorbed here without
+      // bound until the byte buffer overflows.
+      onPause: () => _setNotificationDelivery(paused: true),
+      onResume: () => _setNotificationDelivery(paused: false),
+    );
+    // A connection may already exist - `notifications` can be read after the
+    // first verb - so the seam is installed here too, not only on connect.
+    if (_connection != null) {
+      messageListener.onNotification = _routeNotification;
+    }
+    return _notificationController!.stream;
+  }
+
+  /// [messageListener] is `late` and is assigned only inside
+  /// [createConnection], immediately after `_connection`. So a null
+  /// `_connection` is exactly the case where touching it throws a
+  /// `LateInitializationError` - and the controller can be paused before
+  /// anything has connected.
+  void _setNotificationDelivery({required bool paused}) {
+    if (_connection == null) return;
+    if (paused) {
+      messageListener.pauseDelivery();
+    } else {
+      messageListener.resumeDelivery();
+    }
+  }
+
+  void _routeNotification(String notification) {
+    final controller = _notificationController;
+    if (controller == null || controller.isClosed) {
+      // `warning`, not `finer`. A silently dropped notification is
+      // indistinguishable from one the atServer never sent, so the failure
+      // gets attributed to the sender. Nothing retries this.
+      logger.warning('Notification DROPPED for $_currentAtSign - the stream is '
+          '${controller == null ? "not open" : "closed"}: $notification');
+      return;
+    }
+    controller.add(notification);
+  }
+
+  @override
+  Future<void> startNotifications({
+    String? regex,
+    int? lastNotificationTime,
+    bool selfNotificationsEnabled = true,
+  }) async {
+    if (_isNotifying) {
+      logger.info('startNotifications: already notifying, nothing sent');
+      return;
+    }
+    // Reading this getter is what creates the controller and installs the
+    // seam, so it must happen before `monitor:` goes out - otherwise the first
+    // notifications arrive with nowhere to go.
+    notifications;
+
+    await requestResponseMutex.acquire();
+    try {
+      await createConnection();
+      if (_isAuthRequired()) {
+        if (authenticator != null) {
+          await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
+        } else {
+          throw UnAuthenticatedException(
+              'monitor requires authentication and no authenticator is set');
+        }
+      }
+      final command = (MonitorVerbBuilder()
+            ..regex = regex
+            ..lastNotificationTime = lastNotificationTime
+            ..selfNotificationsEnabled = selfNotificationsEnabled)
+          .buildCommand();
+      // ⚠️ `multiplexed` is deliberately NOT set. It is accepted by the shared
+      // verb syntax and read by no atServer, so setting it would advertise a
+      // safety property that does not exist. See [AtLookupMuxable].
+      logger.info('SENDING: ${command.trim()}');
+      await _connection!.write(command);
+      _isNotifying = true;
+    } finally {
+      requestResponseMutex.release();
+    }
+  }
+
+  @override
+  Future<void> stopNotifications() async {
+    _isNotifying = false;
+    await _connection?.close();
+    final controller = _notificationController;
+    _notificationController = null;
+    await controller?.close();
   }
 
   Future<void> _sendCommand(String command) async {

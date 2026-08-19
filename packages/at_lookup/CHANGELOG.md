@@ -1,5 +1,29 @@
 ## 3.7.0
 
+- feat: `AtLookupMuxable`, an `AtLookUp` that also carries the atServer's
+  asynchronous notification stream, so one class knows both of the atServer's
+  framings instead of the framing code existing twice. `AtLookupImpl`
+  implements it: `notifications` is a **single-subscription** stream whose
+  pause reaches the socket, `startNotifications` sends `monitor:` under the
+  request-response mutex, and `stopNotifications` closes both. A broadcast
+  stream was rejected — it does not buffer, ignores pause and drops anything
+  arriving before a listener attaches, and each of those is a lost
+  notification, which is indistinguishable from one the atServer never sent.
+- feat: `OutboundMessageListener` keeps the subscription `listen()` used to
+  discard, and exposes `pauseDelivery`/`resumeDelivery`. That is what makes
+  back-pressure real: pausing stops reading the socket, so TCP closes the
+  window on the atServer rather than this process buffering without bound.
+  Note that `StreamSubscription` **counts** pauses — two need two resumes.
+- fix: ⚠️ `MonitorVerbBuilder.multiplexed` does not do what it says, and
+  nothing in at_lookup sets it. Its dartdoc claims the atServer "will only send
+  notifications once there is no request currently in progress". No atServer
+  implements it: zero occurrences in `at_server` `origin/trunk`, against a
+  probe proven positive on `selfNotifications` (16). The monitor verb's syntax
+  — shared by both sides — does capture `multiplexed`, so the atServer parses
+  the flag and ignores it rather than refusing it. Until an atServer
+  implements the interlock, give the notification stream a connection of its
+  own.
+
 - feat: the six credential members are `@Deprecated` — `atChops`,
   `signingAlgoType`, `hashingAlgoType` and `enrollmentId` on both `AtLookUp`
   and `AtLookupImpl`, plus `privateKey` and `cramSecret` on the impl.

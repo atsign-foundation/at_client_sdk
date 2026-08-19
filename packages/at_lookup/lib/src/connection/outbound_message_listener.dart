@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -45,13 +46,23 @@ class OutboundMessageListener {
     _buffer = ByteBuffer(capacity: bufferCapacity);
   }
 
+  /// The subscription to the socket, kept so delivery can be stopped.
+  ///
+  /// This used to be discarded. Keeping it is what lets back-pressure reach
+  /// the far end: pausing here stops reading the socket, so bytes accumulate
+  /// in the kernel receive buffer and TCP eventually closes the window on the
+  /// atServer. Without it a slow consumer's only option is to buffer without
+  /// bound in this process, which is not back-pressure - it is a memory leak
+  /// that ends in an overflow.
+  StreamSubscription<Uint8List>? _socketSubscription;
+
   /// Listens to the underlying connection's socket if the connection is created.
   /// @throws [AtConnectException] if the connection is not yet created
   void listen() {
     logger.finest('Calling socket.listen within runZonedGuarded block');
 
     runZonedGuarded(() {
-      _connection
+      _socketSubscription = _connection
           .getSocket()
           .listen(messageHandler, onDone: onSocketDone, onError: onSocketError);
     }, (Object error, StackTrace st) {
@@ -60,6 +71,26 @@ class OutboundMessageListener {
       onSocketError(error);
     });
   }
+
+  /// Whether delivery from the socket is currently stopped.
+  bool get isDeliveryPaused => _socketSubscription?.isPaused ?? false;
+
+  /// Stop reading the socket.
+  ///
+  /// ⚠️ Pauses are COUNTED by [StreamSubscription] - measured, not assumed:
+  /// two `pause()` calls need two `resume()` calls before delivery restarts.
+  /// So every call here needs exactly one matching [resumeDelivery]. Wiring
+  /// these to a [StreamController]'s `onPause`/`onResume` satisfies that by
+  /// construction, which is why the notification stream drives them rather
+  /// than callers doing it by hand.
+  ///
+  /// A no-op before [listen] has been called, and a no-op is right: there is
+  /// no delivery to stop.
+  void pauseDelivery() => _socketSubscription?.pause();
+
+  /// Resume reading the socket. Safe when not paused - probed, it does not
+  /// throw - so an unmatched resume costs nothing.
+  void resumeDelivery() => _socketSubscription?.resume();
 
   /// Logs the error and closes the [OutboundConnection]
   @visibleForTesting

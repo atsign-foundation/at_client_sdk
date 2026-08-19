@@ -41,6 +41,26 @@ that pile. The signal a consumer actually reads is the doc comment, the
 CHANGELOG and this plan — not the analyzer. Do not treat "we deprecated it" as
 having told anyone.
 
+## The acceptance gate for the whole sequence
+
+**Zero uses of `AtLookupImpl` in lib code and READMEs** (gkc, 2026-08-19).
+Mechanical, re-runnable, and it prints its own positive control:
+
+```bash
+bash docs/projects/at-lookup-consolidation/count_atlookupimpl.sh
+```
+
+Reading at `3e4919d22` + step 6a/6b: **47 uses across 24 files**, against a
+control finding 169 `AtLookUp`. A further 111 sit in tests, examples, docs and
+CHANGELOGs; those are reported by the script and deliberately **not** gated,
+because a CHANGELOG entry describing what `AtLookupImpl` did in a released
+version is a true statement about that version.
+
+⚠️ **47 is not the plan's "64 construction sites" with a different name.** 64
+counts constructions; 47 counts every use in scope — constructions, type
+annotations, `is` checks and imports. Quoting one for the other is the mistake
+[section 7](#7-corrections) already records twice.
+
 **Next is the deletion's preconditions**, marked **BLOCKS THE MAJOR** in
 [section 6](#6-filed-not-scheduled).
 
@@ -535,6 +555,48 @@ Those four move in the same commit. The mercy is that this one is a compile
 error rather than the usual silent `noSuchMethod` null - `dart analyze` names
 every site.
 
+
+### ⚠️ `monitor:multiplexed` is a flag no atServer implements
+
+Found while building step 6, and it decides how the muxable may be wired.
+
+`MonitorVerbBuilder.multiplexed` in at_commons documents itself as telling the
+atServer that a connection carries both notification and request-response
+traffic, so that "the server will only send notifications once there is no
+request currently in progress". That interlock is exactly what would make one
+shared socket safe.
+
+**It does not exist.** Measured against `at_server` `origin/trunk` (head
+`cfb64a65`), not against the local checkout — which sits on
+`gkc-fix-2747-notify-crosses-test-boundary`, a different branch:
+
+| probe | result |
+| ----- | ------ |
+| `git grep -ci 'multiplexed' origin/trunk` (all files) | **0** |
+| positive control: `git grep -ci 'selfNotifications' origin/trunk -- '*.dart'` | **16**, lines printed |
+
+The control matters: a broken probe and a true absence print the same nothing.
+
+Worse than unimplemented, it is **not refused**. `VerbSyntax.monitor` — in
+at_commons, shared by client and server — carries
+`(:(?<multiplexed>multiplexed))?`, so the atServer parses the flag, captures
+it, never reads it, and answers normally. A client setting it gets success and
+no interlock.
+
+And the hazard it was meant to prevent is live: `monitor_verb_handler.dart`
+subscribes to the notification manager's stream and writes each notification to
+the connection as it arrives, with nothing gating that write on a request being
+in flight. A notification landing mid-response is appended to a buffer whose
+prefix is already `data:`, so the framing check — which tests that prefix —
+does not route it and it is absorbed into the verb response. Corruption, under
+concurrency only.
+
+**Consequences.** `startNotifications` deliberately does not set the flag, and
+says so at the call site. The muxable needs a connection of its own, which is
+what the plan already assumed — [section 1](#1-the-frame) says the connection
+count does not change and collapsing two sockets into one is a later wiring
+choice. This is the measurement behind that being right. Owed elsewhere: an
+atServer-side implementation, or the flag's removal from at_commons.
 
 ### Actually filed
 
