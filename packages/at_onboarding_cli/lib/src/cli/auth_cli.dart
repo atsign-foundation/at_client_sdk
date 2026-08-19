@@ -216,7 +216,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.otp:
         // generate a one-time-passcode for this atSign. This is a passcode
@@ -233,7 +234,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.interactive:
         // Interactive session for various enrollment management activities:
@@ -246,7 +248,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.list:
         await list(
@@ -256,7 +259,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.fetch:
         await fetch(
@@ -266,7 +270,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.approve:
         await approve(
@@ -276,7 +281,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.auto:
         await autoApprove(
@@ -286,7 +292,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.deny:
         await deny(
@@ -296,7 +303,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.revoke:
         await revoke(
@@ -306,7 +314,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.enroll:
         // App which doesn't have auth keys and is not the first app.
@@ -324,7 +333,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
 
       case AuthCliCommand.delete:
         await deleteEnrollment(
@@ -334,7 +344,8 @@ Future<int> wrappedMain(List<String> arguments) async {
                 atKeysFilePath: commandArgResults[AuthCliArgs.argNameAtKeys],
                 rootDomain:
                     commandArgResults[AuthCliArgs.argNameRootServer],
-                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase]));
+                passPhrase: commandArgResults[AuthCliArgs.argNamePassPhrase],
+                posture: AuthCliArgs.postureIn(commandArgResults)));
       case AuthCliCommand.decrypt:
         await passPhraseDecryptAtKeys(commandArgResults);
 
@@ -1087,17 +1098,18 @@ AtOnboardingService createOnboardingService(ArgResults ar) {
   // AtClientPreference, and every axis it supplies is fixed at construction.
   // An unnamed --posture leaves the superclass's own default in place rather
   // than the CLI restating one, so this binary rides the rollout schedule of
-  // the at_client it was built against.
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference(
-      posture: AuthCliArgs.postureIn(ar) ?? PqPosture.legacy)
-    ..rootDomain = rootDomain.rootDomain
-    ..rootPort = rootDomain.rootPort
-    ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
-    ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
-    ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
-    ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
-    ..hashingAlgoType =
-        HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
+  // the at_client it was built against — which is what `preferenceUnder`
+  // does, and what naming `PqPosture.legacy` here did not.
+  AtOnboardingPreference atOnboardingPreference =
+      AuthCliArgs.preferenceUnder(AuthCliArgs.postureIn(ar))
+        ..rootDomain = rootDomain.rootDomain
+        ..rootPort = rootDomain.rootPort
+        ..registrarUrl = ar[AuthCliArgs.argNameRegistrarFqdn]
+        ..cramSecret = ar[AuthCliArgs.argNameCramSecret]
+        ..atKeysFilePath = ar[AuthCliArgs.argNameAtKeys]
+        ..passPhrase = ar[AuthCliArgs.argNamePassPhrase]
+        ..hashingAlgoType =
+            HashingAlgoType.fromString(ar[AuthCliArgs.argNameHashingAlgoType]);
 
   final impl = AtOnboardingServiceImpl(atSign, atOnboardingPreference);
   String lastProgressEventType = '';

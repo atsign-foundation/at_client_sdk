@@ -9,6 +9,7 @@ import 'package:at_onboarding_cli/src/cli/auth_cli.dart';
 import 'package:at_onboarding_cli/src/cli/auth_cli_args.dart';
 
 import 'package:at_onboarding_cli/src/util/at_file_util.dart';
+import 'package:at_onboarding_cli/src/util/at_onboarding_preference.dart';
 import 'package:test/test.dart';
 import 'at_onboarding_cli_test.dart';
 
@@ -255,9 +256,14 @@ AtKeys _getAtAuthKeysFromAtChopsKeys(AtChopsKeys atChopsKeys) {
 /// Ruling 113's CLI section: honoured on **every** command, not activation
 /// alone. `--signingAlgoType` silently did nothing on every command but
 /// `onboard` ([#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161)),
-/// which is what that ruling exists to stop happening again — so the rows
-/// below check the argument reaches the parsers that were previously left out,
-/// not just the one that always worked.
+/// which is what that ruling exists to stop happening again.
+///
+/// ⚠️ **A parser that accepts an argument is not a client that runs under
+/// it**, and for a day this file only checked the first. `--posture` reached
+/// every parser while only `onboard` and `enroll` read the value — the other
+/// twelve commands built their client through `createAtClient`, which named no
+/// posture — so the argument reproduced the exact no-op it replaced, and these
+/// rows were green throughout. The last two rows are the missing half.
 void postureArgumentTests() {
   final args = AuthCliArgs();
 
@@ -279,6 +285,79 @@ void postureArgumentTests() {
                 'passes it there is silently ignored - the exact shape #2161 '
                 'was filed for');
       }
+    });
+
+    test('a named posture reaches the preference with its axes', () {
+      final asked = AuthCliArgs.preferenceUnder(PqPosture.pqActive);
+      expect(asked.posture, same(PqPosture.pqActive));
+      expect(asked.authenticationKeyAlgorithm, SigningAlgoType.mldsa65,
+          reason: 'the axes have to come with it, or naming a posture buys '
+              'nothing');
+
+      // Latent, and deliberately kept as such: "the caller said nothing" and
+      // "the caller asked for legacy" are the same VALUE today, so this cannot
+      // fail now however the CLI resolves an unset argument. It arms itself at
+      // R-2, when the default moves and a CLI that restated `PqPosture.legacy`
+      // starts running the old stage through the flip. What discriminates
+      // today is the row below.
+      expect(AuthCliArgs.preferenceUnder(null).posture,
+          same(AtOnboardingPreference().posture));
+    });
+
+    test('the CLI names a posture constant in exactly one place', () {
+      // `?? PqPosture.legacy` where a preference is built is how an unset
+      // --posture quietly stopped meaning "no opinion", and the assertion
+      // above cannot see it while legacy is still the default. The three
+      // entries of `postureNames` are the whole legitimate vocabulary; a
+      // fourth mention in code is a construction site restating a default.
+      final named = <String>[];
+      for (final path in const [
+        'lib/src/cli/auth_cli.dart',
+        'lib/src/cli/auth_cli_args.dart',
+        'lib/src/util/create_at_client_cli.dart',
+      ]) {
+        final lines = File(path).readAsLinesSync();
+        expect(lines, isNotEmpty, reason: '$path did not read; a rail over an '
+            'empty file passes for the wrong reason');
+        for (final line in lines) {
+          final code = line.trim();
+          if (code.startsWith('//')) continue;
+          if (RegExp(r'PqPosture\.(legacy|pqReady|pqActive)').hasMatch(code)) {
+            named.add('$path | $code');
+          }
+        }
+      }
+      expect(named, hasLength(3),
+          reason: 'expected only the three postureNames entries, got:\n'
+              '${named.join('\n')}');
+      expect(named.every((l) => l.contains('auth_cli_args.dart')), isTrue,
+          reason: 'the map is the one place a posture constant belongs:\n'
+              '${named.join('\n')}');
+    });
+
+    test('every command that builds a client passes the posture to it', () {
+      // The half a parser check cannot reach. `createAtClient` serves every
+      // command except onboard and enroll, and a call site that omits the
+      // argument leaves that command silently at the built-in default however
+      // loudly the user named one. Read from source because the alternative —
+      // driving each command — needs an atServer per row.
+      final source = File('lib/src/cli/auth_cli.dart').readAsStringSync();
+      final calls = RegExp(r'(?<![A-Za-z_])createAtClient\(')
+          .allMatches(source)
+          .toList();
+      expect(calls, isNotEmpty,
+          reason: 'if this finds nothing the rest of the row proves nothing');
+
+      final without = <int>[];
+      for (final call in calls) {
+        final end = source.indexOf(');', call.start);
+        if (!source.substring(call.start, end).contains('posture:')) {
+          without.add('\n'.allMatches(source.substring(0, call.start)).length + 1);
+        }
+      }
+      expect(without, isEmpty,
+          reason: 'auth_cli.dart lines $without call createAtClient without a '
+              'posture, so those commands ignore --posture');
     });
 
     test('the retired argument is gone from every one of them', () {

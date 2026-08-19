@@ -12,11 +12,20 @@ import 'package:chalkdart/chalk.dart';
 
 import 'home_directory_util.dart';
 
+/// A client for the commands that only read or administer an atSign — `otp`,
+/// `list`, `spp`, `approve` and the rest.
+///
+/// [posture] is how far into the post-quantum rollout this invocation runs;
+/// null means whatever the at_client this was built against defaults to. It is
+/// optional because this function is exported and apps already call it, but a
+/// command that has a `--posture` to pass and does not pass it silently runs
+/// at another stage than the one the user named.
 Future<AtClient> createAtClient(
     {required String atSign,
     String? atKeysFilePath,
     String? rootDomain,
-    String? passPhrase}) async {
+    String? passPhrase,
+    PqPosture? posture}) async {
   final int maxConnectAttempts = 5;
   String nameSpace = 'at_activate';
   atSign = AtUtils.fixAtSign(atSign);
@@ -43,15 +52,16 @@ Future<AtClient> createAtClient(
   // Parse rootServer using AtRootDomain
   AtRootDomain parsedRootDomain = AtRootDomain.parse(rootServer);
   
-  AtOnboardingPreference atOnboardingPreference = AtOnboardingPreference()
-    ..atKeysFilePath = atKeysFilePathToUse
-    ..namespace = nameSpace
-    ..rootDomain = parsedRootDomain.rootDomain
-    ..rootPort = parsedRootDomain.rootPort
-    ..passPhrase = passPhrase
-    ..hiveStoragePath = localStoragePathToUse
-    ..commitLogPath = commitLogStoragePathToUse
-    ..downloadPath = downloadPathToUse;
+  AtOnboardingPreference atOnboardingPreference =
+      AuthCliArgs.preferenceUnder(posture)
+        ..atKeysFilePath = atKeysFilePathToUse
+        ..namespace = nameSpace
+        ..rootDomain = parsedRootDomain.rootDomain
+        ..rootPort = parsedRootDomain.rootPort
+        ..passPhrase = passPhrase
+        ..hiveStoragePath = localStoragePathToUse
+        ..commitLogPath = commitLogStoragePathToUse
+        ..downloadPath = downloadPathToUse;
 
   AtOnboardingService atOnboardingService = AtOnboardingServiceImpl(
       atSign, atOnboardingPreference,

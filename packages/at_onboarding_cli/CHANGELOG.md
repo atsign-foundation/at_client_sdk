@@ -10,6 +10,18 @@
   - It has no default. An unnamed `--posture` leaves whatever the at_client
     this was built against defaults to, so the binary is not pinned to the
     stage that was current on the day it was compiled.
+  - Reaching every command means two routes, not one: `onboard` and `enroll`
+    read it through `createOnboardingService`, everything else through
+    `createAtClient`, which gains an optional `posture` — it is exported, so
+    apps that already call it are unaffected. Both go through
+    `AuthCliArgs.preferenceUnder`, which is the single place that decides what
+    an unnamed posture means, and so the only place a `PqPosture` constant is
+    named outside the argument map.
+  - **A parser that accepts an argument is not a client that runs under it.**
+    For a day this reached every parser while only the two onboarding-service
+    commands read the value, which is the same silent no-op `--signingAlgoType`
+    was retired for. The tests now check the argument reaches a client, not
+    only a parser.
   - Activation reads `AtClientPreference.authenticationKeyAlgorithm` — the
     posture's axis — rather than the deprecated `signingAlgoType`. Every
     activation the old argument could express is expressible as a posture, and

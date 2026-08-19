@@ -144,6 +144,19 @@ class AuthCliArgs {
     final named = results[argNamePosture];
     return named == null ? null : postureNames[named];
   }
+
+  /// A preference under [posture], or under whatever the at_client this was
+  /// built against defaults to when [posture] is null.
+  ///
+  /// A posture is final in `AtClientPreference`, so it rides the constructor
+  /// and cannot be assigned afterwards — and the constructor takes no "no
+  /// opinion" value. Naming `PqPosture.legacy` for an unset `--posture`
+  /// instead would collapse the distinction [postureIn] exists to keep, and
+  /// pin the binary to the stage that was current on the day it was compiled.
+  static AtOnboardingPreference preferenceUnder(PqPosture? posture) =>
+      posture == null
+          ? AtOnboardingPreference()
+          : AtOnboardingPreference(posture: posture);
   static const argNameMaxRetries = 'max-retries';
   static const argNameAllowBadRegistrarCerts = 'allow-bad-registrar-certs';
   static const argNameYes = 'yes';
@@ -330,12 +343,16 @@ class AuthCliArgs {
         mandatory: false,
         defaultsTo: HashingAlgoType.argon2id.name,
         hide: hide);
-    // Honoured on EVERY command, not activation alone. A posture means the
-    // same thing wherever a client is created, and because a posture is a
-    // floor and retrofit is idempotent, running any command at a higher one
-    // upgrades the atSign coherently. It replaced --signingAlgoType, which
-    // named the PKAM authentication key while reading like the data signing
-    // key, and silently did nothing on every command but onboard (#2161).
+    // Honoured on EVERY command, not activation alone: `onboard` and `enroll`
+    // read it through createOnboardingService, everything else through
+    // createAtClient. A posture means the same thing wherever a client is
+    // created, and because a posture is a floor and retrofit is idempotent,
+    // running any command at a higher one upgrades the atSign coherently. It
+    // replaced --signingAlgoType, which named the PKAM authentication key
+    // while reading like the data signing key, and silently did nothing on
+    // every command but onboard (#2161) — a shape this argument reproduced
+    // for a day, reaching only the two commands that took the onboarding
+    // service, until createAtClient was given the posture too.
     //
     // No defaultsTo, deliberately: an unset posture means "whatever the
     // at_client this was compiled against defaults to", so the CLI does not
