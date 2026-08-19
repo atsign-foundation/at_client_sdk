@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_lookup/at_lookup.dart';
+
 import 'package:test/test.dart';
 
 import 'fake_at_server_socket.dart';
@@ -116,6 +118,98 @@ void main() {
           '@alice@',
           reason: 'the handshake prompt is a valid response and must be '
               'returned unchanged');
+    });
+  });
+
+  group('the notification framing', () {
+    // A verb response ends `\n@<atSign>@`; a notification is not a reply to
+    // anything, so no prompt follows it and it ends at a bare `\n`. One
+    // listener has to know both.
+    test('a notification goes to onNotification, not to the verb queue',
+        () async {
+      final rig = FakeAtServerRig();
+      final seen = <String>[];
+      rig.listener.onNotification = seen.add;
+
+      await rig.socket.serverSends('notification: {"id":"abc"}\n');
+      expect(seen, ['notification: {"id":"abc"}']);
+
+      // and the verb channel is undisturbed by it
+      await rig.socket.serverSends('data:phone@alice\n@alice@');
+      expect(
+          await rig.listener
+              .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
+          'data:phone@alice');
+      expect(seen, hasLength(1),
+          reason: 'a verb response must not be delivered as a notification');
+    });
+
+    test('a data value containing newlines is not mistaken for one', () async {
+      final rig = FakeAtServerRig();
+      final seen = <String>[];
+      rig.listener.onNotification = seen.add;
+
+      await rig.socket.serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
+
+      // Asserted before the read, so a listener that routes this away fails
+      // here with the reason - not thirty seconds later on a starved read.
+      expect(seen, isEmpty,
+          reason: 'the test is on the buffer prefix, so a multi-line value '
+              'still reads as data: and is never routed');
+      expect(
+          await rig.listener
+              .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
+          'data:the_key_is\n@bob:phone@alice');
+    });
+
+    test('two notifications in one packet are two, not one', () async {
+      // The atServer has no reason to put one notification per TCP segment.
+      // messageHandler's fast path appends everything up to the LAST newline
+      // in bulk, so an intermediate newline never reaches the framing check
+      // and both lines arrive fused into one string.
+      final rig = FakeAtServerRig();
+      final seen = <String>[];
+      rig.listener.onNotification = seen.add;
+
+      await rig.socket
+          .serverSends('notification: {"id":"a"}\nnotification: {"id":"b"}\n');
+
+      expect(seen, [
+        'notification: {"id":"a"}',
+        'notification: {"id":"b"}',
+      ]);
+    });
+
+    test('a notification split across packets still arrives once', () async {
+      final rig = FakeAtServerRig();
+      final seen = <String>[];
+      rig.listener.onNotification = seen.add;
+
+      await rig.socket.serverSends('notification: {"id":');
+      expect(seen, isEmpty, reason: 'incomplete - no newline yet');
+      await rig.socket.serverSends('"split"}\n');
+
+      expect(seen, ['notification: {"id":"split"}']);
+    });
+
+    test('with nothing installed, a notification poisons the next response',
+        () async {
+      // The behaviour the seam exists to fix, pinned so its absence is
+      // visible: with no callback the notification bytes stay in the buffer
+      // and prefix whatever the atServer says next, which then fails
+      // _isValidResponse. This is why Monitor was given a listener of its own.
+      final rig = FakeAtServerRig();
+
+      await rig.socket.serverSends('notification: {"id":"abc"}\n');
+      await rig.socket.serverSends('data:after@alice\n@alice@');
+
+      expect(
+          () => rig.listener
+              .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
+          throwsA(predicate((dynamic e) =>
+              e is AtLookUpException && e.errorMessage == 'Unexpected response found')),
+          reason: 'the unrouted notification is still in the buffer and is '
+              'returned joined to the response that followed it');
     });
   });
 

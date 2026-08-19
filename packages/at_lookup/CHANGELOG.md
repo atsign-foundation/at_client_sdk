@@ -1,5 +1,29 @@
 ## 3.7.0
 
+- feat: `OutboundMessageListener` can route asynchronous notifications, via a
+  new `onNotification` callback. The atServer frames the two kinds of message
+  differently - a verb response ends with a newline and the ready prompt
+  `@<atSign>@`, while a notification is a reply to nothing, so no prompt
+  follows it and it ends at a bare newline. One listener now knows both. While
+  `onNotification` is null the second framing is not applied at all and parsing
+  is byte-for-byte what it was, because routing notifications to a callback
+  nobody installed would drop them.
+
+- feat: `OutboundMessageListener.read` waits on an event instead of polling.
+  It slept 10ms at a time and re-checked a queue, so every response carried up
+  to a polling interval of latency for no reason. It now sleeps until a
+  response is queued or until the nearer of its two deadlines, whichever comes
+  first.
+- feat: `read`'s two timeouts come from `AtNetworkTimeouts` and are now
+  nullable. The whole-response budget defaults to
+  `AtNetworkTimeouts.defaultResponseBudget` (90s, unchanged in value) and the
+  between-chunks budget to `AtNetworkTimeouts.effectiveDefault`, which moves
+  that default from **10s to 30s**. Ten seconds of silence is not evidence a
+  busy atServer has gone away, and the two budgets measure different things:
+  one bounds the whole response, the other restarts on every chunk. Callers
+  passing explicit values are unaffected, and a process that sets
+  `AtNetworkTimeouts.defaultTimeout` at startup now moves this too.
+
 - fix: a response carrying no colon no longer destroys the connection.
   `OutboundMessageListener._stripPrompt` ran `substring(0, -1)` when
   `indexOf(':')` found nothing, and the bare `@<atSign>@` that completes the
