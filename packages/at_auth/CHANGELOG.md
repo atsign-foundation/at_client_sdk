@@ -1,4 +1,12 @@
 ## 3.4.0
+- feat: `AtEnrollment.approve` accepts `approverChops`, the approving client's
+  own crypto. What approval needs is not authentication - the atSign's
+  encryption private key and its self-encryption key - so it should not come
+  from a network object. While null the approver still falls back to
+  `atLookUp.atChops`, so every existing caller is unaffected; at_client now
+  passes its own. Pinned: given `approverChops`, the approver completes an
+  approval and **never reads** `atLookUp.atChops`, which is what lets that
+  field be deleted. Given neither, it still refuses.
 - feat: `AtAuthImpl.onboard` and `EnrollmentHandshake` install authenticators
   too, finishing at_auth's side of the seam. Both inject their signer rather
   than let the keystore resolve one: a PQ-native activation signs with a

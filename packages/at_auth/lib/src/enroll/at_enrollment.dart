@@ -9,6 +9,7 @@ import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
+import 'package:at_chops/at_chops.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollment {
@@ -121,8 +122,14 @@ abstract class AtEnrollment {
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
   ///       enrollmentRequestDecision, atLookupImpl);
   /// ```
+  ///
+  /// [approverChops] is the approving client's own crypto. What approval needs
+  /// is not authentication - the atSign's encryption private key, its
+  /// self-encryption key - so it does not belong on the network object. While
+  /// null, the implementation falls back to `atLookUp.atChops`.
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
+      {AtChops? approverChops});
 
   /// Denies an enrollment request.
   ///

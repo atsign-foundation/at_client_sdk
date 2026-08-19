@@ -20,13 +20,15 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/remote_backed_client.dart';
+import 'package:at_chops/at_chops.dart';
 
 class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   final List<EnrollmentRequestDecision> approvals = [];
 
   @override
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision decision, AtLookUp atLookUp) async {
+      EnrollmentRequestDecision decision, AtLookUp atLookUp,
+      {AtChops? approverChops}) async {
     approvals.add(decision);
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);

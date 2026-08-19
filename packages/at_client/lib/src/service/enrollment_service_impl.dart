@@ -105,7 +105,8 @@ class EnrollmentServiceImpl implements EnrollmentService {
     }
 
     final response = await _atEnrollmentImpl.approve(
-        decision, _atClient.getRemoteSecondary()!.atLookUp);
+        decision, _atClient.getRemoteSecondary()!.atLookUp,
+        approverChops: _atClient.atChops);
 
     // Re-read the record rather than trusting the decision object: the
     // decision carries only the id and the symmetric key, while conveyance

@@ -14,6 +14,7 @@ import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
+import 'package:at_chops/at_chops.dart';
 
 /// A concrete implementation of [AtEnrollment] for managing enrollments.
 ///
@@ -52,8 +53,10 @@ class AtEnrollmentImpl implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
           EnrollmentRequestDecision enrollmentRequestDecision,
-          AtLookUp atLookUp) =>
-      _approver.approve(enrollmentRequestDecision, atLookUp);
+          AtLookUp atLookUp,
+          {AtChops? approverChops}) =>
+      _approver.approve(enrollmentRequestDecision, atLookUp,
+          approverChops: approverChops);
 
   @override
   Future<AtEnrollmentResponse> deny(

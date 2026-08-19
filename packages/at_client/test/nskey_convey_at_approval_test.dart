@@ -20,7 +20,8 @@ import 'test_utils/remote_backed_client.dart';
 class _RecordingAtEnrollment extends Mock implements AtEnrollment {
   @override
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision decision, AtLookUp atLookUp) async {
+      EnrollmentRequestDecision decision, AtLookUp atLookUp,
+      {AtChops? approverChops}) async {
     return AtEnrollmentResponse(
         decision.enrollmentId, EnrollmentStatus.approved);
   }

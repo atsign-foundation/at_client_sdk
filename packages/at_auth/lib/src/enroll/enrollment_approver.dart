@@ -21,10 +21,18 @@ import 'package:at_lookup/at_lookup.dart';
 class EnrollmentApprover {
   static const _kSppRegex = r'[A-Za-z0-9]{6}';
 
+  /// [approverChops] is the approving client's own crypto.
+  ///
+  /// None of what this method needs is authentication: it wants the atSign's
+  /// **encryption** private key, its self-encryption key, and somewhere to put
+  /// the APKAM symmetric key it derives. Reaching through `atLookUp.atChops`
+  /// for those made a network object the carrier of an app's key material.
+  /// Passing it keeps at_lookup out of it, and lets that field go.
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision enrollmentRequestDecision,
-      AtLookUp atLookUp) async {
-    if (atLookUp.atChops == null) {
+      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
+      {AtChops? approverChops}) async {
+    final chops = approverChops ?? atLookUp.atChops;
+    if (chops == null) {
       throw AtAuthenticationException(
           'The authentication keys are not initialized');
     }
@@ -38,35 +46,31 @@ class EnrollmentApprover {
     String apkamSymmetricKey = enrollmentRequestDecision
             .mintedApkamSymmetricKey ??
         utf8.decode((RsaEncryptionAlgo()
-              ..atPrivateKey = AtPrivateKey.fromString(atLookUp.atChops!
-                  .atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey))
+              ..atPrivateKey = AtPrivateKey.fromString(chops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey))
             .decrypt(base64Decode(
                 enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
 
     // Set the APKAM Symmetric key to the AtChops Instance.
-    atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
+    chops.atChopsKeys.apkamSymmetricKey = AESKey(apkamSymmetricKey);
 
     InitialisationVector encryptionPrivateKeyIV =
         AtChopsUtil.generateRandomIV(16);
     // Fetch the encryptionPrivateKey from the atChops and encrypt with APKAM Symmetric key.
-    String encryptedDefaultEncryptionPrivateKey = (await atLookUp.atChops
-            ?.encryptString(
-                atLookUp.atChops!.atChopsKeys.atEncryptionKeyPair!.atPrivateKey
-                    .privateKey,
+    String encryptedDefaultEncryptionPrivateKey = (await chops.encryptString(
+                chops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey,
                 EncryptionKeyType.aes256,
                 keyName: 'apkamSymmetricKey',
                 iv: encryptionPrivateKeyIV))
-        ?.result;
+        .result;
 
     InitialisationVector selfEncryptionKeyIV = AtChopsUtil.generateRandomIV(16);
     // Fetch the selfEncryptionKey from the atChops and encrypt with APKAM Symmetric key.
-    String encryptedDefaultSelfEncryptionKey = (await atLookUp.atChops
-            ?.encryptString(
-                atLookUp.atChops!.atChopsKeys.selfEncryptionKey!.key,
+    String encryptedDefaultSelfEncryptionKey = (await chops.encryptString(
+                chops.atChopsKeys.selfEncryptionKey!.key,
                 EncryptionKeyType.aes256,
                 keyName: 'apkamSymmetricKey',
                 iv: selfEncryptionKeyIV))
-        ?.result;
+        .result;
 
     String command = 'enroll:approve:${jsonEncode({
           'enrollmentId': enrollmentRequestDecision.enrollmentId,
