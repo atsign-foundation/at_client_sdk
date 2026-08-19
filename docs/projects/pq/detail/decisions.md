@@ -10884,6 +10884,83 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
    no-op once done, failure logged and retried next start, and the client stays
    usable at its current level meanwhile. `selfRetrofit` is already idempotent,
    which is what makes every-start safe.
+
+   **The mechanics, ruled by gkc 2026-08-19** after the first attempt at this
+   row reported three blockers, two of which were wrong — both because they
+   were read off `AtClientPreference` and a function signature rather than the
+   layer that already stores the data. `appName`, `deviceName` **and** the
+   grants map are all on the enrollment record, reachable through
+   `LocalSecondary.getEnrollmentDetails()`, which `PqClientBootstrap` already
+   calls; `AtClientImpl.atKeysIo` is a public getter and the bootstrap already
+   holds `_keysIo` and already guards steps on its absence. What was left is
+   the one real question — `selfRetrofit` ends in
+   `AtClientManager.fromAuthSession`, which builds a **new** client under the
+   new enrollment id — and it is answered as follows.
+
+   - **The `AtClient` instance is the same instance.** What moves is its
+     connections: they must all end up authenticated under the new enrollment.
+     This is *not* `selfRetrofit`'s shape, which hands back a different client.
+   - **The instance cache is re-filed**, from `(atSign, oldId)` to
+     `(atSign, newId)`, atomically with the re-point. `atClientInstanceMap` is
+     keyed by `instanceKey(atSign, enrollmentId)`, so an instance whose id
+     changes underneath it would otherwise sit under a stale key and a later
+     `create` for the new id would build a **second** client for the same
+     enrollment.
+   - **The internals are rebuilt from the new id, and the old connections are
+     torn down explicitly.** `_atChops`, `_remoteSecondary` and the monitor are
+     each constructed *from* `enrollmentId`, so re-deriving them is the path
+     `_init` already runs; mutating each in place is a new path per holder.
+     Teardown is explicit rather than lazy because the atServer caps the
+     superseded enrollment on a **720-hour** grace, so a connection left behind
+     goes on working for thirty days — a half-moved client looks healthy and
+     fails a month later with nothing pointing back here.
+   - **A partial re-point is retried in-run**, with bounded exponential
+     backoff, the client serving on the old enrollment throughout. On giving
+     up: `warning`, naming both enrollment ids. Nothing is lost — the next
+     start reads the retrofitted id from the keyfile and comes up on it with no
+     further mechanism. The bound is the point: a failure that survives two
+     attempts rarely clears in ninety seconds, and a loop that retries for a
+     week hides it.
+   - **A connection records what it last authenticated as** — the identity
+     itself, not a proxy for it. A connection knows its enrollment id by
+     construction, because it is the side that supplies it at PKAM. This lands
+     on `AtConnectionMetaData` beside `isAuthenticated`, as the enrollment id
+     **and the time it authenticated**, set by both PKAM paths:
+     `AtLookupImpl.pkamAuthenticate` and `Monitor._authenticateConnection`,
+     which authenticate independently on separate sockets. ⚠️ Reading
+     `AtLookUp.enrollmentId` back is **not** sufficient: that field is what the
+     *next* PKAM will use, so a build that sets it and never reconnects passes
+     a naive assertion while the socket is still on the old enrollment.
+   - **A successful retrofit re-runs the whole startup.** The other steps
+     publish records keyed by the enrollment id — `_apsk`, the key package, the
+     chain link, the snapshot — so placing the retrofit at position N leaves
+     steps before it published under the old id and steps after it under the
+     new. The steps are idempotent and no-ops once done, which is what makes a
+     second pass cheap. A guard stops a retrofit in the second pass triggering
+     a third.
+   - **"Partial from pqReady" means no retrofit at all.** That stage already
+     authenticates ML-DSA; only the *data signing* key moves, and a signing
+     keypair is minted unilaterally with no server approval — which
+     `reconcileSigningKeys` already does on every start. So the retrofit driver
+     is only ever needed to climb out of `legacy`.
+   - **Whether to retrofit is DERIVED, never a stored axis:** the posture's
+     `authenticationKeyAlgorithm` is stronger than the one this enrollment
+     holds. That reproduces all three cells of the table above — `legacy` to
+     `legacy` no, either PQ stage from `legacy` yes, `pqActive` from `pqReady`
+     nothing — and keeps ruling 1's "a posture is a floor, key material wins"
+     as the single rule. A stored flag would be a second control over one
+     behaviour. There is no preference opt-out.
+   - **The new enrollment reuses the old one's `appName`, `deviceName` and
+     grants verbatim.** No narrowing: losing authority is a downgrade, and it
+     would land silently, a namespace at a time. There is no escalation to
+     weigh, because **the atServer forbids it** — on at_server `origin/trunk`,
+     `enroll_verb_handler.dart`'s `verifyNoEscalation` rejects any requested
+     grant the parent does not itself hold, subset per namespace *and* per
+     access letter, with `__manage` and `*` required literally rather than
+     implied. The child also records `parentEnrollmentId` so revocation
+     cascades, and inherits the parent's key expiry, which it may narrow and
+     never widen — the handler's own comment gives the reason, that this is
+     "the one enrollment path with no human in the loop to notice".
 3. **Capping needs almost nothing built, and the exception is a sibling-repo
    dependency.** The atServer caps the superseded enrollment on an
    `apkamSelfEnrollmentGraceHours` default of **720 hours**, re-arms it on each

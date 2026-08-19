@@ -64,30 +64,35 @@ in all three. Construction rejects `disallowLegacyEncryption` true where
 for authenticating and reading. Nothing is needed for capping; the atServer's
 720-hour grace already re-arms per sibling and exempts the first enrollment.
 
-⛔ **Client-driven retrofit at start is OWED and BLOCKED, measured 2026-08-19.**
-Ruling 2 asks for it "in the same shape as the nskey mint", and that shape does
-not fit, for three reasons found by opening the code rather than inferred:
+**Client-driven retrofit at start is DESIGNED and OWED**, ruled with gkc
+2026-08-19 and folded into
+[ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
+ruling 2, which carries the mechanics. In short: the **same** `AtClient`
+instance survives and its connections move; the instance cache is re-filed
+under the new id; the internals are rebuilt and the old connections torn down
+explicitly; a partial re-point is retried in-run with bounded backoff; a
+connection records what it last authenticated as, on `AtConnectionMetaData`
+beside `isAuthenticated`, with the time; a successful retrofit re-runs the
+whole startup; "partial from `pqReady`" means no retrofit at all; the trigger
+is derived from key material rather than stored; and the new enrollment reuses
+the old one's `appName`, `deviceName` and grants verbatim.
 
-1. **`selfRetrofit` replaces the client.** It ends in
-   `AtClientManager.fromAuthSession(...)` and returns a **new**
-   `AtClientManager` under a **new enrollment id**. A `PqClientBootstrap` step
-   belongs to the client being replaced, so "the client stays usable at its
-   current level meanwhile" and "the step succeeded" cannot both hold the way
-   they do for the mint.
-2. **It needs an `AtAuthSession`, which needs an `AtKeysIo`.** The bootstrap
-   holds an `AtClient`. A client constructed without a key source cannot write
-   the new keyfile at all — the same inertness `SigningKeyMinting` has — so the
-   step would be silently a no-op for exactly the clients least able to notice.
-3. **It needs `appName` and `deviceName`, and `AtClientPreference` carries
-   neither** (`appName` exists on `atClientParticulars` and is nullable;
-   there is no `deviceName`). They are not free-form either: the atServer
-   refuses a `(appName, deviceName)` pair that is already approved, so an
-   every-start retrofit needs a deterministic pair plus the local marker ruling
-   2 already calls for — or it mints a fresh enrollment per start.
+⚠️ **Two of the three blockers first recorded here were wrong**, and both for
+the same reason — read off `AtClientPreference` and a function signature rather
+than the layer that already stores the data. `appName`, `deviceName` and the
+grants are all on the enrollment record via
+`LocalSecondary.getEnrollmentDetails()`, which `PqClientBootstrap` already
+calls; `AtClientImpl.atKeysIo` is a public getter and the bootstrap already
+holds `_keysIo`. The blocker that was real — `selfRetrofit` returning a
+different client — is what ruling 2 now answers.
 
 **Nothing is half-built for this** — `selfRetrofit` has no production caller at
-all today; every call site in the tree is a test. What the row needs first is a
-ruling from gkc on 1 and 3.
+all today; every call site in the tree is a test.
+
+⚠️ **It reaches at_lookup, whose in-tree version 3.6.1 is already published**,
+so landing the connection-identity field needs a version bump — gkc's call.
+Noted in passing: the builder field at `at_lookup_impl.dart:553` is spelled
+`enrollmentlId`.
 
 **The narrowing.** `disallowLegacyEncryption` becomes posture-only and its
 `AtClientPreference` override goes, which overturns ruling 70's
