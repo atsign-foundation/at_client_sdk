@@ -14,6 +14,17 @@
   - Nothing is fatal and the check costs no round trip when there is nothing to
     do: a client that cannot retrofit comes up on the enrollment it had and
     tries again next start.
+- fix: every connection `AtClientImpl` opens carries the client's identity.
+  `AtClient.stream()` builds its own `RemoteSecondary` — it needs a connection
+  separate from the client's, since it hands the socket raw bytes and then
+  closes it — but passed neither the enrollment id nor the algorithm resolved
+  from that enrollment's key material, so it authenticated as an unenrolled
+  `rsa2048` client. Under an ML-DSA enrollment that signs the challenge with
+  the wrong routine
+  ([#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161)).
+  The three sites in the class that open a connection now share one builder,
+  `AtClientImpl.buildRemoteSecondary`, so carrying the identity is a property
+  of the class rather than something each site has to remember.
 - feat: `retrofitIdentity()` — the identity half of `selfRetrofit()`, which
   submits the enrollment and authenticates under the new id without building a
   client.

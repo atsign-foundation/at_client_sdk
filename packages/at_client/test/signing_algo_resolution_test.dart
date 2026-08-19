@@ -1,11 +1,10 @@
-import 'dart:typed_data';
-
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'test_utils/ml_dsa_keyfile.dart';
 import 'test_utils/mocks.dart';
 
 /// The signing algorithm is a fact about the enrollment's key material — you
@@ -17,38 +16,6 @@ import 'test_utils/mocks.dart';
 /// reconnect failed against the record-authoritative atServer.
 void main() {
   final mockAtChopsKeys = MockAtChopsKeys();
-
-  /// A keyfile whose [enrollmentId] has active typed ML-DSA **authentication**
-  /// material.
-  ///
-  /// Authentication rather than signing because PKAM proves possession of the
-  /// APKAM keypair, and that keypair is no longer the same thing as the
-  /// enrollment's attestation signing keys — `signingAlgorithmForEnrollment`
-  /// reads the authentication role for exactly that reason.
-  Future<InMemoryAtKeysIo> mlDsaKeyfile(
-      String atSign, String enrollmentId) async {
-    final now = DateTime.now().toUtc();
-    final keys = AtKeys()
-      ..addKey(AtKeysMaterial(
-        keyId: 'apkam:$enrollmentId:1',
-        enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.privateAuthentication,
-        keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-        bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 3))),
-        createdAt: now,
-      ))
-      ..addKey(AtKeysMaterial(
-        keyId: 'apkam:$enrollmentId:1',
-        enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.publicAuthentication,
-        keyAlgorithmType: KeyAlgorithmType.mlDsa65,
-        bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 4))),
-        createdAt: now,
-      ));
-    final io = InMemoryAtKeysIo();
-    await io.write(atSign, keys);
-    return io;
-  }
 
   setUp(() {
     var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';

@@ -587,15 +587,7 @@ class AtClientImpl implements AtClient {
     }
 
     // Using ??= because we may be injecting a RemoteSecondary
-    _remoteSecondary ??= RemoteSecondary(
-      _atSign,
-      _preference!,
-      atChops: atChops,
-      atLookUp: atLookUp,
-      privateKey: _preference!.privateKey,
-      enrollmentId: enrollmentId,
-      signingAlgoType: signingAlgoType,
-    );
+    _remoteSecondary ??= buildRemoteSecondary(atLookUp: atLookUp);
 
     // Settle which enrollment this client runs as, before anything that
     // derives from it is built.
@@ -916,6 +908,32 @@ class AtClientImpl implements AtClient {
   RemoteSecondary? getRemoteSecondary() {
     return _remoteSecondary;
   }
+
+  /// Builds a [RemoteSecondary] that authenticates as **this client**: the
+  /// enrollment id settled at init, and the PKAM signing algorithm resolved
+  /// from that enrollment's key material rather than the preference's
+  /// deprecated default.
+  ///
+  /// Every site in this class that opens a connection goes through here, so
+  /// that carrying the client's identity is a property of the class rather
+  /// than something each site has to remember. A site that forgot signed the
+  /// challenge with the wrong routine, which under an ML-DSA enrollment throws
+  /// out of at_chops rather than failing authentication — a shape that reads
+  /// as a client bug wherever it surfaces.
+  ///
+  /// [atLookUp] injects an already-built lookup; passing none lets
+  /// [RemoteSecondary] open its own connection, which is what a site wanting a
+  /// connection separate from the client's shared one does.
+  @visibleForTesting
+  RemoteSecondary buildRemoteSecondary({AtLookUp? atLookUp}) => RemoteSecondary(
+        _atSign,
+        _preference!,
+        atChops: atChops,
+        atLookUp: atLookUp,
+        privateKey: _preference!.privateKey,
+        enrollmentId: enrollmentId,
+        signingAlgoType: signingAlgoType,
+      );
 
   @override
   /// Replaces this client's preference — everything except the rollout axes,
@@ -1612,14 +1630,7 @@ class AtClientImpl implements AtClient {
     _atChops = await _createAtChops(_atSign);
 
     final previous = _remoteSecondary;
-    _remoteSecondary = RemoteSecondary(
-      _atSign,
-      _preference!,
-      atChops: _atChops,
-      privateKey: _preference!.privateKey,
-      enrollmentId: enrollmentId,
-      signingAlgoType: signingAlgoType,
-    );
+    _remoteSecondary = buildRemoteSecondary();
     try {
       await previous?.atLookUp.close();
     } on Exception catch (e) {
@@ -1746,11 +1757,10 @@ class AtClientImpl implements AtClient {
     var command =
         'stream:init$sharedWith namespace:$namespace $streamId $fileName ${encryptedData.length}\n';
     _logger.finer('sending stream init:$command');
-    var remoteSecondary = RemoteSecondary(
-      _atSign,
-      _preference!,
-      atChops: atChops,
-    );
+    // Its own connection, because it hands the socket raw bytes and then
+    // closes it — but built the same way as the client's, so it authenticates
+    // as the same enrollment with the same routine.
+    var remoteSecondary = buildRemoteSecondary();
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
     if (result != null && result.startsWith('stream:ack')) {
