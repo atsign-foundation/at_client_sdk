@@ -7,6 +7,10 @@
   defaults, so nothing changes for existing callers. The second, previously
   non-injectable `RemoteSecondary` construction on the deprecated `stream()`
   path now receives them too.
+- feat: `NotificationServiceImpl.create` accepts
+  `monitorOutboundConnectionFactory` and forwards it to the `Monitor` it
+  builds. `Monitor` already took it; the service never passed it and `create`
+  never exposed it. Omitting it keeps the `dart:io` default.
 - chore: delete `lib/src/manager/sync_isolate_manager.dart`. Deprecated, not
   exported from any barrel, and with no references anywhere in the repo — it
   was also the only `dart:isolate` import in any package's `lib/`.
