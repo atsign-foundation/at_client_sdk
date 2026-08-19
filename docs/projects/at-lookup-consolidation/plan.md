@@ -67,10 +67,20 @@ Numbering is dependency order: each unblocked the next.
 
 **1 — Freeze `AtLookUp`; new surface goes on a sub-interface.** `AtLookUp` keeps
 exactly today's members; `AtLookupMuxable implements AtLookUp` carries the new
-ones. The break was never in the impl: widening the interface would leave **17
-`Mock`/`Fake implements` sites** satisfying the new members through
+ones. The break was never in the impl: **18 `Mock`/`Fake implements` sites**
+exist — at_auth 12, at_client_flutter 3, at_client 2, at_onboarding_cli 1 — and
+widening the interface would leave them satisfying the new members through
 `noSuchMethod`, returning null into non-nullable types **at runtime only**, with
 `dart analyze` clean.
+
+⚠️ The freeze protects **5** of those 18 — the ones that mock `AtLookUp`. The
+other **13 mock `AtLookupImpl`**, the concrete class, which *does* gain the
+muxable members in step 6, so they are exposed exactly as before. Sweep them in
+that step; the compiler will not.
+
+```bash
+git grep -nP 'class \w+ extends (Mock|Fake) implements AtLook\w*'
+```
 
 **2 — Monitor consumes a notification stream, not a socket.** It keeps its own
 concerns — regex, last-notification time, surfacing state — and loses connection
@@ -244,7 +254,7 @@ then the old path is deleted — so no package is uncompilable between commits.
 | 1   | Add `defaultResponseBudget` beside `defaultOnboardingTimeout`, documented as uncapped-by-design and why. Nothing reads it yet.                                                                                                       | at_commons     |
 | 2   | `FakeAtServerSocket` over a real `StreamController`, then the completer, the resettable idle timer, timeouts from `AtNetworkTimeouts`, the `onNotification` seam, and the `_stripPrompt` `-1` guard adopted. Signature unchanged.     | at_lookup      |
 | 3   | Declare `AtAuthenticator` and `AtCommandExecutor`; accept and prefer an injected authenticator **alongside** the existing ladder. Nothing breaks yet.                                                                                | at_lookup      |
-| 4   | Supply the authenticators over `AtKeysIo`. at_auth, at_client and at_onboarding_cli switch to passing one. **at_tools' `at_cli` is the external case** — it sets `preference.privateKey` with no AtChops at all.                      | at_auth        |
+| 4   | Supply the authenticators **from at_auth**, built over `AtKeysIo` — at_lookup still names none of it, and gains no dependency. at_auth, at_client and at_onboarding_cli switch to passing one. **at_tools' `at_cli` is the external case** — it sets `preference.privateKey` with no AtChops at all. | at_auth        |
 | 5   | Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` at `:744`, and **`at_chops` from the pubspec**.                                                                       | at_lookup      |
 | 6   | Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership.                                       | at_lookup      |
 | 7   | `withSecureSocket` in, constructor deprecated. Deprecate `MonitorClient` in the same commit — exported, zero consumers tree-wide, and its `_createNewConnection` bypasses `SecureSocketUtil` so it never got the connect timeouts.    | at_lookup      |
