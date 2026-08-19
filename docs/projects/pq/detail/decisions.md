@@ -4591,6 +4591,13 @@ citation.
 
 ### 50.1 The knob is `AtClientPreference.keyEstablishmentAlgo`, not a `CryptoConfig` field
 
+⚠️ **The field was renamed to `keyEstablishmentAlgorithms` (a list) on
+2026-08-19, with KE-2's writer.** The heading keeps the old spelling
+deliberately: this ruling's substance is *which class owns the knob*, which is
+unchanged, and re-slugging a ruling heading costs every inbound link — rulings
+70 and 113 took 19 repoints between them. Read it as being about
+`AtClientPreference`, whatever the field is called.
+
 The obvious home for "which KEM does this atSign use" is the pluggable-crypto
 config, beside the providers it parameterises. It cannot live there, and the
 reason is ordering rather than taste.
@@ -6333,8 +6340,10 @@ What was wrong was never the cardinality. It was the **freeze**.
 
 Three costs, all present in the tree today:
 
-1. **A package can never gain a key.** `keyEstablishmentAlgo` is frozen at
-   `enroll:request`; a client that later needs the other KEM cannot add it, and
+1. ~~**A package can never gain a key.**~~ ⚠️ **Fixed 2026-08-19 by KE-2's
+   writer — this cost is retired, and the two below are what remain.** The
+   configured algorithm was frozen at
+   `enroll:request`; a client that later needed the other KEM could not add it, and
    `register()` deliberately keeps the loaded key's algorithm over a changed
    preference (`key_package_registration.dart:180`) because the kpid is the
    address peers seal to. The preference takes effect on the *next enrollment*.
@@ -6530,7 +6539,7 @@ both modes and makes reruns of each reuse its own.
 rollout-posture table, flipped by the 4.0 posture; the seven e2e mode-B
 call sites pass `mldsa65` explicitly now. And the audit's HIGH finding
 is fixed in the same motion: `selfRetrofit` now threads
-`preference.keyEstablishmentAlgo` into `enrollmentKeyPackageBuilder`,
+`preference.keyEstablishmentAlgorithms.first` into `enrollmentKeyPackageBuilder`,
 where it previously ignored the knob and every retrofitted enrollment
 froze X-Wing into its write-once key package whatever the deployment
 had configured. Live proof: a new functional arm drives the rsa2048
@@ -6601,9 +6610,13 @@ discoverability argument as `SecretSharingAlgos`.
 
 **Deliberately NOT axes:** `allowLegacyCryptoFallback` (an app's knowing
 per-app exception, meaningful in both eras — a posture flipping it would
-turn an explicit opt-in into an ambient one), `keyEstablishmentAlgo` (a
+turn an explicit opt-in into an ambient one), ~~`keyEstablishmentAlgo`~~ (a
 deployment's choice between two live options, not an era — neither
-column of the table could name a "right" value), and `seedNamespaceKeys`
+column of the table could name a "right" value; ⚠️ **it BECAME an axis on
+2026-08-19 as `keyEstablishmentAlgorithms`, and the reasoning here still
+holds** — all three postures give it the same value, exactly because it is a
+deployment's choice rather than a rollout position. It is an axis so a
+deployment states it where it states everything else), and `seedNamespaceKeys`
 (its false default guards "experimental", not "3.x"; whether the 4.0
 release flips it is a separate ruling this entry deliberately does not
 make).
@@ -6908,8 +6921,11 @@ list.
 
 **Still open, and the defect below is still live:** the **writer**.
 `PublishedNskeyKeyRing._mint` always emits `NskeyAdvertisement.single` under
-this client's own `keyEstablishmentAlgo`, so no atSign ever advertises two
-algorithms and a recipient that rotates still strands senders. The mint-as-a-
+the **first** of this client's `keyEstablishmentAlgorithms`, so no atSign ever
+advertises two algorithms **for an nskey** and a recipient that rotates still
+strands senders. ⚠️ **Unchanged by KE-2 (2026-08-19), which is easy to
+misread:** that landed the multi-key writer for an enrollment's own **key
+package**, not for nskeys. This defect is still live. The mint-as-a-
 union step, and the payload pins and differential test that would prove any of
 this, are unbuilt — nothing anywhere constructs a multi-key advertisement.
 
@@ -11076,9 +11092,11 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
    stands: which KEM an atSign publishes is a deployment choice, not a rollout
    stage. Two lists are needed and neither exists in the right shape:
    a **receiver-side** list of what this atSign publishes for others to seal to
-   (today the singular `AtClientPreference.keyEstablishmentAlgo` — the same
-   singularity as [#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135)
-   and KE-2), and a **sender-side** list of what it is prepared to seal to
+   (✅ **both shipped 2026-08-19** — this read "today the singular
+   `AtClientPreference.keyEstablishmentAlgo` — the same singularity as
+   [#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135) and
+   KE-2"; the receiver-side list landed with KE-2's writer as
+   `keyEstablishmentAlgorithms`), and a **sender-side** list of what it is prepared to seal to
    (today `SecretSharingAlgos.keyAlgos` and `suites`, both `static const`).
    Verification and decryption stay maximal and are never posture-settable, so
    cross-cutting invariant 1, *reads are universal*, holds by construction.

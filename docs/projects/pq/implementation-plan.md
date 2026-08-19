@@ -172,8 +172,12 @@ content-key scope silently. Consulted at both sender-choice sites:
 `PairwiseSecretSharing.sendEnvelope`.
 
 ⛔ **The receiver-side list is NOT part of this row** — ruled with gkc
-2026-08-19. `AtClientPreference.keyEstablishmentAlgo` stays singular. The
-multi-key *reader* shipped 2026-08-13, so what widening it needs is the
+2026-08-19. ⚠️ **This paragraph read "`AtClientPreference.keyEstablishmentAlgo`
+stays singular" until later the same day, and that is no longer true: it was a
+statement about THIS row's scope, not a permanent one.** The list landed in
+KE-2 as `keyEstablishmentAlgorithms`, together with the writer that gives it
+meaning — which is exactly why it was held out of this row. The
+multi-key *reader* shipped 2026-08-13, so what widening it needed was the
 **writer**: mint a second key, retire the first, republish. That is KE-2's
 remaining half ([#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133),
 effort L), with [#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135)

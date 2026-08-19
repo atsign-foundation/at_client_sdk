@@ -172,7 +172,7 @@ rows were cited to `tests/at_functional_test/test/key_package_amendment_live_tes
 `blockers.dart` is empty of project blockers again, and the declared-vs-used
 check is what forced it: the `ke2` constant had to be deleted in the same
 commit, because a blocker guarding nothing tells whoever greps it that the
-project owes no scenarios. ⚠️ **Two clauses of those rows are NOT proven and
+project owes no scenarios. ⚠️ **Three clauses of those rows are NOT proven and
 are deliberately not claimed** — a superseded kpid's envelope still opening, a
 peer negotiating to its preferred key, and UC-A2.6's revoked-enrollment gate.
 They are plan 14.19 item 36; the scenarios say so where a reader will meet it.

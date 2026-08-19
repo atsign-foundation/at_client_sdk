@@ -63,7 +63,7 @@ retiring the classical-only `selfEncryptionKey` and `shared_key.*`.
 **Two KEMs, chosen per deployment.** The default is the **X-Wing hybrid
 (ML-KEM-768 + X25519)**, which keeps a hedge against ML-KEM falling to
 *classical* cryptanalysis. The alternative is **pure ML-KEM-1024**, selected by
-`AtClientPreference.keyEstablishmentAlgo` — it exists for its citation rather
+`AtClientPreference.keyEstablishmentAlgorithms` — it exists for its citation rather
 than its strength, being the only option here whose specification chain contains
 no draft, and the parameter set CNSA 2.0 mandates. Neither restricts who an
 atSign can talk to: a sender follows whatever the recipient advertised, and

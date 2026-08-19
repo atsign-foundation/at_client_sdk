@@ -442,9 +442,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 ### 3.4 UC-A2.4 — The key package advertises the KEM the deployment configured
 
 - **Given:** `@alice` pq-native; the deployment running `alice4` sets
-  `AtClientPreference.keyEstablishmentAlgo = ml-kem-1024` (the default is the X-Wing
-  hybrid). `enrollmentKeyPackageBuilder` takes it as an **explicit parameter** — it runs
-  before the enrollment exists and has no client to read a preference from.
+  `AtClientPreference.keyEstablishmentAlgorithms = [ml-kem-1024]` (the default is
+  `[x-wing]`, the hybrid). `enrollmentKeyPackageBuilder` takes the **first** of that list
+  as an **explicit parameter** — it runs before the enrollment exists and has no client
+  to read a preference from, and an enrollment is created holding one key.
 - **When:** `alice4` requests an enrollment (as [UC-A2.1](#31-uc-a21--new-enrollment-approved-by-an-online-enrollment-pq-safe-enrollapprove)),
   minting the key package that rides `enroll:request`.
 - **Then:**

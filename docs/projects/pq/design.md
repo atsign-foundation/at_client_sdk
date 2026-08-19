@@ -229,8 +229,10 @@ nskey private, received per-APKAM over the substrate.
 
 **B1 build detail (one nskey keypair per namespace).** Per-`(atSign, namespace)` there
 is **one** nskey keypair, under the KEM this deployment configured
-(`AtClientPreference.keyEstablishmentAlgo` — X-Wing by default, ML-KEM-1024 the
-no-hybrid option). Its private is **minted as a fresh random keypair
+(the **first** of `AtClientPreference.keyEstablishmentAlgorithms` — X-Wing by
+default, ML-KEM-1024 the no-hybrid option. An nskey is one key, so it takes the
+primary; only the enrollment's own key package advertises the whole list).
+Its private is **minted as a fresh random keypair
 and distributed per-APKAM over the substrate** (sealed to each authorised
 enrollment's key package) — it is **never derived from a shared seed** ([`decisions.md`](decisions.md) [section 11](detail/decisions.md#11-single-nskey-per-namespace-lazily-published-2026-06-30)).
 The public half is published **eagerly** — written at mint, always, to

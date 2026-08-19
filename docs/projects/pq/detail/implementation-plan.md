@@ -1375,7 +1375,8 @@ mixed-scheme / cold-start / revoke+rotate-exclude; e2e at_talk chat scenario. **
 `AtKemAlgorithm.newSeed`/`keyPairFromSeed` + `MlKem1024PureDartAlgo` + `pqSeal ver 0x03`
 (**at_chops 3.6.0**, unpublished); `SecretSharingAlgos` gains `ml-kem-1024`, both RFC 9180 suites,
 `sealVersionFor`/`suiteForKeyAlgo`/`openableSuitesFor`/`kemFor`/`kemForSuite`, and joins the **main
-barrel**; `AtClientPreference.keyEstablishmentAlgo` is read by `KeyPackageRegistration` and
+barrel**; `AtClientPreference.keyEstablishmentAlgorithms` (singular `keyEstablishmentAlgo` when
+this shipped; a list since KE-2) is read by `KeyPackageRegistration` and
 `enrollmentKeyPackageBuilder`; `sendEnvelope` seals under the **recipient's** `alg` at the strongest
 suite both sides list; `NskeyAdvertisement`/`ResolvedNskey` carry `alg` **and** `suites` and
 `PublishedNskeyKeyRing` mints under the preference; `at/nskey/MLKEM1024/AES/GCM` is the second
