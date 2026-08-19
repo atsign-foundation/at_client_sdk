@@ -89,8 +89,8 @@ void main() {
 
     test('UC-A2.4 · the key package advertises the configured KEM', () {
       // GIVEN the deployment running alice4 sets
-      //       AtClientPreference.keyEstablishmentAlgo = ml-kem-1024, where the
-      //       default is the X-Wing hybrid.
+      //       AtClientPreference.keyEstablishmentAlgorithms = [ml-kem-1024],
+      //       where the default is [x-wing], the hybrid.
       // WHEN  alice4 requests an enrollment, minting the key package that rides
       //       enroll:request.
       // THEN  the advertised key is a 1568-byte ML-KEM-1024 encapsulation key

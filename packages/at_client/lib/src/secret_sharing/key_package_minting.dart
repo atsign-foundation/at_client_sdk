@@ -130,7 +130,8 @@ class KeyPackageMinting with ApkamSigning {
     }
 
     final AtKeys keys = await io.read(atSign);
-    final held = advertisedKeysIn(keys, enrolment);
+    final advertised = advertisedKeysIn(keys, enrolment);
+    final held = advertised.keys;
     final active = [
       for (final key in held)
         if (key.status == KeyEntryStatus.active) key
@@ -190,7 +191,15 @@ class KeyPackageMinting with ApkamSigning {
       // PackageKey.computeKid over the same public bytes, which is what ties
       // the two halves to the package a sender sealed to.
       for (final key in superseded) {
-        keys.retireKey(enrolment, key.kid);
+        if (advertised.tagged) {
+          keys.retireKey(enrolment, key.kid);
+        } else {
+          // Untagged material lives in the atSign's container, not this
+          // enrollment's, and retireKey looks only in the latter — it would
+          // find nothing and report nothing, leaving the key active in the
+          // keyfile while the advertisement below called it retired.
+          keys.retireAtSignKey(key.kid);
+        }
       }
       return true;
     });
@@ -248,35 +257,63 @@ class KeyPackageMinting with ApkamSigning {
   /// [KeyPartStatus.dead] material is left out entirely — retirement is as
   /// close to deletion as a keyfile gets, and a dead key is not something to
   /// go on advertising.
+  ///
+  /// ⚠️ **Tagged material wins, and untagged material is the FALLBACK — the
+  /// same rule `keyPackageMaterials` encodes, and it is not optional.**
+  /// `enrollmentKeyPackageBuilder` files an enrollment's first key package
+  /// with **no enrollment id**: it runs before the atServer has assigned one.
+  /// So the ordinary state of a freshly created enrollment is one *untagged*
+  /// pair, and a reader that took only tagged material would see an enrollment
+  /// holding nothing, mint a duplicate key under the same algorithm, and
+  /// advertise a package beside the one already in the record.
+  ///
+  /// The two sets never mix. A retrofitted keyfile carries the legacy
+  /// enrollment's untagged package beside this enrollment's tagged one, and
+  /// merging them would let this enrollment advertise a key another
+  /// enrollment's record was built on.
   @visibleForTesting
-  static List<PackageKey> advertisedKeysIn(AtKeys keys, String enrolment) {
-    final entries = <PackageKey>[];
-    for (final material in keys.keys) {
-      if (material.enrollmentId != enrolment) continue;
-      if (material.keyPartType != CryptographicKeyType.publicEncapsulation) {
-        continue;
+  static ({List<PackageKey> keys, bool tagged}) advertisedKeysIn(
+      AtKeys keys, String enrolment) {
+    List<PackageKey> gather({required bool tagged}) {
+      final entries = <PackageKey>[];
+      for (final material in keys.keys) {
+        final owned = tagged
+            ? material.enrollmentId == enrolment
+            : material.enrollmentId == null;
+        if (!owned) continue;
+        if (material.keyPartType != CryptographicKeyType.publicEncapsulation) {
+          continue;
+        }
+        if (material.status == KeyPartStatus.dead) continue;
+        final alg =
+            SecretSharingAlgos.keyAlgoForMaterial(material.keyAlgorithmType);
+        if (alg == null) continue;
+        entries.add(PackageKey.fromBytes(
+          use: SecretSharingAlgos.useEnc,
+          alg: alg,
+          pub: Uint8List.fromList(material.bytes.bytes),
+          status: material.status == KeyPartStatus.active
+              ? KeyEntryStatus.active
+              : KeyEntryStatus.retired,
+        ));
       }
-      if (material.status == KeyPartStatus.dead) continue;
-      final alg = SecretSharingAlgos.keyAlgoForMaterial(
-          material.keyAlgorithmType);
-      if (alg == null) continue;
-      entries.add(PackageKey.fromBytes(
-        use: SecretSharingAlgos.useEnc,
-        alg: alg,
-        pub: Uint8List.fromList(material.bytes.bytes),
-        status: material.status == KeyPartStatus.active
-            ? KeyEntryStatus.active
-            : KeyEntryStatus.retired,
-      ));
+      entries.sort((a, b) {
+        if ((a.status == KeyEntryStatus.active) !=
+            (b.status == KeyEntryStatus.active)) {
+          return a.status == KeyEntryStatus.active ? -1 : 1;
+        }
+        return 0;
+      });
+      return entries;
     }
-    entries.sort((a, b) {
-      if ((a.status == KeyEntryStatus.active) !=
-          (b.status == KeyEntryStatus.active)) {
-        return a.status == KeyEntryStatus.active ? -1 : 1;
-      }
-      return 0;
-    });
-    return entries;
+
+    final own = gather(tagged: true);
+    // Which set won decides which verb retires from it: tagged material lives
+    // in the enrollment's own container and untagged material in the atSign's,
+    // and `retireKey` on the wrong one finds nothing and silently does nothing.
+    return own.isNotEmpty
+        ? (keys: own, tagged: true)
+        : (keys: gather(tagged: false), tagged: false);
   }
 
   /// Signs the amended package and sends it as the enrollment's own

@@ -22,6 +22,14 @@
     opens them. A signing key inverts both arms, which is why the two disagree.
   - Inert unless the configured list has changed since the enrollment was
     created, which is every start after the first.
+  - ⚠️ **It reads the enrollment's held keys by the tagged-then-untagged rule
+    `keyPackageMaterials` already encodes, and that is not optional.**
+    `enrollmentKeyPackageBuilder` files an enrollment's first key package with
+    **no** enrollment id — it runs before the atServer has assigned one — so an
+    untagged pair is the ordinary state of a freshly created enrollment. A
+    tagged-only reader sees an enrollment holding nothing, mints a duplicate
+    under an algorithm it already has, and advertises it beside the key already
+    in the record.
 - fix: `PqClientBootstrap.stepNamesInOrder` is derived from the list `startup()`
   iterates instead of being a hand-written copy beside it. The copy had drifted
   — it omitted `startEnvelopeListener` — and the test pinning "the step order is

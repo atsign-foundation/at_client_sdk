@@ -61,9 +61,9 @@ void main() {
   Future<List<AtKeysMaterial>> encMaterials(
       {String part = CryptographicKeyType.publicEncapsulation}) async {
     final keys = await keysIo.read(atSign);
-    return keys.keys
-        .where((m) => m.enrollmentId == enrollmentId && m.keyPartType == part)
-        .toList();
+    // Both containers: production files an enrollment's first package
+    // untagged, and anything this class mints is tagged.
+    return keys.keys.where((m) => m.keyPartType == part).toList();
   }
 
   Future<Set<String>> heldKpids() async =>
@@ -91,7 +91,18 @@ void main() {
 
   /// Files an already-held encapsulation keypair, as an enrollment created
   /// under [algorithm] would carry.
-  Future<String> fileHeldKey(String algorithm) async {
+  ///
+  /// ⚠️ **[tagged] defaults to FALSE because that is what production writes.**
+  /// `enrollmentKeyPackageBuilder` files the first key package with **no**
+  /// enrollment id — it runs before the atServer has assigned one — so an
+  /// untagged pair is the ordinary state of a freshly created enrollment, and
+  /// a tagged one only appears once something re-files it under the id.
+  ///
+  /// This defaulted to `true` when the file was written, and the fixture was
+  /// wrong in the direction that hides a defect: every row passed while the
+  /// production reader saw no held key at all, mint a duplicate under the same
+  /// algorithm, and advertised it beside the one already in the record.
+  Future<String> fileHeldKey(String algorithm, {bool tagged = false}) async {
     final kem = SecretSharingAlgos.kemFor(algorithm)!;
     final seed = kem.newSeed();
     final pair = await kem.keyPairFromSeed(seed);
@@ -99,7 +110,7 @@ void main() {
     final materialAlgo = SecretSharingAlgos.materialAlgoFor(algorithm)!;
     await keysIo.update(atSign.toAtsign(), (keys) {
       keys.addKey(AtKeysMaterial(
-        enrollmentId: enrollmentId,
+        enrollmentId: tagged ? enrollmentId : null,
         keyId: kpid,
         keyPartType: CryptographicKeyType.publicEncapsulation,
         keyAlgorithmType: materialAlgo,
@@ -107,7 +118,7 @@ void main() {
         createdAt: DateTime.now().toUtc(),
       ));
       keys.addKey(AtKeysMaterial(
-        enrollmentId: enrollmentId,
+        enrollmentId: tagged ? enrollmentId : null,
         keyId: kpid,
         keyPartType: CryptographicKeyType.privateDecapsulation,
         keyAlgorithmType: materialAlgo,

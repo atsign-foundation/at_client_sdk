@@ -19,21 +19,25 @@ class TestUtils {
   static int get rootServerPort =>
       int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
 
-  /// [posture], [authenticationKeyAlgorithm] and [dataSigningKeyAlgorithms]
-  /// must be threaded here because all three are final at construction — a
-  /// test cannot set any of them on the returned instance.
+  /// [posture], [authenticationKeyAlgorithm], [dataSigningKeyAlgorithms] and
+  /// [keyEstablishmentAlgorithms] must be threaded here because all four are
+  /// final at construction — a test cannot set any of them on the returned
+  /// instance.
   static AtClientPreference getPreference(String atsign,
       {PqPosture? posture,
       SigningAlgoType? authenticationKeyAlgorithm,
-      Set<SigningAlgoType>? dataSigningKeyAlgorithms}) {
+      Set<SigningAlgoType>? dataSigningKeyAlgorithms,
+      List<String>? keyEstablishmentAlgorithms}) {
     var preference = posture == null &&
             authenticationKeyAlgorithm == null &&
-            dataSigningKeyAlgorithms == null
+            dataSigningKeyAlgorithms == null &&
+            keyEstablishmentAlgorithms == null
         ? AtClientPreference()
         : AtClientPreference(
             posture: posture ?? PqPosture.legacy,
             authenticationKeyAlgorithm: authenticationKeyAlgorithm,
-            dataSigningKeyAlgorithms: dataSigningKeyAlgorithms);
+            dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
+            keyEstablishmentAlgorithms: keyEstablishmentAlgorithms);
     preference.hiveStoragePath = 'test/hive/client/$atsign';
     preference.commitLogPath = 'test/hive/client/$atsign';
     preference.rootDomain = 'vip.ve.atsign.zone';
