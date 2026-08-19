@@ -434,7 +434,7 @@ class Monitor {
     }
 
     // The monitor authenticates on its own socket, independently of
-    // AtLookupImpl, so it records its own identity. Without this a client that
+    // at_lookup's own client, so it records its own identity. Without this a client that
     // moves to a new enrollment cannot tell whether the monitor followed it.
     final metaData = _monitorConnection!.getMetaData()!;
     metaData.isAuthenticated = true;

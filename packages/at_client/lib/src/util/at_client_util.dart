@@ -13,13 +13,15 @@ class AtClientUtil {
   @Deprecated('use RemoteSecondary.findSecondaryUrl')
   static Future<String> findSecondary(
       String toAtSign, String rootDomain, int rootPort) async {
-    var secondaryUrl =
-        await AtLookupImpl.findSecondary(toAtSign, rootDomain, rootPort);
-    if (secondaryUrl == null) {
-      throw SecondaryNotFoundException(
-          'No secondary url found for atsign: $toAtSign');
-    }
-    return secondaryUrl;
+    // `AtLookupImpl.findSecondary` was itself a deprecated wrapper over this
+    // finder, and it could not return null - it built the address and called
+    // `toString()`. The null branch below was therefore already unreachable;
+    // an address that cannot be found arrives as a thrown exception, which is
+    // what this method's own callers already handle.
+    final secondaryAddress =
+        await CacheableSecondaryAddressFinder(rootDomain, rootPort)
+            .findSecondary(toAtSign);
+    return secondaryAddress.toString();
   }
 
   static List<String> getSecondaryInfo(String? url) {

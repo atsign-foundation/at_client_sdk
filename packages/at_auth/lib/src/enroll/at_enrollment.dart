@@ -112,7 +112,12 @@ abstract class AtEnrollment {
   ///  To approve an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
+  /// final atLookup = AtLookUp.withSecureSocket(
+  ///   atSign: '@alice',
+  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   secureSocketConfig: SecureSocketConfig(),
+  ///   authenticator: authenticatorFor(keysIo, '@alice'),
+  /// );
   ///
   /// EnrollmentRequestDecision enrollmentRequestDecision =
   ///           EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
@@ -142,7 +147,12 @@ abstract class AtEnrollment {
   ///  To deny an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
+  /// final atLookup = AtLookUp.withSecureSocket(
+  ///   atSign: '@alice',
+  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   secureSocketConfig: SecureSocketConfig(),
+  ///   authenticator: authenticatorFor(keysIo, '@alice'),
+  /// );
   ///
   /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.deny(enrollmentRequestDecision, atLookupImpl);
@@ -161,7 +171,12 @@ abstract class AtEnrollment {
   ///  To revoke an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
+  /// final atLookup = AtLookUp.withSecureSocket(
+  ///   atSign: '@alice',
+  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   secureSocketConfig: SecureSocketConfig(),
+  ///   authenticator: authenticatorFor(keysIo, '@alice'),
+  /// );
   ///
   /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('dummy-enrollment-id');
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.revoke(enrollmentRequestDecision, atLookupImpl);

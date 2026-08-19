@@ -73,7 +73,7 @@ class FlutterEnrollmentService {
       throw Exception('Enrollment failed: $e \n $s');
     } finally {
       // Always close the connection, including when submit() throws (a timeout
-      // or a network failure) — otherwise the AtLookupImpl connection leaks.
+      // or a network failure) — otherwise the lookup's connection leaks.
       await atLookup.close();
     }
 

@@ -17,13 +17,13 @@ directory for usage of the at_lookup library.
 #### Initializing the atLookup Instance
 
 ```dart
-
-var atLookupImpl = AtLookupImpl(
-  '@alice',
-  'root.atsign.com',
-  64,
-  privateKey: 'privateKey',
-  cramSecret: 'cramSecret',
+final atLookUp = AtLookUp.withSecureSocket(
+  atSign: '@alice',
+  rootDomain: AtRootDomain.atsignDomain,
+  secureSocketConfig: SecureSocketConfig(),
+  // at_auth builds this from whatever credential you hold. Pass null for a
+  // connection that never authenticates.
+  authenticator: authenticatorFor(keysIo, '@alice'),
 );
 ```
 

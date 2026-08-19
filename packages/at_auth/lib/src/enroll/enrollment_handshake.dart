@@ -55,10 +55,12 @@ class EnrollmentHandshake {
           'AtAuthKeys are not avaialbe in the enrollemnt response');
     }
 
-    atLookup ??= AtLookupImpl(
-      enrollmentResponse.atSign!,
-      enrollmentResponse.rootDomain!.rootDomain,
-      enrollmentResponse.rootDomain!.rootPort,
+    atLookup ??= AtLookUp.withSecureSocket(
+      atSign: enrollmentResponse.atSign!,
+      rootDomain: enrollmentResponse.rootDomain!,
+      secureSocketConfig: SecureSocketConfig(),
+      // Installed below, from the in-memory keys this handshake just wrote.
+      authenticator: null,
     );
 
     // An enrollment that advertised a key package holds no symmetric key yet,
@@ -75,7 +77,7 @@ class EnrollmentHandshake {
     // deliberately not a complete keyfile yet - the symmetric key is the thing
     // the handshake is here to fetch - so asking the keystore to build a
     // signer would demand material that has not arrived.
-    if (atLookup is AtLookupImpl) {
+    if (atLookup is AtLookupMuxable) {
       final memory = InMemoryAtKeysIo();
       await memory.write(
           enrollmentResponse.atSign!, enrollmentResponse.atAuthKeys!);

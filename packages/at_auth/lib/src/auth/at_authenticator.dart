@@ -178,7 +178,7 @@ AtAuthenticator authenticatorForPrivateKey(
           'Failed connecting to $atSign. $pkamResponse');
     };
 
-/// Ported from `AtLookupImpl.pkamAuthenticate`, which keeps the challenge
+/// Ported from at_lookup's own `pkamAuthenticate`, which keeps the challenge
 /// validation: [validatedFromChallenge] refuses a challenge that does not name
 /// [atSign], so a server cannot get this client to sign for somebody else.
 Future<bool> _pkam(
@@ -246,7 +246,7 @@ Future<bool> _pkam(
       'Failed connecting to $atSign. $pkamResponse');
 }
 
-/// Ported from `AtLookupImpl.cramAuthenticate`, verbatim - including that it
+/// Ported from at_lookup's own `cramAuthenticate`, verbatim - including that it
 /// does NOT pass the challenge through [validatedFromChallenge], where PKAM
 /// does.
 ///

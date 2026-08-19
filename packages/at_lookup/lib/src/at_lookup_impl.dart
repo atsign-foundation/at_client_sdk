@@ -539,6 +539,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   final Mutex _pkamAuthenticationMutex = Mutex();
 
   @override
+  Future<String> readResponse(
+          {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
+      messageListener.read(
+          maxWaitMilliSeconds: maxWaitMilliSeconds,
+          transientWaitTimeMillis: transientWaitTimeMillis);
+
+  @override
   Future<String> sendSync(String command,
       {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
     await _sendCommand(command);

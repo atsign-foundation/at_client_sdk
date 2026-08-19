@@ -271,6 +271,60 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// Whether [startNotifications] is in force.
   bool get isNotifying;
 
+  // The two places `AtLookupImpl` accepts more than `AtLookUp` does, restated
+  // here so a caller can hold this interface without losing anything.
+  //
+  // Found with the analyzer, not by reading: a hand-written comparison of the
+  // two signature lists missed `scan` entirely, because nested generics in
+  // `Future<List<String>>` broke its return-type pattern. A probe that calls
+  // each method through the interface reports exactly what is missing, and
+  // carries `scan(auth:)` as a control that must be reported.
+  //
+  // They go HERE rather than on `AtLookUp` because that interface is frozen:
+  // adding a parameter to one of its methods forces every `implements
+  // AtLookUp` to redeclare it, which breaks the six mocks and any external
+  // implementer at compile time. This interface is new, and `AtLookupImpl` is
+  // its only implementer.
+
+  /// As [AtLookUp.scan], and additionally [auth] - whether to scan as the
+  /// authenticated atSign. `at_server_status` scans unauthenticated.
+  @override
+  Future<List<String>> scan({String? regex, String? sharedBy, bool auth = true});
+
+  /// As [AtLookUp.lookup], and additionally [metadata].
+  @override
+  Future<String> lookup(String key, String sharedBy,
+      {bool auth = true, bool verifyData = false, bool metadata = false});
+
+  /// Takes over authentication entirely when set.
+  ///
+  /// On the interface because installing one is the whole point of the seam,
+  /// and every installer previously had to write `if (lookUp is
+  /// AtLookupImpl)` to reach it — four such casts across at_auth, at_client
+  /// and at_onboarding_cli. A cast to a concrete type in order to configure it
+  /// is the shape this project exists to remove.
+  AtAuthenticator? get authenticator;
+  set authenticator(AtAuthenticator? value);
+
+  /// Whether a usable connection is currently open.
+  ///
+  /// A caller closing down needs this to avoid closing what was never opened,
+  /// and it too was reached only by casting.
+  bool isConnectionAvailable();
+
+  /// Read one response from the connection, without sending anything first.
+  ///
+  /// For a caller that has already put bytes on the wire itself — at_client's
+  /// file-stream path writes to the socket directly and then waits for
+  /// `stream:done`. It previously reached `messageListener.read(...)` through
+  /// a cast to the concrete class.
+  ///
+  /// This is deliberately narrower than exposing the listener: that type is
+  /// not in at_lookup's barrel, and putting it on a public interface would
+  /// publish it by the back door.
+  Future<String> readResponse(
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis});
+
   /// Whether the connection dropped and a reconnect is in flight.
   ///
   /// A subscriber otherwise cannot tell a reconnecting stream from a quiet

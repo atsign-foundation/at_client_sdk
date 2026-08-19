@@ -1769,9 +1769,12 @@ class AtClientImpl implements AtClient {
       result = result.trim();
       _logger.finer('ack received for streamId:$streamId');
       remoteSecondary.atLookUp.connection!.getSocket().add(encryptedData);
-      var streamResult = await (remoteSecondary.atLookUp as AtLookupImpl)
-          .messageListener
-          .read(maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
+      // `readResponse` rather than reaching through to the listener: this
+      // path has already written the bytes to the socket itself, so it needs
+      // the read half alone. The listener is not in at_lookup's barrel.
+      var streamResult = await (remoteSecondary.atLookUp as AtLookupMuxable)
+          .readResponse(
+              maxWaitMilliSeconds: _preference!.outboundConnectionTimeout);
       if (streamResult.startsWith('stream:done')) {
         await remoteSecondary.atLookUp.connection!.close();
         streamResponse.status = AtStreamStatus.complete;

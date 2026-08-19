@@ -270,7 +270,7 @@ Future<void> _verifyAgainstApsk(
         'signature against');
   }
   // An absent `_apsk` does not come back null: the atServer answers AT0015 and
-  // `AtLookupImpl` throws it. That is the revoked-enrollment case this doc
+  // at_lookup throws it. That is the revoked-enrollment case this doc
   // comment describes, and the caller treats a throw from here the same way it
   // treats the refusal below — see the skip in [_openIfSymmetricKey].
   final String? response = await atLookUp

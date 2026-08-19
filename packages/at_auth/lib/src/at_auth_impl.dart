@@ -96,7 +96,7 @@ class AtAuthImpl implements AtAuth {
   /// `AtLookUp` does not declare it - that interface is frozen because mocks
   /// implement it - so any other implementation keeps the existing behaviour.
   void _installAuthenticator(AtLookUp? lookUp, AtAuthenticator authenticator) {
-    if (lookUp is AtLookupImpl) {
+    if (lookUp is AtLookupMuxable) {
       lookUp.authenticator = authenticator;
     } else {
       _logger.finer('${lookUp.runtimeType} has no authenticator seam; '
@@ -137,10 +137,13 @@ class AtAuthImpl implements AtAuth {
     }
 
     atAuthRequest.enrollmentId ??= atAuthKeys.enrollmentId;
-    atLookUp ??= AtLookupImpl(
-      atAuthRequest.atSign,
-      atAuthRequest.rootDomain.rootDomain,
-      atAuthRequest.rootDomain.rootPort,
+    atLookUp ??= AtLookUp.withSecureSocket(
+      atSign: atAuthRequest.atSign,
+      rootDomain: atAuthRequest.rootDomain,
+      secureSocketConfig: SecureSocketConfig(),
+      // Installed a few lines below, once the algorithm has been resolved
+      // from the keyfile.
+      authenticator: null,
     );
     // A typed-material enrollment (a self-retrofit's) authenticates with its
     // own signing keypair and algorithm, resolved from the keyfile rather
@@ -242,10 +245,13 @@ class AtAuthImpl implements AtAuth {
     String? publicKeyId,
   }) async {
     var atOnboardingResponse = AtOnboardingResponse(atOnboardingRequest.atSign);
-    atLookUp ??= AtLookupImpl(
-      atOnboardingRequest.atSign,
-      atOnboardingRequest.rootDomain.rootDomain,
-      atOnboardingRequest.rootDomain.rootPort,
+    atLookUp ??= AtLookUp.withSecureSocket(
+      atSign: atOnboardingRequest.atSign,
+      rootDomain: atOnboardingRequest.rootDomain,
+      secureSocketConfig: SecureSocketConfig(),
+      // Onboarding installs its own once it knows whether this is the CRAM
+      // leg or the PKAM one.
+      authenticator: null,
     );
 
     //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
@@ -350,7 +356,7 @@ class AtAuthImpl implements AtAuth {
 
     //4. Close connection to server
     try {
-      await (atLookUp as AtLookupImpl).close();
+      await atLookUp!.close();
     } on Exception catch (e) {
       _logger.severe('error while closing connection to server: $e');
     }
