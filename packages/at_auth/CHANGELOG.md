@@ -1,4 +1,13 @@
 ## 3.4.0
+- feat: add `authenticatorForPrivateKey`, the legacy credential as an
+  authenticator - a PKAM private key and no keystore at all. That is the shape
+  at_lookup's ladder supported, and without it deleting the ladder would make
+  an `AtKeysIo` mandatory to authenticate, breaking every consumer that builds
+  a client from a preference alone. Signs with an empty public half exactly as
+  the ladder did, `AtPkamKeyPair.create('', privateKey)`, since RSA signing
+  needs only the private key. Always rsa2048: a keyless caller has no
+  enrollment record to name an algorithm, and rsa2048 is what at_lookup signed
+  with by default. It still refuses a challenge that does not name its atSign.
 - feat: `AtEnrollment.approve` accepts `approverChops`, the approving client's
   own crypto. What approval needs is not authentication - the atSign's
   encryption private key and its self-encryption key - so it should not come

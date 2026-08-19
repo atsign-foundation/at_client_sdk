@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
@@ -74,6 +75,58 @@ AtAuthenticator authenticatorFor(
       }
       return _pkam(executor, atSign, keys, enrollmentId, clientConfig, chops,
           signingAlgo);
+    };
+
+/// The legacy credential: a PKAM private key and nothing else.
+///
+/// Reads no keystore, because a caller on this path has none - it holds a
+/// private key on an `AtClientPreference` and that is all. That is the shape
+/// at_lookup's own ladder supported, and the reason the ladder cannot simply
+/// be deleted: without this, authentication would require an `AtKeysIo` and
+/// every such caller would break.
+///
+/// Signs with an empty public half, exactly as the ladder did:
+/// `AtPkamKeyPair.create('', privateKey)`. RSA signing needs the private key
+/// only, and at_auth already builds a signer of that shape in
+/// `enrollment_handshake` for an enrollment whose keys are incomplete.
+///
+/// Always rsa2048: a keyless caller has no enrollment record to name an
+/// algorithm, and rsa2048 is what at_lookup signed with by default, so this
+/// preserves what such a caller already got.
+AtAuthenticator authenticatorForPrivateKey(
+  String atSign,
+  String privateKey, {
+  String? enrollmentId,
+  Map<String, dynamic> clientConfig = const {},
+}) =>
+    (executor) async {
+      _logger.finer('authenticating $atSign with a bare private key');
+      var fromResponse = await executor.sendSync((FromVerbBuilder()
+            ..atSign = atSign
+            ..clientConfig = Map<String, dynamic>.from(clientConfig))
+          .buildCommand());
+      if (fromResponse.isEmpty) {
+        return false;
+      }
+      fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
+      fromResponse = validatedFromChallenge(fromResponse, atSign);
+
+      final signature = base64Encode(PkamSigningAlgo(
+              AtPkamKeyPair.create('', privateKey), HashingAlgoType.sha256)
+          .sign(Uint8List.fromList(utf8.encode(fromResponse))));
+
+      final pkamResponse = await executor.sendSync((PkamVerbBuilder()
+            ..signingAlgo = SigningAlgoType.rsa2048.name
+            ..hashingAlgo = HashingAlgoType.sha256.name
+            ..enrollmentlId = enrollmentId
+            ..signature = signature)
+          .buildCommand());
+      if (pkamResponse == 'data:success') {
+        _logger.info('pkam auth success for $atSign');
+        return true;
+      }
+      throw UnAuthenticatedException(
+          'Failed connecting to $atSign. $pkamResponse');
     };
 
 /// Ported from `AtLookupImpl.pkamAuthenticate`, which keeps the challenge

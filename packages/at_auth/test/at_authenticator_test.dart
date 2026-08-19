@@ -158,6 +158,41 @@ void main() {
     });
   });
 
+  group('the legacy credential', () {
+    // A caller holding nothing but a PKAM private key on a preference - which
+    // is what at_lookup's ladder supported, and why deleting the ladder would
+    // otherwise require every such caller to gain a keystore.
+    test('authenticates with no keystore at all', () async {
+      final executor = RecordingExecutor(['data:$challenge', 'data:success']);
+
+      final ok = await authenticatorForPrivateKey(
+          atSign, demo.pkamPrivateKeyMap[atSign]!)(executor);
+
+      expect(ok, isTrue);
+      expect(executor.sent.first, startsWith('from:$atSign'));
+      expect(executor.sent.last, startsWith('pkam:'));
+      expect(executor.sent.last, contains('signingAlgo:rsa2048'),
+          reason: 'a keyless caller has no enrollment record to name an '
+              'algorithm, and rsa2048 is what at_lookup signed with');
+    });
+
+    test('still refuses a challenge naming another atSign', () async {
+      final executor = RecordingExecutor([
+        'data:_9e8169dc-5618-44ec-ab43-1a5b2144c581@bob\u{1F6E0}'
+            ':c3d345fc-5691-4f90-bc34-17cba31f060f'
+      ]);
+
+      await expectLater(
+          () => authenticatorForPrivateKey(
+              atSign, demo.pkamPrivateKeyMap[atSign]!)(executor),
+          throwsA(predicate((dynamic e) =>
+              e is UnAuthenticatedException &&
+              e.message.contains('Refusing to sign a malformed from:'))));
+      expect(executor.sent, hasLength(1),
+          reason: 'it must refuse before sending any signature');
+    });
+  });
+
   group('refusals', () {
     test('a challenge that does not name this atSign is refused', () async {
       final io = InMemoryAtKeysIo();
