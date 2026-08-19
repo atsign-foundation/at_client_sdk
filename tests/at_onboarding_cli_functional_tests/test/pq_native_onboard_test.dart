@@ -3,7 +3,8 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart' show PqPosture;
+import 'package:at_client/at_client.dart'
+    show AtClient, AtClientImpl, PqPosture;
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_utils/at_utils.dart';
@@ -21,10 +22,24 @@ import 'utils/test_keys_dir.dart';
 /// atSign activated that way could never be repaired, only abandoned. This test
 /// exists to fail if the CLI ever mints one of the three without the others.
 ///
-/// One-shot server state: CRAM activation works once per atSign per virtualenv.
-/// `@denise` is this file's alone — every other atSign in this package is
-/// already spent by an `onboard()` or has its PKAM key installed by hand for
-/// the authenticate tests, and either makes an activation here fail.
+/// Both tests here drive their remote commands on a client from a fresh
+/// `authenticate()` under a **bare** preference, never on the activation
+/// client. That is what `at_activate`'s `otp`, `list` and `spp` do — they build
+/// their client through `createAtClient`, which names no posture — and it is
+/// the only arrangement in which the preference and the key material can
+/// disagree. A test driven on the activation client agrees with itself.
+///
+/// The two tests are one comparison: the *only* thing varied between them is
+/// the posture at activation, so an outcome that differs can only come from
+/// the key material each activation minted. Each states its own resolved
+/// algorithm, so a run in which they silently converged fails rather than
+/// passing while measuring nothing.
+///
+/// One-shot server state: CRAM activation works once per atSign per virtualenv,
+/// so `@denise` and `@egbiometric🛠` are this file's alone — every other atSign
+/// in this package is already spent by an `onboard()` or has its PKAM key
+/// installed by hand for the authenticate tests, and either makes an
+/// activation here fail.
 void main() {
   AtSignLogger.root_level = 'WARNING';
 
@@ -76,13 +91,41 @@ void main() {
 
     // A fresh connection authenticating from the keyfile alone. No RSA APKAM
     // exists anywhere, so this can only succeed by ML-DSA.
-    expect(await AtOnboardingServiceImpl(atSign, preference()).authenticate(),
-        true);
+    //
+    // Under a **bare** preference, deliberately: that is what `at_activate`
+    // hands `createAtClient` for `otp`, `list` and `spp`, so its posture is
+    // `legacy` and its `authenticationKeyAlgorithm` is `rsa2048`. Everything
+    // below then runs on this client rather than on the activation client,
+    // because the activation client was built under `pqReady` and so cannot
+    // tell a working resolution from a posture that happens to agree with it.
+    // A client that reads its algorithm off the preference here signs an
+    // ML-DSA key with the RSA routine and every command below throws.
+    // `at_activate` is its own process, and in one process the activation
+    // client is still cached under `(atSign, enrollmentId)` holding the
+    // `pqReady` axes — which `AtClientImpl.create` refuses to hand to a caller
+    // naming different ones. That refusal is a real guard, so what this does
+    // is what process exit does, rather than working around it.
+    await service.atClient!.stop();
+    AtClientImpl.atClientInstanceMap
+        .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
+
+    final reader = AtOnboardingServiceImpl(
+        atSign,
+        AtOnboardingPreference()
+          ..rootDomain = 'vip.ve.atsign.zone'
+          ..hiveStoragePath = 'test/storage/hive/$atSign-reader'
+          ..commitLogPath = 'test/storage/hive/$atSign-reader/commit'
+          ..namespace = 'wavi'
+          ..atKeysFilePath = keysFilePath);
+    expect(await reader.authenticate(), true);
+    final client = reader.atClient!;
+    expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
+        reason: 'the keyfile is the authority on how this enrollment '
+            'authenticates; the bare preference above says rsa2048');
 
     // --- 2. the key package is on the enrollment record --------------------
     // Never published, so `enroll:listns` is the only route to it — and it can
     // only have been set by the enroll:request that created the record.
-    final client = service.atClient!;
     final listns = await client
         .getRemoteSecondary()!
         .executeCommand('enroll:listns:wavi\n', auth: true);
@@ -138,5 +181,67 @@ void main() {
         reason: 'a legacy peer must still be able to reach this atSign, and '
             'the key it finds has to be the one this atSign holds the private '
             'half of');
+  }, timeout: Timeout(Duration(minutes: 3)));
+
+  test('a legacy activation is the rsa2048 arm of the same comparison',
+      () async {
+    // `@egbiometric🛠` is this test's alone. A CRAM activation is one-shot per
+    // atSign per virtualenv, and every other demo atSign this package touches
+    // is already spent by an `onboard()` or has its PKAM key installed by
+    // hand — either makes an activation here fail.
+    final legacyAtSign = AtUtils.fixAtSign('@egbiometric🛠');
+    final legacyKeysFile = testKeysFile(legacyAtSign);
+    for (final path in [legacyKeysFile, '$legacyKeysFile.bak']) {
+      final file = File(path);
+      if (file.existsSync()) file.deleteSync();
+    }
+
+    // The only thing varied against the test above is the posture at
+    // activation. Everything else — the reader's bare preference, the command
+    // driven — is held identical, so a difference in outcome can only come
+    // from the key material the activation minted.
+    final activation = AtOnboardingPreference(posture: PqPosture.legacy)
+      ..rootDomain = 'vip.ve.atsign.zone'
+      ..hiveStoragePath = 'test/storage/hive/$legacyAtSign'
+      ..commitLogPath = 'test/storage/hive/$legacyAtSign/commit'
+      ..namespace = 'wavi'
+      ..cramSecret = at_demos.cramKeyMap[legacyAtSign]
+      ..atKeysFilePath = legacyKeysFile
+      ..downloadPath = keysDir
+      ..appName = 'wavi'
+      ..deviceName = 'legacy-cli';
+    expect(await AtOnboardingServiceImpl(legacyAtSign, activation).onboard(),
+        true);
+
+    final keys =
+        await FileAtKeysIo(filePath: (_) => legacyKeysFile).read(legacyAtSign);
+    expect(keys.apkamPublicKey, isNotNull,
+        reason: 'a legacy activation keeps its APKAM in the flat fields, '
+            'which is what makes it the rsa2048 arm');
+
+    final reader = AtOnboardingServiceImpl(
+        legacyAtSign,
+        AtOnboardingPreference()
+          ..rootDomain = 'vip.ve.atsign.zone'
+          ..hiveStoragePath = 'test/storage/hive/$legacyAtSign-reader'
+          ..commitLogPath = 'test/storage/hive/$legacyAtSign-reader/commit'
+          ..namespace = 'wavi'
+          ..atKeysFilePath = legacyKeysFile);
+    expect(await reader.authenticate(), true);
+    final AtClient client = reader.atClient!;
+
+    // The rig check the plan asks for: the two arms must actually differ, or
+    // the comparison is of a case with itself.
+    expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.rsa2048,
+        reason: 'this arm has no typed material, so the preference fallback '
+            'stands — and it must not be the mldsa65 the other arm resolves');
+
+    // The same authenticated command as the PQ-native arm, so what is shown
+    // is that each client follows its OWN key material under one identical
+    // reader preference.
+    final listns = await client
+        .getRemoteSecondary()!
+        .executeCommand('enroll:listns:wavi\n', auth: true);
+    expect(listns, startsWith('data:'));
   }, timeout: Timeout(Duration(minutes: 3)));
 }
