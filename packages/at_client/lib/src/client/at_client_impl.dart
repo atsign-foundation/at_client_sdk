@@ -12,6 +12,7 @@ import 'package:at_client/src/manager/storage_manager.dart';
 import 'package:at_client/src/response/response.dart';
 import 'package:at_client/src/service/encryption_service.dart';
 import 'package:at_client/src/service/file_transfer_service.dart';
+import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_client/src/stream/at_stream_notification.dart';
@@ -314,6 +315,7 @@ class AtClientImpl implements AtClient {
     AtLookupSecureSocketFactory? secureSocketFactory,
     AtLookupSecureSocketListenerFactory? socketListenerFactory,
     AtLookupOutboundConnectionFactory? outboundConnectionFactory,
+    AtSyncQueue? syncQueue,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -350,6 +352,7 @@ class AtClientImpl implements AtClient {
         secureSocketFactory: secureSocketFactory,
         socketListenerFactory: socketListenerFactory,
         outboundConnectionFactory: outboundConnectionFactory,
+        syncQueue: syncQueue,
       );
 
       await atClientImpl._init(atLookUp: atLookUp);
@@ -373,9 +376,11 @@ class AtClientImpl implements AtClient {
     AtLookupSecureSocketFactory? secureSocketFactory,
     AtLookupSecureSocketListenerFactory? socketListenerFactory,
     AtLookupOutboundConnectionFactory? outboundConnectionFactory,
+    AtSyncQueue? syncQueue,
   })  : _secureSocketFactory = secureSocketFactory,
         _socketListenerFactory = socketListenerFactory,
-        _outboundConnectionFactory = outboundConnectionFactory {
+        _outboundConnectionFactory = outboundConnectionFactory,
+        _syncQueue = syncQueue {
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -409,6 +414,10 @@ class AtClientImpl implements AtClient {
   final AtLookupSecureSocketListenerFactory? _socketListenerFactory;
   final AtLookupOutboundConnectionFactory? _outboundConnectionFactory;
 
+  /// Sync queue handed to the [LocalSecondary] this client builds. Null means
+  /// the Hive-backed queue `LocalSecondary` opens for itself.
+  final AtSyncQueue? _syncQueue;
+
   Future<void> _init({AtLookUp? atLookUp}) async {
     if (_preference!.isLocalStoreRequired) {
       if (_localSecondaryKeyStore == null) {
@@ -420,6 +429,7 @@ class AtClientImpl implements AtClient {
         this,
         keyStore: _localSecondaryKeyStore ?? _storageManager?.keyValueStore,
         onEvent: emitDataEvent,
+        syncQueue: _syncQueue,
       );
       _atChops ??= await _createAtChops(_atSign);
       _validateDefaultCryptoProvider();

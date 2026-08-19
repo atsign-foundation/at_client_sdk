@@ -11,6 +11,12 @@
   `monitorOutboundConnectionFactory` and forwards it to the `Monitor` it
   builds. `Monitor` already took it; the service never passed it and `create`
   never exposed it. Omitting it keeps the `dart:io` default.
+- feat: `AtClientImpl.create` accepts a `syncQueue` and hands it to
+  `LocalSecondary`, which adopts it instead of opening the Hive-backed queue
+  itself. `AtSyncQueue.open`'s `injectedBox` test seam was previously
+  unreachable from `create`. An injected queue also sidesteps the implicit
+  ordering contract that the built-in path has with `Hive.init`. Omitting it
+  changes nothing.
 - chore: delete `lib/src/manager/sync_isolate_manager.dart`. Deprecated, not
   exported from any barrel, and with no references anywhere in the repo — it
   was also the only `dart:isolate` import in any package's `lib/`.
