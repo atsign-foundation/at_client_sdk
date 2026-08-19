@@ -830,6 +830,26 @@ the 167/167 baseline it is measured against was itself a single run. Record any
 further occurrence with its numerator and denominator rather than re-classifying
 it.
 
+**Recurred 2026-08-19 at `327cf4fa2`, in 1 of 2 pack runs** (173/174, then
+174/174 on a re-run). Same file, same symptom, same 40 s timeout at
+`await firstNotification`. The tree state is not the one the 2026-08-17
+observations were made on — the retrofit sequencing landed in between — so the
+two rates describe different trees and must not be pooled.
+
+**The 2026-08-19 run produced evidence the earlier ones did not: the
+notification WAS delivered.** The client log carries
+`Received @alice🛠:rf2cmon-57335863.buzz@alice🛠`, and exactly **one** such
+line, on a monitor whose PKAM went out as `signingAlgo:rsa2048`. Two clients
+were live with monitors listening — the legacy owner and the retrofitted ML-DSA
+one — and the test awaits the latter. So the question narrows from "was it
+delivered" to **which monitor the atServer considered a subscriber**, which is a
+fact with no near-side representation at all.
+
+⚠️ **`runLocal.sh` ends with `docker compose down`, so the atServer log for that
+occurrence was destroyed before it could be read.** A run chasing this must copy
+the logs out first — `docker cp test-virtualenv-1:/apps/logs <dir>` — before the
+teardown. The re-run did capture them, and passed, so they say nothing.
+
 **If it recurs,** the bisect point is `0668cf91d` — code there is 14.31's
 local-key fix without the `_apsk` write serialisation, so green at that commit
 would pin it on the serialisation.
