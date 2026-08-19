@@ -15,8 +15,9 @@
     `createAtClient`, which gains an optional `posture` — it is exported, so
     apps that already call it are unaffected. Both go through
     `AuthCliArgs.preferenceUnder`, which is the single place that decides what
-    an unnamed posture means, and so the only place a `PqPosture` constant is
-    named outside the argument map.
+    an unnamed posture means — it names no posture itself, which is the point,
+    so the argument map stays the only code in the package that names a
+    `PqPosture` constant at all.
   - **A parser that accepts an argument is not a client that runs under it.**
     For a day this reached every parser while only the two onboarding-service
     commands read the value, which is the same silent no-op `--signingAlgoType`

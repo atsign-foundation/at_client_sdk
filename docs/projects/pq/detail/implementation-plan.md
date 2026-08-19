@@ -3769,12 +3769,27 @@ its own. None blocks anything.
     sections and would want a ruling. Recorded so the guards' coverage is not
     mistaken for completeness.
 
-27. **Seven broken links in this doc set, all pre-dating 2026-08-18.** Found by
-    resolving every `](target)` across the eight PQ docs and attributing each
-    against the previous commit, so none of these came from the `0x01` removal.
-    `detail/implementation-plan.md` links `design.md`, `acceptance.md` and
-    `roadmap.md` as siblings when they are one level up — the `../` is missing —
-    plus three dangling `#anchors` there, and one in `detail/decisions.md`.
+27. ~~**Seven broken links in this doc set, all pre-dating 2026-08-18.**~~
+    **FIXED — re-derived 2026-08-19 and the doc set is clean:** 687 file
+    targets across the eight PQ docs all resolve, and 1078 `#anchor`s all land
+    on a heading, the last of them (`detail/` pointing at 14.17's live heading
+    as though it were local) repaired with 14.38's doc commit. Both controls
+    behaved — a known-good target and anchor resolved, a fabricated one did
+    not — and the three surviving `](design.md)`-shaped strings in
+    `detail/implementation-plan.md` are inside backtick code spans in the
+    paragraph describing this very fix, which is the case the original item
+    warned about. ⚠️ **The first checker written for this reported 67 broken
+    and was wrong**: its slug function preserved em-dashes where GitHub strips
+    them, and its positive control passed only because the anchor it chose had
+    none. Draw the control from a heading that carries the character the
+    checker mishandles. The original finding follows.
+
+    Found by resolving every `](target)` across the eight PQ docs and
+    attributing each against the previous commit, so none of these came from
+    the `0x01` removal. `detail/implementation-plan.md` linked `design.md`,
+    `acceptance.md` and `roadmap.md` as siblings when they are one level up —
+    the `../` was missing — plus three dangling `#anchors` there, and one in
+    `detail/decisions.md`.
     Re-derive rather than trusting this count: resolve each link target and each
     `#anchor` against the headings of the file it lands in, skipping fenced code
     blocks and the literal `](target#anchor)` that appears in prose as an
@@ -4615,7 +4630,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 18 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18 against an actual 10, then **10** until 2026-08-19 against an actual 18 — the same number, wrong in both directions a day apart; re-derive it with the command below rather than reading any of them.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 17 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18 against an actual 10, then **10** until 2026-08-19 against an actual 18 — the same number, wrong in both directions a day apart; re-derive it with the command below rather than reading any of them.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
