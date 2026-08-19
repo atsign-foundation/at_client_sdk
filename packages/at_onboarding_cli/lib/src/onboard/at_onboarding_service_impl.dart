@@ -188,12 +188,18 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     }
   }
 
-  /// Where this CLI's keys live. One definition, used both when onboarding
-  /// hands a source to at_auth and when authentication needs one to read.
+  /// Where this CLI's keys live, for READING them during authentication.
+  ///
+  /// The passphrase is not optional here. A password-protected keyfile cannot
+  /// be read without it, and this source is handed to an authenticator that
+  /// reads on every authentication - so omitting it fails `list`, and every
+  /// other authenticated command, with "Pass Phrase is required". That is a
+  /// long way from where the mistake was made, and no unit test sees it.
   AtKeysIo _keysIo() => FileAtKeysIo(
         filePath: atOnboardingPreference.atKeysFilePath != null
             ? (_) => atOnboardingPreference.atKeysFilePath!
             : null,
+        passPhrase: atOnboardingPreference.passPhrase,
       );
 
   @override
@@ -261,7 +267,14 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     atOnboardingRequest.retryOptions =
         RetryOptions(maxRetries: maxRetries, retryDelay: retryInterval);
-    final atKeysIo = _keysIo();
+    // Deliberately not _keysIo(): this one omits the passphrase where the read
+    // path requires it. Whether that omission is right is a separate question,
+    // and not one to answer as a side effect of sharing a helper.
+    final atKeysIo = FileAtKeysIo(
+      filePath: atOnboardingPreference.atKeysFilePath != null
+          ? (_) => atOnboardingPreference.atKeysFilePath!
+          : null,
+    );
     atOnboardingRequest.atKeysIo = atKeysIo;
 
     // A post-quantum activation is all-or-nothing, which is why it goes

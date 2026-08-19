@@ -1,4 +1,11 @@
 ## 1.17.0
+- fix: authentication reads a password-protected keyfile again. The
+  authenticator's key source omitted the passphrase, so every authenticated
+  command against a protected `.atKeys` failed with "Pass Phrase is required"
+  - a long way from where the omission was. The construction was copied
+  faithfully from the onboarding path, where it is right because onboarding
+  writes; reading needs the passphrase, as the same file's other source
+  already did. Caught by the new functional runner, not by the 54 unit tests.
 
 - feat: installs an `AtAuthenticator` on its lookup, so authentication reads
   the keyfile rather than credentials parked on at_lookup. Where the keys live
