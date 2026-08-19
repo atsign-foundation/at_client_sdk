@@ -1,4 +1,12 @@
 ## 3.15.0
+- feat: `RemoteSecondary` and `AtClientImpl.create` accept at_lookup's
+  `secureSocketFactory`, `socketListenerFactory` and
+  `outboundConnectionFactory`, and forward them to the `AtLookupImpl` they
+  build. The factories were already constructor parameters on `AtLookupImpl`
+  and simply never passed through. Omitting them keeps at_lookup's `dart:io`
+  defaults, so nothing changes for existing callers. The second, previously
+  non-injectable `RemoteSecondary` construction on the deprecated `stream()`
+  path now receives them too.
 - chore: delete `lib/src/manager/sync_isolate_manager.dart`. Deprecated, not
   exported from any barrel, and with no references anywhere in the repo — it
   was also the only `dart:isolate` import in any package's `lib/`.
