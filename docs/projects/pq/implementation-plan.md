@@ -42,9 +42,9 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
-| [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — 2 code fixes and a test repair | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
+| [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — **partly overtaken 2026-08-19**: change 1 and half of change 3 shipped with 14.39's CLI commit; change 2 and the rest of 3 remain | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
 | [14.40](#1440-at_clients-in-progress-heading-is-a-patch-and-now-carries-a-breaking-change) | Decide at_client's next version number — `## 3.14.1` now carries a BREAKING entry | Nothing but a ruling. The bump is gkc's call and was deliberately not taken |
-| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — the rename, the 3 postures, client-driven retrofit, the algorithm lists, and public-data signature verification | Nothing. Design settled by [ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18); large, and it changes R-2's definition |
+| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Owed: client-driven retrofit at start** (designed, unbuilt) and **public-data signature verification** (undesigned) | Retrofit is blocked on an at_lookup version bump — it needs `AtConnectionMetaData` to record what a connection last authenticated as, and in-tree 3.6.1 equals published 3.6.1. gkc's call |
 
 ### 14.39 `PqPosture` and the rollout it drives
 
@@ -175,6 +175,17 @@ at_client's `CHANGELOG.md` under its in-progress `## 3.14.1` heading. A patch
 version carrying a source-breaking change is the conflict; the entry itself is
 correct and stays.
 
+⚠️ **The question got bigger on 2026-08-19, not smaller.** 14.39 added four more
+**BREAKING** entries under the same `## 3.14.1` heading — `PqPosture` replacing
+`ReleasePosture`, `SigningRollout` deleted, `disallowLegacyEncryption` losing
+its constructor argument, and `inUseSigningAlgorithms` renamed — plus a
+**BREAKING** `--posture` entry under at_onboarding_cli's in-progress `## 1.17.0`.
+So this is now two version questions, not one. The blast-radius argument is
+unchanged and still bounded: none of that surface is published (at_client 3.14.0
+on pub.dev carries no `ReleasePosture`, no `SigningRollout` and no
+`disallowLegacyEncryption`), so no released consumer breaks — it remains a
+numbering question.
+
 The break is real: `SecretSharingAlgos.xWingHpke` is gone, `suites` and
 `openableSuitesFor` no longer name it, and the `suites` list emitted on
 `enroll:request` narrows. What it costs is bounded by the same argument
@@ -217,9 +228,14 @@ both.
    does the `pqNative` branch that sat beside it. It was **not** deleted
    outright as this row proposed — activation genuinely has no key material to
    resolve from, so the posture axis is what says which algorithm to mint.
-2. **Fix `at_client_impl.dart:1584`**, the file-stream `RemoteSecondary`, which
-   passes neither `signingAlgoType` nor `enrollmentId` and signs with the same
-   default.
+2. **Fix the file-stream `RemoteSecondary`** — the one constructed inside
+   `AtClientImpl.encryptUnencryptedFile`/`_uploadFile`, which passes neither
+   `signingAlgoType` nor `enrollmentId` and so signs with the same default.
+   Find it by symbol rather than by line:
+   `git grep -n 'var remoteSecondary = RemoteSecondary(' -- packages/at_client/lib`
+   (this row said `at_client_impl.dart:1584` until 2026-08-19, and a cold read
+   found the line had drifted to 1592 — a line number in a plan row is stale
+   the moment anything above it moves).
 3. ⚠️ **PARTLY DONE 2026-08-19.** `pq_native_onboard_test.dart` no longer sets
    the value it asserts — it names `PqPosture.pqReady` and nothing else, so the
    posture is the only thing that can make it pass. **Still owed:** drive the
@@ -1694,18 +1710,23 @@ grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 # rails, all four packages. EACH FIGURE CARRIES THE COMMIT IT WAS MEASURED AT —
 # a block with one date at the bottom invites reading every number as current,
 # and three of these five were re-measured 15 commits after the other two.
-cd packages/at_client         && dart analyze lib test       # exit 0, 351 info  @9debd5a01+14.24
-cd packages/at_client         && dart test --concurrency=1   # 1350 (2 skipped)  @9debd5a01+14.24
-cd packages/at_client         && dart test test/acceptance --concurrency=1  # 66 (2)  @9debd5a01+14.24
-cd packages/at_auth           && dart test --concurrency=1   # 312              @7c6b3e7f2
-cd packages/at_onboarding_cli && dart test --concurrency=1   # 39               @7c6b3e7f2
-cd tests/at_functional_test   && bash runLocal.sh            # 166/166 EXIT=0   @9debd5a01+14.24
-# ✅ The functional figure is now measured against the REBUILT
-# `at_virtual_env:local` (2026-08-16), which the previous 165/165 was not — that
-# one predated the rebuild and was never a claim about the image on this
-# machine. 166 is 165 plus the cooldown row 14.24 added.
-# ⚠️ at_auth and at_onboarding_cli were NOT re-measured here and still carry
-# @7c6b3e7f2. Do not read the block as one date.
+cd packages/at_client         && dart analyze lib test       # exit 0, 360 info  @642a5899f
+cd packages/at_client         && dart test --concurrency=1   # 1455 (2 skipped)  @642a5899f
+cd packages/at_client         && dart test test/acceptance --concurrency=1  # 106 (2) @642a5899f
+cd packages/at_auth           && dart test --concurrency=1   # 315              @642a5899f
+cd packages/at_onboarding_cli && dart test --concurrency=1   # 49               @642a5899f
+cd tests/at_functional_test   && bash runLocal.sh            # 174/174 EXIT=0   @642a5899f
+cd tests/at_end2end_test      && bash runLocal.sh            # 54/54  EXIT=0    @642a5899f
+# ✅ ALL SEVEN were re-measured together on 2026-08-19 at `642a5899f`, which is
+# the first commit where both live packs are green after the PqPosture rename.
+# Both runLocal.sh default VIRTUALENV_IMAGE to `at_virtual_env:local`, so a bare
+# run is the PQ-capable arm — the var only has to be set by hand when driving
+# `dart test` directly.
+# ⚠️ The two live figures moved for reasons worth knowing rather than growth:
+# functional 169 → 174 (the matrix's cells, once its driver stopped asking the
+# arms for stage names that no longer exist), and both packs were RED at
+# `c9de7d997` while every unit suite was green — analyze cannot see a string
+# argument, so nothing caught it until the pack ran.
 # Every figure in this project has been wrong at least once by being carried
 # forward — the COMMAND is the value here, not the number beside it.
 ```
