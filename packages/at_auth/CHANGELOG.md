@@ -1,4 +1,10 @@
 ## 3.4.0
+- feat: `authenticatorFor` accepts an injected `AtChops`. `AtAuth` has always
+  let a caller bring its own signer, through `AtAuth.create(atChops:)` and its
+  mutable `atChops` field, so an authenticator that ignored one would break a
+  consumer holding a hardware-backed key. When supplied, only the *algorithm*
+  is read from the keyfile - resolving its own signer eagerly would throw on a
+  keyfile missing material such a caller never needed.
 - feat: add `authenticatorFor`, which builds the `AtAuthenticator` at_lookup
   now accepts. It reads credentials from an injected `AtKeysIo` and decides
   which one applies by what the keystore has: an `AtKeysSourceAbsentException`

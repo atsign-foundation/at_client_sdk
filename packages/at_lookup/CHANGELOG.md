@@ -1,5 +1,12 @@
 ## 3.7.0
 
+- fix: `pkamAuthenticate` prefers an injected authenticator too, not only
+  `executeCommand`. at_auth reaches that method directly rather than through a
+  verb, so a seam wired into the verb path alone would have looked connected
+  while doing nothing on the one call that matters most. The enrollment id is
+  now threaded to the recording, because a caller of `pkamAuthenticate` names
+  it in the call while a verb has only the field.
+
 - feat: `validatedFromChallenge` is public API rather than
   `@visibleForTesting`. Authentication is moving to at_auth, where the key
   material is, and the side that signs a challenge is the side that must refuse

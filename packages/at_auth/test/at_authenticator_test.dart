@@ -1,4 +1,5 @@
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_demo_data/at_demo_data.dart' as demo;
 import 'package:at_lookup/at_lookup.dart';
@@ -112,6 +113,48 @@ void main() {
       expect(second.sent.last, startsWith('pkam:'),
           reason: 'the same closure must now choose PKAM, having re-read the '
               'keystore rather than remembered its first answer');
+    });
+  });
+
+  group('an injected signer', () {
+    test('is used, and the keyfile is asked only for the algorithm', () async {
+      // Keys carrying NO apkam material at all. authenticationFor would throw
+      // building a signer from them, so this passing is the proof that the
+      // injected chops was used and the keyfile's own signer never built.
+      final io = InMemoryAtKeysIo();
+      await io.write(
+          atSign,
+          AtKeys()
+            ..defaultEncryptionPublicKey =
+                AtBytes.fromString(demo.encryptionPublicKeyMap[atSign]!));
+      final executor = RecordingExecutor(['data:$challenge', 'data:success']);
+
+      final injected = AtChopsImpl(AtChopsKeys.create(
+          null,
+          AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
+              demo.pkamPrivateKeyMap[atSign]!)));
+
+      final ok =
+          await authenticatorFor(io, atSign, chops: injected)(executor);
+
+      expect(ok, isTrue);
+      expect(executor.sent.last, startsWith('pkam:'));
+      expect(executor.sent.last, contains('signingAlgo:rsa2048'));
+    });
+
+    test('without one, the same keyfile cannot sign at all', () async {
+      // The control for the test above: same keys, no injected signer. If this
+      // also passed, the test above would prove nothing about which signer ran.
+      final io = InMemoryAtKeysIo();
+      await io.write(
+          atSign,
+          AtKeys()
+            ..defaultEncryptionPublicKey =
+                AtBytes.fromString(demo.encryptionPublicKeyMap[atSign]!));
+      final executor = RecordingExecutor(['data:$challenge', 'data:success']);
+
+      await expectLater(
+          () => authenticatorFor(io, atSign)(executor), throwsA(anything));
     });
   });
 

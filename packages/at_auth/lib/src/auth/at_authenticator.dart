@@ -34,6 +34,13 @@ const _cramTransientWaitMillis = 4000;
 /// - it returns keys — PKAM, signed with the algorithm those keys name for
 ///   [enrollmentId].
 ///
+/// [chops] lets a caller supply its own signer, which `AtAuth` has always
+/// allowed through `AtAuth.create(atChops:)` and its mutable `atChops` field.
+/// When supplied, only the *algorithm* is taken from the keyfile - the keypair
+/// is the caller's. Resolving the keyfile's own signer eagerly would be worse
+/// than wasteful: it throws on a keyfile missing material that a caller with
+/// its own signer never needed.
+///
 /// Nothing here reaches into at_lookup for key material, and at_lookup names
 /// none of these types: `AtKeys` and `AtKeysIo` live in at_auth, which depends
 /// on at_lookup, so the dependency only points one way.
@@ -42,6 +49,7 @@ AtAuthenticator authenticatorFor(
   String atSign, {
   String? cramSecret,
   String? enrollmentId,
+  AtChops? chops,
   Map<String, dynamic> clientConfig = const {},
 }) =>
     (executor) async {
@@ -57,7 +65,7 @@ AtAuthenticator authenticatorFor(
         _logger.finer('no keyfile for $atSign - authenticating with CRAM');
         return _cram(executor, atSign, cramSecret, clientConfig);
       }
-      return _pkam(executor, atSign, keys, enrollmentId, clientConfig);
+      return _pkam(executor, atSign, keys, enrollmentId, clientConfig, chops);
     };
 
 /// Ported from `AtLookupImpl.pkamAuthenticate`, which keeps the challenge
@@ -69,11 +77,25 @@ Future<bool> _pkam(
   AtKeys keys,
   String? enrollmentId,
   Map<String, dynamic> clientConfig,
+  AtChops? injectedChops,
 ) async {
-  final resolved = keys.authenticationFor(enrollmentId);
   // A null algorithm means the flat fields' RSA keypair, which is what
   // at_lookup signs with by default - so a legacy enrollment is rsa2048.
-  final signingAlgo = resolved.algorithm ?? SigningAlgoType.rsa2048;
+  final AtChops signer;
+  final SigningAlgoType signingAlgo;
+  if (injectedChops != null) {
+    // The caller brought its own signer - a hardware-backed one, say. Take
+    // only the ALGORITHM from the keyfile: `authenticationFor` would build an
+    // AtChops this call is about to discard, and it throws on a keyfile
+    // missing material a caller with its own signer never needed.
+    signer = injectedChops;
+    signingAlgo =
+        keys.authenticationAlgorithmFor(enrollmentId) ?? SigningAlgoType.rsa2048;
+  } else {
+    final resolved = keys.authenticationFor(enrollmentId);
+    signer = resolved.chops;
+    signingAlgo = resolved.algorithm ?? SigningAlgoType.rsa2048;
+  }
   const hashingAlgo = HashingAlgoType.sha256;
 
   var fromResponse = await executor.sendSync((FromVerbBuilder()
@@ -86,7 +108,7 @@ Future<bool> _pkam(
   fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
   fromResponse = validatedFromChallenge(fromResponse, atSign);
 
-  final signingResult = resolved.chops.sign(AtSigningInput(fromResponse)
+  final signingResult = signer.sign(AtSigningInput(fromResponse)
     ..signingAlgoType = signingAlgo
     ..hashingAlgoType = hashingAlgo
     ..signingMode = AtSigningMode.pkam);

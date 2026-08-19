@@ -11,7 +11,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
-import 'package:meta/meta.dart' show visibleForTesting;
 import 'package:mutex/mutex.dart';
 import 'package:at_chops/at_chops.dart';
 
@@ -515,7 +514,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor {
 
   /// Runs [authenticate] against this connection, under the same mutex the
   /// ladder's own methods take.
-  Future<void> _authenticateWith(AtAuthenticator authenticate) async {
+  ///
+  /// [enrollmentId] is what gets recorded on the connection. It is a parameter
+  /// rather than always this object's field because the two can differ: a
+  /// caller reaching [pkamAuthenticate] names the enrollment in that call,
+  /// while a verb going through [_process] has only the field to go on.
+  Future<void> _authenticateWith(AtAuthenticator authenticate,
+      {String? enrollmentId}) async {
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
@@ -527,11 +532,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor {
             'Failed connecting to $_currentAtSign.'
             ' The authenticator reported failure');
       }
-      // The enrollment id still comes from this object, because the ladder
-      // still needs the field. When the ladder goes, so does the field, and
-      // the authenticator - which is the side that knows the enrollment -
-      // becomes the only thing that can supply it.
-      _recordAuthentication(enrollmentId: enrollmentId);
+      // The enrollment id still comes from the caller or this object, because
+      // the ladder still needs the field. When the ladder goes, so does the
+      // field, and the authenticator - which is the side that knows the
+      // enrollment - becomes the only thing that can supply it.
+      _recordAuthentication(enrollmentId: enrollmentId ?? this.enrollmentId);
     } finally {
       _pkamAuthenticationMutex.release();
     }
@@ -585,6 +590,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor {
 
   @override
   Future<bool> pkamAuthenticate({String? enrollmentId}) async {
+    // Prefer an injected authenticator here too, not only in [_process].
+    // at_auth reaches this method directly rather than through a verb, so a
+    // seam wired only into [_process] would leave the authenticate() path
+    // still running the ladder - the seam would look connected and do nothing
+    // on the one call that matters most.
+    if (authenticator != null) {
+      await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
+      return _connection!.getMetaData()!.isAuthenticated;
+    }
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
