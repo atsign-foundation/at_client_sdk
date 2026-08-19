@@ -130,16 +130,49 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         serviceFactory: atServiceFactory,
         enrollmentId: enrollmentId);
 
+    // Read before the `??=` below erases the distinction, because which of the
+    // two flows this is decides whether the preference gets to say how the
+    // connection authenticates.
+    final serviceBuiltTheLookup = _atLookUp != null;
+
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
-    _atLookUp?.enrollmentId = enrollmentId;
-    // Activation-time: there is no key material to resolve from yet, so the
-    // posture's axis is what says which algorithm to mint under. It replaced
-    // the deprecated preference field, which named the same key while reading
-    // like the data signing one.
-    _atLookUp?.signingAlgoType =
-        atOnboardingPreference.authenticationKeyAlgorithm;
-    _atLookUp?.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
+
+    if (serviceBuiltTheLookup) {
+      // Enrolment. The APKAM keypair was minted moments ago under the
+      // posture's axis and the keyfile that will hold it is written later, so
+      // there is no key material to resolve from and the preference is the
+      // only source there is.
+      _atLookUp!.enrollmentId = enrollmentId;
+      _atLookUp!.signingAlgoType =
+          atOnboardingPreference.authenticationKeyAlgorithm;
+    } else {
+      // Authentication. The lookup just adopted is the client's own, and the
+      // client has already read the keyfile — which outranks any preference,
+      // because you cannot sign ML-DSA with an RSA key. Writing the
+      // preference over the top is how `at_activate otp`/`list` came to fail
+      // on a PQ-native atSign: they build their client through
+      // `createAtClient`, which names no posture, so the posture is `legacy`,
+      // so the overwrite claimed rsa2048 for an ML-DSA enrollment and the
+      // first reconnect signed the challenge with the wrong routine.
+      //
+      // Asserted rather than left alone: a cached client short-circuits
+      // `AtClientImpl.create` without rebuilding its RemoteSecondary, so its
+      // lookup carries whatever the previous caller left on it. And the id is
+      // the client's rather than the argument's, because a client that
+      // retrofitted during its own init came up on a different enrollment
+      // from the one the keyfile named when this call started.
+      final client = atClientManager.atClient;
+      _atLookUp!.enrollmentId = client.enrollmentId ?? enrollmentId;
+      _atLookUp!.signingAlgoType = AtClientImpl.signingAlgoOf(client);
+    }
+    // Neither key material nor a posture says how a challenge is *hashed*, so
+    // this axis is the preference's on both paths — and asserting it is what
+    // resets a cached client's lookup after a caller that ran with another
+    // value, which the `list` after a passphrase-protected authentication
+    // depends on.
+    _atLookUp!.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
+
     atClient ??= atClientManager.atClient;
     _atLookUp!.atChops = atChops;
   }

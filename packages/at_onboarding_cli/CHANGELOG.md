@@ -25,6 +25,19 @@
   the superclass supplies each default, so `AtOnboardingPreference()` is
   unchanged. Naming `dataSigningKeyAlgorithms` needs `SigningAlgoType`, which
   at_client does not export — import it from at_chops.
+- fix: an authenticated client keeps the PKAM algorithm it resolved from its
+  keyfile. `_initAtClient` serves two flows through one method. Enrolment hands
+  it a lookup this service built for an APKAM keypair minted moments earlier,
+  with no keyfile yet to resolve from, so the preference is the only source
+  there is. Authentication hands it nothing, so it adopts the client's own
+  lookup — and that client has already read the keyfile. The preference was
+  stamped over both, and `at_activate otp`, `list` and `spp` build their client
+  through `createAtClient`, which names no posture: on a PQ-native atSign the
+  stamp claimed `rsa2048` for an ML-DSA enrollment and the next connection
+  signed the challenge with the RSA routine
+  ([#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161)).
+  Key material now wins for a lookup adopted from the client, and the
+  preference still decides for one this service built.
 - fix: `authenticate()` hands its key source to the AtClient it creates. It
   built a `FileAtKeysIo` for `AtAuth` and then created the client without one,
   so every consumer — including everything built on `at_cli_commons` — got a
