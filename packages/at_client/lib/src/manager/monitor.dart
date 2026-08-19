@@ -433,6 +433,14 @@ class Monitor {
       throw UnAuthenticatedException('Bad "pkam" response: $fromResponse');
     }
 
+    // The monitor authenticates on its own socket, independently of
+    // AtLookupImpl, so it records its own identity. Without this a client that
+    // moves to a new enrollment cannot tell whether the monitor followed it.
+    final metaData = _monitorConnection!.getMetaData()!;
+    metaData.isAuthenticated = true;
+    metaData.authenticatedAsEnrollmentId = enrollmentId;
+    metaData.authenticatedAt = DateTime.now().toUtc();
+
     logger.info('Monitor connection authentication successful');
   }
 

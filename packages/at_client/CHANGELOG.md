@@ -1,4 +1,10 @@
 ## 3.14.1
+- feat: the monitor connection records the identity it authenticated as.
+  `Monitor._authenticateConnection` sets `authenticatedAsEnrollmentId` and
+  `authenticatedAt` on its connection's metadata, as `AtLookupImpl` now does
+  for the connections it owns. The monitor authenticates independently, on its
+  own socket, so a client whose enrollment moves cannot otherwise tell whether
+  the monitor followed it. Requires `at_lookup ^3.7.0`.
 - feat: `AtClientPreference.sealsToKeyAlgorithms` — which of a recipient's
   advertised KEM keys this client is willing to seal to, strongest first,
   defaulted from a new `PqPosture` axis and identical in all three stages

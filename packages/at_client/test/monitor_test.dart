@@ -62,6 +62,10 @@ void main() {
   late Completer doneCompleter;
   late StreamSubscription currentStateSubscription;
 
+  /// The monitor's connection carries real metadata, so a test can read back
+  /// what the monitor's own authentication recorded on it.
+  late OutboundConnectionMetadata mockConnectionMetaData;
+
   setUp(() {
     reset(mockSecondaryAddressFinder);
     reset(mockSocket);
@@ -73,6 +77,9 @@ void main() {
         .thenAnswer((_) async => fakeSecondaryAddress);
     when(() => mockOutboundConnection.getSocket())
         .thenAnswer((_) => mockSocket);
+    mockConnectionMetaData = OutboundConnectionMetadata();
+    when(() => mockOutboundConnection.getMetaData())
+        .thenReturn(mockConnectionMetaData);
     when(() => mockMonitorOutboundConnectionFactory.createConnection(
             fakeSecondaryAddress,
             decryptPackets: true,
@@ -273,6 +280,58 @@ void main() {
 
       expect(await monitor.currentStateStream.first,
           NotificationListenerState.notConnected);
+    });
+
+    /// The monitor authenticates on its own socket, independently of
+    /// AtLookupImpl, so a client whose enrollment moves has to be able to ask
+    /// this connection which enrollment it holds. Monitor.enrollmentId is what
+    /// the next authentication would send; only the connection knows what the
+    /// last one did.
+    test('the monitor records the enrollment id it authenticated with',
+        () async {
+      const enrollmentId = '0d1f8ba0-5c4e-4d2a-9b0f-1b7c9f2e5a31';
+      final enrolledMonitor = Monitor(
+        atSign: atSign,
+        atClientPreference: atClientPreference,
+        atChops: mockAtChops,
+        enrollmentId: enrollmentId,
+        secondaryAddressFinder: mockSecondaryAddressFinder,
+        handleNotification: (String received) async {},
+        getLastNotificationTime: getLastNotificationTime,
+        monitorOutboundConnectionFactory: mockMonitorOutboundConnectionFactory,
+      );
+      enrolledMonitor.logger.level = 'warning';
+      addTearDown(enrolledMonitor.stop);
+      final before = DateTime.now().toUtc();
+
+      enrolledMonitor.start();
+      expect(await enrolledMonitor.currentStateStream.first,
+          NotificationListenerState.listening);
+
+      expect(mockConnectionMetaData.authenticatedAsEnrollmentId, enrollmentId,
+          reason: 'the monitor connection must carry the enrollment id it '
+              'authenticated with');
+      expect(mockConnectionMetaData.isAuthenticated, true);
+      expect(mockConnectionMetaData.authenticatedAt, isNotNull,
+          reason: 'an authenticated connection must be stamped with when');
+      expect(mockConnectionMetaData.authenticatedAt!.isBefore(before), false,
+          reason: 'the stamp is this authentication, not an earlier one');
+    });
+
+    test('a monitor connection that fails pkam is left unidentified', () async {
+      when(() => mockOutboundConnection.write(any(that: startsWith('pkam:'))))
+          .thenAnswer((Invocation invocation) async {
+        socketOnDataFn('error:AT0401-pkam authentication failed\n'.codeUnits);
+      });
+
+      monitor.start();
+      expect(await monitor.currentStateStream.first,
+          NotificationListenerState.notConnected);
+
+      expect(mockConnectionMetaData.isAuthenticated, false,
+          reason: 'nothing may be recorded until the atServer accepts');
+      expect(mockConnectionMetaData.authenticatedAsEnrollmentId, isNull);
+      expect(mockConnectionMetaData.authenticatedAt, isNull);
     });
 
     test('start, secondary reachable but pkam failure', () async {
