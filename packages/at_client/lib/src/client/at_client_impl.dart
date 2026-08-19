@@ -311,6 +311,9 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     String? enrollmentId,
+    AtLookupSecureSocketFactory? secureSocketFactory,
+    AtLookupSecureSocketListenerFactory? socketListenerFactory,
+    AtLookupOutboundConnectionFactory? outboundConnectionFactory,
   }) async {
     currentAtSign = AtUtils.fixAtSign(currentAtSign);
 
@@ -327,6 +330,11 @@ class AtClientImpl implements AtClient {
       // atKeysIo (like atChops) is only honored on first construction — the
       // extended AtKeys is meant to be born at construction and immutable
       // after, so a re-used cached client keeps its original key source.
+      // The same is true of every injected collaborator below, the socket
+      // factories included: they are read by _init, which this branch skips,
+      // so a cached client keeps whatever it was built with. Callers that need
+      // different collaborators need a different atSign or a cleared
+      // atClientInstanceMap.
     } else {
       atClientImpl = AtClientImpl._(
         currentAtSign,
@@ -339,6 +347,9 @@ class AtClientImpl implements AtClient {
         atKeysIo: atKeysIo,
         atLookUp: atLookUp,
         enrollmentId: enrollmentId,
+        secureSocketFactory: secureSocketFactory,
+        socketListenerFactory: socketListenerFactory,
+        outboundConnectionFactory: outboundConnectionFactory,
       );
 
       await atClientImpl._init(atLookUp: atLookUp);
@@ -359,7 +370,12 @@ class AtClientImpl implements AtClient {
     AtKeysIo? atKeysIo,
     AtLookUp? atLookUp,
     this.enrollmentId,
-  }) {
+    AtLookupSecureSocketFactory? secureSocketFactory,
+    AtLookupSecureSocketListenerFactory? socketListenerFactory,
+    AtLookupOutboundConnectionFactory? outboundConnectionFactory,
+  })  : _secureSocketFactory = secureSocketFactory,
+        _socketListenerFactory = socketListenerFactory,
+        _outboundConnectionFactory = outboundConnectionFactory {
     _atSign = theAtSign.toAtsign();
     _logger = AtSignLogger('AtClientImpl ($_atSign)');
     _preference = preference;
@@ -385,6 +401,13 @@ class AtClientImpl implements AtClient {
     _atChops = atChops;
     _atKeysIo = atKeysIo;
   }
+
+  /// Socket factories handed to every [RemoteSecondary] this client builds.
+  /// Null means "use at_lookup's own `dart:io` defaults", which is what every
+  /// caller that does not inject gets.
+  final AtLookupSecureSocketFactory? _secureSocketFactory;
+  final AtLookupSecureSocketListenerFactory? _socketListenerFactory;
+  final AtLookupOutboundConnectionFactory? _outboundConnectionFactory;
 
   Future<void> _init({AtLookUp? atLookUp}) async {
     if (_preference!.isLocalStoreRequired) {
@@ -438,6 +461,9 @@ class AtClientImpl implements AtClient {
       atLookUp: atLookUp,
       privateKey: _preference!.privateKey,
       enrollmentId: enrollmentId,
+      secureSocketFactory: _secureSocketFactory,
+      socketListenerFactory: _socketListenerFactory,
+      outboundConnectionFactory: _outboundConnectionFactory,
     );
 
     // Using ??= because we may be injecting an EncryptionService
@@ -1226,6 +1252,9 @@ class AtClientImpl implements AtClient {
       _atSign,
       _preference!,
       atChops: atChops,
+      secureSocketFactory: _secureSocketFactory,
+      socketListenerFactory: _socketListenerFactory,
+      outboundConnectionFactory: _outboundConnectionFactory,
     );
     var result = await remoteSecondary.executeCommand(command, auth: true);
     _logger.finer('ack message:$result');
