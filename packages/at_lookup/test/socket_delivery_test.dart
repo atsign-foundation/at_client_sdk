@@ -92,6 +92,33 @@ void main() {
     });
   });
 
+  group('a response with no colon', () {
+    // The bare `@<atSign>@` that completes the handshake carries no colon, and
+    // `_isValidResponse` accepts it, so it reaches `_stripPrompt`. Before the
+    // guard, `substring(0, -1)` threw a RangeError inside the socket's data
+    // handler; `runZonedGuarded` reported that as a socket error and destroyed
+    // a healthy connection, and the caller saw only a timeout.
+    test('comes back, and leaves the connection alive', () async {
+      final rig = FakeAtServerRig();
+
+      await rig.socket.serverSends('@alice@\n@alice@');
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(rig.socket.destroyed, isFalse,
+          reason: 'a colonless response must not destroy the connection - a '
+              'RangeError raised in the data handler surfaces as a socket '
+              'error and closes it');
+      expect(rig.connection.getMetaData()!.isClosed, isFalse,
+          reason: 'and must not mark the connection closed');
+      expect(
+          await rig.listener
+              .read(maxWaitMilliSeconds: 500, transientWaitTimeMillis: 500),
+          '@alice@',
+          reason: 'the handshake prompt is a valid response and must be '
+              'returned unchanged');
+    });
+  });
+
   group('the far end going away closes the connection', () {
     test('onDone destroys the socket and marks the connection closed',
         () async {

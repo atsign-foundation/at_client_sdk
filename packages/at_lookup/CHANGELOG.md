@@ -1,5 +1,14 @@
 ## 3.7.0
 
+- fix: a response carrying no colon no longer destroys the connection.
+  `OutboundMessageListener._stripPrompt` ran `substring(0, -1)` when
+  `indexOf(':')` found nothing, and the bare `@<atSign>@` that completes the
+  handshake is exactly such a response - one `_isValidResponse` accepts. The
+  RangeError was raised inside the socket's data handler, so `runZonedGuarded`
+  reported it as a socket error and closed a healthy connection, leaving the
+  caller with an `AtTimeoutException` naming the wrong cause. Guarded, as the
+  copy of this method in at_client's `Monitor` already was.
+
 - feat: a connection records the identity it authenticated as.
   `AtConnectionMetaData` gains `authenticatedAsEnrollmentId` and
   `authenticatedAt` beside `isAuthenticated`, set by every path in

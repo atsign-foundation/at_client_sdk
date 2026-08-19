@@ -116,8 +116,19 @@ class OutboundMessageListener {
 
   /// The method accepts the result (server response) and trim's the prompt from the response
   /// and returns the actual response.
+  ///
+  /// A response with no colon has no prompt to strip and is returned as it
+  /// stands. The bare `@<atSign>@` that completes the handshake is exactly
+  /// that, and [_isValidResponse] accepts it, so without this guard
+  /// `substring(0, -1)` throws a RangeError from inside the socket's data
+  /// handler - which `runZonedGuarded` turns into a socket error, destroying a
+  /// healthy connection and leaving the caller with a timeout that names the
+  /// wrong cause.
   String _stripPrompt(String result) {
     var colonIndex = result.indexOf(':');
+    if (colonIndex == -1) {
+      return result;
+    }
     var responsePrefix = result.substring(0, colonIndex);
     var response = result.substring(colonIndex);
     if (responsePrefix.contains('@')) {
