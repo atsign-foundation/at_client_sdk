@@ -1,3 +1,12 @@
+## 3.7.0
+
+- feat: a connection records the identity it authenticated as.
+  `AtConnectionMetaData` gains `authenticatedAsEnrollmentId` and
+  `authenticatedAt` beside `isAuthenticated`, set by every path in
+  `AtLookupImpl` that authenticates. `AtLookUp.enrollmentId` is what the *next*
+  PKAM will send, so it cannot answer which enrollment a socket that is already
+  up holds; this can.
+
 ## 3.6.1
 
 - fix: strengthen the from challenge. A client now checks that a `from:`

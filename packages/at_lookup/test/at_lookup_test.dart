@@ -225,6 +225,100 @@ void main() {
     });
   });
 
+  group('A connection records the identity it authenticated as', () {
+    const pkamSignature = 'a-signature';
+
+    /// Wires the mocks for one PKAM exchange and hands back the metadata
+    /// object the connection will carry, so a test can read what the
+    /// authentication wrote onto it.
+    OutboundConnectionMetadata primePkam(
+        {String? enrollmentId, bool succeeds = true}) {
+      registerFallbackValue(FakeAtSigningInput());
+      when(() => mockAtChops.sign(any()))
+          .thenReturn(AtSigningResult()..result = pkamSignature);
+      var readCount = 0;
+      when(() => mockOutboundListener.read()).thenAnswer((_) => Future.value(
+          readCount++ == 0
+              ? fromChallenge
+              : (succeeds
+                  ? 'data:success'
+                  : 'error:AT0401-Exception: pkam authentication failed')));
+
+      final metaData = OutboundConnectionMetadata()..isAuthenticated = false;
+      when(() => mockOutBoundConnection.getMetaData()).thenReturn(metaData);
+      when(() => mockOutBoundConnection.isInValid()).thenReturn(false);
+
+      final enrollmentClause =
+          enrollmentId == null ? '' : 'enrollmentId:$enrollmentId:';
+      final command = 'pkam:signingAlgo:rsa2048:hashingAlgo:sha256:'
+          '$enrollmentClause$pkamSignature\n';
+      when(() => mockOutBoundConnection.write(command))
+          .thenAnswer((invocation) {
+        mockSecureSocket.write(command);
+        return Future.value();
+      });
+      return metaData;
+    }
+
+    AtLookupImpl newAtLookup() {
+      final atLookup = AtLookupImpl('@alice', atServerHost, 64,
+          secondaryAddressFinder: mockSecondaryAddressFinder,
+          secureSocketFactory: mockSocketFactory,
+          socketListenerFactory: mockSecureSocketListenerFactory,
+          outboundConnectionFactory: mockOutboundConnectionFactory);
+      atLookup.atChops = mockAtChops;
+      return atLookup;
+    }
+
+    test('pkam auth records the enrollment id it authenticated with', () async {
+      const enrollmentIdFromServer = '5a21feb4-dc04-4603-829c-15f523789170';
+      final metaData = primePkam(enrollmentId: enrollmentIdFromServer);
+      final before = DateTime.now().toUtc();
+
+      expect(
+          await newAtLookup()
+              .pkamAuthenticate(enrollmentId: enrollmentIdFromServer),
+          true);
+
+      expect(metaData.authenticatedAsEnrollmentId, enrollmentIdFromServer,
+          reason: 'the connection must carry the enrollment id it sent');
+      expect(metaData.authenticatedAt, isNotNull,
+          reason: 'an authenticated connection must be stamped with when');
+      expect(metaData.authenticatedAt!.isBefore(before), false,
+          reason: 'the stamp is this authentication, not an earlier one');
+      expect(metaData.authenticatedAt!.isUtc, true);
+    });
+
+    test('pkam auth with no enrollment id records none, not the field',
+        () async {
+      final metaData = primePkam();
+      final atLookup = newAtLookup()
+        // What the NEXT authentication would use. This one is being handed
+        // nothing, and sends nothing, so it must record nothing.
+        ..enrollmentId = 'f0c5e2b0-0000-4000-8000-000000000001';
+
+      expect(await atLookup.pkamAuthenticate(), true);
+
+      expect(metaData.authenticatedAsEnrollmentId, isNull,
+          reason: 'the recorded identity is what went on the wire, '
+              'not what AtLookUp.enrollmentId holds');
+      expect(metaData.authenticatedAt, isNotNull);
+    });
+
+    test('a refused pkam auth records nothing', () async {
+      final metaData = primePkam(succeeds: false);
+
+      await expectLater(newAtLookup().pkamAuthenticate(),
+          throwsA(isA<UnAuthenticatedException>()));
+
+      expect(metaData.isAuthenticated, false,
+          reason: 'nothing may be recorded until the atServer accepts');
+      expect(metaData.authenticatedAsEnrollmentId, isNull,
+          reason: 'a refusal must leave the connection unidentified');
+      expect(metaData.authenticatedAt, isNull);
+    });
+  });
+
   group('A group of tests to verify executeCommand method', () {
     test('executeCommand - from verb - auth false', () async {
       final atLookup = AtLookupImpl('@alice', atServerHost, 64,

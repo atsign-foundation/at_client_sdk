@@ -474,6 +474,16 @@ class AtLookupImpl implements AtLookUp {
     return _verbResponseHandler(verbResponse);
   }
 
+  /// Records on the connection the identity it has just authenticated as, so
+  /// a later caller can tell which enrollment a live socket holds rather than
+  /// which one the next authentication would use.
+  void _recordAuthentication({String? enrollmentId}) {
+    final metaData = _connection!.getMetaData()!;
+    metaData.isAuthenticated = true;
+    metaData.authenticatedAsEnrollmentId = enrollmentId;
+    metaData.authenticatedAt = DateTime.now().toUtc();
+  }
+
   final Mutex _pkamAuthenticationMutex = Mutex();
 
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
@@ -510,7 +520,7 @@ class AtLookupImpl implements AtLookUp {
         var pkamResponse = await messageListener.read();
         if (pkamResponse == 'data:success') {
           logger.info('auth success');
-          _connection!.getMetaData()!.isAuthenticated = true;
+          _recordAuthentication();
         } else {
           throw UnAuthenticatedException(
               'Failed connecting to $_currentAtSign. $pkamResponse');
@@ -558,7 +568,7 @@ class AtLookupImpl implements AtLookUp {
         var pkamResponse = await messageListener.read();
         if (pkamResponse == 'data:success') {
           logger.info('auth success');
-          _connection!.getMetaData()!.isAuthenticated = true;
+          _recordAuthentication(enrollmentId: enrollmentId);
         } else {
           throw UnAuthenticatedException(
               'Failed connecting to $_currentAtSign. $pkamResponse');
@@ -598,7 +608,7 @@ class AtLookupImpl implements AtLookUp {
             transientWaitTimeMillis: 4000, maxWaitMilliSeconds: 10000);
         if (cramResponse == 'data:success') {
           logger.info('auth success');
-          _connection!.getMetaData()!.isAuthenticated = true;
+          _recordAuthentication();
         } else {
           throw UnAuthenticatedException('Auth failed');
         }
