@@ -44,7 +44,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — **partly overtaken 2026-08-19**: change 1 and half of change 3 shipped with 14.39's CLI commit; change 2 and the rest of 3 remain | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
 | [14.40](#1440-at_clients-in-progress-heading-is-a-patch-and-now-carries-a-breaking-change) | Decide at_client's next version number — `## 3.14.1` now carries a BREAKING entry | Nothing but a ruling. The bump is gkc's call and was deliberately not taken |
-| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green, live packs not yet run. **Owed: public-data signature verification** (undesigned) | Nothing |
+| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green and **live-green** — functional 174/174 (after one 173/174 whose single failure was [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)), e2e pq 54/54, and the `legacy-server` arm 2/2 against the pinned `atsigncompany/virtualenv:vip-p3.15.0`. **Owed: public-data signature verification** (undesigned) | Nothing |
 
 ### 14.39 `PqPosture` and the rollout it drives
 
@@ -74,9 +74,14 @@ retires the live re-point, the atomic cache re-file, the bounded in-run retry
 and the second startup pass. `AtClientImpl.retrofitIsDue` carries the
 derivation; `retrofitIdentity` (split out of `selfRetrofit`, which could not be
 called from `_init` without building a second client) carries the submission.
-⚠️ **The success path has no unit coverage** — it needs a live atServer, so the
-functional and e2e packs are its only proof and they have not been run against
-this. What is unit-pinned is the derivation and the failure containment.
+⚠️ **The success path has no UNIT coverage** — it needs a live atServer. What is
+unit-pinned is the derivation (`retrofitIsDue`, across the posture matrix
+including the downgrade arm) and the failure containment. Its live proof is the
+packs, and they were run on 2026-08-19: e2e `retrofit_e2e_test.dart` and
+`retrofit_retirement_e2e_test.dart` cover UC-B1.1/B1.2/B1.3 and UC-B2.1/B2.2,
+and the `legacy-server` arm covers UC-B0.1's refusal against a pinned pre-PQ
+atServer — the one path a refactor could silently turn from a refusal into a
+success.
 
 ⚠️ **Two stale-reference hazards a live re-point would have to solve, found by
 the same audit and recorded because sequencing sidesteps rather than removes
@@ -129,8 +134,13 @@ calls; `AtClientImpl.atKeysIo` is a public getter and the bootstrap already
 holds `_keysIo`. The blocker that was real — `selfRetrofit` returning a
 different client — is what ruling 2 now answers.
 
-**Nothing is half-built for this** — `selfRetrofit` has no production caller at
-all today; every call site in the tree is a test.
+⚠️ **This paragraph used to read "Nothing is half-built for this — `selfRetrofit`
+has no production caller at all today; every call site in the tree is a test."**
+It was true when written and survived the build as a literal truth with the
+wrong effect, ~65 lines above this section's own row saying the retrofit is
+BUILT. `selfRetrofit` itself still has no production caller — every call site
+is an e2e or functional test — but `retrofitIdentity`, split out of it, is
+called by `AtClientImpl._settleEnrollmentIdentity` on every client start.
 
 ✅ **The at_lookup half is DONE**, released as **3.7.0** (gkc's call
 2026-08-19; in-tree 3.6.1 equalled published 3.6.1, so there was no in-progress
