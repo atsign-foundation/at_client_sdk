@@ -112,6 +112,16 @@
 - fix: `--version` reports the package's actual version. `lib/src/version.dart`
   is generated from the pubspec by `build_version` and had not been regenerated
   since 1.15.0, so the published 1.16.0 CLI reported `1.15.0`.
+- **BREAKING** chore: removed `lib/src/activate_cli/activate_cli.dart`, whose
+  `main`, `wrappedMain` and `activate` were all `@Deprecated('Use auth_cli')`.
+  The `at_activate` binary has routed to `auth_cli` for several releases and is
+  unaffected; nothing in this package imported the library.
+  - Marked breaking because the file was reachable, if only by importing
+    `package:at_onboarding_cli/src/…` directly — a path Dart convention marks
+    as private, and one at least one downstream program does use. If you are
+    that program, call the shipped `at_activate` binary rather than
+    re-implementing its `main`; there is no supported library entry point for
+    activation, and there was not one before.
 
 ## 1.16.0
 - refactor: route enrollment crypto — `sha256` hashing, AES key generation and RSA keypair generation — through at_chops (`SHA256HashingAlgo`, `AtChopsUtil.generateSymmetricKey`, `AtChopsUtil.generateAtEncryptionKeyPair`). `crypto`, `encrypt` and `crypton` are no longer imported anywhere in the package and have been dropped from `dependencies`. Byte-identical by construction.

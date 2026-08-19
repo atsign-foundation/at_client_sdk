@@ -1570,7 +1570,9 @@ unpublished, so **that** blocker is gone. The new one is bigger: `AtLookupImpl`
 is a published constructor with callers outside this tree, so a required named
 parameter takes at_lookup to **4.0.0**, and every in-tree defective site is now
 fixed by other means (14.38 change 2, and the audit that found the only other
-unstamped sites are the dead `SyncIsolateManager`). Reopen when at_lookup has a
+unstamped sites were in `SyncIsolateManager`, deleted 2026-08-19 as item 32 —
+so **every** surviving construction in at_client now carries an identity, and a
+required parameter would enumerate nothing). Reopen when at_lookup has a
 major in flight for its own reasons; needs a ruling, not a decision taken here.
 
 ✅ **The posture argument reaches every command as of 2026-08-19** —
@@ -3842,8 +3844,19 @@ its own. None blocks anything.
     correction that updates the two you have open leaves the others asserting
     the old figure with equal confidence.
 
-32. **`SyncIsolateManager` is dead code, and it holds the last two
-    identity-less `RemoteSecondary` constructions in at_client.** The class is
+32. ~~**`SyncIsolateManager` is dead code, and it holds the last two
+    identity-less `RemoteSecondary` constructions in at_client.**~~ **DONE
+    2026-08-19** — deleted. Every premise re-derived first and all held: zero
+    references outside its own file, absent from every barrel, and the only
+    `dart:isolate` import in at_client (now zero, proven with a `dart:convert`
+    positive control on the same recipe). The one surviving construction
+    outside `RemoteSecondary` itself is `sync_service_impl.dart`, which passes
+    `enrollmentId` and `signingAlgoType` — so the "last identity-less" claim
+    was exact. ⚠️ **The re-derivation command the item gave was too narrow:**
+    `git grep -n 'SyncIsolateManager'` misses `docs/projects/wasm/plan.md`,
+    which names the *file* three times and never the class. Those three
+    references were the deletion's own schedule (phase 3 and item I9); all
+    three are updated. Grep the literal, not only the symbol. The class is
     itself `@Deprecated`, is exported from no barrel, and has zero references
     outside its own file — including tests and examples. The `SyncManager` its
     deprecation message names as its only user no longer exists in the tree,
@@ -3856,15 +3869,36 @@ its own. None blocks anything.
     that shape finds them and has to re-derive that they are unreachable.
     Straight delete. Re-derive: `git grep -n 'SyncIsolateManager'`.
 
-33. **`lib/src/activate_cli/activate_cli.dart` is a deprecated file with no
-    caller.** `bin/activate_cli.dart` — the `at_activate` binary — routes
-    straight to `auth_cli.main`, and nothing imports the library file. Its
-    bare `AtOnboardingPreference()` at the top of `wrappedMain` is why a grep
-    for posture-less preference construction in at_onboarding_cli still
-    returns a hit after 14.38 threaded the posture through `createAtClient`,
-    which costs the next reader the same investigation. Straight delete, or
-    date it as historical. Re-derive:
-    `git grep -n "activate_cli/activate_cli"`.
+33. ~~**`lib/src/activate_cli/activate_cli.dart` is a deprecated file with no
+    caller.**~~ **DONE 2026-08-19** — deleted. ⚠️ **But "no caller" was FALSE,
+    and the item's own re-derivation command could not have discovered it:**
+    `git grep` searches this repo, and the callers are in other ones.
+    `~/dev/atsign` holds two, both importing the library through its private
+    path — `atGettingStarted/at_dart/bin/at_activate.dart` (last commit
+    2023-07-20, pins `at_onboarding_cli: ^1.3.0`, which resolves to 1.17.0) and
+    a checkout of the same file under `karol/at_demos`. Each is a four-line
+    `main` that calls `activate_cli.main(args)` and nothing else.
+
+    Deleted anyway, for reasons that survive the correction: all three of its
+    top-level members were `@Deprecated('Use auth_cli')`, it is exported from
+    no barrel, and reaching it requires importing `package:at_onboarding_cli/`
+    **`src/`** — a path Dart convention marks as not-public, so the breakage is
+    a compile error at a private import rather than a silent behaviour change.
+    The replacement is the `at_activate` binary those files were re-implementing
+    by hand. The removal is named in the CHANGELOG so a consumer who hits it
+    finds the reason. **Owed, in another repo:** `atGettingStarted` needs its
+    `bin/at_activate.dart` pointed at `auth_cli`, or deleting in favour of the
+    shipped binary — see the note under [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on).
+
+    The rest of the original item stands. Its bare `AtOnboardingPreference()`
+    at the top of `wrappedMain` was why a grep for posture-less preference
+    construction in at_onboarding_cli still returned a hit after 14.38 threaded
+    the posture through `createAtClient`. `git grep -nP 'AtOnboardingPreference\(\)'
+    -- packages/at_onboarding_cli/lib packages/at_onboarding_cli/bin` now
+    returns **three** hits and no defect: the deliberate `posture == null`
+    branch of `AuthCliArgs.preferenceUnder`, and two mentions in
+    `at_onboarding_preference.dart`'s own dartdoc. Not zero — do not "fix"
+    them.
 
 34. **The stream-transfer pair is deprecated for v4, has no in-repo caller,
     and cannot be used from outside either.** `AtClient.stream()` and
@@ -3879,6 +3913,27 @@ its own. None blocks anything.
     a live API — and until then it stays covered by
     `AtClientImpl.buildRemoteSecondary`, which is the only reason it now
     authenticates as the client it belongs to.
+
+35. **Lands in `atGettingStarted`, not here: `at_dart/bin/at_activate.dart`
+    imports a file this repo deleted.** Found 2026-08-19 while doing item 33,
+    by grepping `~/dev/atsign` rather than this repo — which is the only reason
+    it was found at all. It does
+    `import 'package:at_onboarding_cli/src/activate_cli/activate_cli.dart'`
+    and calls `activate_cli.main(args)`; that library is gone as of
+    at_onboarding_cli 1.17.0, and the pubspec's `^1.3.0` will resolve straight
+    into the break. A checkout under `karol/at_demos` holds the same file.
+    The fix is to delete the wrapper and use the shipped `at_activate` binary,
+    which is what it was re-implementing. Not urgent — the repo's last commit
+    is 2023-07-20 — but it is a real consumer, and recording it here is the
+    only thing stopping the next reader concluding the deletion had no
+    downstream at all.
+
+    ⚠️ **The general lesson is worth more than the item.** Item 33 read "no
+    caller" and gave `git grep` as its re-derivation. Both were written from
+    inside this repo, and a `git grep` *cannot* see a consumer in another one,
+    so the command would have confirmed the claim forever. Any absence claim
+    about a **published package's** API needs a search whose scope is wider
+    than the repo that publishes it.
 
 #### 14.19.1 Things that LOOK like defects and are not
 
@@ -4630,7 +4685,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 17 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18 against an actual 10, then **10** until 2026-08-19 against an actual 18 — the same number, wrong in both directions a day apart; re-derive it with the command below rather than reading any of them.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 16 unstruck of 35, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18 against an actual 10, then **10** until 2026-08-19 against an actual 18 — the same number, wrong in both directions a day apart; re-derive it with the command below rather than reading any of them.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 

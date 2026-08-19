@@ -55,7 +55,7 @@ State of the workspace:
 | `dart:io` in client-path packages | 21 files | `at_client` 7, `at_lookup` 6, `at_utils` 3, `at_auth` 3, `at_chops` 1, `at_server_status` 1                                     |
 | `dart:io` in excluded packages    | 14 files | `at_onboarding_cli` 12, `at_cli_commons` 2 — CLI only, never in a WASM build graph                                              |
 | `dart:ffi`                        | 8 files  | All in `at_chops` — the OpenSSL-backed PQ algorithms, quarantined behind a separate `at_chops_ffi.dart` barrel                  |
-| `dart:isolate`                    | 1 file   | `at_client/lib/src/manager/sync_isolate_manager.dart`, deprecated                                                              |
+| `dart:isolate`                    | 0        | Deleted 2026-08-19 — the one file was deprecated and unreachable                                                               |
 | `dart:html` / `dart:js`           | 0        | There is no existing web support to lean on                                                                                    |
 | Conditional imports               | **0**    | `if (dart.library.…)` appears nowhere in the workspace. Every conditional seam this plan calls for is greenfield.               |
 
@@ -406,7 +406,7 @@ interface. Point the web impl at `wss://<host>:<port>/ws`.
 
 **Phase 3 — `dart:io` sweep.** Conditional imports and barrel splits across
 `at_utils`, `at_auth`, `at_client` (excluding file transfer) and
-`at_server_status`; delete `sync_isolate_manager.dart`; verify the `at_chops`
+`at_server_status`; verify the `at_chops`
 pure-Dart dependencies actually compile under dart2wasm; swap connectivity off
 `internet_connection_checker`; factor `dart:io File` out of the reachable
 `AtClient` surface.
@@ -549,9 +549,11 @@ Grouped by phase. Ordering within a group is roughly dependency order.
 - **I8** — `at_auth`: `src/registrar/registrar_service.dart` uses
   `HttpClient()` from `dart:io`. Swap to `package:http`, which works on WASM
   via fetch.
-- **I9** — `at_client`: delete `src/manager/sync_isolate_manager.dart`. It is
-  `@Deprecated`, used only by the deprecated `SyncManager`, and is the only
-  `dart:isolate` file. The live sync path does not use it.
+- **I9** — ✅ **DONE 2026-08-19, ahead of this plan** — `at_client`:
+  `src/manager/sync_isolate_manager.dart` is deleted. It was `@Deprecated`,
+  named the deprecated `SyncManager` as its only user (a class that no longer
+  exists in the tree), and was the only `dart:isolate` file. `dart:isolate` now
+  appears nowhere in `at_client`, so this phase has no isolate work left.
 - **I10** — `at_client`: replace `internet_connection_checker` (raw-socket
   host probes) in `src/listener/connectivity_listener.dart` and
   `src/client/remote_secondary.dart`. Prefer an injectable connectivity

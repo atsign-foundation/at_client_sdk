@@ -2089,6 +2089,13 @@
   crashed for a non-nullable item type).
 - fix: `AtCollection` reads no longer duplicate the preceding item when a key
   expires or is deleted between the scan and its per-key read.
+- chore: removed `SyncIsolateManager` (`lib/src/manager/sync_isolate_manager.dart`).
+  It was `@Deprecated`, exported from no barrel, and named as its only user a
+  `SyncManager` class that no longer exists in the package; nothing referenced
+  it. It also held the last two `RemoteSecondary` constructions that passed
+  neither an enrollment id nor a signing algorithm, so every surviving
+  construction now authenticates as a known enrollment. This was the package's
+  only `dart:isolate` import.
 
 ## 3.14.0
 - feat (experimental): per-APKAM same-atSign secret-sharing substrate —

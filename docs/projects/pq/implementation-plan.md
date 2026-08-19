@@ -34,7 +34,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
-| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **17** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **16** open small items of 35 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
@@ -1028,17 +1028,23 @@ ladder — a same-value version bump merges silently.)
 
 ### 14.19 Small items, raised 2026-08-12 and not yet acted on
 
-**17 open, 17 struck** — ⚠️ **re-derive both, never read them here.** This
-header said `11 open, 12 struck` until 2026-08-18 and `15 open, 16 struck`
-until 2026-08-19, and the TODO row three paragraphs up said 9 the whole time:
-the count turned out to have **four** homes, not the two a correction had been
-updating. ⚠️ **It has SIX** — the two memory files a fresh session reads first
-state it too, and they are not in this repo, so nothing here can go red for
-them. A cold read on 2026-08-19 found this header stale for a second time,
-by a correction that had updated the other three. (Was 17 open on 2026-08-17,
-before items 1, 3, 16, 17 and
+**16 open, 19 struck** (35 items) — ⚠️ **re-derive all three, never read them
+here.** This header said `11 open, 12 struck` until 2026-08-18, `15 open, 16
+struck` until 2026-08-19 and `17 open, 17 struck` until items 32 and 33 were
+done, and the TODO row three paragraphs up said 9 the whole time: the count
+turned out to have **four** homes, not the two a correction had been updating.
+⚠️ **It has SIX** — the two memory files a fresh session reads first state it
+too, and they are not in this repo, so nothing here can go red for them. A cold
+read on 2026-08-19 found this header stale for a second time, by a correction
+that had updated the other three. (Was 17 open on 2026-08-17, before items 1,
+3, 16, 17 and
 19 were fixed, 22 was struck as a false positive, and 15 was struck as the
-closure it had already recorded in its own body since 2026-08-15). Each is real
+closure it had already recorded in its own body since 2026-08-15. Then 32 and
+33 were done on 2026-08-19, which also **added** item 35 — deleting dead code
+found a consumer of it in another repo, so the open count fell by one, not
+two.) **Check the total as well as the open count**: the two disagree whenever
+an item is added rather than closed, and only the total catches a duplicated or
+skipped number. Each is real
 and verified at the time of writing, and each is too small to be a step of its
 own. **None blocks anything** — which is why the items themselves live in
 [`detail/implementation-plan.md`](detail/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)
