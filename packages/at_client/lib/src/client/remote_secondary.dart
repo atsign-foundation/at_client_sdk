@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_auth/at_auth.dart' show AtKeysIo, authenticatorFor;
+
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/secondary.dart';
 import 'package:at_client/src/client/secondary_address_finder_source.dart';
@@ -30,6 +32,38 @@ class RemoteSecondary implements Secondary {
   set atChops(AtChops? value) {
     _atChops = value;
     atLookUp.atChops = value;
+    _installAuthenticator();
+  }
+
+  /// The keystore an authenticator reads. Null keeps the existing behaviour.
+  AtKeysIo? _atKeysIo;
+
+  /// Hands the lookup an authenticator, so authentication is decided from the
+  /// keystore rather than from credentials parked on at_lookup.
+  ///
+  /// Called from the constructor as well as the [atChops] setter, because the
+  /// constructor sets `atLookUp.atChops` directly - hooking only the setter
+  /// installs nothing on the path that matters, which was measured: the
+  /// injected and ladder authentication counts were unchanged, 57 and 201,
+  /// while every suite stayed green.
+  ///
+  /// Installed beside `atChops`, not instead of it: at_auth's
+  /// `EnrollmentApprover` reads that field for enrollment crypto, which is not
+  /// authentication.
+  void _installAuthenticator() {
+    final io = _atKeysIo;
+    final lookUp = atLookUp;
+    // `AtLookUp` does not declare the seam - that interface is frozen because
+    // mocks implement it - so any other implementation keeps its behaviour.
+    if (io == null || lookUp is! AtLookupImpl) {
+      return;
+    }
+    lookUp.authenticator = authenticatorFor(
+      io,
+      _atSign,
+      enrollmentId: lookUp.enrollmentId,
+      chops: _atChops,
+    );
   }
 
   /// [signingAlgoType] overrides the preference's PKAM signing algorithm —
@@ -42,7 +76,8 @@ class RemoteSecondary implements Secondary {
       AtChops? atChops,
       AtLookUp? atLookUp,
       String? enrollmentId,
-      SigningAlgoType? signingAlgoType}) {
+      SigningAlgoType? signingAlgoType,
+      AtKeysIo? atKeysIo}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -52,6 +87,7 @@ class RemoteSecondary implements Secondary {
       ..pathToCerts = preference.pathToCerts
       ..tlsKeysSavePath = preference.tlsKeysSavePath;
     _atChops = atChops;
+    _atKeysIo = atKeysIo;
     this.atLookUp = atLookUp ??
         AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
             privateKey: privateKey,
@@ -70,6 +106,7 @@ class RemoteSecondary implements Secondary {
     this.atLookUp.signingAlgoType = resolvedSigningAlgo;
     this.atLookUp.hashingAlgoType = preference.hashingAlgoType;
     this.atLookUp.atChops = atChops;
+    _installAuthenticator();
   }
 
   Map<String, String> _getClientConfig() {

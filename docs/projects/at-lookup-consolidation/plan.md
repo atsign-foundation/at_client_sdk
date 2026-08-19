@@ -330,6 +330,77 @@ constraint on at_lookup rises in step 4, in the same commit as the first use.
 
 ## 6. Filed, not scheduled
 
+### `atLookUp.enrollmentId`, which step 5 also needs first
+
+The same shape as the approver's `atChops`, and larger. One write
+(`remote_secondary.dart:98`) and **seven reads**, every one of them
+`atClient.getRemoteSecondary()?.atLookUp.enrollmentId`:
+
+`nskey_rotation.dart:254`, `nskey_seeding.dart:67`,
+`pq_signing_root.dart:904`, `apkam_signing.dart:67`,
+`enrollment_privilege_resolver.dart:36`,
+`envelope_enrollment_conveyance.dart:253`, `signing_key_minting.dart:314`.
+
+All seven are asking "which enrollment am I operating as" - a fact about the
+client, read off a network object because that is where somebody parked it.
+The plan lists `enrollmentId` as Gone at step 5, which would break all seven.
+They need the answer from the client instead, and the field goes with the
+ladder once they have it.
+
+Two things to be careful of when moving them. `AtLookUp.enrollmentId` is what
+the *next* authentication will use, which is deliberately not
+`AtConnectionMetaData.authenticatedAsEnrollmentId` - what a live socket
+actually holds; that distinction is documented on the metadata field and must
+survive the move. And `apkam_signing.dart:67` reads
+`... ?? 'primary'`, a manufactured sentinel: anything downstream comparing
+against `'primary'` is comparing against "we did not know", not against an
+enrollment.
+
+### The approver's crypto, which step 5 needs first
+
+`EnrollmentApprover.approve` reaches through `atLookUp.atChops` for three
+things, none of them authentication: the atSign's **encryption** private key
+(`:41`), the self-encryption key (`:63`), and a scratch slot for the APKAM
+symmetric key it derives (`:47`).
+
+That last one looked like a shared side effect and is not. `:47` is the **only**
+writer of `apkamSymmetricKey` onto a lookup's chops anywhere in the tree, and
+nothing reads it back: the two `encryptString(keyName: 'apkamSymmetricKey')`
+calls a few lines below resolve it through at_chops' own key lookup, in the
+same method. `enrollment_handshake.dart:112` sets it on its own local chops,
+not the lookup's. So the approver can be handed its own signer and mutate that.
+
+The change is additive, and the shape this project uses everywhere else - the
+tolerant reader ships first, the deletion follows:
+
+```dart
+// at_auth: AtEnrollment, and AtEnrollmentImpl, and the approver
+Future<AtEnrollmentResponse> approve(
+    EnrollmentRequestDecision decision,
+    AtLookUp atLookUp, {
+    AtChops? approverChops,   // step 5 makes this the only source
+});
+```
+
+The approver resolves `approverChops ?? atLookUp.atChops`, refuses when both
+are null, and uses that one object throughout. at_client's
+`enrollment_service_impl` passes `approverChops: atClient.atChops`. Step 5 then
+deletes the fallback and the field together, and no behaviour moves on the day
+it does.
+
+⚠️ **It does not leave the mocks alone, even though the parameter is
+optional.** This paragraph first claimed it would. Dart requires an override to
+declare every named parameter of the member it overrides - probed:
+`void f(int a)` is not a valid override of `void f(int a, {String? extra})`,
+`invalid_override`. Nine classes mock `AtEnrollment` and **four override
+`approve` with a concrete body and no named parameters**
+(`enrollment_conveyance_guard_test`, `enrollment_conveyance_seam_test`,
+`enrollment_service_test`, `nskey_convey_at_approval_test`, all in at_client).
+Those four move in the same commit. The mercy is that this one is a compile
+error rather than the usual silent `noSuchMethod` null - `dart analyze` names
+every site.
+
+
 - **CRAM does not validate the `from:` challenge; PKAM does.**
   `at_lookup_impl.cramAuthenticate` digests the raw response, while
   `pkamAuthenticate` passes it through `validatedFromChallenge` first. The

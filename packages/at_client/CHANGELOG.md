@@ -1,4 +1,20 @@
 ## 3.14.1
+
+- feat: `RemoteSecondary` accepts an `AtKeysIo` and installs an
+  `AtAuthenticator` on its lookup, so authentication is decided from the
+  client's keystore rather than from credentials parked on at_lookup. Both
+  construction sites supply it. Installed beside `atChops` rather than instead
+  of it, because at_auth's `EnrollmentApprover` still reads that field for
+  enrollment crypto, which is not authentication.
+
+  The install is in the constructor as well as the `atChops` setter. Hooking
+  only the setter - which is what a first attempt did, in `AtClientImpl` -
+  installs nothing on the path that matters, because the constructor sets
+  `atLookUp.atChops` directly. That version was measured to change nothing:
+  57 injected / 201 ladder authentications before and after, identical, while
+  at_client's 1480 tests and the functional 177 passed either way. It was
+  reverted rather than shipped. This version measures 135 injected / 119
+  ladder against the same suite.
 - feat: `KeyPackageMinting` — KE-2's writer. An enrollment now amends its own
   advertised key package to match
   `AtClientPreference.keyEstablishmentAlgorithms`: minting an encapsulation

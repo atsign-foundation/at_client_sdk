@@ -933,6 +933,7 @@ class AtClientImpl implements AtClient {
         privateKey: _preference!.privateKey,
         enrollmentId: enrollmentId,
         signingAlgoType: signingAlgoType,
+        atKeysIo: _atKeysIo,
       );
 
   @override
