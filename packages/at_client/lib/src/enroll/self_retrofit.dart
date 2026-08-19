@@ -103,6 +103,71 @@ Future<AtClientManager> selfRetrofit({
   AtClientManager? manager,
   SigningAlgoType? signingAlgo,
 }) async {
+  final newSession = await retrofitIdentity(
+    session: session,
+    preference: preference,
+    appName: appName,
+    deviceName: deviceName,
+    namespaces: namespaces,
+    apkamKeysExpiryDuration: apkamKeysExpiryDuration,
+    signingAlgo: signingAlgo,
+  );
+
+  final switched = await (manager ?? AtClientManager.getInstance())
+      .fromAuthSession(newSession, preference);
+
+  // The signing-root step (in-flow, privileged only): mint if the atSign
+  // publishes no root yet. Inside its own guard because the retrofit itself
+  // has already succeeded — the client is live and stays returned — and a
+  // root minted later heals nothing worse than a delay.
+  try {
+    final client = switched.atClient;
+    final granted = (await EnrollmentServiceImpl(client, AtEnrollment.create())
+            .fetchEnrollmentRequests())
+        .where((e) => e.enrollmentId == newSession.enrollmentId)
+        .firstOrNull
+        ?.namespace;
+    if (EnrollmentServiceImpl.isFullyPrivileged(granted)) {
+      await PqSigningRoot(client, keysIo: session.atKeysIo)
+          .mintIfAbsent(isFullyPrivileged: true);
+    }
+  } catch (e) {
+    _logger.warning('The retrofit of ${session.atSign} succeeded but its '
+        'signing-root step did not; rerunning selfRetrofit retries it: $e');
+  }
+
+  return switched;
+}
+
+/// The identity half of a self-retrofit: submit the enrollment, then
+/// authenticate under the new id, and hand back the session that carries it.
+/// No client is built and no [AtClientManager] is touched.
+///
+/// Split out of [selfRetrofit] because a client that retrofits during its own
+/// startup cannot use that function: it ends in
+/// [AtClientManager.fromAuthSession], which builds *another* client, whose own
+/// initialisation would retrofit in turn. A client deciding its own identity
+/// needs the id, not a second client holding it.
+///
+/// The returned session's `enrollmentId` is the new enrollment. Its `atLookUp`
+/// is authenticated as that enrollment, and its `atKeysIo` reads a keyfile
+/// that now carries the new enrollment's typed key material — which is what
+/// lets a caller re-derive its AtChops and connections from the new identity.
+///
+/// See [selfRetrofit] for what [signingAlgo] means, why the advertised signing
+/// key is minted before the request, and why the KEM is decided at this call.
+/// The signing-root step is NOT run here: it needs a live client, so it stays
+/// with the half that builds one.
+@experimental
+Future<AtAuthSession> retrofitIdentity({
+  required AtAuthSession session,
+  required AtClientPreference preference,
+  required String appName,
+  required String deviceName,
+  required Map<String, String> namespaces,
+  Duration? apkamKeysExpiryDuration,
+  SigningAlgoType? signingAlgo,
+}) async {
   final atLookUp = session.atLookUp;
   if (atLookUp == null) {
     throw ArgumentError.value(session, 'session',
@@ -162,28 +227,5 @@ Future<AtClientManager> selfRetrofit({
         'authenticate; the legacy client is untouched');
   }
 
-  final switched = await (manager ?? AtClientManager.getInstance())
-      .fromAuthSession(auth.session!, preference);
-
-  // The signing-root step (in-flow, privileged only): mint if the atSign
-  // publishes no root yet. Inside its own guard because the retrofit itself
-  // has already succeeded — the client is live and stays returned — and a
-  // root minted later heals nothing worse than a delay.
-  try {
-    final client = switched.atClient;
-    final granted = (await EnrollmentServiceImpl(client, AtEnrollment.create())
-            .fetchEnrollmentRequests())
-        .where((e) => e.enrollmentId == response.enrollmentId)
-        .firstOrNull
-        ?.namespace;
-    if (EnrollmentServiceImpl.isFullyPrivileged(granted)) {
-      await PqSigningRoot(client, keysIo: session.atKeysIo)
-          .mintIfAbsent(isFullyPrivileged: true);
-    }
-  } catch (e) {
-    _logger.warning('The retrofit of ${session.atSign} succeeded but its '
-        'signing-root step did not; rerunning selfRetrofit retries it: $e');
-  }
-
-  return switched;
+  return auth.session!;
 }
