@@ -1,9 +1,11 @@
 # One listener, two framings
 
-Status: design settled. **Step 1 of nine has landed** —
-`AtNetworkTimeouts.defaultResponseBudget` in at_commons, which nothing reads
-yet. **Next is step 2**, in [section 5](#5-order-of-work). This line is the only
-statement of progress; `git log` is the record of what landed. Owner: gkc.
+Status: design settled. **Step 1 of nine has landed**
+(`AtNetworkTimeouts.defaultResponseBudget` in at_commons, read by nothing yet),
+**and step 2's harness half** — `FakeAtServerSocket` plus the delivery and
+back-pressure tests. **Next is the rest of step 2**, the listener redesign, in
+[section 5](#5-order-of-work). This line is the only statement of progress;
+`git log` is the record of what landed. Owner: gkc.
 Written against `gkc-pq-d1-spike` at `9f5da2ad0` and `origin/trunk` at
 `401e14d98`, 2026-08-19.
 
@@ -135,11 +137,17 @@ The total must follow the second, since at_client passes
 `outboundConnectionTimeout` — **600 000 ms** — for stream reads.
 
 **8 — A fake socket over a real `StreamController`, plus mechanism counters.**
-**Not one existing listener test exercises the waiting path**: every one calls
-`messageHandler(bytes)` first, then `read()`, which finds the queue populated and
-returns immediately, so the poll loop is never entered by the current suite.
-There is **no `StreamController` anywhere in at_lookup's tests**, and
-`MockStreamSubscription` cannot show that pausing stops delivery. Without the
+The waiting path itself **is** covered, contrary to what this decision first
+claimed: printing inside the poll loop and running
+`outbound_message_listener_test.dart` counts **38 iterations across 7 tests** —
+the whole `AtTimeOutException` group. Those 7 are the regression detector to
+protect when the poll loop becomes a completer, not a gap to fill.
+
+What nothing covers is **delivery**. There is **no `StreamController` anywhere
+in at_lookup's tests**: every test feeds bytes by calling `messageHandler`
+directly, so no test has ever driven data in through a socket, and
+`createMockAtServerSocket` stubs `listen` to return a `MockStreamSubscription`
+that delivers nothing and cannot show that pausing stops delivery. Without the
 harness, decision 6's two properties ship with nothing able to detect their
 absence. Every new case gets a break-it mutation whose failure quotes its own
 reason string.
@@ -256,7 +264,7 @@ then the old path is deleted — so no package is uncompilable between commits.
 | #   | Step                                                                                                                                                                                                                                | Package        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
 | 1   | Add `defaultResponseBudget` beside `defaultOnboardingTimeout`, documented as uncapped-by-design and why. Nothing reads it yet.                                                                                                       | at_commons     |
-| 2   | `FakeAtServerSocket` over a real `StreamController`, then the completer, the resettable idle timer, timeouts from `AtNetworkTimeouts`, the `onNotification` seam, and the `_stripPrompt` `-1` guard adopted. Signature unchanged.     | at_lookup      |
+| 2   | **Lands as two commits.** First `FakeAtServerSocket` over a real `StreamController` alone, proven against current behaviour so it is not judging code written beside it. Then the completer, the resettable idle timer, timeouts from `AtNetworkTimeouts`, the `onNotification` seam, and the `_stripPrompt` `-1` guard. Signature unchanged. | at_lookup      |
 | 3   | Declare `AtAuthenticator` and `AtCommandExecutor`; accept and prefer an injected authenticator **alongside** the existing ladder. Nothing breaks yet.                                                                                | at_lookup      |
 | 4   | Supply the authenticators **from at_auth**, built over `AtKeysIo` — at_lookup still names none of it, and gains no dependency. at_auth, at_client and at_onboarding_cli switch to passing one. **at_tools' `at_cli` is the external case** — it sets `preference.privateKey` with no AtChops at all. | at_auth        |
 | 5   | Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` at `:744`, and **`at_chops` from the pubspec**.                                                                       | at_lookup      |
@@ -313,4 +321,4 @@ first version.
 | The auth short-circuit is a branch regression          | **Present on both**    | The branch spells it as an early `return true`; this branch as `if (!isAuthenticated) { … }` around the whole body. Onboarding is built on it.         |
 | Install the authenticator on `authenticate()`          | **Held closure**       | Install stores the phase a second time, so it can disagree with at_auth's state — the derived-vs-stored hazard decision 9 invoked and 10 avoids.       |
 | Rebase drops at_lookup work silently                   | **Conflicts**          | Git reports `CONFLICT (modify/delete)`. The hazard is that it reads as "keep the file or not" and `git rm` discards 87 lines without showing a hunk.   |
-| Existing listener tests cover `read()`                 | **Never wait**         | All pre-populate the queue then read, so the poll loop is never entered.                                                                               |
+| Listener tests never enter the waiting path            | **7 do, 38 times**     | Measured by printing in the poll loop and running the suite: the whole `AtTimeOutException` group waits. The real gap is delivery — zero `StreamController` in at_lookup's tests, so nothing drives bytes through a socket. |
