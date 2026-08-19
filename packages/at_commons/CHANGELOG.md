@@ -1,5 +1,14 @@
 ## 5.16.0
 
+- feat: add `AtNetworkTimeouts.defaultResponseBudget` (90s) — the overall budget
+  for one complete response, as distinct from `defaultTimeout`, which bounds the
+  wait for the *next* bytes and restarts every time a chunk arrives. A large
+  response is many such waits in a row, and only this budget bounds their sum, so
+  a peer that trickles bytes indefinitely is caught by this and by nothing else.
+  Deliberately not passed through `cap`: it bounds an aggregate rather than a
+  single operation, and its own default already exceeds the 60s ceiling. Nothing
+  reads it yet.
+
 - docs: `signingAlgo` says plainly that it names the APKAM **authentication**
   key's algorithm — the key that signs the `from:` challenge — and not the
   algorithm an enrollment signs documents with. The name invites the second

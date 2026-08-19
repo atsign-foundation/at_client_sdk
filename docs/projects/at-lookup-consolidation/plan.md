@@ -1,7 +1,11 @@
 # One listener, two framings
 
-Status: design settled, nothing built. Owner: gkc. Written against
-`gkc-pq-d1-spike` at `9f5da2ad0` and `origin/trunk` at `401e14d98`, 2026-08-19.
+Status: design settled. **Step 1 of nine has landed** —
+`AtNetworkTimeouts.defaultResponseBudget` in at_commons, which nothing reads
+yet. **Next is step 2**, in [section 5](#5-order-of-work). This line is the only
+statement of progress; `git log` is the record of what landed. Owner: gkc.
+Written against `gkc-pq-d1-spike` at `9f5da2ad0` and `origin/trunk` at
+`401e14d98`, 2026-08-19.
 
 Goal: fold the connection-consolidation work into `gkc-pq-d1-spike` as an
 additive **minor** release, by deleting duplicated machinery rather than
