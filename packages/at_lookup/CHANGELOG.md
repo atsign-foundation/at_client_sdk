@@ -1,5 +1,15 @@
 ## 3.7.0
 
+- feat: `validatedFromChallenge` is public API rather than
+  `@visibleForTesting`. Authentication is moving to at_auth, where the key
+  material is, and the side that signs a challenge is the side that must refuse
+  a malformed one. The alternative was a second copy of a security control,
+  and two copies drift.
+- feat: `AtCommandExecutor.sendSync` accepts the same two timeout budgets as
+  `OutboundMessageListener.read`. Authentication does not want one answer: the
+  CRAM leg of onboarding waits far less than a verb response does, and moving
+  that code out of at_lookup must not change its timing.
+
 - feat: `AtLookupImpl` accepts an injected authenticator. Two new types,
   `AtAuthenticator` and `AtCommandExecutor`, let a caller hand over the whole
   of authentication as one closure instead of handing at_lookup a credential

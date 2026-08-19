@@ -29,7 +29,14 @@ abstract interface class AtCommandExecutor {
   ///
   /// Called from inside authentication, which already holds the
   /// request/response mutex, so this must not take it again.
-  Future<String> sendSync(String command);
+  ///
+  /// The two budgets are those of `OutboundMessageListener.read` and mean the
+  /// same things. They are here because authentication does not want one
+  /// answer: the CRAM leg of onboarding waits far less than a verb response
+  /// does, on the grounds that a secret is either accepted promptly or not at
+  /// all. Omit them and the process-wide defaults apply.
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis});
 }
 
 abstract interface class AtLookUp {

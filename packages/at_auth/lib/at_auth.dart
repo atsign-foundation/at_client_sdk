@@ -3,6 +3,10 @@ library;
 
 export 'src/at_auth.dart';
 export 'src/auth_constants.dart';
+// Builds the AtAuthenticator at_lookup takes, over this package's keystore.
+// at_lookup cannot name AtKeys or AtKeysIo, so the credential, the enrollment
+// and the signing algorithm all stay on this side of that seam.
+export 'src/auth/at_authenticator.dart';
 
 // Contains models related to onboarding and authentication requests and responses.
 export 'src/auth/models/at_auth_requests.dart';

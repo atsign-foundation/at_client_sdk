@@ -26,7 +26,12 @@ final RegExp _fromChallengeUuid = RegExp(
 /// [atSign]; throws [UnAuthenticatedException] otherwise.
 ///
 /// [challenge] is the response with any `data:` prefix already stripped.
-@visibleForTesting
+///
+/// Public, not `@visibleForTesting`: authentication is moving out of at_lookup
+/// and into at_auth, where the key material is, and the side that signs the
+/// challenge is the side that has to refuse a bad one. Duplicating this check
+/// there would be the worse answer - two copies of a security control drift,
+/// and the one that drifts is the one nobody is looking at.
 String validatedFromChallenge(String challenge, String atSign) {
   void refuse(String why) {
     // The challenge itself is not secret — it is a session id and a nonce the
@@ -500,9 +505,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor {
   final Mutex _pkamAuthenticationMutex = Mutex();
 
   @override
-  Future<String> sendSync(String command) async {
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
     await _sendCommand(command);
-    return messageListener.read();
+    return messageListener.read(
+        maxWaitMilliSeconds: maxWaitMilliSeconds,
+        transientWaitTimeMillis: transientWaitTimeMillis);
   }
 
   /// Runs [authenticate] against this connection, under the same mutex the

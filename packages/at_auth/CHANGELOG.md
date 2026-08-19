@@ -1,4 +1,16 @@
 ## 3.4.0
+- feat: add `authenticatorFor`, which builds the `AtAuthenticator` at_lookup
+  now accepts. It reads credentials from an injected `AtKeysIo` and decides
+  which one applies by what the keystore has: an `AtKeysSourceAbsentException`
+  means this atSign is not onboarded yet and CRAM is the only credential that
+  exists; keys mean PKAM, signed with the algorithm those keys name for the
+  enrollment. The keystore is re-read on every invocation rather than captured,
+  so one closure held for an instance's lifetime answers CRAM during onboarding
+  and PKAM afterwards without anyone telling it the phase changed - and cannot
+  disagree with the keystore, because it holds no second copy of the answer.
+  Both legs are ported from `AtLookupImpl` unchanged, including CRAM's tighter
+  timeouts and the fact that CRAM does not validate the `from:` challenge where
+  PKAM does.
 - feat: `AtKeysSourceAbsentException` — the one read failure that means "this
   atSign has no key source yet" rather than "this process cannot read what is
   there". `FileAtKeysIo.read` throws it for a missing file and

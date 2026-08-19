@@ -5,7 +5,10 @@ at_commons, `FakeAtServerSocket`, the `_stripPrompt` guard the harness found on
 its first use, the event-driven `read()`, and the `onNotification` seam.
 **Step 3 has landed too** — `AtAuthenticator`, `AtCommandExecutor`, and
 `AtLookupImpl` preferring an injected authenticator over the ladder.
-**Next is step 4**, supplying authenticators from at_auth, in
+**Step 4 is half done**: `authenticatorFor` exists in at_auth and nothing calls
+it yet. **Next is migrating the eight production sites** that set `atChops`,
+`privateKey` or `cramSecret` - six in at_auth, three in at_client, two in
+at_onboarding_cli - to pass an authenticator instead. See
 [section 5](#5-order-of-work). This line
 is the only statement of progress; `git log` is the record of what landed. Owner: gkc.
 Written against `gkc-pq-d1-spike` at `9f5da2ad0` and `origin/trunk` at
@@ -245,18 +248,42 @@ and the algorithm all already live:
 AtAuthenticator authenticatorFor(AtKeysIo io, String atSign,
                                  {String? cramSecret, String? enrollmentId}) =>
   (executor) async {
-    final keys = await io.read(atSign);          // re-read EVERY auth
-
-    if (keys == null) {                          // not onboarded yet
+    final AtKeys keys;
+    try {
+      keys = await io.read(atSign);              // re-read EVERY auth
+    } on AtKeysSourceAbsentException {           // not onboarded yet
       return _cram(executor, atSign, cramSecret!);
     }
 
-    final algo = keys.authenticationAlgorithmFor(enrollmentId);
+    final algo = keys.authenticationAlgorithmFor(enrollmentId)
+        ?? SigningAlgoType.rsa2048;
     final challenge = validatedFromChallenge(
         await executor.sendSync('from:$atSign\n'), atSign);
     // … sign with `algo`, send pkam:, return success …
   };
 ```
+
+Three corrections to that sketch, each measured against the types rather than
+assumed:
+
+- **`AtKeysIo.read` returns `FutureOr<AtKeys>`, never null**, so this sketch's
+  original `if (keys == null)` was dead code the analyzer would have rejected.
+  The "not onboarded yet" signal is the typed
+  `AtKeysSourceAbsentException`, which `FileAtKeysIo.read` throws for a missing
+  keyfile and which exists precisely so a caller can tell that apart from a
+  keyfile it cannot read.
+- **`authenticationAlgorithmFor` returns null whenever `enrollmentId` is
+  null** — it is `enrollmentId == null ? null : …`. A legacy, non-APKAM
+  authentication therefore resolves to nothing and needs the same
+  `?? SigningAlgoType.rsa2048` default, and for the same reason,
+  that `at_client_impl.dart` already documents at its own call site: at_lookup
+  signs with rsa2048 by default, so a legacy enrollment compares as rsa2048.
+- ⚠️ **PKAM validates the challenge and CRAM does not.**
+  `pkamAuthenticate` passes the `from:` response through
+  `validatedFromChallenge`; `cramAuthenticate` digests it raw. Port both
+  exactly as they are and change neither silently — then decide whether the
+  asymmetry is intended, on its own evidence. It is filed in
+  [section 6](#6-filed-not-scheduled), not fixed here.
 
 ## 5. Order of work
 
@@ -281,6 +308,14 @@ at the front of the release order as well as the commit order. at_auth's
 constraint on at_lookup rises in step 4, in the same commit as the first use.
 
 ## 6. Filed, not scheduled
+
+- **CRAM does not validate the `from:` challenge; PKAM does.**
+  `at_lookup_impl.cramAuthenticate` digests the raw response, while
+  `pkamAuthenticate` passes it through `validatedFromChallenge` first. The
+  control exists so a server cannot get a client to sign a challenge naming a
+  different atSign. Whether it matters for CRAM — where the secret is already
+  shared with that server — is a question with an answer, and nobody has
+  written it down. Not changed by this work; step 4 ports both verbatim.
 
 **`enrollment_submitter.dart:290` advertises `rsa2048` unconditionally.** It
 ignores `AtEnrollmentRequest.signingAlgo` while `:215` mints an RSA keypair.
