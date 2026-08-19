@@ -24,7 +24,14 @@ import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 /// Anything this fake does not implement throws [UnimplementedError] naming the
 /// member, so an unsupported call fails loudly instead of returning null into a
 /// non-nullable type.
-class FakeAtServerSocket implements Socket {
+/// Implements [SecureSocket], not [Socket], purely so it can be injected
+/// through `AtLookupImpl`'s own `secureSocketFactory` seam - which is typed
+/// `Future<SecureSocket>`. Nothing calls a SecureSocket-specific member on it:
+/// `createOutBoundConnection` passes the socket straight to the connection
+/// factory. Implementing the narrower type forced tests to mock the connection
+/// factory as well and hand it a throwaway SecureSocket that was never read
+/// from - two moving parts to inject one fake.
+class FakeAtServerSocket implements SecureSocket {
   late final StreamController<Uint8List> _inbound = StreamController<Uint8List>(
     onListen: () => listenCount++,
     onPause: () => pauseCount++,

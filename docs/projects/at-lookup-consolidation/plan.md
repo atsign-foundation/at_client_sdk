@@ -61,6 +61,23 @@ counts constructions; 47 counts every use in scope — constructions, type
 annotations, `is` checks and imports. Quoting one for the other is the mistake
 [section 7](#7-corrections) already records twice.
 
+**The end state the gate encodes** (confirmed by gkc, 2026-08-19): every caller
+goes through the static `AtLookUp.withSecureSocket(...)` of
+[section 4](#4-the-factory), which returns an `AtLookupMuxable`. The concrete
+class is not named anywhere in lib code — including inside at_lookup itself.
+
+⚠️ **Nine of the 47 are inside at_lookup's own `lib/`, and SIX of those are
+string literals in the deprecation messages this project just added.** They
+read "Supply an AtAuthenticator via `AtLookupImpl.authenticator`". The moment
+the class leaves lib code that sentence points at something a consumer cannot
+see — the identical defect to `privateKey`'s "no longer used" message that
+[section 7](#7-corrections) records, recreated one layer up by the commit that
+fixed it. **Step 7 must rewrite them to name the factory**, and the gate is
+what will catch it if that is forgotten. The remaining three are the class
+declaration, its constructor, and `monitor_client.dart:57`'s call to the
+static `AtLookupImpl.findSecondary` — and step 7 deprecates `MonitorClient`
+regardless.
+
 **Next is the deletion's preconditions**, marked **BLOCKS THE MAJOR** in
 [section 6](#6-filed-not-scheduled).
 
@@ -278,9 +295,42 @@ abstract interface class AtLookUp {
     required AtAuthenticator?   authenticator,
     Map<String, dynamic>        clientConfig = const {},
     SecondaryAddressFinder?     secondaryAddressFinder,
+    AtLookupTransport?          transport,   // ruled 2026-08-19, see below
   });
 }
 ```
+
+### ⚠️ The seventh parameter, and why the six were not enough
+
+**Ruled by gkc, 2026-08-19: the transport is a real parameter, not a
+`@visibleForTesting` back door.**
+
+The six-parameter list above was designed from the production call sites, and
+it left **no way to give an `AtLookupMuxable` a socket it did not open
+itself**. That is invisible while `AtLookupImpl`'s constructor is still
+reachable — at_lookup's own muxable tests inject a `FakeAtServerSocket` through
+its `secureSocketFactory` parameter — and it becomes fatal at exactly the
+moment the [acceptance gate](#the-acceptance-gate-for-the-whole-sequence) is
+met, because meeting the gate is what removes that constructor. The tests would
+stop compiling on the commit that finished the job.
+
+It is not only a test seam, which is why it is not a test hatch.
+`docs/projects/wasm/plan.md` proposes an `at_transport` package and explicitly
+defers the decision — *"Transport abstraction plus native and web impls. Can
+instead live inside `at_lookup`; decide when the abstraction is written."*
+Step 7 is when it is written, so the web port is a named non-test caller for
+the same parameter. A `@visibleForTesting` hatch would have answered the test
+question and left that one open, and the hatch would have become the extension
+point anyway.
+
+The factory is already **named for its transport** so a differently-transported
+factory can join it later; taking the transport as a value is the same idea one
+level down.
+
+⚠️ **This is the "caller that does not exist yet".** Grepping the call sites
+answers *who supplies this today* — and today the answer is nobody, because
+today they call a constructor. Found only because gkc asked how fakes reach an
+`AtLookupMuxable`, which is a question the call sites cannot answer.
 
 Gone, and with them `at_chops` from at_lookup's pubspec: `atChops`,
 `enrollmentId`, `privateKey`, `cramSecret`, `signingAlgoType`,

@@ -92,6 +92,26 @@ class OutboundMessageListener {
   /// throw - so an unmatched resume costs nothing.
   void resumeDelivery() => _socketSubscription?.resume();
 
+  /// Called after the connection has been closed because the far end went
+  /// away - either cleanly (`onDone`) or with an error (`onError`).
+  ///
+  /// The listener knows the socket died before anything else does, and until
+  /// now it kept that to itself: it closed the connection and returned, so a
+  /// subscriber waiting on notifications simply stopped hearing anything, with
+  /// no event distinguishing "the atServer is quiet" from "the socket is
+  /// gone". Whoever owns reconnection needs that difference.
+  void Function()? onDisconnect;
+
+  void _notifyDisconnect() {
+    final callback = onDisconnect;
+    if (callback == null) return;
+    try {
+      callback();
+    } catch (e, st) {
+      logger.shout('onDisconnect threw $e - reconnection may not happen\n$st');
+    }
+  }
+
   /// Logs the error and closes the [OutboundConnection]
   @visibleForTesting
   void onSocketError(Object error) async {
@@ -101,6 +121,7 @@ class OutboundMessageListener {
     await closeConnection();
     logger.finest(
         'outbound socket onError handler called - closeConnection complete');
+    _notifyDisconnect();
   }
 
   /// Closes the [OutboundConnection]
@@ -111,6 +132,7 @@ class OutboundMessageListener {
     await closeConnection();
     logger.finest(
         'outbound socket onDone handler called - closeConnection complete');
+    _notifyDisconnect();
   }
 
   /// Handles messages on the inbound client's connection and calls the verb executor

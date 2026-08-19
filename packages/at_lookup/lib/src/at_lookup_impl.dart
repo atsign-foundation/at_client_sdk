@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_commons/at_builders.dart';
@@ -342,6 +343,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       // and routing one into a void drops it silently.
       if (_notificationController != null) {
         messageListener.onNotification = _routeNotification;
+        messageListener.onDisconnect = _onNotificationConnectionLost;
       }
       messageListener.listen();
       logger.info('New connection created OK');
@@ -826,6 +828,124 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   bool _isNotifying = false;
 
+  // --- reconnect, reauth and heartbeat -----------------------------------
+  //
+  // Owned here because this object holds the socket. at_client's Monitor
+  // carries an identical [1,2,3,5,8,13,21,34] delay list; both cannot own
+  // reconnection, and on a connection that also carries verb traffic a
+  // Monitor-owned reconnect would be healing a socket it does not own for a
+  // subsystem that is not it.
+
+  /// Delays between reconnect attempts. The last is repeated indefinitely.
+  static const List<Duration> notificationReconnectDelays = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 8),
+    Duration(seconds: 13),
+    Duration(seconds: 21),
+    Duration(seconds: 34),
+  ];
+
+  /// How often a quiet notification connection is probed, and how long the
+  /// probe waits. Settable so a test does not have to wait 30 seconds.
+  Duration heartbeatInterval = const Duration(seconds: 30);
+  Duration heartbeatResponseTimeout = const Duration(seconds: 10);
+
+  String? _notifyRegex;
+  int? _notifyLastNotificationTime;
+  bool _notifySelfNotifications = true;
+
+  int _reconnectIx = 0;
+  bool _reconnecting = false;
+  Timer? _heartbeatTimer;
+
+  /// Whether a reconnect is in flight. Visible so a test can assert the loop
+  /// is running rather than inferring it from a delay.
+  bool get isReconnectingNotifications => _reconnecting;
+
+  void _onNotificationConnectionLost() {
+    if (!_isNotifying || _reconnecting) return;
+    // `warning`: the subscriber cannot see this any other way, and a silent
+    // reconnect looks identical to an atServer that has simply gone quiet.
+    logger.warning(
+        'Notification connection to $_currentAtSign lost - reconnecting');
+    _stopHeartbeat();
+    unawaited(_reconnectNotifications());
+  }
+
+  Future<void> _reconnectNotifications() async {
+    _reconnecting = true;
+    try {
+      while (_isNotifying) {
+        final delay = notificationReconnectDelays[
+            min(_reconnectIx, notificationReconnectDelays.length - 1)];
+        _reconnectIx++;
+        logger.info('Reconnecting notifications in ${delay.inSeconds}s '
+            '(attempt $_reconnectIx)');
+        await Future.delayed(delay);
+        // Re-checked after the delay, not only before it: stopNotifications
+        // can land while this is sleeping, and reconnecting after that would
+        // resurrect a connection the caller asked to be rid of.
+        if (!_isNotifying) return;
+        try {
+          await _openNotificationStream();
+          logger.info('Notification connection re-established');
+          _reconnectIx = 0;
+          _startHeartbeat();
+          return;
+        } catch (e) {
+          logger.warning('Reconnect attempt $_reconnectIx failed: $e');
+        }
+      }
+    } finally {
+      _reconnecting = false;
+    }
+  }
+
+  void _startHeartbeat() {
+    _stopHeartbeat();
+    _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
+  }
+
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  /// Probe a quiet connection with `noop:0`.
+  ///
+  /// ⚠️ This makes the notification connection carry verb traffic, which is
+  /// the arrangement [AtLookupMuxable] warns about: no atServer implements the
+  /// `multiplexed` interlock, so a notification written between this command
+  /// and its reply is absorbed into the reply rather than routed. The window
+  /// is one short round trip every [heartbeatInterval], and it is the same
+  /// exposure at_client's Monitor has had all along - this moves that
+  /// behaviour, it does not add it. It closes when an atServer implements the
+  /// flag.
+  Future<void> _heartbeat() async {
+    if (!_isNotifying) return;
+    try {
+      await requestResponseMutex.acquire();
+      try {
+        await _sendCommand('noop:0\n');
+        await messageListener.read(
+            maxWaitMilliSeconds: heartbeatResponseTimeout.inMilliseconds,
+            transientWaitTimeMillis: heartbeatResponseTimeout.inMilliseconds);
+      } finally {
+        requestResponseMutex.release();
+      }
+      _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
+    } catch (e) {
+      logger.info('Notification heartbeat failed ($e) - closing the '
+          'connection so it reconnects');
+      // Closing is what starts recovery: the socket going away drives the
+      // listener's onDone, which is wired to [_onNotificationConnectionLost].
+      await _connection?.close();
+    }
+  }
+
   @override
   bool get isNotifying => _isNotifying;
 
@@ -889,6 +1009,25 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // notifications arrive with nowhere to go.
     notifications;
 
+    // Remembered, because reconnecting has to re-issue the SAME monitor:. A
+    // reconnect that dropped the regex would start delivering everything, and
+    // one that dropped the watermark would replay from the beginning.
+    _notifyRegex = regex;
+    _notifyLastNotificationTime = lastNotificationTime;
+    _notifySelfNotifications = selfNotificationsEnabled;
+
+    await _openNotificationStream();
+    _isNotifying = true;
+    _reconnectIx = 0;
+    _startHeartbeat();
+  }
+
+  /// Connect, authenticate if required, and send `monitor:`.
+  ///
+  /// Shared by [startNotifications] and the reconnect loop, so a reconnected
+  /// connection is established exactly as the first one was. Anything else and
+  /// the two paths drift, with the difference only visible after an outage.
+  Future<void> _openNotificationStream() async {
     await requestResponseMutex.acquire();
     try {
       await createConnection();
@@ -901,16 +1040,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         }
       }
       final command = (MonitorVerbBuilder()
-            ..regex = regex
-            ..lastNotificationTime = lastNotificationTime
-            ..selfNotificationsEnabled = selfNotificationsEnabled)
+            ..regex = _notifyRegex
+            ..lastNotificationTime = _notifyLastNotificationTime
+            ..selfNotificationsEnabled = _notifySelfNotifications)
           .buildCommand();
       // ⚠️ `multiplexed` is deliberately NOT set. It is accepted by the shared
       // verb syntax and read by no atServer, so setting it would advertise a
       // safety property that does not exist. See [AtLookupMuxable].
       logger.info('SENDING: ${command.trim()}');
       await _connection!.write(command);
-      _isNotifying = true;
     } finally {
       requestResponseMutex.release();
     }
@@ -918,11 +1056,22 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Future<void> stopNotifications() async {
+    // First, and deliberately: this flag is what the reconnect loop reads to
+    // decide whether to keep trying. Closing the connection before clearing it
+    // would trip the disconnect handler into reconnecting the very connection
+    // this method is tearing down.
     _isNotifying = false;
+    _stopHeartbeat();
     await _connection?.close();
     final controller = _notificationController;
     _notificationController = null;
-    await controller?.close();
+    // NOT awaited, and that is the point. `close()` on a single-subscription
+    // controller returns its `done` future, which completes only once a
+    // subscriber has received the done event - so a caller that started
+    // notifications and never listened would hang here forever. Start-then-stop
+    // with no subscriber is a legal caller, and awaiting this deadlocked four
+    // tests for thirty seconds each before it was caught.
+    unawaited(controller?.close() ?? Future<void>.value());
   }
 
   Future<void> _sendCommand(String command) async {

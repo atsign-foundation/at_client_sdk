@@ -1,10 +1,7 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
-import 'package:at_lookup/src/connection/outbound_connection_impl.dart';
-import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -22,41 +19,42 @@ void main() {
   const host = '127.0.0.1';
   const port = 12345;
 
+  /// Every socket the factory has handed out, in order.
+  ///
+  /// A fresh one per connection, because reconnection is under test: a rig
+  /// that returned the same destroyed socket would make a successful
+  /// reconnect indistinguishable from a failed one.
+  late List<FakeAtServerSocket> sockets;
+
+  /// The socket currently in use - the most recent one the factory handed out.
   late FakeAtServerSocket socket;
-  late OutboundConnectionImpl connection;
   late MockSecondaryAddressFinder addressFinder;
   late MockSecureSocketFactory socketFactory;
-  late MockSecureSocketListenerFactory listenerFactory;
-  late MockOutboundConnectionFactory connectionFactory;
 
   setUp(() {
-    socket = FakeAtServerSocket();
-    connection = OutboundConnectionImpl(socket);
+    sockets = [];
     addressFinder = MockSecondaryAddressFinder();
     socketFactory = MockSecureSocketFactory();
-    listenerFactory = MockSecureSocketListenerFactory();
-    connectionFactory = MockOutboundConnectionFactory();
     registerFallbackValue(SecureSocketConfig());
 
-    final tokenSocket = createMockAtServerSocket(host, port);
     when(() => addressFinder.findSecondary('@alice'))
         .thenAnswer((_) async => SecondaryAddress(host, port));
+    // The ONE injection point: a fresh fake socket per connection, handed
+    // straight to AtLookupImpl's own socket factory. Everything above it -
+    // the connection, the listener, both framings, reconnect - is production
+    // code, so a notification here travels the path it travels live.
     when(() => socketFactory.createSocket(host, '$port', any()))
-        .thenAnswer((_) => Future<SecureSocket>.value(tokenSocket));
-    // The real connection, over the fake socket. The token SecureSocket above
-    // only satisfies the factory chain and is never read from.
-    when(() => connectionFactory.createOutboundConnection(tokenSocket))
-        .thenAnswer((_) => connection);
-    // The real listener, so the two framings actually run.
-    when(() => listenerFactory.createListener(connection))
-        .thenAnswer((_) => OutboundMessageListener(connection));
+        .thenAnswer((_) async {
+      final s = FakeAtServerSocket();
+      sockets.add(s);
+      socket = s;
+      return s;
+    });
   });
 
   AtLookupImpl build() => AtLookupImpl('@alice', host, 64,
       secondaryAddressFinder: addressFinder,
-      secureSocketFactory: socketFactory,
-      socketListenerFactory: listenerFactory,
-      outboundConnectionFactory: connectionFactory);
+      secureSocketFactory: socketFactory);
 
   /// An authenticator that succeeds without doing anything. `_authenticateWith`
   /// records the authentication itself, so returning true is enough to get
@@ -192,6 +190,125 @@ void main() {
           throwsA(isA<UnAuthenticatedException>()),
           reason: 'monitor requires authentication; failing loudly beats a '
               'connection that silently never receives anything');
+    });
+  });
+
+  group('reconnect, reauth and heartbeat', () {
+    test('losing the connection reconnects, reauthenticates, and re-issues '
+        'the SAME monitor:', () async {
+      var authCount = 0;
+      final atLookup = build()
+        ..authenticator = ((_) async {
+          authCount++;
+          return true;
+        })
+        // Parked, so this test measures reconnection and not the probe.
+        ..heartbeatInterval = const Duration(hours: 1);
+
+      await atLookup.startNotifications(
+          regex: '.wavi', lastNotificationTime: 1755600000000);
+      expect(sockets, hasLength(1));
+      expect(authCount, 1);
+      final first = socket;
+      expect(first.written, ['monitor:selfNotifications:1755600000000 .wavi\n']);
+
+      // The far end goes away.
+      await first.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(atLookup.isReconnectingNotifications, isTrue,
+          reason: 'the listener must tell the muxable the socket died - '
+              'without the onDisconnect seam nothing here ever learns it');
+
+      // First delay in the backoff is 1s.
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(sockets, hasLength(2),
+          reason: 'a new connection must have been opened');
+      expect(authCount, 2,
+          reason: 'the new connection is unauthenticated, so the authenticator '
+              'must run again - reconnecting without reauthenticating gives a '
+              'socket the atServer will not send notifications on');
+      expect(socket.written, ['monitor:selfNotifications:1755600000000 .wavi\n'],
+          reason: 'the reconnect must re-issue the SAME monitor: - dropping '
+              'the regex would start delivering everything, and dropping the '
+              'watermark would replay from the beginning');
+      expect(atLookup.isReconnectingNotifications, isFalse,
+          reason: 'and the loop must finish once it succeeds');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('notifications flow again on the reconnected socket', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications();
+      final seen = <String>[];
+      atLookup.notifications.listen(seen.add);
+
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 1400));
+      await socket.serverSends('notification: {"id":"after-reconnect"}\n');
+      await socket.settle();
+
+      expect(seen, ['notification: {"id":"after-reconnect"}'],
+          reason: 'the framing seam must be re-installed on the NEW listener - '
+              'createConnection builds a fresh one, so a seam wired only at '
+              'startup would go quiet after the first outage');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('stopNotifications ends the reconnect loop', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications();
+
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(atLookup.isReconnectingNotifications, isTrue);
+
+      await atLookup.stopNotifications();
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(sockets, hasLength(1),
+          reason: 'a reconnect landing after stopNotifications would resurrect '
+              'the connection the caller just asked to be rid of');
+    });
+
+    test('the heartbeat probes a quiet connection with noop:0', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(milliseconds: 40);
+      await atLookup.startNotifications();
+      final s = socket;
+      expect(s.written, hasLength(1), reason: 'just the monitor: so far');
+
+      await Future.delayed(const Duration(milliseconds: 90));
+
+      expect(s.written.last, 'noop:0\n',
+          reason: 'a connection that only ever reads cannot tell a quiet '
+              'atServer from a dead socket');
+      await s.serverSends('data:ok\n@alice@');
+      await atLookup.stopNotifications();
+    });
+
+    test('an unanswered heartbeat starts recovery', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(milliseconds: 30)
+        ..heartbeatResponseTimeout = const Duration(milliseconds: 60);
+      await atLookup.startNotifications();
+      final s = socket;
+
+      // Probe goes out at ~30ms, times out at ~90ms, closes the connection,
+      // whose onDone drives the disconnect seam.
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      expect(s.destroyed, isTrue,
+          reason: 'an unanswered probe must close the connection');
+      expect(atLookup.isReconnectingNotifications, isTrue,
+          reason: 'and closing it must start the reconnect loop - closing '
+              'without reconnecting leaves a listener that is silent forever');
+
+      await atLookup.stopNotifications();
     });
   });
 

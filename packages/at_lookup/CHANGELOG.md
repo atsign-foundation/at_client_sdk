@@ -1,5 +1,23 @@
 ## 3.7.0
 
+- feat: the muxable owns reconnect, reauth and heartbeat, because it owns the
+  socket. Losing the notification connection re-establishes it on the
+  `[1,2,3,5,8,13,21,34]`-second backoff, re-runs the authenticator, and
+  re-issues the **same** `monitor:` — a reconnect that dropped the regex would
+  start delivering everything, and one that dropped the watermark would replay
+  from the beginning. A quiet connection is probed with `noop:0`, because a
+  connection that only ever reads cannot tell a quiet atServer from a dead
+  socket. at_client's `Monitor` carries an identical delay list; both cannot
+  own reconnection.
+- feat: `OutboundMessageListener.onDisconnect`. The listener knows the socket
+  died before anything else does and used to keep it to itself, so a
+  subscriber just stopped hearing anything, with no event separating "the
+  atServer is quiet" from "the socket is gone".
+- fix: `stopNotifications` no longer awaits the notification controller's
+  `close()`. On a single-subscription controller that future completes only
+  once a subscriber has received the done event, so starting notifications and
+  stopping them without ever listening — a legal sequence — hung forever.
+
 - feat: `AtLookupMuxable`, an `AtLookUp` that also carries the atServer's
   asynchronous notification stream, so one class knows both of the atServer's
   framings instead of the framing code existing twice. `AtLookupImpl`
