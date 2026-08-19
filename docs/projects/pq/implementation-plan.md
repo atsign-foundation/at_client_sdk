@@ -78,10 +78,17 @@ called from `_init` without building a second client) carries the submission.
 functional and e2e packs are its only proof and they have not been run against
 this. What is unit-pinned is the derivation and the failure containment.
 
-⚠️ **`NotificationServiceImpl.repointMonitor()` now has no production caller**,
-sequencing having removed the need to move a live monitor. The listener-state
-relay beside it is a genuine fix and stays either way; the re-point method is a
-decision owed.
+⚠️ **Two stale-reference hazards a live re-point would have to solve, found by
+the same audit and recorded because sequencing sidesteps rather than removes
+them.** `EncryptionService.remoteSecondary` is a stored, mutable field assigned
+once at init; and `SyncServiceImpl` builds and holds `final` its **own**
+`RemoteSecondary`, a second connection constructed from the enrollment id at
+create time. Everything else reaches the remote through
+`atClient.getRemoteSecondary()` at call time and is re-point-safe already.
+Rebuilding the sync service instead of re-pointing it is contraindicated by an
+incident recorded in `at_client_manager.dart` — two `SyncService` instances
+against one Hive queue lost writes and surfaced as `bypasscache_test` timing out
+in CI.
 
 The original design, now superseded in part, was ruled with gkc
 2026-08-19 and folded into
@@ -96,21 +103,22 @@ whole startup; "partial from `pqReady`" means no retrofit at all; the trigger
 is derived from key material rather than stored; and the new enrollment reuses
 the old one's `appName`, `deviceName` and grants verbatim.
 
-✅ **The monitor's move is built, and it needed something ruling 2 did not
-know.** `Monitor.enrollmentId`, `Monitor.atChops` and `Monitor.signingAlgoType`
-are all `final`, so "rebuild rather than mutate" means the monitor object is
-*replaced* — and `currentListenerStateStream` handed out that object's own
-controller, so every subscriber alive at the swap would have been left on a
-stream nothing writes to again. noports' `sshnpd` holds exactly such a
-subscription for the life of the daemon. `NotificationServiceImpl` now owns a
-relay that forwards from whichever monitor is current, and `repointMonitor()`
-re-points it as it swaps, closing the old connection explicitly.
+⛔ **The monitor's move was built and then REVERTED** (gkc 2026-08-19), and the
+reason is worth keeping. `Monitor.enrollmentId`, `Monitor.atChops` and
+`Monitor.signingAlgoType` are all `final`, so "rebuild rather than mutate"
+means the monitor object is *replaced* — and `currentListenerStateStream` hands
+out that object's own controller, so every subscriber alive at the swap is left
+on a stream nothing writes to again. noports' `sshnpd` holds exactly such a
+subscription for the life of the daemon. A relay in `NotificationServiceImpl`
+fixes it, and **a live re-point cannot be built without one**. Sequencing
+removed every monitor replacement from the tree, so the relay guarded something
+that can no longer happen and came out with `repointMonitor()`.
 
-⚠️ **The audit this implies has NOT been done: replacing an object replaces
-every stream it owns**, and a long-lived subscriber to one of those is
-invisible at the replacement site. The re-point replaces `_atChops` and
-`_remoteSecondary` too. Neither is known to expose a stream — that is an
-absence nobody has checked, not a finding.
+✅ **The stream audit was done, 2026-08-19, and is clean.** No
+`StreamController` exists in `RemoteSecondary`, `AtLookupImpl`,
+`OutboundMessageListener` or anywhere in at_chops, so the monitor was the only
+object whose replacement orphaned a subscriber. What the audit *did* turn up is
+below.
 
 ⚠️ **Two of the three blockers first recorded here were wrong**, and both for
 the same reason — read off `AtClientPreference` and a function signature rather

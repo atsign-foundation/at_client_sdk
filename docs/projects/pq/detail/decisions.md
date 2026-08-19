@@ -10964,13 +10964,16 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
      to again: receiving nothing, told nothing, no error anywhere. **The holder
      outside this tree is noports** — `sshnpd_impl.dart` subscribes once at
      daemon startup and holds it for the process's life, and would simply have
-     stopped reporting listener state after a retrofit. So rebuilding the
-     monitor is safe only because `NotificationServiceImpl` now owns a relay
-     that forwards from whichever monitor is current, which
-     `repointMonitor()` re-points as it swaps. The general shape is the durable
-     part: **replacing an object replaces the streams it owns**, and a
-     long-lived subscriber to one of those is invisible at the replacement
-     site.
+     stopped reporting listener state after a retrofit. Rebuilding the monitor
+     is therefore safe **only** behind a relay owned by
+     `NotificationServiceImpl`, forwarding from whichever monitor is current.
+     That relay was built and then **reverted the same day**: sequencing (see
+     the notice above) means nothing in the tree replaces a monitor at all, so
+     it guarded a hazard that can no longer occur, and a mechanism with no
+     mover comes out. **Anyone building the live re-point must build it
+     first.** The general shape is the durable part: **replacing an object
+     replaces the streams it owns**, and a long-lived subscriber to one of
+     those is invisible at the replacement site.
    - **A partial re-point is retried in-run**, with bounded exponential
      backoff, the client serving on the old enrollment throughout. On giving
      up: `warning`, naming both enrollment ids. Nothing is lost — the next

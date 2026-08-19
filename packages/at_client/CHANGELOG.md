@@ -17,17 +17,6 @@
 - feat: `retrofitIdentity()` — the identity half of `selfRetrofit()`, which
   submits the enrollment and authenticates under the new id without building a
   client.
-- fix: a subscriber to `NotificationService.currentListenerStateStream` no
-  longer depends on the `Monitor` object that was current when it subscribed.
-  `NotificationServiceImpl` relays listener state from whichever monitor is
-  current, so replacing the monitor no longer leaves the subscriber on a
-  controller nothing writes to again — receiving nothing, and told nothing.
-- feat: `NotificationServiceImpl.repointMonitor()` moves the notification
-  connection onto the client's current enrollment id, by replacing the monitor
-  with one built from it. A monitor cannot be moved between enrollments: its
-  id, its AtChops and its signing algorithm are all final. The old connection
-  is closed explicitly rather than left to the atServer's grace period, and the
-  call is a no-op once the monitor already holds the id.
 - feat: the monitor connection records the identity it authenticated as.
   `Monitor._authenticateConnection` sets `authenticatedAsEnrollmentId` and
   `authenticatedAt` on its connection's metadata, as `AtLookupImpl` now does
