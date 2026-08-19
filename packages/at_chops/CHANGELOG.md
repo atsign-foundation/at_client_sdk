@@ -16,6 +16,11 @@
   - Message only. A correctly sized key signs exactly as before, which the
     third case of `pkam_mldsa65_wrong_key_message_test.dart` pins, and the
     RSA hint is conditional so a 7-byte key is not told it might be RSA.
+- chore: move `dart_periphery` from `dependencies` to `dev_dependencies`. It is
+  imported only by `example/zariot/`, and as a direct dependency it put an
+  FFI-based package on the resolved graph of every at_chops consumer. No
+  library code, public API, or behaviour changes.
+
 
 ## 3.6.0
 
