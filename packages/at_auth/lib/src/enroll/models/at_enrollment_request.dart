@@ -330,11 +330,16 @@ class FirstEnrollmentRequest extends EnrollmentRequest {
   ///
   /// For a first enrollment the handed keys carry the freshly minted APKAM
   /// keypair — the enrollment record does not exist yet, so this is the only
-  /// moment anything can be put on it (`metadata.keyPackage` is written by the
-  /// request that creates the record and never afterwards). A PQ-native
+  /// moment anything can ride the request that *creates* it. A PQ-native
   /// onboard passes `enrollmentKeyPackageBuilder(atSign,
   /// signingAlgo: SigningAlgoType.mldsa65,
-  /// keyEstablishmentAlgo: preference.keyEstablishmentAlgo)`.
+  /// keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first)`.
+  ///
+  /// ⚠️ **This used to add that `metadata.keyPackage` is "written by the
+  /// request that creates the record and never afterwards".** Not since
+  /// 2026-08-19: at_client's `KeyPackageMinting` amends it by the enrollment's
+  /// own self-only `enroll:update`, so the record's metadata is no longer
+  /// write-once.
   ///
   /// Requires [atKeys], because a builder both reads the APKAM keypair it
   /// signs with and **writes back** the material it minted.

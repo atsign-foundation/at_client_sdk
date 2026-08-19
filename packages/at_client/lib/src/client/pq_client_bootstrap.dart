@@ -18,6 +18,8 @@ import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart'
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
+import 'package:at_client/src/secret_sharing/key_package_minting.dart'
+    show KeyPackageMinting;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -43,6 +45,7 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 class PqStartupGates {
   const PqStartupGates({
     this.mintInUseSigningKeys = true,
+    this.reconcileKeyPackage = true,
     this.requestRootPrivate = true,
     this.requestMissingPrivates = true,
     this.publishRootLink = true,
@@ -58,6 +61,14 @@ class PqStartupGates {
   /// Inert while that set is empty, which is the 3.x default, so this gate
   /// governs the 4.0 posture and an app that opts in early.
   final bool mintInUseSigningKeys;
+
+  /// Active: brings this enrollment's advertised key package into line with
+  /// `AtClientPreference.keyEstablishmentAlgorithms` — minting, filing and
+  /// advertising an encapsulation keypair for every algorithm the list names
+  /// and the enrollment does not hold, and retiring every one it holds that
+  /// the list no longer names. Inert unless that list has changed since the
+  /// enrollment was created, which is every start after the first.
+  final bool reconcileKeyPackage;
 
   /// Active: broadcasts an ask for the signing-root private.
   final bool requestRootPrivate;
@@ -190,6 +201,7 @@ class PqClientBootstrap {
     root = PqSigningRoot(_atClient, keysIo: keysIo);
     chain = PqSigningChain(_atClient);
     minting = SigningKeyMinting(_atClient);
+    keyPackageMinting = KeyPackageMinting(_atClient);
   }
 
   final AtClient _atClient;
@@ -223,6 +235,10 @@ class PqClientBootstrap {
   /// Gives this enrollment its own signing keys, per the in-use set.
   late final SigningKeyMinting minting;
 
+  /// Keeps this enrollment's advertised key package in line with the
+  /// configured key-establishment algorithms.
+  late final KeyPackageMinting keyPackageMinting;
+
   String get _atSign => _atClient.getCurrentAtSign()!;
 
   final Completer<void> _startupComplete = Completer<void>();
@@ -254,30 +270,35 @@ class PqClientBootstrap {
     if (_started) return startupComplete;
     _started = true;
     try {
-      for (final step in [
-        _hydrateHeldSecrets,
-        _collectConveyedKeys,
-        _startEnvelopeListener,
-        _mintInUseSigningKeys,
-        _seedNamespaceKeys,
-        _requestRootPrivate,
-        _requestMissingPrivates,
-        _publishRootLink,
-        _publishChainLink,
-        _sweepUnanchoredEnrollments,
-        _reconcileEnrollmentSnapshot,
-      ]) {
+      for (final step in _steps) {
         if (_stopped) {
           _logger.info('PQ startup stopped for $_atSign; the remaining '
               'steps will not run (the next start retries them)');
           break;
         }
-        await step();
+        await step.run();
       }
     } finally {
       _startupComplete.complete();
     }
   }
+
+  /// The ordered startup steps, each with the name [stepNamesInOrder]
+  /// reports — one list, so a step cannot run in an order no test can see.
+  List<({String name, Future<void> Function() run})> get _steps => [
+        (name: 'hydrateHeldSecrets', run: _hydrateHeldSecrets),
+        (name: 'collectConveyedKeys', run: _collectConveyedKeys),
+        (name: 'startEnvelopeListener', run: _startEnvelopeListener),
+        (name: 'mintInUseSigningKeys', run: _mintInUseSigningKeys),
+        (name: 'reconcileKeyPackage', run: _reconcileKeyPackage),
+        (name: 'seedNamespaceKeys', run: _seedNamespaceKeys),
+        (name: 'requestRootPrivate', run: _requestRootPrivate),
+        (name: 'requestMissingPrivates', run: _requestMissingPrivates),
+        (name: 'publishRootLink', run: _publishRootLink),
+        (name: 'publishChainLink', run: _publishChainLink),
+        (name: 'sweepUnanchoredEnrollments', run: _sweepUnanchoredEnrollments),
+        (name: 'reconcileEnrollmentSnapshot', run: _reconcileEnrollmentSnapshot),
+      ];
 
   /// Primes the in-memory secret store with the key material this client
   /// holds durably, so it can **answer** other enrollments' pull requests.
@@ -385,6 +406,26 @@ class PqClientBootstrap {
       _logger.warning('Minting this enrollment\'s own signing keys failed for '
           '$_atSign; it keeps signing with the key it already advertises, and '
           'the next start retries: $e, $st');
+    }
+  }
+
+  /// Brings this enrollment's advertised key package into line with
+  /// `AtClientPreference.keyEstablishmentAlgorithms` — KE-2's writer.
+  ///
+  /// Runs **after** the signing keys and before anything that publishes,
+  /// because the key package is signed by whatever key `_apsk` advertises.
+  /// Running it first would sign the package with the key this start is about
+  /// to retire, so a peer verifying against the freshly published `_apsk`
+  /// would refuse a package that had just been written — and refusing a key
+  /// package means refusing to seal anything to this enrollment at all.
+  Future<void> _reconcileKeyPackage() async {
+    if (!_gates.reconcileKeyPackage) return;
+    try {
+      await keyPackageMinting.reconcileKeyPackage();
+    } catch (e, st) {
+      _logger.warning('Reconciling the advertised key package failed for '
+          '$_atSign; it goes on answering at the key it already advertises, '
+          'and the next start retries: $e, $st');
     }
   }
 
@@ -623,17 +664,14 @@ class PqClientBootstrap {
   }
 
   /// The step names in run order, for tests that pin the ordering contract.
+  ///
+  /// ⚠️ **Derived from [_steps], because a hand-maintained copy had already
+  /// drifted.** This was a `static const` list written out by hand beside the
+  /// real sequence, and the test pinning "the step order is the documented
+  /// one" compared it to a third list written out by hand in the test — so it
+  /// compared two transcriptions to each other and never read the sequence
+  /// that actually runs. It was missing `startEnvelopeListener` and stayed
+  /// green. Order now has one home: the list `startup()` iterates.
   @visibleForTesting
-  static const List<String> stepNamesInOrder = [
-    'hydrateHeldSecrets',
-    'collectConveyedKeys',
-    'mintInUseSigningKeys',
-    'seedNamespaceKeys',
-    'requestRootPrivate',
-    'requestMissingPrivates',
-    'publishRootLink',
-    'publishChainLink',
-    'sweepUnanchoredEnrollments',
-    'reconcileEnrollmentSnapshot',
-  ];
+  List<String> get stepNamesInOrder => [for (final step in _steps) step.name];
 }

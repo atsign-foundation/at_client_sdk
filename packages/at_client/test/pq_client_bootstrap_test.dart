@@ -335,14 +335,27 @@ void main() {
   });
 
   test('the step order is the documented one', () {
-    expect(PqClientBootstrap.stepNamesInOrder, const [
+    // ⚠️ **This pinned a hand-written copy until 2026-08-19, and the copy had
+    // drifted.** `stepNamesInOrder` was a `static const` transcription of the
+    // sequence written out beside it, so this test compared one transcription
+    // to another and never read the list `startup()` iterates. It was missing
+    // `startEnvelopeListener` and stayed green through that omission. The
+    // getter is now derived from the real list, so a step added without a row
+    // here goes red — which is the whole point of an ordering pin.
+    expect(build().stepNamesInOrder, const [
       'hydrateHeldSecrets',
       'collectConveyedKeys',
+      'startEnvelopeListener',
       // Before every step that signs — seeding, both link publications and
       // the sweep all produce signed envelopes, and a key minted after them
       // would leave that start's envelopes signed under a key the
       // advertisement of that moment did not name.
       'mintInUseSigningKeys',
+      // After the signing keys, because the key package is signed by whatever
+      // key `_apsk` advertises: signing it first would sign under the key this
+      // start is about to retire, and a peer verifying against the new `_apsk`
+      // would refuse a package written moments earlier.
+      'reconcileKeyPackage',
       'seedNamespaceKeys',
       'requestRootPrivate',
       'requestMissingPrivates',

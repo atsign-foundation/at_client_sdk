@@ -1,4 +1,32 @@
 ## 3.14.1
+- feat: `KeyPackageMinting` — KE-2's writer. An enrollment now amends its own
+  advertised key package to match
+  `AtClientPreference.keyEstablishmentAlgorithms`: minting an encapsulation
+  keypair for every algorithm the list names and it does not hold, retiring
+  every one it holds that the list no longer names, re-signing the package with
+  all of them and republishing by `enroll:update`. It runs as a startup step,
+  after the signing keys and before anything that publishes.
+  - **This is what the multi-key receiver was waiting for.** That half shipped
+    2026-08-13 — every held material returned, every address watched, the
+    secret selected by `envelope.kid` — but nothing could mint a second key, so
+    a package could never gain one and the plural machinery answered at exactly
+    one address.
+  - A retired key stays **advertised as retired** rather than dropped: the
+    publish rewrites the record whole, so an omitted entry is a withdrawal, and
+    withdrawing one strands every envelope still in flight to that address. Its
+    private half is retained too, so what was already sealed to it still opens.
+  - ⚠️ **It files before it publishes — the opposite order to
+    `SigningKeyMinting`.** An encapsulation key advertised before its private
+    half is filed makes every sender reading the advertisement in that window
+    seal to a key nobody holds, and those writes are durable: no later repair
+    opens them. A signing key inverts both arms, which is why the two disagree.
+  - Inert unless the configured list has changed since the enrollment was
+    created, which is every start after the first.
+- fix: `PqClientBootstrap.stepNamesInOrder` is derived from the list `startup()`
+  iterates instead of being a hand-written copy beside it. The copy had drifted
+  — it omitted `startEnvelopeListener` — and the test pinning "the step order is
+  the documented one" compared it to a third hand-written list in the test, so
+  it read two transcriptions of the order and never the order itself.
 - **BREAKING** feat: `AtClientPreference.keyEstablishmentAlgorithms` replaces
   the singular `keyEstablishmentAlgo` — the receiver-side list ruling 113
   asked for, and a new `PqPosture` axis. It defaults to `[x-wing]`, so an

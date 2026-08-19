@@ -252,9 +252,13 @@ class KeyPackage {
   /// [suites] defaults to what [keys] can actually open. An overstated claim
   /// here is correctable, but only by the enrollment itself: `enroll:update`
   /// reaches `metadata` and is self-only, so nobody else can repair a package
-  /// that advertises a construction its holder cannot open. No client sends
-  /// that operation yet, so in practice the value written at `enroll:request`
-  /// is the one peers seal to.
+  /// that advertises a construction its holder cannot open.
+  ///
+  /// ⚠️ **This used to add "no client sends that operation yet, so in practice
+  /// the value written at `enroll:request` is the one peers seal to".** One
+  /// does as of 2026-08-19: `KeyPackageMinting` republishes the package at
+  /// startup whenever the configured key-establishment list has changed, so
+  /// the value peers seal to is the latest published one, not the original.
   static Map<String, Object?> payloadFor({
     required DateTime createdAt,
     required List<PackageKey> keys,

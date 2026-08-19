@@ -88,10 +88,12 @@ final _logger = AtSignLogger('selfRetrofit');
 /// privileged retrofit decide whether the atSign ever gets a root at all.
 /// "No ML-DSA anywhere" is true only of the enrollment's own keys.
 ///
-/// The new enrollment's KEM comes from
-/// [AtClientPreference.keyEstablishmentAlgo] and is **decided at this call**:
-/// the key package rides the `enroll:request`, and changing it afterwards
-/// needs an `enroll:update` the new enrollment must send for itself.
+/// The new enrollment's initial KEM is the first of
+/// [AtClientPreference.keyEstablishmentAlgorithms] — its key package rides the
+/// `enroll:request`, which carries one key. Any further algorithm the list
+/// names is minted, filed and advertised by `KeyPackageMinting` at the
+/// retrofitted client's first startup, through the `enroll:update` the new
+/// enrollment sends for itself.
 @experimental
 Future<AtClientManager> selfRetrofit({
   required AtAuthSession session,

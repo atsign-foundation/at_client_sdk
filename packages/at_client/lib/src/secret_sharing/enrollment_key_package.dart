@@ -21,10 +21,17 @@ import 'package:meta/meta.dart' show experimental;
 /// its private half in the [AtKeys] the enrollment will persist.
 ///
 /// Pass the result to `AtEnrollmentRequest.metadataBuilder`. It runs once, at
-/// the only moment this is possible: the APKAM keypair exists (at_auth has
-/// just generated it) and the enrollment record does not exist yet, so this
-/// is the sole opportunity to put anything on it — the metadata is written by
-/// the request that creates the record and never afterwards.
+/// the only moment anything can ride the *creating* request: the APKAM keypair
+/// exists (at_auth has just generated it) and the enrollment record does not
+/// yet.
+///
+/// ⚠️ **This used to end "and never afterwards", which stopped being true when
+/// KE-2's writer landed (2026-08-19).** The record's metadata is no longer
+/// write-once: `KeyPackageMinting` amends `metadata.keyPackage` by the
+/// enrollment's own self-only `enroll:update`, so a package can gain a key and
+/// retire one. What this function still uniquely decides is the package the
+/// enrollment is *created* with — and so the key it advertises for the window
+/// before its first startup.
 ///
 /// Two properties this relies on, both verified rather than assumed:
 ///
@@ -46,14 +53,21 @@ import 'package:meta/meta.dart' show experimental;
 /// the raw keys.
 ///
 /// [keyEstablishmentAlgo] is the KEM the enrollment's encapsulation key is
-/// minted under — pass `AtClientPreference.keyEstablishmentAlgo`. It is an
-/// explicit parameter rather than something read from a preference because
-/// this function has no client and cannot have one: it runs before the
-/// enrollment exists. **Treat it as decided at this call.** The key package
-/// rides `enroll:request`, and the only later route into `metadata.keyPackage`
-/// is the enrollment's own self-only `enroll:update`, which no client sends
-/// yet — so in practice this decides the enrollment's KEM, and changing the
-/// preference later takes effect on a new enrollment.
+/// minted under — pass the **first** of
+/// `AtClientPreference.keyEstablishmentAlgorithms`, the primary. Singular
+/// here because an enrollment is created holding one key; the rest of the
+/// configured list is minted at the client's first startup. It is an explicit
+/// parameter rather than something read from a preference because this
+/// function has no client and cannot have one: it runs before the enrollment
+/// exists.
+///
+/// ⚠️ **This used to say "treat it as decided at this call", because the only
+/// later route into `metadata.keyPackage` was an `enroll:update` no client
+/// sent. One does as of 2026-08-19.** `KeyPackageMinting` reconciles the
+/// package against the configured list at every startup, so what this decides
+/// is the enrollment's *initial* key — the one it advertises until its first
+/// start, and the one a deployment running the default single-entry list keeps
+/// for good.
 ///
 @experimental
 Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
