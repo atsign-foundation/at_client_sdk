@@ -6,7 +6,6 @@ library;
 
 import 'package:test/test.dart';
 
-import 'blockers.dart';
 import 'proven_elsewhere.dart';
 
 void main() {
@@ -158,8 +157,33 @@ void main() {
       // than retired"; rulings 95.6-9 say it is retained AND marked retired,
       // so senders stop addressing it while the holder goes on opening what
       // already named it.
-      fail('not implemented');
-    }, skip: ke2);
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.5 · an enrollment amends its own key package',
+        proves: 'a client configured for both KEMs amends its own record at '
+            'startup: enroll:listns returns two keys where the creating '
+            'request carried one, the package still verifies against the '
+            '_apsk the atServer is serving, the original kpid keeps its '
+            'address and stays active, and the suites list widens to cover '
+            'both. A DIFFERENTIAL — the control arm is a client whose list '
+            'matches what it was created with, which must leave the record '
+            'alone, and it is what shows both arms started from one key.',
+      );
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.5 · setting keyPackage leaves a sibling metadata key alone',
+        proves: "the second Then — the atServer merges metadata per named "
+            'key, so a write naming only keyPackage does not withdraw a '
+            'sibling field a later build added. Driven by two enroll:updates '
+            'rather than through the client, because the client sends one '
+            'named key either way and could not tell a merge from a replace.',
+      );
+
+      // ⛔ NOT proven, and deliberately not claimed: the pre-existing envelope
+      // at a SUPERSEDED kpid still opening, and a peer negotiating to its own
+      // preferred key. Both need a secret sealed before the amendment and read
+      // after it. Recorded as plan 14.19 item 36.
+    });
 
     test('UC-A2.6 · only the enrollment itself may amend its metadata', () {
       // GIVEN alice1 (E1, fully privileged) and alice4 (E4, scoped) enrolled.
@@ -174,7 +198,22 @@ void main() {
       //       re-advertise an encapsulation target. The accepted arm — E4
       //       updating E4 — runs in the same session, or the two refusals
       //       prove only that the verb refuses everything.
-      fail('not implemented');
-    }, skip: ke2);
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.6 · only the enrollment itself may amend its metadata',
+        proves: 'both refusals against a live atServer, with the accepted arm '
+            'in the same session so they are about WHO asked rather than the '
+            'request being malformed. The owner arm is the one that matters: '
+            'it carries full permissions everywhere else, and isAuthorized '
+            'short-circuits a connection with no enrollment id to true, so it '
+            'goes green for the wrong reason if the self-only check is an '
+            'authorization lookup rather than an identity test. No mock can '
+            'stand in — a fake that accepts everything makes the interlock '
+            'and its absence identical.',
+      );
+
+      // ⛔ NOT proven, and deliberately not claimed: the state gate — the same
+      // request against a REVOKED E4. Recorded as plan 14.19 item 36.
+    });
   });
 }

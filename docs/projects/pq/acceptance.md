@@ -49,7 +49,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**66 PROVEN · 2 BLOCKED · 1 WITHDRAWN** across 69 use cases and 79 scenarios —
+**68 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 69 use cases and 79 scenarios —
 several rows carry more than one.
 
 ⚠️ **This sentence said `50 · 2 · 1` across 53 until 2026-08-18**, when a cold
@@ -84,8 +84,8 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-A2.2  | Second host using the *same* keyfile (copied keyfile, E1)                           | PROVEN    | `a2_enrollment_test.dart`    |
 | UC-A2.3  | Namespace-restricted enrollment                                                     | PROVEN    | `a2_enrollment_test.dart`    |
 | UC-A2.4  | The key package advertises the KEM the deployment configured                        | PROVEN    | `a2_enrollment_test.dart`    |
-| UC-A2.5  | An enrollment amends its own key package (`enroll:update`)                          | BLOCKED   | `ke2`                        |
-| UC-A2.6  | Only the enrollment itself may amend its metadata                                   | BLOCKED   | `ke2`                        |
+| UC-A2.5  | An enrollment amends its own key package (`enroll:update`)                          | PROVEN    | `key_package_amendment_live_test.dart` |
+| UC-A2.6  | Only the enrollment itself may amend its metadata                                   | PROVEN    | `key_package_amendment_live_test.dart` |
 | UC-A3.1  | Self write/read, namespace key already exists                                       | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.2  | A client mints and publishes the nskey for each namespace it is authorised for      | PROVEN    | `a3_self_data_test.dart`     |
 | UC-A3.3  | Self write with no namespace key has no PQ fallback                                 | PROVEN    | `a3_self_data_test.dart`     |

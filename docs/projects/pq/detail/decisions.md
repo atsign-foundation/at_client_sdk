@@ -1944,7 +1944,7 @@ functional suite authenticates over the legacy path with an **`ecc_secp256r1`** 
 pinning legacy to `rsa2048`, which is what I first recommended, would have broken working
 behaviour rather than tightened anything.
 
-**Parity is owed from the other atServer implementations before a PQ client can rely on
+**Parity is owed from every atServer implementation before a PQ client can rely on
 this.** At least one rejects `signingAlgo:mldsa65` while *parsing* the command, so a PQ
 client meets an invalid-syntax error rather than an authentication failure — a confusing
 failure mode for the thing hardest to debug. That implementation already stores `signingAlgo`
@@ -8008,8 +8008,8 @@ locally. **The spike never merges**; it is broken into stacked PRs afterwards.
    run against.
 5. The atServer PR goes for publication in parallel.
 
-The Dart atServer carries the verb now; every other atServer implementation is
-a tracked parity follow-up with its own issue, so it cannot silently diverge.
+The verb is carried now; parity across atServer implementations is
+a tracked follow-up with its own issue, so it cannot silently diverge.
 
 ## 92. The spike takes trunk, and two published version numbers move underneath it (2026-08-11)
 

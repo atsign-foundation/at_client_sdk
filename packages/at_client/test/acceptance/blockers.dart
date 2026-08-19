@@ -29,51 +29,20 @@
 /// `blocked:` and `owed:` are different states. A project that has landed leaves
 /// its rows *owed a test*, not blocked — conflating them made this burn-down
 /// misleading in both directions at once (decisions.md 35).
+/// ⚠️ **This file declares NOTHING today, and that is the correct state.** The
+/// burn-down reached zero a second time on 2026-08-19, when KE-2's writer
+/// landed and UC-A2.5/UC-A2.6 were cited to
+/// `tests/at_functional_test/test/key_package_amendment_live_test.dart`.
+///
+/// It reached zero once before, on 2026-08-08, and the file was **deleted**
+/// then — after which KE-2 blocked two rows and the file had to come back.
+/// Kept this time, because the documentation above is what was actually
+/// expensive, and because the burn-down demonstrably returns above zero. The
+/// layer constants went with the blockers that used them: a layer label with
+/// no blocker to attach it to is a spelling nobody can check.
+///
+/// To block a row again: add a `const` here naming the project and the layer,
+/// and `skip:` the scenario against it. `catalogue_test.dart` enforces both
+/// directions — a `skip:` with nothing declaring it, and a constant guarding
+/// nothing, are each a failure.
 library;
-
-// ---------------------------------------------------------------------------
-// Layers (acceptance.md section 14)
-// ---------------------------------------------------------------------------
-
-const _functional = 'layer: tests/at_functional_test';
-
-// ---------------------------------------------------------------------------
-// Blocked on a project
-// ---------------------------------------------------------------------------
-
-/// UC-A2.5 / UC-A2.6 — the `enroll:update` writer (decisions.md 68).
-///
-/// ⚠️ **Corrected 2026-08-18. This constant used to say the verb did not exist
-/// and neither half was built, and both claims were false** — which is the
-/// failure the second lesson above describes, arriving at the constant that
-/// carries the warning.
-///
-/// What is built: the verb is merged to at_server `trunk` as **`enroll:update`**
-/// — self-only, refusing `namespaces` so an enrollment cannot widen its own
-/// grant, and merging `metadata` by named key rather than replacing the map.
-/// The client receiver already answers at every kpid it holds
-/// (`keyPackageMaterials`, `EnvelopeAddressing.regexForAny` on both the sweep
-/// and subscribe paths, and `encKeyFor(envelope.kid)` selecting the secret).
-///
-/// ⚠️ **Corrected again 2026-08-19: the client WRITER now exists too.** This
-/// constant said these rows waited on it, and that was true until
-/// `KeyPackageMinting` landed — a startup step that mints an encapsulation
-/// keypair for every algorithm `AtClientPreference.keyEstablishmentAlgorithms`
-/// names and the enrollment lacks, retires what left the list, re-signs the
-/// package with all of them and sends `enroll:update`. A package can gain a key.
-///
-/// What these two rows wait on now is only the **layer**. Both need a live
-/// atServer: UC-A2.5 to observe an amended package coming back from
-/// `enroll:listns`, and UC-A2.6 to observe the atServer *refusing* a foreign
-/// and an owner connection — a refusal no mock can stand in for, because a
-/// fake that accepts everything makes the interlock's presence and its absence
-/// indistinguishable. The mechanism is unit-tested in
-/// `key_package_minting_test.dart`, including by mutation; what is unproven
-/// here is the wire.
-///
-/// The layer is the functional pack rather than e2e for the reason UC-B4.2
-/// established: it runs against the virtualenv container in CI as well as
-/// locally, drives more than one enrollment of one atSign in a single file, and
-/// can activate an atSign from CRAM — none of which the e2e pack can do.
-const ke2 = 'blocked: KE-2 (the writer is built; these need the live wire) '
-    '· $_functional';

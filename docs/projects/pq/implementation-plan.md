@@ -34,7 +34,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
-| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **16** open small items of 35 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
@@ -818,8 +818,8 @@ invisible to anyone working the TODO table.
   divergent version to reconcile. ⚠️ **Re-derive against all three, not just
   the first** — this named only `at_server` until 2026-08-18, which answers a
   question about one repo:
-  `git -C ~/dev/atsign/repos/<repo> grep -c "__ssenv"` for `at_server`,
-  `java_at_server` and `at_java`. Zero in each as of 2026-08-18, each run
+  `git -C ~/dev/atsign/repos/<repo> grep -c "__ssenv"` across every atServer
+  implementation's repo. Zero in each as of 2026-08-18, each run
   beside a control that matched, since an unvalidated grep and a true absence
   print the same nothing.
 - **B-1 — none left of the two.** ✅ Both closed since, and re-verified
@@ -1028,7 +1028,7 @@ ladder — a same-value version bump merges silently.)
 
 ### 14.19 Small items, raised 2026-08-12 and not yet acted on
 
-**16 open, 19 struck** (35 items) — ⚠️ **re-derive all three, never read them
+**17 open, 19 struck** (36 items) — ⚠️ **re-derive all three, never read them
 here.** This header said `11 open, 12 struck` until 2026-08-18, `15 open, 16
 struck` until 2026-08-19 and `17 open, 17 struck` until items 32 and 33 were
 done, and the TODO row three paragraphs up said 9 the whole time: the count
@@ -1434,7 +1434,7 @@ This entry is the owed half; the rulings are the contract.
    shared scenario, because 3.14.0's `wrapAndSign` returns a `Map` where this
    tree's returns a `SignedEnvelope` and 3.14.0 ships no `lib/src/signing/` —
    a shared file would not compile on the published arm.
-6. ~~**`enroll:update` parity for every other atServer implementation.**~~
+6. ~~**`enroll:update` parity across atServer implementations.**~~
    ⛔ **OUT OF SCOPE — gkc, 2026-08-18.** Do not re-raise it, and do not file a
    tracking issue for it. Recorded here rather than deleted because it was
    raised three times in one session, each time from re-reading this row as
@@ -1613,7 +1613,7 @@ the reason is the point of the row.
 | 14.13 | A passive-by-default flag                            | FOLDED AWAY 2026-08-11 into the rollout axis (14.18 step 19). Kept for its survey |
 | 14.21 | The signing root cannot be rotated                   | RULED the same day by decisions 101. Kept so 14.22 is legible against it |
 | 14.23 | Per-generation nskey records                         | ⛔ REJECTED — do NOT build. 14.24 shipped instead; the body is kept so it is not re-derived |
-| KE-2  | The `enroll:update` **writer**                       | **Writer built 2026-08-19, project still open.** `KeyPackageMinting` is a startup step reconciling the advertised key package against `AtClientPreference.keyEstablishmentAlgorithms` (which replaced the singular `keyEstablishmentAlgo` in the same pass); it mints, files, retires and republishes, unit-tested and isolated by mutation. Verb merged to at_server `trunk`; the client receiver answers at every held kpid. ⚠️ This cell said "nothing mints a second KEM key and re-advertises, so a package cannot gain one" — false since that landed. **Owed: the two acceptance rows**, which need the live wire rather than the mechanism — the refusal arms of the self-only check cannot be mocked, since a fake that accepts everything makes the interlock's presence and absence identical. Issue #2133 |
+| KE-2  | The `enroll:update` **writer**                       | **Writer built and live-proven 2026-08-19.** `KeyPackageMinting` is a startup step reconciling the advertised key package against `AtClientPreference.keyEstablishmentAlgorithms` (which replaced the singular `keyEstablishmentAlgo` in the same pass); it mints, files, retires and republishes, unit-tested and isolated by mutation. Verb merged to at_server `trunk`; the client receiver answers at every held kpid. ⚠️ This cell said "nothing mints a second KEM key and re-advertises, so a package cannot gain one" — false since that landed. UC-A2.5 and UC-A2.6 are `PROVEN`, cited to `tests/at_functional_test/test/key_package_amendment_live_test.dart` — the acceptance burn-down is back to **0 skipped**, and the `ke2` blocker constant is deleted. ⚠️ **Three clauses of those rows are NOT proven and deliberately not claimed** (a superseded kpid's envelope still opening, peer negotiation, and the revoked-enrollment gate) — plan 14.19 item 36. Issue #2133 |
 | B-3   | Stop **conveying** the legacy `selfEncryptionKey`    | Narrower than it reads: the key's *use* is retired by the release cadence (R-2 flips `disallowLegacyEncryption`), so this is only relaxing `enroll:approve` to accept an approval that omits `encryptedDefaultSelfEncryptionKey` — every atServer implementation, one sweep — then ceasing to mint and convey it. Ecosystem-gated by decisions 37. Issue #2128 |
 | KF-1  | `.atKeys`-at-rest protection + backup/restore        | Off the GA critical path. Issue #2129 |
 | S-5   | at_auth 4.0.0 WASM barrel split                      | Off the GA critical path |

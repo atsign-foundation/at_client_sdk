@@ -22,6 +22,11 @@
     opens them. A signing key inverts both arms, which is why the two disagree.
   - Inert unless the configured list has changed since the enrollment was
     created, which is every start after the first.
+  - **Live-proven against a real atServer.** UC-A2.5 and UC-A2.6 were the last
+    two skipped rows in the PQ acceptance catalogue; both are now `PROVEN` and
+    the burn-down is back to zero skipped. The self-only refusal in particular
+    could not be proven anywhere else — a mocked lookup that accepts everything
+    makes the interlock's presence and its absence identical.
   - ⚠️ **It reads the enrollment's held keys by the tagged-then-untagged rule
     `keyPackageMaterials` already encodes, and that is not optional.**
     `enrollmentKeyPackageBuilder` files an enrollment's first key package with

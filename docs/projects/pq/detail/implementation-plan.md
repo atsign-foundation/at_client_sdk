@@ -1443,7 +1443,7 @@ ruling 13. The verb is **`enroll:update`**, not `enroll:updateMetadata`, and it 
 `namespaces` and the approval state stay permanently out of reach, because a self-only
 operation must not be able to widen its own grant. And it **does** take new `EnrollParams`
 fields: `apsk` and `apkamPublicKeySignature`, both shipped in at_commons 5.14.0.
-Parity for every other atServer implementation is a tracked follow-up so it cannot silently diverge.
+Parity across atServer implementations is a tracked follow-up so it cannot silently diverge.
 **Deliverables — client half (the larger one): ✅ DONE 2026-08-13** as
 [14.18](#1418-the-remaining-d1-initial-development-sequence) step 5. The receiver holds a **set** of KEM
 keypairs and answers at every held kpid: `PersistedApkamKeys` is a list of `PersistedEncKey`,
@@ -1498,8 +1498,43 @@ landed. What exists now:
   nskey, a fresh package key — takes it, so a reorder changes what the atSign
   mints next and `rolloutDifferencesFrom` compares the list order-sensitively.
 
-**Still owed:** the two acceptance rows, which need the live wire rather than
-the mechanism — see the blocker note below.
+⛔ **The "one residual" [#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133)
+records — `enrollment_symmetric_key.dart:148` still filtering on the singular
+`regexFor(kpid)` — is EXAMINED AND CORRECT, 2026-08-19. Do not "fix" it.**
+That scan runs inside `enrollmentApkamSymmetricKeyResolver`, during enrollment
+bootstrap, and its `kpid` comes from `_keyPackageHalves` — one key, chosen
+before any client exists. At that moment the enrollment being created holds
+exactly one package key by construction: `enrollmentKeyPackageBuilder` has just
+minted it, and `KeyPackageMinting` cannot have run, because it is a startup
+step on an already-approved client. The approver seals to what the enrollment
+advertised, which is that key. Widening the scan to `regexForAny` would make it
+watch addresses this enrollment never advertised, for a key nobody sealed to.
+
+✅ **The two acceptance rows are PROVEN, 2026-08-19**, cited to
+`tests/at_functional_test/test/key_package_amendment_live_test.dart`: UC-A2.5
+as a differential (a client configured for one KEM leaves its record alone; a
+client configured for two amends it at startup, and the control arm is what
+shows both began with one key), UC-A2.5's per-key metadata merge, and UC-A2.6's
+two refusals with the accepted arm in the same session. The acceptance
+burn-down is back to **0 skipped**, and the `ke2` blocker constant is deleted —
+`catalogue_test.dart` forced that in the same commit, because a blocker
+guarding nothing tells whoever greps it the project owes no scenarios.
+
+⚠️ **Three clauses those rows assert are NOT proven, and are recorded rather
+than quietly claimed** — plan **14.19 item 36**: a superseded kpid's envelope
+still opening, a peer negotiating to its preferred key, and UC-A2.6's
+revoked-enrollment gate.
+
+⚠️ **A real defect was found only by reasoning about the live path**, after the
+unit suite was green: `KeyPackageMinting` read tagged key material only, and
+`enrollmentKeyPackageBuilder` files an enrollment's first package **untagged**
+— it runs before the atServer assigns an id. So the writer saw every fresh
+enrollment as holding nothing and minted a duplicate key on first startup. The
+unit fixture had tagged the material; production does not. Two nskey live rows
+failed against the broken version and pass against the fix, in the same
+environment — which is what settles the attribution.
+
+**Still owed:** parity across atServer implementations, tracked separately.
 
 **Acceptance → [acceptance.md](../acceptance.md):** UC-A2.5 (a package gains a second KEM key; a peer negotiates
 to it; envelopes at the old kpid still open) and UC-A2.6 (a foreign enrollment, and an owner connection, are
@@ -2884,7 +2919,7 @@ than it looks** (both re-verified against the source 2026-08-11):
 5. **The rollout harness.** Two stage-parameterised executables plus the 3×3
    matrix in [`acceptance.md` 16.5](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix),
    with the failing cell asserted by its specific error.
-6. **`enroll:update` parity for every other atServer implementation** — needs
+6. **`enroll:update` parity across atServer implementations** — needs
    its own tracking issue so it cannot silently diverge.
 
 **Unverified, and not to be reported as verified.** Two at_client_sdk
@@ -3963,6 +3998,27 @@ its own. None blocks anything.
     about a **published package's** API needs a search whose scope is wider
     than the repo that publishes it.
 
+36. **Three clauses of UC-A2.5/UC-A2.6 are asserted by the catalogue and NOT
+    proven by the live rows that cite them.** Recorded 2026-08-19 when both
+    rows went `PROVEN`, because the alternative — marking them proven and
+    saying nothing — is the overclaim the catalogue exists to prevent. The
+    scenarios in `packages/at_client/test/acceptance/a2_enrollment_test.dart`
+    carry a `⛔ NOT proven` note naming this item, so a reader meets it where
+    the claim is made rather than here.
+    1. **A superseded kpid's envelope still opens.** The live row proves the
+       *gaining* case, where the original key stays active. The swap case —
+       retire X-Wing, mint ML-KEM — is unit-proven (the private half is
+       retained, status `retired`) but no live row seals a secret to the old
+       address before the amendment and opens it after.
+    2. **A peer negotiates to whichever key its own `sealsToKeyAlgorithms`
+       order prefers.** Needs a second atSign sealing to the amended package.
+    3. **UC-A2.6's state gate — the same request against a REVOKED
+       enrollment.** The two refusals proven live are the foreign-enrollment
+       and owner-connection arms.
+    Each needs a secret in flight or a revocation, which is why they were not
+    folded into the first pass. Re-derive:
+    `git grep -n "NOT proven" -- packages/at_client/test/acceptance/`.
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.
@@ -4713,7 +4769,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 16 unstruck of 35, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18 against an actual 10, then **10** until 2026-08-19 against an actual 18 — the same number, wrong in both directions a day apart; re-derive it with the command below rather than reading any of them.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 17 unstruck of 36, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18 against an actual 10, then **10** until 2026-08-19 against an actual 18 — the same number, wrong in both directions a day apart; re-derive it with the command below rather than reading any of them.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 

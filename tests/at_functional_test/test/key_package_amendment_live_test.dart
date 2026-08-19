@@ -242,4 +242,60 @@ void main() {
         lookupOf(mine));
     expect(ok.enrollmentId, mine.enrollmentId);
   });
+
+  test('UC-A2.5 · setting keyPackage leaves a sibling metadata key alone',
+      () async {
+    // The per-key merge, which is UC-A2.5's second "Then". Whole-map replace
+    // would be read-mutate-write against shared durable state: a client that
+    // has never heard of a field a later build added would clobber it, and
+    // nothing would report that it had.
+    //
+    // Driven by two enroll:updates rather than through KeyPackageMinting,
+    // because what this asserts is the atSERVER's merge — the client half
+    // sends one named key either way, so a client-side test could not tell a
+    // merge from a replace.
+    final client = await enrol('a25-merge', const [SecretSharingAlgos.xWing]);
+    await (client.client as AtClientImpl).pqBootstrap!.startupComplete;
+
+    // A field this build has no opinion about, standing in for one a later
+    // build adds.
+    await AtEnrollment.create().update(
+        EnrollmentUpdateRequest(
+            enrollmentId: client.enrollmentId,
+            metadata: {'somethingLaterBuildsAdded': 'keep me'}),
+        lookupOf(client));
+
+    // Then a keyPackage write that names only keyPackage.
+    final pub = base64Encode(List<int>.filled(1216, 11));
+    await AtEnrollment.create().update(
+        EnrollmentUpdateRequest(
+            enrollmentId: client.enrollmentId,
+            metadata: {
+              'keyPackage': KeyPackage.payloadFor(
+                createdAt: DateTime.now().toUtc(),
+                keys: [
+                  PackageKey(
+                      use: SecretSharingAlgos.useEnc,
+                      alg: SecretSharingAlgos.xWing,
+                      pub: pub)
+                ],
+              )
+            }),
+        lookupOf(client));
+
+    final raw = await lookupOf(client)
+        .executeCommand('enroll:listns:$namespace\n', auth: true);
+    final decoded =
+        jsonDecode(raw!.replaceFirst(RegExp(r'^data:'), '')) as List;
+    final mine = decoded.cast<Map<String, dynamic>>().firstWhere(
+        (e) => e['enrollmentId'] == client.enrollmentId);
+    final metadata = (mine['metadata'] as Map).cast<String, dynamic>();
+
+    expect(metadata['somethingLaterBuildsAdded'], 'keep me',
+        reason: 'a write naming keyPackage must not withdraw a sibling key it '
+            'says nothing about — the atServer merges metadata per named key');
+    expect(metadata['keyPackage'], isNotNull,
+        reason: 'and the key it DID name must have landed, or this row would '
+            'pass for a write that did nothing at all');
+  });
 }

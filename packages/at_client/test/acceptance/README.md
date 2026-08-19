@@ -158,14 +158,24 @@ the 45** rows as the catalogue stood then, and no data-path row could go green u
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**2 of the 79** rows are skipped, and the burn-down went back above zero on
-2026-08-10 rather than drifting there. `enroll:updateMetadata` was ruled
+**0 of the 79** rows are skipped. The burn-down went back above zero on
+2026-08-10 rather than drifting there — `enroll:update` was ruled
 ([`decisions.md` 68](../../../../docs/projects/pq/decisions.md)) and brought two
-new rows with it — UC-A2.5 and UC-A2.6 — so the catalogue grew by two use cases
-that nothing yet implements. That is the mechanism working: a ruling that adds
+new rows with it, UC-A2.5 and UC-A2.6, so the catalogue grew by two use cases
+that nothing yet implemented. That is the mechanism working: a ruling that adds
 scope adds rows, and the count says so on the same day rather than at review.
 `blockers.dart` and `catalogue_test.dart`'s declared-vs-used cross-check came
 back together with them, which is the contract the retired guard stated.
+
+**Both returned to zero on 2026-08-19**, when KE-2's writer landed and the two
+rows were cited to `tests/at_functional_test/test/key_package_amendment_live_test.dart`.
+`blockers.dart` is empty of project blockers again, and the declared-vs-used
+check is what forced it: the `ke2` constant had to be deleted in the same
+commit, because a blocker guarding nothing tells whoever greps it that the
+project owes no scenarios. ⚠️ **Two clauses of those rows are NOT proven and
+are deliberately not claimed** — a superseded kpid's envelope still opening, a
+peer negotiating to its preferred key, and UC-A2.6's revoked-enrollment gate.
+They are plan 14.19 item 36; the scenarios say so where a reader will meet it.
 
 Every other scenario is asserted here or cited to a live test that asserts it.
 
