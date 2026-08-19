@@ -1,57 +1,30 @@
 # One listener, two framings
 
-Status: design settled. **Steps 1 and 2 have landed** — the response budget in
-at_commons, `FakeAtServerSocket`, the `_stripPrompt` guard the harness found on
-its first use, the event-driven `read()`, and the `onNotification` seam.
-**Step 3 has landed too** — `AtAuthenticator`, `AtCommandExecutor`, and
-`AtLookupImpl` preferring an injected authenticator over the ladder.
-**Step 4's production migration is COMPLETE.** Measured with all four
-authentication entry points instrumented: **250 of 257 authentications go
-through the injected seam**, `_process` never falls through to the ladder, and
-the remaining **7** are test files constructing an `AtLookupImpl` directly
-(`nskey_rotation_live_test` 3, plus one each in `apsk_server_side_test`,
-`copied_keyfile_test`, `enrollment_namespace_gate_test`,
-`enrollment_pq_key_exchange_live_test`). No `lib/` site reaches the ladder.
-Those seven can only change when step 5 removes the fields.
+Status: design settled. **Steps 1-4 have landed.** The response budget in
+at_commons; `FakeAtServerSocket` and the `_stripPrompt` bug it found on first
+use; the event-driven `read()` and the second framing; `AtAuthenticator` and
+`AtCommandExecutor`; and authenticators supplied from at_auth for all three
+credential shapes a caller can hold.
 
-Superseded reading of this row: `authenticatorFor` exists and at_auth's three sites
-use it. Measured against a live atServer with both routes logging at `shout`:
-**57 authentications through the injected route, 201 still through the
-ladder**. ⚠️ An earlier measurement said "4 ladder" - it was read at `finer`,
-which the functional harness suppresses. ⚠️ **"Ladder = 0" is the wrong finish line**, though this row said so. About
-ten files in `tests/at_functional_test` construct an `AtLookupImpl` and set
-`atChops` on it directly - they are testing at_lookup and at_auth, so they
-legitimately use the ladder, and they can only change when step 5 deletes the
-fields. The count therefore has a floor that production migration cannot
-reach. Step 4 is finished when **no `lib/` site sets credentials on a lookup**;
-the residual count is then entirely test code, and step 5 clears it. ⚠️ **The at_client install does NOT belong in `AtClientImpl`'s `atChops`
-setter.** Putting it there was measured to change nothing: 57 injected / 201
-ladder before and after, while at_client's 1480 tests and the functional 177
-all passed either way. `remote_secondary.dart:72` sets `atLookUp.atChops` in
-the **constructor**, so the chops that matters never passes through that
-setter. The install has to happen where `RemoteSecondary` is built - which
-also needs an `AtKeysIo` threaded to it, since `RemoteSecondary` holds a
-preference and a lookup but no keystore. Reverted rather than shipped: a no-op
-that reads as a completed migration is worse than an absent one.
+**Step 4's production migration is complete, and measured rather than
+asserted.** With all four authentication entry points instrumented at `shout`,
+a functional pass counts **250 of 257 authentications through the injected
+seam**. `_process` never falls through to the ladder. The remaining **7** are
+test files constructing an `AtLookupImpl` directly, and can only change when
+step 5 removes the fields. Re-derive with the recipe in
+[section 7](#7-corrections).
 
-**Still to migrate** - and it is more than this row first listed. Beyond the
-sites already done, `at_onboarding_cli` constructs an `AtLookupImpl` at six
-further places (`at_onboarding_service_impl` `:215 :445 :460 :488 :721`,
-`auth_cli.dart:413`), and `at_client_flutter/enrollment_service.dart:65` at
-one. `at_server_status/at_status_impl.dart:100` needs nothing: it holds no key
-material and never authenticates, which is the case the factory's nullable
-`authenticator` exists for. Original list: of `atChops` onto a lookup — 2 in
-`at_auth_impl`, 1 in `enrollment_handshake`, 3 in at_client
-(`at_client_impl:105` reaching `remote_secondary`'s setter at `:32`, plus
-`:72`), 1 in `at_onboarding_service_impl` — plus the read guard at
-`enrollment_approver.dart:27`, which asks `atLookUp.atChops == null` and will
-have nothing to ask once the field goes. See [section 5](#5-order-of-work).
+Six `lib/` sites still *write* `atChops` onto a lookup, deliberately: the
+authenticator is installed **beside** that field, not instead of it, because
+`EnrollmentApprover` and others still read it for work that is not
+authentication.
 
-⚠️ Not migration sites, though they match a loose grep for the same names:
-`at_auth_impl:131` and `:354` cascade onto the **response** objects, and
-`auth_cli.dart:1108` onto an `AtOnboardingPreference`. This row said "eight
-production sites" until each was opened. This line
-is the only statement of progress; `git log` is the record of what landed. Owner: gkc.
+**Next is step 5**, which has three prerequisites — they are marked
+**BLOCKS STEP 5** in [section 6](#6-filed-not-scheduled).
+
+This line is the only statement of progress. `git log` records what landed;
+[section 7](#7-corrections) holds the readings that were superseded and why.
+Owner: gkc.
 Written against `gkc-pq-d1-spike` at `9f5da2ad0` and `origin/trunk` at
 `401e14d98`, 2026-08-19.
 
@@ -502,6 +475,36 @@ every site.
 
 ### Actually filed
 
+- **at_onboarding_cli still constructs six lookups without an authenticator** —
+  `at_onboarding_service_impl` `:215 :445 :460 :488 :721` and
+  `auth_cli.dart:413`. They are not uniform: some authenticate, `:721` only
+  checks `isOnboarded`, and two send a bare `from:` through a proxy. Installing
+  one everywhere is harmless where unused, since it runs only when
+  authentication is required. Verify with
+  `tests/at_onboarding_cli_functional_tests/runLocal.sh`, which now exists.
+- **`at_onboarding_service_impl.onboard` builds its `FileAtKeysIo` without the
+  passphrase**, where the read path requires one. That asymmetry is deliberate
+  as of this work — onboarding *writes* — but nobody has established whether a
+  passphrase belongs there too. It was left alone rather than changed as a side
+  effect of sharing a helper; the read path's omission was a real bug and is
+  fixed.
+- **`check_test_env.dart` in `tests/at_onboarding_cli_functional_tests` is dead
+  code.** It polls `lookup:publickey@sitaram` until it answers — state only
+  pkamLoad creates — so in a suite that deliberately runs without pkamLoad it
+  can never pass, and hangs for its five-minute timeout. CI does not call it.
+  Either delete it or give it a check that suits this suite.
+- **REJECTED, do not "fix":** `at_client_flutter/enrollment_service.dart:65`
+  builds a lookup with no authenticator, and that is correct. It submits an
+  OTP-based enrollment, which routes through `auth: false` and never
+  authenticates — the case the factory's nullable `authenticator` exists for.
+  `at_server_status/at_status_impl.dart:100` is the same shape and holds no key
+  material at all.
+- **Seven ladder authentications survive in the functional pack**, all in test
+  files that construct an `AtLookupImpl` directly: `nskey_rotation_live_test`
+  (3), and one each in `apsk_server_side_test`, `copied_keyfile_test`,
+  `enrollment_namespace_gate_test`, `enrollment_pq_key_exchange_live_test`.
+  Nothing in `lib/` reaches the ladder. These change when step 5 removes the
+  fields, not before.
 - **CRAM does not validate the `from:` challenge; PKAM does.**
   `at_lookup_impl.cramAuthenticate` digests the raw response, while
   `pkamAuthenticate` passes it through `validatedFromChallenge` first. The
@@ -535,6 +538,48 @@ it from `AtSigningInput`. Worth doing for at_chops' other callers.
   also one of the 64 sites, so deleting first shrinks step 8 by one.
 
 ## 7. Corrections
+
+### How to re-derive step 4's progress
+
+Instrument **all four** authentication entry points in
+`at_lookup_impl.dart` with `logger.shout`, then run
+`tests/at_functional_test/runLocal.sh` and count:
+
+| probe at | counts |
+| --- | --- |
+| top of `_authenticateWith` | the injected seam |
+| beside `logger.finer('calling pkam using atchops')` | `_process` falling through |
+| after `pkamAuthenticate`'s authenticator early-return | that method's own fallback |
+| first line of `authenticate(String? privateKey)` | the legacy leg |
+
+⚠️ **`shout`, not the existing levels.** The ladder's own log is `finer` and
+the harness sets the root level, so reading it unmodified under-reports by
+roughly fiftyfold — that produced a "4 ladder" figure when the truth was 201.
+
+⚠️ **Assert the anchor count before replacing.** The prologue shared by the
+direct legs appears **three** times, and the third is `_authenticateWith` —
+the injected path itself. Tagging that as ladder use would report the fix as
+the problem.
+
+### Readings that were superseded
+
+- **"4 ladder authentications"** → **201**. Read at `finer` under a harness
+  that filters it, while the injected route was counted at `shout`: two
+  instruments, reported as one comparison.
+- **"Ladder = 0 is the finish line"** → wrong. Test files constructing an
+  `AtLookupImpl` directly put a floor under it that no production change can
+  reach. The finish line is **no `lib/` site reaching the ladder**.
+- **"8 production sites write `atChops`"** → **6**. Three of the original
+  eight cascade onto response and preference objects rather than lookups, and
+  a seventh (`at_client_impl.dart:105`) writes to `RemoteSecondary`'s setter,
+  which reaches a lookup only through `remote_secondary.dart:39` — already
+  counted.
+- **The at_client install in `AtClientImpl`'s `atChops` setter** → reverted.
+  Measured to change nothing (57/201 before and after) because
+  `RemoteSecondary` sets `atLookUp.atChops` in its **constructor**. Every suite
+  passed either way. A no-op that reads as a completed migration is worse than
+  an absent one.
+
 
 Figures and claims that changed under measurement, kept so nobody rebuilds on the
 first version.
