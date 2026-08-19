@@ -10,7 +10,7 @@ import 'proven_elsewhere.dart';
 /// questions, so both run as separate processes against a live atServer —
 /// no single process can hold two versions of at_client.
 void main() {
-  test('UC-G1.14 · rollout 1 is invisible to a deployed peer', () {
+  test('UC-G1.14 · pqReady is invisible to a deployed peer', () {
     // GIVEN a sender at rollout 1 — an ML-DSA-65 authentication key and a
     //       freshly minted RSA-2048 signing key.
     // WHEN  a published-arm client (at_client 3.14.0 from pub.dev) fetches
@@ -19,7 +19,7 @@ void main() {
     //       exactly as for a `now` sender — the released reader cannot tell
     //       the two stages apart.
     provenIn('tests/at_functional_test/test/pq_rollout_matrix_test.dart',
-        'UC-G1.14 · rollout 1 is invisible to a deployed peer',
+        'UC-G1.14 · pqReady is invisible to a deployed peer',
         proves: 'the released reader\'s own verdict, with two positive '
             'controls: rollout 1 must publish a DIFFERENT key from now, and '
             'rollout 2 must fail the same parse — without which the row '

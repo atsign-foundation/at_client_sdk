@@ -1519,7 +1519,9 @@ the legacy-interop opt-out is honoured at activation but leaves an atSign that
 cannot write a public record at all.
 **The `at_onboarding_cli` half landed 2026-08-08**, live-covered in
 `tests/at_onboarding_cli_functional_tests/test/pq_native_onboard_test.dart` —
-a CRAM activation with `--signingAlgoType mldsa65` against a real atServer,
+a CRAM activation under a post-quantum posture against a real atServer
+(`--signingAlgoType mldsa65` when this landed; `PqPosture.pqReady` since
+2026-08-19, when the argument was replaced by `--posture`),
 asserting all three products of a PQ-native activation together. That pack runs
 against the virtualenv container in CI, so this is CI-reachable coverage. It is
 deliberately **one test asserting three things**: the products are

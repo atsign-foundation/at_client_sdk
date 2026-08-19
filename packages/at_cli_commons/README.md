@@ -64,10 +64,14 @@ final pref = AtOnboardingPreference(
 )..someCustomField = 'my value';
 ```
 
-`posture`, `disallowLegacyEncryption`, `authenticationKeyAlgorithm` and
-`dataSigningKeyAlgorithms` are all available there, and each is optional. Every
+`posture`, `authenticationKeyAlgorithm`, `dataSigningKeyAlgorithms` and
+`sealsToKeyAlgorithms` are all available there, and each is optional. Every
 type they take — including `SigningAlgoType` — is nameable from
 `package:at_client/at_client.dart` alone.
+
+`disallowLegacyEncryption` is deliberately **not** among them: it is settable
+only through the posture, so an app that wants legacy writes refused adopts
+`PqPosture.pqActive` or builds a posture that says so.
 
 ## Where to go next
 

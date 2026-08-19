@@ -193,7 +193,11 @@ Evidence, reproduction and the rejected alternatives are in
 [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161); this
 row is the work.
 
-An atSign activated with `--signingAlgoType mldsa65` cannot then run `otp` or
+⚠️ **Partly overtaken by 14.39's CLI commit, 2026-08-19** — see the change
+list below before starting. The argument in the reproduction no longer exists:
+what activates a PQ-native atSign now is `--posture pqReady`.
+
+An atSign activated PQ-native cannot then run `otp` or
 `list`: both fail with `RangeError`, because the connection signs the PKAM
 challenge as RSA-2048 with an ML-DSA key. `otp` is where a second enrollment
 starts, so a PQ-native atSign cannot enrol a second app.
@@ -207,39 +211,39 @@ both.
 
 **Three changes, agreed with gkc 2026-08-18.**
 
-1. **Delete** the overwrite at `at_onboarding_service_impl.dart:139`. It is
-   redundant rather than misplaced: `RemoteSecondary` already sets the lookup
-   from `signingAlgoOf(client)`, which falls back to the preference when
-   nothing was resolved, and `AtOnboardingPreference extends AtClientPreference`
-   with the same object reaching the client. Verified, so activation is
-   unaffected.
+1. ✅ **DONE 2026-08-19** (14.39's CLI commit). The overwrite at
+   `at_onboarding_service_impl.dart:139` no longer reads the deprecated
+   `signingAlgoType`; it reads the posture's `authenticationKeyAlgorithm`, as
+   does the `pqNative` branch that sat beside it. It was **not** deleted
+   outright as this row proposed — activation genuinely has no key material to
+   resolve from, so the posture axis is what says which algorithm to mint.
 2. **Fix `at_client_impl.dart:1584`**, the file-stream `RemoteSecondary`, which
    passes neither `signingAlgoType` nor `enrollmentId` and signs with the same
    default.
-3. **Repair** `tests/at_onboarding_cli_functional_tests/test/pq_native_onboard_test.dart`
-   rather than adding a test beside it. It runs the defective line today and
-   passes anyway, because it sets `preference.signingAlgoType` to `mldsa65`
-   itself, so the overwrite writes the right value back, and because it drives
-   its remote command on the activation client rather than the one from the
-   fresh `authenticate()`. Leave the preference at its default so key-material
-   resolution is the only thing that can make it pass, drive a remote operation
-   on the freshly authenticated client, and keep an rsa2048 arm in the same run
-   so the two provably differ.
+3. ⚠️ **PARTLY DONE 2026-08-19.** `pq_native_onboard_test.dart` no longer sets
+   the value it asserts — it names `PqPosture.pqReady` and nothing else, so the
+   posture is the only thing that can make it pass. **Still owed:** drive the
+   remote operation on the client from the fresh `authenticate()` rather than
+   the activation client, and keep an rsa2048 arm in the same run so the two
+   provably differ.
 
-⚠️ **Not doing, deliberately.** `AtLookupImpl.signingAlgoType` still initialises
-to `rsa2048` (`at_lookup_impl.dart:739`), so any site that forgets authenticates
-with the wrong routine silently. Making it required at construction would let
-the compiler enumerate every site, but at_lookup's in-tree 3.6.1 equals its
-published 3.6.1, so touching it opens 3.6.2, which
-[decisions 109](detail/decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18)
-established is not needed. This rides the next at_lookup version whenever one
-opens for another reason.
+⚠️ **Was "not doing, deliberately" — and the reason it waited has arrived.**
+`AtLookupImpl.signingAlgoType` still initialises to `rsa2048`
+(`at_lookup_impl.dart:739`), so any site that forgets authenticates with the
+wrong routine silently. Making it required at construction would let the
+compiler enumerate every site, and this was parked because at_lookup's in-tree
+3.6.1 equals its published 3.6.1, so touching it opens 3.6.2 for nothing.
+**[Ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
+ruling 2 now needs `AtConnectionMetaData` to record what a connection last
+authenticated as**, which opens at_lookup anyway — so this rides that version
+when gkc opens it.
 
-`--signingAlgoType` also stays a silent no-op on non-onboard commands, which
-build their preference through `create_at_client_cli.dart` without copying it.
-Once the overwrite is gone it has no effect there anyway, and a posture
-argument covering legacy / rollout 1 / rollout 2 is under discussion which may
-replace the flag.
+✅ **The posture argument that "may replace the flag" shipped** on 2026-08-19:
+`--posture legacy|pqReady|pqActive` on every command, `--signingAlgoType`
+removed. So the silent-no-op-on-non-onboard-commands half of
+[#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) is
+closed by construction — there is no flag left to be a no-op. What remains of
+this row is change 2 and the residue of change 3.
 
 ### 14.30 A content notification can outrun the key that opens it
 

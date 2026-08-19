@@ -146,7 +146,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G1.11  | Proof of possession is required                                                    | PROVEN    | `g1_enroll_update_test.dart` |
 | UC-G1.12  | Namespaces stay out of reach                                                       | PROVEN    | `g1_enroll_update_test.dart` |
 | UC-G1.13  | `enroll:update` is self-only                                                       | PROVEN    | `g1_enroll_update_test.dart` |
-| UC-G1.14  | Rollout 1 is invisible to a deployed peer                                          | PROVEN    | `g1_rollout_matrix_test.dart` |
+| UC-G1.14  | pqReady is invisible to a deployed peer                                            | PROVEN    | `g1_rollout_matrix_test.dart` |
 | UC-G1.15  | Every rollout stage verifies every other stage's envelope                          | PROVEN    | `g1_rollout_matrix_test.dart` |
 
 ---
@@ -2079,7 +2079,7 @@ what is gone is the claim that this matrix demonstrates it.
   Proven in `tests/at_functional_test/test/pq_rollout_matrix_test.dart`, test
   `UC-G1.15`.
 
-#### UC-G1.14 — rollout 1 is invisible to a deployed peer
+#### UC-G1.14 — pqReady is invisible to a deployed peer
   *Given* a sender at rollout 1 — an ML-DSA-65 authentication key and a freshly
   minted RSA-2048 signing key.
   *When* a **published-arm** client (at_client 3.14.0, resolved from pub.dev)

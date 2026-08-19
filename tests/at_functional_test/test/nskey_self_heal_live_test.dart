@@ -32,7 +32,21 @@ import 'test_utils.dart';
 void main() {
   late AtClient approver;
   late String atSign;
-  const namespace = 'buzz';
+
+  // Unique per run: the atServer refuses a second enrollment carrying an
+  // (appName, deviceName) pair that already has one approved.
+  final runId = DateTime.now().microsecondsSinceEpoch;
+
+  // ⚠️ **Run-unique, and it has to be.** This file's premise is that the
+  // HOLDER is the one that minted — "the wave the seeker missed" — so anything
+  // else publishing an nskey for the same namespace first makes
+  // `mintAndPublish` ADOPT that generation instead, leaving the holder without
+  // the private half it is about to be asked for. That is correct production
+  // behaviour (the mint election, decisions 105), so the test has to stop
+  // racing rather than the code stop adopting. On a shared `buzz` it lost the
+  // race to `self_enrollment_retrofit_live_test`, whose pqActive posture seeds
+  // namespace keys, and the failure surfaced as this file's own precondition.
+  final namespace = 'selfheal$runId';
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
@@ -43,10 +57,6 @@ void main() {
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
-
-  // Unique per run: the atServer refuses a second enrollment carrying an
-  // (appName, deviceName) pair that already has one approved.
-  final runId = DateTime.now().microsecondsSinceEpoch;
 
   /// [atKeysIo] is the client's OWN keyfile, so the test observes exactly what
   /// the client's start-time self-heal files. With two separate stores the

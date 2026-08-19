@@ -27,7 +27,7 @@ import 'test_utils.dart';
 /// either direction under any stage, which is measured, pinned and accepted
 /// rather than fixed
 /// ([`decisions.md` 95](../../../docs/projects/pq/decisions.md) rulings 2–3).
-/// So the envelope grid is a `now`/`rollout1`/`rollout2` 3×3 inside the 4×4.
+/// So the envelope grid is a `legacy`/`pqReady`/`pqActive` 3×3 inside the 4×4.
 void main() {
   final senderAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'] as String;
   final receiverAtSign =
@@ -37,8 +37,8 @@ void main() {
   /// `published` is the control arm and the other three are this tree. A stage
   /// asked of the wrong build is refused by the build itself rather than
   /// silently approximated, which is what stops the published column agreeing
-  /// with `now` for the wrong reason.
-  const stages = ['published', 'now', 'rollout1', 'rollout2'];
+  /// with `legacy` for the wrong reason.
+  const stages = ['published', 'legacy', 'pqReady', 'pqActive'];
   String armFor(String stage) => stage == 'published' ? 'published' : 'current';
 
   final matrixRoot =
@@ -102,13 +102,13 @@ void main() {
 
     Future<String> storageFor(String role, String atSign) async {
       // The runId is in the path, not just the stage pair. UC-G1.14 runs a
-      // now/now cell of its own and compares its keyfile against a
-      // rollout1/rollout1 one; if a cell's directory were keyed on the stages
+      // legacy/legacy cell of its own and compares its keyfile against a
+      // pqReady/pqReady one; if a cell's directory were keyed on the stages
       // alone, a second run of the same pair would overwrite the first and the
       // comparison would be of one file with itself.
       final dir = Directory('${workRoot.path}/$cell-$runId/$role');
       dir.createSync(recursive: true);
-      // A fresh keyfile per cell, so a rollout-2 mint does not leak into the
+      // A fresh keyfile per cell, so a pqActive mint does not leak into the
       // next cell's baseline.
       final baseline = File('${baselineKeys.path}/${atSign}_key.atKeys');
       // Not a silent skip: every stage's client is handed the same starting
@@ -257,11 +257,11 @@ void main() {
     //
     // Under `docs/projects/pq/detail/decisions.md` 108 the ladder SWAPS
     // algorithms rather than overlapping them — no stage's in-use set holds
-    // two — so a rollout-2 sender emits ML-DSA-65 alone and a rollout-1
+    // two — so a pqActive sender emits ML-DSA-65 alone and a pqReady
     // receiver, which signs RSA-2048, must still verify it. That is the whole
     // claim: verification is ungated, so a swap needs no overlap to be safe.
     // These nine cells are what turns that ruling into a measurement.
-    const armStages = ['now', 'rollout1', 'rollout2'];
+    const armStages = ['legacy', 'pqReady', 'pqActive'];
 
     final verdicts = <String, Map<String, Object?>>{};
     for (final senderStage in armStages) {
@@ -301,23 +301,23 @@ void main() {
     //
     // `algs` is the JOSE name on the wire, so this reads what was actually
     // signed rather than what the stage was asked for.
-    expect(verdicts['rollout2 → rollout2']!['algs'], ['ML-DSA-65'],
-        reason: 'a rollout-2 sender mints an ML-DSA-65 signing key and signs '
+    expect(verdicts['pqActive → pqActive']!['algs'], ['ML-DSA-65'],
+        reason: 'a pqActive sender mints an ML-DSA-65 signing key and signs '
             'with it alone. If this is RSA the stage never reached the signer '
             'and every cell above is comparing a case with itself');
-    expect(verdicts['now → now']!['algs'], isNot(contains('ML-DSA-65')),
-        reason: 'a now sender files no signing key of its own and signs with '
+    expect(verdicts['legacy → legacy']!['algs'], isNot(contains('ML-DSA-65')),
+        reason: 'a legacy sender files no signing key of its own and signs with '
             'its APKAM authentication key, so it must NOT emit ML-DSA-65 — '
             'the control that makes the assertion above discriminate');
 
     // The cell the ruling is actually about: strongest signer, weakest
     // verifier. Called out separately from the loop because it is the one a
     // reader comes here to check.
-    expect(verdicts['rollout2 → rollout1']!['verified'], true,
+    expect(verdicts['pqActive → pqReady']!['verified'], true,
         reason: 'a receiver that signs RSA-2048 must verify an ML-DSA-65 '
             'envelope. This is the cell an overlapping ladder would have '
             'existed to rescue, and decisions 108 rules it needs no rescue');
-    expect(verdicts['rollout2 → now']!['verified'], true,
+    expect(verdicts['pqActive → legacy']!['verified'], true,
         reason: 'and so must a receiver that files no signing key at all');
 
     // Each signature names exactly one — the ladder swaps, so nothing this
@@ -325,13 +325,13 @@ void main() {
     // stage started overlapping, which is a design change, not a passing test.
     for (final entry in verdicts.entries) {
       expect((entry.value['algs'] as List).length, 1,
-          reason: '${entry.key}: no rollout stage names two algorithms, so no '
+          reason: '${entry.key}: no posture names two algorithms, so no '
               'envelope from one should carry two signatures. Two means the '
               'in-use set gained a member and decisions 108 needs revisiting');
     }
   });
 
-  test('UC-G1.14 · rollout 1 is invisible to a deployed peer', () async {
+  test('UC-G1.14 · pqReady is invisible to a deployed peer', () async {
     // Every cell runs here rather than reading what the matrix loop left
     // behind: a test that depends on another test having run first passes or
     // fails on declaration order, which is not a property of the code.
@@ -339,56 +339,56 @@ void main() {
     // The receiver is `published` throughout — at_client 3.14.0, resolved from
     // pub.dev. That is the whole row. The question is not what this tree
     // believes it published, it is what a build we cannot change makes of it.
-    final asNow = await runCell(senderStage: 'now', receiverStage: 'published');
-    final asRollout1 =
-        await runCell(senderStage: 'rollout1', receiverStage: 'published');
+    final asLegacy = await runCell(senderStage: 'legacy', receiverStage: 'published');
+    final asPqReady =
+        await runCell(senderStage: 'pqReady', receiverStage: 'published');
 
     Map<String, Object?> verdict(Map<String, Object?> result) =>
         (result['peerApsk'] as Map).cast<String, Object?>();
 
-    final nowVerdict = verdict(asNow.result);
-    final rollout1Verdict = verdict(asRollout1.result);
+    final legacyVerdict = verdict(asLegacy.result);
+    final pqReadyVerdict = verdict(asPqReady.result);
 
-    // The baseline: what a deployed peer does with a `now` sender today.
-    expect(nowVerdict['fetched'], true, reason: '${nowVerdict['error']}');
-    expect(nowVerdict['rsa'], true,
-        reason: 'the released reader must parse a now sender\'s _apsk as an '
+    // The baseline: what a deployed peer does with a `legacy` sender today.
+    expect(legacyVerdict['fetched'], true, reason: '${legacyVerdict['error']}');
+    expect(legacyVerdict['rsa'], true,
+        reason: 'the released reader must parse a legacy sender\'s _apsk as an '
             'RSA public key. If this fails the run says nothing about rollout '
             '1, because the baseline it is measured against is broken');
 
     // The row's claim.
-    expect(rollout1Verdict['fetched'], true,
-        reason: '${rollout1Verdict['error']}');
-    expect(rollout1Verdict['rsa'], true,
-        reason: 'a rollout-1 sender advertises its own freshly minted RSA-2048 '
-            'SIGNING key where now advertises its AUTHENTICATION key. Both are '
+    expect(pqReadyVerdict['fetched'], true,
+        reason: '${pqReadyVerdict['error']}');
+    expect(pqReadyVerdict['rsa'], true,
+        reason: 'a pqReady sender advertises its own freshly minted RSA-2048 '
+            'SIGNING key where legacy advertises its AUTHENTICATION key. Both are '
             'a single active rsa2048 entry, so both spell as the bare string, '
             'and at_client 3.14.0 cannot tell the two stages apart');
 
     // Positive control 1: the stage actually moved the key. Without it every
-    // assertion above passes for a harness in which rollout 1 did nothing at
+    // assertion above passes for a harness in which pqReady did nothing at
     // all — which is what this row asserted, and got, until 2026-08-14.
-    expect(rollout1Verdict['value'], isNot(nowVerdict['value']),
-        reason: 'rollout 1 must publish a DIFFERENT key from now — its signing '
+    expect(pqReadyVerdict['value'], isNot(legacyVerdict['value']),
+        reason: 'pqReady must publish a DIFFERENT key from legacy — its signing '
             'key rather than its authentication key. Byte-identity here means '
             'the stage is not being applied and this row is comparing a case '
             'with itself');
 
-    // Positive control 2: `rsa: true` is capable of being false. Rollout 2
+    // Positive control 2: `rsa: true` is capable of being false. pqActive
     // advertises the array, which no released reader takes — so the two
     // assertions above are measuring something rather than always passing.
-    final asRollout2 =
-        await runCell(senderStage: 'rollout2', receiverStage: 'published');
-    final rollout2Verdict = verdict(asRollout2.result);
-    expect(rollout2Verdict['rsa'], false,
-        reason: 'rollout 2 publishes the JSON advertisement, which is the one '
+    final asPqActive =
+        await runCell(senderStage: 'pqActive', receiverStage: 'published');
+    final pqActiveVerdict = verdict(asPqActive.result);
+    expect(pqActiveVerdict['rsa'], false,
+        reason: 'pqActive publishes the JSON advertisement, which is the one '
             'shape a released reader cannot take. If that parses as RSA then '
-            'the parse discriminates nothing and rollout 1\'s green is empty');
+            'the parse discriminates nothing and pqReady\'s green is empty');
 
     File keyfile(String storage) => File('$storage/$senderAtSign.atKeys');
-    expect(keyfile(asRollout2.senderStorage).readAsBytesSync(),
-        isNot(keyfile(asNow.senderStorage).readAsBytesSync()),
-        reason: 'and rollout 2 mints a signing key and files it, so its '
+    expect(keyfile(asPqActive.senderStorage).readAsBytesSync(),
+        isNot(keyfile(asLegacy.senderStorage).readAsBytesSync()),
+        reason: 'and pqActive mints a signing key and files it, so its '
             'keyfile must differ from now\'s — the check that a stage reaches '
             'the keyfile at all');
   });
