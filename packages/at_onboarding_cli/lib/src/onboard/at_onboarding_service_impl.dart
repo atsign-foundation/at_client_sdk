@@ -175,7 +175,26 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     atClient ??= atClientManager.atClient;
     _atLookUp!.atChops = atChops;
+    // Beside atChops, not instead of it: at_auth's EnrollmentApprover reads
+    // that field for enrollment crypto, which is not authentication.
+    final lookUp = _atLookUp;
+    if (lookUp is AtLookupImpl) {
+      lookUp.authenticator = authenticatorFor(
+        _keysIo(),
+        _atSign,
+        enrollmentId: lookUp.enrollmentId,
+        chops: atChops,
+      );
+    }
   }
+
+  /// Where this CLI's keys live. One definition, used both when onboarding
+  /// hands a source to at_auth and when authentication needs one to read.
+  AtKeysIo _keysIo() => FileAtKeysIo(
+        filePath: atOnboardingPreference.atKeysFilePath != null
+            ? (_) => atOnboardingPreference.atKeysFilePath!
+            : null,
+      );
 
   @override
   @Deprecated('Use getter')
@@ -242,11 +261,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
     atOnboardingRequest.retryOptions =
         RetryOptions(maxRetries: maxRetries, retryDelay: retryInterval);
-    final atKeysIo = FileAtKeysIo(
-      filePath: atOnboardingPreference.atKeysFilePath != null
-          ? (_) => atOnboardingPreference.atKeysFilePath!
-          : null,
-    );
+    final atKeysIo = _keysIo();
     atOnboardingRequest.atKeysIo = atKeysIo;
 
     // A post-quantum activation is all-or-nothing, which is why it goes

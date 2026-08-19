@@ -1,4 +1,9 @@
 ## 1.17.0
+
+- feat: installs an `AtAuthenticator` on its lookup, so authentication reads
+  the keyfile rather than credentials parked on at_lookup. Where the keys live
+  now has one definition, `_keysIo()`, used both when onboarding hands a source
+  to at_auth and when authentication needs one.
 - **BREAKING** feat: `--posture legacy|pqReady|pqActive` on **every** command,
   replacing `--signingAlgoType`, which is removed.
   - It named the PKAM *authentication* key while reading like the data signing
