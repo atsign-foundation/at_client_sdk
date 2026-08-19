@@ -1,4 +1,14 @@
 ## 3.4.0
+- feat: `AtAuthImpl.authenticate` installs an `AtAuthenticator` on the lookup,
+  so authentication runs on this side of the seam rather than out of
+  at_lookup's credential fields. The keystore it reads follows the same
+  precedence this method already used - an explicitly supplied `AtKeys` beats
+  an `AtKeysIo`, so the authenticator reads what the rest of the method read
+  rather than re-resolving and possibly differing. `atChops` is still set
+  alongside it, because `EnrollmentApprover` reads that field for work that is
+  not authentication at all. Measured against a live atServer: the injected
+  route ran 17 times in a functional pass, with 4 ladder authentications left
+  at the call sites still to migrate.
 - feat: `authenticatorFor` accepts an injected `AtChops`. `AtAuth` has always
   let a caller bring its own signer, through `AtAuth.create(atChops:)` and its
   mutable `atChops` field, so an authenticator that ignored one would break a

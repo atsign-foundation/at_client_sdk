@@ -6,6 +6,7 @@ import 'package:at_auth/src/at_auth.dart';
 import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
+import 'package:at_auth/src/auth/at_authenticator.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/onboarding_mint.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
@@ -16,6 +17,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
+import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
@@ -67,6 +69,41 @@ class AtAuthImpl implements AtAuth {
       AtEnrollment? atEnrollment})
       : atEnrollment = atEnrollment ?? AtEnrollment.create();
 
+  /// The keystore the authenticator should read, matching the precedence
+  /// [authenticate] itself uses.
+  ///
+  /// An explicitly supplied `atAuthKeys` wins over an `atKeysIo` - that is what
+  /// this class does two lines into [authenticate], and the authenticator must
+  /// read the same thing the rest of the method used rather than re-resolve
+  /// and possibly differ. A fixed key set is wrapped in an in-memory store: a
+  /// keystore that never changes, which is exactly right for a caller that
+  /// handed over frozen keys. Only when the request supplied a source and no
+  /// keys does the authenticator get the source itself, and with it the
+  /// re-reading that lets one closure answer CRAM then PKAM.
+  Future<AtKeysIo> _keysSourceFor(AtAuthRequest request, AtKeys resolved,
+      {AtKeysIo? io}) async {
+    if (request.atAuthKeys == null && io != null) {
+      return io;
+    }
+    final memory = InMemoryAtKeysIo();
+    await memory.write(request.atSign, resolved);
+    return memory;
+  }
+
+  /// Hands [lookUp] the authenticator, when it is the implementation that has
+  /// somewhere to put it.
+  ///
+  /// `AtLookUp` does not declare it - that interface is frozen because mocks
+  /// implement it - so any other implementation keeps the existing behaviour.
+  void _installAuthenticator(AtLookUp? lookUp, AtAuthenticator authenticator) {
+    if (lookUp is AtLookupImpl) {
+      lookUp.authenticator = authenticator;
+    } else {
+      _logger.finer('${lookUp.runtimeType} has no authenticator seam; '
+          'leaving authentication on the credential fields');
+    }
+  }
+
   @override
 
   /// Authenticate using PKAM
@@ -117,6 +154,19 @@ class AtAuthImpl implements AtAuth {
     }
     atChops ??= atAuthKeys.authenticationFor(atAuthRequest.enrollmentId).chops;
     atLookUp!.atChops = atChops;
+    // Installed alongside atChops, not instead of it. at_lookup prefers the
+    // authenticator, so this is the route that runs - but the field is still
+    // read for work that is not authentication at all (enrollment_approver
+    // takes the encryption private key out of it), so it cannot go yet.
+    _installAuthenticator(
+        atLookUp,
+        authenticatorFor(
+          await _keysSourceFor(atAuthRequest, atAuthKeys,
+              io: atAuthRequest.atKeysIo),
+          atAuthRequest.atSign,
+          enrollmentId: atAuthRequest.enrollmentId,
+          chops: atChops,
+        ));
 
     _logger.finer('Authenticating using PKAM');
     pkamAuthenticator ??= PkamAuthenticator();
