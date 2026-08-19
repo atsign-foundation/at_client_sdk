@@ -93,13 +93,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// longer used" - was false. The ladder in [_process] reads this field and
   /// calls authenticate() with it, and before the authenticator seam landed
   /// that was the leg most ladder traffic took.
-  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
       'instead - at_auth builds one from a bare private key with '
       'authenticatorForPrivateKey(). '
       'Removed with the credential ladder in the next major release.')
   String? privateKey;
 
-  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
       'instead - at_auth builds one that falls back to CRAM with '
       'authenticatorFor(). '
       'Removed with the credential ladder in the next major release.')
@@ -136,6 +136,19 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   AtChops? _atChops;
 
+  /// Prefer [AtLookUp.withSecureSocket].
+  ///
+  /// This takes a `String, int` root pair where [AtRootDomain] validates the
+  /// port and knows about proxy addresses, it accepts key material at_lookup
+  /// no longer needs, and it hands back a concrete type where a caller only
+  /// ever needs an interface.
+  ///
+  /// The warnings this raises at every construction site ARE the deliverable:
+  /// they are the mechanical list of what still has to move. `dart analyze`
+  /// reports them as `info`, so nothing breaks while the list is worked
+  /// through.
+  @Deprecated('Use AtLookUp.withSecureSocket, which returns an '
+      'AtLookupMuxable. Removed in the next major release.')
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
       {this.privateKey,
       this.cramSecret,
@@ -850,7 +863,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// How often a quiet notification connection is probed, and how long the
   /// probe waits. Settable so a test does not have to wait 30 seconds.
+  @override
   Duration heartbeatInterval = const Duration(seconds: 30);
+
+  @override
   Duration heartbeatResponseTimeout = const Duration(seconds: 10);
 
   String? _notifyRegex;
@@ -863,6 +879,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   /// Whether a reconnect is in flight. Visible so a test can assert the loop
   /// is running rather than inferring it from a delay.
+  @override
   bool get isReconnectingNotifications => _reconnecting;
 
   void _onNotificationConnectionLost() {
@@ -1080,7 +1097,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     await _connection!.write(command);
   }
 
-  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
       'instead - at_auth builds one with authenticatorForChops(). '
       'Removed with the credential ladder in the next major release.')
   @override
@@ -1088,7 +1105,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     _atChops = atChops;
   }
 
-  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
       'instead - at_auth builds one with authenticatorForChops(). '
       'Removed with the credential ladder in the next major release.')
   @override
@@ -1119,6 +1136,8 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 }
 
 class AtLookupSecureSocketFactory {
+  const AtLookupSecureSocketFactory();
+
   Future<SecureSocket> createSocket(
       String host, String port, SecureSocketConfig socketConfig,
       {Duration? timeout}) async {
@@ -1128,6 +1147,8 @@ class AtLookupSecureSocketFactory {
 }
 
 class AtLookupSecureSocketListenerFactory {
+  const AtLookupSecureSocketListenerFactory();
+
   OutboundMessageListener createListener(
       OutboundConnection outboundConnection) {
     return OutboundMessageListener(outboundConnection);
@@ -1135,6 +1156,8 @@ class AtLookupSecureSocketListenerFactory {
 }
 
 class AtLookupOutboundConnectionFactory {
+  const AtLookupOutboundConnectionFactory();
+
   OutboundConnection createOutboundConnection(SecureSocket secureSocket) {
     return OutboundConnectionImpl(secureSocket);
   }

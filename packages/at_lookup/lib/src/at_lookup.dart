@@ -40,6 +40,54 @@ abstract interface class AtCommandExecutor {
 }
 
 abstract interface class AtLookUp {
+  /// Build a lookup that talks to an atServer over TLS.
+  ///
+  /// This is the entry point. Constructing `AtLookupImpl` directly still
+  /// works and is deprecated: it takes a `String, int` root pair rather than
+  /// an [AtRootDomain], it accepts key material this class no longer needs,
+  /// and it hands back a concrete type where callers only need an interface.
+  ///
+  /// Static, and that is deliberate — statics are not part of the `implements`
+  /// contract, so adding this breaks none of the classes that mock
+  /// [AtLookUp]. Widening the interface itself would have: `implements` erases
+  /// bodies, so a mock satisfies a new member through `noSuchMethod` and
+  /// returns null into a non-nullable type **at runtime only**, with
+  /// `dart analyze` clean.
+  ///
+  /// Named for its transport, so a differently-transported factory can join it
+  /// later rather than this one growing a mode flag.
+  ///
+  /// [authenticator] is required and nullable, which is not an oversight: null
+  /// means *this connection never authenticates*, and that is a real mode —
+  /// `at_status_impl` holds no key material at all, and an OTP enrolment
+  /// request goes out unauthenticated. Requiring it forces the caller to say
+  /// which it meant.
+  ///
+  /// [secureSocketConfig] is required for the same reason: a caller wanting
+  /// the defaults writes `SecureSocketConfig()` and thereby states it. One
+  /// production site today omits what its neighbour sets.
+  static AtLookupMuxable withSecureSocket({
+    required String atSign,
+    required AtRootDomain rootDomain,
+    required SecureSocketConfig secureSocketConfig,
+    required AtAuthenticator? authenticator,
+    Map<String, dynamic> clientConfig = const {},
+    SecondaryAddressFinder? secondaryAddressFinder,
+    AtLookupTransport transport = AtLookupTransport.secureSocket,
+  }) {
+    return AtLookupImpl(
+      atSign,
+      rootDomain.rootDomain,
+      rootDomain.rootPort,
+      secureSocketConfig: secureSocketConfig,
+      clientConfig: clientConfig,
+      secondaryAddressFinder: secondaryAddressFinder,
+      secureSocketFactory: transport.socketFactory,
+      socketListenerFactory: transport.listenerFactory,
+      outboundConnectionFactory: transport.connectionFactory,
+    )..authenticator = authenticator;
+  }
+
   /// update
   Future<bool> update(String key, String value,
       {String? sharedWith, Metadata? metadata});
@@ -88,14 +136,14 @@ abstract interface class AtLookUp {
   /// material to authenticate. Callers that read this for crypto which is not
   /// authentication should be handed their own [AtChops] - that is what
   /// at_auth EnrollmentApprover.approve takes an approverChops for.
-  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
       'instead - at_auth builds one with authenticatorForChops(). '
       'Removed with the credential ladder in the next major release.')
   set atChops(AtChops? atChops);
 
   OutboundConnection? get connection;
 
-  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
       'instead - at_auth builds one with authenticatorForChops(). '
       'Removed with the credential ladder in the next major release.')
   AtChops? get atChops;
@@ -222,4 +270,61 @@ abstract interface class AtLookupMuxable implements AtLookUp {
 
   /// Whether [startNotifications] is in force.
   bool get isNotifying;
+
+  /// Whether the connection dropped and a reconnect is in flight.
+  ///
+  /// A subscriber otherwise cannot tell a reconnecting stream from a quiet
+  /// atServer: both look like no events. at_client's `Monitor` surfaces the
+  /// same distinction as a listener state, for the same reason.
+  bool get isReconnectingNotifications;
+
+  /// How often a quiet notification connection is probed, and how long the
+  /// probe waits for its answer.
+  ///
+  /// On the interface because they are the only way to make the notification
+  /// connection's liveness behaviour testable, or tunable, without naming the
+  /// implementation - which is the thing this project is removing from callers.
+  Duration get heartbeatInterval;
+  set heartbeatInterval(Duration value);
+
+  Duration get heartbeatResponseTimeout;
+  set heartbeatResponseTimeout(Duration value);
+}
+
+
+/// How an [AtLookupMuxable] makes connections: the three factories
+/// `AtLookupImpl` has always accepted, bundled into one value.
+///
+/// This exists because [AtLookUp.withSecureSocket] returns an interface, and
+/// an interface cannot be handed a socket. Without it there is no way to give
+/// a factory-built muxable a connection it did not open itself — which is
+/// invisible while the concrete constructor is still reachable, and becomes
+/// total the moment callers stop using it.
+///
+/// It bundles rather than abstracts, deliberately. `docs/projects/wasm/plan.md`
+/// records that these factories are **already injectable** and that the thing
+/// blocking a web transport is their **return type** (`SecureSocket`), not
+/// their injectability — its task T8 changes those return types. A new
+/// parallel abstraction here would be a second seam for T8 to reconcile;
+/// bundling leaves exactly one, and T8 lands inside it without touching this
+/// signature.
+///
+/// ⚠️ **This is not yet enough for a non-socket transport, and it does not
+/// claim to be.** `AtConnection` exposes `Socket getSocket()`, which the
+/// listener calls, so a WebSocket implementation needs that member gone —
+/// a breaking change for every `implements AtConnection`, and out of scope
+/// while this ships as an additive minor.
+class AtLookupTransport {
+  final AtLookupSecureSocketFactory socketFactory;
+  final AtLookupOutboundConnectionFactory connectionFactory;
+  final AtLookupSecureSocketListenerFactory listenerFactory;
+
+  const AtLookupTransport({
+    this.socketFactory = const AtLookupSecureSocketFactory(),
+    this.connectionFactory = const AtLookupOutboundConnectionFactory(),
+    this.listenerFactory = const AtLookupSecureSocketListenerFactory(),
+  });
+
+  /// TLS over TCP: what every caller gets unless it says otherwise.
+  static const AtLookupTransport secureSocket = AtLookupTransport();
 }

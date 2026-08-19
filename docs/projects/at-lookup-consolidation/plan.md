@@ -43,21 +43,40 @@ having told anyone.
 
 ## The acceptance gate for the whole sequence
 
-**Zero uses of `AtLookupImpl` in lib code and READMEs** (gkc, 2026-08-19).
-Mechanical, re-runnable, and it prints its own positive control:
+**Zero uses of `AtLookupImpl` in lib code outside at_lookup, and in READMEs**
+(gkc, 2026-08-19). Mechanical, re-runnable, and it prints its own positive
+control:
 
 ```bash
 bash docs/projects/at-lookup-consolidation/count_atlookupimpl.sh
 ```
 
-Reading at `3e4919d22` + step 6a/6b: **47 uses across 24 files**, against a
-control finding 169 `AtLookUp`. A further 111 sit in tests, examples, docs and
-CHANGELOGs; those are reported by the script and deliberately **not** gated,
-because a CHANGELOG entry describing what `AtLookupImpl` did in a released
-version is a true statement about that version.
+Reading at `9e4bd1a31`: **38 uses across 21 files**, against a control finding
+169 `AtLookUp`. A further 136 sit in at_lookup's own lib, tests, examples, docs
+and CHANGELOGs; those are reported by the script and deliberately **not**
+gated.
 
-⚠️ **47 is not the plan's "64 construction sites" with a different name.** 64
-counts constructions; 47 counts every use in scope — constructions, type
+Two exclusions, each for its own reason:
+
+- **CHANGELOGs and docs** keep their references. An entry describing what
+  `AtLookupImpl` did in a released version is a true statement about that
+  version; rewriting it falsifies the release history rather than cleaning
+  anything up.
+- **at_lookup's own lib** is excluded because **this is not a breaking
+  change** (gkc, 2026-08-19). `AtLookupImpl` is exported from at_lookup's
+  barrel, so renaming it *or* making it library-private removes a public class
+  — a major, in a project whose whole frame is an additive minor. A deprecated
+  `typedef AtLookupImpl = …` alias does not rescue it either: the typedef still
+  spells the name in lib code, so the gate reads identically. **The class
+  therefore survives 3.x where it is defined**, and its removal belongs to the
+  same major that deletes the credential ladder.
+
+What the gate still means, and it is the part that matters: **no code outside
+at_lookup names the concrete class.** Consumers reach an implementation only
+through `AtLookUp.withSecureSocket`, and hold `AtLookupMuxable`.
+
+⚠️ **38 is not the plan's "64 construction sites" with a different name.** 64
+counts constructions; 38 counts every use in scope — constructions, type
 annotations, `is` checks and imports. Quoting one for the other is the mistake
 [section 7](#7-corrections) already records twice.
 
@@ -66,17 +85,14 @@ goes through the static `AtLookUp.withSecureSocket(...)` of
 [section 4](#4-the-factory), which returns an `AtLookupMuxable`. The concrete
 class is not named anywhere in lib code — including inside at_lookup itself.
 
-⚠️ **Nine of the 47 are inside at_lookup's own `lib/`, and SIX of those are
-string literals in the deprecation messages this project just added.** They
-read "Supply an AtAuthenticator via `AtLookupImpl.authenticator`". The moment
-the class leaves lib code that sentence points at something a consumer cannot
-see — the identical defect to `privateKey`'s "no longer used" message that
-[section 7](#7-corrections) records, recreated one layer up by the commit that
-fixed it. **Step 7 must rewrite them to name the factory**, and the gate is
-what will catch it if that is forgotten. The remaining three are the class
-declaration, its constructor, and `monitor_client.dart:57`'s call to the
-static `AtLookupImpl.findSecondary` — and step 7 deprecates `MonitorClient`
-regardless.
+⚠️ **The six deprecation messages naming `AtLookupImpl.authenticator` are no
+longer WRONG, but they are no longer the best advice either.** This paragraph
+previously said they would point at a class consumers could not see — true
+under the rename that has since been ruled out. The class survives, so they
+remain accurate; step 7 should still repoint them at
+`AtLookUp.withSecureSocket`, because that is where a new caller should go.
+They sit in at_lookup's own lib and are therefore out of the gate's scope, so
+nothing mechanical will catch it if this is forgotten.
 
 **Next is the deletion's preconditions**, marked **BLOCKS THE MAJOR** in
 [section 6](#6-filed-not-scheduled).
@@ -295,10 +311,46 @@ abstract interface class AtLookUp {
     required AtAuthenticator?   authenticator,
     Map<String, dynamic>        clientConfig = const {},
     SecondaryAddressFinder?     secondaryAddressFinder,
-    AtLookupTransport?          transport,   // ruled 2026-08-19, see below
+    AtLookupTransport           transport
+        = AtLookupTransport.secureSocket,     // ruled 2026-08-19, see below
   });
 }
 ```
+
+**Shipped, with two departures from the sketch above.** `rootDomain` and
+`secureSocketConfig` are required as designed; `transport` is non-nullable with
+a const default, so a caller that says nothing gets TLS over TCP and a caller
+that says something has stated it.
+
+⚠️ **`AtLookupTransport` BUNDLES the three factories `AtLookupImpl` already
+took; it does not abstract them.** That is a deliberate concession to
+`docs/projects/wasm/plan.md`, which had already designed this ground and says
+so plainly: *"`AtLookupSecureSocketFactory` and
+`AtLookupSecureSocketListenerFactory` are constructor params of
+`AtLookupImpl`. The leak is their **return type** (`SecureSocket`), not their
+injectability."* Its task **T8** changes those return types. A new parallel
+abstraction here would have been a second seam for T8 to reconcile; a bundle
+leaves exactly one, and T8 lands inside it without touching this signature.
+
+And it is **not** yet enough for a web transport, which the bundle's own
+dartdoc says: `AtConnection` exposes `Socket getSocket()`, which the listener
+calls, so a WebSocket implementation needs that member gone — a breaking
+change for every `implements AtConnection`, and the WASM plan already flags it
+as one.
+
+### Three numbers, three questions — do not quote one for another
+
+| figure | what it counts | how |
+| ------ | -------------- | --- |
+| **64** | `AtLookupImpl(` text occurrences | a grep, and it includes the declaration and dartdoc lines |
+| **45** | constructor *invocations* the analyzer resolves | `deprecated_member_use` naming the deprecated constructor, after step 7 |
+| **38** | uses in the gate's scope | lib outside at_lookup, plus READMEs — the acceptance gate |
+
+⚠️ **45 excludes at_lookup's own package**, because `deprecated_member_use`
+does not fire within the declaring package: `at_lookup/test/at_lookup_test.dart`
+alone holds 15 constructions the analyzer says nothing about. So 45 is "sites
+outside at_lookup that construct one", not "all constructions" — and the 64
+that this plan carried was a grep count all along.
 
 ### ⚠️ The seventh parameter, and why the six were not enough
 
@@ -404,7 +456,7 @@ then the old path is deleted — so no package is uncompilable between commits.
 | 4   | Supply the authenticators **from at_auth**, built over `AtKeysIo` — at_lookup still names none of it, and gains no dependency. at_auth, at_client and at_onboarding_cli switch to passing one. **at_tools' `at_cli` is the external case** — it sets `preference.privateKey` with no AtChops at all. | at_auth        |
 | 5   | **DONE, and reshaped by a ruling: annotate, do not delete** (gkc, 2026-08-19). The six credential members carry `@Deprecated` on both the interface and the impl override; the ladder still reads them, so nothing breaks. Everything below this sentence describes **the later major that does the deletion**, and is kept here because it is what that major must do. ⛔ Do not read the rest of this row as owed at step 5. — Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` at `:744`, and **`at_chops` from the pubspec**. ⚠️ **Widen `AtAuthenticator`'s return in this same step** (ruled 2026-08-19). It returns `bool` today and that works only because `_authenticateWith` reads at_lookup's own `enrollmentId` field to record `AtConnectionMetaData.authenticatedAsEnrollmentId`. Deleting the field leaves nothing able to supply it - the authenticator is the side that knows the enrollment, and `bool` cannot carry it - so a caller could no longer tell which enrollment a live socket holds. Return a small result carrying success and the enrollment id, and let at_lookup record it. Widening the executor with `recordAuthentication` was the rejected alternative: it makes the id a side effect rather than data, and keeps `AtCommandExecutor` wider than it needs to be. ⚠️ **`atChops` is not only an auth credential, and deleting it breaks a non-auth reader.** `enrollment_approver.dart` reads `atLookUp.atChops` six times to do enrollment crypto - it takes the encryption private key out of it at `:41`, decrypts the wrapped payload at `:52` and `:63`, and at `:47` **mutates** it (`atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = …`). The lookup is being used as a shared mutable crypto context between at_auth components, which is why the field is on `AtLookUp` at all. The approver is at_auth code and has the keys, so it should be handed its own crypto rather than reaching through a network object for it - but that is a change to the approver, and it has to land before or with the deletion. | at_lookup      |
 | 6   | Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership. ⚠️ **Do not port `MultiplexedOutboundMessageListener` as written** - it truncates multi-line values (see [section 7](#7-corrections)). The framing that works is two passes: the notification check byte by byte, the `\n@` check only from the last newline on, as landed in step 2. | at_lookup      |
-| 7   | `withSecureSocket` in, constructor deprecated. Deprecate `MonitorClient` in the same commit — exported, zero consumers tree-wide, and its `_createNewConnection` bypasses `SecureSocketUtil` so it never got the connect timeouts.    | at_lookup      |
+| 7   | **DONE.** `withSecureSocket` in, constructor deprecated. Deprecate `MonitorClient` in the same commit — exported, zero consumers tree-wide, and its `_createNewConnection` bypasses `SecureSocketUtil` so it never got the connect timeouts.    | at_lookup      |
 | 8   | Migrate the 64 sites, compiler-enumerated. **Run `dart analyze` in `tests/at_functional_test` and `tests/at_end2end_test` separately** — 29 of the 64 live there, invisible to at_lookup's own analyze.                               | 9 packages     |
 | 9   | Monitor takes an `AtLookupMuxable` and loses its connection factory, PKAM auth, buffer, framing constants, overflow check, prompt stripping, `sendCommand`, backoff and heartbeat. **Wiring passes a fresh instance.**                | at_client      |
 

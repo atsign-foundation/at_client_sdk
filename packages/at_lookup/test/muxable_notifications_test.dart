@@ -39,10 +39,12 @@ void main() {
 
     when(() => addressFinder.findSecondary('@alice'))
         .thenAnswer((_) async => SecondaryAddress(host, port));
-    // The ONE injection point: a fresh fake socket per connection, handed
-    // straight to AtLookupImpl's own socket factory. Everything above it -
-    // the connection, the listener, both framings, reconnect - is production
-    // code, so a notification here travels the path it travels live.
+    // The ONE injection point: a fresh fake socket per connection, reaching
+    // the muxable through the factory's `transport` parameter. Everything
+    // above it - the connection, the listener, both framings, reconnect - is
+    // production code, so a notification here travels the path it travels
+    // live. A fresh socket per call because reconnection is under test: reuse
+    // a destroyed one and a successful reconnect looks like a failed one.
     when(() => socketFactory.createSocket(host, '$port', any()))
         .thenAnswer((_) async {
       final s = FakeAtServerSocket();
@@ -52,14 +54,27 @@ void main() {
     });
   });
 
-  AtLookupImpl build() => AtLookupImpl('@alice', host, 64,
-      secondaryAddressFinder: addressFinder,
-      secureSocketFactory: socketFactory);
+  /// Built through the FACTORY, and held as the INTERFACE.
+  ///
+  /// Not a stylistic choice: this is the shape every caller has at the end of
+  /// this project, so testing through it is what proves the factory produces
+  /// something fully usable without naming the concrete class. Reaching for
+  /// `AtLookupImpl(...)` here would test a constructor the plan is retiring
+  /// and would leave the factory's own seam unexercised.
+  AtLookupMuxable build({AtAuthenticator? authenticator}) =>
+      AtLookUp.withSecureSocket(
+        atSign: '@alice',
+        rootDomain: const AtRootDomain(host, 64),
+        secureSocketConfig: SecureSocketConfig(),
+        authenticator: authenticator,
+        secondaryAddressFinder: addressFinder,
+        transport: AtLookupTransport(socketFactory: socketFactory),
+      );
 
   /// An authenticator that succeeds without doing anything. `_authenticateWith`
   /// records the authentication itself, so returning true is enough to get
   /// past `monitor:`'s auth gate.
-  AtLookupImpl authenticated() => build()..authenticator = (_) async => true;
+  AtLookupMuxable authenticated() => build(authenticator: (_) async => true);
 
   group('the notification stream', () {
     test('a notification from the atServer arrives on it', () async {
@@ -197,11 +212,10 @@ void main() {
     test('losing the connection reconnects, reauthenticates, and re-issues '
         'the SAME monitor:', () async {
       var authCount = 0;
-      final atLookup = build()
-        ..authenticator = ((_) async {
-          authCount++;
-          return true;
-        })
+      final atLookup = build(authenticator: (_) async {
+        authCount++;
+        return true;
+      })
         // Parked, so this test measures reconnection and not the probe.
         ..heartbeatInterval = const Duration(hours: 1);
 

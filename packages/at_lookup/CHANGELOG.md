@@ -1,5 +1,32 @@
 ## 3.7.0
 
+- feat: `AtLookUp.withSecureSocket(...)` — the entry point, returning an
+  `AtLookupMuxable`. Static, so it adds nothing to the `implements` contract
+  and breaks none of the classes that mock `AtLookUp`. It takes an
+  `AtRootDomain` rather than a `String, int` pair, requires
+  `secureSocketConfig` and `authenticator` (the latter nullable, because "this
+  connection never authenticates" is a real mode that ought to be stated), and
+  takes an `AtLookupTransport`.
+- feat: `AtLookupTransport` bundles the three connection factories
+  `AtLookupImpl` has always accepted into one value, so a caller holding only
+  the `AtLookupMuxable` interface can still say how connections are made. It
+  bundles rather than abstracts on purpose: the web-port plan records that
+  these factories are already injectable and that the blocker is their
+  **return type**, so a second abstraction here would be one more seam for that
+  work to reconcile. It is not yet sufficient for a non-socket transport, and
+  does not claim to be — `AtConnection.getSocket()` still returns a `Socket`.
+- feat: `AtLookupImpl`'s constructor is `@Deprecated` in favour of the factory.
+  The class itself is **not** deprecated and does not move: it is exported from
+  the barrel, so renaming it or making it private would remove a public class,
+  which this release is not. The warnings at each construction site are the
+  deliverable — 45 of them, `info`, so nothing breaks while they are worked
+  through.
+- feat: `MonitorClient` is `@Deprecated` with no replacement. A tree-wide
+  search finds its own declaration and nothing else, and it predates the
+  connect timeouts — it builds its socket directly rather than through
+  `SecureSocketUtil`, so it never got them. Use `withSecureSocket` and
+  `AtLookupMuxable.notifications`.
+
 - feat: the muxable owns reconnect, reauth and heartbeat, because it owns the
   socket. Losing the notification connection re-establishes it on the
   `[1,2,3,5,8,13,21,34]`-second backoff, re-runs the authenticator, and
