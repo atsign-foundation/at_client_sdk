@@ -3,6 +3,8 @@ import 'dart:convert';
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/enroll/enrollment_progress.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
+import 'package:at_auth/src/auth/at_authenticator.dart';
+import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
@@ -69,6 +71,21 @@ class EnrollmentHandshake {
             ? enrollmentResponse.atAuthKeys!.toAtChops()
             : _apkamChopsAwaitingSymmetricKey(enrollmentResponse.atAuthKeys!);
     atLookup.atChops = atChops;
+    // The chops is injected rather than resolved: this enrollment's keys are
+    // deliberately not a complete keyfile yet - the symmetric key is the thing
+    // the handshake is here to fetch - so asking the keystore to build a
+    // signer would demand material that has not arrived.
+    if (atLookup is AtLookupImpl) {
+      final memory = InMemoryAtKeysIo();
+      await memory.write(
+          enrollmentResponse.atSign!, enrollmentResponse.atAuthKeys!);
+      atLookup.authenticator = authenticatorFor(
+        memory,
+        enrollmentResponse.atSign!,
+        enrollmentId: enrollmentResponse.enrollmentId,
+        chops: atChops,
+      );
+    }
 
     await _waitForPkamAuthSuccess(
       atLookup,

@@ -1,4 +1,19 @@
 ## 3.4.0
+- feat: `AtAuthImpl.onboard` and `EnrollmentHandshake` install authenticators
+  too, finishing at_auth's side of the seam. Both inject their signer rather
+  than let the keystore resolve one: a PQ-native activation signs with a
+  keypair minted moments earlier that is in no keyfile, under an enrollment the
+  atServer has not created yet, and the handshake's keys are deliberately
+  incomplete because the symmetric key is what it is there to fetch.
+  `authenticatorFor` gained an explicit `signingAlgo` for the first case - the
+  rsa2048 default would otherwise sign an ML-DSA key with the RSA routine.
+- fix(docs): the previous entry said a functional pass left "4 ladder
+  authentications". That figure was read through a log filter: the ladder logs
+  at `finer` and the functional harness sets the root level to `shout`, so
+  almost all of them were invisible. Measured with both routes at `shout`:
+  **57 through the injected route and 201 through the ladder**. The remaining
+  ones are at_client's `remote_secondary`, which every AtClient verb goes
+  through, and at_onboarding_cli.
 - feat: `AtAuthImpl.authenticate` installs an `AtAuthenticator` on the lookup,
   so authentication runs on this side of the seam rather than out of
   at_lookup's credential fields. The keystore it reads follows the same

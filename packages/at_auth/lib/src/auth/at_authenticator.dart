@@ -41,6 +41,12 @@ const _cramTransientWaitMillis = 4000;
 /// than wasteful: it throws on a keyfile missing material that a caller with
 /// its own signer never needed.
 ///
+/// [signingAlgo] overrides the algorithm the keyfile would name. Onboarding a
+/// PQ-native atSign is the case that needs it: the keypair was minted moments
+/// earlier and is in no keyfile, under an enrollment the atServer has not
+/// created yet, so nothing can be resolved and the rsa2048 default would sign
+/// an ML-DSA key with the RSA routine.
+///
 /// Nothing here reaches into at_lookup for key material, and at_lookup names
 /// none of these types: `AtKeys` and `AtKeysIo` live in at_auth, which depends
 /// on at_lookup, so the dependency only points one way.
@@ -50,6 +56,7 @@ AtAuthenticator authenticatorFor(
   String? cramSecret,
   String? enrollmentId,
   AtChops? chops,
+  SigningAlgoType? signingAlgo,
   Map<String, dynamic> clientConfig = const {},
 }) =>
     (executor) async {
@@ -65,7 +72,8 @@ AtAuthenticator authenticatorFor(
         _logger.finer('no keyfile for $atSign - authenticating with CRAM');
         return _cram(executor, atSign, cramSecret, clientConfig);
       }
-      return _pkam(executor, atSign, keys, enrollmentId, clientConfig, chops);
+      return _pkam(executor, atSign, keys, enrollmentId, clientConfig, chops,
+          signingAlgo);
     };
 
 /// Ported from `AtLookupImpl.pkamAuthenticate`, which keeps the challenge
@@ -78,12 +86,21 @@ Future<bool> _pkam(
   String? enrollmentId,
   Map<String, dynamic> clientConfig,
   AtChops? injectedChops,
+  SigningAlgoType? injectedAlgo,
 ) async {
   // A null algorithm means the flat fields' RSA keypair, which is what
   // at_lookup signs with by default - so a legacy enrollment is rsa2048.
   final AtChops signer;
   final SigningAlgoType signingAlgo;
-  if (injectedChops != null) {
+  if (injectedAlgo != null) {
+    // The caller named the algorithm because the keystore cannot answer. A
+    // PQ-native activation signs with a keypair minted moments ago, under an
+    // enrollment the atServer has not created yet, so there is nothing to
+    // resolve from - and the default would sign an ML-DSA key with the RSA
+    // routine.
+    signer = injectedChops ?? keys.authenticationFor(enrollmentId).chops;
+    signingAlgo = injectedAlgo;
+  } else if (injectedChops != null) {
     // The caller brought its own signer - a hardware-backed one, say. Take
     // only the ALGORITHM from the keyfile: `authenticationFor` would build an
     // AtChops this call is about to discard, and it throws on a keyfile

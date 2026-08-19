@@ -5,8 +5,12 @@ at_commons, `FakeAtServerSocket`, the `_stripPrompt` guard the harness found on
 its first use, the event-driven `read()`, and the `onNotification` seam.
 **Step 3 has landed too** — `AtAuthenticator`, `AtCommandExecutor`, and
 `AtLookupImpl` preferring an injected authenticator over the ladder.
-**Step 4 is half done**: `authenticatorFor` exists in at_auth and nothing calls
-it yet. **Next is migrating the 7 writes** of `atChops` onto a lookup — 2 in
+**Step 4 is part done**: `authenticatorFor` exists and at_auth's three sites
+use it. Measured against a live atServer with both routes logging at `shout`:
+**57 authentications through the injected route, 201 still through the
+ladder**. ⚠️ An earlier measurement said "4 ladder" - it was read at `finer`,
+which the functional harness suppresses. Step 4 is finished when that count is
+**0**. **Still to migrate** of `atChops` onto a lookup — 2 in
 `at_auth_impl`, 1 in `enrollment_handshake`, 3 in at_client
 (`at_client_impl:105` reaching `remote_secondary`'s setter at `:32`, plus
 `:72`), 1 in `at_onboarding_service_impl` — plus the read guard at

@@ -80,13 +80,13 @@ class AtAuthImpl implements AtAuth {
   /// handed over frozen keys. Only when the request supplied a source and no
   /// keys does the authenticator get the source itself, and with it the
   /// re-reading that lets one closure answer CRAM then PKAM.
-  Future<AtKeysIo> _keysSourceFor(AtAuthRequest request, AtKeys resolved,
-      {AtKeysIo? io}) async {
-    if (request.atAuthKeys == null && io != null) {
-      return io;
+  Future<AtKeysIo> _keysSourceFor(String atSign, AtKeys resolved,
+      {AtKeysIo? reReadable}) async {
+    if (reReadable != null) {
+      return reReadable;
     }
     final memory = InMemoryAtKeysIo();
-    await memory.write(request.atSign, resolved);
+    await memory.write(atSign, resolved);
     return memory;
   }
 
@@ -161,8 +161,13 @@ class AtAuthImpl implements AtAuth {
     _installAuthenticator(
         atLookUp,
         authenticatorFor(
-          await _keysSourceFor(atAuthRequest, atAuthKeys,
-              io: atAuthRequest.atKeysIo),
+          await _keysSourceFor(atAuthRequest.atSign, atAuthKeys,
+              // Only when the request supplied a source and no keys of its
+              // own. An explicit AtKeys wins here exactly as it wins above,
+              // so the authenticator reads what this method read.
+              reReadable: atAuthRequest.atAuthKeys == null
+                  ? atAuthRequest.atKeysIo
+                  : null),
           atAuthRequest.atSign,
           enrollmentId: atAuthRequest.enrollmentId,
           chops: atChops,
@@ -317,6 +322,19 @@ class AtAuthImpl implements AtAuth {
       atChops ??= _atAuthKeys.toAtChops();
     }
     atLookUp!.atChops = atChops;
+    // The algorithm is named rather than derived here. A PQ-native activation
+    // signs with the keypair minted a few lines above, which is in no keyfile,
+    // under an enrollment the atServer has not created yet - so there is
+    // nothing for the keystore to resolve, and the rsa2048 default would sign
+    // an ML-DSA key with the RSA routine.
+    _installAuthenticator(
+        atLookUp,
+        authenticatorFor(
+          await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
+          atOnboardingRequest.atSign,
+          chops: atChops,
+          signingAlgo: atOnboardingRequest.signingAlgoType,
+        ));
 
     //3. send onboarding enrollment
     String? enrollmentIdFromServer;
