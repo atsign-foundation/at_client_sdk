@@ -34,7 +34,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
-| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **15** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **18** open small items — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
@@ -42,7 +42,6 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
-| [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — **partly overtaken 2026-08-19**: change 1 and half of change 3 shipped with 14.39's CLI commit; change 2 and the rest of 3 remain | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
 | [14.40](#1440-at_clients-in-progress-heading-is-a-patch-and-now-carries-a-breaking-change) | Decide at_client's next version number — `## 3.14.1` now carries a BREAKING entry | Nothing but a ruling. The bump is gkc's call and was deliberately not taken |
 | [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green and **live-green** — functional 174/174 (after one 173/174 whose single failure was [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)), e2e pq 54/54, and the `legacy-server` arm 2/2 against the pinned `atsigncompany/virtualenv:vip-p3.15.0`. **Owed: public-data signature verification** (undesigned) | Nothing |
 
@@ -200,7 +199,7 @@ instead. There is no `--disallowLegacyEncryption` anywhere.
 
 ⚠️ **`pq_native_onboard_test.dart` set `preference.signingAlgoType` itself**, so
 it asserted the value it had just written and passed whether or not the
-resolution mechanism worked — the shape [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign)
+resolution mechanism worked — the shape [14.38](detail/implementation-plan.md#1438-activate_cli-cannot-administer-a-pq-native-atsign)
 recorded. It now names `PqPosture.pqReady` and nothing else.
 
 ✅ **The sibling-repo dependency is merged, and still unreleased.**
@@ -252,70 +251,6 @@ this repository — so this is a numbering question, not a blast-radius one.
 ⛔ **Not acted on deliberately.** Version bumps are gkc's call and the standing
 rule is to fold entries under the in-progress heading rather than open a new
 one. Recorded here so the conflict is not discovered at publish time.
-
-### 14.38 `activate_cli` cannot administer a PQ-native atSign
-
-Found 2026-08-18 driving `activate_cli` against a throwaway virtualenv.
-Evidence, reproduction and the rejected alternatives are in
-[#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161); this
-row is the work.
-
-⚠️ **Partly overtaken by 14.39's CLI commit, 2026-08-19** — see the change
-list below before starting. The argument in the reproduction no longer exists:
-what activates a PQ-native atSign now is `--posture pqReady`.
-
-An atSign activated PQ-native cannot then run `otp` or
-`list`: both fail with `RangeError`, because the connection signs the PKAM
-challenge as RSA-2048 with an ML-DSA key. `otp` is where a second enrollment
-starts, so a PQ-native atSign cannot enrol a second app.
-
-at_client resolves the algorithm correctly and `RemoteSecondary` stamps it on
-the lookup. `AtOnboardingServiceImpl._initAtClient` then overwrites it from the
-preference at `at_onboarding_service_impl.dart:139`. The comment above that
-line says activation has no key material to resolve from, which is true for the
-`onboard` caller and false for the `authenticate` caller, and the method serves
-both.
-
-**Three changes, agreed with gkc 2026-08-18.**
-
-1. ✅ **DONE 2026-08-19** (14.39's CLI commit). The overwrite at
-   `at_onboarding_service_impl.dart:139` no longer reads the deprecated
-   `signingAlgoType`; it reads the posture's `authenticationKeyAlgorithm`, as
-   does the `pqNative` branch that sat beside it. It was **not** deleted
-   outright as this row proposed — activation genuinely has no key material to
-   resolve from, so the posture axis is what says which algorithm to mint.
-2. **Fix the file-stream `RemoteSecondary`** — the one constructed inside
-   `AtClientImpl.encryptUnencryptedFile`/`_uploadFile`, which passes neither
-   `signingAlgoType` nor `enrollmentId` and so signs with the same default.
-   Find it by symbol rather than by line:
-   `git grep -n 'var remoteSecondary = RemoteSecondary(' -- packages/at_client/lib`
-   (this row said `at_client_impl.dart:1584` until 2026-08-19, and a cold read
-   found the line had drifted to 1592 — a line number in a plan row is stale
-   the moment anything above it moves).
-3. ⚠️ **PARTLY DONE 2026-08-19.** `pq_native_onboard_test.dart` no longer sets
-   the value it asserts — it names `PqPosture.pqReady` and nothing else, so the
-   posture is the only thing that can make it pass. **Still owed:** drive the
-   remote operation on the client from the fresh `authenticate()` rather than
-   the activation client, and keep an rsa2048 arm in the same run so the two
-   provably differ.
-
-⚠️ **Was "not doing, deliberately" — and the reason it waited has arrived.**
-`AtLookupImpl.signingAlgoType` still initialises to `rsa2048`
-(`at_lookup_impl.dart:739`), so any site that forgets authenticates with the
-wrong routine silently. Making it required at construction would let the
-compiler enumerate every site, and this was parked because at_lookup's in-tree
-3.6.1 equals its published 3.6.1, so touching it opens 3.6.2 for nothing.
-**[Ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
-ruling 2 now needs `AtConnectionMetaData` to record what a connection last
-authenticated as**, which opens at_lookup anyway — so this rides that version
-when gkc opens it.
-
-✅ **The posture argument that "may replace the flag" shipped** on 2026-08-19:
-`--posture legacy|pqReady|pqActive` on every command, `--signingAlgoType`
-removed. So the silent-no-op-on-non-onboard-commands half of
-[#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) is
-closed by construction — there is no flag left to be a no-op. What remains of
-this row is change 2 and the residue of change 3.
 
 ### 14.30 A content notification can outrun the key that opens it
 
@@ -1696,6 +1631,7 @@ absence of a row from this table.
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| 14.38  | `at_activate` can administer a PQ-native atSign             | DONE 2026-08-19, live-green (CLI functional pack 17/17 against a locally built `at_virtual_env:local`). All three agreed changes landed, and two of them had been recorded as done when they were not: the `_initAtClient` overwrite survived a change to *which* preference field it read, and the file-stream site was named as methods that do not exist. The row also claimed `--posture` reached every command — it reached every *parser* while twelve commands ignored the value. Detail: [14.38](detail/implementation-plan.md#1438-activate_cli-cannot-administer-a-pq-native-atsign) |
 | 14.37  | `pqSeal` version `0x01` removed outright, and the last homegrown key schedule with it | DONE 2026-08-18 — **one commit, not the two this row prescribed.** gkc reframed it from *retire safely* to *is there any value in `0x01` over `0x02`* — there is none: same KEM, so no diversity; self-generated vectors against the working group's; and its only distinctive feature, AES-256-GCM, is immaterial on a 32-byte content key. `_SealVersion.custom` had no other user, so `atPQv1-base` left the tree entirely. ⚠️ The two-commit plan's first step was also **mis-specified** — it named `SecretSharingAlgos.suites`, which neither seal site reads. Ruling [110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18) amended in place. Detail: [14.37](detail/implementation-plan.md#1437-the-0x01-seal-version-removed-outright) |
 | 14.15  | Pre-PR rails checklist                                  | DONE 2026-08-10 — the compose-image item is struck in the body and nothing needs reverting before a PR. It stayed in TODO until 2026-08-18 because the section opened with a condition instead of a status. The external gate it names is step 32's blocker |
 | 14.17  | Signature agility, and the G1 cluster joins the catalogue | DONE 2026-08-18 — steps 1–5 done, step 6 out of scope by gkc's ruling; the last piece was the signed-envelope 3×3. ⚠️ **This row sat in TODO reading "the owed half" for the rest of that day**, while the section's own body said COMPLETE — the shape the plan's own re-derivation warning names, where a body says closed and the heading nothing keys on says open. A cold read caught it. The section heading moved with this row. Body: [14.17](#1417-signature-agility--complete) |

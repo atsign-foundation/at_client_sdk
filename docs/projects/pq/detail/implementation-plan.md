@@ -1501,6 +1501,92 @@ key and the enrollee onboards without it.
 **Effort:** L.
 **coversD1:** D1-B B7 phases 1-3.
 
+### 14.38 `activate_cli` cannot administer a PQ-native atSign
+
+Found 2026-08-18 driving `activate_cli` against a throwaway virtualenv.
+Evidence, reproduction and the rejected alternatives are in
+[#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161); this
+row is the work.
+
+✅ **DONE 2026-08-19**, live-green: the CLI functional pack 17/17 against a
+locally built `at_virtual_env:local`.
+
+An atSign activated PQ-native cannot then run `otp` or
+`list`: both fail with `RangeError`, because the connection signs the PKAM
+challenge as RSA-2048 with an ML-DSA key. `otp` is where a second enrollment
+starts, so a PQ-native atSign cannot enrol a second app.
+
+at_client resolves the algorithm correctly and `RemoteSecondary` stamps it on
+the lookup. `AtOnboardingServiceImpl._initAtClient` then overwrote it from the
+preference.
+
+⚠️ **This row used to say the method "serves both" the `onboard` and
+`authenticate` callers. `onboard()` never called it.** Its two callers are
+`enroll()` and `authenticate()`, and that is what makes the fix a condition
+rather than a deletion: enrolment holds a lookup the service built for a
+keypair minted moments earlier with no keyfile yet, so the preference is the
+only source there is, while authentication adopts the client's own lookup and
+the client has already read the keyfile. Deleting the stamp outright, as change
+1 first proposed, breaks enrolment — proven by mutation, not by argument.
+
+**Three changes, agreed with gkc 2026-08-18.**
+
+1. ✅ **DONE 2026-08-19** — in two steps, and the first was not enough.
+   14.39's CLI commit changed *which* preference field the overwrite read
+   (posture's `authenticationKeyAlgorithm` rather than the deprecated
+   `signingAlgoType`) and this row recorded that as done. The overwrite itself
+   survived, so #2161 stayed live: `at_activate otp`, `list` and `spp` build
+   their client through `createAtClient`, which named no posture, so the
+   posture was `legacy` and the stamp claimed rsa2048 for an ML-DSA
+   enrollment. The stamp is now conditional — key material wins for a lookup
+   adopted from the client, the preference still decides for one the service
+   built, and `hashingAlgoType` stays unconditional on both paths because no
+   key material says how a challenge is hashed (and because that assignment is
+   what resets a cached client's lookup, which the `list` after a
+   passphrase-protected authentication depends on — the pack caught this).
+2. ✅ **DONE 2026-08-19.** The site was **not** in
+   `AtClientImpl.encryptUnencryptedFile`/`_uploadFile`, as this row claimed;
+   neither symbol exists anywhere in the tree. It was in the deprecated
+   `AtClient.stream()`, which the row's own grep recipe found correctly. All
+   three sites in `AtClientImpl` that open a connection now go through
+   `buildRemoteSecondary`, so carrying the client's identity is a property of
+   the class; a unit rail pins that there is exactly one construction left and
+   that it is the builder.
+3. ✅ **DONE 2026-08-19.** Both tests in `pq_native_onboard_test.dart` now
+   drive their remote commands on a client from a fresh `authenticate()` under
+   a **bare** preference — what `createAtClient` hands every non-onboarding
+   command — never on the activation client, which agrees with itself. The
+   rsa2048 arm is a legacy activation of `@egbiometric🛠`, and each arm states
+   its own resolved algorithm so a run in which they converged fails rather
+   than passing while measuring nothing.
+
+⛔ **Still parked, and the reason has changed.**
+`AtLookupImpl.signingAlgoType` initialises to `rsa2048` (find it by symbol:
+`git grep -nP 'SigningAlgoType signingAlgoType = ' -- packages/at_lookup/lib`),
+so any site that forgets authenticates with the wrong routine silently. Making
+it required at construction would let the compiler enumerate every site. This
+was parked for want of an open at_lookup version — and 3.7.0 is now open and
+unpublished, so **that** blocker is gone. The new one is bigger: `AtLookupImpl`
+is a published constructor with callers outside this tree, so a required named
+parameter takes at_lookup to **4.0.0**, and every in-tree defective site is now
+fixed by other means (14.38 change 2, and the audit that found the only other
+unstamped sites are the dead `SyncIsolateManager`). Reopen when at_lookup has a
+major in flight for its own reasons; needs a ruling, not a decision taken here.
+
+✅ **The posture argument reaches every command as of 2026-08-19** —
+`--posture legacy|pqReady|pqActive`, `--signingAlgoType` removed.
+
+⚠️ **This paragraph used to say that closed the silent-no-op half of
+[#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) "by
+construction — there is no flag left to be a no-op". It did not.** For a day
+`--posture` reached every *parser* while only `onboard` and `enroll` read the
+value; the other twelve commands built their client through `createAtClient`,
+which named no posture. The argument had reproduced the exact defect it
+replaced, and the tests were green throughout because they asserted the parser
+accepted it. `createAtClient` now takes a `posture`, all eleven call sites pass
+it, and a rail checks the value reaches a client rather than a parser.
+
+
 ### ON-1 — PQ-native greenfield onboarding + legacy-interop opt-out · at_client, at_client_flutter · M — **ACCEPTANCE COMPLETE 2026-08-08** ([decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08))  *(critic gap — UC-A1.1; amended by decisions 37)*
 **Landed:** `pqNativeOnboard` (at_client) over `AtOnboardingRequest.signingAlgoType`
 + `mintLegacyMaterial` + `metadataBuilder` and a PQ-native mint (at_auth 3.4.0).
@@ -2863,7 +2949,7 @@ builds on it.
 | 4 | **DONE 2026-08-13 — ruling 2 landed, so all of step 4 is complete and step 6 is unblocked.** Ruling 2 in three commits: `6462ae786` (the advertisement becomes `{v, createdAt, keys:[{use, alg, pub, kid}], suites}` with one `toPayload`/`fromPayload` codec replacing a map literal in `_mint` and a hand parser in `verify` 250 lines apart), `d28ef48a9` (a key that is not its algorithm's length is refused — a kid is the digest of whatever bytes are carried, so it matched a forged key as readily as a real one), `69449603e` (the reader skips entries it has no KEM for and picks the strongest it can use, which has to ship before any writer emits a second key). **Three things the ruling got wrong**, all corrected in `decisions.md` 94: `_apsk` entries never carried `status`; `status` and `KeyEntryStatus` are deferred **entirely to step 5** so no dead field ships (gkc, 2026-08-13); and at_auth cannot reach `PackageKey` because at_client depends on at_auth, so one vocabulary means one **wire spelling** across two Dart types. `createdAt` was added for symmetry with `KeyPackage`; `v` stays 1. Rails: at_client 1188/1188, functional 146/146. One key-entry vocabulary across all three advertising records — `{use, alg, pub, kid, status?}` inside `{v, keys:[…], suites}`. **Landed 2026-08-12:** ruling 3 (one kid function, at_auth's `publicKeyKid`, over the key's raw BYTES — `apskKid` hashed the base64 text and `nskeyKidOf` the material, and every kpid changes value); ruling 4 (`v`, `alg`, `suites` required, both `legacy*Suites` deleted); ruling 5 (one `SecretSharingAlgos.bestSuiteBetween`); **ruling 6** — `pq_envelope.dart`'s `pqSealToBase64`/`pqOpenFromBase64`, both taking `info` and `version` as **required** arguments and constructing neither, so there is nothing inside the shared code for the two substrates to converge onto. at_chops' `pqSeal`/`pqOpen` now require `info` too, which makes a shared binding a **compile error** rather than a convention — it was reachable before, because `info` was optional and `info ?? Uint8List(0)` made omission and empty the same binding. **Found en route:** the pairwise substrate had NO test that could fail on a converged binding — dropping the label from all three pairwise/enrollment call sites left the suite green at 1180/1180 — so the production-fed differential in `pairwise_secret_sharing_test.dart` was built first and proven by that same symmetric mutation, which now turns exactly one test red. **Still owed: ruling 2** — the nskey advertisement gains a `keys` list and adopts the shared spelling | [`decisions.md` 94](decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — ⚠️ **before step 6**, or that parser becomes the third hand-rolled codec for one shape |
 | 5 | **DONE 2026-08-13 — the `retired` key path, in three commits.** `6a5eac838`: `PackageKey` gains `status`, a `KeyEntryStatus` of `active` or `retired`, and `bestKeyFor` on both a key package and an nskey advertisement passes a retired key over, so `kpid` is the *active* enc key's kid. Emitted only when retired — absent already reads as active — and an unrecognised value reads as retired, the one reading that cannot make a build use a key its owner withdrew. `f956b2146`: `PersistedApkamKeys` becomes `{encKeys: [PersistedEncKey]}` and `KeyPackageRegistration` expands, advertises and answers for every held key, with `encKeyFor(kid)` replacing `encSecretKey` and `heldKpids` listing every address. `f6fc3796e`: the sweep, the wake-up subscription and the sync listener cover every held address (`EnvelopeAddressing.regexForAny`/`sweepRegexForAny`), and `_consume` opens with the key the envelope names. **Three things ruling 9 got wrong or omitted**, all recorded in `decisions.md` 95: the sweep filter is a **fifth** consequence and the one that makes the other four reachable; the keyfile already records the status (`AtKeysMaterial.KeyPartStatus`, `AtKeys.retireKey`, and an `AtKeysAssurance` rule enforcing one active `publicEncapsulation` per enrollment and algorithm), so deriving it from `createdAt` was wrong; and `dead` material is not adopted at all. Rails: at_client 1210/1210, functional 146/146. **Nothing rotates yet** — the writer is step 16. ⚠️ app-facing: `PersistedApkamKeys` is what apps build in `loadApkamKeys`/`saveApkamKeys` | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) rulings 6–9 — without the plural holding the field is decorative. The **name collision** was settled 2026-08-12 (gkc) and landed as ruled: the per-entry wire value is a Dart `KeyEntryStatus`, and `KeyPackageStatus` — the reader's verdict on a whole package (`present`/`absent`/`rejected`/`unsupported`) — keeps its name. Nothing renamed |
 | 6 | **DONE — mostly with step 2a, completed 2026-08-13.** `parseApskValue` reads the array **and** the released bare string, refuses a structured value advertising nothing it understands rather than guessing, and skips entries whose `use` or `alg` it does not know; `apsk_formats_test.dart` covers all of that plus "the array form is unmistakable to a bare-RSA consumer". Finished on 2026-08-13 by giving `ApskSigningKey` a `status` and having `apskSigningKeys` read it — **keeping** a retired entry, because this list is what verifies stored envelopes and a retired key is precisely what signed the older ones. `KeyEntryStatus` moved from at_client to **at_auth** in the same change so all three advertising records name one type, narrowing [94](decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)'s "one vocabulary cannot mean one Dart type" — that was true of a type living in at_client, and at_auth is the lower package. **Found by the re-verify:** `design.md` 9.3's JSON example omitted `kid`, which the reader requires, so the document the design showed is one every reader treats as empty and then refuses; corrected, and pinned. `advertised.first` and the singular `ParsedApsk` are steps 7–9's business, not a gap here | [`design.md` 9.3](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
-| 7 | **DONE 2026-08-13.** `SigningAlgoType.strongestFirst` + `strongestOf` in at_chops — purely additive (two statics on the existing enum; no member added, moved or renamed, so it does not touch the unresolved 3.6.0-versus-major question). Deliberately **not** declaration order: members are declared in the order they were added and reordering them is a wire change, so preference is a second statement. `mldsa65` first, categorically — the only member Shor does not break — then RSA-4096, `ed25519`, `ecc_secp256r1`, RSA-2048 by classical security level. Total on purpose: a partial order leaves the choice undefined for exactly the pair nobody thought about. **The tripwire is completeness, not just the literals**: a new `SigningAlgoType` left out of the order turns `test/signing_strength_test.dart` red, which is what stops it becoming silently unrankable. Wired straight into `parseApskValue`, which took `advertised.first` — the order entries arrive in is the *signer's* choice, so an enrollment advertising ML-DSA-65 beside RSA-2048 was verified against whichever it listed first | [14.17](#1417-signature-agility--complete) |
+| 7 | **DONE 2026-08-13.** `SigningAlgoType.strongestFirst` + `strongestOf` in at_chops — purely additive (two statics on the existing enum; no member added, moved or renamed, so it does not touch the unresolved 3.6.0-versus-major question). Deliberately **not** declaration order: members are declared in the order they were added and reordering them is a wire change, so preference is a second statement. `mldsa65` first, categorically — the only member Shor does not break — then RSA-4096, `ed25519`, `ecc_secp256r1`, RSA-2048 by classical security level. Total on purpose: a partial order leaves the choice undefined for exactly the pair nobody thought about. **The tripwire is completeness, not just the literals**: a new `SigningAlgoType` left out of the order turns `test/signing_strength_test.dart` red, which is what stops it becoming silently unrankable. Wired straight into `parseApskValue`, which took `advertised.first` — the order entries arrive in is the *signer's* choice, so an enrollment advertising ML-DSA-65 beside RSA-2048 was verified against whichever it listed first | [14.17](../implementation-plan.md#1417-signature-agility--complete) |
 | 8 | **DONE 2026-08-13.** `requireAlg` is gone rather than rewritten: the algorithm is now *resolved* — from what the envelope's `signatures` and the signer's `_apsk` have in common, taking the strongest by `SigningAlgoType.strongestFirst` — and then its key is fetched, where before one advertised key was taken and the envelope was required to match it. Its refusal survives in a different form: no algorithm in common is refused naming both lists. `ParsedApsk` went plural (`keys`, `keyFor(algo)`; `signingAlgo`/`publicKey` survive as strongest-of getters), and the bare RSA form parses to a one-entry list so both published forms are one shape to the caller. The two JOSE `alg` switches — one on the sign side, one on the verify side — became one `_joseAlgFor`, since two would be two chances to disagree | ⚠️ an inversion, not an addition |
 | 9 | **DONE 2026-08-13, with step 8** — the two do not separate: resolving the strongest shared algorithm *is* walking the entries. `verifyEnvelope` selects its entry by algorithm rather than taking `signatures.first`, verifies only that one, and refuses on failure with no fallback. **Found en route and fixed:** `signerEnrollmentId` reads `signatures.first.kid` while the verified entry is now chosen by algorithm, so the two could be different entries — append a signature under a stronger algorithm carrying another kid and a caller acts on a signer whose signature was never checked. `SignedEnvelope.fromJson` now refuses an envelope whose entries name more than one signer, which is a structural claim about this shape rather than a verify-time check. UC-G1.7 is covered for the first time, four rows | [`design.md` 9.4](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
 
@@ -3741,6 +3827,44 @@ its own. None blocks anything.
     correction that updates the two you have open leaves the others asserting
     the old figure with equal confidence.
 
+32. **`SyncIsolateManager` is dead code, and it holds the last two
+    identity-less `RemoteSecondary` constructions in at_client.** The class is
+    itself `@Deprecated`, is exported from no barrel, and has zero references
+    outside its own file — including tests and examples. The `SyncManager` its
+    deprecation message names as its only user no longer exists in the tree,
+    `Isolate.spawn` appears nowhere in at_client, and the only doc that
+    mentions it is the WASM port plan, which references it three times solely
+    to schedule its deletion. Its two `RemoteSecondary(atSign, preference,
+    privateKey: privateKey)` calls pass neither an enrollment id nor a signing
+    algorithm; after [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign)
+    change 2 they are the only ones left in the package, so a future audit of
+    that shape finds them and has to re-derive that they are unreachable.
+    Straight delete. Re-derive: `git grep -n 'SyncIsolateManager'`.
+
+33. **`lib/src/activate_cli/activate_cli.dart` is a deprecated file with no
+    caller.** `bin/activate_cli.dart` — the `at_activate` binary — routes
+    straight to `auth_cli.main`, and nothing imports the library file. Its
+    bare `AtOnboardingPreference()` at the top of `wrappedMain` is why a grep
+    for posture-less preference construction in at_onboarding_cli still
+    returns a hit after 14.38 threaded the posture through `createAtClient`,
+    which costs the next reader the same investigation. Straight delete, or
+    date it as historical. Re-derive:
+    `git grep -n "activate_cli/activate_cli"`.
+
+34. **The stream-transfer pair is deprecated for v4, has no in-repo caller,
+    and cannot be used from outside either.** `AtClient.stream()` and
+    `sendStreamAck` are both `@Deprecated("Obsolete, will be removed in v4")`;
+    nothing in this repo calls either, and the receive half
+    (`StreamNotificationHandler`, which drives `stream:receive`/`stream:done`
+    over its own socket) is reachable only from `sendStreamAck`, so it is dead
+    by the same argument. `AtStreamResponse` and `AtStreamStatus` are exported
+    from no barrel, so an external consumer can call `stream()` but cannot
+    write down the type it returns. The deprecation was never announced in the
+    CHANGELOG. It belongs on the v4 removal list rather than being carried as
+    a live API — and until then it stays covered by
+    `AtClientImpl.buildRemoteSecondary`, which is the only reason it now
+    authenticates as the client it belongs to.
+
 #### 14.19.1 Things that LOOK like defects and are not
 
 Recorded because each was proposed as a fix and **rejected on evidence**.
@@ -4491,7 +4615,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
 | 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
-| 11 | **14.19's open small items — 10 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18, against an actual 10-then-11; re-derive it with the command below rather than reading either number.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
+| 11 | **14.19's open small items — 18 unstruck, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18 against an actual 10, then **10** until 2026-08-19 against an actual 18 — the same number, wrong in both directions a day apart; re-derive it with the command below rather than reading any of them.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
 | 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
 
