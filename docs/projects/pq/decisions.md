@@ -170,7 +170,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | AMENDED 2026-08-18        |
 | [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
 | [112] | An unreadable key source is not an empty one                                                | 2026-08-18 | LIVE                      |
-| [113] | PqPosture: three postures, and the rollout they drive                                       | 2026-08-18 | LIVE                      |
+| [113] | PqPosture: three postures, and the rollout they drive                                       | 2026-08-18 | AMENDED 2026-08-19        |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted

@@ -10914,6 +10914,27 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
      superseded enrollment on a **720-hour** grace, so a connection left behind
      goes on working for thirty days — a half-moved client looks healthy and
      fails a month later with nothing pointing back here.
+
+     *Amended 2026-08-19 while building it, because "rebuild rather than
+     mutate" turned out to carry a cost this bullet did not know about.* All
+     three claims verified against source — `_atChops` via
+     `_createAtChops`'s `keys.authenticationFor(enrollmentId)`,
+     `_remoteSecondary` via its `enrollmentId:` argument, the monitor via
+     `NotificationServiceImpl`'s `enrollmentId: atClient.enrollmentId`. But
+     `Monitor.enrollmentId`, `Monitor.atChops` and `Monitor.signingAlgoType`
+     are all **final**, so the monitor can only be *replaced* — and
+     `currentListenerStateStream` handed out that monitor's own controller, so
+     every existing subscriber would have been left on a stream nothing writes
+     to again: receiving nothing, told nothing, no error anywhere. **The holder
+     outside this tree is noports** — `sshnpd_impl.dart` subscribes once at
+     daemon startup and holds it for the process's life, and would simply have
+     stopped reporting listener state after a retrofit. So rebuilding the
+     monitor is safe only because `NotificationServiceImpl` now owns a relay
+     that forwards from whichever monitor is current, which
+     `repointMonitor()` re-points as it swaps. The general shape is the durable
+     part: **replacing an object replaces the streams it owns**, and a
+     long-lived subscriber to one of those is invisible at the replacement
+     site.
    - **A partial re-point is retried in-run**, with bounded exponential
      backoff, the client serving on the old enrollment throughout. On giving
      up: `warning`, naming both enrollment ids. Nothing is lost — the next

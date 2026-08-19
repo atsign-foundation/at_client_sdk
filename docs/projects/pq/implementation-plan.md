@@ -44,7 +44,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.38](#1438-activate_cli-cannot-administer-a-pq-native-atsign) | `activate_cli` cannot administer a PQ-native atSign — **partly overtaken 2026-08-19**: change 1 and half of change 3 shipped with 14.39's CLI commit; change 2 and the rest of 3 remain | Nothing. Cause pinned and the shape agreed; [#2161](https://github.com/atsign-foundation/at_client_sdk/issues/2161) carries the evidence |
 | [14.40](#1440-at_clients-in-progress-heading-is-a-patch-and-now-carries-a-breaking-change) | Decide at_client's next version number — `## 3.14.1` now carries a BREAKING entry | Nothing but a ruling. The bump is gkc's call and was deliberately not taken |
-| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Owed: client-driven retrofit at start** (designed, unbuilt) and **public-data signature verification** (undesigned) | Retrofit is blocked on an at_lookup version bump — it needs `AtConnectionMetaData` to record what a connection last authenticated as, and in-tree 3.6.1 equals published 3.6.1. gkc's call |
+| [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Owed: client-driven retrofit at start** (designed, part-built 2026-08-19 — the two connection-identity foundations are in, the re-point itself is not) and **public-data signature verification** (undesigned) | Nothing. The at_lookup blocker is lifted: 3.7.0 carries the connection-identity fields |
 
 ### 14.39 `PqPosture` and the rollout it drives
 
@@ -77,6 +77,22 @@ whole startup; "partial from `pqReady`" means no retrofit at all; the trigger
 is derived from key material rather than stored; and the new enrollment reuses
 the old one's `appName`, `deviceName` and grants verbatim.
 
+✅ **The monitor's move is built, and it needed something ruling 2 did not
+know.** `Monitor.enrollmentId`, `Monitor.atChops` and `Monitor.signingAlgoType`
+are all `final`, so "rebuild rather than mutate" means the monitor object is
+*replaced* — and `currentListenerStateStream` handed out that object's own
+controller, so every subscriber alive at the swap would have been left on a
+stream nothing writes to again. noports' `sshnpd` holds exactly such a
+subscription for the life of the daemon. `NotificationServiceImpl` now owns a
+relay that forwards from whichever monitor is current, and `repointMonitor()`
+re-points it as it swaps, closing the old connection explicitly.
+
+⚠️ **The audit this implies has NOT been done: replacing an object replaces
+every stream it owns**, and a long-lived subscriber to one of those is
+invisible at the replacement site. The re-point replaces `_atChops` and
+`_remoteSecondary` too. Neither is known to expose a stream — that is an
+absence nobody has checked, not a finding.
+
 ⚠️ **Two of the three blockers first recorded here were wrong**, and both for
 the same reason — read off `AtClientPreference` and a function signature rather
 than the layer that already stores the data. `appName`, `deviceName` and the
@@ -89,10 +105,13 @@ different client — is what ruling 2 now answers.
 **Nothing is half-built for this** — `selfRetrofit` has no production caller at
 all today; every call site in the tree is a test.
 
-⚠️ **It reaches at_lookup, whose in-tree version 3.6.1 is already published**,
-so landing the connection-identity field needs a version bump — gkc's call.
-Noted in passing: the builder field at `at_lookup_impl.dart:553` is spelled
-`enrollmentlId`.
+✅ **The at_lookup half is DONE**, released as **3.7.0** (gkc's call
+2026-08-19; in-tree 3.6.1 equalled published 3.6.1, so there was no in-progress
+heading to fold under). `AtConnectionMetaData` gained
+`authenticatedAsEnrollmentId` and `authenticatedAt`, set by every path in
+`AtLookupImpl` that authenticates, and `Monitor._authenticateConnection` sets
+the same fields on its own socket. Noted in passing: the builder field at
+`at_lookup_impl.dart:563` is spelled `enrollmentlId`.
 
 **The narrowing.** `disallowLegacyEncryption` becomes posture-only and its
 `AtClientPreference` override goes, which overturns ruling 70's
