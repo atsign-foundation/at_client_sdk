@@ -665,8 +665,8 @@ void main() {
       expect(SigningAlgoType.mldsa65.name, 'mldsa65');
     });
 
-    test('the deployment default keyEstablishmentAlgo is x-wing', () {
-      expect(AtClientPreference().keyEstablishmentAlgo, 'x-wing');
+    test('the deployment default keyEstablishmentAlgorithms is [x-wing]', () {
+      expect(AtClientPreference().keyEstablishmentAlgorithms, ['x-wing']);
     });
 
     test('the _apsk reader accepts the exact published array shape', () {

@@ -282,6 +282,7 @@ void main() {
             disallowLegacyEncryption: true,
             mintLegacyMaterial: true,
             sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+            keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
           ).disallowLegacyEncryption,
           isTrue,
           reason: 'a bespoke posture can still ask for the refusal without '
@@ -298,6 +299,7 @@ void main() {
                 disallowLegacyEncryption: true,
                 mintLegacyMaterial: true,
                 sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+                keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
               ),
           throwsArgumentError);
     });

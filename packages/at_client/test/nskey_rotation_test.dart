@@ -271,9 +271,9 @@ void main() {
       // preference — the path seed() takes without a roster round trip.
       final lookUp = c.client.getRemoteSecondary()!.atLookUp;
       when(() => lookUp.enrollmentId).thenReturn(null);
-      when(() => c.client.getPreferences()).thenReturn(AtClientPreference()
-        ..namespace = namespace
-        ..keyEstablishmentAlgo = SecretSharingAlgos.mlKem1024);
+      when(() => c.client.getPreferences()).thenReturn(AtClientPreference(
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024])
+        ..namespace = namespace);
       final filer = await filing();
       final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
       final s = sharing();
@@ -304,8 +304,8 @@ void main() {
     test('conveys a seed the receiver can re-derive the public half from, '
         'under ML-KEM where seed and decapsulation key differ', () async {
       final c = client();
-      when(() => c.client.getPreferences()).thenReturn(AtClientPreference()
-        ..keyEstablishmentAlgo = SecretSharingAlgos.mlKem1024);
+      when(() => c.client.getPreferences()).thenReturn(AtClientPreference(
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]));
       final filer = await filing();
       final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
       await ring.mintAndPublish(namespace);

@@ -48,11 +48,21 @@ class FakeCryptoProvider extends Fake implements CryptoProvider {}
 class MockAtClientManager extends Mock implements AtClientManager {}
 
 class MockAtClient extends Mock implements AtClient {
+  /// [keyEstablishmentAlgorithms] is a constructor argument rather than
+  /// something a test sets afterwards because the field is final — and
+  /// `getPreferences()` is a concrete override here, so `when(() =>
+  /// client.getPreferences())` does not reach `noSuchMethod` and silently
+  /// stubs nothing. Both routes a test would reach for are closed; this is
+  /// the one that works.
+  MockAtClient({List<String>? keyEstablishmentAlgorithms})
+      : _preference = AtClientPreference(
+            keyEstablishmentAlgorithms: keyEstablishmentAlgorithms)
+          ..namespace = 'wavi';
+
   // A stable, mutable preference (matching the real getPreferences(), which
   // returns the live instance) so tests can set `.crypto` to inject a
   // CryptoConfig that CryptoRuntime resolves against.
-  final AtClientPreference _preference = AtClientPreference()
-    ..namespace = 'wavi';
+  final AtClientPreference _preference;
 
   @override
   AtClientPreference getPreferences() => _preference;

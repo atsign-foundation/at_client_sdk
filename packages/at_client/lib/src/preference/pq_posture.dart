@@ -145,6 +145,30 @@ class PqPosture {
   /// state it in the same place as everything else it states.
   final List<String> sealsToKeyAlgorithms;
 
+  /// The key-establishment algorithms this atSign **mints and advertises**, so
+  /// that peers can seal to it — the receiver's side, where
+  /// [sealsToKeyAlgorithms] is the sender's.
+  ///
+  /// **One entry is the ordinary state and the default.** Unlike the sender's
+  /// list, where every omission refuses somebody, an entry here costs a
+  /// keypair minted, filed and advertised for the life of the enrollment — and
+  /// buys nothing on its own, because a sender needs only one construction in
+  /// common. Advertising both KEMs is what a **migration** looks like, not
+  /// what a healthy deployment looks like.
+  ///
+  /// So a second entry means: offer both while peers catch up, then drop the
+  /// first. An enrollment holds at most one active key per algorithm — the
+  /// keyfile's own assurance rule — so the list is exactly the set of active
+  /// keys the enrollment's package advertises. Removing an entry **retires**
+  /// that key rather than deleting it: envelopes already sealed to it still
+  /// open, and senders stop addressing it.
+  ///
+  /// Identical in all three released stages, for the same reason
+  /// [sealsToKeyAlgorithms] is: which KEM an atSign publishes is a
+  /// **deployment** decision rather than a rollout position. It is an axis so
+  /// that a deployment states it where it states everything else.
+  final List<String> keyEstablishmentAlgorithms;
+
   /// A posture no released stage defines.
   ///
   /// Every axis is required: a defaulted one would hide the axes a caller
@@ -159,7 +183,15 @@ class PqPosture {
     required bool disallowLegacyEncryption,
     required bool mintLegacyMaterial,
     required List<String> sealsToKeyAlgorithms,
+    required List<String> keyEstablishmentAlgorithms,
   }) {
+    if (keyEstablishmentAlgorithms.isEmpty) {
+      throw ArgumentError.value(
+          keyEstablishmentAlgorithms,
+          'keyEstablishmentAlgorithms',
+          'an atSign that advertises no key-establishment key can receive '
+              'nothing sealed to it. Name at least one algorithm');
+    }
     if (disallowLegacyEncryption && !writesPqByDefault) {
       throw ArgumentError.value(
           disallowLegacyEncryption,
@@ -176,6 +208,7 @@ class PqPosture {
       disallowLegacyEncryption: disallowLegacyEncryption,
       mintLegacyMaterial: mintLegacyMaterial,
       sealsToKeyAlgorithms: sealsToKeyAlgorithms,
+      keyEstablishmentAlgorithms: keyEstablishmentAlgorithms,
     );
   }
 
@@ -188,6 +221,7 @@ class PqPosture {
     required this.disallowLegacyEncryption,
     required this.mintLegacyMaterial,
     required this.sealsToKeyAlgorithms,
+    required this.keyEstablishmentAlgorithms,
   });
 
   /// The default: classical throughout, and driving no upgrade.
@@ -206,6 +240,7 @@ class PqPosture {
     disallowLegacyEncryption: false,
     mintLegacyMaterial: true,
     sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+    keyEstablishmentAlgorithms: [SecretSharingAlgos.xWing],
   );
 
   /// **The credentials move and the data path does not.**
@@ -230,6 +265,7 @@ class PqPosture {
     disallowLegacyEncryption: false,
     mintLegacyMaterial: true,
     sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+    keyEstablishmentAlgorithms: [SecretSharingAlgos.xWing],
   );
 
   /// Post-quantum by default: the split is complete and the data path has
@@ -272,5 +308,6 @@ class PqPosture {
     disallowLegacyEncryption: true,
     mintLegacyMaterial: true,
     sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+    keyEstablishmentAlgorithms: [SecretSharingAlgos.xWing],
   );
 }

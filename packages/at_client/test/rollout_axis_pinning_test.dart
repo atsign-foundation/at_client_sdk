@@ -49,6 +49,7 @@ void main() {
     disallowLegacyEncryption: true,
     mintLegacyMaterial: true,
     sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+    keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
   );
 
   group('what counts as the same settings', () {
@@ -76,6 +77,7 @@ void main() {
         disallowLegacyEncryption: false,
         mintLegacyMaterial: true,
         sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+        keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
       ));
 
       expect(identical(canonical.posture, built.posture), isFalse,

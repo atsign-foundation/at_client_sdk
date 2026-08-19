@@ -367,8 +367,10 @@ void main() {
       // envelope, and an X-Wing decapsulation of a 0x03 one fails.
       TestSharer mlKemSharer(String enrollmentId, Uint8List seed) {
         final client = buildMockClient(enrollmentId);
-        when(() => client.getPreferences()).thenReturn(AtClientPreference()
-          ..keyEstablishmentAlgo = SecretSharingAlgos.mlKem1024);
+        when(() => client.getPreferences()).thenReturn(AtClientPreference(
+            keyEstablishmentAlgorithms: const [
+              SecretSharingAlgos.mlKem1024
+            ]));
         final sharer = TestSharer(client)
           ..directory = directory
           ..requestAnswerJitter = Duration.zero;

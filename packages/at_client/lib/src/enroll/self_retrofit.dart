@@ -206,7 +206,8 @@ Future<AtAuthSession> retrofitIdentity({
           metadataBuilder: enrollmentKeyPackageBuilder(session.atSign,
               signingAlgo: algo,
               advertisedSigningKey: advertisedSigningKey,
-              keyEstablishmentAlgo: preference.keyEstablishmentAlgo)),
+              keyEstablishmentAlgo:
+                  preference.keyEstablishmentAlgorithms.first)),
       atLookUp);
 
   // Authenticate under the new enrollment: the retrofit response's session

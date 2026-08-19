@@ -541,8 +541,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
 
   Future<NskeyAdvertisement> _mint(
       String owner, String namespace, MintLease lease) async {
+    // The primary, because an nskey is one key: only the enrollment's own key
+    // package advertises the whole configured list.
     final String keyAlgo =
-        _atClient.getPreferences()?.keyEstablishmentAlgo ??
+        _atClient.getPreferences()?.keyEstablishmentAlgorithms.first ??
             SecretSharingAlgos.xWing;
     final AtKemAlgorithm? kem = SecretSharingAlgos.kemFor(keyAlgo);
     if (kem == null) {

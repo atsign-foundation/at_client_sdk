@@ -214,14 +214,19 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// completes.
   String get encKeyAlgo => _activeEncKey.keyAlgo;
 
-  /// The KEM this client would mint a *fresh* key under, per
-  /// [AtClientPreference.keyEstablishmentAlgo].
+  /// The KEM this client would mint a *fresh* key under — the **primary**,
+  /// first of [AtClientPreference.keyEstablishmentAlgorithms].
   ///
   /// Not necessarily [encKeyAlgo]: a client that loaded an existing key keeps
   /// that key's algorithm, because its kpid is the address its enrollment
   /// already advertised.
+  ///
+  /// Singular where the preference is now a list, because this answers "what
+  /// would this client mint if it held nothing" — one key. Reconciling the
+  /// enrollment's package against the whole list is `KeyPackageMinting`'s job,
+  /// which runs at startup once a client exists.
   String get configuredKeyAlgo =>
-      atClient.getPreferences()?.keyEstablishmentAlgo ??
+      atClient.getPreferences()?.keyEstablishmentAlgorithms.first ??
       SecretSharingAlgos.xWing;
 
   /// This key package's addressing id ([KeyPackage.kpid]) — the SHA-256 prefix

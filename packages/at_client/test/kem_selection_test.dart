@@ -91,17 +91,56 @@ void main() {
   });
 
   group('the deployment knob', () {
-    test('defaults to the hybrid', () {
-      expect(AtClientPreference().keyEstablishmentAlgo,
-          SecretSharingAlgos.xWing);
+    test('defaults to the hybrid, and to exactly one algorithm', () {
+      expect(AtClientPreference().keyEstablishmentAlgorithms,
+          [SecretSharingAlgos.xWing],
+          reason: 'a second entry costs a keypair minted, filed and carried '
+              'for the life of the enrollment, and buys nothing until a '
+              'deployment is actually migrating between KEMs');
     });
 
     test('takes the no-hybrid option, and it resolves', () {
-      final preference = AtClientPreference()
-        ..keyEstablishmentAlgo = SecretSharingAlgos.mlKem1024;
+      final preference = AtClientPreference(
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]);
 
-      expect(SecretSharingAlgos.kemFor(preference.keyEstablishmentAlgo),
+      expect(
+          SecretSharingAlgos.kemFor(
+              preference.keyEstablishmentAlgorithms.first),
           same(MlKem1024PureDartAlgo.instance));
+    });
+
+    test('takes both, which is what a migration between KEMs looks like', () {
+      final preference = AtClientPreference(keyEstablishmentAlgorithms: const [
+        SecretSharingAlgos.mlKem1024,
+        SecretSharingAlgos.xWing,
+      ]);
+
+      // The FIRST is the primary: it is what anything minting a single key —
+      // an nskey, or a fresh package key — uses. The rest are advertised by
+      // the enrollment's key package so peers can still reach it.
+      expect(preference.keyEstablishmentAlgorithms.first,
+          SecretSharingAlgos.mlKem1024);
+      expect(preference.keyEstablishmentAlgorithms, hasLength(2));
+    });
+
+    test('refuses an empty list, where the sender-side list permits one', () {
+      // The asymmetry is the point: sealing to nothing writes to nobody, but
+      // advertising nothing can RECEIVE nothing while looking healthy.
+      expect(
+          () => AtClientPreference(keyEstablishmentAlgorithms: const []),
+          throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
+              'message', contains('can receive nothing'))));
+      expect(AtClientPreference(sealsToKeyAlgorithms: const [])
+          .sealsToKeyAlgorithms,
+          isEmpty);
+    });
+
+    test('refuses an algorithm this build cannot mint', () {
+      expect(
+          () => AtClientPreference(
+              keyEstablishmentAlgorithms: const ['ml-kem-768']),
+          throwsA(isA<ArgumentError>().having(
+              (e) => e.message.toString(), 'message', contains('this build mints'))));
     });
 
     test('every advertised option resolves to an implementation', () {

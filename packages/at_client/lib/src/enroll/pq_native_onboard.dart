@@ -130,7 +130,7 @@ Future<void> mintSigningRootAfterActivation(
 ///   that creates the record. Nothing but the enrollment's own `enroll:update`
 ///   reaches `metadata.keyPackage` afterwards, so this is effectively the
 ///   moment its KEM is set, at whatever
-///   [AtClientPreference.keyEstablishmentAlgo] says now;
+///   [AtClientPreference.keyEstablishmentAlgorithms] names first;
 /// - the atSign-level **ML-DSA-65 signing root**, published at
 ///   `public:pq_signing_root@<atSign>` under the `_rootlock` mint lock. A
 ///   first enrollment is fully privileged
@@ -173,7 +173,8 @@ Future<AtClientManager> pqNativeOnboard({
     ..mintLegacyMaterial = mintLegacyMaterial;
   // Mints the ML-DSA APKAM and advertises the first enrollment's key package.
   makeActivationPqNative(request,
-      atSign: atSign, keyEstablishmentAlgo: preference.keyEstablishmentAlgo);
+      atSign: atSign,
+      keyEstablishmentAlgo: preference.keyEstablishmentAlgorithms.first);
 
   final response =
       await (atAuth ?? AtAuth.create()).onboard(request, cramSecret);

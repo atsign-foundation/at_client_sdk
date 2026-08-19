@@ -36,7 +36,7 @@ export 'package:at_client/src/response/enrollment.dart';
 export 'package:at_client/src/enroll/enrollment_conveyance.dart'
     show EnrollmentConveyanceException;
 // The algorithm ids only, not the rest of the (experimental) secret-sharing
-// surface: `AtClientPreference.keyEstablishmentAlgo` takes one of them, and a
+// surface: `AtClientPreference.keyEstablishmentAlgorithms` lists them, and a
 // preference on the main barrel whose values are only nameable through
 // `at_client_mixins.dart` is a knob most apps would never find.
 export 'package:at_client/src/secret_sharing/algo_ids.dart';

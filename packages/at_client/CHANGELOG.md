@@ -1,4 +1,26 @@
 ## 3.14.1
+- **BREAKING** feat: `AtClientPreference.keyEstablishmentAlgorithms` replaces
+  the singular `keyEstablishmentAlgo` — the receiver-side list ruling 113
+  asked for, and a new `PqPosture` axis. It defaults to `[x-wing]`, so an
+  unconfigured client mints and advertises exactly what it did before.
+  - A second entry is what a **migration** between KEMs looks like: the
+    enrollment advertises both while peers catch up, then the first is dropped
+    and retired — still openable for what was already sealed to it, no longer
+    offered. The keyfile permits one active key per (enrollment, role,
+    algorithm), so the list is exactly the set of active keys the enrollment's
+    key package advertises.
+  - Unlike `sealsToKeyAlgorithms`, a shorter list refuses nobody, so this one
+    defaults to one entry rather than to everything: an extra entry costs a
+    keypair minted, filed and carried for the life of the enrollment. An
+    **empty** list is refused, where an empty `sealsToKeyAlgorithms` is not —
+    an atSign advertising no key can receive nothing while looking healthy.
+  - The **first entry is the primary**, and that is not cosmetic: everything
+    minting a single key — an nskey, or a fresh package key for a client that
+    holds none — takes it. So a reorder changes what this atSign mints next,
+    which is why `rolloutDifferencesFrom` compares the list order-sensitively.
+  - Final at construction, like the other algorithm lists. An unimplemented
+    algorithm is now refused where it is written rather than at the first
+    registration.
 - feat: a client whose posture requires a stronger authentication key than its
   enrollment holds now retrofits itself during startup, and comes up on the new
   enrollment. Whether to retrofit is derived from key material — the posture's

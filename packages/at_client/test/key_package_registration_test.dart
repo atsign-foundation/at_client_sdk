@@ -126,11 +126,14 @@ void main() {
 
   group('the configured KEM decides what is minted', () {
     TestRegistrant registrantFor(String keyAlgo) {
-      final client = buildMockClient('enroll-a');
-      // MockAtClient's getPreferences() is concrete and returns a stable,
-      // mutable instance — the same shape as the real one, so setting the
-      // knob here is what an app does.
-      client.getPreferences().keyEstablishmentAlgo = keyAlgo;
+      // The list is final at construction, so the knob is set when the client
+      // is built rather than afterwards — which is what an app does, and what
+      // the rollout-axis refusal requires of anything changing it mid-life.
+      final client = buildRemoteBackedMockClient(
+          atSign: atSign,
+          enrollmentId: 'enroll-a',
+          remoteData: remoteData,
+          keyEstablishmentAlgorithms: [keyAlgo]);
       return TestRegistrant(client)..directory = FakeEnrollmentDirectory();
     }
 
@@ -204,8 +207,29 @@ void main() {
 
     test('an unimplemented algorithm fails rather than minting something else',
         () async {
-      await expectLater(registrantFor('kyber-1024-v9').register(),
-          throwsA(isA<StateError>()));
+      // ⚠️ **The refusal moved earlier when the singular knob became
+      // `keyEstablishmentAlgorithms`.** It used to surface here, from
+      // `register()`, because the preference took any string; the list is
+      // validated at construction, so a deployment that misspells an
+      // algorithm now finds out where it wrote it rather than at the first
+      // registration. This asserts the new site — and asserting the old one
+      // would pass for the wrong reason, since building the client is what
+      // throws and `register()` is never reached.
+      expect(
+          () => AtClientPreference(
+              keyEstablishmentAlgorithms: const ['kyber-1024-v9']),
+          throwsA(isA<ArgumentError>()));
+
+      // The register-time guard is kept, and is still reached — by the OTHER
+      // route into it, which the preference cannot police: an algorithm read
+      // back from a keyfile, where a package was filed under an id a later
+      // build no longer implements. That arrives through `_heldFrom`, not
+      // through the preference at all.
+      final registrant = TestRegistrant(buildMockClient('enroll-a'))
+        ..directory = FakeEnrollmentDirectory()
+        ..loadApkamKeys = (() async => PersistedApkamKeys.single(
+            encSeed: base64Encode(Uint8List(32)), keyAlgo: 'kyber-1024-v9'));
+      await expectLater(registrant.register(), throwsA(isA<StateError>()));
     });
   });
 

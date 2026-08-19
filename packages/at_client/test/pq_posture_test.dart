@@ -110,7 +110,12 @@ void main() {
         disallowLegacyEncryption: false,
         mintLegacyMaterial: false,
         sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+        keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024],
       );
+      expect(custom.keyEstablishmentAlgorithms,
+          const [SecretSharingAlgos.mlKem1024],
+          reason: 'the receiver-side list is an axis like any other, and a '
+              'bespoke posture states it rather than inheriting a default');
       expect(custom.mintLegacyMaterial, false,
           reason: 'the axis exists so the stop-release can flip it');
       expect(custom.writesPqByDefault, true);
@@ -130,6 +135,7 @@ void main() {
                 disallowLegacyEncryption: true,
                 mintLegacyMaterial: true,
                 sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+                keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
               ),
           throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
               'message', contains('refuses its own writes'))));
@@ -149,6 +155,7 @@ void main() {
             disallowLegacyEncryption: false,
             mintLegacyMaterial: true,
             sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
+            keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
           ).writesPqByDefault,
           true);
     });

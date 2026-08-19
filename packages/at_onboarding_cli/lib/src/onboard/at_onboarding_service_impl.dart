@@ -264,7 +264,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     if (pqNative) {
       makeActivationPqNative(atOnboardingRequest,
           atSign: _atSign.toString(),
-          keyEstablishmentAlgo: atOnboardingPreference.keyEstablishmentAlgo);
+          keyEstablishmentAlgo:
+              atOnboardingPreference.keyEstablishmentAlgorithms.first);
     }
 
     AtOnboardingResponse atOnboardingResponse = await atAuth!.onboard(

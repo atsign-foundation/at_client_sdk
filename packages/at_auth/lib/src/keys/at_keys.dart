@@ -613,9 +613,19 @@ class AtKeys {
   /// as a single operation rather than two the caller has to sequence.
   ///
   /// The order is forced and it is the only order that works. The invariants
-  /// permit one ACTIVE material per (enrollment, role), so the outgoing key
-  /// must be retired before the incoming one can be filed; add-then-retire is
-  /// rejected by [addKey] before the retire ever runs. Leaving callers to
+  /// permit one ACTIVE material per (enrollment, role, **algorithm**), so a
+  /// replacement spelled in the same algorithm as the outgoing key needs that
+  /// key retired first; add-then-retire is rejected by [addKey] before the
+  /// retire ever runs.
+  ///
+  /// ⚠️ **The algorithm is part of the rule, and this sentence used to omit
+  /// it** — which reads as "an enrollment holds one active key per role", and
+  /// would say that agility is impossible. It is not: an enrollment holds one
+  /// active signing key *per algorithm it signs with*, and one active
+  /// encapsulation key *per KEM it advertises*. Adding a key under an
+  /// algorithm the enrollment does not yet hold needs no rotation and does not
+  /// belong here — call [addKey]. Use this only when the incoming key takes an
+  /// outgoing one's slot. Leaving callers to
   /// sequence that themselves means a keyfile flush can land between the two
   /// steps, and a crash there leaves an enrollment with no active key of that
   /// role at all.

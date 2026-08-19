@@ -111,7 +111,7 @@ class AtClientPreference {
   /// The key-establishment algorithms this client will **seal to**, strongest
   /// first — the sender's side of the choice, defaulted by [posture].
   ///
-  /// Not to be confused with [keyEstablishmentAlgo], which is what this atSign
+  /// Not to be confused with [keyEstablishmentAlgorithms], which is what this atSign
   /// *publishes* for others to seal to. That one is about this atSign's own
   /// key; this one is about which of a **recipient's** advertised keys this
   /// client is willing to use.
@@ -138,14 +138,18 @@ class AtClientPreference {
       {this.posture = PqPosture.legacy,
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms,
-      List<String>? sealsToKeyAlgorithms})
+      List<String>? sealsToKeyAlgorithms,
+      List<String>? keyEstablishmentAlgorithms})
       : disallowLegacyEncryption = posture.disallowLegacyEncryption,
         authenticationKeyAlgorithm =
             authenticationKeyAlgorithm ?? posture.authenticationKeyAlgorithm,
         dataSigningKeyAlgorithms = _signableOrRefuse(
             dataSigningKeyAlgorithms ?? posture.dataSigningKeyAlgorithms),
         sealsToKeyAlgorithms = _sealableOrRefuse(
-            sealsToKeyAlgorithms ?? posture.sealsToKeyAlgorithms) {
+            sealsToKeyAlgorithms ?? posture.sealsToKeyAlgorithms),
+        keyEstablishmentAlgorithms = _advertisableOrRefuse(
+            keyEstablishmentAlgorithms ??
+                posture.keyEstablishmentAlgorithms) {
     // Defaulted in the body rather than the initializer list because the field
     // is mutable: an app may still turn seeding on or off after construction,
     // and the posture only decides where it starts.
@@ -206,6 +210,12 @@ class AtClientPreference {
     // algorithms in a different order are two different clients.
     compare('sealsToKeyAlgorithms', '${other.sealsToKeyAlgorithms}',
         '$sealsToKeyAlgorithms');
+    // Order-sensitive for a different reason than the list above: here the
+    // first entry is the algorithm anything minting a single key uses, so a
+    // reorder changes what this atSign mints next even though the set of
+    // advertised keys is unchanged.
+    compare('keyEstablishmentAlgorithms', '${other.keyEstablishmentAlgorithms}',
+        '$keyEstablishmentAlgorithms');
 
     final asked = other.dataSigningKeyAlgorithms;
     final running = dataSigningKeyAlgorithms;
@@ -231,6 +241,31 @@ class AtClientPreference {
       if (!SecretSharingAlgos.keyAlgos.contains(algorithm)) {
         throw ArgumentError.value(algorithm, 'sealsToKeyAlgorithms',
             'this build seals to ${SecretSharingAlgos.keyAlgos.join(', ')}');
+      }
+    }
+    return List.unmodifiable(algorithms);
+  }
+
+  /// [algorithms] unmodifiable, or an [ArgumentError] — naming the first
+  /// member this build cannot mint a key for, or refusing an empty list.
+  ///
+  /// Empty is refused where [_sealableOrRefuse] permits it, and the asymmetry
+  /// is the point: a client that seals to nothing simply writes to nobody,
+  /// while an atSign that advertises nothing can **receive** nothing, and
+  /// would look like a working enrollment that silently never gets its data.
+  static List<String> _advertisableOrRefuse(List<String> algorithms) {
+    if (algorithms.isEmpty) {
+      throw ArgumentError.value(
+          algorithms,
+          'keyEstablishmentAlgorithms',
+          'an atSign advertising no key-establishment key can receive nothing '
+              'sealed to it. Name at least one of '
+              '${SecretSharingAlgos.keyAlgos.join(', ')}');
+    }
+    for (final algorithm in algorithms) {
+      if (!SecretSharingAlgos.keyAlgos.contains(algorithm)) {
+        throw ArgumentError.value(algorithm, 'keyEstablishmentAlgorithms',
+            'this build mints ${SecretSharingAlgos.keyAlgos.join(', ')}');
       }
     }
     return List.unmodifiable(algorithms);
@@ -467,23 +502,39 @@ class AtClientPreference {
   /// an app's back.
   bool seedNamespaceKeys = false;
 
-  /// Which key-establishment algorithm this atSign **mints and advertises** —
-  /// an id from [SecretSharingAlgos.keyAlgos].
+  /// Which key-establishment algorithms this atSign **mints and advertises** —
+  /// ids from [SecretSharingAlgos.keyAlgos], strongest-preferred first.
   ///
   /// The receiver's side of the choice. [sealsToKeyAlgorithms] is the sender's:
   /// this decides what others seal to when they write to this atSign, that
   /// decides which of *their* advertised keys this client will use.
   ///
-  /// ⚠️ **Singular, while the advertisement it feeds is already plural.** The
-  /// multi-key reader shipped 2026-08-13 — an advertisement carries
-  /// `keys: [{kid, alg, pub}]` and a holder answers at every kpid it holds —
-  /// but nothing yet mints a second one, so this stays one algorithm. Widening
-  /// it is the writer half of KE-2
-  /// ([#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133),
-  /// with [#2135](https://github.com/atsign-foundation/at_client_sdk/issues/2135)
-  /// tracking the singularity): minting a second key, marking the first
-  /// retired, and republishing. A list here before that exists would have
-  /// entries nothing acts on.
+  /// **One entry is the default and the ordinary state.** A second entry is
+  /// what a migration between KEMs looks like: the enrollment advertises both
+  /// while peers catch up, then the first is dropped and **retired** — still
+  /// openable for what was already sealed to it, no longer offered. The
+  /// keyfile permits at most one active key per algorithm, so this list is
+  /// exactly the set of active keys the enrollment's key package advertises.
+  ///
+  /// Unlike [sealsToKeyAlgorithms], a shorter list here refuses nobody: a
+  /// sender needs one construction in common, and every build can seal to
+  /// both. What an extra entry costs is a keypair minted, filed and carried
+  /// for the life of the enrollment. So this defaults to one and widens only
+  /// when a deployment is moving.
+  ///
+  /// **The first entry is the primary, and that is not cosmetic.** Only the
+  /// enrollment's own key package advertises the whole list; everything that
+  /// mints exactly one key — an **nskey** for a namespace, and the fresh key
+  /// `KeyPackageRegistration` would mint for a client that holds none — takes
+  /// the first. So reordering a two-entry list changes what this atSign mints
+  /// next, which is why two lists holding the same algorithms in a different
+  /// order are two different clients to [rolloutDifferencesFrom].
+  ///
+  /// **Changing it takes effect at the next client start**, where
+  /// `KeyPackageMinting` mints what this names and the enrollment lacks,
+  /// retires what it holds and this no longer names, and republishes the
+  /// package by `enroll:update`. An enrollment created under the current list
+  /// already holds everything it names and finds nothing to do.
   ///
   /// Two options, and the choice is a deployment's rather than a message's:
   ///
@@ -506,13 +557,32 @@ class AtClientPreference {
   /// **Configuration rather than negotiation, and the reason is NIST's.**
   /// SP 800-227 §4.6.3 warns that composite schemes "introduce additional
   /// choices in protocols, which could also introduce vulnerabilities (e.g. in
-  /// the form of downgrade attacks)". Each atSign advertises one KEM and there
-  /// is no per-message negotiation to attack.
+  /// the form of downgrade attacks)".
   ///
-  /// Changing it does not re-key anything already published. Keys are minted
-  /// per generation, so an atSign moves to the other option by rotating —
-  /// which is the only moment the advertised algorithm can change.
-  String keyEstablishmentAlgo = SecretSharingAlgos.xWing;
+  /// ⚠️ **This paragraph used to end "each atSign advertises one KEM and there
+  /// is no per-message negotiation to attack", and a two-entry list falsifies
+  /// the first clause.** What still holds, and why a migration window is
+  /// acceptable rather than a hole:
+  ///
+  /// - The advertisement is an **APKAM-signed envelope** verified against the
+  ///   enrollment's `_apsk`, so entries cannot be stripped in flight. The
+  ///   choice a sender makes is over keys the enrollment attested to.
+  /// - Both options are **post-quantum**. Selecting the other entry picks a
+  ///   different PQ KEM, not a weaker class of algorithm — which is not the
+  ///   hybrid-versus-classical downgrade SP 800-227 has in view.
+  /// - The sender's choice is its own standing configuration
+  ///   ([sealsToKeyAlgorithms]), not something the recipient's record steers
+  ///   per message.
+  ///
+  /// The residual exposure is a **replayed older signed package** advertising
+  /// only the entry a deployment is migrating away from. That is the same
+  /// exposure a retained retired key already carries, and it is why a
+  /// migration is meant to be a window rather than a resting state.
+  ///
+  /// Changing it does not re-key anything already published, and never
+  /// silently drops a key: what leaves the list is retired, not deleted, so
+  /// everything sealed to it still opens.
+  final List<String> keyEstablishmentAlgorithms;
 }
 
 /// Default preference on how to handle get, put and delete requests with
