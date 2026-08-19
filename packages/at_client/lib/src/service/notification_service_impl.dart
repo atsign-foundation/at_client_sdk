@@ -45,7 +45,11 @@ class NotificationServiceImpl extends NotificationService {
   static const lastReceivedNotificationKey = 'lastreceivednotification';
 
   final AtClient atClient;
-  late final Monitor monitor;
+  /// Replaced, not mutated, when this client moves to another enrollment:
+  /// everything a monitor derives from the enrollment — its id, its AtChops
+  /// and its PKAM signing algorithm — is final on [Monitor]. Subscribers are
+  /// insulated from the replacement by [currentListenerStateStream].
+  late Monitor monitor;
   late final AtSignLogger logger;
   DateTime? _lastReceipt;
 
@@ -227,6 +231,77 @@ class NotificationServiceImpl extends NotificationService {
         secondaryAddressFinder: secondaryAddressFinder);
   }
 
+  /// A monitor for this client's CURRENT enrollment id, AtChops and signing
+  /// algorithm. Read at call time, so a client that has moved to another
+  /// enrollment builds a monitor for the new one.
+  Monitor _buildMonitor() => Monitor(
+        atSign: atSign,
+        atClientPreference: atClient.getPreferences()!,
+        atChops: atClient.atChops,
+        enrollmentId: atClient.enrollmentId,
+        signingAlgoType: signingAlgoOf(atClient),
+        handleNotification: handleNotificationReceipt,
+        getLastNotificationTime: getLastNotificationTime,
+        secondaryAddressFinder: secondaryAddressFinder,
+      );
+
+  /// Listener-state events, relayed from whichever [Monitor] is current.
+  ///
+  /// Subscribers hold this rather than the monitor's own controller, because
+  /// the monitor object does not survive a move to another enrollment. A
+  /// subscriber left on a replaced monitor's stream receives nothing further
+  /// and is told nothing — it is a live subscription to a controller no code
+  /// writes to again.
+  final StreamController<NotificationListenerState> _listenerStateRelay =
+      StreamController.broadcast();
+
+  StreamSubscription<NotificationListenerState>? _listenerStateSubscription;
+
+  /// Points the relay at [monitor], releasing whichever monitor it was
+  /// forwarding before.
+  void _relayListenerStateFrom(Monitor monitor) {
+    unawaited(_listenerStateSubscription?.cancel());
+    _listenerStateSubscription = monitor.currentStateStream.listen((state) {
+      // The relay outlives a stop, so a stopped service can still forward the
+      // final notConnected that closeConnection emits after its await.
+      if (!_listenerStateRelay.isClosed) {
+        _listenerStateRelay.add(state);
+      }
+    });
+  }
+
+  /// Moves the notification connection onto this client's current enrollment
+  /// id, by replacing the monitor with one built from it.
+  ///
+  /// The old monitor's connection is closed before the new one is built, and
+  /// the wait is explicit: a monitor socket left authenticated as the previous
+  /// enrollment goes on delivering notifications for as long as the atServer's
+  /// grace period runs, so a half-moved client looks healthy for weeks.
+  ///
+  /// A no-op if the monitor already holds this client's enrollment id, which
+  /// is what makes it safe to call on every start.
+  Future<void> repointMonitor() async {
+    if (monitor.enrollmentId == atClient.enrollmentId) {
+      logger.finer('repointMonitor: monitor already holds '
+          '${atClient.enrollmentId}; nothing to do');
+      return;
+    }
+    final wasListening =
+        monitor.targetState == NotificationListenerState.listening;
+    logger.info('repointMonitor: moving the notification connection from '
+        '${monitor.enrollmentId} to ${atClient.enrollmentId} '
+        '(listening: $wasListening)');
+
+    monitor.stop();
+    await monitor.closeConnection();
+
+    monitor = _buildMonitor();
+    _relayListenerStateFrom(monitor);
+    if (wasListening) {
+      monitor.start();
+    }
+  }
+
   final String myStatsNotifKey;
 
   NotificationServiceImpl._(
@@ -241,17 +316,8 @@ class NotificationServiceImpl extends NotificationService {
         CacheableSecondaryAddressFinder(atClient.getPreferences()!.rootDomain,
             atClient.getPreferences()!.rootPort);
 
-    this.monitor = monitor ??
-        Monitor(
-          atSign: atSign,
-          atClientPreference: atClient.getPreferences()!,
-          atChops: atClient.atChops,
-          enrollmentId: atClient.enrollmentId,
-          signingAlgoType: signingAlgoOf(atClient),
-          handleNotification: handleNotificationReceipt,
-          getLastNotificationTime: getLastNotificationTime,
-          secondaryAddressFinder: this.secondaryAddressFinder,
-        );
+    this.monitor = monitor ?? _buildMonitor();
+    _relayListenerStateFrom(this.monitor);
 
     lastReceivedNotificationAtKey = AtKey.local(
             lastReceivedNotificationKey, atClient.getCurrentAtSign()!,
@@ -1046,7 +1112,7 @@ class NotificationServiceImpl extends NotificationService {
 
   @override
   Stream<NotificationListenerState> get currentListenerStateStream =>
-      monitor.currentStateStream;
+      _listenerStateRelay.stream;
 }
 
 /// One notification held back, with everything needed to deliver it later.

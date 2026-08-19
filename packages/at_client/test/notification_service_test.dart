@@ -1,5 +1,6 @@
 // ignore_for_file: deprecated_member_use_from_same_package
 
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_chops/at_chops.dart';
@@ -51,6 +52,8 @@ class MockAtClientImpl extends Mock implements AtClientImpl {
 }
 
 class FakeMonitor extends Fake implements Monitor {
+  FakeMonitor({this.enrollmentId});
+
   @override
   NotificationListenerState currentState =
       NotificationListenerState.notConnected;
@@ -59,16 +62,43 @@ class FakeMonitor extends Fake implements Monitor {
   NotificationListenerState targetState =
       NotificationListenerState.notConnected;
 
+  /// The identity this monitor was built for. A monitor is replaced rather
+  /// than mutated when the client moves enrollment, so tests vary it by
+  /// building another FakeMonitor.
+  @override
+  final String? enrollmentId;
+
+  @override
+  StreamController<NotificationListenerState> currentStateStreamController =
+      StreamController.broadcast();
+
+  @override
+  Stream<NotificationListenerState> get currentStateStream =>
+      currentStateStreamController.stream;
+
+  int closeConnectionCount = 0;
+
+  @override
+  Future<void> closeConnection() async {
+    closeConnectionCount++;
+    _setState(NotificationListenerState.notConnected);
+  }
+
   @override
   void start() {
-    currentState = NotificationListenerState.listening;
     targetState = NotificationListenerState.listening;
+    _setState(NotificationListenerState.listening);
   }
 
   @override
   Future<void> stop() async {
-    currentState = NotificationListenerState.notConnected;
     targetState = NotificationListenerState.notConnected;
+    _setState(NotificationListenerState.notConnected);
+  }
+
+  void _setState(NotificationListenerState state) {
+    currentState = state;
+    currentStateStreamController.add(state);
   }
 }
 
@@ -1116,6 +1146,75 @@ void main() {
       when(() => mockAtClientImpl.put(any(), any(),
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
+    });
+
+    /// A monitor cannot be moved to another enrollment: its id, its AtChops
+    /// and its signing algorithm are all final. So it is replaced — and a
+    /// subscriber that held the monitor's own stream would be left on a
+    /// controller nothing writes to again, receiving nothing and told nothing.
+    test('a listener-state subscriber survives the monitor being replaced',
+        () async {
+      final first = FakeMonitor(enrollmentId: 'the-old-enrollment');
+      when(() => mockAtClientImpl.enrollmentId)
+          .thenReturn('the-new-enrollment');
+      final ns = await NotificationServiceImpl.create(mockAtClientImpl,
+          monitor: first) as NotificationServiceImpl;
+
+      final seen = <NotificationListenerState>[];
+      // Subscribed BEFORE the replacement, and never re-subscribed.
+      ns.currentListenerStateStream.listen(seen.add);
+
+      first.start();
+      await Future.delayed(Duration.zero);
+      expect(seen, [NotificationListenerState.listening],
+          reason: 'the relay must forward the monitor it starts with');
+
+      await ns.repointMonitor();
+
+      expect(first.closeConnectionCount, 1,
+          reason: 'the replaced monitor\'s connection is torn down '
+              'explicitly, not left to the atServer grace period');
+      expect(identical(ns.monitor, first), false,
+          reason: 'the monitor is replaced, not mutated');
+      expect(ns.monitor.enrollmentId, 'the-new-enrollment',
+          reason: 'the new monitor is built from the client\'s current id');
+
+      // The NEW monitor's events reach the subscription taken out before the
+      // swap. This is the whole point of the relay. Counted from after the
+      // swap, because the replaced monitor emits notConnected on its way out
+      // and would otherwise supply this value itself.
+      await Future.delayed(Duration.zero); // drain the swap's own events first
+      final countAfterSwap = seen.length;
+      await ns.monitor.closeConnection();
+      await Future.delayed(Duration.zero);
+      expect(seen.length, countAfterSwap + 1,
+          reason: 'the pre-existing subscriber must receive from the '
+              'replacement monitor');
+      expect(seen.last, NotificationListenerState.notConnected);
+
+      // And the replaced monitor is released: it can no longer reach anyone.
+      final countBefore = seen.length;
+      first.currentStateStreamController
+          .add(NotificationListenerState.listening);
+      await Future.delayed(Duration.zero);
+      expect(seen.length, countBefore,
+          reason: 'a replaced monitor must not still feed the relay');
+    });
+
+    test('repointMonitor is a no-op when the monitor already holds the id',
+        () async {
+      final only = FakeMonitor(enrollmentId: 'the-same-enrollment');
+      when(() => mockAtClientImpl.enrollmentId)
+          .thenReturn('the-same-enrollment');
+      final ns = await NotificationServiceImpl.create(mockAtClientImpl,
+          monitor: only) as NotificationServiceImpl;
+
+      await ns.repointMonitor();
+
+      expect(identical(ns.monitor, only), true,
+          reason: 'called on every start, so it must do nothing once done');
+      expect(only.closeConnectionCount, 0,
+          reason: 'a no-op must not drop a working connection');
     });
 
     test('Verify lastReceipt', () async {
