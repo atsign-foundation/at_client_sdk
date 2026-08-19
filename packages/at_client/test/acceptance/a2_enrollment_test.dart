@@ -133,26 +133,38 @@ void main() {
 
     test('UC-A2.5 · an enrollment amends its own key package', () {
       // GIVEN alice4 enrolled (E4) advertising a single X-Wing key, with
-      //       secrets already sealed to that kpid sitting unread.
-      // WHEN  alice4 mints a second KEM keypair, rebuilds and re-signs its key
-      //       package with BOTH keys, and sends enroll:updateMetadata on its
-      //       own APKAM-authenticated connection.
+      //       secrets already sealed to that kpid sitting unread, and a
+      //       preference naming BOTH x-wing and ml-kem-1024.
+      // WHEN  alice4 starts, and KeyPackageMinting mints the missing ML-KEM
+      //       keypair, files it, rebuilds and re-signs the key package with
+      //       both keys, and sends enroll:update on its own
+      //       APKAM-authenticated connection.
       // THEN  enroll:listns returns the amended package (two keys, suites
       //       covering both KEMs, still derived from the package's own keys);
       //       it still verifies against E4's _apsk, because the update path
       //       relaxes no signature check; a peer negotiates to whichever key
       //       its own keyAlgos order prefers; the pre-existing envelope at the
-      //       OLD kpid still opens, because a replaced kpid is retained rather
-      //       than retired; nothing already sealed is re-sealed and no
-      //       conveyance fires, the updater holding the plaintext already; and
-      //       an unnamed sibling metadata key survives the write.
+      //       OLD kpid still opens, because a key that is merely joined by a
+      //       second stays active and its private half is retained either way;
+      //       nothing already sealed is re-sealed and no conveyance fires, the
+      //       updater holding the plaintext already; and an unnamed sibling
+      //       metadata key survives the write.
+      //
+      // ⚠️ Two corrections, both 2026-08-19. The verb is `enroll:update`, not
+      // `enroll:updateMetadata` (renamed by decisions 91 ruling 13), and the
+      // old wording had the client "mint a second keypair and send" as one
+      // explicit act — it is a startup reconciliation against the configured
+      // list. The parenthetical also said a replaced kpid is "retained rather
+      // than retired"; rulings 95.6-9 say it is retained AND marked retired,
+      // so senders stop addressing it while the holder goes on opening what
+      // already named it.
       fail('not implemented');
     }, skip: ke2);
 
     test('UC-A2.6 · only the enrollment itself may amend its metadata', () {
       // GIVEN alice1 (E1, fully privileged) and alice4 (E4, scoped) enrolled.
-      // WHEN  E1 sends enroll:updateMetadata naming E4; and separately a
-      //       legacy-PKAM / owner connection (no enrollmentId) sends the same.
+      // WHEN  E1 sends enroll:update naming E4; and separately a legacy-PKAM /
+      //       owner connection (no enrollmentId) sends the same.
       // THEN  both are refused — the second DESPITE carrying full permissions
       //       everywhere else, which is the arm that goes green for the wrong
       //       reason if the self-only check is written as an authorization

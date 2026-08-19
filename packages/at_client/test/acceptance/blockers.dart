@@ -55,13 +55,25 @@ const _functional = 'layer: tests/at_functional_test';
 /// (`keyPackageMaterials`, `EnvelopeAddressing.regexForAny` on both the sweep
 /// and subscribe paths, and `encKeyFor(envelope.kid)` selecting the secret).
 ///
-/// What these two rows still wait on is the client **writer**: nothing mints a
-/// second KEM keypair for an existing enrollment, re-signs its key package with
-/// both keys and sends it. Until something does, a package cannot gain a key,
-/// so neither row has a mechanism to assert against.
+/// ⚠️ **Corrected again 2026-08-19: the client WRITER now exists too.** This
+/// constant said these rows waited on it, and that was true until
+/// `KeyPackageMinting` landed — a startup step that mints an encapsulation
+/// keypair for every algorithm `AtClientPreference.keyEstablishmentAlgorithms`
+/// names and the enrollment lacks, retires what left the list, re-signs the
+/// package with all of them and sends `enroll:update`. A package can gain a key.
+///
+/// What these two rows wait on now is only the **layer**. Both need a live
+/// atServer: UC-A2.5 to observe an amended package coming back from
+/// `enroll:listns`, and UC-A2.6 to observe the atServer *refusing* a foreign
+/// and an owner connection — a refusal no mock can stand in for, because a
+/// fake that accepts everything makes the interlock's presence and its absence
+/// indistinguishable. The mechanism is unit-tested in
+/// `key_package_minting_test.dart`, including by mutation; what is unproven
+/// here is the wire.
 ///
 /// The layer is the functional pack rather than e2e for the reason UC-B4.2
 /// established: it runs against the virtualenv container in CI as well as
 /// locally, drives more than one enrollment of one atSign in a single file, and
 /// can activate an atSign from CRAM — none of which the e2e pack can do.
-const ke2 = 'blocked: KE-2 (the enroll:update writer) · $_functional';
+const ke2 = 'blocked: KE-2 (the writer is built; these need the live wire) '
+    '· $_functional';

@@ -1456,22 +1456,50 @@ The `to.kpid != kpid` self-check was already fixed: `_isSelf` compares `enrollme
 **What this leaves for B-2** is the writer that creates the state. **Updated 2026-08-13:** the
 `enroll:update` *caller* now exists — `AtEnrollment.update` /`EnrollmentUpdateRequest`, and
 `EnrollmentUpdateRequest.metadata` merges per-key into the record
-([14.18](#1418-the-remaining-d1-initial-development-sequence) step 16) — so what is still owed is
-the part that gives it something to send: **minting** a new KEM key, **marking the old one retired**
-and **republishing the package**. Nothing rotates yet, and nothing calls `update` in production.
+([14.18](#1418-the-remaining-d1-initial-development-sequence) step 16).
+✅ **Updated 2026-08-19: the part that gives it something to send is BUILT.**
+`KeyPackageMinting` mints a new KEM key, marks the outgoing one retired and
+republishes the package. ⚠️ **This paragraph ended "nothing rotates yet, and
+nothing calls `update` in production" until that landed** — a startup step now
+does, on any client whose configured key-establishment list has changed.
 ✅ **[#2133](https://github.com/atsign-foundation/at_client_sdk/issues/2133) was retitled to
 `enroll:update` and given a status block on 2026-08-18**, which is also when `blockers.dart`'s `ke2`
 constant stopped saying "neither half is built" — it had said so since the client half landed, and it
 is the string anyone greps to find out what KE-2 owes.
-⚠️ **The receiver-side algorithm list is KE-2's, ruled 2026-08-19.**
+✅ **The receiver-side algorithm list AND the writer are BUILT, 2026-08-19.**
 [Ruling 113](decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
-ruling 8 asks for two posture-defaulted algorithm lists. The **sender-side** one
-shipped with 14.39 (`sealsToKeyAlgorithms`). The **receiver-side** one —
-widening `AtClientPreference.keyEstablishmentAlgo` from one algorithm to a list
-— lands here instead, because what it needs is not a field but this row's
-missing writer: mint a second KEM key, mark the first retired, republish. A
-list on the preference before that writer exists would carry entries nothing
-acts on.
+ruling 8 asked for two posture-defaulted algorithm lists. The **sender-side**
+one shipped with 14.39 (`sealsToKeyAlgorithms`); the **receiver-side** one
+landed here as `AtClientPreference.keyEstablishmentAlgorithms`, replacing the
+singular `keyEstablishmentAlgo` — together with the writer that gives it
+meaning, which is why the two were held to land in one place.
+
+⚠️ **This entry said the writer was "missing" and that a list before it would
+"carry entries nothing acts on".** Both were true until `KeyPackageMinting`
+landed. What exists now:
+
+- **`KeyPackageMinting`** (`lib/src/secret_sharing/key_package_minting.dart`),
+  a `PqClientBootstrap` step placed after `mintInUseSigningKeys` — the package
+  is signed by whatever key `_apsk` advertises, so signing it first would sign
+  under the key that start is about to retire. It mints an encapsulation
+  keypair for every algorithm the list names and the enrollment lacks, retires
+  every one it holds that the list no longer names, re-signs the package with
+  all of them and sends `enroll:update`.
+- **It files before it publishes** — the inverse of `SigningKeyMinting`, and
+  the asymmetry is the design. An encapsulation key advertised before its
+  private half is filed makes senders seal to a key nobody holds, and those
+  writes are durable. A signing key inverts both arms. Proven by mutation:
+  swapping the order reddens exactly the ordering test.
+- **The list defaults to one entry** (`[x-wing]`), not to everything the build
+  supports, because a shorter list here refuses nobody while an extra entry
+  costs a keypair carried for the life of the enrollment. An **empty** list is
+  refused, where an empty `sealsToKeyAlgorithms` is not.
+- **The first entry is the primary**: anything minting a single key — an
+  nskey, a fresh package key — takes it, so a reorder changes what the atSign
+  mints next and `rolloutDifferencesFrom` compares the list order-sensitively.
+
+**Still owed:** the two acceptance rows, which need the live wire rather than
+the mechanism — see the blocker note below.
 
 **Acceptance → [acceptance.md](../acceptance.md):** UC-A2.5 (a package gains a second KEM key; a peer negotiates
 to it; envelopes at the old kpid still open) and UC-A2.6 (a foreign enrollment, and an owner connection, are

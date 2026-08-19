@@ -8432,7 +8432,7 @@ separately.**
 |--------|-----------|
 | The enrollment record's `keyPackage` is write-once, so a bad envelope is frozen for that enrollment's life | `enroll:update` reaches `metadata` ([91](#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11) ruling 13) |
 | A published reader crashes on a null cast rather than refusing | ~~nothing released reads an envelope — see ruling 3~~ **NOT killed** — amended 2026-08-14, see ruling 3. A published reader exists and the crash is real; what carries the decision is who can reach it, not that nobody reads |
-| Recovery needs an `enroll:update` no client sends yet | only bites if a bad envelope can exist, and none can when one shape is the only shape |
+| ~~Recovery needs an `enroll:update` no client sends yet~~ **Moot since 2026-08-19** — `KeyPackageMinting` sends it at startup | only bites if a bad envelope can exist, and none can when one shape is the only shape |
 
 **3. Nothing released reads or writes an envelope.** ⚠️ **This was wrong, and
 is amended in place 2026-08-14** — the ruling stands, its stated evidence does

@@ -1016,9 +1016,13 @@ build does not recognise are **kept**, because the field is the holder's stateme
 itself. `metadata.keyPackage` is written by `enroll:request` and reachable
 afterwards only by the enrollment's own self-only `enroll:update`
 ([plan 14.6](detail/implementation-plan.md#146-the-enrollment-records-metadatakeypackage-is-a-one-way-door)),
-which no client sends yet — so in practice whatever it claims is what peers seal
-to, and nobody else can repair it. That is why an overstatement is a defect and
-not a cosmetic one
+— and nobody else can repair it, because that verb is self-only. ⚠️ **This
+sentence used to add "which no client sends yet — so in practice whatever it
+claims is what peers seal to".** One does as of 2026-08-19: `KeyPackageMinting`
+republishes the package at startup when the configured key-establishment list
+has changed, so an overstatement is repairable *by its own holder* on the next
+start rather than frozen. It is still nobody else's to fix, which is why an
+overstatement is a defect and not a cosmetic one
 ([`decisions.md` 50.5](detail/decisions.md#505-the-defect-a-widened-list-planted-before-anything-read-it)).
 
 **atServer build points** (verb spec; effort **L** — full DEP1 spec in
