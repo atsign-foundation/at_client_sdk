@@ -19,8 +19,30 @@ authenticator is installed **beside** that field, not instead of it, because
 `EnrollmentApprover` and others still read it for work that is not
 authentication.
 
-**Next is step 5**, which has three prerequisites — they are marked
-**BLOCKS STEP 5** in [section 6](#6-filed-not-scheduled).
+**Step 5 was blocked on a ruling and the ruling has been made: the credential
+members are `@Deprecated` in 3.x, not deleted** (gkc, 2026-08-19). Deleting
+them breaks `AtLookUp`, which is a public interface, and this project ships as
+an additive minor. So step 5 annotates and documents; the deletion becomes a
+scheduled later major, and the prerequisites below survive as its preconditions
+rather than this step's. **Landed as the annotation pass**: six members, on
+both the interface and the impl override, because most callers hold the
+concrete type and an interface-only annotation would fire for almost nobody.
+
+That pass is measured, not asserted. `dart analyze --fatal-warnings` over all
+16 workspace members: **16 of 16 exit 0 before and after**, findings 1201 →
+1286, every one of them `info`. Nothing breaks and no reader has to move
+first, because `deprecated_member_use` is `info` here and `--fatal-warnings`
+does not promote it.
+
+⚠️ **The annotation therefore signals almost nothing on its own.** 1151 of the
+1201 baseline findings were *already* `deprecated_member_use`, nearly all from
+at_chops' in-flight compatibility deprecation, so 90 more land invisibly in
+that pile. The signal a consumer actually reads is the doc comment, the
+CHANGELOG and this plan — not the analyzer. Do not treat "we deprecated it" as
+having told anyone.
+
+**Next is the deletion's preconditions**, marked **BLOCKS THE MAJOR** in
+[section 6](#6-filed-not-scheduled).
 
 This line is the only statement of progress. `git log` records what landed;
 [section 7](#7-corrections) holds the readings that were superseded and why.
@@ -310,27 +332,41 @@ then the old path is deleted — so no package is uncompilable between commits.
 | 2   | **Lands as two commits.** First `FakeAtServerSocket` over a real `StreamController` alone, proven against current behaviour so it is not judging code written beside it. Then the completer, the deadline recomputed from `_lastReceivedTime` on every wake, timeouts from `AtNetworkTimeouts`, the `onNotification` seam, and the `_stripPrompt` `-1` guard. **`read`'s two params become nullable** - source-compatible for every caller, but not literally unchanged as this row first said, and breaking for an implementer that overrides `read` with `int` params. There are none in tree; the mocks go through `noSuchMethod`. | at_lookup      |
 | 3   | Declare `AtAuthenticator` and `AtCommandExecutor`; accept and prefer an injected authenticator **alongside** the existing ladder. Nothing breaks yet.                                                                                | at_lookup      |
 | 4   | Supply the authenticators **from at_auth**, built over `AtKeysIo` — at_lookup still names none of it, and gains no dependency. at_auth, at_client and at_onboarding_cli switch to passing one. **at_tools' `at_cli` is the external case** — it sets `preference.privateKey` with no AtChops at all. | at_auth        |
-| 5   | Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` at `:744`, and **`at_chops` from the pubspec**. ⚠️ **Widen `AtAuthenticator`'s return in this same step** (ruled 2026-08-19). It returns `bool` today and that works only because `_authenticateWith` reads at_lookup's own `enrollmentId` field to record `AtConnectionMetaData.authenticatedAsEnrollmentId`. Deleting the field leaves nothing able to supply it - the authenticator is the side that knows the enrollment, and `bool` cannot carry it - so a caller could no longer tell which enrollment a live socket holds. Return a small result carrying success and the enrollment id, and let at_lookup record it. Widening the executor with `recordAuthentication` was the rejected alternative: it makes the id a side effect rather than data, and keeps `AtCommandExecutor` wider than it needs to be. ⚠️ **`atChops` is not only an auth credential, and deleting it breaks a non-auth reader.** `enrollment_approver.dart` reads `atLookUp.atChops` six times to do enrollment crypto - it takes the encryption private key out of it at `:41`, decrypts the wrapped payload at `:52` and `:63`, and at `:47` **mutates** it (`atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = …`). The lookup is being used as a shared mutable crypto context between at_auth components, which is why the field is on `AtLookUp` at all. The approver is at_auth code and has the keys, so it should be handed its own crypto rather than reaching through a network object for it - but that is a change to the approver, and it has to land before or with the deletion. | at_lookup      |
+| 5   | **DONE, and reshaped by a ruling: annotate, do not delete** (gkc, 2026-08-19). The six credential members carry `@Deprecated` on both the interface and the impl override; the ladder still reads them, so nothing breaks. Everything below this sentence describes **the later major that does the deletion**, and is kept here because it is what that major must do. ⛔ Do not read the rest of this row as owed at step 5. — Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` at `:744`, and **`at_chops` from the pubspec**. ⚠️ **Widen `AtAuthenticator`'s return in this same step** (ruled 2026-08-19). It returns `bool` today and that works only because `_authenticateWith` reads at_lookup's own `enrollmentId` field to record `AtConnectionMetaData.authenticatedAsEnrollmentId`. Deleting the field leaves nothing able to supply it - the authenticator is the side that knows the enrollment, and `bool` cannot carry it - so a caller could no longer tell which enrollment a live socket holds. Return a small result carrying success and the enrollment id, and let at_lookup record it. Widening the executor with `recordAuthentication` was the rejected alternative: it makes the id a side effect rather than data, and keeps `AtCommandExecutor` wider than it needs to be. ⚠️ **`atChops` is not only an auth credential, and deleting it breaks a non-auth reader.** `enrollment_approver.dart` reads `atLookUp.atChops` six times to do enrollment crypto - it takes the encryption private key out of it at `:41`, decrypts the wrapped payload at `:52` and `:63`, and at `:47` **mutates** it (`atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = …`). The lookup is being used as a shared mutable crypto context between at_auth components, which is why the field is on `AtLookUp` at all. The approver is at_auth code and has the keys, so it should be handed its own crypto rather than reaching through a network object for it - but that is a change to the approver, and it has to land before or with the deletion. | at_lookup      |
 | 6   | Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership. ⚠️ **Do not port `MultiplexedOutboundMessageListener` as written** - it truncates multi-line values (see [section 7](#7-corrections)). The framing that works is two passes: the notification check byte by byte, the `\n@` check only from the last newline on, as landed in step 2. | at_lookup      |
 | 7   | `withSecureSocket` in, constructor deprecated. Deprecate `MonitorClient` in the same commit — exported, zero consumers tree-wide, and its `_createNewConnection` bypasses `SecureSocketUtil` so it never got the connect timeouts.    | at_lookup      |
 | 8   | Migrate the 64 sites, compiler-enumerated. **Run `dart analyze` in `tests/at_functional_test` and `tests/at_end2end_test` separately** — 29 of the 64 live there, invisible to at_lookup's own analyze.                               | 9 packages     |
 | 9   | Monitor takes an `AtLookupMuxable` and loses its connection factory, PKAM auth, buffer, framing constants, overflow check, prompt stripping, `sendCommand`, backoff and heartbeat. **Wiring passes a fresh instance.**                | at_client      |
 
-Sequencing constraint: at_lookup goes **3.7.0 → 3.8.0** and at_client already
-pins `^3.7.0`, so at_lookup publishes first. at_commons moves too, putting step 1
-at the front of the release order as well as the commit order. at_auth's
-constraint on at_lookup rises in step 4, in the same commit as the first use.
+Sequencing constraint: at_lookup publishes first, at_commons moves with it
+putting step 1 at the front of the release order as well as the commit order,
+and at_auth's constraint on at_lookup rises in step 4, in the same commit as
+the first use.
+
+⚠️ **This paragraph used to say "at_lookup goes 3.7.0 → 3.8.0". There is no
+3.8.0.** pub.dev's latest at_lookup is **3.6.1**; the in-tree `3.7.0` was
+bumped by `4e2507012` and has never been published, so it is the in-progress
+heading and the whole consolidation folds into it. Checked against pub.dev's
+API and `git log -L3,3:packages/at_lookup/pubspec.yaml`, not against in-tree
+precedent — which is the trap this repo has already hit once, at `66ec12a38`
+("fold 3.7.0 entries back into unpublished 3.6.0").
 
 ## 6. Filed, not scheduled
 
 ⚠️ **The heading is no longer the whole truth, and the anchor is kept only
 because other sections link to it.** Four of what follows are not filed-and-
-unscheduled at all — they are **required before step 5 can be done**, and
-burying required work under a heading that says otherwise is how it gets
-skipped. They are marked **BLOCKS STEP 5**. The genuinely filed items are at
-the end, under [Actually filed](#actually-filed).
+unscheduled at all — they are **required before the credential fields can be
+deleted**, and burying required work under a heading that says otherwise is how
+it gets skipped. They are marked **BLOCKS THE MAJOR**. The genuinely filed
+items are at the end, under [Actually filed](#actually-filed).
 
-### BLOCKS STEP 5 — it does not delete the ladder, it makes a keystore mandatory
+⚠️ **These used to be marked `BLOCKS STEP 5`, and the rename is not
+cosmetic.** Step 5 no longer deletes anything — it annotates (see the Status
+block). What these four block is the *later major* that does the deletion. Left
+saying "step 5", they would read as blocking work that has already shipped, and
+a fresh session would go looking for a gate that is not there.
+
+### BLOCKS THE MAJOR — deletion does not remove the ladder, it makes a keystore mandatory
 
 Measured, by tagging both routes and attributing the ladder authentications in
 a functional pass (107 of them at the point of sampling):
@@ -382,7 +418,7 @@ instead. The credential decision still leaves at_lookup, which is the point -
 it just lands in at_client rather than in a keyfile. Worth building **before**
 step 5, so the deletion has somewhere for those callers to go.
 
-### BLOCKS STEP 5 (partly) — at_onboarding_cli had no local functional harness
+### BLOCKS THE MAJOR (partly) — at_onboarding_cli had no local functional harness
 
 `tests/at_onboarding_cli_functional_tests` has **no `runLocal.sh`**, and its
 `docker-compose.yaml` defaults to `atsigncompany/virtualenv:vip` - the
@@ -402,20 +438,47 @@ of a live check means the change wants a runner first. Writing one - a
 `at_virtual_env:local` - is the cheaper thing to do before the migration, not
 after it.
 
-### BLOCKS STEP 5 — seven at_client modules read `atLookUp.enrollmentId`
+### BLOCKS THE MAJOR — `atLookUp.enrollmentId` has 51 uses, not the 7 first recorded
 
-The same shape as the approver's `atChops`, and larger. One write
-(`remote_secondary.dart:98`) and **seven reads**, every one of them
-`atClient.getRemoteSecondary()?.atLookUp.enrollmentId`:
+⚠️ **This section used to say "seven at_client modules", and that was a
+hand-built list.** The annotation pass replaced it with an enumeration from
+`dart analyze`, which resolves the receiver type and so cannot miss a caller
+the way a grep can. The seven were all real and all still here — what the list
+omitted is below.
 
-`nskey_rotation.dart:254`, `nskey_seeding.dart:67`,
-`pq_signing_root.dart:904`, `apkam_signing.dart:67`,
-`enrollment_privilege_resolver.dart:36`,
-`envelope_enrollment_conveyance.dart:253`, `signing_key_minting.dart:314`.
+The full figure is **51 uses across 34 files**, workspace-wide, reads and
+writes together. Two denominators are in play and they are not the same
+question: "how many modules ask the lookup which enrollment they are" (the
+original 7) and "how many uses break when the member goes" (51). Neither is
+wrong; quoting one for the other is.
 
-All seven are asking "which enrollment am I operating as" - a fact about the
+In at_client `lib/`, **eight readers**, not seven:
+
+| file | line | in the original 7? |
+| ---- | ---- | ------------------ |
+| `crypto/nskey/nskey_rotation.dart` | 254 | yes |
+| `crypto/nskey/nskey_seeding.dart` | 67 | yes |
+| `crypto/nskey/pq_signing_root.dart` | 904 | yes |
+| `mixins/apkam_signing.dart` | 67 | yes |
+| `service/enrollment_privilege_resolver.dart` | 36 | yes |
+| `service/envelope_enrollment_conveyance.dart` | 253 | yes |
+| `signing/signing_key_minting.dart` | 296, 314 | `:314` only |
+| `secret_sharing/key_package_minting.dart` | 124 | **no — missed** |
+
+`key_package_minting.dart:124` reads `atLookUp?.enrollmentId` into a local
+spelled **`enrolment`**, single *l*, and every downstream use names that local.
+So a grep anchored on the usage sites never connects them back to the member —
+which is exactly why the analyzer, not a grep, is the instrument for this list.
+
+Plus `remote_secondary.dart` at `:78`, `:95`, `:108` and `:148` — the write
+site and the authenticator-precedence branches that read the field to *build*
+its replacement.
+
+And **at_onboarding_cli has four more** the at_client-scoped count never
+covered: `at_onboarding_service_impl.dart` at `:146`, `:166`, `:185`, `:515`.
+
+All of them are asking "which enrollment am I operating as" — a fact about the
 client, read off a network object because that is where somebody parked it.
-The plan lists `enrollmentId` as Gone at step 5, which would break all seven.
 They need the answer from the client instead, and the field goes with the
 ladder once they have it.
 
@@ -428,7 +491,7 @@ survive the move. And `apkam_signing.dart:67` reads
 against `'primary'` is comparing against "we did not know", not against an
 enrollment.
 
-### BLOCKS STEP 5 — the approver's crypto (DONE additively, 2026-08-19)
+### BLOCKS THE MAJOR — the approver's crypto (DONE additively, 2026-08-19)
 
 `EnrollmentApprover.approve` reaches through `atLookUp.atChops` for three
 things, none of them authentication: the atSign's **encryption** private key
@@ -475,6 +538,33 @@ every site.
 
 ### Actually filed
 
+- **Twenty `lib/` doc comments cite a planning-doc path, which the project's
+  own rule bans** ("never a phase/step/option number or a planning-doc
+  filename" — a rule flagged more than once). Found by
+  `git grep -n 'docs/projects' -- '*/lib/*.dart'`: 21 hits, of which the one in
+  `at_auth/lib/src/auth/at_authenticator.dart` was written by this work and has
+  been rewritten to state the technical reason instead. The other **20** are
+  the PQ work's established convention — `at_enrollment_request.dart:242`,
+  `file_io.dart:61`, `file_lock.dart:5`, `pq_hpke.dart:16` and `:262`,
+  `pq_client_bootstrap.dart:33`, `mint_lock.dart:43`, `nskey_records.dart:10`
+  and `:118`, `pq_signing_chain.dart:86`, `published_nskey_key_ring.dart:101`
+  and `:288`, `privilege_resolver.dart:32`, `apkam_signing.dart:40`,
+  `envelope_signature.dart:666`, `signing_key_minting.dart:263`, plus four in
+  `tests/pq_matrix/*/lib/`. Not touched here: they predate this project and
+  most cite a numbered *decision*, which is arguably a durable reference rather
+  than a planning trail. **That distinction is gkc's call, not this plan's** —
+  the rule as written admits neither. Re-derive the list with the grep above
+  rather than trusting this one.
+- **`AtLookupImpl.authenticate()` carries a deprecation somebody backed out
+  of, and the reason they gave no longer holds.** `at_lookup_impl.dart:560` is
+  a commented-out annotation: `/// @Deprecated('Use method pkamAuthenticate')
+  Commenting deprecation since it causes issue in dart analyze in the caller`.
+  It is the legacy PKAM leg, impl-only (not on `AtLookUp`), and it is what the
+  ladder calls with the now-deprecated `privateKey`. The annotation pass
+  measured what "issue in dart analyze" actually means here: `info`, which
+  `--fatal-warnings` does not promote, with all 16 workspace packages exiting
+  0. So the stated blocker is gone. **Not annotated here** — it is a seventh
+  member beyond the six ruled on, and widening a deprecation set is gkc's call.
 - **at_onboarding_cli still constructs six lookups without an authenticator** —
   `at_onboarding_service_impl` `:215 :445 :460 :488 :721` and
   `auth_cli.dart:413`. They are not uniform: some authenticate, `:721` only
@@ -561,6 +651,41 @@ direct legs appears **three** times, and the third is `_authenticateWith` —
 the injected path itself. Tagging that as ladder use would report the fix as
 the problem.
 
+### How to re-derive who still uses the deprecated members
+
+Not by grep. `enrollmentId`, `privateKey` and `cramSecret` are field names on
+many unrelated types here — at_auth's own `AtAuthKeys.enrollmentId` is
+*separately* deprecated and contributes 33 findings of its own — so a text
+search cannot tell the receiver types apart. `dart analyze` can, because it
+resolves them.
+
+Analyze every workspace member and filter on the tail these six annotations
+share:
+
+```bash
+MARK='Removed with the credential ladder in the next major release'
+# in each of the 16 workspace packages:
+dart analyze --fatal-warnings > /tmp/$pkg.log 2>&1
+# then, over the collected logs:
+grep -h "$MARK" /tmp/*.log | sed -E "s/.*- '([^']+)' is deprecated.*/\1/" \
+  | sort | uniq -c | sort -rn                       # by member
+grep -h "$MARK" /tmp/*.log | grep ' lib/'           # production sites only
+```
+
+Reading at `768d08119` + the annotation commit: **90 findings** — `enrollmentId`
+51, `atChops` 25, `signingAlgoType` 12, `hashingAlgoType` 2.
+
+⚠️ **Prove the filter both ways before believing a number from it.** The tail
+must match a real line in the annotated run (print it) and return **0** against
+the pre-annotation baseline. Both were checked; without the second, this filter
+would silently also collect at_chops' 1151 unrelated deprecations.
+
+⚠️ **`privateKey` and `cramSecret` return zero, and that is a finding, not a
+broken probe.** Neither has a single consumer anywhere in the 16 packages —
+`privateKey` was already annotated in the baseline, so its uses would have
+shown up there too, and they do not. Those two can be deleted at the major with
+far less ceremony than the other four.
+
 ### Readings that were superseded
 
 - **"4 ladder authentications"** → **201**. Read at `finer` under a harness
@@ -598,3 +723,8 @@ first version.
 | Rebase drops at_lookup work silently                   | **Conflicts**          | Git reports `CONFLICT (modify/delete)`. The hazard is that it reads as "keep the file or not" and `git rm` discards 87 lines without showing a hunk.   |
 | Listener tests never enter the waiting path            | **7 do, 38 times**     | Measured by printing in the poll loop and running the suite: the whole `AtTimeOutException` group waits. The real gap is delivery — zero `StreamController` in at_lookup's tests, so nothing drives bytes through a socket. |
 | `gkc-fewer-connections`' listener is adoptable         | **Truncates values**   | Its byte loop starts at 0, so an internal `\n@` inside a `data:` value reads as the terminator. Measured by running that exact file over `data:the_key_is\n@bob:phone@alice\n@alice@`: it returns `data:the_key_is`. at_lookup's own `data contains new line character and @` test (`outbound_message_listener_test.dart:95`) would have caught it, so it never ran against this suite. |
+| Seven at_client modules read `atLookUp.enrollmentId`   | **8 readers, 51 uses** | The seven were real; the list was hand-built and missed `key_package_minting.dart:124`, which stores the value in a local spelled `enrolment` (single *l*) so no usage-site grep leads back to it. Re-derived from `dart analyze`, which resolves receiver types. at_onboarding_cli holds four more the at_client-scoped count never covered. |
+| `privateKey reference is no longer used` (its own `@Deprecated` message) | **False; it is live** | `_process`'s ladder reads the field and calls `authenticate(privateKey)` with it, and before the authenticator seam it was the leg most ladder traffic took. Shipped in at_lookup's source as an annotation a consumer would read as "inert". Replaced with a message naming the replacement. |
+| at_lookup goes 3.7.0 → 3.8.0                           | **There is no 3.8.0**  | pub.dev's latest is **3.6.1**. In-tree `3.7.0` was bumped by `4e2507012` and never published, so it is the in-progress heading and everything folds into it. The claim came from in-tree precedent, which this repo has already been burned by once — `66ec12a38`. |
+| Deprecating the fields will force the readers to move  | **It forces nothing**  | `deprecated_member_use` is severity `info` here and `--fatal-warnings` does not promote it: all 16 workspace packages exit 0 before and after. Worse for the signal, 1151 of the 1201 baseline findings were *already* that same lint, so 90 more are invisible. A prediction of mine, wrong; the analyzer settled it. |
+| Annotating only adds findings                          | **It removes 5 too**   | Dart suppresses `deprecated_member_use` *inside* a declaration that is itself deprecated, so annotating the five declarations naming the (also deprecated) `AtChops` type hid at_chops' own signal on those lines. at_lookup went 33 → 28. Explained rather than rounded: 90 new − 5 suppressed = the +85 workspace delta exactly. |

@@ -1,5 +1,21 @@
 ## 3.7.0
 
+- feat: the six credential members are `@Deprecated` — `atChops`,
+  `signingAlgoType`, `hashingAlgoType` and `enrollmentId` on both `AtLookUp`
+  and `AtLookupImpl`, plus `privateKey` and `cramSecret` on the impl.
+  Authentication runs through an injected `AtAuthenticator`, which at_auth
+  builds from whichever credential shape a caller holds, so at_lookup no
+  longer needs key material of its own. The fallback ladder still reads these
+  fields and nothing breaks; the fields and the ladder are removed together in
+  the next major. `signingAlgoType` and `hashingAlgoType` are one setting —
+  they are read on the same lines when the PKAM signature is built — so
+  deprecating either without the other would say the survivor lives on into
+  the major, which is not true.
+- fix: `privateKey`'s deprecation message claimed "privateKey reference is no
+  longer used". That was false: the ladder in `_process` reads the field and
+  signs with it, and before the authenticator seam landed it was the leg most
+  of the traffic took. The message now names the replacement instead.
+
 - fix: `pkamAuthenticate` prefers an injected authenticator too, not only
   `executeCommand`. at_auth reaches that method directly rather than through a
   verb, so a seam wired into the verb path alone would have looked connected

@@ -86,9 +86,22 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor {
 
   late int _rootPort;
 
-  @Deprecated("privateKey reference is no longer used")
+  /// The legacy PKAM credential: a private key and nothing else.
+  ///
+  /// The message this annotation used to carry - "privateKey reference is no
+  /// longer used" - was false. The ladder in [_process] reads this field and
+  /// calls authenticate() with it, and before the authenticator seam landed
+  /// that was the leg most ladder traffic took.
+  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+      'instead - at_auth builds one from a bare private key with '
+      'authenticatorForPrivateKey(). '
+      'Removed with the credential ladder in the next major release.')
   String? privateKey;
 
+  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+      'instead - at_auth builds one that falls back to CRAM with '
+      'authenticatorFor(). '
+      'Removed with the credential ladder in the next major release.')
   String? cramSecret;
 
   /// Takes over authentication entirely when set, in place of the
@@ -795,21 +808,40 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor {
     await _connection!.write(command);
   }
 
+  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+      'instead - at_auth builds one with authenticatorForChops(). '
+      'Removed with the credential ladder in the next major release.')
   @override
   set atChops(AtChops? atChops) {
     _atChops = atChops;
   }
 
+  @Deprecated('Supply an AtAuthenticator via AtLookupImpl.authenticator '
+      'instead - at_auth builds one with authenticatorForChops(). '
+      'Removed with the credential ladder in the next major release.')
   @override
   AtChops? get atChops => _atChops;
 
   /// To use a specific signing algorithm other than default one for pkam auth, set the [SigningAlgoType] and [HashingAlgoType]
+  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
+      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
+      'Removed with the credential ladder in the next major release.')
   @override
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 
+  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
+      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
+      'Removed with the credential ladder in the next major release.')
   @override
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
+  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
+      'builds. To ask "which enrollment am I", read your own client state - '
+      'not this field, and not '
+      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
+      'live connection authenticated as rather than what the next '
+      'authentication will use. '
+      'Removed with the credential ladder in the next major release.')
   @override
   String? enrollmentId;
 }

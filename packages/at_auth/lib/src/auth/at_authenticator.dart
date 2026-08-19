@@ -248,10 +248,13 @@ Future<bool> _pkam(
 
 /// Ported from `AtLookupImpl.cramAuthenticate`, verbatim - including that it
 /// does NOT pass the challenge through [validatedFromChallenge], where PKAM
-/// does. That asymmetry is recorded in
-/// `docs/projects/at-lookup-consolidation/plan.md` section 6 and is
-/// deliberately not resolved by moving this code: a port that quietly adds a
-/// check is a behaviour change hiding inside a refactor.
+/// does.
+///
+/// That asymmetry is preserved deliberately rather than resolved here: a port
+/// that quietly adds a check is a behaviour change hiding inside a refactor,
+/// and it would land in a commit nobody would think to review for it. Whether
+/// CRAM should validate the challenge too is a real question and a separate
+/// one; it wants its own change, with its own test.
 Future<bool> _cram(
   AtCommandExecutor executor,
   String atSign,
