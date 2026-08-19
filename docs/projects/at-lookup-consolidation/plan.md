@@ -9,8 +9,13 @@ its first use, the event-driven `read()`, and the `onNotification` seam.
 use it. Measured against a live atServer with both routes logging at `shout`:
 **57 authentications through the injected route, 201 still through the
 ladder**. ⚠️ An earlier measurement said "4 ladder" - it was read at `finer`,
-which the functional harness suppresses. Step 4 is finished when that count is
-**0**. ⚠️ **The at_client install does NOT belong in `AtClientImpl`'s `atChops`
+which the functional harness suppresses. ⚠️ **"Ladder = 0" is the wrong finish line**, though this row said so. About
+ten files in `tests/at_functional_test` construct an `AtLookupImpl` and set
+`atChops` on it directly - they are testing at_lookup and at_auth, so they
+legitimately use the ladder, and they can only change when step 5 deletes the
+fields. The count therefore has a floor that production migration cannot
+reach. Step 4 is finished when **no `lib/` site sets credentials on a lookup**;
+the residual count is then entirely test code, and step 5 clears it. ⚠️ **The at_client install does NOT belong in `AtClientImpl`'s `atChops`
 setter.** Putting it there was measured to change nothing: 57 injected / 201
 ladder before and after, while at_client's 1480 tests and the functional 177
 all passed either way. `remote_secondary.dart:72` sets `atLookUp.atChops` in
@@ -20,7 +25,13 @@ also needs an `AtKeysIo` threaded to it, since `RemoteSecondary` holds a
 preference and a lookup but no keystore. Reverted rather than shipped: a no-op
 that reads as a completed migration is worse than an absent one.
 
-**Still to migrate** of `atChops` onto a lookup — 2 in
+**Still to migrate** - and it is more than this row first listed. Beyond the
+sites already done, `at_onboarding_cli` constructs an `AtLookupImpl` at six
+further places (`at_onboarding_service_impl` `:215 :445 :460 :488 :721`,
+`auth_cli.dart:413`), and `at_client_flutter/enrollment_service.dart:65` at
+one. `at_server_status/at_status_impl.dart:100` needs nothing: it holds no key
+material and never authenticates, which is the case the factory's nullable
+`authenticator` exists for. Original list: of `atChops` onto a lookup — 2 in
 `at_auth_impl`, 1 in `enrollment_handshake`, 3 in at_client
 (`at_client_impl:105` reaching `remote_secondary`'s setter at `:32`, plus
 `:72`), 1 in `at_onboarding_service_impl` — plus the read guard at
@@ -330,7 +341,86 @@ constraint on at_lookup rises in step 4, in the same commit as the first use.
 
 ## 6. Filed, not scheduled
 
-### `atLookUp.enrollmentId`, which step 5 also needs first
+⚠️ **The heading is no longer the whole truth, and the anchor is kept only
+because other sections link to it.** Four of what follows are not filed-and-
+unscheduled at all — they are **required before step 5 can be done**, and
+burying required work under a heading that says otherwise is how it gets
+skipped. They are marked **BLOCKS STEP 5**. The genuinely filed items are at
+the end, under [Actually filed](#actually-filed).
+
+### BLOCKS STEP 5 — it does not delete the ladder, it makes a keystore mandatory
+
+Measured, by tagging both routes and attributing the ladder authentications in
+a functional pass (107 of them at the point of sampling):
+
+| where | count | why |
+| ----- | ----- | --- |
+| `enrollment_test.dart` | 35 | constructs `AtLookupImpl` directly - test code exercising at_lookup itself |
+| `at_client_lifecycle_functional_test.dart` | 19 | `AtClient` built with **no `atKeysIo`** |
+| `atclient_notify_test.dart` | 12 | same - it creates clients nine times and passes no keystore |
+| `atclient_sync_callback_test.dart` | 8 | same |
+| the rest | ~33 | spread thin |
+
+By atSign: 90 `@alice🛠`, 11 `@bob🛠`, 4 `@sachin`, 2 `@srie`.
+
+The second group is the finding. An `AtClient` constructed without an
+`AtKeysIo` gets no authenticator - correctly, since nothing can authenticate
+from a keystore it was not given - and falls through to the ladder on
+`preference.privateKey` / `atChops`. So the ladder's remaining traffic is not
+un-migrated code; it is **callers who supply no keystore**.
+
+Step 5 therefore is not the mechanical deletion the row implies. Deleting the
+ladder makes an `AtKeysIo` **required** to authenticate, which is a breaking
+change for every consumer that builds a client from a preference alone - and
+at_tools' `at_cli` is already named in the corrections table as exactly such a
+consumer, outside this tree.
+
+**There is a bridge, and the ladder itself shows the way.** Its legacy leg
+signs with `AtPkamKeyPair.create('', privateKey)` - an **empty public half**,
+because RSA signing needs only the private key. at_auth already builds a
+signer of that shape for a different reason:
+`enrollment_handshake._apkamChopsAwaitingSymmetricKey` constructs an AtChops
+with an empty encryption private key, for an enrollment whose keys are
+deliberately incomplete.
+
+So a caller holding nothing but `preference.privateKey` can still be given an
+authenticator, and needs no keystore at all:
+
+```dart
+/// The legacy credential: a PKAM private key and nothing else. Reads no
+/// keystore, because there is none - which is exactly the caller this exists
+/// for.
+AtAuthenticator authenticatorForPrivateKey(String atSign, String privateKey,
+    {Map<String, dynamic> clientConfig = const {}});
+```
+
+With that, step 5 deletes the ladder without making a keystore mandatory and
+without a major: at_client hands keystore-less callers this authenticator
+instead. The credential decision still leaves at_lookup, which is the point -
+it just lands in at_client rather than in a keyfile. Worth building **before**
+step 5, so the deletion has somewhere for those callers to go.
+
+### BLOCKS STEP 5 (partly) — at_onboarding_cli had no local functional harness
+
+`tests/at_onboarding_cli_functional_tests` has **no `runLocal.sh`**, and its
+`docker-compose.yaml` defaults to `atsigncompany/virtualenv:vip` - the
+published image, not the local PQ-capable build the rest of this work is
+verified against. So there is no local path to functionally verify anything
+in at_onboarding_cli, and `tests/at_functional_test` does not exercise the CLI.
+
+The consequence for this project: the CLI's authenticator install is
+**unit-green only** (54 tests), and its six remaining construction sites
+(`at_onboarding_service_impl` `:215 :445 :460 :488 :721`, `auth_cli.dart:413`)
+should be migrated with that in mind - they are not uniform, either. Some
+authenticate, `:721` only checks `isOnboarded`, and two send a bare `from:`
+through a proxy. Installing an authenticator on all of them is harmless where
+unused, because it only runs when authentication is required, but the absence
+of a live check means the change wants a runner first. Writing one - a
+`runLocal.sh` matching at_functional_test's, defaulting to
+`at_virtual_env:local` - is the cheaper thing to do before the migration, not
+after it.
+
+### BLOCKS STEP 5 — seven at_client modules read `atLookUp.enrollmentId`
 
 The same shape as the approver's `atChops`, and larger. One write
 (`remote_secondary.dart:98`) and **seven reads**, every one of them
@@ -356,7 +446,7 @@ survive the move. And `apkam_signing.dart:67` reads
 against `'primary'` is comparing against "we did not know", not against an
 enrollment.
 
-### The approver's crypto, which step 5 needs first
+### BLOCKS STEP 5 — the approver's crypto (DONE additively, 2026-08-19)
 
 `EnrollmentApprover.approve` reaches through `atLookUp.atChops` for three
 things, none of them authentication: the atSign's **encryption** private key
@@ -400,6 +490,8 @@ Those four move in the same commit. The mercy is that this one is a compile
 error rather than the usual silent `noSuchMethod` null - `dart analyze` names
 every site.
 
+
+### Actually filed
 
 - **CRAM does not validate the `from:` challenge; PKAM does.**
   `at_lookup_impl.cramAuthenticate` digests the raw response, while

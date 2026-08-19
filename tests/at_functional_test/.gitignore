@@ -25,3 +25,8 @@ test/testData/rf2b-t5@*.atKeys
 test/testData/rf2d-posture@*.atKeys
 # FileAtKeysIo.flush keeps the previous state recoverable beside the keyfile.
 test/testData/*.atKeys.bak
+
+# AtKeysFileLock leaves these beside a keyfile during a run. Untracked and
+# unignored, they are one `git add -A` away from being committed - which is
+# how machine-local lock state ends up in the repo.
+*.atKeys.lock
