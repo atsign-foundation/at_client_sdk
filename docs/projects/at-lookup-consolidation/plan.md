@@ -10,7 +10,17 @@ use it. Measured against a live atServer with both routes logging at `shout`:
 **57 authentications through the injected route, 201 still through the
 ladder**. ⚠️ An earlier measurement said "4 ladder" - it was read at `finer`,
 which the functional harness suppresses. Step 4 is finished when that count is
-**0**. **Still to migrate** of `atChops` onto a lookup — 2 in
+**0**. ⚠️ **The at_client install does NOT belong in `AtClientImpl`'s `atChops`
+setter.** Putting it there was measured to change nothing: 57 injected / 201
+ladder before and after, while at_client's 1480 tests and the functional 177
+all passed either way. `remote_secondary.dart:72` sets `atLookUp.atChops` in
+the **constructor**, so the chops that matters never passes through that
+setter. The install has to happen where `RemoteSecondary` is built - which
+also needs an `AtKeysIo` threaded to it, since `RemoteSecondary` holds a
+preference and a lookup but no keystore. Reverted rather than shipped: a no-op
+that reads as a completed migration is worse than an absent one.
+
+**Still to migrate** of `atChops` onto a lookup — 2 in
 `at_auth_impl`, 1 in `enrollment_handshake`, 3 in at_client
 (`at_client_impl:105` reaching `remote_secondary`'s setter at `:32`, plus
 `:72`), 1 in `at_onboarding_service_impl` — plus the read guard at
