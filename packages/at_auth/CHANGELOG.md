@@ -1,4 +1,15 @@
 ## 3.4.0
+
+- feat: `authenticatorForCramSecret` - the fourth credential shape, a CRAM
+  secret with no keystore behind it. `authenticatorFor` already falls back to
+  CRAM, but only for a caller with an `AtKeysIo` to read, because it decides by
+  that read throwing. at_lookup's ladder served the keystore-less caller from
+  its own `cramSecret` field, and removing the ladder without this would take
+  CRAM away from anyone setting `AtClientPreference.cramSecret`.
+- refactor: at_auth builds its lookups with `AtLookUp.withSecureSocket` and
+  installs authenticators through `AtLookupMuxable`, so nothing here names
+  at_lookup's implementation class. Two casts turned out to be unnecessary all
+  along - `close()` and `cramAuthenticate()` are both on `AtLookUp`.
 - feat: add `authenticatorForChops`, the third credential shape at_lookup's
   ladder supported: an `AtChops` and nothing else - no keyfile, no private
   key, the material living inside the signer. A client built from an

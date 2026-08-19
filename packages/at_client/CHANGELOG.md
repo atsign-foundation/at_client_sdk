@@ -1,4 +1,18 @@
 ## 3.14.1
+
+- refactor: `RemoteSecondary` builds its lookup with
+  `AtLookUp.withSecureSocket` and no longer sets `privateKey` or `cramSecret`
+  on it. Both are credentials, and credentials now travel as an authenticator;
+  `_installAuthenticator` supplies one from whichever of the four shapes the
+  client holds - keystore, AtChops, private key, CRAM secret - in the ladder's
+  own precedence order.
+- refactor: the file-stream path reads its `stream:done` through
+  `AtLookupMuxable.readResponse` rather than reaching into the message
+  listener, which is deliberately not part of at_lookup's public surface.
+- refactor: `AtClientUtil.findSecondary` uses `CacheableSecondaryAddressFinder`
+  directly. It went through a deprecated at_lookup wrapper that could not
+  return null - it built the address and called `toString()` - so this
+  method's null branch had been unreachable.
 - feat: `RemoteSecondary` installs an authenticator for all three credential
   shapes, not just a keystore: an `AtKeysIo` if it has one, else the
   preference's private key, else its `AtChops`. Only the first existed before,

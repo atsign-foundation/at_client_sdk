@@ -62,10 +62,14 @@ class FlutterEnrollmentService {
     bool waitForApproval = false,
   }) async {
     AtEnrollmentResponse? atEnrollmentResponse;
-    AtLookUp atLookup = AtLookupImpl(
-      request.atSign,
-      request.rootDomain.rootDomain,
-      request.rootDomain.rootPort,
+    // authenticator: null - this submits an enrolment request, which the
+    // atServer accepts unauthenticated. There is no credential here to
+    // authenticate with, and that is correct rather than an omission.
+    final AtLookUp atLookup = AtLookUp.withSecureSocket(
+      atSign: request.atSign,
+      rootDomain: request.rootDomain,
+      secureSocketConfig: SecureSocketConfig(),
+      authenticator: null,
     );
     try {
       atEnrollmentResponse = await _atEnrollment.submit(request, atLookup);

@@ -51,10 +51,13 @@ control:
 bash docs/projects/at-lookup-consolidation/count_atlookupimpl.sh
 ```
 
-Reading at `9e4bd1a31`: **38 uses across 21 files**, against a control finding
-169 `AtLookUp`. A further 136 sit in at_lookup's own lib, tests, examples, docs
-and CHANGELOGs; those are reported by the script and deliberately **not**
-gated.
+✅ **MET.** Reading after step 8: **0 uses**, against a control finding **201**
+`AtLookUp` with its matched line printed — so the zero comes from an absence,
+not from a broken pattern. It was 47 when the gate was written, 38 after it was
+scoped, and 0 now.
+
+A further 140 sit in at_lookup's own lib, tests, examples, docs and CHANGELOGs;
+those are reported by the script and deliberately **not** gated.
 
 Two exclusions, each for its own reason:
 
@@ -457,7 +460,7 @@ then the old path is deleted — so no package is uncompilable between commits.
 | 5   | **DONE, and reshaped by a ruling: annotate, do not delete** (gkc, 2026-08-19). The six credential members carry `@Deprecated` on both the interface and the impl override; the ladder still reads them, so nothing breaks. Everything below this sentence describes **the later major that does the deletion**, and is kept here because it is what that major must do. ⛔ Do not read the rest of this row as owed at step 5. — Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` at `:744`, and **`at_chops` from the pubspec**. ⚠️ **Widen `AtAuthenticator`'s return in this same step** (ruled 2026-08-19). It returns `bool` today and that works only because `_authenticateWith` reads at_lookup's own `enrollmentId` field to record `AtConnectionMetaData.authenticatedAsEnrollmentId`. Deleting the field leaves nothing able to supply it - the authenticator is the side that knows the enrollment, and `bool` cannot carry it - so a caller could no longer tell which enrollment a live socket holds. Return a small result carrying success and the enrollment id, and let at_lookup record it. Widening the executor with `recordAuthentication` was the rejected alternative: it makes the id a side effect rather than data, and keeps `AtCommandExecutor` wider than it needs to be. ⚠️ **`atChops` is not only an auth credential, and deleting it breaks a non-auth reader.** `enrollment_approver.dart` reads `atLookUp.atChops` six times to do enrollment crypto - it takes the encryption private key out of it at `:41`, decrypts the wrapped payload at `:52` and `:63`, and at `:47` **mutates** it (`atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = …`). The lookup is being used as a shared mutable crypto context between at_auth components, which is why the field is on `AtLookUp` at all. The approver is at_auth code and has the keys, so it should be handed its own crypto rather than reaching through a network object for it - but that is a change to the approver, and it has to land before or with the deletion. | at_lookup      |
 | 6   | Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership. ⚠️ **Do not port `MultiplexedOutboundMessageListener` as written** - it truncates multi-line values (see [section 7](#7-corrections)). The framing that works is two passes: the notification check byte by byte, the `\n@` check only from the last newline on, as landed in step 2. | at_lookup      |
 | 7   | **DONE.** `withSecureSocket` in, constructor deprecated. Deprecate `MonitorClient` in the same commit — exported, zero consumers tree-wide, and its `_createNewConnection` bypasses `SecureSocketUtil` so it never got the connect timeouts.    | at_lookup      |
-| 8   | Migrate the 64 sites, compiler-enumerated. **Run `dart analyze` in `tests/at_functional_test` and `tests/at_end2end_test` separately** — 29 of the 64 live there, invisible to at_lookup's own analyze.                               | 9 packages     |
+| 8   | **DONE — the gate reads 0.** Migrate the sites, compiler-enumerated. **Run `dart analyze` in `tests/at_functional_test` and `tests/at_end2end_test` separately** — 29 of the 64 live there, invisible to at_lookup's own analyze.                               | 9 packages     |
 | 9   | Monitor takes an `AtLookupMuxable` and loses its connection factory, PKAM auth, buffer, framing constants, overflow check, prompt stripping, `sendCommand`, backoff and heartbeat. **Wiring passes a fresh instance.**                | at_client      |
 
 Sequencing constraint: at_lookup publishes first, at_commons moves with it

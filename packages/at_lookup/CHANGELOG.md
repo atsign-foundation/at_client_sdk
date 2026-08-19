@@ -1,5 +1,13 @@
 ## 3.7.0
 
+- feat: `AtLookupMuxable` gains the members callers were reaching for through
+  a cast to the concrete class: `authenticator`, `isConnectionAvailable` and
+  `readResponse`, plus `scan(auth:)` and `lookup(metadata:)`. Those last two
+  are a defect this surfaced - `AtLookupImpl` accepted **more** than `AtLookUp`
+  declared, so a caller moving to the interface silently lost parameters. They
+  are restated on the muxable rather than added to `AtLookUp`, which is frozen:
+  adding a parameter there forces every `implements AtLookUp` to redeclare it.
+
 - feat: `AtLookUp.withSecureSocket(...)` — the entry point, returning an
   `AtLookupMuxable`. Static, so it adds nothing to the `implements` contract
   and breaks none of the classes that mock `AtLookUp`. It takes an

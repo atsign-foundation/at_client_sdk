@@ -126,6 +126,25 @@ AtAuthenticator authenticatorForChops(
           'Failed connecting to $atSign. $pkamResponse');
     };
 
+/// The fourth credential shape: a CRAM secret and nothing else.
+///
+/// [authenticatorFor] already falls back to CRAM, but only for a caller that
+/// has an [AtKeysIo] to read - it decides by that read throwing
+/// [AtKeysSourceAbsentException]. A caller holding a bare CRAM secret and no
+/// keystore at all has nothing to hand it, and at_lookup's ladder served
+/// exactly that caller from its `cramSecret` field.
+///
+/// Nothing in this tree sets `AtClientPreference.cramSecret` - every in-tree
+/// CRAM goes through onboarding, which builds its own lookup - but the field
+/// is public and an external consumer can, so removing the ladder without
+/// this would take CRAM away from them silently.
+AtAuthenticator authenticatorForCramSecret(
+  String atSign,
+  String cramSecret, {
+  Map<String, dynamic> clientConfig = const {},
+}) =>
+    (executor) => _cram(executor, atSign, cramSecret, clientConfig);
+
 /// The legacy credential: a PKAM private key and nothing else.
 ///
 /// Reads no keystore, because a caller on this path has none - it holds a

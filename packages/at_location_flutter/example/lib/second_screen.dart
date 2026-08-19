@@ -218,10 +218,11 @@ class _SecondScreenState extends State<SecondScreen> {
     } else if (!receiver!.contains('@')) {
       receiver = '@${receiver!}';
     }
-    var checkPresence =
-        // ignore: deprecated_member_use
-        await AtLookupImpl.findSecondary(receiver!, 'root.atsign.org', 64);
-    return checkPresence != null;
+    // As above: absence arrives as a thrown exception rather than a null, so
+    // this preserves the old behaviour exactly.
+    await CacheableSecondaryAddressFinder('root.atsign.org', 64)
+        .findSecondary(receiver!);
+    return true;
   }
 
   Widget alertDialogContent() {

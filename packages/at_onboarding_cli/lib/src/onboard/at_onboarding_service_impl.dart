@@ -36,7 +36,28 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   bool _isAtsignOnboarded = false;
   AtSignLogger logger = AtSignLogger('OnboardingCli');
   AtOnboardingPreference atOnboardingPreference;
+  // Stays `AtLookUp?`, deliberately. Narrowing it to AtLookupMuxable breaks
+  // two assignments that are not this class's to change: it is assigned from
+  // `RemoteSecondary.atLookUp`, which is typed AtLookUp, and from the public
+  // `set atLookUp(AtLookUp?)` this class overrides - narrowing a public
+  // setter's parameter is a breaking change.
   AtLookUp? _atLookUp;
+
+  /// The five lookups this class builds, which differed only in formatting.
+  ///
+  /// `authenticator: null` at construction is right for all of them:
+  /// [_installAuthenticator] supplies one afterwards from whichever credential
+  /// the CLI actually holds, and two of these sites only ever send an
+  /// unauthenticated `from:` through a proxy.
+  AtLookupMuxable _newLookUp() => AtLookUp.withSecureSocket(
+        atSign: _atSign,
+        rootDomain: AtRootDomain(
+          atOnboardingPreference.rootDomain,
+          atOnboardingPreference.rootPort,
+        ),
+        secureSocketConfig: SecureSocketConfig(),
+        authenticator: null,
+      );
 
   /// The object which controls what types of AtClients, NotificationServices
   /// and SyncServices get created when we call [AtClientManager.setCurrentAtSign].
@@ -178,7 +199,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // Beside atChops, not instead of it: at_auth's EnrollmentApprover reads
     // that field for enrollment crypto, which is not authentication.
     final lookUp = _atLookUp;
-    if (lookUp is AtLookupImpl) {
+    if (lookUp is AtLookupMuxable) {
       lookUp.authenticator = authenticatorFor(
         _keysIo(),
         _atSign,
@@ -218,11 +239,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     AtFileUtil.ensureWritable(File(atOnboardingPreference.atKeysFilePath!));
 
     // Ensure we have an AtLookUp instance and send from: command if using proxy
-    AtLookupImpl atLookUpImpl = AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
+    final atLookUpImpl = _newLookUp();
 
     await _sendFromCommandIfUsingProxy(atLookUpImpl, context: 'onboard');
 
@@ -455,11 +472,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           'appName and deviceName are mandatory for enrollment');
     }
 
-    _atLookUp ??= AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
+    _atLookUp ??= _newLookUp();
 
     AtEnrollmentRequest newClientEnrollmentRequest = AtEnrollmentRequest(
         atSign: _atSign,
@@ -470,8 +483,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 
-    AtLookupImpl atLookUpImpl = AtLookupImpl(_atSign,
-        atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+    final atLookUpImpl = _newLookUp();
 
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
@@ -498,11 +510,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     bool logProgress = true,
     int maxRetries = AtOnboardingService.defaultMaxApkamRetries,
   }) async {
-    _atLookUp ??= AtLookupImpl(
-      _atSign,
-      atOnboardingPreference.rootDomain,
-      atOnboardingPreference.rootPort,
-    );
+    _atLookUp ??= _newLookUp();
 
     if (_isUsingProxy) {
       // When using a proxy, send from: command to ensure correct atSign context
@@ -731,8 +739,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<bool> isOnboarded() async {
     if (_isUsingProxy) {
       // When using a proxy, try a simple lookup command that doesn't require auth
-      AtLookUp atLookUp = AtLookupImpl(_atSign,
-          atOnboardingPreference.rootDomain, atOnboardingPreference.rootPort);
+      final atLookUp = _newLookUp();
       await _sendFromCommandIfUsingProxy(atLookUp, context: 'isOnboarded');
 
       try {
@@ -793,7 +800,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<void> close() async {
     logger.info('Closing');
     if (_atLookUp != null &&
-        (_atLookUp as AtLookupImpl).isConnectionAvailable()) {
+        _atLookUp is AtLookupMuxable &&
+        (_atLookUp as AtLookupMuxable).isConnectionAvailable()) {
       await _atLookUp!.close();
     }
     if (atClient != null) {

@@ -1,4 +1,11 @@
 ## 1.17.0
+
+- refactor: the five lookups this service built, which differed only in
+  formatting, come from one `_newLookUp()` helper over
+  `AtLookUp.withSecureSocket`. `close()` no longer casts to at_lookup's
+  implementation class to ask whether a connection is open; it tests for
+  `AtLookupMuxable`, which also stops it throwing when a test injects a plain
+  `AtLookUp`.
 - fix: authentication reads a password-protected keyfile again. The
   authenticator's key source omitted the passphrase, so every authenticated
   command against a protected `.atKeys` failed with "Pass Phrase is required"

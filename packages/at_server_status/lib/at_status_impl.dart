@@ -69,7 +69,7 @@ class AtStatusImpl implements AtServerStatus {
     // ignore: omit_local_variable_types
     AtStatus atStatus = AtStatus();
     atStatus.atSign = atSign;
-    // `AtLookupImpl.findSecondary` was a thin wrapper over this finder, and
+    // at_lookup's own `findSecondary` static was a thin wrapper over this finder, and
     // both it and the class it lived on are now deprecated.
     //
     // The finder is built INSIDE the future deliberately: the wrapper did its

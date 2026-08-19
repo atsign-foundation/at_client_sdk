@@ -6,6 +6,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeysIo,
         authenticatorFor,
         authenticatorForChops,
+        authenticatorForCramSecret,
         authenticatorForPrivateKey;
 
 import 'package:at_chops/at_chops.dart';
@@ -45,6 +46,7 @@ class RemoteSecondary implements Secondary {
 
   /// The legacy credential, for a client that was given no keystore.
   String? _privateKey;
+  String? _cramSecret;
 
   /// The algorithm the constructor resolved, so an authenticator built from a
   /// bare signer names the same one the lookup was told to use.
@@ -66,7 +68,7 @@ class RemoteSecondary implements Secondary {
     final lookUp = atLookUp;
     // `AtLookUp` does not declare the seam - that interface is frozen because
     // mocks implement it - so any other implementation keeps its behaviour.
-    if (lookUp is! AtLookupImpl) {
+    if (lookUp is! AtLookupMuxable) {
       return;
     }
 
@@ -110,7 +112,18 @@ class RemoteSecondary implements Secondary {
       return;
     }
 
-    // None of the three: nothing to authenticate with, so nothing is
+    // Last, matching the ladder's own order: atChops, then privateKey, then
+    // cramSecret. Nothing in this tree sets `preference.cramSecret` - every
+    // in-tree CRAM goes through onboarding, which builds its own lookup - but
+    // the field is public API, so a consumer that sets it kept working through
+    // the ladder and must keep working through the seam.
+    final cramSecret = _cramSecret;
+    if (cramSecret != null) {
+      lookUp.authenticator = authenticatorForCramSecret(_atSign, cramSecret);
+      return;
+    }
+
+    // None of the four: nothing to authenticate with, so nothing is
     // installed. That is a real mode - at_status_impl holds no key material at
     // all, and an OTP enrollment submit routes through auth: false.
   }
@@ -138,13 +151,20 @@ class RemoteSecondary implements Secondary {
     _atChops = atChops;
     _atKeysIo = atKeysIo;
     _privateKey = privateKey;
+    _cramSecret = preference.cramSecret;
+    // privateKey and cramSecret are no longer set ON the lookup: both are
+    // credentials, and credentials now travel as an authenticator, which
+    // _installAuthenticator supplies below from whichever of the four shapes
+    // this client actually holds.
     this.atLookUp = atLookUp ??
-        AtLookupImpl(atSign, preference.rootDomain, preference.rootPort,
-            privateKey: privateKey,
-            cramSecret: preference.cramSecret,
-            secondaryAddressFinder: processSecondaryAddressFinder(),
-            secureSocketConfig: secureSocketConfig,
-            clientConfig: _getClientConfig());
+        AtLookUp.withSecureSocket(
+          atSign: atSign,
+          rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
+          secureSocketConfig: secureSocketConfig,
+          authenticator: null,
+          secondaryAddressFinder: processSecondaryAddressFinder(),
+          clientConfig: _getClientConfig(),
+        );
     this.atLookUp.enrollmentId = enrollmentId;
     // The preference is the documented legacy fallback: the caller passes the
     // key-material resolution when the enrollment has typed material.

@@ -13,7 +13,7 @@ class AtClientUtil {
   @Deprecated('use RemoteSecondary.findSecondaryUrl')
   static Future<String> findSecondary(
       String toAtSign, String rootDomain, int rootPort) async {
-    // `AtLookupImpl.findSecondary` was itself a deprecated wrapper over this
+    // at_lookup's own `findSecondary` static was itself a deprecated wrapper over this
     // finder, and it could not return null - it built the address and called
     // `toString()`. The null branch below was therefore already unreachable;
     // an address that cannot be found arrives as a thrown exception, which is

@@ -129,7 +129,12 @@ Future<EnrolledClient> enrolAndAuthenticate({
       metadataBuilder: (keysIo) async => built = await build(keysIo),
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
     ),
-    AtLookupImpl(atSign, rootDomain, rootPort),
+    AtLookUp.withSecureSocket(
+      atSign: atSign,
+      rootDomain: AtRootDomain(rootDomain, rootPort),
+      secureSocketConfig: SecureSocketConfig(),
+      authenticator: null,
+    ),
   );
 
   await approver.enrollmentService!

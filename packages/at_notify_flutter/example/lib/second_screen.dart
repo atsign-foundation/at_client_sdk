@@ -132,9 +132,14 @@ class _SecondScreenState extends State<SecondScreen> {
     } else if (!atSignController.text.contains('@')) {
       atSignController.text = '@${atSignController.text}';
     }
-    // ignore: deprecated_member_use
-    var checkPresence = await AtLookupImpl.findSecondary(atSignController.text, AtEnv.rootDomain, 64);
-    return checkPresence != null;
+    // at_lookup's own `findSecondary` static was a deprecated wrapper over this.
+    // Behaviour is unchanged, including the surprising part: an atSign with no
+    // atDirectory entry arrives as a THROWN exception, not as a null, so the
+    // old `!= null` test could only ever be true. Absence propagates to the
+    // caller exactly as it did before.
+    await CacheableSecondaryAddressFinder(AtEnv.rootDomain, 64)
+        .findSecondary(atSignController.text);
+    return true;
   }
 
   void getAtSignAndInitializeNotify() async {

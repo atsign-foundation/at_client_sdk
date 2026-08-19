@@ -1,6 +1,11 @@
 # CHANGELOG
 
 ## 1.1.5
+
+- refactor: the enrollment service builds its lookup with
+  `AtLookUp.withSecureSocket`, passing `authenticator: null` - submitting an
+  enrolment request needs no authentication, and there is no credential here
+  to authenticate with.
 - fix: an atSign names one keychain entry however the caller spells it.
   Nothing normalizes on the way in — `AuthRequest.atSign` is a plain String,
   and at_auth passes that string verbatim to `read`/`write` while passing

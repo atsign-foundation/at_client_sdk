@@ -410,10 +410,13 @@ Future<int> status(ArgResults ar) async {
 
   String? pk;
   try {
-    AtLookUp al = AtLookupImpl(
-      atSign,
-      rootDomain.rootDomain,
-      rootDomain.rootPort,
+    // authenticator: null - this reads a public key, which needs no
+    // authentication and for which no credential is held here.
+    final AtLookUp al = AtLookUp.withSecureSocket(
+      atSign: atSign,
+      rootDomain: rootDomain,
+      secureSocketConfig: SecureSocketConfig(),
+      authenticator: null,
     );
     try {
       pk = await al.executeCommand('lookup:publickey$atSign\n', auth: false);
