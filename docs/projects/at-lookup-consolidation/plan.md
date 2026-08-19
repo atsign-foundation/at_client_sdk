@@ -51,7 +51,13 @@ control:
 bash docs/projects/at-lookup-consolidation/count_atlookupimpl.sh
 ```
 
-✅ **MET.** Reading after step 8: **0 uses**, against a control finding **201**
+✅ **MET, AND LIVE-PROVEN.** `tests/at_functional_test/runLocal.sh` against
+`at_virtual_env:local`: **177/177, exit 0**, at `853bf7d4c`. That matters more
+than the unit suites here — every authentication path in at_client changed how
+its lookup is constructed, and a mocked `executeVerb` accepts whatever it is
+given, so a broken credential path would have stayed green everywhere else.
+
+Reading after step 8: **0 uses**, against a control finding **201**
 `AtLookUp` with its matched line printed — so the zero comes from an absence,
 not from a broken pattern. It was 47 when the gate was written, 38 after it was
 scoped, and 0 now.
