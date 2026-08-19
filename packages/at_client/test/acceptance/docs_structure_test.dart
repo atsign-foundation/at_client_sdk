@@ -490,12 +490,18 @@ void main() {
     /// convention these checks reward — **a plan row marked DONE names the
     /// use cases it proved** — and the more rows that do, the more of the plan
     /// these two actually cover. Today only 6 lines cite one.
+    /// Each entry is `<file>\u0000<line>`. NUL is the separator because it
+    /// cannot occur in either half, and it is written as an ESCAPE, never as
+    /// a raw byte: a literal NUL makes the whole file `data` to `file(1)`, so
+    /// `grep` prints nothing and exits 1 over the whole file. `git grep` still
+    /// reads it, so the two disagree and the silent one looks like a clean
+    /// absence.
     List<String> planLines() => [
           for (final f in const [
             'implementation-plan.md',
             'detail/implementation-plan.md'
           ])
-            ..._read(f).split('\n').map((l) => '$f $l'),
+            ..._read(f).split('\n').map((l) => '$f\u0000$l'),
         ];
 
     final ucId = RegExp(ucIdPattern);
@@ -529,7 +535,7 @@ void main() {
 
       final wrong = <String>[];
       for (final entry in planLines()) {
-        final parts = entry.split(' ');
+        final parts = entry.split('\u0000');
         final line = parts[1];
         if (!RegExp(r'\bDONE\b|✅').hasMatch(line)) continue;
         for (final m in ucId.allMatches(line)) {
