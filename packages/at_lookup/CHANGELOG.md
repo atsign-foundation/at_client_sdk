@@ -1,5 +1,10 @@
 ## 3.7.0
 
+- fix(deps): raised the `at_commons` constraint to `^5.16.0`. This package now
+  reads `AtNetworkTimeouts.defaultResponseBudget`, which does not exist in
+  at_commons 5.15.0 or earlier — under the old `^5.13.0` a consumer could
+  resolve an at_commons that this package does not compile against.
+
 - fix: a request in flight when its connection closes now fails immediately
   instead of waiting out its response budget. `AtLookupImpl` holds
   `requestResponseMutex` across that wait, so a connection that had already gone
