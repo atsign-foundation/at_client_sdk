@@ -171,8 +171,9 @@ void main() {
     test('an apsk map survives a wire round trip under the name "apsk"', () {
       // The array form, spelled as KeyPackage's keys are (use/alg/pub) so one
       // vocabulary covers every "list of keys with algorithms" in the
-      // protocol. `status: verifyOnly` marks an entry that no longer signs but
-      // is retained so historic envelopes still verify.
+      // protocol. `status: retired` marks an entry no longer used for new
+      // operations but retained so historic envelopes still verify; the value
+      // is use-neutral because `use` already names the operation.
       final apsk = {
         'v': 1,
         'keys': [
@@ -186,7 +187,7 @@ void main() {
             'use': 'sign',
             'alg': 'rsa2048',
             'pub': 'ZmFrZS1yc2EtcHVibGlj',
-            'status': 'verifyOnly',
+            'status': 'retired',
           },
         ],
       };
