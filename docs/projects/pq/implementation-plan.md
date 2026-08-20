@@ -1778,7 +1778,37 @@ flake: gkc ruled out infrastructure on 2026-08-20.
 
    Whole directory as CI invokes it (`test/pq -x legacy-server`): **17 of 17**.
 
-3. **`enrollment_setup.dart` gets no bytes for 30 seconds.** `end2end_test_14`.
+3. **`end2end_test_14` — the setup is FIXED; a second layer is now visible.**
+
+   **The setup step was SLOW, not stuck, and its budget was the framework
+   default.** Measured 2026-08-20: given five minutes, all four approvals pass
+   in **4:59**. Given thirty seconds they all time out. Two defects fixed:
+   the step ran with `dart run`, which exits 0 even when its tests fail — so it
+   went green with four timed-out approvals and the failure surfaced three
+   minutes later as eight missing-keyfile errors in a different step — and the
+   budget is now fifteen minutes, because 4:59 against 5:00 is a coin toss.
+
+   ⚠️ **Sync volume is NOT a sufficient cause, and this row said it was.**
+   `end2end_tests` runs the SAME four @ce2e atSigns (config23 lists the same
+   set config14 does, reordered) and the SAME suite, and it is green. The
+   differentiator is that `end2end_test_14` runs `enrollment_setup.dart` first.
+
+   **The second layer, and the strongest lead on it.** With the setup passing,
+   the suite reaches 34 tests instead of 12 and 18 fail, on
+   `PKAM Keypair required for signing`. `AtClientImpl` has exactly **one**
+   `_atKeysIo` field and it serves two jobs: the nskey private store handed to
+   `PqClientBootstrap` (`at_client_impl.dart:610`) **and** the authentication
+   key source in `_createAtChops` (`at_client_impl.dart:1651`), which prefers
+   it over the local secondary. This branch's `test_initializers.dart` points
+   that field at `<hiveStoragePath>/<atSign>.nskey.atKeys` and seeds it with an
+   **empty `AtKeys()`**. A client that is not handed an `atChops` therefore
+   authenticates from an empty keyfile.
+
+   Proven: the single field and both its uses; the empty seed; `_createAtChops`
+   preferring it; the failure text; `end2end_tests` green on the same atSigns.
+   **Inferred, not proven:** that `enrollment_setup` changing the enrollment ids
+   is what routes `notify_test`'s bare `setCurrentAtSign` (no atChops, no
+   enrollmentId) onto a cache entry with no injected chops.
    It is a standalone setup step (`dart run test/enrollment_setup.dart`), not a
    test on `dart_test.yaml`'s allowlist, so its failure cascades: the 8 later
    failures all read `provided keys file does not exist`, for the keyfile the
