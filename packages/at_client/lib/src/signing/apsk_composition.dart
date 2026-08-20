@@ -34,9 +34,9 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 /// design rather than an oversight.** An enrollment that holds signing keys
 /// held them from birth, so its authentication key signs nothing that outlives
 /// the transition; retaining it would advertise a key with nothing to verify.
-/// This rests on a deployment premise recorded with the ruling — that no
-/// long-lived auth-key-signed material is extant — and if that turns out to be
-/// false the ruling reopens rather than this function growing a special case.
+/// This rests on a deployment premise — that no long-lived auth-key-signed
+/// material is extant — and if that turns out to be false the premise is what
+/// gets revisited, rather than this function growing a special case.
 ///
 /// A key already listed as an active signer is not listed again as retired.
 /// One key described twice, once as current and once as withdrawn, is a

@@ -21,9 +21,8 @@ import 'package:meta/meta.dart' show experimental;
 /// exists (at_auth has just generated it) and the enrollment record does not
 /// yet.
 ///
-/// ⚠️ **This used to end "and never afterwards", which stopped being true when
-/// KE-2's writer landed (2026-08-19).** The record's metadata is no longer
-/// write-once: `KeyPackageMinting` amends `metadata.keyPackage` by the
+/// ⚠️ **The record's metadata is not write-once.**
+/// `KeyPackageMinting` amends `metadata.keyPackage` by the
 /// enrollment's own self-only `enroll:update`, so a package can gain a key and
 /// retire one. What this function still uniquely decides is the package the
 /// enrollment is *created* with — and so the key it advertises for the window

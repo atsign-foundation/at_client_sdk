@@ -29,10 +29,9 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// Gates for the PQ startup's ACTIVE steps — the ones that write to the
 /// atServer on the client's own initiative.
 ///
-/// Every default is on: this object is the *seam* for the passive-by-default
-/// posture surveyed in `docs/projects/pq/implementation-plan.md` 14.13,
-/// not the posture itself — flipping defaults is a later, deliberate rollout
-/// decision. The two read-precondition steps (hydrating held secrets and
+/// Every default is on: this object is the *seam* for a passive-by-default
+/// posture, not the posture itself — flipping defaults is a later, deliberate
+/// rollout decision. The two read-precondition steps (hydrating held secrets and
 /// collecting conveyed key material) deliberately have no gate here:
 /// gating them breaks *decryption*, not quietens writes — the collect sweep
 /// is the only route by which a conveyed nskey private reaches the keyfile.
@@ -125,7 +124,7 @@ class PqStartupGates {
 ///  5. request root private   — active: asks holders for the signing-root
 ///     private this enrollment should have and does not.
 ///  6. request missing privates — active: the pull half of the self-heal
-///     invariant (decisions.md 38).
+///     invariant.
 ///  7. publish root link      — active: anchor directly to the root when
 ///     this enrollment can; the better outcome of the two link kinds.
 ///  8. publish chain link     — active: fall back to the approval-chain
@@ -164,7 +163,7 @@ class PqClientBootstrap {
     ring = PublishedNskeyKeyRing(
       _atClient,
       privateFiling: filing,
-      // The read path's self-heal (decisions.md 38): a miss on an own
+      // The read path's self-heal: a miss on an own
       // generation broadcasts a pull, so a record that arrived before its
       // key stops being permanently unreadable and becomes merely early.
       // Only when the answer has somewhere durable to land.
@@ -412,7 +411,7 @@ class PqClientBootstrap {
   }
 
   /// Brings this enrollment's advertised key package into line with
-  /// `AtClientPreference.keyEstablishmentAlgorithms` — KE-2's writer.
+  /// `AtClientPreference.keyEstablishmentAlgorithms`.
   ///
   /// Runs **after** the signing keys and before anything that publishes,
   /// because the key package is signed by whatever key `_apsk` advertises.
@@ -476,7 +475,7 @@ class PqClientBootstrap {
   }
 
   /// Asks for any nskey privates this enrollment is entitled to and does
-  /// not hold — the pull half of the self-heal invariant (decisions.md 38).
+  /// not hold — the pull half of the self-heal invariant.
   /// An enrollment created after a namespace was minted missed the
   /// mint-time push, and this is its route to the key; without it the
   /// namespace reads as one this client can never open. Guarded on the
@@ -525,7 +524,7 @@ class PqClientBootstrap {
     }
   }
 
-  /// The chain sweep (decisions.md 38, decision 3): a fully privileged
+  /// The chain sweep: a fully privileged
   /// client signs and conveys links for approved enrollments that lack
   /// one. A scoped enrollment cannot anchor itself and its approver may be
   /// a legacy enrollment that can sign nothing, so without this sweep

@@ -23,13 +23,11 @@ abstract interface class EnrollmentPrivilegeResolver {
 }
 
 /// Whether [namespaces] grant `rw` on both `*` and `__manage` — the class
-/// that may hold the signing root ([decisions.md 18.2][]).
+/// that may hold the signing root.
 ///
 /// Read off the granted namespaces rather than trusted from the caller: this
 /// decides who receives the key that vouches for every enrollment on the
 /// atSign.
-///
-/// [decisions.md 18.2]: ../../../../../docs/projects/pq/decisions.md
 bool isFullyPrivileged(Map<String, dynamic>? namespaces) {
   if (namespaces == null) return false;
   bool grantsWrite(String ns) => '${namespaces[ns] ?? ''}'.contains('w');

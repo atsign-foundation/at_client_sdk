@@ -2,8 +2,8 @@ import 'dart:io';
 
 /// An inter-process advisory lock for a keyfile's read-modify-write.
 ///
-/// Why it exists (`at_client_sdk` `docs/projects/pq/decisions.md` 38.4):
-/// several CLI apps routinely share one `.atKeys` file, and `flush` is a
+/// Why it exists: several CLI apps routinely share one `.atKeys` file, and
+/// `flush` is a
 /// read-validate-write. The write itself is atomic (temp + rename) and
 /// `validateMapUpdate` *detects* a candidate that drops existing material —
 /// but two processes that both read before either writes both pass

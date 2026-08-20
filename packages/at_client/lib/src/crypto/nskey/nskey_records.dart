@@ -6,8 +6,7 @@
 /// — so a changed byte strands data rather than renaming it. Each emitted
 /// form is pinned as a raw string in `test/wire_literal_pins_test.dart`; an
 /// intended change (there should be none) edits the pin in the same commit,
-/// and that edit is the review. The spec's table of these shapes is
-/// `docs/projects/pq/design.md` §1.3.
+/// and that edit is the review.
 ///
 /// | record             | shape                                          |
 /// |--------------------|------------------------------------------------|
@@ -115,8 +114,8 @@ const String pqSigningRootRecordName = 'pq_signing_root';
 /// The at-key the signing root is published under.
 ///
 /// **Mutable**, like the nskey advertisement beside it. The root is an
-/// ordinary signing key (`docs/projects/pq/decisions.md` 101), so retiring one
-/// entry and advertising its successor is a rewrite of this record — which an
+/// ordinary signing key, so retiring one entry and advertising its successor
+/// is a rewrite of this record — which an
 /// immutable record makes unimplementable. What immutability
 /// was actually doing here is stopping two of the owner's privileged
 /// enrollments each minting a root, and that job moves to

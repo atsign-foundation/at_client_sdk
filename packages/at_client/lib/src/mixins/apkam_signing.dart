@@ -36,9 +36,8 @@ final Expando<Future<void>> _apskWriteChain = Expando('apskWriteChain');
 /// Serialising here closes that, because both writers are this process's. It
 /// does **not** close the same window against a writer in another process, and
 /// no caller should read it as doing so — the record has no single owner, and a
-/// rule stated over it fails for that reason (see the `_apsk` fallback ruling in
-/// `docs/projects/pq/`). What remains uncovered is a genuinely concurrent second
-/// client of the same atSign, which is the case that ruling accepted.
+/// rule stated over it fails for that reason. What remains uncovered is a
+/// genuinely concurrent second client of the same atSign, which is accepted.
 ///
 /// A failed predecessor never wedges the chain: its error is the caller's to
 /// see, not the next writer's to inherit.

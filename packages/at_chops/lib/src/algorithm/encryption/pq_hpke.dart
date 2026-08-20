@@ -13,8 +13,7 @@
 /// step provides context binding ([info]) and AEAD key/nonce derivation —
 /// not randomness extraction.
 ///
-/// Byte-level specification: `docs/projects/pq/seal-spec.md`. Every version
-/// is attested by the working group's own vectors
+/// Every version is attested by the working group's own vectors
 /// (`test/vectors/hpke_wg_0x647a_chacha.json`,
 /// `test/vectors/hpke_wg_0x0042_mlkem1024.json`) rather than by any this
 /// project generated for itself.
@@ -259,8 +258,7 @@ Future<Uint8List> pqOpen(
 /// [version] selects the suite, so a caller can check a version this build
 /// still reads but no longer emits. Every supported version now derives
 /// through RFC 9180 §5.1, so the authority is the RFC and the working group's
-/// vectors in `test/vectors/`; see `docs/projects/pq/seal-spec.md` for the
-/// envelope around it.
+/// vectors in `test/vectors/`.
 @visibleForTesting
 ({Uint8List key, Uint8List nonce}) pqSealDeriveKeyAndNonce(
   Uint8List sharedSecret, {

@@ -596,8 +596,8 @@ class ParsedApsk {
   /// A verifier that took only the first would refuse every envelope signed
   /// before the split.
   ///
-  /// Trying each is **not** the fallback ruling 11 forbids. That refusal is
-  /// about algorithms: dropping to a weaker one after a failure hands the
+  /// Trying each is **not** the algorithm fallback this signer forbids. That
+  /// refusal is about algorithms: dropping to a weaker one after a failure hands the
   /// choice of algorithm to whoever wrote the envelope. The algorithm is
   /// already fixed here by the strongest-shared rule, and every key tried is
   /// one this signer published under it.
@@ -664,9 +664,8 @@ ParsedApsk parseApskValue(String value) {
 /// `typ` instead would let the document pick which checks run.
 ///
 /// **The key's own declaration is authoritative** over the envelope's `alg`
-/// claim, matching PKAM's record-authoritative rule
-/// (`docs/projects/pq/decisions.md` 34): the published key names its algorithm
-/// and the envelope must agree. A lie about `alg` fails the verify — it can
+/// claim, matching PKAM's record-authoritative rule: the published key names
+/// its algorithm and the envelope must agree. A lie about `alg` fails the verify — it can
 /// never select a weaker routine than the published key calls for. The claim
 /// is inside `protected`, so it is signed; the check is not about tamper but
 /// about a signer and a published key disagreeing.

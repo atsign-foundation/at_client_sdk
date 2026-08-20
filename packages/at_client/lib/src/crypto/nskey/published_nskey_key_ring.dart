@@ -97,8 +97,7 @@ abstract class AdvertisedKeyVerifier {
 /// What this does **not** defend against is the operator of [owner]'s atServer,
 /// which serves both the advertisement and the `_apsk` it is checked against
 /// and so can substitute a consistent pair. Removing that requires anchoring
-/// the key somewhere the operator does not control; see the trust boundary in
-/// `docs/projects/pq/design.md`.
+/// the key somewhere the operator does not control.
 class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
   final AtClientEnvelopeSigner _signer;
 
@@ -209,8 +208,7 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
 /// atSigns' by `plookup`.
 ///
 /// Own privates are held in memory here; conveying them per-APKAM over the
-/// secret-sharing substrate is SS-4's job, and when it lands it supplies them
-/// instead of [mintAndPublish].
+/// secret-sharing substrate is what supplies them instead of [mintAndPublish].
 class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   final AtClient _atClient;
   final AdvertisedKeyVerifier verifier;
@@ -284,9 +282,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// Broadcasts a pull request for a missing own-atSign private, when
   /// [privateHalf] comes up empty for a generation this atSign has published.
   ///
-  /// This is the read path's half of the self-heal ruling
-  /// (`docs/projects/pq/decisions.md` 38): a value can arrive before the
-  /// private that opens it — a new enrollment that missed the mint-time push
+  /// This is the read path's half of the self-heal: a value can arrive before
+  /// the private that opens it — a new enrollment that missed the mint-time push
   /// is the ordinary case, not an edge — and the reader asks rather than
   /// failing forever. The request is store-and-forward: any current holder
   /// answers when it next runs.

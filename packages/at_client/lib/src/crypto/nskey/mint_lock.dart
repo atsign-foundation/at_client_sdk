@@ -39,9 +39,9 @@ class MintLease {
 /// Serialises minting a key record between an atSign's own enrollments.
 ///
 /// The records this guards are **mutable** — the nskey advertisement because
-/// rotation has to overwrite it, the signing root because
-/// `docs/projects/pq/decisions.md` 101 made the root an ordinary signing key —
-/// so immutability cannot serve as the interlock on the record itself. It
+/// rotation has to overwrite it, the signing root because it is an ordinary
+/// signing key — so immutability cannot serve as the interlock on the record
+/// itself. It
 /// moves here instead: a short-ttl immutable self key whose creation the
 /// atServer refuses to repeat.
 ///

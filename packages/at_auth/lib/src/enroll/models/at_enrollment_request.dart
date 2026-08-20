@@ -238,9 +238,9 @@ class AtEnrollmentRequest extends EnrollmentRequest {
 }
 
 /// An APKAM-authenticated self-enrollment: the request an already-enrolled
-/// client submits to spawn a FRESH enrollment for itself — the client half of
-/// the PQ retrofit (`at_client_sdk` `docs/projects/pq/decisions.md` 5, 40,
-/// 42 item 1). No OTP and no human approval: the connection's existing
+/// client submits to spawn a FRESH enrollment for itself, which is the client
+/// half of the post-quantum retrofit. No OTP and no human approval: the
+/// connection's existing
 /// approved enrollment is the whole authority, and the atServer auto-approves
 /// a subset of its grants.
 ///

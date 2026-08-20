@@ -1421,8 +1421,8 @@ class SyncServiceImpl implements SyncService {
         md.appMetadata =
             Metadata.decodeAppMetadata(metaData[AtConstants.appMetadata]);
       }
-      // The mirror of the push-side drop this branch fixed: without it a
-      // record pulled from the atServer loses `immutable` on the way in.
+      // The mirror of the push-side drop: without it a record pulled from
+      // the atServer loses `immutable` on the way in.
       if (metaData[AtConstants.immutable] != null) {
         md.immutable =
             metaData[AtConstants.immutable].toString().toLowerCase() == 'true';

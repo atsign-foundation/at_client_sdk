@@ -184,8 +184,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     // than the in-memory store the next call shares from. The store is a
     // transit buffer: after a restart it holds nothing, so an approver relying
     // on it alone conveys a new enrollment none of the privates without which
-    // it cannot read the very namespaces it was just approved for — the
-    // conveyance hole of decisions.md 38. Best-effort like the chain link: an
+    // it cannot read the very namespaces it was just approved for.
+    // Best-effort like the chain link: an
     // enrollment this misses heals itself by pulling at its next start.
     final keysIo = _atClient.atKeysIo;
     if (keysIo != null) {

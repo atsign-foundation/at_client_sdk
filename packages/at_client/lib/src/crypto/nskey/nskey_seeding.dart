@@ -162,8 +162,8 @@ class NskeySeeding {
   /// Pulls the nskey privates this enrollment is entitled to and does not
   /// hold, from whichever enrollments currently do.
   ///
-  /// The other half of the self-heal ruling (`decisions.md` 38): [seed] mints
-  /// when no key exists; this asks when one does. It is what heals an
+  /// The other half of the self-heal: [seed] mints when no key exists, and
+  /// this asks when one does. It is what heals an
   /// enrollment that missed the mint-time push — a device approved after the
   /// namespace was minted, a clone upgrading late — and it runs at client
   /// start, unconditionally on any client that can file the answer, because

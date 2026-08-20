@@ -375,13 +375,12 @@ abstract interface class AtLookupMuxable implements AtLookUp {
 /// invisible while the concrete constructor is still reachable, and becomes
 /// total the moment callers stop using it.
 ///
-/// It bundles rather than abstracts, deliberately. `docs/projects/wasm/plan.md`
-/// records that these factories are **already injectable** and that the thing
-/// blocking a web transport is their **return type** (`SecureSocket`), not
-/// their injectability — its task T8 changes those return types. A new
-/// parallel abstraction here would be a second seam for T8 to reconcile;
-/// bundling leaves exactly one, and T8 lands inside it without touching this
-/// signature.
+/// It bundles rather than abstracts, deliberately. These factories are
+/// **already injectable**; what blocks a web transport is their **return
+/// type** (`SecureSocket`), not their injectability. A parallel abstraction
+/// here would be a second seam for that return-type change to reconcile,
+/// where bundling leaves exactly one — and the change lands inside it without
+/// touching this signature.
 ///
 /// ⚠️ **This is not yet enough for a non-socket transport, and it does not
 /// claim to be.** `AtConnection` exposes `Socket getSocket()`, which the

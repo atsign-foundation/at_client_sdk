@@ -411,8 +411,8 @@ class PqSigningRoot {
     // Durable before published, for the same reason minting an nskey is: a
     // published root whose private did not survive strands every enrollment on
     // the atSign against a key nobody holds. The record being mutable makes
-    // that repairable in principle and D1 builds no rotation to repair it
-    // with, so the ordering stands.
+    // that repairable in principle, but no rotation exists to repair it with,
+    // so the ordering stands.
     final stored = await _storeFreshPair(atSign, pair);
     if (stored.overtaken) {
       // The mint lock serialises this atSign's ENROLLMENTS; it does not
@@ -510,8 +510,8 @@ class PqSigningRoot {
       //
       // Getting the landed case wrong is still the expensive one: retiring the
       // pair for a root this client DID publish leaves every enrollment on the
-      // atSign chaining to a key nobody holds, and D1 builds no rotation to
-      // replace it with.
+      // atSign chaining to a key nobody holds, with no rotation to replace
+      // it.
       //
       // Judged against EVERY advertised entry rather than the active one:
       // "did my write land" is a question about the record naming my key at
@@ -856,8 +856,8 @@ class PqSigningRoot {
   /// **This is the only route left for an enrollment that missed the
   /// approval-time conveyance.** The root is atSign-level and carries no
   /// namespace, so it is excluded from the `enroll:listns` fan-out by
-  /// construction; and nothing mints a replacement, because D1 builds the
-  /// root's rotatability and not the rotation. Without a pull, such an
+  /// construction; and nothing mints a replacement, because the root is
+  /// rotatable but no rotation is implemented. Without a pull, such an
   /// enrollment stays without it forever.
   ///
   /// **Broadcast, not a wait.** This deliberately does not block on an answer.

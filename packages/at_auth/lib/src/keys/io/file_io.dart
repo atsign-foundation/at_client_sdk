@@ -57,8 +57,7 @@ class FileAtKeysIo extends WrittenAtKeysIo {
     // candidate that drops material — but two processes that both read before
     // either writes both pass validation, and the second rename silently
     // discards the first's addition. Several CLI apps sharing one keyfile is
-    // the ordinary deployment, not an edge (`at_client_sdk`
-    // docs/projects/pq/decisions.md 38.4).
+    // the ordinary deployment, not an edge.
     await AtKeysFileLock(file.path)
         .synchronized(() => _writeValidated(file, atsign, atKeys));
   }

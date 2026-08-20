@@ -76,14 +76,12 @@ class ChainResult {
 /// a forged parent claim simply fails the signature check against the parent it
 /// names.
 ///
-/// **The parent signs and the child publishes** ([decisions.md 22.2b][] ruling
-/// 7). `_apsk` writes are restricted to the owning enrollment's own
+/// **The parent signs and the child publishes.** `_apsk` writes are
+/// restricted to the owning enrollment's own
 /// authenticated connection, so the signer is not a permitted writer: the
 /// approver conveys the link over the substrate, and the child stamps it onto
 /// its own record on first run. Until the child runs, verifiers see a bare key,
 /// which the transition rule already tolerates.
-///
-/// [decisions.md 22.2b]: ../../../../../../docs/projects/pq/decisions.md
 @experimental
 class PqSigningChain {
   /// One chain view per client. The wire vocabulary (the field names, the

@@ -260,7 +260,7 @@ class SigningKeyMinting with ApkamSigning {
   /// nothing establishes is that there is a single writer.
   ///
   /// ⚠️ **The plurality has one measured cost, and it is ACCEPTED rather than
-  /// guarded (`docs/projects/pq/decisions.md` 102).** The caller publishes
+  /// guarded.** The caller publishes
   /// before it files, deliberately, so that no envelope is ever signed under a
   /// key the advertisement does not name. Between the two the keyfile does not
   /// yet hold what was advertised, so a concurrent
@@ -276,7 +276,7 @@ class SigningKeyMinting with ApkamSigning {
   /// process lifetime of refused envelopes.
   ///
   /// ⚠️ **Three guards against it were built and all three broke the live
-  /// enrollment path** — ruling 102 records what each measured. The one that
+  /// enrollment path.** The one that
   /// matters for anyone tempted to try a fourth: the rule "never drop an
   /// advertised key" cannot be stated over `public:_apsk.primary.a.__e`,
   /// which no single client owns and which non-enrolled clients overwrite in
