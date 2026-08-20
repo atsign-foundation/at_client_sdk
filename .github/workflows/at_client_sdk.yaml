@@ -374,8 +374,11 @@ jobs:
           # reads the same in base-port mode as out of it.
           ready=
           for i in $(seq 1 30); do
-            if docker exec e2e_virtualenv supervisorctl status 2>/dev/null \
-                 | grep -qE '_root +RUNNING'; then
+            # Captured, not piped: `supervisorctl status` exits non-zero here
+            # by design, and under pipefail a pipeline would take that exit
+            # code and discard the match.
+            status=$(docker exec e2e_virtualenv supervisorctl status 2>/dev/null || true)
+            if printf '%s\n' "$status" | grep -qE '_root +RUNNING'; then
               ready=1
               break
             fi
@@ -513,8 +516,11 @@ jobs:
           # reads the same in base-port mode as out of it.
           ready=
           for i in $(seq 1 30); do
-            if docker exec e2e_virtualenv supervisorctl status 2>/dev/null \
-                 | grep -qE '_root +RUNNING'; then
+            # Captured, not piped: `supervisorctl status` exits non-zero here
+            # by design, and under pipefail a pipeline would take that exit
+            # code and discard the match.
+            status=$(docker exec e2e_virtualenv supervisorctl status 2>/dev/null || true)
+            if printf '%s\n' "$status" | grep -qE '_root +RUNNING'; then
               ready=1
               break
             fi

@@ -96,10 +96,15 @@ CAP_PORT=25010
 # atDirectory instead, which is the thing everything after this needs, and say
 # so out loud if it never arrives.
 echo "*** Waiting for supervisor"
+# Captured to a variable and grepped separately, NOT piped. This script runs
+# under `set -o pipefail`, so `supervisorctl status | grep -q` takes
+# supervisorctl's exit code - the very 3 that made the exit code useless here -
+# and the match is thrown away. The pipeline reads as a grep and behaves as an
+# exit-code check.
 ready=
 for i in $(seq 1 30); do
-  if docker exec e2e_virtualenv supervisorctl status 2>/dev/null \
-       | grep -qE '_root +RUNNING'; then
+  status=$(docker exec e2e_virtualenv supervisorctl status 2>/dev/null || true)
+  if printf '%s\n' "$status" | grep -qE '_root +RUNNING'; then
     ready=1
     break
   fi
