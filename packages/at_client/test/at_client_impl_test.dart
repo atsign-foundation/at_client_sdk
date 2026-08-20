@@ -13,15 +13,28 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 import 'test_utils/test_utils.dart';
 
+/// Drops EVERY cached client for [atSign], whatever enrollment it was filed
+/// under.
+///
+/// `atClientInstanceMap.remove(atSign)` clears only the entry for a client with
+/// no enrollment id; a client created WITH one is filed under `atSign|id` and
+/// survives it. A later create for that atSign then finds the leftover and
+/// adopts it, which surfaces as an unrelated test failing on rollout axes or
+/// on a RemoteSecondary that is not this test's mock.
+void _dropCachedClients(String atSign) {
+  AtClientImpl.atClientInstanceMap.removeWhere((key, _) =>
+      key == atSign || (key is String && key.startsWith('$atSign|')));
+}
+
 void main() {
   group('A group of at client impl create tests', () {
     final String atSign = '@alice';
     setUp(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
@@ -63,12 +76,12 @@ void main() {
       ..commitLogPath = 'test/hive/path';
 
     setUp(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      _dropCachedClients(atSign);
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
@@ -350,7 +363,7 @@ void main() {
       expect(atResponse.response, 'ok');
     });
     tearDown(() async {
-      AtClientImpl.atClientInstanceMap.remove(atSign);
+      _dropCachedClients(atSign);
     });
   });
   group('A group of test to validate max length of a key', () {
@@ -380,7 +393,7 @@ void main() {
     MockLocalSecondary mockLocalSecondary = MockLocalSecondary();
     MockAtChopsKeys mockAtChopsKeys = MockAtChopsKeys();
     setUp(() {
-      AtClientImpl.atClientInstanceMap.remove('@alice');
+      _dropCachedClients('@alice');
       var key = 'REqkIcl9HPekt0T7+rZhkrBvpysaPOeC2QL1PVuWlus=';
       registerFallbackValue(FakeLookupVerbBuilder());
       when(() => mockLocalSecondary.executeVerb(any()))
