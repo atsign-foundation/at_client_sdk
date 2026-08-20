@@ -113,7 +113,7 @@ because a wrap-up is the wrong place to move anchors the acceptance rail parses.
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | **A unit-tree isolation flake**: `local_secondary_sync_queue_test.dart` failed 1-in-4 when run after the nskey/pq files in one non-alphabetical invocation — a same-file test's queue entry leaked into a later test, so the per-test store isn't always fresh. Green alone, green in the full suite | Reproduce at rate (~10 runs of the four-file order), then read the file's setUp for what makes the store per-test fresh |
 | [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. Still in the section: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |
 | [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. ✅ **The refusal is fixed too** — it was a namespace check, not immutability, and the sweep now bypasses it. **Owed elsewhere:** the keystore's `get()` does not filter expired records (at_persistence_secondary_server, another repo) | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20) |
-| [14.44](#1444-two-residuals-from-the-at_chops-pr-review) | Two residuals from the at_chops PR review, both answered on #2169 and neither fixable there: the passphrase envelope persists the salt and three costs but **not `hashLength`**, and `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths | Nothing. The first belongs in the **at_auth carve** (train position 5), where that file is already being edited; the second is pre-existing on trunk in both X-Wing backends and unreachable today, so it goes whenever at_chops is next open |
+| [14.44](#1444-residuals-from-the-at_chops-pr-review) | Residuals from the at_chops PR review, none fixable there: the passphrase envelope persists the salt and three costs but **not `hashLength`**; `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths; and at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence whose durable record is ruling 110's addendum | Nothing. The first belongs in the **at_auth carve** (train position 5), where that file is already being edited; the other two go whenever at_chops is next open |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
@@ -2452,12 +2452,25 @@ saturation widening an existing window. Settling that needs the pack's failure
 rate over N runs with and without a fix, which is expensive and should wait
 until the loop is fixed anyway.
 
-### 14.44 Two residuals from the at_chops PR review
+### 14.44 Residuals from the at_chops PR review
 
-Both raised by Xlin123 on [PR #2169](https://github.com/atsign-foundation/at_client_sdk/pull/2169)
-(2026-08-20) and answered there. Neither belongs in that PR — the first is an
-at_auth file and the carve is at_chops-only, the second predates the branch —
-so they are recorded here rather than left in a review thread.
+The first two were raised by Xlin123 on [PR #2169](https://github.com/atsign-foundation/at_client_sdk/pull/2169)
+(2026-08-20) and answered there; neither belongs in that PR — the first is an
+at_auth file and the carve is at_chops-only, the second predates the branch.
+The third is a promise a reply on that PR made, delivered elsewhere with a
+consumer-facing half still owed. All are recorded here rather than left in a
+review thread.
+
+**at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence.** A reply on
+#2169 promised a record of the skew consequence: two installs of released
+at_client 3.14.0, resolved either side of at_chops 3.6.0 publishing, cannot
+read each other's pairwise envelopes in either direction for the envelopes'
+7-day ttl. The durable record is
+[ruling 110's addendum](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18).
+The consumer-facing sentence in the at_chops CHANGELOG's 3.6.0 entry could not
+ride #2169 — the PR was approved, pushes dismiss stale approvals, and the
+carve gate keeps at_chops byte-identical — so it goes in the next at_chops
+touch, amending the 3.6.0 section in place.
 
 **The passphrase envelope does not persist `hashLength`.** `6aa43b772` salts
 the `.atKeys` passphrase derivation and spans two packages; the at_chops half

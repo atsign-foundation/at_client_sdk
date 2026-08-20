@@ -10719,6 +10719,29 @@ preference from `openableSuitesFor`, so it would have narrowed the
 *advertisement* while leaving emission untouched. The retirement removed both
 together instead.
 
+**Addendum 2026-08-20 — the resolution-skew consequence, recorded as promised
+on #2169.** The review of the at_chops PR raised the dependency direction, and
+the reply promised this record. Published at_client 3.14.0 constrains
+`at_chops: ^3.3.0`, and pub resolves the newest satisfying version — so the day
+at_chops 3.6.0 reaches pub.dev, a fresh resolve of that same released at_client
+starts sealing pairwise `__ssenv` envelopes at `0x02` without anyone changing a
+line. A copy of the same app resolved earlier holds at_chops 3.5.0 or older,
+which hardcodes `0x01` and cannot open `0x02`; nor can the 3.6.0-resolved copy
+open `0x01`, its open set being `{0x02, 0x03}`. Two installs of one released
+app, resolved either side of the publish, cannot read each other's envelopes in
+either direction. Bounded and accepted rather than fixed: the envelopes carry
+`envelopeTtl = Duration(days: 7)`, and the substrate is `@experimental` — the
+marker is the test, per [94](#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)
+sub-ruling 4 and this ruling's own compatibility clause. Recorded so a
+seven-day window of `PqOpenFailure.versionMismatch` between two copies of one
+app is diagnosable as this, rather than rediscovered as a defect. The
+consumer-facing half — one sentence in at_chops 3.6.0's CHANGELOG entry beside
+the `0x01` removal — could not ride #2169 (the PR was approved, pushes dismiss
+stale approvals, and the carve gate keeps at_chops byte-identical between the
+PR and the spike), so it is owed on the next at_chops touch:
+[the residuals item](../implementation-plan.md#1444-residuals-from-the-at_chops-pr-review)
+carries it.
+
 **The consequence, stated plainly.** A current build and a published 3.14.0
 build now share no construction, because `trunk`'s `suites` is `[xWingHpke]`
 alone. Cross-version secret sharing therefore **refuses** rather than silently
