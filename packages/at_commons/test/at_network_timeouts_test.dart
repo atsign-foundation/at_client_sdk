@@ -48,5 +48,20 @@ void main() {
       expect(AtNetworkTimeouts.defaultOnboardingTimeout,
           greaterThan(AtNetworkTimeouts.maxAllowed));
     });
+
+    test('defaultResponseBudget is 90 seconds and exceeds the operation cap',
+        () {
+      // Pins the long-standing default of OutboundMessageListener.read's
+      // maxWaitMilliSeconds, so adopting it there changes no behaviour.
+      expect(AtNetworkTimeouts.defaultResponseBudget,
+          const Duration(seconds: 90));
+      // It bounds a whole response rather than one operation, so it is exempt
+      // from the cap - and its own default already sits above the ceiling.
+      expect(AtNetworkTimeouts.defaultResponseBudget,
+          greaterThan(AtNetworkTimeouts.maxAllowed));
+      // A response is many next-bytes waits in a row; the budget bounds the sum.
+      expect(AtNetworkTimeouts.defaultResponseBudget,
+          greaterThan(AtNetworkTimeouts.defaultTimeout));
+    });
   });
 }
