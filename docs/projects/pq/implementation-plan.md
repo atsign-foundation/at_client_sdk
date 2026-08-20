@@ -41,6 +41,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
+| [14.44](#1444-two-residuals-from-the-at_chops-pr-review) | Two residuals from the at_chops PR review, both answered on #2169 and neither fixable there: the passphrase envelope persists the salt and three costs but **not `hashLength`**, and `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths | Nothing. The first belongs in the **at_auth carve** (train position 5), where that file is already being edited; the second is pre-existing on trunk in both X-Wing backends and unreachable today, so it goes whenever at_chops is next open |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
@@ -2137,6 +2138,49 @@ call itself. Do not "fix" the product here.
 `SyncStatus.failure`, so a **failed** sync returns to its caller as success. It
 did not cause this race, but a harness that reports a failed sync as done will
 eventually hide something that matters.
+
+### 14.44 Two residuals from the at_chops PR review
+
+Both raised by Xlin123 on [PR #2169](https://github.com/atsign-foundation/at_client_sdk/pull/2169)
+(2026-08-20) and answered there. Neither belongs in that PR — the first is an
+at_auth file and the carve is at_chops-only, the second predates the branch —
+so they are recorded here rather than left in a review thread.
+
+**The passphrase envelope does not persist `hashLength`.** `6aa43b772` salts
+the `.atKeys` passphrase derivation and spans two packages; the at_chops half
+(`ArgonHashParams.salt`, `ArgonHashParams.owaspMinimum`) shipped in #2169, and
+the at_auth half — writing the salt and the costs into the envelope and reading
+them back — lands with the at_auth carve, position 5 in the train. What that
+half persists is `salt`, `memory`, `iterations` and `parallelism`; it does
+**not** persist `hashLength`. A caller that changed the key length would write
+a file whose own decode path re-derives at 32 bytes and fails, and because the
+cipher is unauthenticated the failure arrives as
+`AtDecryptionException('passphrase may be incorrect')` — pointing at the
+passphrase rather than at the parameter that actually differed.
+
+Two ways to close it, and the second is probably right: persist `hashLength`
+alongside the other three, or have `encode` refuse an `ArgonHashParams` whose
+`hashLength` is not the default, since nothing in-tree varies it and a stored
+parameter nobody sets is a format that cannot be tested. Do it in the at_auth
+carve, where that file is already being touched.
+
+**`XWingCore.combine` writes at hardcoded offsets.** It sizes its buffer from
+the four inputs' actual lengths and then writes at literal 0/32/64/96/128, so
+the two disagree for any component that is not 32 bytes. Measured rather than
+reasoned: a **short** input throws `StateError: Too few elements` from
+`setRange`, so only an **over-long** one is silently wrong — it truncates to 32
+and leaves the tail of the buffer as zeros, yielding a shared secret neither
+party can detect is wrong.
+
+Not introduced by the branch. `origin/trunk` carries the same shape in both
+`x_wing_pure_dart.dart` and `x_wing_ffi.dart`; extracting them into
+`x_wing_core.dart` preserved the risk rather than creating it, though it did
+widen the reach — the trunk copies were library-private and the shared one is
+package-visible. Unreachable today: every caller passes components whose
+lengths the underlying primitives fix at 32. The fix is to reject any
+wrong-length input up front against `sharedSecretLength` rather than to track
+offsets with a cursor, so that the guard states the contract instead of
+silently accommodating a violation of it.
 
 ## PARKED
 
