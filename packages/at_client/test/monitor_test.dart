@@ -25,8 +25,13 @@ import 'package:test/test.dart';
 /// What is left is what was always Monitor's: the watermark, the notification
 /// callback, and the two states.
 class FakeMuxable extends Fake implements AtLookupMuxable {
-  final _notifications = StreamController<String>();
-  final _up = StreamController<bool>.broadcast();
+  // Recreated on demand, exactly as AtLookupImpl does: stopNotifications()
+  // nulls AND closes both controllers, so the next read of `notifications` or
+  // `notificationConnectionUp` builds a fresh one. A fake that reused a single
+  // controller could not reproduce a stop-then-start race at all - the
+  // subscriptions would keep working and the bug would be invisible.
+  StreamController<String> _notifications = StreamController<String>();
+  StreamController<bool> _up = StreamController<bool>.broadcast();
 
   bool started = false;
   int? startedWithWatermark;
@@ -61,7 +66,14 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   @override
   Future<void> stopNotifications() async {
     started = false;
-    _up.add(false);
+    if (!_up.isClosed) _up.add(false);
+    // Closed and replaced, as the real one does.
+    final n = _notifications;
+    final u = _up;
+    _notifications = StreamController<String>();
+    _up = StreamController<bool>.broadcast();
+    unawaited(n.close());
+    unawaited(u.close());
   }
 
   /// The atServer sends one.
@@ -73,8 +85,13 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   void reconnected() => _up.add(true);
 
   Future<void> dispose() async {
-    await _notifications.close();
-    await _up.close();
+    // NOT awaited: close() on a single-subscription controller returns a
+    // `done` that only completes once a subscriber has taken the event, and
+    // after stopNotifications these are fresh controllers with no listener.
+    // Awaiting hangs forever - the same trap that made the real
+    // stopNotifications hang before it was fixed.
+    if (!_notifications.isClosed) unawaited(_notifications.close());
+    if (!_up.isClosed) unawaited(_up.close());
   }
 }
 
@@ -265,6 +282,32 @@ void main() {
       expect(monitor.targetState, NotificationListenerState.notConnected);
       expect(monitor.currentState, NotificationListenerState.notConnected);
       expect(muxable.started, isFalse);
+    });
+
+    test('start immediately after stop does not leave it deaf', () async {
+      // The MIRROR of the race above, and the one _start's post-await
+      // re-check does NOT cover. _stop awaits stopNotifications, which closes
+      // both controllers; if _start runs meanwhile its `??=` sees non-null
+      // subscription fields and keeps the OLD ones, pointed at controllers
+      // that are about to close - so at_lookup reconnects and notifies into a
+      // stream nobody is listening to.
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      monitor.stop();
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 60));
+
+      muxable.deliver('notification: {"id":"after-restart"}');
+      await Future.delayed(const Duration(milliseconds: 20));
+
+      expect(received, ['notification: {"id":"after-restart"}'],
+          reason: 'a restarted monitor must still hear the atServer - the '
+              'failure here is silent, and looks exactly like an atServer '
+              'with nothing to say');
+      expect(monitor.currentState, NotificationListenerState.listening,
+          reason: 'and it must not report notConnected while at_lookup is '
+              'connected and notifying');
     });
 
     test('stop during start does not leave it listening', () async {

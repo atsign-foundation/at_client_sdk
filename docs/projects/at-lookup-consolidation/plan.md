@@ -1,6 +1,14 @@
 # One listener, two framings
 
-Status: design settled. **Steps 1-4 have landed.** The response budget in
+Status: ⛔ **FINISHED — all nine steps have landed.** See
+[the acceptance gate](#the-acceptance-gate-for-the-whole-sequence) below for
+the evidence. ⚠️ This line read "Steps 1-4 have landed" for the rest of the
+session that finished steps 5-9, while a paragraph further down said all nine
+had - and a third line claimed to be *the only statement of progress*. A cold
+reader found it and called it the highest-consequence trap in the tree: read
+the header and stop, and you conclude steps 5-9 are owed and rebuild them.
+
+What landed: the response budget in
 at_commons; `FakeAtServerSocket` and the `_stripPrompt` bug it found on first
 use; the event-driven `read()` and the second framing; `AtAuthenticator` and
 `AtCommandExecutor`; and authenticators supplied from at_auth for all three
@@ -98,8 +106,9 @@ class is not named anywhere in lib code — including inside at_lookup itself.
 longer WRONG, but they are no longer the best advice either.** This paragraph
 previously said they would point at a class consumers could not see — true
 under the rename that has since been ruled out. The class survives, so they
-remain accurate; step 7 should still repoint them at
-`AtLookUp.withSecureSocket`, because that is where a new caller should go.
+remain accurate, and step 7 **did** repoint them: all six now name
+`AtLookUp.withSecureSocket` and none names `AtLookupImpl.authenticator`
+(`git grep -c 'via AtLookupImpl.authenticator' -- packages/at_lookup/lib` → 0).
 They sit in at_lookup's own lib and are therefore out of the gate's scope, so
 nothing mechanical will catch it if this is forgotten.
 
@@ -486,12 +495,12 @@ then the old path is deleted — so no package is uncompilable between commits.
 
 | #   | Step                                                                                                                                                                                                                                | Package        |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------- |
-| 1   | Add `defaultResponseBudget` beside `defaultOnboardingTimeout`, documented as uncapped-by-design and why. Nothing reads it yet.                                                                                                       | at_commons     |
-| 2   | **Lands as two commits.** First `FakeAtServerSocket` over a real `StreamController` alone, proven against current behaviour so it is not judging code written beside it. Then the completer, the deadline recomputed from `_lastReceivedTime` on every wake, timeouts from `AtNetworkTimeouts`, the `onNotification` seam, and the `_stripPrompt` `-1` guard. **`read`'s two params become nullable** - source-compatible for every caller, but not literally unchanged as this row first said, and breaking for an implementer that overrides `read` with `int` params. There are none in tree; the mocks go through `noSuchMethod`. | at_lookup      |
-| 3   | Declare `AtAuthenticator` and `AtCommandExecutor`; accept and prefer an injected authenticator **alongside** the existing ladder. Nothing breaks yet.                                                                                | at_lookup      |
-| 4   | Supply the authenticators **from at_auth**, built over `AtKeysIo` — at_lookup still names none of it, and gains no dependency. at_auth, at_client and at_onboarding_cli switch to passing one. **at_tools' `at_cli` is the external case** — it sets `preference.privateKey` with no AtChops at all. | at_auth        |
+| 1   | **DONE.** Add `defaultResponseBudget` beside `defaultOnboardingTimeout`, documented as uncapped-by-design and why. Nothing reads it yet.                                                                                                       | at_commons     |
+| 2   | **DONE.** **Lands as two commits.** First `FakeAtServerSocket` over a real `StreamController` alone, proven against current behaviour so it is not judging code written beside it. Then the completer, the deadline recomputed from `_lastReceivedTime` on every wake, timeouts from `AtNetworkTimeouts`, the `onNotification` seam, and the `_stripPrompt` `-1` guard. **`read`'s two params become nullable** - source-compatible for every caller, but not literally unchanged as this row first said, and breaking for an implementer that overrides `read` with `int` params. There are none in tree; the mocks go through `noSuchMethod`. | at_lookup      |
+| 3   | **DONE.** Declare `AtAuthenticator` and `AtCommandExecutor`; accept and prefer an injected authenticator **alongside** the existing ladder. Nothing breaks yet.                                                                                | at_lookup      |
+| 4   | **DONE.** Supply the authenticators **from at_auth**, built over `AtKeysIo` — at_lookup still names none of it, and gains no dependency. at_auth, at_client and at_onboarding_cli switch to passing one. **at_tools' `at_cli` is the external case** — it sets `preference.privateKey` with no AtChops at all. | at_auth        |
 | 5   | **DONE, and reshaped by a ruling: annotate, do not delete** (gkc, 2026-08-19). The six credential members carry `@Deprecated` on both the interface and the impl override; the ladder still reads them, so nothing breaks. Everything below this sentence describes **the later major that does the deletion**, and is kept here because it is what that major must do. ⛔ Do not read the rest of this row as owed at step 5. — Delete both copies of the `atChops → privateKey → cramSecret` ladder, the credential fields, `signingAlgoType` at `:744`, and **`at_chops` from the pubspec**. ⚠️ **Widen `AtAuthenticator`'s return in this same step** (ruled 2026-08-19). It returns `bool` today and that works only because `_authenticateWith` reads at_lookup's own `enrollmentId` field to record `AtConnectionMetaData.authenticatedAsEnrollmentId`. Deleting the field leaves nothing able to supply it - the authenticator is the side that knows the enrollment, and `bool` cannot carry it - so a caller could no longer tell which enrollment a live socket holds. Return a small result carrying success and the enrollment id, and let at_lookup record it. Widening the executor with `recordAuthentication` was the rejected alternative: it makes the id a side effect rather than data, and keeps `AtCommandExecutor` wider than it needs to be. ⚠️ **`atChops` is not only an auth credential, and deleting it breaks a non-auth reader.** `enrollment_approver.dart` reads `atLookUp.atChops` six times to do enrollment crypto - it takes the encryption private key out of it at `:41`, decrypts the wrapped payload at `:52` and `:63`, and at `:47` **mutates** it (`atLookUp.atChops?.atChopsKeys.apkamSymmetricKey = …`). The lookup is being used as a shared mutable crypto context between at_auth components, which is why the field is on `AtLookUp` at all. The approver is at_auth code and has the keys, so it should be handed its own crypto rather than reaching through a network object for it - but that is a change to the approver, and it has to land before or with the deletion. | at_lookup      |
-| 6   | Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership. ⚠️ **Do not port `MultiplexedOutboundMessageListener` as written** - it truncates multi-line values (see [section 7](#7-corrections)). The framing that works is two passes: the notification check byte by byte, the `\n@` check only from the last newline on, as landed in step 2. | at_lookup      |
+| 6   | **DONE.** Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership. ⚠️ **Do not port `MultiplexedOutboundMessageListener` as written** - it truncates multi-line values (see [section 7](#7-corrections)). The framing that works is two passes: the notification check byte by byte, the `\n@` check only from the last newline on, as landed in step 2. | at_lookup      |
 | 7   | **DONE.** `withSecureSocket` in, constructor deprecated. Deprecate `MonitorClient` in the same commit — exported, zero consumers tree-wide, and its `_createNewConnection` bypasses `SecureSocketUtil` so it never got the connect timeouts.    | at_lookup      |
 | 8   | **DONE — the gate reads 0.** Migrate the sites, compiler-enumerated. **Run `dart analyze` in `tests/at_functional_test` and `tests/at_end2end_test` separately** — 29 of the 64 live there, invisible to at_lookup's own analyze.                               | 9 packages     |
 | 9   | **DONE.** Monitor takes an `AtLookupMuxable` and loses its connection factory, PKAM auth, buffer, framing constants, overflow check, prompt stripping, `sendCommand`, backoff and heartbeat. **Wiring passes a fresh instance.**                | at_client      |
@@ -609,6 +618,15 @@ writes together. Two denominators are in play and they are not the same
 question: "how many modules ask the lookup which enrollment they are" (the
 original 7) and "how many uses break when the member goes" (51). Neither is
 wrong; quoting one for the other is.
+
+⚠️ **Do not re-derive this with a grep on the member name.** `enrollmentId` is
+reached through at least eight differently-named receivers in lib code —
+`material.`, `response.`, `request.`, `enrollment.`, `_atClient.`, `this.`,
+`lookUp.`, `atLookUp.` — most of them nothing to do with a lookup. A grep for
+`enrollmentId` over-counts wildly; a grep for `atLookUp.enrollmentId`
+UNDER-counts, returning 9 where the member has 51 uses, because it misses every
+alias. Only the analyzer separates them by receiver *type*, which is why the
+figure above came from `deprecated_member_use` and not from a search.
 
 In at_client `lib/`, **eight readers**, not seven:
 
@@ -738,6 +756,21 @@ atServer-side implementation, or the flag's removal from at_commons.
 
 ### Actually filed
 
+- **`at_server_status`'s six live-network test failures are PRE-EXISTING**, not
+  caused by this work. Both arms were run in the same session and are
+  identical: `+10 -6`, the same six test names, before and after the migration.
+  They fail because the atDirectory has no entry for the atSigns the tests use
+  (`small73sepia`), so `_checkRootLocation` throws and the expected `notFound`
+  arrives as `unavailable`. Nothing here fixed them and nothing here should
+  have; recorded so the next person to run that suite does not attribute them
+  to the consolidation.
+- **`at_notify_flutter` and `at_location_flutter` are NOT pub-workspace
+  members**, so the 16-package analyze sweep does not reach them even though
+  both have `example/lib` files this work edited. They were analyzed
+  individually instead (`dart analyze --fatal-warnings example/lib/second_screen.dart`,
+  clean in both). ⚠️ A sweep over the workspace is not a sweep over the repo,
+  and the gap is invisible: the sweep exits 0 having never opened them.
+
 - **Twenty `lib/` doc comments cite a planning-doc path, which the project's
   own rule bans** ("never a phase/step/option number or a planning-doc
   filename" — a rule flagged more than once). Found by
@@ -765,7 +798,13 @@ atServer-side implementation, or the flag's removal from at_commons.
   `--fatal-warnings` does not promote, with all 16 workspace packages exiting
   0. So the stated blocker is gone. **Not annotated here** — it is a seventh
   member beyond the six ruled on, and widening a deprecation set is gkc's call.
-- **at_onboarding_cli still constructs six lookups without an authenticator** —
+- **at_onboarding_cli builds six lookups with `authenticator: null`** — five
+  through one `_newLookUp()` helper in `at_onboarding_service_impl` and one in
+  `auth_cli.dart`. ⚠️ This entry used to say they were built *without an
+  authenticator*, which now reads as an omission: they go through
+  `AtLookUp.withSecureSocket` and `_installAuthenticator` supplies one
+  afterwards where the site needs it. What remains worth checking is the same
+  thing it always was - they are not uniform. Originally recorded as —
   `at_onboarding_service_impl` `:215 :445 :460 :488 :721` and
   `auth_cli.dart:413`. They are not uniform: some authenticate, `:721` only
   checks `isOnboarded`, and two send a bare `from:` through a proxy. Installing
@@ -789,7 +828,15 @@ atServer-side implementation, or the flag's removal from at_commons.
   authenticates — the case the factory's nullable `authenticator` exists for.
   `at_server_status/at_status_impl.dart:100` is the same shape and holds no key
   material at all.
-- **Seven ladder authentications survive in the functional pack**, all in test
+- ⚠️ **The "seven ladder authentications" figure is NOT current.** It was
+  measured at step 4, before `tests/at_functional_test/lib/src/enrolled_client.dart`
+  and its e2e twin moved to the factory - a change that can only have reduced
+  it. Nothing has re-measured it since, and this entry does not restate it as
+  fact. Re-derive with the recipe in [section 7](#7-corrections) before
+  quoting any number here. What is still true is the SHAPE: the survivors are
+  test files constructing an `AtLookupImpl` directly, and they are out of the
+  acceptance gate's scope by design. The original reading, now superseded:
+  seven, all in test
   files that construct an `AtLookupImpl` directly: `nskey_rotation_live_test`
   (3), and one each in `apsk_server_side_test`, `copied_keyfile_test`,
   `enrollment_namespace_gate_test`, `enrollment_pq_key_exchange_live_test`.

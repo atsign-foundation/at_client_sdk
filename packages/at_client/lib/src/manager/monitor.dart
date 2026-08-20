@@ -67,6 +67,29 @@ class Monitor {
   StreamSubscription<String>? _notificationSubscription;
   StreamSubscription<bool>? _connectionSubscription;
 
+  /// Serialises [start] and [stop] so their bodies cannot interleave.
+  ///
+  /// Both are fire-and-forget to the caller and both await at_lookup partway
+  /// through, so without this a `stop()` immediately followed by a `start()`
+  /// runs the subscribe step of one while the teardown of the other is still
+  /// in flight. `stopNotifications` closes at_lookup's controllers and builds
+  /// fresh ones on next use, so the interleaving left this class holding
+  /// subscriptions to the CLOSED pair while at_lookup connected and notified
+  /// into the new ones - a monitor that is connected at one end and deaf at
+  /// the other, reporting `notConnected` for ever.
+  ///
+  /// `NotificationService.stopListening()`/`startListening()` expose exactly
+  /// that pair to application code, and the failure is silent: it looks like
+  /// an atServer with nothing to say.
+  Future<void> _lifecycle = Future<void>.value();
+
+  void _enqueue(Future<void> Function() step) {
+    _lifecycle = _lifecycle.then((_) => step()).catchError(
+        (Object e, StackTrace st) {
+      logger.shout('Monitor lifecycle step failed: $e\n$st');
+    });
+  }
+
   Monitor({
     required this.atSign,
     required this.atClientPreference,
@@ -87,7 +110,7 @@ class Monitor {
       return;
     }
     _targetState = NotificationListenerState.listening;
-    unawaited(_start());
+    _enqueue(_start);
   }
 
   Future<void> _start() async {
@@ -165,7 +188,7 @@ class Monitor {
   void stop() {
     logger.info('stop() called. Setting targetState to notConnected');
     _targetState = NotificationListenerState.notConnected;
-    unawaited(_stop());
+    _enqueue(_stop);
   }
 
   Future<void> _stop() async {

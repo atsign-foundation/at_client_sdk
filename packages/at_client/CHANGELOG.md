@@ -5,8 +5,21 @@
   check, prompt stripping, PKAM authentication, `sendCommand`, the heartbeat
   and the `[1,2,3,5,8,13,21,34]`-second reconnect backoff. 582 lines to 170.
   What remains is what was only ever Monitor's: the watermark, the notification
-  callback, and `currentState`/`targetState`. Its public surface is unchanged,
-  including `currentStateStream`.
+  callback, and `currentState`/`targetState`. The five members anything outside
+  `monitor.dart` uses are unchanged — `start`, `stop`, `currentState`,
+  `targetState`, `currentStateStream`. **The class as a whole lost about
+  fifteen public members** and its constructor now requires `lookUp`, so a deep
+  importer of `src/manager/monitor.dart` breaks; it is not in this package's
+  barrel.
+- fix: `start()` and `stop()` are serialised, so their bodies cannot
+  interleave. Both are fire-and-forget and both await at_lookup partway
+  through; a `stop()` immediately followed by a `start()` left this class
+  holding subscriptions to the controllers `stopNotifications` had just closed,
+  while at_lookup connected and notified into the fresh ones. The monitor was
+  then connected at one end and deaf at the other, reporting `notConnected` for
+  ever — and `NotificationService.stopListening()`/`startListening()` expose
+  exactly that pair to application code. Silent: it looks like an atServer with
+  nothing to say.
 - fix: `stop()` arriving while `start()` is still in flight no longer leaves
   the connection running. The rewrite reintroduced the race the old
   done-completer existed to close; `_start` now re-checks `targetState` after
