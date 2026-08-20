@@ -35,7 +35,7 @@ pointing at it and no detail. `## TODO` below is *what is owed*, unordered; this
 is *what to do first*. Re-read this section against `git log --oneline -10`
 before acting — it has led with finished work before.
 
-Last re-ranked **2026-08-20** against the tree at `e79d63562`.
+Last re-ranked **2026-08-20** against the tree at `31fb4a241`.
 
 ⚠️ **A second workstream is now open and is NOT in this table** — the knowledge
 base, agreed with gkc 2026-08-20. Its plan, format, rail design and ordered
@@ -43,12 +43,15 @@ method are in [`docs/knowledge/README.md`](../../knowledge/README.md), which is
 a scaffold with no nuggets written yet. If that is what you are here for, open
 that file instead; the list below is the PQ release work.
 
-1. **[RECOMMENDED] Get PR #2169 over the line.** It is `OPEN` with
-   `CHANGES_REQUESTED` and **CI green, 30/30**. All ten review points are
-   answered in its threads; four were fixed in `26a309396`. Nothing is owed on
-   it but a re-review — `gh pr view 2169` to check whether Xlin123 has replied,
-   and answer anything new. It is train position 2 of 8, so everything after it
-   waits.
+1. **[RECOMMENDED] Publish at_chops 3.6.0 to pub.dev.** #2169 **merged**
+   2026-08-20 as `c4c581834` — approved by Xlin123, CI 47/47, and an
+   adversarial re-review confirmed every fix and every argued reply before the
+   merge (its one finding, an unrecorded promise, is delivered in ruling 110's
+   addendum). Merged is not published, and the train's gate is the publish:
+   nothing after at_chops can declare `at_chops: ^3.6.0` until it is on
+   pub.dev. No workflow in this repo publishes to pub.dev (checked
+   `.github/workflows/` 2026-08-20), so the publish is a maintainer step —
+   gkc's.
 2. **Carve at_lookup** — train position 3. Recipe is in
    [14.18](#1418-the-remaining-d1-initial-development-sequence); the carve gate
    is `git -C /tmp/carve-<pkg> diff gkc-pq-d1-spike --stat -- packages/<pkg>`
@@ -56,29 +59,34 @@ that file instead; the list below is the PQ release work.
    declares `at_commons: ^5.16.0` and pub.dev's at_commons is still 5.15.0.
    Re-derive that before assuming, with the command in
    [Re-deriving the state](#re-deriving-the-state).
-3. **Capture a failing functional run for
-   [14.43](#1443-the-functional-suites-convergence-race).** Open
-   `tests/at_functional_test` and run `./runLocal.sh` repeatedly, keeping every
-   log. Three consecutive green packs were run on 2026-08-20 and the item's one
-   missing piece is still a red run's log. Three more hypotheses were disproven
-   that day and are listed in the section — read them before forming a fourth.
+3. **Diagnose [14.43](#1443-the-functional-suites-convergence-race) from the
+   two reds captured 2026-08-20.** The missing evidence exists: a local pack
+   log (`untracked/pq-1443-packs/run_4_20260820_223443.log`, this machine
+   only) red in `atclient_sync_conflict_test` with `conflictInfo` null where
+   the pull reported success, and CI run `32418455392`'s beta functional red
+   in UC-G1.15 — an rsa2048 envelope signature that does not verify against
+   the one key the published `_apsk` advertises. Both signatures and the
+   provenance are recorded in the section. Read the disproven-hypotheses lists
+   there before forming a new one.
 4. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
    ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
    `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
    removal owed at 4.0.
 
 **Blocked, and what lifts it:** publishing anything past at_chops waits on
-at_chops 3.6.0 reaching pub.dev, which waits on #2169 merging. at_lookup's
-publish additionally waits on at_commons 5.16.0.
+at_chops 3.6.0 reaching pub.dev — #2169 is merged, so only the publish itself
+remains. at_lookup's publish additionally waits on at_commons 5.16.0.
 
 ⚠️ **CI on this branch is behind HEAD, and cannot catch up by itself.** Nothing
 fires on push here — the workflow is `workflow_dispatch` only on this branch —
-so the newest run is as new as the last manual dispatch and no newer. As of
-2026-08-20 the newest run is on `f24ee3ab6` while HEAD is `e79d63562`, so the
-two at_client expiry fixes (`7c9f42d70`, `e79d63562`) have **never been through
-CI**. They are unit-green, docs-rail-green and functional-green locally at
-177/177. Dispatch before treating the branch as green, and compare the two SHAs
-rather than reading a conclusion:
+so the newest run is as new as the last manual dispatch and no newer. The
+2026-08-20 dispatch on `cfd511663` (run `32418455392`) **failed three jobs**:
+both `unit_at_client` channels on the `dart format` gate — three files, fixed
+in `be1fb9172` — and `functional_tests (beta)` on UC-G1.15, which is a 14.43
+instance and is captured as evidence there, not a new defect. A fresh dispatch
+on `31fb4a241` (run `32421422064`) was queued the same evening; read its
+conclusion rather than this sentence. Dispatch before treating the branch as
+green, and compare the two SHAs rather than reading a conclusion:
 
 ```bash
 gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike
@@ -2197,10 +2205,30 @@ queue by the time it returns: `local_secondary.dart` awaits `_enqueueForSync`
 before `_update` returns, so "the writes were not queued yet" is not available
 as an explanation.
 
-⚠️ **Still no captured failing run.** Three packs were run on 2026-08-20 and all
-three were green, which at roughly 1-in-5 says nothing either way. The item's
-missing evidence is a red run's log, and everything above is a narrowing of
-where to look rather than progress on the cause.
+✅ **Two failing runs captured, 2026-08-20 evening, on different instruments.**
+(This paragraph said "still no captured failing run" until that evening.)
+
+- **Local**: 4 packs at `cfd511663` — 3 green, 1 red. The red's full log (at
+  the pack's own log level) is `untracked/pq-1443-packs/run_4_20260820_223443.log`,
+  **on this machine only** — `untracked/` is gitignored. Failing test:
+  `atclient_sync_conflict_test.dart` "notify updating of a key to sharedWith
+  atSign - using await", asserting at line 76 that the pulled
+  `phone_0.wavi@alice🛠` keyInfo carries `conflictInfo` — it was **null**. The
+  surrounding log shows the sync pull completing `SyncStatus.success` and the
+  key arriving `remoteToLocal`; what did not happen is the conflict
+  computation populating `conflictInfo`.
+- **CI beta**: run `32418455392` on the same `cfd511663`,
+  `functional_tests (beta)`, `pq_rollout_matrix_test.dart` UC-G1.15, cell
+  `pqReady → pqActive`: `AtSigningVerificationException` — the envelope's
+  rsa2048 signature does not verify against **the one rsa2048 key the
+  published `_apsk` advertises**. Fetch with
+  `gh run view 32418455392 --log-failed`. The smell is a stale or overwritten
+  advertisement: whether the verifier read the signer's `_apsk` or a
+  later-published one is a race on record convergence between the matrix's
+  stage clients.
+
+Two different failure signatures in one family — do not assume one cause
+covers both.
 
 ⚠️ **Start by reading [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart),
 which is very probably the same thing.** It records an unexplained intermittent
