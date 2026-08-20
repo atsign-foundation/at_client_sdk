@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
-import 'package:at_chops/src/algorithm/at_iv.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -24,6 +23,14 @@ import 'aes_gcm.dart';
 /// The KEM's 32-byte shared secret is already uniformly random, so the HKDF
 /// step provides context binding ([info]) and AEAD key/nonce derivation —
 /// not randomness extraction.
+///
+/// This construction is the one sanctioned user of the GCM algos'
+/// explicit-nonce API (`encryptWithNonce`/`decryptWithNonce`): the AEAD key
+/// is derived from a fresh KEM shared secret on every [pqSeal], so it is
+/// single-use and the HKDF-derived nonce can never repeat under it — the
+/// RFC 9180 single-shot pattern. Every other caller goes through the GCM
+/// algos' public [AesGcm256EncryptionAlgo.encrypt], which generates its own
+/// nonce.
 
 /// Version emitted by [pqSeal]. Bump this when introducing a new construction.
 const int _envelopeVersion = 0x01;
@@ -88,10 +95,12 @@ Future<Uint8List> pqSeal(
   final _DerivedKey dk =
       _deriveKeyAndNonce(enc.sharedSecret, _envelopeVersion, info);
 
-  // body = gcmCipherText || tag(16), per AesGcm256EncryptionAlgo's wire format.
-  final Uint8List body = await AesGcm256EncryptionAlgo(_aesKey(dk.key)).encrypt(
+  // body = gcmCipherText || tag(16). Explicit-nonce API: safe here because
+  // dk.key is single-use (fresh KEM shared secret per seal) — see file docs.
+  final Uint8List body =
+      await AesGcm256EncryptionAlgo(_aesKey(dk.key)).encryptWithNonce(
     plaintext,
-    iv: InitialisationVector(dk.nonce),
+    nonce: dk.nonce,
     aad: aad ?? const <int>[],
   );
 
@@ -133,16 +142,16 @@ Future<Uint8List> pqOpen(
         'declared ciphertext length overruns envelope');
   }
   final Uint8List kemCt = Uint8List.sublistView(envelope, 3, 3 + ctLen);
-  // gcmBody = gcmCipherText || tag(16); AesGcm256EncryptionAlgo splits the tag.
+  // gcmBody = gcmCipherText || tag(16); decryptWithNonce splits the tag.
   final Uint8List gcmBody = Uint8List.sublistView(envelope, 3 + ctLen);
 
   final Uint8List ss = await xwing.decapsulate(recipientSecretKey, kemCt);
   final _DerivedKey dk = _deriveKeyAndNonce(ss, ver, info);
 
   try {
-    return await AesGcm256EncryptionAlgo(_aesKey(dk.key)).decrypt(
+    return await AesGcm256EncryptionAlgo(_aesKey(dk.key)).decryptWithNonce(
       gcmBody,
-      iv: InitialisationVector(dk.nonce),
+      nonce: dk.nonce,
       aad: aad ?? const <int>[],
     );
   } on AtDecryptionException {

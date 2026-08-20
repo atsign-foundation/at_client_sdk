@@ -4,10 +4,12 @@ import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/at_iv.dart';
+import 'package:at_chops/src/algorithm/encryption/gcm_nonce.dart';
 import 'package:at_chops/src/algorithm/ffi/openssl_ffi_bindings.dart';
 import 'package:at_chops/src/key/impl/aes_key.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:ffi/ffi.dart';
+import 'package:meta/meta.dart';
 
 /// AES-256-GCM authenticated encryption (AEAD), backed by OpenSSL 3 via
 /// Dart FFI (`EVP_CIPHER_CTX` / `EVP_aes_256_gcm`).
@@ -15,7 +17,11 @@ import 'package:ffi/ffi.dart';
 /// Wire format, nonce handling, and AAD semantics are identical to
 /// [AesGcm256EncryptionAlgo] (the pure-Dart counterpart) so the two
 /// implementations are interoperable: data encrypted by one decrypts
-/// correctly with the other.
+/// correctly with the other. In particular, [encrypt] generates a fresh
+/// 12-byte nonce from the platform CSPRNG on every call and returns
+/// `nonce(12) || ciphertext || tag(16)`; callers cannot supply a nonce, so a
+/// (key, nonce) pair can never be reused. See [AesGcm256EncryptionAlgo] for
+/// the full rationale.
 ///
 /// The caller loads libcrypto (e.g. via [tryLoadLibCrypto]) and passes the
 /// resulting [DynamicLibrary] via [AesGcm256FfiAlgo.fromLib].
@@ -70,12 +76,90 @@ final class AesGcm256FfiAlgo
             'EVP_CIPHER_CTX_ctrl');
   }
 
+  /// Encrypts [plainData] and returns `nonce(12) || ciphertext || tag(16)`.
+  ///
+  /// A fresh nonce is drawn from the platform CSPRNG on every call. [iv]
+  /// must be null; supplying one throws [AtEncryptionException].
   @override
   Future<Uint8List> encrypt(Uint8List plainData,
       {InitialisationVector? iv, List<int> aad = const []}) async {
-    final Uint8List keyBytes = _keyBytesForEncrypt();
-    final List<int> nonce = _nonceBytesForEncrypt(iv);
+    if (iv != null) {
+      throw AtEncryptionException(
+          'AES-256-GCM generates its own nonce internally and prepends it to '
+          'the ciphertext; do not supply an IV');
+    }
+    final Uint8List nonce = generateGcmNonce();
+    final Uint8List body =
+        await encryptWithNonce(plainData, nonce: nonce, aad: aad);
+    return Uint8List.fromList(nonce + body);
+  }
 
+  /// Decrypts `nonce(12) || ciphertext || tag(16)` as produced by [encrypt].
+  ///
+  /// [iv] must be null; the nonce is read from the input itself.
+  @override
+  Future<Uint8List> decrypt(Uint8List encryptedData,
+      {InitialisationVector? iv, List<int> aad = const []}) async {
+    if (iv != null) {
+      throw AtDecryptionException(
+          'AES-256-GCM reads its nonce from the first $nonceLength bytes of '
+          'the ciphertext; do not supply an IV');
+    }
+    if (encryptedData.length < nonceLength + tagLength) {
+      throw AtDecryptionException(
+          'AES-256-GCM (FFI) input shorter than the $nonceLength-byte nonce '
+          'plus the $tagLength-byte tag');
+    }
+    final Uint8List nonce = encryptedData.sublist(0, nonceLength);
+    return decryptWithNonce(encryptedData.sublist(nonceLength),
+        nonce: nonce, aad: aad);
+  }
+
+  /// Encrypts [plainData] under a caller-supplied [nonce], returning
+  /// `ciphertext || tag(16)` (the nonce is NOT prepended).
+  ///
+  /// DANGER: encrypting twice under the same (key, nonce) destroys both
+  /// confidentiality and authenticity for that key. Only call this when the
+  /// key itself is single-use — an HPKE-style construction deriving a fresh
+  /// key per message (`pqSeal`) — or when verifying known-answer vectors.
+  /// Everything else must use [encrypt].
+  @internal
+  Future<Uint8List> encryptWithNonce(Uint8List plainData,
+      {required Uint8List nonce, List<int> aad = const []}) async {
+    if (nonce.length != nonceLength) {
+      throw AtEncryptionException(
+          'AES-256-GCM requires a $nonceLength-byte nonce; '
+          'got ${nonce.length} bytes');
+    }
+    return _encryptCore(_keyBytesForEncrypt(), nonce, plainData, aad);
+  }
+
+  /// Decrypts `ciphertext || tag(16)` under a caller-supplied [nonce].
+  ///
+  /// Counterpart of [encryptWithNonce]; same restrictions apply.
+  @internal
+  Future<Uint8List> decryptWithNonce(Uint8List encryptedData,
+      {required Uint8List nonce, List<int> aad = const []}) async {
+    if (nonce.length != nonceLength) {
+      throw AtDecryptionException(
+          'AES-256-GCM requires a $nonceLength-byte nonce; '
+          'got ${nonce.length} bytes');
+    }
+    if (encryptedData.length < tagLength) {
+      throw AtDecryptionException(
+          'AES-256-GCM (FFI) input shorter than the $tagLength-byte tag');
+    }
+    final Uint8List cipherText =
+        encryptedData.sublist(0, encryptedData.length - tagLength);
+    final Uint8List tag =
+        encryptedData.sublist(encryptedData.length - tagLength);
+    return _decryptCore(_keyBytesForDecrypt(), nonce, cipherText, tag, aad);
+  }
+
+  // ── OpenSSL EVP core ───────────────────────────────────────────────────────
+
+  Uint8List _encryptCore(Uint8List keyBytes, Uint8List nonce,
+      Uint8List plainData, List<int> aad) {
     final Pointer<EVP_CIPHER_CTX> ctx = _ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');
 
@@ -181,21 +265,8 @@ final class AesGcm256FfiAlgo
     }
   }
 
-  @override
-  Future<Uint8List> decrypt(Uint8List encryptedData,
-      {InitialisationVector? iv, List<int> aad = const []}) async {
-    if (encryptedData.length < tagLength) {
-      throw AtDecryptionException(
-          'AES-256-GCM (FFI) input shorter than the $tagLength-byte tag');
-    }
-
-    final Uint8List keyBytes = _keyBytesForDecrypt();
-    final List<int> nonce = _nonceBytesForDecrypt(iv);
-    final Uint8List cipherText =
-        encryptedData.sublist(0, encryptedData.length - tagLength);
-    final Uint8List tag =
-        encryptedData.sublist(encryptedData.length - tagLength);
-
+  Uint8List _decryptCore(Uint8List keyBytes, Uint8List nonce,
+      Uint8List cipherText, Uint8List tag, List<int> aad) {
     final Pointer<EVP_CIPHER_CTX> ctx = _ctxNew();
     if (ctx == nullptr) throw StateError('EVP_CIPHER_CTX_new failed');
 
@@ -318,23 +389,5 @@ final class AesGcm256FfiAlgo
           'AES-256-GCM requires a 256-bit key; got ${keyBytes.length * 8} bits');
     }
     return keyBytes;
-  }
-
-  List<int> _nonceBytesForEncrypt(InitialisationVector? iv) {
-    if (iv == null || iv.ivBytes.length != nonceLength) {
-      throw AtEncryptionException(
-          'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
-          'use AtChopsUtil.generateRandomIV($nonceLength)');
-    }
-    return iv.ivBytes;
-  }
-
-  List<int> _nonceBytesForDecrypt(InitialisationVector? iv) {
-    if (iv == null || iv.ivBytes.length != nonceLength) {
-      throw AtDecryptionException(
-          'AES-256-GCM requires an explicit $nonceLength-byte nonce; '
-          'use AtChopsUtil.generateRandomIV($nonceLength)');
-    }
-    return iv.ivBytes;
   }
 }

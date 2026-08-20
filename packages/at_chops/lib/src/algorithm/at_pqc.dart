@@ -38,6 +38,11 @@ abstract final class AtPqc {
   /// Because the algorithm requires a key at construction time this is a
   /// factory method rather than a static field.
   ///
+  /// Output is self-contained: `encrypt` generates a fresh nonce from the
+  /// platform CSPRNG on every call and returns
+  /// `nonce(12) || ciphertext || tag(16)`. There is no IV to generate,
+  /// convey, or store — passing `iv:` throws.
+  ///
   /// **AAD note:** [SymmetricEncryptionAlgorithm] does not carry an `aad`
   /// parameter on its interface. If you need AAD (e.g. for PQ-HPKE), use
   /// [AesGcm256EncryptionAlgo] or [AesGcm256FfiAlgo] directly — both expose
