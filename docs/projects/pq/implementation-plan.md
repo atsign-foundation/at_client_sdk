@@ -38,7 +38,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
-| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **One of four red rows is fixed; three are open.** Row 1, the notification that never arrived, was a closed connection whose pending request waited out its 30-second budget holding at_lookup's request mutex — fixed, and `end2end_tests` is green in CI. Row 2 is UC-A4.2's failing positive control. Row 3, `enrollment_setup.dart`'s 30-second silence, shares row 1's fingerprint but is **measured still red** after the fix. Row 4 is `pq_native_onboard_test.dart` failing PKAM for `@denise`, which was never recorded here before. Four mechanisms are read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
+| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **Two of four red rows are fixed; two are open.** Row 1, the notification that never arrived, was a closed connection whose pending request waited out its 30-second budget holding at_lookup's request mutex — fixed, and `end2end_tests` is green in CI. Row 4, `pq_native_onboard_test.dart` failing PKAM for `@denise`, was a CI step whose `sudo` stripped `VIRTUALENV_IMAGE` so it ran the published atServer — fixed, and proven by running both images locally. Row 2 is UC-A4.2's failing positive control. Row 3, `enrollment_setup.dart`'s 30-second silence, shares row 1's fingerprint but is **measured still red** after the fix. Four mechanisms are read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
@@ -1673,9 +1673,10 @@ Everything below is from those runs plus the re-runs after each fix.
 where the loop cannot succeed either — so every local e2e run silently waits
 the full 60 seconds before doing anything. Harmless, and worth removing.
 
-**Four failures, of which one is fixed and three are open.** This section said
+**Four failures, of which two are fixed and two are open.** This section said
 "three" until 2026-08-20, when a fourth was found in `at_libraries`' matrix
-that had never been recorded here at all. None was the image, and none was a
+that had never been recorded here at all — and that fourth turned out to be
+the cheapest of the lot, a CI step running the wrong image. None was the image, and none was a
 flake: gkc ruled out infrastructure on 2026-08-20.
 
 1. **`notify_test.dart` — FIXED 2026-08-20. A closed connection held the
@@ -1764,9 +1765,31 @@ flake: gkc ruled out infrastructure on 2026-08-20.
    connection fix. That test is new on this branch, so there is no trunk arm to
    compare against.
 
-   ⚠️ It is NOT the image: the `VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env`
-   env is set at job level and both matrix legs inherit it, and both compose
-   files parameterise the image. The proxy leg passes on that same image.
+   **ROOT-CAUSED and fixed 2026-08-20: the job was running the published
+   image.** ⚠️ This row first said "It is NOT the image, the env is set at job
+   level and both matrix legs inherit it" — that was wrong, and wrong in an
+   instructive way. The variable *is* set on the job, and the step ran
+   `sudo docker compose up -d`; **`sudo` resets the environment**, so compose
+   never saw `VIRTUALENV_IMAGE` and fell back to the `atsigncompany/virtualenv:vip`
+   default in `docker-compose.yaml`. The published atServer cannot verify an
+   ML-DSA PKAM signature, and its symptom is exactly this `RangeError`.
+
+   It is the only container job in either workflow that used `sudo`; every one
+   in `at_client_sdk.yaml` runs plain `docker compose` and gets its image. The
+   fix drops the `sudo` and adds a step that inspects the **running**
+   container and fails loudly when it is not the image the job asked for —
+   because a wrong image otherwise presents as a client-side bug.
+
+   Measured, both arms in one session, one variable changed:
+
+   | image | result |
+   |-------|--------|
+   | `atsigncompany/virtualenv:dev_env` | 2 of 2 pass |
+   | `atsigncompany/virtualenv:vip`     | `Pkam auth failed … AT0010-Exception: RangeError` |
+
+   ⚠️ The earlier claim came from parsing the YAML and printing the resolved
+   image per job. That measures what the *job* declares, not what *compose*
+   receives — a validation of the wrong thing, and it read as thorough.
 
 ⚠️ **A further row, seen once and recorded as a rate rather than a kind.**
 `functional_tests (beta)` failed `sync_multiple_client_test.dart` ("keys synced
