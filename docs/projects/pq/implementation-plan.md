@@ -1829,12 +1829,17 @@ flake: gkc ruled out infrastructure on 2026-08-20.
    receives — a validation of the wrong thing, and it read as thorough.
 
 ⚠️ **A fifth row, on the BETA Dart channel only, and it is a rate rather than
-a kind.** `functional_tests (beta)` has failed **2 of 4** runs on 2026-08-20,
-with a **different test each time** — `sync_multiple_client_test.dart` once and
-`pq_rollout_matrix_test.dart`'s UC-G1.15 once. `functional_tests (stable)` is
-0 of 4, and a local full pack on stable was 177/177. Two different tests
-failing only on beta points at the channel rather than at either test, and
-that is as far as the evidence goes.
+a kind.** `functional_tests (beta)` has failed **3 of 5** runs on 2026-08-20 —
+`sync_multiple_client_test.dart` once and `pq_rollout_matrix_test.dart`'s
+UC-G1.15 **twice, consecutively**. `functional_tests (stable)` is 0 of 5, and a
+local full pack on stable was 177/177.
+
+⭐ **The decisive observation: in run 32381845256 the SAME commit ran UC-G1.15
+green on stable and red on beta.** Same image, same test, same atServer —
+the only varying input is the Dart SDK channel. So this is neither the test
+being new on this branch nor anything the spike changed in a straightforward
+sense. ⚠️ This row first read "a different test each time", which the
+consecutive UC-G1.15 failures falsified.
 
 What the UC-G1.15 instance showed, recorded because it is the useful part:
 
@@ -1856,6 +1861,17 @@ What the UC-G1.15 instance showed, recorded because it is the useful part:
 - ⚠️ The verifier's kid appears **once** in the whole 465k-line job log while
   other kids appear 4–9 times. Suggestive, NOT decisive: kids are only logged
   when a key package is, so that is a claim about the log.
+
+**Four hypotheses are disproven, recorded so nobody re-walks them:** the
+advertisement is NOT written local-first (`publishPublicSigningKey` passes
+`useRemoteAtServer = true`); it is NOT the documented mint/publish race, whose
+signature is an ML-DSA array replaced by a bare RSA string; there is NO mutex
+contention with sync, because `SyncServiceImpl.create(atClient)` builds its own
+`RemoteSecondary` and so its own connection; and the
+`does not verify against its _apsk` SEVEREs are not the differentiator — they
+appear **19 times in the PASSING stable log** against 17 in the failing beta
+one. That last one is worth its own look some day: every functional run on both
+channels logs 17–19 key-package verification failures and nothing fails.
 
 ⚠️ **A sixth row, seen once and recorded as a rate rather than a kind.**
 `functional_tests (beta)` failed `sync_multiple_client_test.dart` ("keys synced
