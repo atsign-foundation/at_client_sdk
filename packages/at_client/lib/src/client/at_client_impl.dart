@@ -500,8 +500,7 @@ class AtClientImpl implements AtClient {
     // Fetch cached AtClientImpl for re-use, or create a new one and init it.
     // Keyed by (atSign, enrollmentId) — see [instanceKey]; two enrollments of
     // one atSign are different principals and must not share a client.
-    final cacheKey =
-        _resolveCacheKey(currentAtSign, enrollmentId);
+    final cacheKey = _resolveCacheKey(currentAtSign, enrollmentId);
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
