@@ -37,6 +37,12 @@ before acting — it has led with finished work before.
 
 Last re-ranked **2026-08-20** against the tree at `e79d63562`.
 
+⚠️ **A second workstream is now open and is NOT in this table** — the knowledge
+base, agreed with gkc 2026-08-20. Its plan, format, rail design and ordered
+method are in [`docs/knowledge/README.md`](../../knowledge/README.md), which is
+a scaffold with no nuggets written yet. If that is what you are here for, open
+that file instead; the list below is the PQ release work.
+
 1. **[RECOMMENDED] Get PR #2169 over the line.** It is `OPEN` with
    `CHANGES_REQUESTED` and **CI green, 30/30**. All ten review points are
    answered in its threads; four were fixed in `26a309396`. Nothing is owed on
