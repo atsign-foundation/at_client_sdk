@@ -1893,12 +1893,21 @@ a kind.** `functional_tests (beta)` has failed **3 of 5** runs on 2026-08-20 —
 UC-G1.15 **twice, consecutively**. `functional_tests (stable)` is 0 of 5, and a
 local full pack on stable was 177/177.
 
-⭐ **The decisive observation: in run 32381845256 the SAME commit ran UC-G1.15
-green on stable and red on beta.** Same image, same test, same atServer —
-the only varying input is the Dart SDK channel. So this is neither the test
-being new on this branch nor anything the spike changed in a straightforward
-sense. ⚠️ This row first read "a different test each time", which the
-consecutive UC-G1.15 failures falsified.
+⭐ **This is a RACE, not a channel defect** (gkc, 2026-08-20). The rates say
+so: **beta 3 red in 6, stable 1 red in 6**, and a race is what produces that
+shape — the beta SDK's different timing widens the window rather than
+introducing a bug. Reading it as "beta-only" was wrong twice over: stable has
+now hit it too, and the framing pointed the search at the Dart channel instead
+of at the window.
+
+Corroborating: **three of the four observed failures are notify/sync
+convergence** — `sync_multiple_client_test` ("keys synced from multiple clients
+converge"), `atclient_sync_conflict_test` ("notify updating of a key to
+sharedWith atSign"), and UC-G1.15's cross-stage envelope verification. One
+commit ran UC-G1.15 green on stable and red on beta in run 32381845256, which
+is what a timing window looks like rather than a code difference. ⚠️ This row
+first read "a different test each time", then "beta-only"; both were
+falsified.
 
 What the UC-G1.15 instance showed, recorded because it is the useful part:
 
