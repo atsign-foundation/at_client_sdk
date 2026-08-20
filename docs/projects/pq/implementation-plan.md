@@ -38,7 +38,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
-| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **One of the three red rows is fixed; two are open.** Row 1, the notification that never arrived, was a closed connection whose pending request waited out its 30-second budget holding at_lookup's request mutex — fixed in at_lookup, green locally. Row 2 is UC-A4.2's failing positive control; row 3 is a 30-second silence in `enrollment_setup.dart` with the SAME fingerprint as row 1, so it may already be fixed — unmeasured, @ce2e-only. Four mechanisms are read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
+| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **One of four red rows is fixed; three are open.** Row 1, the notification that never arrived, was a closed connection whose pending request waited out its 30-second budget holding at_lookup's request mutex — fixed, and `end2end_tests` is green in CI. Row 2 is UC-A4.2's failing positive control. Row 3, `enrollment_setup.dart`'s 30-second silence, shares row 1's fingerprint but is **measured still red** after the fix. Row 4 is `pq_native_onboard_test.dart` failing PKAM for `@denise`, which was never recorded here before. Four mechanisms are read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
@@ -1673,8 +1673,10 @@ Everything below is from those runs plus the re-runs after each fix.
 where the loop cannot succeed either — so every local e2e run silently waits
 the full 60 seconds before doing anything. Harmless, and worth removing.
 
-**Three failures remained. One is fixed; two are open.** None was the image,
-and none was a flake: gkc ruled out infrastructure on 2026-08-20.
+**Four failures, of which one is fixed and three are open.** This section said
+"three" until 2026-08-20, when a fourth was found in `at_libraries`' matrix
+that had never been recorded here at all. None was the image, and none was a
+flake: gkc ruled out infrastructure on 2026-08-20.
 
 1. **`notify_test.dart` — FIXED 2026-08-20. A closed connection held the
    request mutex for 30 seconds.** `end2end_tests` was 36 of 37.
@@ -1725,11 +1727,12 @@ and none was a flake: gkc ruled out infrastructure on 2026-08-20.
    cd tests/at_end2end_test && ./runLocal.sh 26000 test/notify_test.dart
    ```
 
-   Green twice on 2026-08-20, and the second run carries the proof that the fix
-   is what did it: `Connection closed with a request in flight` at
+   Green twice locally on 2026-08-20, and the second run carries the proof that
+   the fix is what did it: `Connection closed with a request in flight` at
    13:01:25.009403, 211 microseconds after `AtClientImpl (@bob) stop()`, where
-   the same request previously took 30.003 seconds. **2 of 2 runs, which bounds
-   a rate and not a kind.**
+   the same request previously took 30.003 seconds. **`end2end_tests` is then
+   green in CI** on run 32369016084 — so this is confirmed against the @ce2e
+   atSigns too, not only the virtualenv.
 
 2. **`nskey_recipient_not_ready_test.dart` UC-A4.2 fails on its own positive
    control.** `pqe2e_tests` 16 of 17. The reason string is
@@ -1743,20 +1746,36 @@ and none was a flake: gkc ruled out infrastructure on 2026-08-20.
    failures all read `provided keys file does not exist`, for the keyfile the
    timed-out step never wrote. The throw is `OutboundMessageListener.read`'s
    *transient* branch, meaning `_lastReceivedTime` never moved — no bytes at
-   all, not a partial response. ⚠️ **That is row 1's exact fingerprint, so row
-   1's fix may already have closed this. Unmeasured — do not record it as fixed
-   until a CI run says so.** ⚠️ It cannot be reproduced locally: it is
+   all, not a partial response. ⚠️ **Row 1's fix does NOT close it — measured,
+   not assumed.** `end2end_test_14` is still red on run 32369016084, the first
+   CI run carrying the connection fix, so the shared fingerprint was a
+   coincidence of symptom and the cause is a different one. ⚠️ It cannot be
+   reproduced locally: it is
    written for the @ce2e atSigns and dies in `setUpAll` at
    `createAtChopsFromDemoKeys` for want of demo keys, so iterating on it costs
    a CI round trip.
 
-⚠️ **A fourth row, seen once and recorded as a rate rather than a kind.**
+4. **`functional_tests_at_onboarding_cli` — a fourth red row, and it was never
+   recorded here.** The non-proxy leg of `at_libraries`' matrix runs 16 of 17;
+   the red is `pq_native_onboard_test.dart`'s "a CLI activation under the
+   pqReady posture is PQ-native", failing PKAM for `@denise` with a
+   **server-side** `AT0010-Exception: RangeError: Value not in range:
+   -2881644029407446706`. Red on run 32360105692 as well, so it predates the
+   connection fix. That test is new on this branch, so there is no trunk arm to
+   compare against.
+
+   ⚠️ It is NOT the image: the `VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env`
+   env is set at job level and both matrix legs inherit it, and both compose
+   files parameterise the image. The proxy leg passes on that same image.
+
+⚠️ **A further row, seen once and recorded as a rate rather than a kind.**
 `functional_tests (beta)` failed `sync_multiple_client_test.dart` ("keys synced
 from multiple clients converge to the same value") at 176 of 177 on the
 2026-08-20 16b00787c run, having passed on the 8295cea5b run an hour earlier.
-`functional_tests (stable)` passed both. So: **1 red in 2 beta runs, 0 in 2
-stable runs** — not enough to call it anything. Do not describe it as a flake
-or as a regression without more runs.
+`functional_tests (stable)` passed both, and both channels passed again on run
+32369016084. So: **1 red in 3 beta runs, 0 in 3 stable runs** — not enough to
+call it anything. Do not describe it as a flake or as a regression without
+more runs.
 
 **Four mechanisms were read and disproven** for rows 1 and 3, recorded so
 nobody re-walks them: the monitor and verb sockets are *not* collapsed
