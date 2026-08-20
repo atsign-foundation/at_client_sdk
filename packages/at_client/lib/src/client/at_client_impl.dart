@@ -339,6 +339,54 @@ class AtClientImpl implements AtClient {
   static String instanceKey(String atSign, String? enrollmentId) =>
       enrollmentId == null ? atSign : '$atSign|$enrollmentId';
 
+  /// The key [create] should look under, given what the caller named.
+  ///
+  /// A caller that names no enrollment usually means *this atSign's client*
+  /// rather than *a client belonging to no enrollment* — `at_activate`'s
+  /// `otp`, `list` and `spp` build their client through `createAtClient`, which
+  /// names none, and most tests do the same. Taking `null` literally hands
+  /// those callers a brand-new client carrying no key material, which does not
+  /// fail here: it fails much later, on the first verb, as
+  /// `PKAM Keypair required for signing`. That is exactly what made
+  /// `end2end_test_14` fail once `enrollment_setup` had written an enrollment
+  /// id into the keyfile, while trunk — which keyed this cache on the atSign
+  /// alone — returned the enrolled client and worked.
+  ///
+  /// So an unnamed enrollment falls back to the atSign's client when there is
+  /// exactly ONE. **Only one.** Two enrollments of an atSign are two
+  /// principals, and silently picking either would hand a caller credentials
+  /// it did not ask for — the identity hazard this cache key exists to close.
+  /// With several, this refuses and says which ids are available, because a
+  /// caller that cannot say which principal it wants has a bug that a guess
+  /// would hide.
+  ///
+  /// One consequence, and it is the desirable one: a caller whose preference
+  /// names different rollout axes from the enrolled client it now lands on is
+  /// refused by [refuseChangedRolloutAxes] rather than quietly handed a client
+  /// running a stage it thinks it has left. Before this fallback that caller
+  /// got its own client and no refusal — but the client could not authenticate,
+  /// so the failure simply moved to the first verb and lost its explanation on
+  /// the way.
+  static String _resolveCacheKey(String atSign, String? enrollmentId) {
+    final asked = instanceKey(atSign, enrollmentId);
+    if (enrollmentId != null || atClientInstanceMap.containsKey(asked)) {
+      return asked;
+    }
+    final enrolled = atClientInstanceMap.keys
+        .whereType<String>()
+        .where((key) => key.startsWith('$atSign|'))
+        .toList();
+    if (enrolled.isEmpty) return asked;
+    if (enrolled.length == 1) return enrolled.single;
+    throw ArgumentError.value(
+        enrollmentId,
+        'enrollmentId',
+        'no enrollment id was given for $atSign, and ${enrolled.length} '
+            'enrolled clients exist for it '
+            '(${enrolled.map((k) => k.split('|').last).join(', ')}). '
+            'They are different principals, so name the one you want.');
+  }
+
   /// Throws when [asked] names different rollout axes from the client that is
   /// already running under [cacheKey] — the posture, the signing rollout, the
   /// in-use signing set or the legacy-encryption refusal.
@@ -452,7 +500,8 @@ class AtClientImpl implements AtClient {
     // Fetch cached AtClientImpl for re-use, or create a new one and init it.
     // Keyed by (atSign, enrollmentId) — see [instanceKey]; two enrollments of
     // one atSign are different principals and must not share a client.
-    final cacheKey = instanceKey(currentAtSign, enrollmentId);
+    final cacheKey =
+        _resolveCacheKey(currentAtSign, enrollmentId);
     AtClientImpl? atClientImpl;
     if (atClientInstanceMap.containsKey(cacheKey)) {
       atClientImpl = atClientInstanceMap[cacheKey];
