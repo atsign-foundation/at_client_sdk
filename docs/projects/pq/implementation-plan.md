@@ -42,7 +42,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
-| [14.40](#1440-at_clients-in-progress-heading-is-a-patch-and-now-carries-a-breaking-change) | Decide at_client's next version number — `## 3.14.1` now carries a BREAKING entry | Nothing but a ruling. The bump is gkc's call and was deliberately not taken |
+| [14.40](#1440-at_clients-in-progress-heading-is-a-patch-and-now-carries-a-breaking-change) | ✅ **DONE — RULED 2026-08-20: at_client publishes as `3.15.0`, a MINOR.** Heading and pubspec both moved; the three `**BREAKING**` labels were rewritten because nothing published was removed — verified against the published 3.14.0 archive, where `disallowLegacyEncryption`, `keyEstablishmentAlgorithms`, `PqPosture` and `ReleasePosture` appear in **zero** files against a control of `AtClientPreference` in 20 | — |
 | [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green and **live-green** — functional 174/174 (after one 173/174 whose single failure was [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)), e2e pq 54/54, and the `legacy-server` arm 2/2 against the pinned `atsigncompany/virtualenv:vip-p3.15.0`. **Owed: public-data signature verification** (undesigned) | Nothing |
 
 ### 14.39 `PqPosture` and the rollout it drives
@@ -875,6 +875,34 @@ This is the **order**, not the inventory — each row points at the entry that
 holds the detail. **D1 initial development ends at step 34**, when the stacked
 PRs are merged; publishing and R-2 follow it.
 
+⛔ **What actually gates D1 (established 2026-08-20, after two misdiagnoses).**
+D1 is done when the spike is in trunk **and the eight packages are released**
+(gkc). The blocker is **not** an at_server release: `preserveFirstEnrollmentOnRetrofit`
+is on at_server `trunk` (8 hits). It is **CI pulling the production VE image**.
+
+- ⚠️ **`canary` is NOT the trunk image.** It shares a digest with
+  `canary-c3.16.1` (`sha256:7d8a01…`, 2026-08-13), so it *is* the c3.16.1
+  release build and predates #2755. The trunk-tracking pair is **`dev_env` /
+  `trunk-gha6542`** (`sha256:5318d0…`, 2026-08-19). Re-derive from
+  `https://hub.docker.com/v2/repositories/atsigncompany/virtualenv/tags/`.
+- **Ruled: all four VE jobs move to `atsigncompany/virtualenv:dev_env`** —
+  `functional_tests`, `end2end_tests`, `end2end_test_14`, `pqe2e_tests`. Only
+  `legacy_server_tests` stays pinned at `vip-p3.15.0`, because testing an old
+  server is its whole purpose. Three composes default to `vip`; a fourth,
+  `at_onboarding_cli_functional_tests_proxy`, **hardcodes it with no env
+  override at all**.
+- ⚠️ The tests needing #2755 span **two** packs — 3 files under
+  `at_end2end_test/test/pq/` and 4 under `at_functional_test/test/` including
+  `self_enrollment_retrofit_live_test.dart`. Moving only the PQ e2e job would
+  leave the gate standing.
+- ⚠️ **CI has never run on this branch and structurally cannot**: the workflow
+  triggers are `push: [trunk]` and `pull_request: [trunk]`. `gh run list
+  --branch gkc-pq-d1-spike` returns 0 against a control returning 5 for trunk.
+  **`workflow_dispatch:` IS enabled**, so CI can be run manually on the spike
+  branch before any PR is carved — worth doing, because CI's at_client job runs
+  a **bare** `dart analyze` that reads `benchmark/`, which the routine
+  `dart analyze lib test` never opens. That already hid five errors for six days.
+
 **Stage 0 — scaffolding.**
 
 | # | Work | Where | State |
@@ -998,13 +1026,13 @@ rulings 2 and 3 are amended in place.
 | # | Work | Entry |
 |---|------|-------|
 | 23 | *(folded away)* passive-by-default **is** the axis's `now` position | [14.13](detail/implementation-plan.md#1413-a-passive-by-default-flag-surveyed-not-built) |
-| 24 | A client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) |
-| 25 | A `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) |
+| 24 | ✅ **DONE — RULED 2026-08-20: leave it, the warning is the answer.** `isFullyPrivileged()` keeps returning true for a null enrollment id — a client authenticating with the atSign's own keys holds full privilege by construction, which the resolver's own dartdoc already argues. `ApkamSigning.enrollmentId` keeps substituting `'primary'`, so such a client keeps publishing `public:_apsk.primary.a.__e@<atSign>` under a name no enrollment record carries, and `apkam_signing.dart:68` keeps logging a warning when it happens. ⚠️ Accepted knowingly: a verifier walking an owner-key signature through the approval chain dead-ends, and surfaces that as a verification error rather than as this decision. Do not re-open. | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) |
+| 25 | ⛔ **STRUCK FROM D1 2026-08-20 — it belongs to the STOP-RELEASE.** 14.12's own body says so: "the point of this entry is that the stop-release cannot ship before both are", where *both* are public-record signing moving onto the ML-DSA signing root and self data moving off `selfEncryptionKey` onto the nskey path (B-3 phase 1). Neither is scheduled, and this row sitting in the D1 sequence made D1 depend on two undesigned moves. The assertion in `pq_legacy_interop_live_test.dart`'s opt-out arm stays exactly where it is — it already fails with the reason naming this row, so whichever project fixes it gets a red test pointing here. | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) |
 | 26 | *(closed)* revocation visibility — an `EnrollmentManager` cache race, fixed in at_server `16dd457f`. ⚠️ This cell said "a proven test-instrument failure" until 2026-08-15; that was the 2026-08-11 ruling the root-cause overturned | [14.9](detail/implementation-plan.md#149-a-revoked-enrollment-can-still-authenticate-briefly) |
 | 27 | ✅ **DONE 2026-08-15** — domain separation on the signed envelope, per-use `typ` plus a root-link prefix ([`decisions.md` 103](detail/decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15)) | [14.8](detail/implementation-plan.md#148-domain-separation-on-the-signed-envelope) |
-| 28 | NoPorts' own copy of the envelope shape | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) |
+| 28 | ✅ **DONE AS NOTED 2026-08-20 — the naming WAS the deliverable.** 14.7 establishes that a migration here does not break NoPorts: it imports none of at_client's functions, signs with the encryption keypair and fetches `getRemotePK` rather than `_apsk`. There is nothing to build. It becomes a separately-owned second migration only if the envelope pitch becomes RFC 7515, and that conditional is what this row records. | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) |
 | 29 | **Three** audit residuals — perf ceiling on a real low-end device, SS-4 interrupted-mint resume, IS-1 record-name drift. ⚠️ This read **four**, including UC-A3.4's live self-direction, until 2026-08-18 — 14.16's own body has marked that ✅ DONE since 2026-08-17 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
-| 30 | `deprecated_member_use` findings across the workspace (345 at_client, 183 at_onboarding_cli, 110 at_auth, 28 at_lookup) | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
+| 30 | `deprecated_member_use` across the workspace. ⚠️ **RE-DERIVED 2026-08-20 at `26644e779`: 780, not the 666 this row used to record** — at_client **396**, at_onboarding_cli **205**, at_auth **153**, at_lookup **26**, at_chops 0, at_commons 0 (`dart analyze lib test` per package, `grep -c deprecated_member_use`). ⛔ **RULED 2026-08-20: all 780 are in D1's bar.** ⚠️ **76 of them are this project's own**, added deliberately by the at_lookup consolidation's six credential deprecations and the `AtLookupImpl` constructor deprecation; the other 704 are the at_chops compatibility shim, `AtSigningInput` and `apkamPublicKey`. Clearing the 76 means moving at_client's eight readers of `atLookUp.enrollmentId` and the `atChops` readers off those members — the work filed as **BLOCKS THE MAJOR** in `docs/projects/at-lookup-consolidation/plan.md` section 6. That is non-breaking: the members stay, their callers leave. | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
 | 31 | ✅ **DONE — nothing owed since 2026-08-10.** The one item (the functional pack's compose hardcoding a local image) is struck in the body; the external gate it names is step 32's blocker, not a checklist entry. This row carried no state until 2026-08-18, which in this table reads as open | [14.15](#1415-pre-pr-rails-checklist) |
 
 Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128),
@@ -1018,7 +1046,7 @@ parallel work for five days after it was finished. Issue states verified with
 
 | # | Work |
 |---|------|
-| 32 | Carve the spike into stacked PRs |
+| 32 | ⛔ **RESHAPED 2026-08-20 — NOT one stack. A per-package release train.** Carve a PR **per package**, from the spike branch, each raised when that package has no work pending but publishing. **Single PRs for all except at_client, which lands as a series of stacked PRs.** Dependency order, derived from the pubspecs rather than assumed — note `at_auth` depends on `at_server_status`, which is easy to miss: **at_commons → at_chops → at_lookup → at_server_status → at_auth → at_client (stacked) → at_client_flutter → at_onboarding_cli**. ✅ **Ready now: at_commons and at_chops** — 0 deprecations each, no D1 row touches them. **Ready means that package's own work is done, its share of step 30 included.** ⚠️ This also dissolves step 20's circularity: at_auth publishes at position 5, so the rotation arm becomes buildable long before at_client's stack lands. |
 | 33 | Merge them to trunk. **The spike branch itself never merges** |
 | 34 | ← D1 initial development complete here |
 

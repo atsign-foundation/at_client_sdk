@@ -1,4 +1,13 @@
-## 3.14.1
+## 3.15.0
+
+<!-- Was `## 3.14.1` until 2026-08-20. A patch heading carrying 229 entries and
+three **BREAKING** labels. Ruled a MINOR because semver keys on what a consumer
+can observe, and NOTHING PUBLISHED WAS REMOVED — verified against the published
+3.14.0 archive from pub.dev, in which `disallowLegacyEncryption`,
+`keyEstablishmentAlgorithms`, `PqPosture` and `ReleasePosture` appear in ZERO
+files, against a positive control of `AtClientPreference` in 20. The BREAKING
+labels below were rewritten in the same pass: as written they sent a reader
+hunting for a constructor argument that never existed in a release. -->
 
 - refactor: `Monitor` takes an `AtLookupMuxable` and drops everything that
   duplicated at_lookup — the byte buffer, the framing constants, the overflow
@@ -105,7 +114,13 @@
   — it omitted `startEnvelopeListener` — and the test pinning "the step order is
   the documented one" compared it to a third hand-written list in the test, so
   it read two transcriptions of the order and never the order itself.
-- **BREAKING** feat: `AtClientPreference.keyEstablishmentAlgorithms` replaces
+> **None of the entries below is breaking for a consumer of at_client 3.14.0.**
+> Each removes or replaces something that existed only inside this unpublished
+> window — checked against the published archive, not inferred. The one change
+> that touches published code is `Monitor`, and `src/manager/monitor.dart` is
+> not exported from this package's barrel.
+
+- feat: `AtClientPreference.keyEstablishmentAlgorithms` replaces
   the singular `keyEstablishmentAlgo` — the receiver-side list ruling 113
   asked for, and a new `PqPosture` axis. It defaults to `[x-wing]`, so an
   unconfigured client mints and advertises exactly what it did before.
@@ -183,7 +198,7 @@
     this client set.
   - Naming an algorithm this build cannot seal under is refused at
     construction, and the list is held unmodifiable.
-- **BREAKING** feat: `disallowLegacyEncryption` is settable only through the
+- feat: `disallowLegacyEncryption` is settable only through the
   posture. The `AtClientPreference` constructor argument is removed, which
   overturns ruling 70's "individual flags still win" for this one flag.
   - A safety flag whose escape hatch defeats its purpose is not the same kind
@@ -192,7 +207,7 @@
   - An app that wants the refusal adopts `PqPosture.pqActive`, or builds a
     posture that asks for it — and such a posture must write post-quantum by
     default, so the flag never moves on its own.
-- **BREAKING** feat: the rollout posture is `PqPosture`, with three pre-built
+- feat: the rollout posture is `PqPosture`, with three pre-built
   constants and a constructor a program can call for a combination none of them
   expresses. `legacy` is the default, `pqReady` moves the credentials while the
   data path stays legacy, and `pqActive` makes post-quantum writes the default.
