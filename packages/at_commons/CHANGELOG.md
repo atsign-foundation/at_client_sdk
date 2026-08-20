@@ -1,3 +1,34 @@
+## 5.16.0
+
+- feat: add `AtNetworkTimeouts.defaultResponseBudget` (90s) — the overall budget
+  for one complete response, as distinct from `defaultTimeout`, which bounds the
+  wait for the *next* bytes and restarts every time a chunk arrives. A large
+  response is many such waits in a row, and only this budget bounds their sum, so
+  a peer that trickles bytes indefinitely is caught by this and by nothing else.
+  Deliberately not passed through `cap`: it bounds an aggregate rather than a
+  single operation, and its own default already exceeds the 60s ceiling. Nothing
+  reads it yet.
+
+- docs: `signingAlgo` says plainly that it names the APKAM **authentication**
+  key's algorithm — the key that signs the `from:` challenge — and not the
+  algorithm an enrollment signs documents with. The name invites the second
+  reading and the two are deliberately different algorithms from rollout 1
+  onward. Stated on `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`,
+  which all declare the field and previously said this in two forms and none.
+
+- feat: add `EnrollVerbBuilder.apkamPublicKeySignature`, threading the existing
+  `EnrollParams.apkamPublicKeySignature` through to the built command. The field
+  had no route to the wire, so an `enroll:update` could not carry the proof of
+  possession the atServer requires before it installs a new `apkamPublicKey` —
+  which made the rotation the field exists for unsendable.
+- feat: add `Metadata.copy()` — a field-for-field copy, so callers handing
+  metadata from one object to another stop hand-rolling the field list. A
+  hand-rolled copier silently drops any field added to `Metadata` later: the
+  value still round-trips and only the missing field is absent at the far end,
+  which is how `immutable` and `appMetadata` went astray on several paths in
+  `at_client`. A caller that must not carry a field clears it after copying, so
+  the exception is written where it applies rather than being the default.
+
 ## 5.15.0
 
 - feat: add `EnrollVerbBuilder.apsk`, threading the existing
