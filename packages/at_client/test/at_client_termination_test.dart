@@ -4,6 +4,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/src/listener/at_sign_change_listener.dart';
 import 'package:at_client/src/listener/switch_at_sign_event.dart';
 import 'package:at_client/src/manager/monitor.dart';
+import 'package:at_lookup/at_lookup.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
@@ -103,21 +104,20 @@ void main() {
     group('Monitor lifecycle tests', () {
       late Monitor monitor;
       late MockAtLookUp mockAtLookup;
-      late MockAtChops mockAtChops;
-      late MockSecondaryAddressFinder mockAddressFinder;
+      // Monitor no longer holds an AtChops or a SecondaryAddressFinder: it
+      // holds an AtLookupMuxable, and everything to do with opening and
+      // authenticating that connection now lives in at_lookup.
+      late _StubMuxable mockMuxable;
 
       setUp(() {
         mockAtLookup = MockAtLookUp();
-        mockAtChops = MockAtChops();
-        mockAddressFinder = MockSecondaryAddressFinder();
+        mockMuxable = _StubMuxable();
         when(() => mockAtLookup.close()).thenAnswer((_) async => {});
 
         monitor = Monitor(
           atSign: '@test',
           atClientPreference: AtClientPreference(),
-          atChops: mockAtChops,
-          enrollmentId: null,
-          secondaryAddressFinder: mockAddressFinder,
+          lookUp: mockMuxable,
           handleNotification: (String jsonEncoded) async {},
           getLastNotificationTime: () async => null,
         );
@@ -343,4 +343,29 @@ class _CapturingAtSignChangeListener implements AtSignChangeListener {
 
   @override
   void listenToAtSignChange(SwitchAtSignEvent event) => _onEvent(event);
+}
+
+/// The little of [AtLookupMuxable] that [Monitor] uses. Everything else it
+/// once needed - a connection factory, an AtChops, an address finder - moved
+/// into at_lookup with the machinery that used them.
+class _StubMuxable extends Fake implements AtLookupMuxable {
+  final _notifications = StreamController<String>.broadcast();
+  final _up = StreamController<bool>.broadcast();
+
+  @override
+  Stream<String> get notifications => _notifications.stream;
+
+  @override
+  Stream<bool> get notificationConnectionUp => _up.stream;
+
+  @override
+  Future<void> startNotifications({
+    String? regex,
+    int? lastNotificationTime,
+    bool selfNotificationsEnabled = true,
+  }) async =>
+      _up.add(true);
+
+  @override
+  Future<void> stopNotifications() async => _up.add(false);
 }

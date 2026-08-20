@@ -42,6 +42,10 @@ class FakeAtServerSocket implements SecureSocket {
   /// Everything the client wrote, in order, as strings.
   final List<String> written = <String>[];
 
+  /// When true, every write throws - a reachable atServer that rejects
+  /// commands, which is a distinct failure from one that cannot be reached.
+  bool failWrites = false;
+
   /// The subscription the last [listen] handed out.
   ///
   /// [OutboundMessageListener.listen] discards its subscription, so a test that
@@ -103,13 +107,26 @@ class FakeAtServerSocket implements SecureSocket {
   }
 
   @override
-  void write(Object? object) => written.add('$object');
+  void write(Object? object) {
+    // The guard belongs on EVERY write entry point. It was on `add` alone at
+    // first, and `BaseConnection.write` calls this one - so the fake accepted
+    // the write, the test saw no exception, and it read as at_lookup
+    // swallowing a failed send. It does not: `BaseConnection.write` rethrows.
+    if (failWrites) throw const SocketException('write rejected');
+    written.add('$object');
+  }
 
   @override
-  void writeln([Object? object = '']) => written.add('$object\n');
+  void writeln([Object? object = '']) {
+    if (failWrites) throw const SocketException('write rejected');
+    written.add('$object\n');
+  }
 
   @override
-  void add(List<int> data) => written.add(utf8.decode(data));
+  void add(List<int> data) {
+    if (failWrites) throw const SocketException('write rejected');
+    written.add(utf8.decode(data));
+  }
 
   @override
   Future<void> flush() async => flushCount++;

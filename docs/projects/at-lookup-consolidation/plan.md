@@ -103,6 +103,33 @@ remain accurate; step 7 should still repoint them at
 They sit in at_lookup's own lib and are therefore out of the gate's scope, so
 nothing mechanical will catch it if this is forgotten.
 
+**All nine steps have landed, and the last one is live-proven**: the functional
+pack ran **177/177, exit 0** against `at_virtual_env:local` with the rewritten
+notification path, `atclient_notify_test.dart` and
+`stats_notification_sync_test.dart` included. That run is the evidence that
+matters for step 9 — Monitor's notification delivery cannot be proven by a
+mock, because a mocked socket delivers whatever the test hands it.
+
+`monitor.dart` went from **582 lines to 183**:
+the byte buffer, framing constants, overflow check, prompt stripping, PKAM
+authentication, `sendCommand`, the heartbeat and the
+`[1,2,3,5,8,13,21,34]`-second backoff are gone from it, and exist once in
+at_lookup. What is left is what was only ever Monitor's — the watermark, the
+notification callback and the two states.
+
+Its 16 tests became 11. Nothing was deleted before its subject had a home:
+framing and the heartbeat were already covered in at_lookup, the three
+enrollment/PKAM cases map onto `at_lookup_test.dart`'s "a refused pkam auth
+records nothing" and its siblings, and the two with **no** equivalent —
+connect failure, and a reachable atServer that rejects the write — were
+**ported into at_lookup first**, as its "a connection that cannot be
+established" group.
+
+⚠️ **The rewrite reintroduced the race the old done-completer existed to
+close**, and the ported test caught it: `stop()` landing while `_start()` was
+awaiting left the connection up, because the await completed afterwards and
+put it back. `_start` now re-checks `targetState` **after** the await.
+
 **Next is the deletion's preconditions**, marked **BLOCKS THE MAJOR** in
 [section 6](#6-filed-not-scheduled).
 
@@ -467,7 +494,7 @@ then the old path is deleted — so no package is uncompilable between commits.
 | 6   | Add `AtLookupMuxable`, `AtLookupImpl implements AtLookupMuxable`, the single-subscription notification controller with pause wired to the socket, and reconnect / reauth / heartbeat ownership. ⚠️ **Do not port `MultiplexedOutboundMessageListener` as written** - it truncates multi-line values (see [section 7](#7-corrections)). The framing that works is two passes: the notification check byte by byte, the `\n@` check only from the last newline on, as landed in step 2. | at_lookup      |
 | 7   | **DONE.** `withSecureSocket` in, constructor deprecated. Deprecate `MonitorClient` in the same commit — exported, zero consumers tree-wide, and its `_createNewConnection` bypasses `SecureSocketUtil` so it never got the connect timeouts.    | at_lookup      |
 | 8   | **DONE — the gate reads 0.** Migrate the sites, compiler-enumerated. **Run `dart analyze` in `tests/at_functional_test` and `tests/at_end2end_test` separately** — 29 of the 64 live there, invisible to at_lookup's own analyze.                               | 9 packages     |
-| 9   | Monitor takes an `AtLookupMuxable` and loses its connection factory, PKAM auth, buffer, framing constants, overflow check, prompt stripping, `sendCommand`, backoff and heartbeat. **Wiring passes a fresh instance.**                | at_client      |
+| 9   | **DONE.** Monitor takes an `AtLookupMuxable` and loses its connection factory, PKAM auth, buffer, framing constants, overflow check, prompt stripping, `sendCommand`, backoff and heartbeat. **Wiring passes a fresh instance.**                | at_client      |
 
 Sequencing constraint: at_lookup publishes first, at_commons moves with it
 putting step 1 at the front of the release order as well as the commit order,

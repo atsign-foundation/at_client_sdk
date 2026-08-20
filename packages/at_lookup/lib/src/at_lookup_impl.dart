@@ -889,12 +889,27 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   bool get isReconnectingNotifications => _reconnecting;
 
+  StreamController<bool>? _connectionUpController;
+
+  @override
+  Stream<bool> get notificationConnectionUp {
+    _connectionUpController ??= StreamController<bool>.broadcast();
+    return _connectionUpController!.stream;
+  }
+
+  void _emitConnectionUp(bool up) {
+    final controller = _connectionUpController;
+    if (controller == null || controller.isClosed) return;
+    controller.add(up);
+  }
+
   void _onNotificationConnectionLost() {
     if (!_isNotifying || _reconnecting) return;
     // `warning`: the subscriber cannot see this any other way, and a silent
     // reconnect looks identical to an atServer that has simply gone quiet.
     logger.warning(
         'Notification connection to $_currentAtSign lost - reconnecting');
+    _emitConnectionUp(false);
     _stopHeartbeat();
     unawaited(_reconnectNotifications());
   }
@@ -918,6 +933,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           logger.info('Notification connection re-established');
           _reconnectIx = 0;
           _startHeartbeat();
+          _emitConnectionUp(true);
           return;
         } catch (e) {
           logger.warning('Reconnect attempt $_reconnectIx failed: $e');
@@ -1044,6 +1060,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     _isNotifying = true;
     _reconnectIx = 0;
     _startHeartbeat();
+    _emitConnectionUp(true);
   }
 
   /// Connect, authenticate if required, and send `monitor:`.
@@ -1086,6 +1103,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // this method is tearing down.
     _isNotifying = false;
     _stopHeartbeat();
+    _emitConnectionUp(false);
     await _connection?.close();
     final controller = _notificationController;
     _notificationController = null;
@@ -1096,6 +1114,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // with no subscriber is a legal caller, and awaiting this deadlocked four
     // tests for thirty seconds each before it was caught.
     unawaited(controller?.close() ?? Future<void>.value());
+    final up = _connectionUpController;
+    _connectionUpController = null;
+    unawaited(up?.close() ?? Future<void>.value());
   }
 
   Future<void> _sendCommand(String command) async {

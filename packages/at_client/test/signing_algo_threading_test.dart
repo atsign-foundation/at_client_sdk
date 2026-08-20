@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/manager/monitor.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -101,24 +100,30 @@ void main() {
   });
 
   group('Monitor', () {
-    Monitor buildMonitor({SigningAlgoType? signingAlgoType}) => Monitor(
-        atSign: '@alice',
-        atClientPreference: preference,
-        atChops: null,
-        enrollmentId: 'pq-1',
-        secondaryAddressFinder: MockSecondaryAddressFinder(),
-        handleNotification: (_) async {},
-        getLastNotificationTime: () async => null,
-        signingAlgoType: signingAlgoType);
+    /// Monitor no longer holds a signing algorithm - it holds an
+    /// `AtLookupMuxable`, and the algorithm travels inside the authenticator
+    /// that `NotificationServiceImpl` builds for it. The guarantee is the same
+    /// and it still has to be checked: a monitor connection stamped with the
+    /// preference's rsa2048 default fails every re-authentication for an
+    /// ML-DSA enrollment.
+    ///
+    /// Asserted against the source, as the `buildRemoteSecondary` group above
+    /// is, because the algorithm is now captured in a closure and there is
+    /// nothing on the built object to read it back from.
+    test('the resolved algorithm reaches the monitor connection', () {
+      final source = File(
+              'lib/src/service/notification_service_impl.dart')
+          .readAsStringSync();
+      final wiring = source.substring(source.indexOf('lookUp: AtLookUp.'));
 
-    test('carries a resolved signingAlgoType for its own re-authentication',
-        () {
-      expect(buildMonitor(signingAlgoType: SigningAlgoType.mldsa65)
-          .signingAlgoType, SigningAlgoType.mldsa65);
-    });
-
-    test('defaults to the preference', () {
-      expect(buildMonitor().signingAlgoType, SigningAlgoType.rsa2048);
+      expect(wiring, contains('signingAlgo: signingAlgoOf(atClient)'),
+          reason: 'the monitor connection must authenticate with the '
+              'RESOLVED algorithm, not the preference default - '
+              'signingAlgoOf() is what reads the enrollment key material');
+      expect(wiring, contains('enrollmentId: atClient.enrollmentId'),
+          reason: 'and as the right enrollment, or the atServer refuses it');
+      expect(wiring, contains('hashingAlgo: preference.hashingAlgoType'),
+          reason: 'hashing travels with signing - the pair is one setting');
     });
   });
 }

@@ -1133,10 +1133,12 @@ void main() {
           false,
           value: 'Got it');
 
-      String fromAtServer =
-          'notification: ${jsonEncode(atNotification.toJson())}\n'
-          '@${mockAtClientImpl.getCurrentAtSign()}@';
-      await ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
+      // Delivered as the muxable delivers it: already framed. The byte-level
+      // framing that used to be tested here - Monitor.onSocketDataReceipt -
+      // now lives in at_lookup's listener and is covered by its own
+      // socket_delivery_test.dart.
+      await ns.monitor.handleNotification(
+          'notification: ${jsonEncode(atNotification.toJson())}');
 
       expect(ns.lastReceipt, isNotNull);
       expect(ns.lastReceipt!.microsecondsSinceEpoch,
@@ -1165,10 +1167,12 @@ void main() {
         received.add(n);
       });
 
-      String fromAtServer =
-          'notification: ${jsonEncode(atNotification.toJson())}\n'
-          '@${mockAtClientImpl.getCurrentAtSign()}@';
-      await ns.monitor.onSocketDataReceipt(fromAtServer.codeUnits);
+      // Delivered as the muxable delivers it: already framed. The byte-level
+      // framing that used to be tested here - Monitor.onSocketDataReceipt -
+      // now lives in at_lookup's listener and is covered by its own
+      // socket_delivery_test.dart.
+      await ns.monitor.handleNotification(
+          'notification: ${jsonEncode(atNotification.toJson())}');
 
       await Future.delayed(Duration(milliseconds: 1));
       expect(received, isNotEmpty);

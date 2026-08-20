@@ -1,5 +1,13 @@
 ## 3.7.0
 
+- feat: `AtLookupMuxable.notificationConnectionUp` — `true` when `monitor:` is
+  accepted on a live connection, `false` when it is lost or stopped. The
+  muxable owns reconnection, so it is the only thing that knows; at_client's
+  `Monitor` re-broadcasts it as a listener state, which noports' daemon
+  subscribes to for its whole life. Broadcast, unlike `notifications`, because
+  it is a state signal whose latest value supersedes the last — a dropped
+  notification is gone, a dropped state event is re-derivable.
+
 - feat: `AtLookupMuxable` gains the members callers were reaching for through
   a cast to the concrete class: `authenticator`, `isConnectionAvailable` and
   `readResponse`, plus `scan(auth:)` and `lookup(metadata:)`. Those last two

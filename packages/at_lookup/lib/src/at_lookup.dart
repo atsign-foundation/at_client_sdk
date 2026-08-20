@@ -332,6 +332,26 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// same distinction as a listener state, for the same reason.
   bool get isReconnectingNotifications;
 
+  /// `true` when `monitor:` has been accepted on a live connection, `false`
+  /// when that connection is lost or notifications are stopped.
+  ///
+  /// This exists because the muxable owns reconnection, so it is the only
+  /// thing that knows. at_client's `Monitor` re-broadcasts it as a
+  /// `NotificationListenerState`, which noports' daemon subscribes to for its
+  /// whole life; without this it could only poll [isReconnectingNotifications]
+  /// and would learn of an outage a poll interval late.
+  ///
+  /// `bool` rather than a richer state because the richer type lives in
+  /// at_client, which depends on at_lookup - naming it here would invert that.
+  ///
+  /// **Broadcast**, unlike [notifications], and the difference is deliberate:
+  /// this is a state signal whose latest value supersedes the last, so a
+  /// dropped event costs a subscriber nothing it cannot re-derive. A dropped
+  /// *notification* is gone. ⚠️ A late subscriber does not get the current
+  /// state on attach, matching what `Monitor.currentStateStream` has always
+  /// done.
+  Stream<bool> get notificationConnectionUp;
+
   /// How often a quiet notification connection is probed, and how long the
   /// probe waits for its answer.
   ///

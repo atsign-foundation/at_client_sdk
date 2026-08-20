@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -323,6 +324,95 @@ void main() {
               'without reconnecting leaves a listener that is silent forever');
 
       await atLookup.stopNotifications();
+    });
+  });
+
+  group('a connection that cannot be established', () {
+    // Ported from at_client's monitor_test.dart, which asserted the same
+    // behaviour on machinery that now lives here: a monitor that cannot
+    // connect must not report itself as listening. The failure has to surface
+    // rather than be swallowed, or a permanently deaf client looks healthy.
+    test('a failure to connect surfaces, and reports nothing as up', () async {
+      final atLookup = authenticated();
+      final seen = <bool>[];
+      atLookup.notificationConnectionUp.listen(seen.add);
+      when(() => socketFactory.createSocket(host, '$port', any()))
+          .thenAnswer((_) async => throw const SocketException('refused'));
+
+      await expectLater(
+          atLookup.startNotifications(), throwsA(isA<Exception>()));
+
+      expect(atLookup.isNotifying, isFalse,
+          reason: 'a connection that never opened is not notifying');
+      expect(seen, isEmpty,
+          reason: 'nothing may report the connection up - a subscriber that '
+              'saw `true` here would wait forever for notifications on a '
+              'socket that does not exist');
+    });
+
+    test('a failure to send monitor: surfaces the same way', () async {
+      final atLookup = authenticated();
+      final seen = <bool>[];
+      atLookup.notificationConnectionUp.listen(seen.add);
+      // Connect succeeds; the write does not. at_client's monitor_test had
+      // this as "secondary reachable but rejecting commands".
+      when(() => socketFactory.createSocket(host, '$port', any()))
+          .thenAnswer((_) async {
+        final s = FakeAtServerSocket()..failWrites = true;
+        sockets.add(s);
+        socket = s;
+        return s;
+      });
+
+      await expectLater(
+          atLookup.startNotifications(), throwsA(isA<Exception>()));
+
+      expect(atLookup.isNotifying, isFalse);
+      expect(seen, isEmpty);
+    });
+  });
+
+  group('notificationConnectionUp', () {
+    test('reports up on start, down on loss, up again on reconnect', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      // Subscribed BEFORE the trigger: it is a broadcast stream, so it does
+      // not replay, and a listener attached afterwards sees nothing.
+      final seen = <bool>[];
+      atLookup.notificationConnectionUp.listen(seen.add);
+
+      await atLookup.startNotifications();
+      await socket.settle();
+      expect(seen, [true], reason: 'monitor: accepted on a live connection');
+
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(seen, [true, false],
+          reason: 'the muxable owns reconnection, so it is the only thing that '
+              'knows the connection dropped - a subscriber cannot tell an '
+              'outage from a quiet atServer any other way');
+
+      await Future.delayed(const Duration(milliseconds: 1400));
+      expect(seen, [true, false, true],
+          reason: 'and it must say so again when the reconnect succeeds');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('reports down when notifications are stopped', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      final seen = <bool>[];
+      atLookup.notificationConnectionUp.listen(seen.add);
+
+      await atLookup.startNotifications();
+      await socket.settle();
+      await atLookup.stopNotifications();
+      await socket.settle();
+
+      expect(seen, [true, false],
+          reason: 'a deliberate stop is still a transition a subscriber must '
+              'see - otherwise it reads as a connection that is still up');
     });
   });
 

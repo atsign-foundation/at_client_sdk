@@ -1,5 +1,21 @@
 ## 3.14.1
 
+- refactor: `Monitor` takes an `AtLookupMuxable` and drops everything that
+  duplicated at_lookup — the byte buffer, the framing constants, the overflow
+  check, prompt stripping, PKAM authentication, `sendCommand`, the heartbeat
+  and the `[1,2,3,5,8,13,21,34]`-second reconnect backoff. 582 lines to 170.
+  What remains is what was only ever Monitor's: the watermark, the notification
+  callback, and `currentState`/`targetState`. Its public surface is unchanged,
+  including `currentStateStream`.
+- fix: `stop()` arriving while `start()` is still in flight no longer leaves
+  the connection running. The rewrite reintroduced the race the old
+  done-completer existed to close; `_start` now re-checks `targetState` after
+  its await.
+- refactor: `NotificationServiceImpl` hands Monitor a **fresh** muxable, so the
+  connection count is unchanged. Passing the client's own lookup instead would
+  collapse the two into one — a one-line change, and not safe until an atServer
+  implements `monitor:multiplexed`.
+
 - refactor: `RemoteSecondary` builds its lookup with
   `AtLookUp.withSecureSocket` and no longer sets `privateKey` or `cramSecret`
   on it. Both are credentials, and credentials now travel as an authenticator;
