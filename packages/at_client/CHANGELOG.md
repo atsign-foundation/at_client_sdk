@@ -9,6 +9,14 @@ files, against a positive control of `AtClientPreference` in 20. The BREAKING
 labels below were rewritten in the same pass: as written they sent a reader
 hunting for a constructor argument that never existed in a release. -->
 
+- fix: `SyncServiceImpl.stop()` now actually halts sync activity. A sync
+  run in flight when `stop()` was called kept executing after `stop()`
+  returned: it resumed from its network await, read whatever local state
+  existed by then, and pushed it — so a caller that awaited `stop()`,
+  staged local writes, and then restarted could have those writes pushed
+  mid-staging by the old run. `stop()` now waits for the in-flight run to
+  unwind, and the run bails at its next resume point after the stop,
+  answering its request with "SyncService has been stopped".
 - deprecated: `Secondary.executeVerb`'s `sync` parameter (also on
   `LocalSecondary`, `RemoteSecondary` and `RemoteSecondary.executeAndParse`),
   removal in 4.0. It has never been read by either implementation: whether a

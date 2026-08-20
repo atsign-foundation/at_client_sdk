@@ -60,6 +60,14 @@ class SyncServiceImpl implements SyncService {
   /// cleared in the run's `finally`.
   bool _processInProgress = false;
 
+  /// Completes when the currently-executing [processSyncRequests] run has
+  /// fully unwound, so [stop] can wait for it. Flipping [isStopped] does
+  /// not cancel a run parked on one of its awaits — the run resumes when
+  /// its await resolves — so without this wait, "stopped" would mean only
+  /// "no new runs start", while the parked run went on to read state and
+  /// move data. Null when no run is active.
+  Completer<void>? _activeRunDone;
+
   /// Cached latest known server commit id. Kept fresh by three
   /// authoritative sources:
   ///   * [statsServiceListener]: push-side stats notifications.
@@ -292,9 +300,25 @@ class SyncServiceImpl implements SyncService {
     // guard above and race into the body. We use a separate flag from
     // _syncInProgress because _isInSync short-circuits on the latter.
     _processInProgress = true;
+    _activeRunDone = Completer<void>();
     final syncRequest = _getSyncRequest();
     try {
-      if (await _isInSync()) {
+      final inSync = await _isInSync();
+      if (isStopped) {
+        // stop() landed while _isInSync was parked on its network read.
+        // Anything this run did from here would be sync activity after
+        // stop() returned — acting on puts and deletes a caller staged
+        // on the promise that the service was halted — so the request
+        // is answered as stopped instead.
+        syncRequest.result!
+          ..syncStatus = SyncStatus.failure
+          ..atClientException = AtClientException(
+              error_codes['AtClientException'],
+              'SyncService has been stopped');
+        _syncError(syncRequest);
+        return;
+      }
+      if (inSync) {
         _logger.info('server and local are in sync - ${syncRequest.id}');
         syncRequest.result!
           ..syncStatus = SyncStatus.success
@@ -365,6 +389,8 @@ class SyncServiceImpl implements SyncService {
     } finally {
       _processInProgress = false;
       lastSyncCompletedAt = DateTime.now().toUtc();
+      _activeRunDone?.complete();
+      _activeRunDone = null;
       _drainQueueIfPending();
     }
     return;
@@ -562,6 +588,16 @@ class SyncServiceImpl implements SyncService {
     }
   }
 
+  /// Throws if [stop] has been called. Placed at the stage boundaries of
+  /// a sync run so a run that was mid-flight when the service stopped
+  /// bails at its next resume point instead of continuing to move data.
+  void _throwIfStopped() {
+    if (isStopped) {
+      throw AtClientException(
+          error_codes['AtClientException'], 'SyncService has been stopped');
+    }
+  }
+
   @visibleForTesting
   Future<SyncResult> syncInternal(int serverCommitId, SyncRequest syncRequest,
       {int? localCommitIdBeforeSync}) async {
@@ -580,6 +616,7 @@ class SyncServiceImpl implements SyncService {
           ' | lastReceivedServerCommitId $lastReceivedServerCommitId'
           ' | serverCommitId $serverCommitId');
       // Hint to casual reader: This is where we sync new changes from the server to this client
+      _throwIfStopped();
       final keyInfoList = await _syncFromServer(
           serverCommitId, lastReceivedServerCommitId, pendingPushAtKeys,
           localCommitIdBeforeSync: localCommitIdBeforeSync);
@@ -590,6 +627,7 @@ class SyncServiceImpl implements SyncService {
       _logger.finer(
           'Found $pushQueueSize pending atKeys in the sync queue; pushing.');
       // Hint to casual reader: This is where we sync new changes from this client to the server
+      _throwIfStopped();
       final keyInfoList = await _pushFromSyncQueue();
       syncResult.keyInfoList.addAll(keyInfoList);
     }
@@ -628,6 +666,7 @@ class SyncServiceImpl implements SyncService {
     final keyInfoList = <KeyInfo>[];
     var batchesDone = 0;
     while (true) {
+      _throwIfStopped();
       final atKeys = await localSecondary.peekSyncQueue(limit: batchSize);
       if (atKeys.isEmpty) break;
       // Snapshot the queue size BEFORE this batch so the
@@ -849,6 +888,7 @@ class SyncServiceImpl implements SyncService {
           localCommitIdBeforeSync, serverCommitId);
 
       while (serverCommitId > lastReceivedServerCommitId) {
+        _throwIfStopped();
         _sendTelemetry('_syncFromServer.whileLoop', {
           "serverCommitId": serverCommitId,
           "lastReceivedServerCommitId": lastReceivedServerCommitId
@@ -1463,10 +1503,14 @@ class SyncServiceImpl implements SyncService {
 
   /// Halts sync activity. Cancels the stats-notification subscription,
   /// drains any pending requests in the queue (their callbacks are
-  /// invoked with an error), removes all progress listeners, and
-  /// causes future [sync] calls to become no-ops until [restart] is
-  /// invoked. Idempotent — calling [stop] when already stopped is a
-  /// no-op.
+  /// invoked with an error), removes all progress listeners, causes
+  /// future [sync] calls to become no-ops until [restart] is invoked,
+  /// and — if a sync run is in flight — waits for it to unwind, so that
+  /// when the returned future completes no further sync work will
+  /// happen. An in-flight run parked on a network await bails at its
+  /// next resume point rather than being cancelled mid-await, so the
+  /// wait is bounded by that call's own timeout. Idempotent — calling
+  /// [stop] when already stopped is a no-op.
   Future<void> stop() async {
     if (isStopped) {
       _logger.info('stop() called, but service is already stopped. Ignoring.');
@@ -1489,6 +1533,18 @@ class SyncServiceImpl implements SyncService {
     }
 
     removeAllProgressListeners();
+
+    // A run parked on one of its awaits when isStopped flipped above is
+    // not cancelled by the flip — it resumes when its await resolves and
+    // bails at its next isStopped check. Wait for that unwinding here:
+    // callers of stop() stage local state on the promise that sync
+    // activity has halted, and a run resuming after this method returned
+    // would push that state.
+    final activeRun = _activeRunDone;
+    if (activeRun != null) {
+      _logger.finer('stop(): waiting for the in-flight sync run to unwind');
+      await activeRun.future;
+    }
   }
 
   /// Reverses a prior [stop]: re-subscribes to stats notifications and
@@ -1504,12 +1560,10 @@ class SyncServiceImpl implements SyncService {
     }
     _logger.info('Restarting sync service for $currentAtSign');
     isStopped = false;
-    // Re-subscribe to stats notifications. Note that any sync run that
-    // was in flight at the moment of stop() may still be on the call
-    // stack; its `finally` will set _processInProgress / _syncInProgress
-    // back to false on its own — restart() does not need to wait for
-    // it. New sync() calls after restart will queue normally and fire
-    // their microtask trigger as usual.
+    // Re-subscribe to stats notifications. stop() waited for any
+    // in-flight run to unwind before returning, so no run survives into
+    // this restart. New sync() calls after restart will queue normally
+    // and fire their microtask trigger as usual.
     await statsServiceListener();
     _startPeriodicSyncTimer();
     sync();

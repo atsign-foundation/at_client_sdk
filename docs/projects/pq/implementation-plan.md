@@ -59,15 +59,18 @@ that file instead; the list below is the PQ release work.
    declares `at_commons: ^5.16.0` and pub.dev's at_commons is still 5.15.0.
    Re-derive that before assuming, with the command in
    [Re-deriving the state](#re-deriving-the-state).
-3. **Diagnose [14.43](#1443-the-functional-suites-convergence-race) from the
-   two reds captured 2026-08-20.** The missing evidence exists: a local pack
-   log (`untracked/pq-1443-packs/run_4_20260820_223443.log`, this machine
-   only) red in `atclient_sync_conflict_test` with `conflictInfo` null where
-   the pull reported success, and CI run `32418455392`'s beta functional red
+3. **Diagnose [14.43](#1443-the-functional-suites-convergence-race)'s shape
+   B, and re-measure the pack rate now shape A is fixed.** Shape A (the local
+   red: `stop()` could not stop an in-flight sync run) is diagnosed from its
+   log, fixed in product and harness, and mutation-proven — the section has
+   the full account. Still open: **shape B**, CI run `32418455392`'s beta red
    in UC-G1.15 — an rsa2048 envelope signature that does not verify against
-   the one key the published `_apsk` advertises. Both signatures and the
-   provenance are recorded in the section. Read the disproven-hypotheses lists
-   there before forming a new one.
+   the one key the published `_apsk` advertises (fetch with
+   `gh run view 32418455392 --log-failed`; smells like an advertisement
+   overwrite race between the matrix's stage clients, unproven). And run the
+   pack repeatedly at the fix commit — the pre-fix local rate was 1 red in 4
+   packs; a post-fix rate needs its own denominator. Read the
+   disproven-hypotheses lists in the section before forming new ones.
 4. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
    ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
    `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
@@ -2245,20 +2248,37 @@ same slice with the prior run fully finished before `stop()`, so no rogue run.
 The `start()` dartdoc documents the in-flight run surviving `stop()` "to set
 flags back on its own" — the survival is designed, but the survivor does
 *work*, not just unwinding. Same shape as the Monitor start/stop race this
-package already fixed with a done-completer: `stop()` needs to (a) make resume
-points bail — re-check `isStopped` after each await in
-`processSyncRequests`/`syncInternal` — and (b) await the in-flight run's
-unwinding so "halts sync activity" is true when the `await stop()` returns.
+package already fixed with a done-completer.
+
+**Fixed, same day.** `processSyncRequests` re-checks `isStopped` after its
+opening await and answers the request "SyncService has been stopped";
+`_throwIfStopped()` guards each stage boundary and each push/pull round in
+`syncInternal`; and `stop()` awaits the in-flight run's unwinding via a
+done-completer, so "halts sync activity" is true when `await stop()` returns.
+Pinned by `test/sync_stop_race_test.dart` — a parkable stats fetch reproduces
+the exact park-resume shape; reverting either half of the fix reddens the
+tests with the right messages (run, not reasoned), and a control arm proves
+the parked run does work when *not* stopped, so the verifyNever cannot pass
+vacuously. A unit test for mid-sync `stop()` existed once and was retired
+(`sync_service_test.dart`'s own header records it) on the claim that
+`atclient_sync_conflict_test` covered it end-to-end — the covering test is the
+one that flaked, which is what "a test is the specification of the mechanism
+it guards" is about. Evidence at the fix commit: unit 1484/1484; one
+functional pack 177/177 with the rewritten harness taking 4 extra
+truth-checked sync rounds that the old harness would have skipped.
 
 **The harness half, also visible in the red log:**
 `FunctionalTestSyncService.syncData` completed 610µs after starting — too fast
 for its own enqueue → network → verdict — so it completed on the **previous
 run's** progress event and stranded its own request, which is the one that went
-rogue. That widens the already-recorded harness defect below (completing on
-`SyncStatus.failure`): it completes on the first success-or-failure event
-regardless of *whose* event it is. Any test staging state between `stop()` and
-`start()` is exposed to both halves; whether shape B (UC-G1.15) reduces to
-this is **not established**.
+rogue. That widened the already-recorded harness defect below (completing on
+`SyncStatus.failure`): it completed on the first success-or-failure event
+regardless of *whose* event it was. **Both halves fixed with the product fix**:
+`syncData` now consumes events with `await for` and completes only when the
+service's own `isInSync()` answers true — an event is treated as "a run
+finished", never as "this call's work is done" — and a failure event means
+retry (bounded), never done. Whether shape B (UC-G1.15) reduces to any of this
+is **not established**.
 
 ⚠️ **Start by reading [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart),
 which is very probably the same thing.** It records an unexplained intermittent
@@ -2295,11 +2315,11 @@ started with null asks the atServer for no replay. So a first-run subscriber
 correctly misses what preceded it, and a test wanting replay must burn that
 call itself. Do not "fix" the product here.
 
-**A separate defect found in the same place, worth fixing on its own merits.**
-`FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on
-`SyncStatus.failure`, so a **failed** sync returns to its caller as success. It
-did not cause this race, but a harness that reports a failed sync as done will
-eventually hide something that matters.
+**A separate defect found in the same place — now fixed with shape A's fix.**
+`FunctionalTestSyncService.syncData()` used to call `syncOutcome.complete()` on
+`SyncStatus.failure`, so a **failed** sync returned to its caller as success.
+The rewrite retries on failure (bounded at five rounds) and throws if still
+not in sync.
 
 ### 14.47 The at_client unit tree has a cross-file isolation flake
 
