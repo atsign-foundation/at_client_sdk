@@ -38,7 +38,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
-| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **Two of four red rows are fixed; two are open.** Row 1, the notification that never arrived, was a closed connection whose pending request waited out its 30-second budget holding at_lookup's request mutex — fixed, and `end2end_tests` is green in CI. Row 4, `pq_native_onboard_test.dart` failing PKAM for `@denise`, was a CI step whose `sudo` stripped `VIRTUALENV_IMAGE` so it ran the published atServer — fixed, and proven by running both images locally. Row 2 is UC-A4.2's failing positive control. Row 3, `enrollment_setup.dart`'s 30-second silence, shares row 1's fingerprint but is **measured still red** after the fix. Four mechanisms are read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
+| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **Three of four red rows are fixed; one is open** — and only ONE of the four was a product defect. Row 1, the notification that never arrived, was a closed connection whose pending request waited out its 30-second budget holding at_lookup's request mutex — fixed, and `end2end_tests` is green in CI. Row 4, `pq_native_onboard_test.dart` failing PKAM for `@denise`, was a CI step whose `sudo` stripped `VIRTUALENV_IMAGE` so it ran the published atServer — fixed, and proven by running both images locally. Row 2, UC-A4.2's failing positive control, was a control that borrowed another file's side effect — `dart test` file order is not alphabetical and CI ran that file first; fixed, and it now establishes its own premise. Row 3, `enrollment_setup.dart`'s 30-second silence, shares row 1's fingerprint but is **measured still red** after the fix. Four mechanisms are read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
@@ -1673,10 +1673,15 @@ Everything below is from those runs plus the re-runs after each fix.
 where the loop cannot succeed either — so every local e2e run silently waits
 the full 60 seconds before doing anything. Harmless, and worth removing.
 
-**Four failures, of which two are fixed and two are open.** This section said
+**Four failures, of which three are fixed and one is open.** This section said
 "three" until 2026-08-20, when a fourth was found in `at_libraries`' matrix
 that had never been recorded here at all — and that fourth turned out to be
-the cheapest of the lot, a CI step running the wrong image. None was the image, and none was a
+the cheapest of the lot, a CI step running the wrong image.
+
+⚠️ **Only ONE of the four was a product defect.** Rows 2 and 4 were harness
+assumptions that had been holding by luck — an environment variable that
+happened to survive, a file order that happened to be favourable — and both
+failed deterministically the moment the luck changed. Row 1 was the real bug. None was the image, and none was a
 flake: gkc ruled out infrastructure on 2026-08-20.
 
 1. **`notify_test.dart` — FIXED 2026-08-20. A closed connection held the
@@ -1735,11 +1740,42 @@ flake: gkc ruled out infrastructure on 2026-08-20.
    green in CI** on run 32369016084 — so this is confirmed against the @ce2e
    atSigns too, not only the virtualenv.
 
-2. **`nskey_recipient_not_ready_test.dart` UC-A4.2 fails on its own positive
-   control.** `pqe2e_tests` 16 of 17. The reason string is
-   `control: readiness must be able to say yes, or its "no" carries no
-   information` — so the arm that makes the refusal meaningful is the one that
-   is red, and the test is correctly refusing to certify its own "no".
+2. **`nskey_recipient_not_ready_test.dart` UC-A4.2 — FIXED 2026-08-20. The
+   control borrowed another file's side effect.** `pqe2e_tests` was 16 of 17,
+   red on `control: readiness must be able to say yes, or its "no" carries no
+   information` — the test correctly refusing to certify its own "no".
+
+   The control asked whether `@bob` was ready for the **shared** `e2e_test`
+   namespace. Nothing in that file made him ready: the e2e preferences set no
+   crypto config and no posture, so an e2e client is legacy by construction and
+   never mints an nskey on its own. It answered "yes" only when one of
+   `era_default_read`, `nskey_notify` or `nskey_cross_atsign` had already
+   minted @bob's `e2e_test` key.
+
+   ⚠️ **`dart test` does not order files alphabetically, and the order is not
+   stable between runs.** CI ran this file **first** of five; a later local run
+   of the same directory ordered them
+   `nskey_multi_enrollment, era_default_read, nskey_cross_atsign, nskey_notify,
+   nskey_recipient_not_ready`. So the row was deterministic in CI and invisible
+   in a directory run that happened to schedule it late — do not read a green
+   directory run as evidence about this class of defect.
+
+   Fixed by making the file establish every fact it asserts: it moves onto
+   `ConcurrentClients` (so @bob can be brought up without the singleton tearing
+   alice's client down) and @bob mints a **run-unique** warm namespace as the
+   control's yes-case. The control still exercises the same query; it no longer
+   adds a writer to the shared namespace.
+
+   Measured, file run ALONE, both arms in one session — which is the arm that
+   discriminates, since a directory run may schedule it late and pass either
+   way:
+
+   | arm | result |
+   |-----|--------|
+   | before the fix | control fails |
+   | after the fix  | passes |
+
+   Whole directory as CI invokes it (`test/pq -x legacy-server`): **17 of 17**.
 
 3. **`enrollment_setup.dart` gets no bytes for 30 seconds.** `end2end_test_14`.
    It is a standalone setup step (`dart run test/enrollment_setup.dart`), not a
