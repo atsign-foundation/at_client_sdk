@@ -1,4 +1,24 @@
 ## 3.6.0
+
+Shipped as a minor despite the breaks below. Both are source-breaking only for
+a caller that omitted `pqSeal`/`pqOpen`'s `info`, or that implements
+`AtKemAlgorithm` outside this package — and no such consumer exists. Every
+`pqSeal`/`pqOpen` call site and every `AtKemAlgorithm` implementation is in
+this repository, and the call sites already passed `info`. They are still
+breaks; the judgement is that there is nothing to break.
+
+- fix: `pqSeal` refuses a KEM that is not the requested version's KEM. `kem`
+  and `version` are independent arguments and nothing compared them, so
+  ML-KEM-1024 could be sealed under `0x02` — whose suite is X-Wing — producing
+  a record that round-trips against a peer repeating the same pairing and
+  cannot be opened by anyone following the documented rule that the version
+  byte names the whole suite. Reachable without choosing a version at all,
+  since `pqSealDefaultVersion` supplies `0x02` to callers that name none.
+  `HpkeSuite` gains `nEnc`, RFC 9180's encapsulated-key length, and the seal
+  compares the KEM's actual output against it — the bytes rather than what a
+  KEM says about itself, so an unrecognised backend is covered too. That length
+  is also asserted to fit the envelope's 2-byte length field, so a suite whose
+  KEM would overflow it fails to compile rather than truncating at seal time.
 - **BREAKING**: `pqSeal` version `0x01` — the `atPQv1-base` construction,
   X-Wing under a bespoke HKDF-SHA256 key schedule with AES-256-GCM — is
   removed. `pqSealSupportedVersions` is now `{0x02, 0x03}` and
@@ -46,8 +66,7 @@
   passes `Uint8List(0)` and says so. Every in-tree caller already supplied one,
   so no behaviour and no wire byte changes; what goes is a state reachable only
   by omission. The key schedule is untouched, and `pqSealDeriveKeyAndNonce`
-  still accepts an absent `info`, so the conformance vectors and
-  `seal-spec.md` are unaffected.
+  still accepts an absent `info`, so the conformance vectors are unaffected.
 - fix: `pqSeal` maps a wrong-length recipient public key to `PqSealException`
   rather than letting the KEM's `ArgumentError` escape. `PqSealException`'s own
   dartdoc gave that case as its example, and `pqOpen` already wrapped
@@ -118,8 +137,9 @@
   `LabeledExtract`/`LabeledExpand` and the `suite_id` inside every label, and
   it reproduces the IETF HPKE working group's published `key`, `base_nonce` and
   `exporter_secret` for that suite plus all 10 of its published encryptions —
-  bytes nobody here produced. Version `0x01` (`atPQv1-base`) is unchanged and
-  stays the default; nothing on the wire moves until a caller asks for `0x02`.
+  bytes nobody here produced. It landed additively — `0x01` stayed the default
+  and no wire byte moved until a caller asked for `0x02` — and `0x02` became
+  the default later in this same release, when `0x01` was removed.
 - feat: `ChaCha20Poly1305Algo` (RFC 8439), keyed and nonced per call.
   ChaCha20-Poly1305 rather than AES-256-GCM because it is the only AEAD the
   HPKE working group publishes `0x647A` vectors for, so this suite has an exact
@@ -144,25 +164,10 @@
   dispatched on the version byte; only the write side could not choose. A
   version this build cannot open is refused rather than emitted, since such an
   envelope carries a suite label that exists nowhere and nobody could read it.
-- docs: **`docs/projects/pq/seal-spec.md`** — a byte-level specification of the
-  `atPQv1-base` seal, written so a second implementation can be built from it
-  without reading the Dart. Validated by reimplementing its key schedule from
-  the document text alone, using `package:crypto`'s HMAC rather than this
-  package's HKDF, and matching all 15 committed vectors.
-- test: **`test/vectors/pq_seal_v1.json`** — cross-implementation conformance
-  vectors for the seal: 15 key-schedule rows and 80 envelopes across both
-  production contexts, an absent and a zero-length `info`, a non-ASCII one,
-  with and without `aad`, at plaintext lengths 0/1/44/1000. Plus the negative
-  arm, without which every row would pass on an implementation that ignored
-  `info` and `aad` entirely. **These are self-generated** — nobody publishes
-  vectors for an Atsign-internal construction — so they attest that two
-  implementations agree and nothing more, which the fixture says of itself.
 - feat: `pqSealDeriveKeyAndNonce` (package-internal, `@visibleForTesting`)
-  exposes the `atPQv1-base` key schedule so the in-tree conformance suite can
-  compare it directly. A schedule mismatch otherwise surfaces only as an AEAD
-  authentication failure, which says nothing about which side is wrong. Not
-  exported by the barrel: external implementations conform against
-  `test/vectors/pq_seal_v1.json`, not this package's internals.
+  exposes the key schedule so a conformance suite can compare it directly. A
+  schedule mismatch otherwise surfaces only as an AEAD authentication failure,
+  which says nothing about which side is wrong. Not exported by the barrel.
 - test: **ML-DSA-65 conformance against NIST's ACVP vectors** (FIPS 204). Until
   now `ml_dsa_65_algo_test.dart` asserted key and signature lengths and that a
   signature round-trips, which two wrong implementations agreeing with each

@@ -72,6 +72,10 @@ void main() {
       expect(suite.aeadId, 0x0003);
       expect(suite.suiteId,
           [0x48, 0x50, 0x4b, 0x45, 0x64, 0x7a, 0x00, 0x01, 0x00, 0x03]);
+      // Nenc decides which KEM pqSeal will accept at this version, so a wrong
+      // value here refuses the right KEM and admits the wrong one.
+      expect(suite.nEnc, 1120);
+      expect(suite.nEnc, XWingPureDartAlgo.ciphertextLength);
     });
 
     test('the ver-0x03 suite is KEM 0x0042, HKDF-SHA384, AES-256-GCM', () {
@@ -81,6 +85,8 @@ void main() {
       expect(suite.aeadId, 0x0002);
       expect(suite.suiteId,
           [0x48, 0x50, 0x4b, 0x45, 0x00, 0x42, 0x00, 0x02, 0x00, 0x02]);
+      expect(suite.nEnc, 1568);
+      expect(suite.nEnc, MlKem1024PureDartAlgo.ciphertextLength);
     });
   });
 

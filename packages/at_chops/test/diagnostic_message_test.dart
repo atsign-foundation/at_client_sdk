@@ -29,7 +29,13 @@ void main() {
 
   test('an unknown HPKE KDF id is named in hex by labeledExtract', () {
     const bogusKdf = HpkeSuite(
-        kemId: 0x647A, kdfId: 0x9999, aeadId: 0x0003, nk: 32, nn: 12, nh: 32);
+        kemId: 0x647A,
+        kdfId: 0x9999,
+        aeadId: 0x0003,
+        nk: 32,
+        nn: 12,
+        nh: 32,
+        nEnc: 1120);
     expect(
         () => labeledExtract(
             bogusKdf, Uint8List(0), 'psk_id_hash', Uint8List(0)),
@@ -38,7 +44,13 @@ void main() {
 
   test('an unknown HPKE KDF id is named in hex by labeledExpand', () {
     const bogusKdf = HpkeSuite(
-        kemId: 0x647A, kdfId: 0x9999, aeadId: 0x0003, nk: 32, nn: 12, nh: 32);
+        kemId: 0x647A,
+        kdfId: 0x9999,
+        aeadId: 0x0003,
+        nk: 32,
+        nn: 12,
+        nh: 32,
+        nEnc: 1120);
     expect(
         () => labeledExpand(
             bogusKdf, Uint8List(32), 'key', Uint8List(0), 32),

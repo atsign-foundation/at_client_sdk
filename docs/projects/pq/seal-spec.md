@@ -194,10 +194,18 @@ implementation that stores the expanded key has a working system until its first
 restart, at which point every record sealed to that key is unopenable — with no
 error at the moment the mistake is made.
 
-Framing and error behaviour are exactly `0x01`'s and `0x02`'s:
+Framing and error behaviour are exactly `0x02`'s:
 `ver || ctLen || enc || ct || tag`, with everything after the 3-byte header
 being RFC 9180's `enc || ct`. Relabelling a `0x03` envelope as `0x02` fails to
 open, which proves the version byte selects the suite rather than describing it.
+
+The writer enforces the same thing, so a mislabelled envelope is never produced
+in the first place: `pqSeal` takes the KEM and the version as separate
+arguments, and refuses any pairing where the KEM's encapsulation length is not
+the version's own `Nenc` (1120 at `0x02`, 1568 at `0x03`). Without that a
+sealer could emit `0x03`'s KEM under `0x02`'s label — an envelope two peers
+making the same mistake would exchange happily and no conformant reader could
+open.
 
 One thing a port must not get wrong: **HKDF-SHA384, not SHA-256**. RFC 5869
 publishes vectors for SHA-256 and SHA-1 only, so this KDF has no standalone

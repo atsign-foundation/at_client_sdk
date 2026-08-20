@@ -816,9 +816,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     is unchanged, only its outcome for a narrow peer. An advertisement carrying **no**
     `suites` field at all is refused at the parse, and always has been on this branch;
   - the payload's declared suite and the envelope's version byte **agree**. Both matter,
-    and separately — the declared suite is what a receiver accepts on, the version byte
-    is what it dispatches the KEM on, and a disagreement between them opens as an AEAD
-    failure that names neither side;
+    and separately — the declared suite is what a receiver accepts on, and the version
+    byte is what the construction is read under. A disagreement between them opens as an
+    AEAD failure that names neither side, which is why the receiver cannot be the only
+    guard: `pqSeal` refuses to emit a version whose KEM is not the one it was handed,
+    comparing the encapsulation against the suite's `Nenc`;
   - the candidate suites are narrowed to the **chosen key's own KEM** before the
     intersection, so a suite can never be selected that the key cannot decapsulate:
     `alg` and `suites` are separate fields and a holder may advertise more than one KEM;
