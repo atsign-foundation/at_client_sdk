@@ -2230,6 +2230,36 @@ as an explanation.
 Two different failure signatures in one family — do not assume one cause
 covers both.
 
+**Shape A is diagnosed, from the red log's own lines — a measurement, not a
+hypothesis.** `SyncServiceImpl.stop()` halts future triggers and cannot halt an
+in-flight run: `processSyncRequests` checks `isStopped` only at entry
+(`sync_service_impl.dart:272`) and never after resuming from an await, and its
+first await — `_isInSync()` → `_getServerCommitId(forceFresh: true)` — is a
+network round-trip. In the red run the harness's own `syncData` request entered
+processing and parked on that await; the test's `stop()` returned at
+`22:37:03.077489` ("Stopping sync service"); the test staged its five puts; and
+at `22:37:03.086665` the parked run resumed, read `pending push count: 5`, and
+ran a full `syncInternal` — five "Will push" lines follow — destroying the
+staged conflict before the measured sync ran. The three green logs show the
+same slice with the prior run fully finished before `stop()`, so no rogue run.
+The `start()` dartdoc documents the in-flight run surviving `stop()` "to set
+flags back on its own" — the survival is designed, but the survivor does
+*work*, not just unwinding. Same shape as the Monitor start/stop race this
+package already fixed with a done-completer: `stop()` needs to (a) make resume
+points bail — re-check `isStopped` after each await in
+`processSyncRequests`/`syncInternal` — and (b) await the in-flight run's
+unwinding so "halts sync activity" is true when the `await stop()` returns.
+
+**The harness half, also visible in the red log:**
+`FunctionalTestSyncService.syncData` completed 610µs after starting — too fast
+for its own enqueue → network → verdict — so it completed on the **previous
+run's** progress event and stranded its own request, which is the one that went
+rogue. That widens the already-recorded harness defect below (completing on
+`SyncStatus.failure`): it completes on the first success-or-failure event
+regardless of *whose* event it is. Any test staging state between `stop()` and
+`start()` is exposed to both halves; whether shape B (UC-G1.15) reduces to
+this is **not established**.
+
 ⚠️ **Start by reading [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart),
 which is very probably the same thing.** It records an unexplained intermittent
 in the same pack, timing out at `await firstNotification`, passing when its file
