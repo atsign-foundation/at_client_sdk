@@ -337,7 +337,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       if (_connection != null) {
         // Clean up the connection before creating a new one
         logger.finer('Closing old connection');
-        await _connection!.close();
+        await _closeConnection();
       }
       logger.info('Creating new connection');
       //1. find secondary url for atsign from lookup library
@@ -828,7 +828,41 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
 
   @override
   Future<void> close() async {
-    await _connection?.close();
+    await _closeConnection();
+  }
+
+  /// Closes the connection and fails whatever was waiting on it.
+  ///
+  /// Every close goes through here rather than calling `_connection.close()`
+  /// directly, because a close leaves a request in flight with nowhere for its
+  /// response to arrive from. [OutboundMessageListener.read] cannot see that on
+  /// its own, so it waits out its transient budget - and it is holding
+  /// [requestResponseMutex] while it does, which stalls the NEXT request on
+  /// this instance for the same 30 seconds.
+  ///
+  /// That is not hypothetical: it is what made an atSign switch stall the
+  /// request that followed it, because `AtClientImpl.stop()` destroys the
+  /// outgoing client's socket while its startup work is still in flight, and
+  /// the same AtLookupImpl is handed back when that atSign is switched to
+  /// again.
+  ///
+  /// The listener aborts on `onDone` as well, and in Dart a local
+  /// `Socket.destroy()` does deliver one - measured - so the two routes
+  /// usually agree. This one is still needed, and not merely as belt and
+  /// braces: **a PAUSED subscription delivers no done event**, also measured,
+  /// and this class pauses the socket to push back-pressure at the atServer
+  /// during notification delivery. Closing while paused reaches the abort
+  /// through here and through nothing else.
+  Future<void> _closeConnection() async {
+    final connection = _connection;
+    if (connection == null) {
+      return;
+    }
+    // `messageListener` is `late` and assigned in [createConnection] - which is
+    // also where `_connection` is assigned, so a non-null connection means
+    // there is a listener to tell.
+    messageListener.abortPendingRequests();
+    await connection.close();
   }
 
   // ---------------------------------------------------------------------
@@ -982,7 +1016,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
           'connection so it reconnects');
       // Closing is what starts recovery: the socket going away drives the
       // listener's onDone, which is wired to [_onNotificationConnectionLost].
-      await _connection?.close();
+      await _closeConnection();
     }
   }
 
@@ -1104,7 +1138,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     _isNotifying = false;
     _stopHeartbeat();
     _emitConnectionUp(false);
-    await _connection?.close();
+    await _closeConnection();
     final controller = _notificationController;
     _notificationController = null;
     // NOT awaited, and that is the point. `close()` on a single-subscription

@@ -22,6 +22,14 @@ class OutboundMessageListener {
   /// whenever nobody is waiting, so a response arriving with no reader costs
   /// nothing.
   Completer<void>? _responseQueued;
+
+  /// Set once the connection this listener reads has gone away.
+  ///
+  /// Never cleared: [AtLookupImpl.createConnection] builds a fresh listener
+  /// with every connection, so a listener whose socket has died is never
+  /// reused for a live one.
+  bool _connectionGone = false;
+
   final AtConnection _connection;
   Function? syncCallback;
 
@@ -273,6 +281,37 @@ class OutboundMessageListener {
     }
   }
 
+  /// Fails anything waiting in [read], at once, because the connection is gone.
+  ///
+  /// A response can only arrive on the socket this listener reads, so once that
+  /// socket is gone a pending [read] is waiting for something that can never
+  /// come. That wait is not free: `AtLookupImpl._process` holds
+  /// `requestResponseMutex` across it, so the next request on the same
+  /// AtLookupImpl queues behind a dead one for the whole transient budget -
+  /// measured at 30 seconds, long enough to blow past a test's own timeout and
+  /// long enough that an application reads it as a hang.
+  ///
+  /// Deliberately NOT the same thing as a timeout: nothing timed out. The
+  /// caller is told the connection went away, which is both true and
+  /// actionable, where `AtTimeoutException` would send it looking at the
+  /// atServer's latency.
+  ///
+  /// A response already parsed and queued is still returned - those bytes
+  /// arrived while the connection was alive and the caller is owed them.
+  void abortPendingRequests() {
+    _connectionGone = true;
+    final waiter = _responseQueued;
+    _responseQueued = null;
+    if (waiter != null && !waiter.isCompleted) {
+      // Logged because it is otherwise invisible: the request simply fails, and
+      // a failure attributed to the atServer rather than to the connection
+      // being closed underneath it sends the reader to the wrong end.
+      logger.info('Connection closed with a request in flight - failing it now '
+          'rather than waiting out its response budget');
+      waiter.complete();
+    }
+  }
+
   /// Reads the response sent by remote socket from the queue.
   ///
   /// Two independent budgets bound the wait, and they measure different things:
@@ -314,6 +353,15 @@ class OutboundMessageListener {
         //ignore any other response
         _buffer.clear();
         throw AtLookUpException('AT0014', 'Unexpected response found');
+      }
+
+      // Checked after the queue and before the deadlines: a response that
+      // arrived before the connection died is still owed to the caller, and a
+      // connection that has gone will never produce another one.
+      if (_connectionGone) {
+        _buffer.clear();
+        throw ConnectionInvalidException(
+            'The connection went away before a response arrived');
       }
 
       // if currentTime - startTime  is greater than maxWait throw AtTimeoutException
@@ -367,6 +415,11 @@ class OutboundMessageListener {
     if (delayBeforeClose != null) {
       await Future.delayed(delayBeforeClose!);
     }
+    // Before the close, so a reader woken by it finds the flag already set.
+    // This covers the far end going away - `onSocketDone` and `onSocketError`
+    // both arrive here. A close started anywhere else reaches
+    // [abortPendingRequests] through `AtLookupImpl`.
+    abortPendingRequests();
     await _connection.close();
   }
 }

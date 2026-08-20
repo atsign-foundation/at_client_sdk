@@ -319,4 +319,87 @@ void main() {
       expect(rig.connection.getMetaData()!.isClosed, isTrue);
     });
   });
+
+  group('a request in flight when the connection goes away', () {
+    /// A response can only arrive on the socket the listener is reading, so a
+    /// connection that is gone can never produce one. Until `read` gives up it
+    /// holds `AtLookupImpl.requestResponseMutex`, so every later request on the
+    /// same instance queues behind a dead one for the whole transient budget.
+    ///
+    /// Each arm measures the WAIT, not the throw: the throw happens either way,
+    /// and only its timing distinguishes "noticed the connection died" from
+    /// "sat out the budget".
+    Future<int> millisUntilReadFails(
+      FakeAtServerRig rig,
+      Future<void> Function() killIt,
+    ) async {
+      final sw = Stopwatch()..start();
+      Object? thrown;
+      final done = rig.listener.read(transientWaitTimeMillis: 3000).then<void>(
+        (_) {},
+        onError: (Object e) {
+          thrown = e;
+        },
+      );
+      await rig.socket.settle();
+
+      await killIt();
+      await done;
+      sw.stop();
+
+      expect(thrown, isNotNull,
+          reason: 'a read with no response and a dead connection must fail, '
+              'not return');
+      return sw.elapsedMilliseconds;
+    }
+
+    test('a locally closed connection fails the pending read at once',
+        () async {
+      final rig = FakeAtServerRig();
+
+      final waited = await millisUntilReadFails(rig, rig.connection.close);
+
+      expect(waited, lessThan(1000),
+          reason: 'closing the connection from this side - what '
+              'AtClientImpl.stop() does on every atSign switch - must fail the '
+              'request in flight immediately. Waiting out the transient budget '
+              'holds the request mutex, and the next request on this '
+              'AtLookupImpl queues behind a response that can never come');
+    });
+
+    test('a far end that hangs up fails the pending read at once', () async {
+      final rig = FakeAtServerRig();
+
+      final waited = await millisUntilReadFails(rig, rig.socket.serverCloses);
+
+      expect(waited, lessThan(1000),
+          reason: 'onDone already closes the connection; the read waiting on '
+              'that same socket must not then wait out its budget');
+    });
+
+    test('a far end that faults fails the pending read at once', () async {
+      final rig = FakeAtServerRig();
+
+      final waited = await millisUntilReadFails(
+          rig, () => rig.socket.serverErrors(const SocketException('reset')));
+
+      expect(waited, lessThan(1000),
+          reason: 'onError already closes the connection; the read waiting on '
+              'that same socket must not then wait out its budget');
+    });
+
+    test('a response already queued when the connection dies is still returned',
+        () async {
+      final rig = FakeAtServerRig();
+
+      await rig.socket.serverSends('data:phone@alice\n@alice@');
+      await rig.connection.close();
+
+      expect(await rig.listener.read(transientWaitTimeMillis: 3000),
+          'data:phone@alice',
+          reason: 'the bytes arrived before the connection went away, so the '
+              'caller is owed the response - aborting on a closed connection '
+              'must not discard one already parsed');
+    });
+  });
 }

@@ -1,5 +1,17 @@
 ## 3.7.0
 
+- fix: a request in flight when its connection closes now fails immediately
+  instead of waiting out its response budget. `AtLookupImpl` holds
+  `requestResponseMutex` across that wait, so a connection that had already gone
+  stalled the **next** request on the same instance for the whole transient
+  budget - 30 seconds by default. Stopping an atSign's client while its startup
+  work was still in flight was enough to trigger it, and the request that
+  followed read as a hang rather than as a closed connection. Every close now
+  routes through one place that fails the pending read first, and the caller
+  gets a `ConnectionInvalidException` naming what happened rather than an
+  `AtTimeoutException` pointing at the atServer. A response already parsed and
+  queued before the connection went away is still returned.
+
 - feat: `AtLookupMuxable.notificationConnectionUp` — `true` when `monitor:` is
   accepted on a live connection, `false` when it is lost or stopped. The
   muxable owns reconnection, so it is the only thing that knows; at_client's
