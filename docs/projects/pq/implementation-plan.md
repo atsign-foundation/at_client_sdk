@@ -32,12 +32,13 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: carve into stacked PRs, merge to trunk | The published atServer image verifying ML-DSA PKAM. Touches step 32 only |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. **at_commons (PR #2168) and at_chops (PR #2169) are raised and green.** Next: at_lookup, at_server_status, at_auth, at_client (stacked), at_client_flutter, at_onboarding_cli | ⚠️ This cell read "the published atServer image verifying ML-DSA PKAM" until 2026-08-20, when that was settled: CI runs against `dev_env` and `functional_tests` is green. What blocks MERGING is now [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found)'s three red e2e rows |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
+| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **Three red rows on the spike, three different causes** — a notification that never arrives (reproduces LOCALLY, start here), UC-A4.2's failing positive control, and a 30-second silence in `enrollment_setup.dart`. Four mechanisms are already read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
@@ -1652,6 +1653,97 @@ for either to break: trunk's at_client compiles and tests green against this
 branch's at_chops, and every `AtKemAlgorithm` implementer sits inside at_chops.
 So the 6 workspace constraints do **not** have to widen together, and at_lookup
 does **not** need 3.6.2 opened.
+
+### 14.41 What the first CI runs on the spike branch found
+
+CI had never run on `gkc-pq-d1-spike` and structurally could not: both
+workflows trigger only on `trunk`. Dispatched manually 2026-08-20 through
+`workflow_dispatch`, on both `at_client_sdk.yaml` and `at_libraries.yaml`.
+Everything below is from those runs plus the re-runs after each fix.
+
+**Three CI-only defects were found and fixed**, none of them in library code:
+
+| Fixed | What it was | How it is known to be fixed |
+|-------|-------------|------------------------------|
+| The VE image | Three jobs took the compose default `vip`; the post-quantum tests need a trunk-tracking atServer | `functional_tests` green on both channels against `dev_env` |
+| The format gate | 95 files did not satisfy `dart format . -o none --set-exit-if-changed` in at_client and at_client_flutter | `unit_at_client` and `unit_at_client_flutter` went red to green on both channels |
+| The e2e readiness step | `supervisorctl status` exits non-zero whenever ANY program is not RUNNING, and `pkamLoad` is deliberately `STOPPED`. As the last command of the step it failed a container that was in fact healthy | `legacy_server_tests` green for the first time; `pqe2e_tests` reaches its tests and runs 16 of 17 |
+
+⚠️ **The same readiness bug is still in `tests/at_end2end_test/runLocal.sh`**,
+where the loop cannot succeed either — so every local e2e run silently waits
+the full 60 seconds before doing anything. Harmless, and worth removing.
+
+**Three failures remain, and they are three different problems.** None is the
+image, and none is a flake: gkc ruled out infrastructure on 2026-08-20.
+
+1. **`notify_test.dart` — a notification that never arrives.** `end2end_tests`
+   36 of 37. ⭐ **This one reproduces locally**, which takes CI, the @ce2e
+   atSigns and network latency out of the picture entirely:
+
+   ```bash
+   cd tests/at_end2end_test && ./runLocal.sh 26000 test/notify_test.dart
+   ```
+
+   The local log shows the monitor started and torn down 62 ms later, with
+   nothing listening for the following 30 seconds:
+
+   ```
+   12:17:55.024  @alice startListening(): starting notification listener
+   12:17:55.045  SENDING: monitor:selfNotifications
+   12:17:55.107  @alice stopListening(): stopping notification listener
+   12:18:25.16   test times out
+   ```
+
+   The other atSign's monitor never starts at all. **`notify_test.dart` itself
+   is unchanged on this branch** — `git diff origin/trunk...HEAD` over it is
+   empty — while `lib/src/test_initializers.dart` and
+   `lib/src/sync_initializer.dart` both changed, and `concurrent_clients.dart`
+   is new. An unchanged test broken by changed shared setup is where to start.
+
+2. **`nskey_recipient_not_ready_test.dart` UC-A4.2 fails on its own positive
+   control.** `pqe2e_tests` 16 of 17. The reason string is
+   `control: readiness must be able to say yes, or its "no" carries no
+   information` — so the arm that makes the refusal meaningful is the one that
+   is red, and the test is correctly refusing to certify its own "no".
+
+3. **`enrollment_setup.dart` gets no bytes for 30 seconds.** `end2end_test_14`.
+   It is a standalone setup step (`dart run test/enrollment_setup.dart`), not a
+   test on `dart_test.yaml`'s allowlist, so its failure cascades: the 8 later
+   failures all read `provided keys file does not exist`, for the keyfile the
+   timed-out step never wrote. The throw is `OutboundMessageListener.read`'s
+   *transient* branch, meaning `_lastReceivedTime` never moved — no bytes at
+   all, not a partial response. ⚠️ It cannot be reproduced locally: it is
+   written for the @ce2e atSigns and dies in `setUpAll` at
+   `createAtChopsFromDemoKeys` for want of demo keys, so iterating on it costs
+   a CI round trip.
+
+⚠️ **A fourth row, seen once and recorded as a rate rather than a kind.**
+`functional_tests (beta)` failed `sync_multiple_client_test.dart` ("keys synced
+from multiple clients converge to the same value") at 176 of 177 on the
+2026-08-20 16b00787c run, having passed on the 8295cea5b run an hour earlier.
+`functional_tests (stable)` passed both. So: **1 red in 2 beta runs, 0 in 2
+stable runs** — not enough to call it anything. Do not describe it as a flake
+or as a regression without more runs.
+
+**Four mechanisms were read and disproven** for rows 1 and 3, recorded so
+nobody re-walks them: the monitor and verb sockets are *not* collapsed
+(`NotificationServiceImpl` builds a deliberate fresh `AtLookUp.withSecureSocket`
+and says why); `messageListener` cannot drift from `_connection` (both are
+rebuilt together inside `createConnection`); a non-notification lookup *does*
+notice a dead socket (`onSocketDone`/`onSocketError` call `closeConnection`
+unconditionally, and the `onDisconnect` seam is additive); and Monitor's
+`_notificationSubscription ??=` cannot hold a closed controller, because
+`_stop()` nulls both subscriptions.
+
+⚠️ **A measurement trap this cost an hour to.** Probing
+`atsigncompany/virtualenv:dev_env` from `docker images` reads whatever was
+cached locally, which can be months old — the copy on this machine was from
+3 July and lacked both `mldsa65` and #2755, which produced a confident and
+entirely wrong conclusion that the image ruling had been a mistake. **Pull
+before probing.** The freshly pulled image is the Aug 19 build and carries
+both. The contradiction that caught it was
+`self_enrollment_retrofit_live_test.dart` passing "ML-DSA PKAM succeeds" on an
+image just measured as lacking ML-DSA.
 
 ## PARKED
 
