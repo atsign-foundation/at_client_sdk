@@ -38,8 +38,8 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
-| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32387955272, 11 of 11, 2026-08-20). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
-| [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | Nothing. Reproduces locally in ~3 minutes: `cd tests/at_end2end_test && ./runLocal.sh 26000` then drive `test/enrollment_setup.dart` |
+| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
+| [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
@@ -782,6 +782,15 @@ One full-pack run on 2026-08-17 came back **166/167**: the test timed out after
 that one failed** — the others were 167/167 and 168/168 ×3 — and the file passes
 alone.
 
+⚠️ **Very probably the same phenomenon as
+[14.43](#1443-the-functional-suites-convergence-race), and the two rows were
+written months apart without noticing each other** (linked 2026-08-20). Both are
+intermittents in the FUNCTIONAL pack; both are waits on convergence — this one
+times out at `await firstNotification`; both pass when the file runs alone. If
+14.43 is worked, work this row with it: five files, one family, is a different
+problem from five unrelated flakes. **Not asserted as identical** — nobody has
+shown one cause covers both.
+
 ⛔ **Not a flake, and not fixed.** Nothing explains it. Five observations bound a
 rate, not a kind, and "it was green before" is weak in the other direction too:
 the 167/167 baseline it is measured against was itself a single run. Record any
@@ -883,7 +892,9 @@ memory file until 2026-08-20, where a fresh clone could not see it:
 
 ```bash
 # one worktree per package, off origin/trunk so the PR carries that package alone
-git worktree add /tmp/carve-<pkg> -b gkc-pq-d1-<pkg> origin/trunk
+# ⚠️ HYPHENS in the branch name where the package has underscores:
+#    at_lookup -> gkc-pq-d1-at-lookup  (matching gkc-pq-d1-at-commons/-at-chops)
+git worktree add /tmp/carve-<pkg> -b gkc-pq-d1-<pkg-hyphenated> origin/trunk
 git -C /tmp/carve-<pkg> checkout gkc-pq-d1-spike -- packages/<pkg>
 # the gate: the carved tree must be byte-identical to the spike over that package
 git -C /tmp/carve-<pkg> diff gkc-pq-d1-spike --stat -- packages/<pkg>   # must be EMPTY
@@ -1702,9 +1713,12 @@ Everything below is from those runs plus the re-runs after each fix.
 where the loop cannot succeed either — so every local e2e run silently waits
 the full 60 seconds before doing anything. Harmless, and worth removing.
 
-**All four are fixed, and CI is fully green** — run 32387955272, 11 of 11
-jobs, 2026-08-20. Only ONE of the four was a product defect; two were harness
-assumptions that had been holding by luck, and one was a CI step running the
+**All four are fixed.** ⚠️ **"CI is green" is a claim about ONE workflow at ONE
+commit, so say which:** `at_client_sdk.yaml` run **32392240064**, 11 of 11, on
+`f24ee3ab6` — the head with `origin/trunk` merged in, covering at_commons #2168.
+`at_libraries.yaml` last went green on a **different** commit, and docs commits
+have landed since, so **no run covers the current head**. Re-derive before
+repeating the claim; the command is in the re-derivation block.
 wrong image. A convergence race remains, recorded below as a rate and owed in
 [14.43](#1443-the-functional-suites-convergence-race). This section said "three" until
 2026-08-20, when a fourth was found in `at_libraries`' matrix that had never
@@ -2039,25 +2053,41 @@ same four atSigns** (config23 names the same set config14 does, reordered) and
 **the same suite** in about three minutes. So the backlog cannot be the whole
 answer; the enrollment step is what differs.
 
-Cheap to attack, and it does **not** need CI: the script runs locally against
-the virtualenv in about three minutes. Bring the environment up with
-`cd tests/at_end2end_test && ./runLocal.sh 26000 <any test>` and drive
-`dart test --concurrency=1 -r expanded test/enrollment_setup.dart`; against
-demo atSigns all four enrollments complete in roughly **one second**, which is
-itself the measurement to explain — the same code, four orders of magnitude
-apart, so whatever costs the four minutes is a property of the @ce2e side.
+⛔ **This does NOT reproduce locally, and an earlier draft of this section said
+it did.** `runLocal.sh` regenerates `config/config.yaml` from `at_demo_data`
+(`runLocal.sh:28`), so a local run drives DEMO atSigns — and against those the
+same four enrollments finish in about **one second**. Running it locally
+reproduces the symptom's *absence*.
+
+That one-second figure is still the most useful measurement here: the same code
+is four orders of magnitude apart on demo atSigns versus @ce2e, so whatever
+costs the four minutes is a property of the **@ce2e side**, not of the script.
+
+Reaching the symptom needs `config/config14.yaml` (which names @ce2e1–4 against
+`root.atsign.wtf`) and the @ce2e credentials that CI injects from a secret —
+**and nothing here records how to obtain those on a developer machine.** So the
+realistic first move is a CI round trip with instrumentation added, via
+`.github/workflows/at_client_sdk.yaml`'s `end2end_test_14` job. Budget for that
+rather than expecting a local loop.
 
 ### 14.43 The functional suite's convergence race
 
-**CI: beta 3 failures in 10 runs, stable 1 in 10** — measured 2026-08-20
-across every run of this workflow on this branch, not transcribed. Locally,
-**1 red in 5** packs the same day. A different test each time, and **all four observed failures are update/notify/sync convergence**:
-`atclient_sync_callback_test`, `atclient_sync_conflict_test`,
-`sync_multiple_client_test`, and `pq_rollout_matrix_test`'s UC-G1.15. ⚠️ Not a
-Dart-channel defect — beta is redder (3 in 7 against 1 in 7) because its timing
-widens the window, and one commit ran UC-G1.15 green on stable and red on beta
-in the same run.
+**CI: beta 3 failures in 10 runs, stable 1 in 10** — measured 2026-08-20 by the
+command in the re-derivation block at the end of this file, not transcribed.
+Locally, **1 red in 5** packs the same day. ⛔ **Those two figures are the ONLY
+rates to quote for this row. Every other one written on this page came from a
+partial view and is superseded** — the page has carried six mutually
+incompatible versions, which is why the command exists.
 
+The observed failures — four in the functional pack, plus
+[14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s,
+very probably the same thing — are all waits on update/notify/sync convergence:
+`atclient_sync_callback_test` (local pack 2026-08-20: "latest commit entry is
+updated when same key is updated and deleted", expected `-` got `*`),
+`atclient_sync_conflict_test`, `sync_multiple_client_test`, and
+`pq_rollout_matrix_test`'s UC-G1.15. ⚠️ Not a Dart-channel defect — beta is
+redder because its timing widens the window, and one commit ran UC-G1.15 green
+on stable and red on beta
 **Reproduces locally**: `cd tests/at_functional_test && ./runLocal.sh`.
 
 ⛔ **Disproven hypotheses are listed and must not be re-walked** — they are listed in
@@ -2066,6 +2096,17 @@ most attractive are that the progress events are dropped by attaching a
 listener late (they are not: the controller is single-subscription and buffers)
 and that `syncData()` completing on a failed sync is what fires (it is not:
 `SyncStatus.failure` appears zero times in the failing log).
+
+⚠️ **Start by reading [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart),
+which is very probably the same thing.** It records an unexplained intermittent
+in the same pack, timing out at `await firstNotification`, passing when its file
+runs alone — recorded 2026-08-17 and recurring 2026-08-19, well before the four
+below. That makes **five** files in one family, not four. ⚠️ Do NOT pool the
+rates: 14.34's observations (1 of 5 runs, then 1 of 2) were taken on tree states
+this branch has since moved past — 14.34 says so itself — and on a different
+file. Two figures from different instruments are not a comparison, however
+carefully each was taken. **Not asserted as identical**; nobody has shown one
+cause covers both.
 
 ⭐ **The pattern to look for first: a test that passes only because of what
 ran before it.** Three independent instances on this branch now, two of them
