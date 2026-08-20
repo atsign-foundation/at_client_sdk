@@ -23,6 +23,19 @@
 /// To re-verify: fetch the draft above and diff `seed`/`eseed`/`ss`; the
 /// `x_wing_algo_test.dart` vector tests re-establish the `ct` binding on every
 /// run.
+///
+/// ## These are no longer the primary anchor
+///
+/// Two reasons to reach for `hpke_wg_kem_vectors.dart` first. The draft is an
+/// Independent Submission CFRG never adopted and it **expires on 2026-09-03**,
+/// so citing it alone dates badly. And its Appendix C is titled "Test vectors
+/// # TODO: replace with test vectors that re-use ML-KEM, X25519 values" — its
+/// own authors mark it provisional.
+///
+/// The working group's vectors cover all three operations — key generation,
+/// derandomised encapsulation and decapsulation — so they supersede this one
+/// rather than complementing it. These stay as a second independent source for
+/// the same construction, which is worth having and costs nothing to keep.
 library;
 
 import 'dart:typed_data';

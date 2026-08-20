@@ -11,7 +11,7 @@ import 'package:at_chops/src/algorithm/default_signing_algo.dart';
 import 'package:at_chops/src/algorithm/encryption/aes.dart';
 import 'package:at_chops/src/algorithm/encryption/rsa.dart';
 import 'package:at_chops/src/algorithm/signing/ecc.dart';
-import 'package:at_chops/src/algorithm/signing/ml_dsa_65_pure_dart.dart';
+import 'package:at_chops/src/algorithm/pkam_mldsa65_signing_algo.dart';
 import 'package:at_chops/src/algorithm/pkam_signing_algo.dart';
 import 'package:at_chops/src/at_chops_base.dart';
 import 'package:at_chops/src/key/keys.dart';
@@ -267,6 +267,9 @@ class AtChopsImpl extends AtChops {
       if (atChopsKeys.atPkamKeyPair == null) {
         throw AtSigningException('PKAM Keypair required for signing');
       }
+      if (signingInput.signingAlgoType == SigningAlgoType.mldsa65) {
+        return PkamMlDsa65SigningAlgo(atChopsKeys.atPkamKeyPair);
+      }
       return PkamSigningAlgo(
           atChopsKeys.atPkamKeyPair!, signingInput.hashingAlgoType);
     } else if (signingInput.signingMode != null &&
@@ -290,7 +293,9 @@ class AtChopsImpl extends AtChops {
     if (verificationInput.signingAlgoType == SigningAlgoType.ecc_secp256r1) {
       return EccSigningAlgo();
     } else if (verificationInput.signingAlgoType == SigningAlgoType.mldsa65) {
-      return MlDsa65PureDartAlgo();
+      // The synchronous class, not MlDsa65PureDartAlgo: its Future-returning
+      // verify would be stored unawaited in the bool-typed result.
+      return PkamMlDsa65SigningAlgo(atChopsKeys.atPkamKeyPair);
     } else if (verificationInput.signingMode != null &&
         verificationInput.signingMode == AtSigningMode.pkam) {
       if (atChopsKeys.atPkamKeyPair != null) {

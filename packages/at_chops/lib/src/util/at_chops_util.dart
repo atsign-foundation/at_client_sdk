@@ -98,7 +98,7 @@ class AtChopsUtil {
   }
 
   /// Generates an X-Wing hybrid post-quantum/traditional KEM key pair
-  /// (draft-connolly-cfrg-xwing-kem; X25519 + ML-KEM-768).
+  /// (IANA HPKE KEM id `0x647A`; X25519 + ML-KEM-768).
   ///
   /// Raw 1216-byte public key and 32-byte seed secret key are
   /// base64-encoded. Pure Dart, fully serializable.
