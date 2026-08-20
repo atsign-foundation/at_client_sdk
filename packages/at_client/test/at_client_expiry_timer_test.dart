@@ -63,8 +63,7 @@ void main() {
       expect(delay, equals(Duration(seconds: 30)));
     });
 
-    test('an expiry exactly now takes the future branch, not the past one',
-        () {
+    test('an expiry exactly now takes the future branch, not the past one', () {
       // `Duration.zero` is not negative, so it is treated as "due now" and
       // fires immediately — and a fruitless sweep cannot back it off. Pinned
       // because `isNegative` rather than `<= 0` is what decides the branch,

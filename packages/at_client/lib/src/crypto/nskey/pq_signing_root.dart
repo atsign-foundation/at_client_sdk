@@ -481,25 +481,24 @@ class PqSigningRoot {
       return null;
     }
     try {
-      await atClient.getRemoteSecondary()!.executeVerb(
-          UpdateVerbBuilder()
-            ..atKey = keyFor(atSign)
-            // The `_apsk` advertisement composer, not a shape of its own: the
-            // root is an ordinary signing key, so it is advertised in the
-            // vocabulary every other signing key uses — `{kid, use, alg, pub}`
-            // with `status` appearing only once a key is retired. `kid` is
-            // derived from the key material rather than supplied, so a writer
-            // cannot address one key and name another.
-            //
-            // `successor` is gone. It was reserved for a rotation pointer and
-            // could never have held one: it was stamped null at mint inside a
-            // record nothing rewrote, so it could only be written at a moment
-            // when there was nothing to point at. A rotation adds an entry
-            // here instead, exactly as `_apsk` already does.
-            ..value = jsonEncode(apskAdvertisement(keys: [
-              ApskSigningKey.forPublicKey(
-                  alg: rootKeyAlgo, pub: base64Encode(publicKey))
-            ])));
+      await atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+        ..atKey = keyFor(atSign)
+        // The `_apsk` advertisement composer, not a shape of its own: the
+        // root is an ordinary signing key, so it is advertised in the
+        // vocabulary every other signing key uses — `{kid, use, alg, pub}`
+        // with `status` appearing only once a key is retired. `kid` is
+        // derived from the key material rather than supplied, so a writer
+        // cannot address one key and name another.
+        //
+        // `successor` is gone. It was reserved for a rotation pointer and
+        // could never have held one: it was stamped null at mint inside a
+        // record nothing rewrote, so it could only be written at a moment
+        // when there was nothing to point at. A rotation adds an entry
+        // here instead, exactly as `_apsk` already does.
+        ..value = jsonEncode(apskAdvertisement(keys: [
+          ApskSigningKey.forPublicKey(
+              alg: rootKeyAlgo, pub: base64Encode(publicKey))
+        ])));
     } catch (e) {
       // A throw here says the call failed, NOT what the atServer did — and the
       // pair of cases this had to tell apart has CHANGED. "The atServer

@@ -49,8 +49,8 @@ void main() {
     when(() => atClient.enrollmentId).thenReturn('enroll-1');
     when(() => atClient.persistenceBundle).thenReturn(bundle);
 
-    local =
-        LocalSecondary(atClient, keyStore: bundle.keyValueStore, onEvent: (_) {});
+    local = LocalSecondary(atClient,
+        keyStore: bundle.keyValueStore, onEvent: (_) {});
   });
 
   tearDown(() async {
