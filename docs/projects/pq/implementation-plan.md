@@ -2067,6 +2067,30 @@ listener late (they are not: the controller is single-subscription and buffers)
 and that `syncData()` completing on a failed sync is what fires (it is not:
 `SyncStatus.failure` appears zero times in the failing log).
 
+⭐ **The pattern to look for first: a test that passes only because of what
+ran before it.** Three independent instances on this branch now, two of them
+found by different people:
+
+1. **UC-A4.2's control** asked whether @bob was ready for the shared namespace
+   while nothing in its own file made him ready — green only when one of three
+   other files had minted first. Fixed `454bedbbd`.
+2. **`encryption_test.dart`'s monitor replay** — fixed on trunk by
+   `6b91035b4` and arriving here with the 2026-08-20 merge. Its commit message
+   is the clearest statement of the shape: "*without it this test only passes
+   when some other test file happened to start atSign_2's monitor first, which
+   is what made it flake*".
+3. The four convergence failures above — **unproven**, but this is where to
+   look before anything subtler.
+
+⚠️ Instance 2 rests on **deliberate** product behaviour, not a defect, and the
+distinction matters: `NotificationServiceImpl.getLastNotificationTime()`
+returns null on its FIRST call for a keystore and seeds the record — confirmed
+at `notification_service_impl.dart:439-444`, "*return null for THIS call to
+keep first-run semantics ('don't replay history I never saw')*" — and a monitor
+started with null asks the atServer for no replay. So a first-run subscriber
+correctly misses what preceded it, and a test wanting replay must burn that
+call itself. Do not "fix" the product here.
+
 **A separate defect found in the same place, worth fixing on its own merits.**
 `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on
 `SyncStatus.failure`, so a **failed** sync returns to its caller as success. It
