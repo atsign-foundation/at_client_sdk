@@ -5,9 +5,12 @@
 /// approvals timed out at exactly 30 seconds, and the failure then surfaced
 /// three minutes later as eight missing-keyfile errors in a different step.
 ///
-/// This is the measurement that separates "slow" from "stuck": with room to
-/// run, an approval either completes or it does not.
-@Timeout(Duration(minutes: 5))
+/// Measured 2026-08-20 with a five-minute budget: **all four approvals passed,
+/// taking 4:59**. So this was slow rather than stuck — but 4:59 against 5:00 is
+/// not a margin, it is a coin toss, and the backlog these atSigns carry only
+/// grows. Fifteen minutes is chosen to be uninteresting rather than tight; a
+/// run that genuinely hangs still fails, just later.
+@Timeout(Duration(minutes: 15))
 library;
 
 import 'dart:convert';
