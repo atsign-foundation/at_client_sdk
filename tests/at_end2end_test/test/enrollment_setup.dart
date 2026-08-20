@@ -4,6 +4,9 @@ import 'dart:io';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+// Not in the barrel: `SyncService` exposes no way to stop syncing, and this
+// script needs one. See [_stopSync].
+import 'package:at_client/src/service/sync_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
@@ -21,15 +24,39 @@ const String selfEncryptionKey = 'selfEncryptionKey';
 const String apkamSymmetricKey = 'apkamSymmetricKey';
 const String enrollmentId = 'enrollmentId';
 
+/// Stops the current client's sync, which this script never needs.
+///
+/// Enrollments are submitted and approved over the REMOTE secondary; nothing
+/// here reads local storage. So syncing is pure cost — and on the long-lived
+/// @ce2e atSigns the cost is prohibitive rather than merely wasteful. Their
+/// commit logs run to several hundred thousand entries, and a CI runner starts
+/// with empty local storage, so every client replays from commit id -1.
+///
+/// Measured 2026-08-20 on `end2end_test_14`: commit ids of 64800, 384337,
+/// 470883 and 836853 all syncing from -1, 3928 records pulled inside a single
+/// 30-second test budget and nowhere near finished. Sync and the enrollment
+/// verbs share one connection, so the approvals never got a slot and all four
+/// timed out — surfacing three minutes later as eight "provided keys file does
+/// not exist" failures in a different step.
+///
+/// `SyncService` declares no way to stop, which is why this reaches for the
+/// implementation.
+Future<void> _stopSync() async {
+  final syncService = AtClientManager.getInstance().atClient.syncService;
+  if (syncService is SyncServiceImpl) {
+    await syncService.stop();
+  }
+}
+
 void main() {
   List atSignList = ConfigUtil.getYaml()['enrollment']['atsignList'];
   String namespace = TestConstants.namespace;
 
-  // Complete the initial sync for submitting the enrollment request to prevent time-out issues.
   setUpAll(() async {
     for (var atSign in atSignList) {
       await TestSuiteInitializer.getInstance()
           .testInitializer(atSign, namespace, 'pkam', enableInitialSync: false);
+      await _stopSync();
     }
   });
 
@@ -40,6 +67,8 @@ void main() {
       await TestSuiteInitializer.getInstance().testInitializer(
           currentAtSign, namespace, 'pkam',
           enableInitialSync: false);
+      // Switching back to an atSign restarts its sync, so stop it again.
+      await _stopSync();
       // Set SPP into the Remote Secondary
       var atClient = AtClientManager.getInstance().atClient;
       var otp = (await atClient.getOTP()).response;

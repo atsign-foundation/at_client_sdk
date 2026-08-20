@@ -284,9 +284,14 @@ jobs:
       - name: Config for @cicd1/4
         run: mv tests/at_end2end_test/config/config14.yaml tests/at_end2end_test/config/config.yaml
 
+      # Through the test runner, not `dart run`: a test file executed with
+      # `dart run` reports exit 0 even when its tests fail, so this step went
+      # green on 2026-08-20 with all four enrollments timed out, and the
+      # failure surfaced three minutes later as eight missing-keyfile errors in
+      # the step below. The exit code is the whole point of a setup gate.
       - name: Submit and approve enrollment request
         working-directory: tests/at_end2end_test
-        run: dart run test/enrollment_setup.dart
+        run: dart test --concurrency=1 -r expanded test/enrollment_setup.dart
 
       # Run end-to-end test
       - name: End to end test
@@ -302,7 +307,7 @@ jobs:
         # Therefore, we set this to "!cancelled()" to ensure this step runs regardless of the outcome of the previous step.
         if: ${{ !cancelled() }}
         working-directory: tests/at_end2end_test
-        run: dart run test/enrollment_teardown.dart
+        run: dart test --concurrency=1 -r expanded test/enrollment_teardown.dart
 
   # The post-quantum half of the end-to-end suite, against a virtualenv
   # container this job starts and throws away.
