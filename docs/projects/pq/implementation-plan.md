@@ -1673,10 +1673,11 @@ Everything below is from those runs plus the re-runs after each fix.
 where the loop cannot succeed either — so every local e2e run silently waits
 the full 60 seconds before doing anything. Harmless, and worth removing.
 
-**Four failures, of which three are fixed and one is open.** This section said
-"three" until 2026-08-20, when a fourth was found in `at_libraries`' matrix
-that had never been recorded here at all — and that fourth turned out to be
-the cheapest of the lot, a CI step running the wrong image.
+**Four failures, of which three are fixed and one is open**, plus two
+intermittents recorded below as rates. This section said "three" until
+2026-08-20, when a fourth was found in `at_libraries`' matrix that had never
+been recorded here at all — and that fourth turned out to be the cheapest of
+the lot, a CI step running the wrong image.
 
 ⚠️ **Only ONE of the four was a product defect.** Rows 2 and 4 were harness
 assumptions that had been holding by luck — an environment variable that
@@ -1827,7 +1828,36 @@ flake: gkc ruled out infrastructure on 2026-08-20.
    image per job. That measures what the *job* declares, not what *compose*
    receives — a validation of the wrong thing, and it read as thorough.
 
-⚠️ **A further row, seen once and recorded as a rate rather than a kind.**
+⚠️ **A fifth row, on the BETA Dart channel only, and it is a rate rather than
+a kind.** `functional_tests (beta)` has failed **2 of 4** runs on 2026-08-20,
+with a **different test each time** — `sync_multiple_client_test.dart` once and
+`pq_rollout_matrix_test.dart`'s UC-G1.15 once. `functional_tests (stable)` is
+0 of 4, and a local full pack on stable was 177/177. Two different tests
+failing only on beta points at the channel rather than at either test, and
+that is as far as the evidence goes.
+
+What the UC-G1.15 instance showed, recorded because it is the useful part:
+
+- The failing cell was `pqActive → pqReady`, on
+  `AtSigningVerificationException` — the receiver read `@alice`'s `_apsk`
+  holding **exactly one key**, `kid f10e7bd62684126f`, `alg mldsa65`, and could
+  not verify the envelope with it. So it is not a stale advertisement holding
+  the pre-PQ key; it is an advertisement holding a key that did not sign.
+- ⭐ **The same stage pair PASSES as its own test minutes earlier** (`✅
+  pqActive sender to pqReady receiver`, 14:24:16) and fails inside UC-G1.15's
+  nine-cell loop (14:25:53). Both go through the same `runCell`. **The variable
+  is back-to-back-ness**, not the pair — the standalone tests are separated by
+  framework overhead and the nine cells are not.
+- Every cell overwrites `@alice`'s single `_apsk` record, and sender and
+  receiver are separate processes. So a receiver can fetch an advertisement
+  that a neighbouring cell published, or fetch before its own sender's publish
+  has landed — the shape where a value and a pointer to it travel by different
+  transports and race.
+- ⚠️ The verifier's kid appears **once** in the whole 465k-line job log while
+  other kids appear 4–9 times. Suggestive, NOT decisive: kids are only logged
+  when a key package is, so that is a claim about the log.
+
+⚠️ **A sixth row, seen once and recorded as a rate rather than a kind.**
 `functional_tests (beta)` failed `sync_multiple_client_test.dart` ("keys synced
 from multiple clients converge to the same value") at 176 of 177 on the
 2026-08-20 16b00787c run, having passed on the 8295cea5b run an hour earlier.
