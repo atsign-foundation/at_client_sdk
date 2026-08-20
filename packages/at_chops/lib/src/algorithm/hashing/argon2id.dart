@@ -44,8 +44,16 @@ class Argon2idHashingAlgo implements AtHashingAlgorithm<String, String> {
         iterations: hashParams.iterations,
         hashLength: hashParams.hashLength);
 
+    // With no salt supplied, the password's own UTF-16 code units stand in for
+    // one. That makes derivation deterministic — the same passphrase always
+    // yields the same key — so it defeats the point of salting entirely, and
+    // the code units are UTF-16 where every other hashing arm here encodes
+    // UTF-8, which diverges for any non-ASCII passphrase. Both behaviours are
+    // preserved only because key files already in the field were written with
+    // them and would otherwise become undecryptable. New callers must pass
+    // [ArgonHashParams.salt].
     SecretKey secretKey = await argon2id.deriveKeyFromPassword(
-        password: password, nonce: password.codeUnits);
+        password: password, nonce: hashParams.salt ?? password.codeUnits);
 
     return Base64Encoder().convert(await secretKey.extractBytes());
   }

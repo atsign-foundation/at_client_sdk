@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:at_chops/at_chops.dart';
 import 'package:test/test.dart';
 
+import 'hpke_wg_kem_vectors.dart';
 import 'x_wing_test_vectors.dart';
 
 void main() {
@@ -43,6 +44,40 @@ void main() {
       final ss = await algo.decapsulate(seed, ct);
       expect(ss, expectedSs);
     });
+  });
+
+  group('IETF HPKE working group KEM 0x647A vectors', () {
+    // These are the vectors that make the conformance claim survive a reader
+    // who does not trust us: they are published by the HPKE working group for
+    // the registered code point, mirrored by the Go standard library, and
+    // neither we nor anyone at Atsign produced them. The draft-10 vectors
+    // above come from an appendix its own authors mark TODO, in a draft that
+    // lapses on 2026-09-03.
+    for (final (i, v) in hpkeWgKem0x647aVectors.indexed) {
+      test('vector $i (kdf ${v.kdfId}) — the seed derives the published pkRm',
+          () async {
+        final kp = await algo.generateKeyPair(v.skRm);
+        // Compared as hex so a mismatch prints a diff a human can read rather
+        // than 1216 unlabelled bytes.
+        expect(toHex(kp.publicKey), toHex(v.pkRm));
+      });
+
+      test(
+          'vector $i (kdf ${v.kdfId}) — derandomised encapsulation reproduces '
+          'the published enc and shared secret', () async {
+        final r = await algo.encapsulateDerand(v.pkRm, v.ikmE);
+        expect(toHex(r.ciphertext), toHex(v.enc));
+        expect(toHex(r.sharedSecret), toHex(v.sharedSecret));
+      });
+
+      test(
+          'vector $i (kdf ${v.kdfId}) — decapsulation yields the published '
+          'shared secret', () async {
+        expect(v.enc.length, XWingPureDartAlgo.ciphertextLength);
+        final ss = await algo.decapsulate(v.skRm, v.enc);
+        expect(toHex(ss), toHex(v.sharedSecret));
+      });
+    }
   });
 
   group('round trip and behavior', () {

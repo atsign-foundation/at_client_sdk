@@ -52,11 +52,7 @@ final class MlDsa65PureDartAlgo
   @override
   Future<Uint8List> signBytes(Uint8List message,
       {required Uint8List secretKey}) async {
-    MlDsa65Sizes.validateSecretKey(secretKey);
-    final Uint8List sig = MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
-    checkOutputLength(sig.length, MlDsa65Sizes.signatureBytes,
-        operation: 'ML-DSA-65 sign', label: 'signature');
-    return sig;
+    return signBytesSync(message, secretKey: secretKey);
   }
 
   /// Verify [signature] over [message] against [publicKey] (raw 1952 bytes).
@@ -66,6 +62,29 @@ final class MlDsa65PureDartAlgo
   @override
   Future<bool> verifyBytes(Uint8List message,
       {required Uint8List signature, required Uint8List publicKey}) async {
+    return verifyBytesSync(message, signature: signature, publicKey: publicKey);
+  }
+
+  /// Synchronous [signBytes]. The pure-Dart computation is synchronous —
+  /// this exposes it to callers that cannot await, such as the PKAM signing
+  /// dispatch and envelope signing.
+  ///
+  /// The length checks live here rather than in [signBytes] because the
+  /// synchronous callers reach this method directly; validating in the async
+  /// wrapper would leave exactly the callers that bypass it unguarded.
+  static Uint8List signBytesSync(Uint8List message,
+      {required Uint8List secretKey}) {
+    MlDsa65Sizes.validateSecretKey(secretKey);
+    final Uint8List sig =
+        MlDsa.sign(secretKey, message, DilithiumParams.mlDsa65);
+    checkOutputLength(sig.length, MlDsa65Sizes.signatureBytes,
+        operation: 'ML-DSA-65 sign', label: 'signature');
+    return sig;
+  }
+
+  /// Synchronous [verifyBytes]. Never throws, for the same reason.
+  static bool verifyBytesSync(Uint8List message,
+      {required Uint8List signature, required Uint8List publicKey}) {
     if (!MlDsa65Sizes.hasValidVerifyLengths(publicKey, signature)) {
       return false;
     }

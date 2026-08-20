@@ -6,7 +6,7 @@ import 'package:at_chops/src/key/keys.dart';
 import '../../algorithm/encryption/x_wing_pure_dart.dart';
 
 /// X-Wing hybrid post-quantum/traditional KEM key pair
-/// (draft-connolly-cfrg-xwing-kem).
+/// (IANA HPKE KEM id `0x647A`).
 ///
 /// Public keys are 1216 raw bytes (`pk_ML-KEM-768 || pk_X25519`); the
 /// private key is the 32-byte seed from which everything else is re-derived.
@@ -16,7 +16,7 @@ class XWingKeyPair extends AsymmetricKeyPair with RawKeyPairBytes {
   XWingKeyPair.create(super.publicKey, super.privateKey) : super.create();
 
   /// Generates an X-Wing hybrid post-quantum/traditional KEM key pair
-  /// (draft-connolly-cfrg-xwing-kem; X25519 + ML-KEM-768).
+  /// (IANA HPKE KEM id `0x647A`; X25519 + ML-KEM-768).
   ///
   /// Raw 1216-byte public key and 32-byte seed secret key are
   /// base64-encoded. Pure Dart, fully serializable.
