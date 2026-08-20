@@ -9,6 +9,7 @@ import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:at_utils/at_logger.dart';
 
 import 'at_credentials.dart';
+import 'at_test_credentials.dart';
 
 class TestSuiteInitializer {
   static final TestSuiteInitializer _singleton =
@@ -18,6 +19,7 @@ class TestSuiteInitializer {
 
   TestSuiteInitializer._internal() {
     AtSignLogger.root_level = 'info';
+    _seedCredentialsForLocalRun();
     AtSignLogger.defaultLoggingHandler = AtSignLogger.consoleLoggingHandler;
   }
 
@@ -172,6 +174,31 @@ class TestSuiteInitializer {
 
     AtChops atChops = AtChopsImpl(atChopsKeys);
     return atChops;
+  }
+
+  /// Fills [AtCredentials.credentialsMap] from [AtTestCredentials] when CI has
+  /// not filled it.
+  ///
+  /// `at_credentials.dart` is a four-line stub in every checkout — CI
+  /// overwrites it from a secret — so on a developer machine that map is empty
+  /// and `createAtChopsFromDemoKeys` throws a null check on its first line.
+  /// That blocked `enrollment_setup.dart` from running locally at all, even
+  /// though it takes its atSigns from `config.yaml` and the generated local
+  /// config names the demo atSigns this map covers.
+  ///
+  /// Guarded on empty, so CI is untouched: there the map already holds the
+  /// atSigns the secret supplied, and this does nothing.
+  ///
+  /// [AtTestCredentials] is the source rather than `at_demo_data` directly:
+  /// it already curates exactly this map for exactly these atSigns, and its
+  /// own comment offers it for local testing. Re-deriving it here would make
+  /// two places answer the same question.
+  static void _seedCredentialsForLocalRun() {
+    if (AtCredentials.credentialsMap.isNotEmpty) return;
+    AtCredentials.credentialsMap.addAll(AtTestCredentials.credentialsMap);
+    logger.info('AtCredentials was empty, so this is a local run: seeded '
+        '${AtCredentials.credentialsMap.length} demo atSign(s) from '
+        'AtTestCredentials');
   }
 
   AtChops createAtChopsFromDemoKeys(String atSign) {
