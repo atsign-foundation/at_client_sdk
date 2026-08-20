@@ -89,11 +89,27 @@ cd ..
 # at authentication, a long way from this line.
 CAP_ATSIGN='eve🛠'
 CAP_PORT=25010
+# `supervisorctl status` exits non-zero whenever ANY program is not RUNNING,
+# and pkamLoad is deliberately STOPPED until it is started below - so the exit
+# code says nothing about readiness here, and waiting on it burns the full 60
+# seconds every run before giving up and continuing anyway. Wait for the
+# atDirectory instead, which is the thing everything after this needs, and say
+# so out loud if it never arrives.
 echo "*** Waiting for supervisor"
+ready=
 for i in $(seq 1 30); do
-  docker exec e2e_virtualenv supervisorctl status >/dev/null 2>&1 && break
+  if docker exec e2e_virtualenv supervisorctl status 2>/dev/null \
+       | grep -qE '_root +RUNNING'; then
+    ready=1
+    break
+  fi
   sleep 2
 done
+if [[ -z "$ready" ]]; then
+  docker exec e2e_virtualenv supervisorctl status || true
+  echo "*** atDirectory did not reach RUNNING within 60s - aborting"
+  exit 1
+fi
 
 echo "*** Setting apkamSelfEnrollmentGraceHours=0 for @${CAP_ATSIGN}"
 docker exec e2e_virtualenv sh -c "
