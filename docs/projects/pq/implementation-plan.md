@@ -41,6 +41,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
+| [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. **Owed: why a client cannot delete a `_nskeylock` record in its own keystore** — the fix stops the spin and not the refusal, so the records still accumulate | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is |
 | [14.44](#1444-two-residuals-from-the-at_chops-pr-review) | Two residuals from the at_chops PR review, both answered on #2169 and neither fixable there: the passphrase envelope persists the salt and three costs but **not `hashLength`**, and `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths | Nothing. The first belongs in the **at_auth carve** (train position 5), where that file is already being edited; the second is pre-existing on trunk in both X-Wing backends and unreachable today, so it goes whenever at_chops is next open |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
@@ -2138,6 +2139,81 @@ call itself. Do not "fix" the product here.
 `SyncStatus.failure`, so a **failed** sync returns to its caller as success. It
 did not cause this race, but a harness that reports a failed sync as done will
 eventually hide something that matters.
+
+### 14.45 An expired key the client cannot delete pins it in a hot loop
+
+⛔ **Pre-existing on `origin/trunk`, not introduced by this branch** —
+`_armExpiryTimer` has 5 hits and `deleteExpiredKeys` 2 there. Found 2026-08-20
+while running the pack for [14.43](#1443-the-functional-suites-convergence-race).
+
+**The loop, read from source.** `AtClientImpl._armExpiryTimer`
+(`at_client_impl.dart:769`) arms `Timer(Duration.zero, _onExpiryFire)` whenever
+the earliest expiry is already in the past — its own dartdoc says so.
+`_onExpiryFire` runs `LocalSecondary.deleteExpiredKeys`, whose per-key `catch`
+(`local_secondary.dart:585`) logs the failure at `warning` and moves on **without
+removing the key**. `_onExpiryFire`'s `finally` then re-arms. The earliest expiry
+is still in the past, so the timer is `Duration.zero` again. Nothing removes the
+key, nothing backs off, nothing gives up: the client spins for the remainder of
+its own lifetime, one `warning` line per turn of the event loop.
+
+**Measured, one local pack run — THREE keys, three loops, all `_nskeylock`:**
+
+| Key | Iterations |
+|---------------------------------------------------|-----------:|
+| `_nskeylock.cooldown1787252300302993.buzz@bob🛠`   | 186,994 |
+| `_nskeylock.ns1787252329248768.wavi@alice🛠`       | 19,965 |
+| `_nskeylock.rot1787252358178828.wavi@alice🛠`      | 18,762 |
+
+225,721 in total, **47.4% of the run's 394,523 log lines**. Each is refused with
+`Cannot perform delete … due to insufficient privilege`. Intervals tighten from
+1259 µs to about 120 µs. The first began during `nskey_rotation_live_test.dart`
+and ended only when that test file ended and the next one loaded — *not* by
+resolving.
+
+**This is designed-in, not incidental.** `MintLock` releases by ttl and by
+nothing else — `mint_lock.dart:80`, "**The winner does not release the lock; the
+ttl does**" — so every mint and every rotation creates a record whose only exit
+is expiry, and the client cannot delete it when it expires. Every lock is
+therefore a future hot loop, and the three above are one run's worth of
+ordinary minting.
+
+**Where it comes from, read in the dependency.** `nextExpiresAt()` reports the
+earliest expiry in the store **including ones already past**, on both backends
+of at_persistence_secondary_server 5.2.1 — Hive takes a bare minimum over every
+record with an `expiresAt`, SQLite runs
+`SELECT MIN(expires_at) … WHERE expires_at IS NOT NULL`. Its sibling
+`nextAvailableAt()` filters (`available_at > ?`; Hive comments *"Strictly after
+the cutoff: already-born keys are excluded"*). The asymmetry is fine on its own
+— a past expiry means "sweep now" — and at_client's `_armExpiryTimer` is what
+adds the assumption that the sweep will then clear it.
+
+✅ **FIXED — the spin, not the refusal.** `AtClientImpl._onExpiryFire` now reads
+`deleteExpiredKeys`'s return count and passes `afterFruitlessSweep: removed == 0`
+to `_armExpiryTimer`, which floors the delay at 30s instead of arming zero when
+the expiry is past and the sweep achieved nothing. The retry survives, so a
+refusal that turns out to be transient still heals and a later expiry is still
+collected. `AtClientImpl.expiryTimerDelay` is `@visibleForTesting` and its four
+branches are pinned in `test/at_client_expiry_timer_test.dart`; reverting the
+fix reddens the backoff test, quoting its own reason. ⚠️ **What that test does
+NOT cover** is the single line feeding it — a change that always passed `false`
+would leave the suite green and restore the spin. Observing it needs a built
+`AtClientImpl` with an injected `LocalSecondary`, which was judged not worth the
+scaffolding; the test file says so at the top.
+
+⛔ **Still open, and it may be the more interesting half:** why a client is not
+authorized to delete a `_nskeylock` record in its own keystore. The fix above
+stops the spin and does nothing about the refusal, so the records still
+accumulate until something else removes them.
+
+⛔ **It is NOT what fires [14.43](#1443-the-functional-suites-convergence-race),
+and this is a measurement rather than a guess.** The run these figures come from
+was **fully green — 177/177, exit 0** — with all three loops running in it. So
+the loop's *presence* does not produce the convergence failures, and a future
+session should not adopt it as the cause on the strength of how alarming it
+looks. What one green run cannot exclude is a *rate* effect: more event-loop
+saturation widening an existing window. Settling that needs the pack's failure
+rate over N runs with and without a fix, which is expensive and should wait
+until the loop is fixed anyway.
 
 ### 14.44 Two residuals from the at_chops PR review
 

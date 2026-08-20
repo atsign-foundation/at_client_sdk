@@ -9,6 +9,20 @@ files, against a positive control of `AtClientPreference` in 20. The BREAKING
 labels below were rewritten in the same pass: as written they sent a reader
 hunting for a constructor argument that never existed in a release. -->
 
+- fix: an expired record the client cannot delete no longer spins the expiry
+  timer. `nextExpiryAt()` reports the earliest expiry including ones already
+  past, so a past expiry arms a zero-delay timer on the assumption that the
+  sweep about to run will remove the record. When the delete is refused the
+  record stays, the earliest expiry does not move, and the next arm is zero
+  again — a cycle that cannot change its own outcome and runs at event-loop
+  speed for the life of the client. Measured in one functional run: 225,721
+  failed sweeps across three records, 47% of the run's log output. A sweep that
+  removes nothing now backs off 30 seconds rather than re-arming immediately,
+  which keeps the retry — a refusal can be transient, and a later expiry still
+  needs collecting — while making a fruitless sweep cost one pass per interval.
+  Reachable in ordinary use: an nskey mint lock is released by its ttl and by
+  nothing else, so every mint and every rotation leaves a record that expires in
+  place.
 - refactor: `Monitor` takes an `AtLookupMuxable` and drops everything that
   duplicated at_lookup — the byte buffer, the framing constants, the overflow
   check, prompt stripping, PKAM authentication, `sendCommand`, the heartbeat

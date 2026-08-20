@@ -185,6 +185,27 @@ class AtClientImpl implements AtClient {
   // other's one-shot timer and an in-flight arm can't re-arm after stop().
   int _expiryArmGen = 0;
 
+  /// Floor on the expiry timer's delay after a sweep that removed nothing.
+  ///
+  /// `nextExpiryAt()` reports the earliest expiry in the store **including
+  /// ones already past** — unlike its sibling `nextAvailableAt()`, which
+  /// excludes crossings that have already happened. A past expiry therefore
+  /// arms `Duration.zero`, on the assumption that the sweep about to run will
+  /// remove the record and move the minimum forward.
+  ///
+  /// That assumption fails for a record the client cannot delete: the sweep
+  /// logs the refusal, the record stays, the minimum does not move, and the
+  /// next arm is `Duration.zero` again. Nothing in that cycle can change its
+  /// own outcome, so it spins at event-loop speed for the life of the client.
+  /// It is reachable in normal operation — an nskey mint lock is released by
+  /// its ttl and by nothing else, so every mint leaves a record that expires
+  /// in place.
+  ///
+  /// The floor keeps the retry (a refusal can be transient, and a later
+  /// expiry still needs collecting) while making a fruitless sweep cost one
+  /// pass per interval instead of thousands per second.
+  static const Duration _fruitlessExpirySweepBackoff = Duration(seconds: 30);
+
   // ---------------------------------------------------------------------------
   // Event-driven availability timer. Symmetric counterpart to the
   // expiry timer above — arms at LocalSecondary.nextAvailableAt(); on
@@ -755,7 +776,11 @@ class AtClientImpl implements AtClient {
   ///
   /// A timestamp in the past arms a `Duration.zero` timer that fires
   /// on the next microtask — effectively immediate.
-  Future<void> _armExpiryTimer() async {
+  /// [afterFruitlessSweep] is set by [_onExpiryFire] when the sweep it just
+  /// ran removed no keys. A past expiry then cannot be cleared by firing
+  /// again immediately, so the delay is floored at
+  /// [_fruitlessExpirySweepBackoff] rather than zero.
+  Future<void> _armExpiryTimer({bool afterFruitlessSweep = false}) async {
     final gen = ++_expiryArmGen;
     _expiryTimer?.cancel();
     _expiryTimer = null;
@@ -766,7 +791,24 @@ class AtClientImpl implements AtClient {
     if (gen != _expiryArmGen || _isStopped) return;
     if (when == null) return;
     final wait = when.difference(DateTime.timestamp());
-    _expiryTimer = Timer(wait.isNegative ? Duration.zero : wait, _onExpiryFire);
+    _expiryTimer = Timer(
+        expiryTimerDelay(wait, afterFruitlessSweep: afterFruitlessSweep),
+        _onExpiryFire);
+  }
+
+  /// How long to wait before the next expiry sweep, given [untilNextExpiry]
+  /// (negative when the earliest expiry is already past).
+  ///
+  /// A past expiry normally means "sweep now", and the sweep clears the
+  /// record so the next one is in the future. When the sweep removed nothing
+  /// ([afterFruitlessSweep]) that reasoning does not hold: firing again
+  /// immediately re-runs the same computation over the same state, forever.
+  /// See [_fruitlessExpirySweepBackoff].
+  @visibleForTesting
+  static Duration expiryTimerDelay(Duration untilNextExpiry,
+      {required bool afterFruitlessSweep}) {
+    if (!untilNextExpiry.isNegative) return untilNextExpiry;
+    return afterFruitlessSweep ? _fruitlessExpirySweepBackoff : Duration.zero;
   }
 
   /// Drives one expiry sweep and re-arms the timer for the next.
@@ -777,13 +819,17 @@ class AtClientImpl implements AtClient {
   /// each put before the corresponding [DataEvent] microtask runs).
   Future<void> _onExpiryFire() async {
     _expirySweepInFlight = true;
+    // Nothing removed means the next arm must not fire immediately: see
+    // [_fruitlessExpirySweepBackoff]. A throwing sweep counts as fruitless
+    // for the same reason — it cannot have moved the earliest expiry.
+    var removed = 0;
     try {
-      await localSecondary?.deleteExpiredKeys();
+      removed = await localSecondary?.deleteExpiredKeys() ?? 0;
     } catch (e, st) {
       _logger.warning('Expiry sweep failed: $e\n$st');
     } finally {
       _expirySweepInFlight = false;
-      await _armExpiryTimer();
+      await _armExpiryTimer(afterFruitlessSweep: removed == 0);
     }
   }
 
