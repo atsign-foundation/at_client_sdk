@@ -9,6 +9,17 @@ files, against a positive control of `AtClientPreference` in 20. The BREAKING
 labels below were rewritten in the same pass: as written they sent a reader
 hunting for a constructor argument that never existed in a release. -->
 
+- fix: the expiry sweep reclaims expired records regardless of the client
+  enrollment's namespace scope. Reclaiming an expired record is storage
+  internals, not an operation an enrollment is performing — the record has
+  already ceased to exist as far as every reader is concerned, and the sweep is
+  driven by a timer rather than by the enrollment whose scope was being tested.
+  A record whose namespace the enrollment did not cover could previously never
+  be reclaimed at all: it arrives in local storage by sync, expires, and then
+  fails the delete every time. The scoping that check enforces is unaffected,
+  because an expiry deletion is local-only and is never enqueued for sync, so it
+  cannot reach any other copy. An enrollment-initiated delete outside its
+  namespace is still refused.
 - fix: an expired record the client cannot delete no longer spins the expiry
   timer. `nextExpiryAt()` reports the earliest expiry including ones already
   past, so a past expiry arms a zero-delay timer on the assumption that the

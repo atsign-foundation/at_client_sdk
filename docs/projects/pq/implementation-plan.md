@@ -41,7 +41,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
-| [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. **Owed: why a client cannot delete a `_nskeylock` record in its own keystore** — the fix stops the spin and not the refusal, so the records still accumulate | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is |
+| [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. ✅ **The refusal is fixed too** — it was a namespace check, not immutability, and the sweep now bypasses it. **Owed elsewhere:** the keystore's `get()` does not filter expired records (at_persistence_secondary_server, another repo) | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20) |
 | [14.44](#1444-two-residuals-from-the-at_chops-pr-review) | Two residuals from the at_chops PR review, both answered on #2169 and neither fixable there: the passphrase envelope persists the salt and three costs but **not `hashLength`**, and `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths | Nothing. The first belongs in the **at_auth carve** (train position 5), where that file is already being edited; the second is pre-existing on trunk in both X-Wing backends and unreachable today, so it goes whenever at_chops is next open |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
@@ -2200,10 +2200,51 @@ would leave the suite green and restore the spin. Observing it needs a built
 `AtClientImpl` with an injected `LocalSecondary`, which was judged not worth the
 scaffolding; the test file says so at the top.
 
-⛔ **Still open, and it may be the more interesting half:** why a client is not
-authorized to delete a `_nskeylock` record in its own keystore. The fix above
-stops the spin and does nothing about the refusal, so the records still
-accumulate until something else removes them.
+✅ **The refusal is FIXED too, and it was not about immutability.** Traced
+2026-08-20: the sweep's delete is refused by `isEnrollmentAuthorizedForOperation`
+in `LocalSecondary._delete` — a **namespace** check — before any keystore or
+server interaction. The lock key parses as `KeyType.selfKey` with namespace
+`buzz`/`wavi`, so it is not in the skip list (`reservedKey`, `cachedSharedKey`,
+`cachedPublicKey`, `localKey`). The sweep passes `localOnly: true` and so never
+builds a `delete:` command at all, which is the only place `force:` appears —
+and the client keystore has no immutability guard on remove (`immutable` occurs
+20 times in at_persistence_secondary_server 5.1.0, in metadata serialization and
+in `AtMetadataBuilder` preserving it across *updates*, never in a remove path;
+control: `expiresAt` occurs 68 times). Immutability is the atServer's
+enforcement, on the `delete` verb.
+
+`deleteExpiredKeys` now passes `isExpiry: true`, which skips that check.
+Reclaiming an expired record is storage internals, not an operation an
+enrollment performs, and the scoping is unaffected because an expiry deletion is
+local-only and never enqueued for sync. `test/expiry_sweep_authorization_test.dart`
+pins both arms — an enrollment-initiated delete outside its namespace is still
+refused, and the sweep reclaims the same record — and reverting the bypass
+reddens it.
+
+⛔ **Parked by gkc 2026-08-20: why the lock is in local storage at all.** It is
+created remote-only (`MintLock._take` → `getRemoteSecondary().executeVerb`, and
+`_isOwnLock` → `getRemoteSecondary().executeCommand`), and arrives locally by
+the sync pull — the never-synced rule covers `public:_`, not self keys, and
+`syncRegex` defaults to null so the pull is unfiltered. Two things stop a client
+suppressing it today: `RemoteSecondary.executeVerb`'s `sync` parameter is
+**inert** (declared and never read, so `_take`'s `sync: false` does nothing),
+and `:nc`/`noCommit` — which would stop the atServer logging the commit — exists
+in at_commons (published 5.15.0, syntax groups for `update`, `update:meta` and
+`delete`) but appears in **zero** files of at_server `origin/trunk`.
+
+⚠️ **Owed against `at_persistence_secondary_server` (5.1.0), not fixable here.**
+`HiveAtKeyValueStore.get()` does not filter expired records, and carries three
+comment lines describing the filter that was never written — *"load metadata for
+hive_key / compare availableAt with time.now() / return only between ttl and
+ttb"*. It throws `KeyNotFoundException` only when the value is **absent**. So
+expiry filtering lives in one caller: of **14** direct `keyStore.get`/`getMeta`
+reads in at_client's `lib`, only `LocalSecondary._llookup` applies
+`_isActiveKey`. Most of the rest are benign — the private-key getters have no
+ttl, and `prevMeta` wants the pre-write value deliberately — but the filter
+belongs in the store. ⛔ Do **not** "fix" `_llookup` to throw for an expired key:
+returning `'data:null'` is the documented contract, stated at
+`collections.dart:1366` as *"data:null (availableAt in future, or post-expiry)"*
+and tested for at 16 call sites across 5 files.
 
 ⛔ **It is NOT what fires [14.43](#1443-the-functional-suites-convergence-race),
 and this is a measurement rather than a guess.** The run these figures come from

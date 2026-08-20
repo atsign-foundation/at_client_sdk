@@ -489,10 +489,24 @@ class LocalSecondary implements Secondary {
     }
   }
 
+  /// [isExpiry] marks a deletion the TTL sweep is performing rather than one
+  /// an enrollment asked for, and skips the enrollment authorization check.
+  ///
+  /// Reclaiming an expired record is storage internals, not an operation on
+  /// anyone's data: the record has already ceased to exist as far as every
+  /// reader is concerned, and the sweep is driven by a timer rather than by
+  /// the enrollment whose scope the check tests. Refusing it leaves bytes
+  /// nothing can read and — before the expiry timer learned to back off — a
+  /// record the sweep retried forever. The scoping the check exists to
+  /// enforce is unaffected: an expiry deletion is `localOnly`, so it is never
+  /// enqueued for sync and cannot reach anyone else's copy.
   Future<String> _delete(DeleteVerbBuilder builder,
-      {bool cameFromServer = false, bool localOnly = false}) async {
+      {bool cameFromServer = false,
+      bool localOnly = false,
+      bool isExpiry = false}) async {
     var deleteKey = builder.buildKey();
-    if (!await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
+    if (!isExpiry &&
+        !await isEnrollmentAuthorizedForOperation(deleteKey, builder)) {
       throw UnAuthorizedException(
           'Cannot perform delete on $deleteKey due to insufficient privilege');
     }
@@ -579,7 +593,15 @@ class LocalSecondary implements Secondary {
         // the publisher's atServer has already dropped (or will drop)
         // its own copy at the same TTL, and is responsible for the
         // recipients' `cached:` evictions.
-        await _delete(builder, localOnly: true);
+        // isExpiry: true — reclaiming an expired record is storage internals,
+        // not an operation an enrollment is performing, so it is not subject
+        // to that enrollment's namespace scope. Without it a client whose
+        // enrollment does not cover a record's namespace can never reclaim it:
+        // the record is pulled into local storage by sync, expires, and then
+        // fails this delete forever. `_nskeylock` records reach exactly that
+        // state — created remote-only by MintLock, synced down like any other
+        // key, and released by ttl alone.
+        await _delete(builder, localOnly: true, isExpiry: true);
         deleted++;
       } on Exception catch (e) {
         _logger.warning('expiry sweep failed for $keyString: $e');
