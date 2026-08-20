@@ -198,14 +198,24 @@ jobs:
       - name: Confirm the virtualenv image that is actually running
         working-directory: tests/${{ matrix.package }}
         run: |
+          # Every container in the project, not one named service: the two
+          # packages call the service different things (`virtualenv` and
+          # `at_virtualenv`), and the proxy package runs a second container
+          # besides. Asking whether ANY of them is the wanted image is the
+          # question that holds for both.
           want="$VIRTUALENV_IMAGE"
-          cid=$(docker compose ps -q virtualenv)
-          got=$(docker inspect --format '{{.Config.Image}}' "$cid")
-          echo "wanted $want, running $got"
-          if [ "$want" != "$got" ]; then
-            echo "The virtualenv is not the image this job asked for."
+          found=0
+          for cid in $(docker compose ps -q); do
+            got=$(docker inspect --format '{{.Config.Image}}' "$cid")
+            echo "  running: $got"
+            if [ "$got" = "$want" ]; then found=1; fi
+          done
+          if [ "$found" != "1" ]; then
+            echo "No container is running $want - compose did not receive"
+            echo "VIRTUALENV_IMAGE and fell back to its default."
             exit 1
           fi
+          echo "confirmed: $want is running"
 
       - name: Check for docker container readiness
         working-directory: tests/${{ matrix.package }}
