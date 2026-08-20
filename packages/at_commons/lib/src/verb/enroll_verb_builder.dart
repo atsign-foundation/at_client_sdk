@@ -44,6 +44,11 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
 
   /// The signing algorithm of [apkamPublicKey] — `rsa2048` or `mldsa65`.
   /// Recorded on the enrollment so PKAM verification is record-authoritative.
+  ///
+  /// ⚠️ **The APKAM *authentication* key's algorithm, not the algorithm the
+  /// enrollment signs documents with** — see `EnrollParams.signingAlgo`, which
+  /// this copies onto the wire. The two keys are deliberately different from
+  /// rollout 1 onward.
   String? signingAlgo;
 
   /// Opaque, additive metadata stored verbatim on the enrollment record and
@@ -62,6 +67,14 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
   /// The bare RSA `_apsk` string, published verbatim. See
   /// [EnrollParams.apskLegacy]. Mutually exclusive with [apsk].
   String? apskLegacy;
+
+  /// Proof that the sender holds the private half of the [apkamPublicKey] it
+  /// is asking the atServer to install. See
+  /// [EnrollParams.apkamPublicKeySignature] for what is signed and why.
+  ///
+  /// Required on an `enroll:update` that changes [apkamPublicKey], and refused
+  /// without it.
+  String? apkamPublicKeySignature;
 
   /// Used to force revoke the enrollment request.
   bool force = false;
@@ -98,6 +111,7 @@ class EnrollVerbBuilder extends AbstractVerbBuilder {
       ..signingAlgo = signingAlgo
       ..apsk = apsk
       ..apskLegacy = apskLegacy
+      ..apkamPublicKeySignature = apkamPublicKeySignature
       ..metadata = metadata
       ..enrollmentStatusFilter = enrollmentStatusFilter
       ..apkamKeysExpiryDuration = apkamKeysExpiryDuration;
