@@ -32,18 +32,19 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. **at_commons (PR #2168) and at_chops (PR #2169) are raised and green.** Next: at_lookup, at_server_status, at_auth, at_client (stacked), at_client_flutter, at_onboarding_cli | ⚠️ This cell read "the published atServer image verifying ML-DSA PKAM" until 2026-08-20, when that was settled: CI runs against `dev_env` and `functional_tests` is green. What blocks MERGING is now [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found)'s three red e2e rows |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. **at_commons (PR #2168) and at_chops (PR #2169) are raised and green.** Next: at_lookup, at_server_status, at_auth, at_client (stacked), at_client_flutter, at_onboarding_cli | ⚠️ This cell has named two blockers that both cleared. It read "the published atServer image verifying ML-DSA PKAM" until 2026-08-20, then "[14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found)'s three red e2e rows" until later the same day. **Nothing blocks it now: CI is fully green** (run 32387955272, 11 of 11). at_lookup is next and does NOT wait on at_chops publishing — only on at_commons 5.16.0, and its floor is already raised |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
-| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **Three of four red rows are fixed; one is open** — and only ONE of the four was a product defect. Row 1, the notification that never arrived, was a closed connection whose pending request waited out its 30-second budget holding at_lookup's request mutex — fixed, and `end2end_tests` is green in CI. Row 4, `pq_native_onboard_test.dart` failing PKAM for `@denise`, was a CI step whose `sudo` stripped `VIRTUALENV_IMAGE` so it ran the published atServer — fixed, and proven by running both images locally. Row 2, UC-A4.2's failing positive control, was a control that borrowed another file's side effect — `dart test` file order is not alphabetical and CI ran that file first; fixed, and it now establishes its own premise. Row 3, `enrollment_setup.dart`'s 30-second silence, shares row 1's fingerprint but is **measured still red** after the fix. Four mechanisms are read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
+| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32387955272, 11 of 11, 2026-08-20). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
+| [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | Nothing. Reproduces locally in ~3 minutes: `cd tests/at_end2end_test && ./runLocal.sh 26000` then drive `test/enrollment_setup.dart` |
+| [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
-| [14.40](#1440-at_clients-in-progress-heading-is-a-patch-and-now-carries-a-breaking-change) | ✅ **DONE — RULED 2026-08-20: at_client publishes as `3.15.0`, a MINOR.** Heading and pubspec both moved; the three `**BREAKING**` labels were rewritten because nothing published was removed — verified against the published 3.14.0 archive, where `disallowLegacyEncryption`, `keyEstablishmentAlgorithms`, `PqPosture` and `ReleasePosture` appear in **zero** files against a control of `AtClientPreference` in 20 | — |
 | [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green and **live-green** — functional 174/174 (after one 173/174 whose single failure was [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)), e2e pq 54/54, and the `legacy-server` arm 2/2 against the pinned `atsigncompany/virtualenv:vip-p3.15.0`. **Owed: public-data signature verification** (undesigned) | Nothing |
 
 ### 14.39 `PqPosture` and the rollout it drives
@@ -228,12 +229,19 @@ exposed; it wants the signer's `_apsk` cached or every public read pays a remote
 lookup on another atSign. Both forms are read, and the legacy form permanently,
 because every public record a released at_client signed sits on a live atSign.
 
-### 14.40 at_client's in-progress heading is a patch, and now carries a breaking change
+### 14.40 at_client publishes as a minor, and the heading now says so
 
-Raised 2026-08-18 by the `0x01` removal, which added a **BREAKING** entry to
-at_client's `CHANGELOG.md` under its in-progress `## 3.14.1` heading. A patch
-version carrying a source-breaking change is the conflict; the entry itself is
-correct and stays.
+✅ **RESOLVED 2026-08-20. The tree already moved and this body did not say so
+for two days.** `packages/at_client/pubspec.yaml` is `version: 3.15.0` and its
+`CHANGELOG.md` opens `## 3.15.0` — a minor, which is what a source-breaking
+entry needs. Verify rather than trusting this line:
+`grep -m1 '^version:' packages/at_client/pubspec.yaml && head -1 packages/at_client/CHANGELOG.md`
+
+What it was: raised 2026-08-18 by the `0x01` removal, which added a **BREAKING**
+entry under an in-progress `## 3.14.1` heading. A patch version carrying a
+source-breaking change was the conflict; the entry itself was correct and
+stayed. ⚠️ The heading above read "at_client's in-progress heading is a patch"
+until today, which a reader would take as the current state.
 
 ⚠️ **The question got bigger on 2026-08-19, not smaller.** 14.39 added four more
 **BREAKING** entries under the same `## 3.14.1` heading — `PqPosture` replacing
@@ -869,6 +877,27 @@ repo. That ratio is the finding — a residual parked inside a project entry
 falsifies quietly, because the work that closes it is filed somewhere else.
 
 ### 14.18 The remaining D1 initial-development sequence
+
+**The per-package carve recipe, which worked three times.** It lived only in a
+memory file until 2026-08-20, where a fresh clone could not see it:
+
+```bash
+# one worktree per package, off origin/trunk so the PR carries that package alone
+git worktree add /tmp/carve-<pkg> -b gkc-pq-d1-<pkg> origin/trunk
+git -C /tmp/carve-<pkg> checkout gkc-pq-d1-spike -- packages/<pkg>
+# the gate: the carved tree must be byte-identical to the spike over that package
+git -C /tmp/carve-<pkg> diff gkc-pq-d1-spike --stat -- packages/<pkg>   # must be EMPTY
+```
+
+Then analyze and test the package **and its consumers**, and raise with the org
+template. Order: **at_commons → at_chops → at_lookup → at_server_status →
+at_auth → at_client (stacked) → at_client_flutter → at_onboarding_cli**.
+
+⚠️ **at_lookup does NOT wait on at_chops publishing.** Established by a compile
+differential 2026-08-20: at_lookup builds and passes 130/130 against the
+published at_chops 3.5.0, and uses no symbol newer than it. It waits only on
+**at_commons 5.16.0**, because it reads `AtNetworkTimeouts.defaultResponseBudget`
+which 5.15.0 does not have — its floor is already raised to `^5.16.0`.
 
 Ruled 2026-08-11 by a walk through every open item
 ([`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)).
@@ -1673,8 +1702,11 @@ Everything below is from those runs plus the re-runs after each fix.
 where the loop cannot succeed either — so every local e2e run silently waits
 the full 60 seconds before doing anything. Harmless, and worth removing.
 
-**Four failures, of which three are fixed and one is open**, plus two
-intermittents recorded below as rates. This section said "three" until
+**All four are fixed, and CI is fully green** — run 32387955272, 11 of 11
+jobs, 2026-08-20. Only ONE of the four was a product defect; two were harness
+assumptions that had been holding by luck, and one was a CI step running the
+wrong image. A convergence race remains, recorded below as a rate and owed in
+[14.43](#1443-the-functional-suites-convergence-race). This section said "three" until
 2026-08-20, when a fourth was found in `at_libraries`' matrix that had never
 been recorded here at all — and that fourth turned out to be the cheapest of
 the lot, a CI step running the wrong image.
@@ -1836,8 +1868,11 @@ flake: gkc ruled out infrastructure on 2026-08-20.
    hands a caller another principal's object, and the code says so. What is
    unsettled is what `enrollmentId: null` should MEAN once an enrolled client
    exists for that atSign: return it, refuse loudly, or build the
-   uncredentialed one it currently builds. That is a product decision, not a
-   harness one.
+   uncredentialed one it currently builds. **RULED by gkc 2026-08-20 and shipped in `0c79164fa`:** an
+   unnamed enrollment falls back to the atSign's client when there is exactly
+   ONE, and refuses naming the available ids when there are several. This
+   paragraph asked for a ruling that now exists; do not go and ask for it
+   again.
    It is a standalone setup step (`dart run test/enrollment_setup.dart`), not a
    test on `dart_test.yaml`'s allowlist, so its failure cascades: the 8 later
    failures all read `provided keys file does not exist`, for the keyfile the
@@ -1846,11 +1881,11 @@ flake: gkc ruled out infrastructure on 2026-08-20.
    all, not a partial response. ⚠️ **Row 1's fix does NOT close it — measured,
    not assumed.** `end2end_test_14` is still red on run 32369016084, the first
    CI run carrying the connection fix, so the shared fingerprint was a
-   coincidence of symptom and the cause is a different one. ⚠️ It cannot be
-   reproduced locally: it is
-   written for the @ce2e atSigns and dies in `setUpAll` at
-   `createAtChopsFromDemoKeys` for want of demo keys, so iterating on it costs
-   a CI round trip.
+   coincidence of symptom and the cause is a different one. ⚠️ This row used to end "It cannot be
+   reproduced locally … so iterating on it costs a CI round trip", which was
+   never true of the script: the blocker was `AtCredentials.credentialsMap`
+   being a stub in every checkout, and the harness now seeds it from
+   `AtTestCredentials`.
 
 4. **`functional_tests_at_onboarding_cli` — a fourth red row, and it was never
    recorded here.** The non-proxy leg of `at_libraries`' matrix runs 16 of 17;
@@ -1989,6 +2024,55 @@ both. The contradiction that caught it was
 `self_enrollment_retrofit_live_test.dart` passing "ML-DSA PKAM succeeds" on an
 image just measured as lacking ML-DSA.
 
+### 14.42 Why enrollment setup takes four minutes
+
+`enrollment_setup.dart` submits and approves one enrollment for each of the
+four @ce2e atSigns. Measured 2026-08-20 in `end2end_test_14`: **3:56** on one
+run and **4:59** on another. Under the framework's 30-second default every
+approval timed out; the budget is now `@Timeout(Duration(minutes: 15))`, which
+stops the job failing but explains nothing. **gkc asked for the cause.**
+
+⚠️ **My sync-backlog reading is NOT established, and is recorded here so it is
+not inherited as fact.** The atSigns' commit logs do reach 836853 entries and a
+fresh runner replays from `-1` — both measured — but `end2end_tests` runs **the
+same four atSigns** (config23 names the same set config14 does, reordered) and
+**the same suite** in about three minutes. So the backlog cannot be the whole
+answer; the enrollment step is what differs.
+
+Cheap to attack, and it does **not** need CI: the script runs locally against
+the virtualenv in about three minutes. Bring the environment up with
+`cd tests/at_end2end_test && ./runLocal.sh 26000 <any test>` and drive
+`dart test --concurrency=1 -r expanded test/enrollment_setup.dart`; against
+demo atSigns all four enrollments complete in roughly **one second**, which is
+itself the measurement to explain — the same code, four orders of magnitude
+apart, so whatever costs the four minutes is a property of the @ce2e side.
+
+### 14.43 The functional suite's convergence race
+
+**CI: beta 3 failures in 10 runs, stable 1 in 10** — measured 2026-08-20
+across every run of this workflow on this branch, not transcribed. Locally,
+**1 red in 5** packs the same day. A different test each time, and **all four observed failures are update/notify/sync convergence**:
+`atclient_sync_callback_test`, `atclient_sync_conflict_test`,
+`sync_multiple_client_test`, and `pq_rollout_matrix_test`'s UC-G1.15. ⚠️ Not a
+Dart-channel defect — beta is redder (3 in 7 against 1 in 7) because its timing
+widens the window, and one commit ran UC-G1.15 green on stable and red on beta
+in the same run.
+
+**Reproduces locally**: `cd tests/at_functional_test && ./runLocal.sh`.
+
+⛔ **Disproven hypotheses are listed and must not be re-walked** — they are listed in
+[14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found), and the two
+most attractive are that the progress events are dropped by attaching a
+listener late (they are not: the controller is single-subscription and buffers)
+and that `syncData()` completing on a failed sync is what fires (it is not:
+`SyncStatus.failure` appears zero times in the failing log).
+
+**A separate defect found in the same place, worth fixing on its own merits.**
+`FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on
+`SyncStatus.failure`, so a **failed** sync returns to its caller as success. It
+did not cause this race, but a harness that reports a failed sync as done will
+eventually hide something that matters.
+
 ## PARKED
 
 Set aside deliberately. A row here exists to stop someone building it, so
@@ -2029,6 +2113,7 @@ absence of a row from this table.
 
 | Item   | What it delivered                                       | State as the plan records it                                                                                         |
 |--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| [14.40](#1440-at_client-publishes-as-a-minor-and-the-heading-now-says-so) | ✅ **DONE — RULED 2026-08-20: at_client publishes as `3.15.0`, a MINOR.** Heading and pubspec both moved; the three `**BREAKING**` labels were rewritten because nothing published was removed — verified against the published 3.14.0 archive, where `disallowLegacyEncryption`, `keyEstablishmentAlgorithms`, `PqPosture` and `ReleasePosture` appear in **zero** files against a control of `AtClientPreference` in 20 | — |
 | 14.38  | `at_activate` can administer a PQ-native atSign             | DONE 2026-08-19, live-green (CLI functional pack 17/17 against a locally built `at_virtual_env:local`). All three agreed changes landed, and two of them had been recorded as done when they were not: the `_initAtClient` overwrite survived a change to *which* preference field it read, and the file-stream site was named as methods that do not exist. The row also claimed `--posture` reached every command — it reached every *parser* while twelve commands ignored the value. Detail: [14.38](detail/implementation-plan.md#1438-activate_cli-cannot-administer-a-pq-native-atsign) |
 | 14.37  | `pqSeal` version `0x01` removed outright, and the last homegrown key schedule with it | DONE 2026-08-18 — **one commit, not the two this row prescribed.** gkc reframed it from *retire safely* to *is there any value in `0x01` over `0x02`* — there is none: same KEM, so no diversity; self-generated vectors against the working group's; and its only distinctive feature, AES-256-GCM, is immaterial on a 32-byte content key. `_SealVersion.custom` had no other user, so `atPQv1-base` left the tree entirely. ⚠️ The two-commit plan's first step was also **mis-specified** — it named `SecretSharingAlgos.suites`, which neither seal site reads. Ruling [110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18) amended in place. Detail: [14.37](detail/implementation-plan.md#1437-the-0x01-seal-version-removed-outright) |
 | 14.15  | Pre-PR rails checklist                                  | DONE 2026-08-10 — the compose-image item is struck in the body and nothing needs reverting before a PR. It stayed in TODO until 2026-08-18 because the section opened with a condition instead of a status. The external gate it names is step 32's blocker |
@@ -2086,6 +2171,14 @@ absence of a row from this table.
 Run these rather than trusting the table. Each answers one row.
 
 ```bash
+# the functional suite's convergence-race rate. It has been written five
+# different ways from partial views; this is the only way to get it right.
+for r in $(gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml \
+             --limit 20 --json databaseId --jq '.[].databaseId'); do
+  gh run view "$r" --json jobs \
+    --jq '.jobs[] | select(.name|startswith("functional_tests")) | [.name,.conclusion] | @tsv'
+done | sort | uniq -c | sort -rn     # RUN IT. 2026-08-20: beta 3 fail/10, stable 1 fail/10
+
 # row 1: which 14.22 rows have landed? Row 1 landed when this file started
 # composing apskAdvertisement; row 2 is unbuilt for as long as the prefix
 # still names one algorithm.
