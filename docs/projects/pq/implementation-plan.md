@@ -1804,11 +1804,40 @@ flake: gkc ruled out infrastructure on 2026-08-20.
    **empty `AtKeys()`**. A client that is not handed an `atChops` therefore
    authenticates from an empty keyfile.
 
-   Proven: the single field and both its uses; the empty seed; `_createAtChops`
-   preferring it; the failure text; `end2end_tests` green on the same atSigns.
-   **Inferred, not proven:** that `enrollment_setup` changing the enrollment ids
-   is what routes `notify_test`'s bare `setCurrentAtSign` (no atChops, no
-   enrollmentId) onto a cache entry with no injected chops.
+   ⭐ **ROOT-CAUSED 2026-08-20, and it is the client cache key.** The
+   `_atKeysIo` reading above was a wrong turn — the failing client's
+   `_atKeysIo` is **null**; it takes `_createAtChops`' local-secondary branch.
+   The actual chain, every link observed, and it **reproduces locally in about
+   three minutes** (`enrollment_setup.dart` then `notify_test.dart` against the
+   virtualenv, no @ce2e atSigns and no CI round trip):
+
+   1. `enrollment_setup.dart` enrols an app per atSign and writes an
+      **`enrollmentId` into the keyfile** — confirmed by reading
+      `atKeys/@alice🛠_key.atKeys` after a local run.
+   2. `testInitializer`'s apkam auth then passes that id, so the client is
+      filed under `(atSign, enrollmentId)`.
+   3. Tests like `notify_test.dart` call
+      `setCurrentAtSign(atSign, namespace, preference)` with **no** enrollment
+      id, which looks up `(atSign, null)`, **misses**, and builds a fresh client
+      with no `atChops` and no `atKeysIo`.
+   4. That client's `_createAtChops` falls through to the local secondary, which
+      holds no PKAM key, and every verb fails
+      **`PKAM Keypair required for signing`**.
+
+   **Why it is a spike regression, mechanically.** Trunk keys the cache on the
+   **atSign alone** (`atClientInstanceMap[currentAtSign]`); this branch keys it
+   on **`(atSign, enrollmentId)`** via `AtClientImpl.instanceKey`. On trunk the
+   bare call hits the very entry `testInitializer` created and gets the
+   credentialed client. That is also why only `end2end_test_14` fails: it is the
+   only job that runs `enrollment_setup` first, so the only one whose keyfile
+   carries an enrollment id at all.
+
+   ⚠️ **The change itself is right** — keying a client cache on the owner alone
+   hands a caller another principal's object, and the code says so. What is
+   unsettled is what `enrollmentId: null` should MEAN once an enrolled client
+   exists for that atSign: return it, refuse loudly, or build the
+   uncredentialed one it currently builds. That is a product decision, not a
+   harness one.
    It is a standalone setup step (`dart run test/enrollment_setup.dart`), not a
    test on `dart_test.yaml`'s allowlist, so its failure cascades: the 8 later
    failures all read `provided keys file does not exist`, for the keyfile the
