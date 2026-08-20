@@ -3,8 +3,7 @@ import 'dart:math' show Random;
 import 'dart:convert' show base64Decode, jsonDecode, jsonEncode, utf8;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_chops/at_chops.dart'
-    show AtKemAlgorithm, PqOpenException;
+import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, PqOpenException;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64, pqSealToBase64;
 import 'package:at_client/src/client/request_options.dart'
@@ -268,8 +267,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
       // recipient would get an envelope it cannot unwrap, and the failure
       // would surface on their side as an opaque AEAD error with nothing to
       // point at.
-      throw StateError(
-          'No mutually supported construction for key package '
+      throw StateError('No mutually supported construction for key package '
           '${to.enrollmentId}/${to.apkamId}: it advertises a '
           '${recipientKey.alg} key opening ${to.suites}, and this client '
           'produces ${SecretSharingAlgos.suites}');
@@ -517,8 +515,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     // `SecretSharingAlgos.suites` separately would be a second list that has
     // to agree with this one, and a suite present in that list but absent
     // here would pass the guard and then have no KEM to open with.
-    final AtKemAlgorithm? kem =
-        SecretSharingAlgos.kemForSuite(envelope.suite);
+    final AtKemAlgorithm? kem = SecretSharingAlgos.kemForSuite(envelope.suite);
     if (kem == null) {
       logger.warning('Envelope $envelopeKey uses unsupported sealing suite '
           '${envelope.suite}; skipping');

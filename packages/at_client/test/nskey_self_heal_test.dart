@@ -11,8 +11,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 class MockPairwiseSecretSharing extends Mock implements PairwiseSecretSharing {}
 
@@ -71,8 +70,8 @@ void main() {
           NskeyAdvertisement.single(
             publicKey: pair.publicKeyBytes,
             alg: SecretSharingAlgos.xWing,
-            suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing),
+            suites:
+                SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
           ));
 
       final sharing = MockPairwiseSecretSharing();
@@ -99,7 +98,9 @@ void main() {
       final held = await filing();
       final kid = nskeyKidOf(pair.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, seed: NskeySeed(pair.privateKeyBytes));
+          namespace: namespace,
+          nskeyKid: kid,
+          seed: NskeySeed(pair.privateKeyBytes));
       final ring = PublishedNskeyKeyRing(atClient, privateFiling: held);
       ring.rememberOwn(
           atSign,
@@ -107,8 +108,8 @@ void main() {
           NskeyAdvertisement.single(
             publicKey: pair.publicKeyBytes,
             alg: SecretSharingAlgos.xWing,
-            suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing),
+            suites:
+                SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
           ));
 
       final sharing = MockPairwiseSecretSharing();
@@ -155,8 +156,8 @@ void main() {
           NskeyAdvertisement.single(
             publicKey: pair.publicKeyBytes,
             alg: SecretSharingAlgos.xWing,
-            suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing),
+            suites:
+                SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
           ));
 
       final sharing = MockPairwiseSecretSharing();
@@ -194,8 +195,8 @@ void main() {
           NskeyAdvertisement.single(
             publicKey: pair.publicKeyBytes,
             alg: SecretSharingAlgos.xWing,
-            suites: SecretSharingAlgos.openableSuitesFor(
-                SecretSharingAlgos.xWing),
+            suites:
+                SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.xWing),
           ));
       final sharing = MockPairwiseSecretSharing();
 
@@ -235,7 +236,9 @@ void main() {
       final held = await filing();
       final kid = nskeyKidOf(pair.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, seed: NskeySeed(pair.privateKeyBytes));
+          namespace: namespace,
+          nskeyKid: kid,
+          seed: NskeySeed(pair.privateKeyBytes));
 
       final sharing = _RecordingStoreSharing();
       final primed = await NskeySeeding(
@@ -265,7 +268,9 @@ void main() {
       final kid = nskeyKidOf(pair.publicKeyBytes);
       final otherKid = nskeyKidOf(other.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, seed: NskeySeed(pair.privateKeyBytes));
+          namespace: namespace,
+          nskeyKid: kid,
+          seed: NskeySeed(pair.privateKeyBytes));
       await held.store(
           namespace: 'second.my_apps',
           nskeyKid: otherKid,
@@ -345,7 +350,9 @@ void main() {
       final held = await filing();
       final kid = nskeyKidOf(pair.publicKeyBytes);
       await held.store(
-          namespace: namespace, nskeyKid: kid, seed: NskeySeed(pair.privateKeyBytes));
+          namespace: namespace,
+          nskeyKid: kid,
+          seed: NskeySeed(pair.privateKeyBytes));
       final asked = <(String, String)>[];
       final ring = PublishedNskeyKeyRing(
         atClient,

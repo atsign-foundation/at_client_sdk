@@ -138,7 +138,8 @@ class NskeyAdvertisement {
     }
     final rawKeys = payload['keys'];
     if (rawKeys is! List) {
-      throw FormatException('advertises no keys, so there is nothing to seal to');
+      throw FormatException(
+          'advertises no keys, so there is nothing to seal to');
     }
     final keys =
         rawKeys.map(PackageKey.fromJson).whereType<PackageKey>().toList();
@@ -327,9 +328,8 @@ class InMemoryNskeyKeyRing implements NskeyKeyRing {
     required Uint8List privateKey,
     String keyAlgo = SecretSharingAlgos.xWing,
   }) {
-    final kid =
-        seedPublicOnly(owner, namespace,
-            publicKey: publicKey, keyAlgo: keyAlgo);
+    final kid = seedPublicOnly(owner, namespace,
+        publicKey: publicKey, keyAlgo: keyAlgo);
     _private[_generation(owner, namespace, kid)] =
         NskeyDecapsulationKey(privateKey);
     return kid;

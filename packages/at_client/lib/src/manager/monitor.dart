@@ -84,8 +84,8 @@ class Monitor {
   Future<void> _lifecycle = Future<void>.value();
 
   void _enqueue(Future<void> Function() step) {
-    _lifecycle = _lifecycle.then((_) => step()).catchError(
-        (Object e, StackTrace st) {
+    _lifecycle =
+        _lifecycle.then((_) => step()).catchError((Object e, StackTrace st) {
       logger.shout('Monitor lifecycle step failed: $e\n$st');
     });
   }

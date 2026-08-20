@@ -104,10 +104,13 @@ void main() {
         section(client, '$i', Duration(milliseconds: 5 * (5 - i)))
     ]);
 
-    expect(log, [
-      for (var i = 0; i < 5; i++) ...['$i:enter', '$i:exit']
-    ], reason: 'later callers queue in the order they asked, and no section '
-        'overlaps another — the delays descend so an unlocked implementation '
-        'would finish them in the opposite order');
+    expect(
+        log,
+        [
+          for (var i = 0; i < 5; i++) ...['$i:enter', '$i:exit']
+        ],
+        reason: 'later callers queue in the order they asked, and no section '
+            'overlaps another — the delays descend so an unlocked implementation '
+            'would finish them in the opposite order');
   });
 }

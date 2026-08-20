@@ -4,8 +4,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 /// Which namespaces a client seeds at start.
 ///

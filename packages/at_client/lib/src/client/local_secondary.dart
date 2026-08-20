@@ -938,8 +938,7 @@ class LocalSecondary implements Secondary {
     // nor the fetch — with the exception that explains it discarded at a level
     // nobody runs at.
     if (enrollmentInfoFromServer == null) {
-      throw AtKeyNotFoundException(
-          'Failed to fetch the enrollment record for '
+      throw AtKeyNotFoundException('Failed to fetch the enrollment record for '
           '${_atClient.enrollmentId} from the atServer'
           '${fetchFailure == null ? '' : ': $fetchFailure'}');
     }

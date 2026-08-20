@@ -1,8 +1,7 @@
 import 'dart:convert' show base64Decode, base64Encode;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_auth/at_auth.dart'
-    show KeyEntryStatus, publicKeyKidOfBase64;
+import 'package:at_auth/at_auth.dart' show KeyEntryStatus, publicKeyKidOfBase64;
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:meta/meta.dart' show experimental;
 

@@ -103,9 +103,8 @@ const ucIdPattern = r'UC-[ABCG]\d+\.\d+[a-z]?';
 /// the tree. Eleven of the twelve that were then checked turned out to describe
 /// code that had been deleted or reversed. Widening a cluster into this class
 /// is what makes it real; adding rows to the document is not.
-final _definition = RegExp(
-    '^#{2,4} +(?:[\\d.]+ +)?($ucIdPattern) +— +(.*)\$',
-    multiLine: true);
+final _definition =
+    RegExp('^#{2,4} +(?:[\\d.]+ +)?($ucIdPattern) +— +(.*)\$', multiLine: true);
 
 /// A use-case id anywhere at all, definitions and cross-references alike.
 /// The optional trailing letter is for a row inserted between two that were

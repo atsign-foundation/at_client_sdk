@@ -32,8 +32,7 @@ import 'package:at_client/src/listener/at_sign_change_listener.dart'
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class _MockAtClient extends Mock implements AtClient {
-}
+class _MockAtClient extends Mock implements AtClient {}
 
 class _MockNotificationService extends Mock implements NotificationService {}
 

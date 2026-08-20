@@ -34,17 +34,17 @@ void main() {
     final secondary = client.getRemoteSecondary()!;
     when(() => secondary.executeCommand(listCommand, auth: true))
         .thenAnswer((_) async => 'data:${jsonEncode({
-              'privileged-1.new.enrollments.__manage$atSign': {
-                'appName': 'admin',
-                'deviceName': 'desk',
-                'namespace': {'*': 'rw', '__manage': 'rw', 'buzz': 'rw'},
-              },
-              'scoped-1.new.enrollments.__manage$atSign': {
-                'appName': 'buzz',
-                'deviceName': 'pixel',
-                'namespace': {'buzz': 'rw'},
-              },
-            })}');
+                  'privileged-1.new.enrollments.__manage$atSign': {
+                    'appName': 'admin',
+                    'deviceName': 'desk',
+                    'namespace': {'*': 'rw', '__manage': 'rw', 'buzz': 'rw'},
+                  },
+                  'scoped-1.new.enrollments.__manage$atSign': {
+                    'appName': 'buzz',
+                    'deviceName': 'pixel',
+                    'namespace': {'buzz': 'rw'},
+                  },
+                })}');
     return client;
   }
 

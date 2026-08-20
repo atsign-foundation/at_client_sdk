@@ -38,8 +38,7 @@ void main() {
       // The control for the row below: with the full list this same owner
       // resolves, so the refusal there is the narrowing and nothing else.
       final r = resolver();
-      r.ring.seedPublicOnly(alice, 'todos',
-          publicKey: todosKey.publicKeyBytes);
+      r.ring.seedPublicOnly(alice, 'todos', publicKey: todosKey.publicKeyBytes);
 
       expect((await r.resolver.resolve(alice, 'todos'))?.alg,
           SecretSharingAlgos.xWing);
@@ -52,13 +51,13 @@ void main() {
       final ring = _CountingRing();
       final narrowed = NskeyResolver(ring,
           sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]);
-      ring.seedPublicOnly(alice, 'todos',
-          publicKey: todosKey.publicKeyBytes);
+      ring.seedPublicOnly(alice, 'todos', publicKey: todosKey.publicKeyBytes);
 
       await expectLater(
           narrowed.resolve(alice, 'todos'),
           throwsA(isA<AtEncryptionException>().having(
-              (e) => e.message, 'message',
+              (e) => e.message,
+              'message',
               allOf(
                   contains(SecretSharingAlgos.xWing),
                   contains(SecretSharingAlgos.mlKem1024),
@@ -74,8 +73,7 @@ void main() {
       final ring = _CountingRing();
       final narrowed = NskeyResolver(ring,
           sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024]);
-      ring.seedPublicOnly(alice, 'notes',
-          publicKey: deepKey.publicKeyBytes);
+      ring.seedPublicOnly(alice, 'notes', publicKey: deepKey.publicKeyBytes);
       ring.seedPublicOnly(alice, 'medical.notes',
           publicKey: todosKey.publicKeyBytes);
 

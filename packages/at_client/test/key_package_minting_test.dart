@@ -85,8 +85,7 @@ void main() {
         signerPublicKey:
             atChops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey,
         expecting: EnvelopeType.keyPackage);
-    return KeyPackage.fromPayload(envelope.payload,
-        enrollmentId: enrollmentId);
+    return KeyPackage.fromPayload(envelope.payload, enrollmentId: enrollmentId);
   }
 
   /// Files an already-held encapsulation keypair, as an enrollment created
@@ -131,8 +130,8 @@ void main() {
   }
 
   void configure(List<String> algorithms) {
-    when(() => atClient.getPreferences()).thenReturn(
-        AtClientPreference(keyEstablishmentAlgorithms: algorithms));
+    when(() => atClient.getPreferences())
+        .thenReturn(AtClientPreference(keyEstablishmentAlgorithms: algorithms));
   }
 
   setUpAll(() {
@@ -221,8 +220,7 @@ void main() {
     test('a second algorithm is minted, filed and advertised beside the first',
         () async {
       final first = await fileHeldKey(SecretSharingAlgos.xWing);
-      configure(
-          const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+      configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
 
       final reconciled = await minter().reconcileKeyPackage();
 
@@ -232,8 +230,8 @@ void main() {
       final package = await advertised();
       expect(package.keys.map((k) => k.alg).toSet(),
           {SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024});
-      expect(package.keys.every((k) => k.status == KeyEntryStatus.active),
-          isTrue);
+      expect(
+          package.keys.every((k) => k.status == KeyEntryStatus.active), isTrue);
       expect(package.keys.map((k) => k.kid), contains(first),
           reason: 'the key already advertised keeps its address — an '
               'enrollment that gained a key has not moved');
@@ -247,13 +245,13 @@ void main() {
       // key whose decapsulation half does not exist yet — and those writes
       // are durable, so nothing later opens them.
       await fileHeldKey(SecretSharingAlgos.xWing);
-      configure(
-          const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+      configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
 
       await minter().reconcileKeyPackage();
 
       expect(heldWhenPublished, hasLength(1));
-      final advertisedKids = (await advertised()).keys.map((k) => k.kid).toSet();
+      final advertisedKids =
+          (await advertised()).keys.map((k) => k.kid).toSet();
       expect(heldWhenPublished.single, containsAll(advertisedKids),
           reason: 'every kid the advertisement names was already in the '
               'keyfile at the moment it was sent');
@@ -271,11 +269,12 @@ void main() {
       final privates =
           await encMaterials(part: CryptographicKeyType.privateDecapsulation);
       final seed = Uint8List.fromList(privates.single.bytes.bytes);
-      final pair = await SecretSharingAlgos.kemFor(
-              SecretSharingAlgos.mlKem1024)!
-          .keyPairFromSeed(seed);
+      final pair =
+          await SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!
+              .keyPairFromSeed(seed);
 
-      expect(base64Encode(pair.publicKey), (await advertised()).keys.single.pub);
+      expect(
+          base64Encode(pair.publicKey), (await advertised()).keys.single.pub);
     });
 
     test('the advertisement is signed by the key _apsk names', () async {

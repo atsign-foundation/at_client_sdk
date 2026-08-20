@@ -200,8 +200,7 @@ class CryptoConfig {
   factory CryptoConfig.nskey(
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos}) =>
-      _nskeySet(keyRing, symmetricAesGcmCryptoProviderId,
-          sealsToKeyAlgorithms);
+      _nskeySet(keyRing, symmetricAesGcmCryptoProviderId, sealsToKeyAlgorithms);
 
   /// The nskey providers wired for **reading**, with writes still going out
   /// under [legacyCryptoProviderId].
@@ -239,9 +238,7 @@ class CryptoConfig {
         // registered on every client regardless of what this atSign mints,
         // because a *recipient's* KEM is the recipient's choice.
         NskeyProvider(
-            keyRing: keyRing,
-            cache: cache,
-            keyAlgo: SecretSharingAlgos.xWing),
+            keyRing: keyRing, cache: cache, keyAlgo: SecretSharingAlgos.xWing),
         NskeyProvider(
             keyRing: keyRing,
             cache: cache,

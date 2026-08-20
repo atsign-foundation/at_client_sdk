@@ -3,8 +3,7 @@ import 'dart:convert' show base64Encode;
 
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
-import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
-    show NskeySeed;
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart' show NskeySeed;
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;

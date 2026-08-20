@@ -60,7 +60,8 @@ void main() {
           'public:__nskey.app_1.my_apps@alice');
     });
 
-    test('the nskey mint lock is _nskeylock.<ns>@<owner>, immutable, 2-minute '
+    test(
+        'the nskey mint lock is _nskeylock.<ns>@<owner>, immutable, 2-minute '
         'ttl', () {
       final key = nskeyMintLockKey('@alice', 'app_1.my_apps');
       expect(key.toString(), '_nskeylock.app_1.my_apps@alice');
@@ -70,7 +71,8 @@ void main() {
       expect(key.metadata.ttl, 120000);
     });
 
-    test('the signing-root mint lock is _rootlock@<atSign>, immutable, '
+    test(
+        'the signing-root mint lock is _rootlock@<atSign>, immutable, '
         '2-minute ttl', () {
       final key = pqSigningRootMintLockKey('@alice');
       // No namespace: the root is atSign-level, which is what distinguishes it
@@ -307,8 +309,7 @@ void main() {
               'is not');
     });
 
-    test('an ML-KEM conveyance carries the SAME XWING-prefixed info',
-        () async {
+    test('an ML-KEM conveyance carries the SAME XWING-prefixed info', () async {
       // NskeyProvider._info is static and names the XWING constant, so the
       // string is baked into every stored ML-KEM conveyance's key schedule.
       // A cleanup to `$id:...` reads better and silently strands them all —
@@ -390,8 +391,7 @@ void main() {
       expect(SymmetricAesGcmProvider.fullNameOf(k), 'msg.app_1.my_apps');
     });
 
-    test('the pairwise substrate binds info "at_client/secret_sharing/v1"',
-        () {
+    test('the pairwise substrate binds info "at_client/secret_sharing/v1"', () {
       // Pins the constant's VALUE, and only that: it never touches a
       // ciphertext, so it stays green if a call site stops passing the
       // constant. The arms that read real sealed output — and that go red on a
@@ -441,8 +441,7 @@ void main() {
         ..namespace = 'myapp'
         ..sharedBy = '@alice';
 
-      await provider.encrypt(
-          CryptoContext(atClient: atClient), atKey, 'hello');
+      await provider.encrypt(CryptoContext(atClient: atClient), atKey, 'hello');
 
       final json = atKey.metadata.appMetadata!.toJson();
       expect(json.keys.toList(), ['providerId', 'ckKid', 'iv', 'ns', 'ckNs']);
@@ -464,18 +463,19 @@ void main() {
       // Not stored anywhere, but the atServer evaluates them, so their grammar
       // is a contract with it — the alternation especially, which arrived when
       // a client began answering at more than one address.
-      expect(EnvelopeAddressing.envelopeKey(
-              msgId: 'msg-1',
-              recipientKpid: 'kp-1',
-              appNamespace: 'myapp',
-              sharedBy: '@alice',
-              ttl: const Duration(hours: 1))
-          .toString(),
+      expect(
+          EnvelopeAddressing.envelopeKey(
+                  msgId: 'msg-1',
+                  recipientKpid: 'kp-1',
+                  appNamespace: 'myapp',
+                  sharedBy: '@alice',
+                  ttl: const Duration(hours: 1))
+              .toString(),
           'msg-1.kp-1.__ssenv.myapp@alice');
       expect(EnvelopeAddressing.fragmentFor('kp-1'), '.kp-1.__ssenv.');
       expect(EnvelopeAddressing.regexFor('kp-1'), '\\.kp-1\\.__ssenv\\.');
-      expect(EnvelopeAddressing.sweepRegexFor('kp-1'),
-          '.*\\.kp-1\\.__ssenv\\..*');
+      expect(
+          EnvelopeAddressing.sweepRegexFor('kp-1'), '.*\\.kp-1\\.__ssenv\\..*');
       expect(EnvelopeAddressing.regexForAny(['kp-1', 'kp-2']),
           '\\.(kp-1|kp-2)\\.__ssenv\\.');
       expect(EnvelopeAddressing.sweepRegexForAny(['kp-1', 'kp-2']),
@@ -764,13 +764,14 @@ void main() {
 
     test('the envelope members, their order, and unpadded base64url', () {
       final pair = AtChopsUtil.generateAtPkamKeyPair();
-      final envelope = signEnvelope(
-        {'hello': 'world'},
-        keys: [ApkamSigningKeys(
+      final envelope = signEnvelope({
+        'hello': 'world'
+      }, keys: [
+        ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
             publicKey: pair.atPublicKey.publicKey,
-            privateKey: pair.atPrivateKey.privateKey)],
-        enrollmentId: 'e1', type: EnvelopeType.app);
+            privateKey: pair.atPrivateKey.privateKey)
+      ], enrollmentId: 'e1', type: EnvelopeType.app);
 
       expect(envelope.toJson().keys.toList(), ['payload', 'signatures'],
           reason: 'exactly RFC 7515 general serialization — a member of our '
@@ -787,8 +788,7 @@ void main() {
         expect(text.contains('='), isFalse,
             reason: 'RFC 7515 base64url carries no padding');
       }
-      expect(
-          utf8.decode(base64Decode(base64.normalize(envelope.payloadB64))),
+      expect(utf8.decode(base64Decode(base64.normalize(envelope.payloadB64))),
           '{"hello":"world"}');
       // RSA-2048 → 256 signature bytes → 342 unpadded base64url chars, a
       // length Dart's bare base64Decode throws on. Pinned because it is the
@@ -798,41 +798,47 @@ void main() {
     });
 
     test('the protected header bytes, both algorithms', () async {
-      String headerOf(SignedEnvelope envelope) => utf8.decode(
-          base64Decode(base64.normalize(envelope.signature.protected)));
+      String headerOf(SignedEnvelope envelope) => utf8
+          .decode(base64Decode(base64.normalize(envelope.signature.protected)));
 
       final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
       expect(
-          headerOf(signEnvelope({'p': 1},
-              keys: [ApkamSigningKeys(
-                  algorithm: SigningAlgoType.rsa2048,
-                  publicKey: rsaPair.atPublicKey.publicKey,
-                  privateKey: rsaPair.atPrivateKey.privateKey)],
-              enrollmentId: 'e1', type: EnvelopeType.app)),
+          headerOf(signEnvelope({
+            'p': 1
+          }, keys: [
+            ApkamSigningKeys(
+                algorithm: SigningAlgoType.rsa2048,
+                publicKey: rsaPair.atPublicKey.publicKey,
+                privateKey: rsaPair.atPrivateKey.privateKey)
+          ], enrollmentId: 'e1', type: EnvelopeType.app)),
           '{"alg":"RS256","typ":"at-app+jws","kid":"e1","v":1}',
           reason: 'RS256, not rsa2048: the JOSE registered name, and SHA-256 '
               'by definition — which is why the envelope names no hash');
 
       final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
       expect(
-          headerOf(signEnvelope({'p': 1},
-              keys: [ApkamSigningKeys(
-                  algorithm: SigningAlgoType.mldsa65,
-                  publicKey: base64Encode(mlDsaPair.publicKey),
-                  privateKey: base64Encode(mlDsaPair.secretKey))],
-              enrollmentId: 'e1', type: EnvelopeType.app)),
+          headerOf(signEnvelope({
+            'p': 1
+          }, keys: [
+            ApkamSigningKeys(
+                algorithm: SigningAlgoType.mldsa65,
+                publicKey: base64Encode(mlDsaPair.publicKey),
+                privateKey: base64Encode(mlDsaPair.secretKey))
+          ], enrollmentId: 'e1', type: EnvelopeType.app)),
           '{"alg":"ML-DSA-65","typ":"at-app+jws","kid":"e1","v":1}',
           reason: 'ML-DSA-65 is the RFC 9964 registered JOSE name');
     });
 
     test('the header omits kid entirely when no enrollment is supplied', () {
       final pair = AtChopsUtil.generateAtPkamKeyPair();
-      final envelope = signEnvelope(
-        {'hello': 'world'},
-        keys: [ApkamSigningKeys(
+      final envelope = signEnvelope({
+        'hello': 'world'
+      }, keys: [
+        ApkamSigningKeys(
             algorithm: SigningAlgoType.rsa2048,
             publicKey: pair.atPublicKey.publicKey,
-            privateKey: pair.atPrivateKey.privateKey)], type: EnvelopeType.app);
+            privateKey: pair.atPrivateKey.privateKey)
+      ], type: EnvelopeType.app);
       expect(
           utf8.decode(
               base64Decode(base64.normalize(envelope.signature.protected))),

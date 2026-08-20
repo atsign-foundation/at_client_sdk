@@ -92,7 +92,8 @@ void main() {
             createdAt: DateTime.now().toUtc(),
           )));
     when(() => client.atKeysIo).thenReturn(io);
-    remoteData['public:${PqSigningRoot.recordName}$atSign'] = jsonEncode(apskAdvertisement(keys: [
+    remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+        jsonEncode(apskAdvertisement(keys: [
       ApskSigningKey.forPublicKey(
           alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
     ]));
@@ -146,8 +147,8 @@ void main() {
     expect(await enrollee.sweepOnce(), greaterThan(0));
     await PqSigningChain(enrolleeClient).publishPendingLink();
 
-    expect(await PqSigningChain(sweeperClient).readRootLink(enrolleeId),
-        isNotNull,
+    expect(
+        await PqSigningChain(sweeperClient).readRootLink(enrolleeId), isNotNull,
         reason: 'the sweeper is fully privileged, and that class signs ROOT '
             'links — one hop, nothing provisional — never chain links '
             'attributed to itself');
@@ -155,8 +156,8 @@ void main() {
         reason: 'the differential against the old design: no chain link was '
             'conveyed or stamped anywhere in this flow');
 
-    final result = await PqSigningChain(enrolleeClient)
-        .verifyChain(enrollee, enrolleeId);
+    final result =
+        await PqSigningChain(enrolleeClient).verifyChain(enrollee, enrolleeId);
     expect(result.verdict, ChainVerdict.anchored,
         reason: 'the stamped link must verify against the published signing '
             'root — a root link that only LOOKS like one vouches for '
@@ -167,8 +168,7 @@ void main() {
             'convergent, not a broadcast that repeats forever');
   });
 
-  test('the sweep upgrades a chain-linked enrollment to a root link',
-      () async {
+  test('the sweep upgrades a chain-linked enrollment to a root link', () async {
     final enrolleeClient = buildMockClient(enrolleeId);
     final enrollee = AtClientSecretSharing.forClient(enrolleeClient);
     await enrollee.register();
@@ -183,8 +183,7 @@ void main() {
     final chainLink =
         await PqSigningChain(parentClient).signLinkFor(parent, enrolleeId);
     await PqSigningChain(enrolleeClient).publishLink(enrolleeId, chainLink!);
-    expect(await PqSigningChain(enrolleeClient).readLink(enrolleeId),
-        isNotNull,
+    expect(await PqSigningChain(enrolleeClient).readLink(enrolleeId), isNotNull,
         reason: 'the precondition that makes this an upgrade test at all');
 
     final sweeperClient = buildMockClient('sweeper-1');
@@ -200,8 +199,8 @@ void main() {
     expect(await enrollee.sweepOnce(), greaterThan(0));
     await PqSigningChain(enrolleeClient).publishPendingLink();
 
-    final result = await PqSigningChain(enrolleeClient)
-        .verifyChain(enrollee, enrolleeId);
+    final result =
+        await PqSigningChain(enrolleeClient).verifyChain(enrollee, enrolleeId);
     expect(result.verdict, ChainVerdict.anchored,
         reason: 'after the upgrade the walk ends at the root in one hop, '
             'whatever the provisional link said. Reason if not: '
@@ -272,8 +271,8 @@ void main() {
         reason: 'the conveyance channel authenticates the SENDER, and the '
             'sender is not the root — a link is stamped only after verifying '
             'against the published signing root');
-    expect(await PqSigningChain(enrolleeClient).readRootLink(enrolleeId),
-        isNull,
+    expect(
+        await PqSigningChain(enrolleeClient).readRootLink(enrolleeId), isNull,
         reason: 'a forged anchor on the published identity record would be '
             'worse than no anchor');
   });

@@ -212,9 +212,7 @@ class KeyPackageMinting with ApkamSigning {
       [
         for (final key in minted)
           PackageKey.fromBytes(
-              use: SecretSharingAlgos.useEnc,
-              alg: key.alg,
-              pub: key.publicKey),
+              use: SecretSharingAlgos.useEnc, alg: key.alg, pub: key.publicKey),
         for (final key in held)
           if (!superseded.contains(key))
             key
@@ -238,10 +236,7 @@ class KeyPackageMinting with ApkamSigning {
           'names them. They stay advertised as retired, so what was already '
           'sealed to them still opens');
     }
-    return (
-      minted: missing,
-      retired: [for (final key in superseded) key.alg]
-    );
+    return (minted: missing, retired: [for (final key in superseded) key.alg]);
   }
 
   /// Every encapsulation key [enrolment] advertises in [keys] — active and
@@ -361,7 +356,9 @@ class KeyPackageMinting with ApkamSigning {
       // Unreachable: AtClientPreference refuses a list naming an algorithm
       // this build cannot mint. Throwing rather than asserting, because the
       // two would have to have drifted apart for this to be reached.
-      throw ArgumentError.value(algorithm, 'algorithm',
+      throw ArgumentError.value(
+          algorithm,
+          'algorithm',
           'no key-establishment implementation, though the preference '
               'accepted it. Supported: ${SecretSharingAlgos.keyAlgos}');
     }

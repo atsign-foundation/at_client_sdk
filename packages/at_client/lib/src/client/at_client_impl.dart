@@ -937,6 +937,7 @@ class AtClientImpl implements AtClient {
       );
 
   @override
+
   /// Replaces this client's preference — everything except the rollout axes,
   /// which are **refused** when they differ.
   ///

@@ -38,7 +38,8 @@ class _WaitingProvider extends CryptoProvider {
   bool filed = false;
 
   @override
-  Future<String> decrypt(CryptoContext context, AtKey atKey, String value) async {
+  Future<String> decrypt(
+      CryptoContext context, AtKey atKey, String value) async {
     if (!filed) {
       throw NskeyPrivateUnavailableException(
           _owner, _namespace, _kid, 'not yet received that generation');
@@ -47,7 +48,8 @@ class _WaitingProvider extends CryptoProvider {
   }
 
   @override
-  Future<String> encrypt(CryptoContext context, AtKey atKey, String value) async =>
+  Future<String> encrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
       value;
 }
 
@@ -62,7 +64,8 @@ class _HopelessProvider extends CryptoProvider {
       throw AtDecryptionException('the ciphertext is corrupt');
 
   @override
-  Future<String> encrypt(CryptoContext context, AtKey atKey, String value) async =>
+  Future<String> encrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
       value;
 }
 
@@ -74,29 +77,30 @@ class _SignallingRing extends InMemoryNskeyKeyRing
   @override
   Stream<FiledNskeyPrivate> get privatesFiled => _controller.stream;
 
-  void announce({String owner = _owner, String namespace = _namespace,
+  void announce(
+          {String owner = _owner,
+          String namespace = _namespace,
           String nskeyKid = _kid}) =>
-      _controller
-          .add((owner: owner, namespace: namespace, nskeyKid: nskeyKid));
+      _controller.add((owner: owner, namespace: namespace, nskeyKid: nskeyKid));
 
   Future<void> dispose() => _controller.close();
 }
 
 String _frame(String key, String providerId) => 'notification: ${jsonEncode({
-      'id': 'n-${key.hashCode}',
-      'key': key,
-      'from': _owner,
-      'to': _owner,
-      'epochMillis': DateTime.now().millisecondsSinceEpoch,
-      'value': 'sealed',
-      'operation': 'update',
-      'messageType': MessageTypeEnum.key.toString(),
-      AtConstants.isEncrypted: true,
-      'metadata': {
-        AtConstants.appMetadata:
-            Metadata.encodeAppMetadata(AppMetadata(providerId: providerId)),
-      },
-    })}\n';
+          'id': 'n-${key.hashCode}',
+          'key': key,
+          'from': _owner,
+          'to': _owner,
+          'epochMillis': DateTime.now().millisecondsSinceEpoch,
+          'value': 'sealed',
+          'operation': 'update',
+          'messageType': MessageTypeEnum.key.toString(),
+          AtConstants.isEncrypted: true,
+          'metadata': {
+            AtConstants.appMetadata:
+                Metadata.encodeAppMetadata(AppMetadata(providerId: providerId)),
+          },
+        })}\n';
 
 void main() {
   late MockAtClientImpl atClient;

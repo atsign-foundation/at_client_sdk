@@ -3,8 +3,7 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 class NoopPersistence implements SecretStorePersistence {
   @override

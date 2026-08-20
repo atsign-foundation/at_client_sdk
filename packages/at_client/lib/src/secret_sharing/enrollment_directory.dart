@@ -5,8 +5,7 @@ import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
-import 'package:at_commons/at_commons.dart'
-    show AtSigningVerificationException;
+import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
 import 'package:meta/meta.dart' show experimental;
 

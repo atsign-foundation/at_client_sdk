@@ -929,10 +929,9 @@ void main() {
 
     test('the fetched record is parsed, and fetched only once', () async {
       final c = await client(enrollmentId: 'e-1');
-      when(() => remote.executeCommand(
-              'enroll:fetch:{"enrollmentId":"e-1"}\n',
-              auth: true))
-          .thenAnswer((_) async => 'data:${jsonEncode({
+      when(() =>
+          remote.executeCommand('enroll:fetch:{"enrollmentId":"e-1"}\n',
+              auth: true)).thenAnswer((_) async => 'data:${jsonEncode({
                 'appName': 'buzz',
                 'deviceName': 'pixel',
                 'namespace': {'buzz': 'rw'},

@@ -24,9 +24,9 @@ void main() {
   late Map<String, dynamic> vectors;
 
   setUpAll(() {
-    vectors = jsonDecode(
-            File('test/vectors/jws_envelope.json').readAsStringSync())
-        as Map<String, dynamic>;
+    vectors =
+        jsonDecode(File('test/vectors/jws_envelope.json').readAsStringSync())
+            as Map<String, dynamic>;
   });
 
   test('the RS256 vector verifies, and tampering is refused', () async {
@@ -35,14 +35,14 @@ void main() {
 
     await verifyEnvelope(envelope,
         signerPublicKey: arm['apskPublicKey'] as String,
-            expecting: EnvelopeType.app);
+        expecting: EnvelopeType.app);
     expect(envelope.payload, vectors['payload']);
     expect(envelope.signerEnrollmentId, 'vector-1');
 
     await expectLater(
         () => verifyEnvelope(envelope.withPayloadJson({'doc': 'tampered'}),
             signerPublicKey: arm['apskPublicKey'] as String,
-                expecting: EnvelopeType.app),
+            expecting: EnvelopeType.app),
         throwsA(isA<AtSigningVerificationException>()));
   });
 
@@ -50,11 +50,14 @@ void main() {
     final arm = vectors['rs256'] as Map<String, dynamic>;
 
     final resigned = signEnvelope(vectors['payload'],
-        keys: [ApkamSigningKeys(
-            algorithm: SigningAlgoType.rsa2048,
-            publicKey: arm['apskPublicKey'] as String,
-            privateKey: arm['privateKey'] as String)],
-        enrollmentId: 'vector-1', type: EnvelopeType.app);
+        keys: [
+          ApkamSigningKeys(
+              algorithm: SigningAlgoType.rsa2048,
+              publicKey: arm['apskPublicKey'] as String,
+              privateKey: arm['privateKey'] as String)
+        ],
+        enrollmentId: 'vector-1',
+        type: EnvelopeType.app);
 
     expect(resigned.toJson(), arm['envelope'],
         reason: 'PKCS#1 v1.5 is deterministic, so any byte of producer '
@@ -66,12 +69,12 @@ void main() {
     final arm = vectors['mlDsa65'] as Map<String, dynamic>;
     final envelope = SignedEnvelope.fromJson(arm['envelope'] as Map);
     final apsk = jsonEncode(apskAdvertisement(keys: [
-        ApskSigningKey.forPublicKey(
-            alg: SigningAlgoType.mldsa65, pub: arm['publicKey'] as String)
-      ]));
+      ApskSigningKey.forPublicKey(
+          alg: SigningAlgoType.mldsa65, pub: arm['publicKey'] as String)
+    ]));
 
-    await verifyEnvelope(envelope, signerPublicKey: apsk,
-        expecting: EnvelopeType.app);
+    await verifyEnvelope(envelope,
+        signerPublicKey: apsk, expecting: EnvelopeType.app);
     expect(envelope.payload, vectors['payload']);
 
     await expectLater(

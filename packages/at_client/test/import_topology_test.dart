@@ -17,8 +17,8 @@ void main() {
       p.canonicalize('lib/at_client.dart'),
       p.canonicalize('lib/at_client_mixins.dart'),
     };
-    final directive =
-        RegExp(r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''', multiLine: true);
+    final directive = RegExp(r'''^\s*(?:import|export)\s+['"]([^'"]+)['"]''',
+        multiLine: true);
     final violations = <String>[];
 
     final files = Directory('lib/src')
@@ -57,10 +57,15 @@ void main() {
     // cut. The edges that used to close it were incidental: a dartdoc-only
     // import in at_client_preference, and a deprecated ignored
     // AtClientManager parameter on NotificationServiceImpl.create.
-    final closure = _importClosure('lib/src/service/enrollment_service_impl.dart');
-    expect(closure, isNot(contains(p.canonicalize('lib/src/client/at_client_impl.dart'))),
+    final closure =
+        _importClosure('lib/src/service/enrollment_service_impl.dart');
+    expect(closure,
+        isNot(contains(p.canonicalize('lib/src/client/at_client_impl.dart'))),
         reason: 'the impl may depend on the service, never the reverse');
-    expect(closure, isNot(contains(p.canonicalize('lib/src/manager/at_client_manager.dart'))),
+    expect(
+        closure,
+        isNot(
+            contains(p.canonicalize('lib/src/manager/at_client_manager.dart'))),
         reason: 'the manager constructs clients; nothing below it may '
             'import it back');
     // A positive control: the closure walk must actually walk.
@@ -76,13 +81,15 @@ void main() {
         _importClosure('lib/src/secret_sharing/at_client_secret_sharing.dart');
     expect(
         closure,
-        isNot(
-            contains(p.canonicalize('lib/src/service/enrollment_service_impl.dart'))),
+        isNot(contains(
+            p.canonicalize('lib/src/service/enrollment_service_impl.dart'))),
         reason: 'privilege resolution reaches the substrate by injection, '
             'never by the substrate importing the service layer');
     // A positive control: the closure walk must actually walk.
-    expect(closure,
-        contains(p.canonicalize('lib/src/secret_sharing/pairwise_secret_sharing.dart')));
+    expect(
+        closure,
+        contains(p.canonicalize(
+            'lib/src/secret_sharing/pairwise_secret_sharing.dart')));
   });
 }
 

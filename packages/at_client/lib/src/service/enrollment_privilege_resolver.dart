@@ -18,8 +18,7 @@ import 'package:at_client/src/util/enroll_list_request_param.dart';
 /// keys, which is full privilege by construction rather than by grant.
 class EnrollmentRecordPrivilegeResolver implements EnrollmentPrivilegeResolver {
   EnrollmentRecordPrivilegeResolver(this._atClient,
-      {required
-      Future<List<Enrollment>> Function(
+      {required Future<List<Enrollment>> Function(
               {EnrollmentListRequestParam? enrollmentListParams})
           listEnrollments})
       : _listEnrollments = listEnrollments;

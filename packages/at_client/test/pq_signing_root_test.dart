@@ -1,7 +1,6 @@
 import 'dart:async' show FutureOr;
 import 'dart:convert';
-import 'package:at_chops/at_chops.dart'
-    show MlDsa65PureDartAlgo;
+import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart';
@@ -16,8 +15,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 /// Generation 1 of a root filed under the algorithm this build mints.
 final rootSlot1 =
@@ -169,8 +167,7 @@ void main() {
 
     expect(publicKey, isNotNull);
     final filed = (await io.read(atSign))
-        .getAtSignKey(
-            rootSlot1, CryptographicKeyType.privateSigning);
+        .getAtSignKey(rootSlot1, CryptographicKeyType.privateSigning);
     expect(filed, isNotNull,
         reason: 'a published root whose private did not survive strands every '
             'enrollment on the atSign, and D1 builds no rotation to replace '
@@ -202,8 +199,9 @@ void main() {
             'delete forced past the immutable record without checking it still '
             'owned the one it was removing');
     expect(
-        c.verbs.whereType<UpdateVerbBuilder>().where(
-            (v) => v.atKey.key == pqSigningRootMintLockRecordName),
+        c.verbs
+            .whereType<UpdateVerbBuilder>()
+            .where((v) => v.atKey.key == pqSigningRootMintLockRecordName),
         hasLength(1),
         reason: 'and it is taken exactly once — a second take inside one mint '
             'would be refused by the atServer anyway');
@@ -352,9 +350,8 @@ void main() {
     });
 
     final io = await keysIo();
-    final minted =
-        await PqSigningRoot(atClient, keysIo: io).mintIfAbsent(
-            isFullyPrivileged: true);
+    final minted = await PqSigningRoot(atClient, keysIo: io)
+        .mintIfAbsent(isFullyPrivileged: true);
 
     expect(minted, isNull);
     expect(reads, greaterThan(1),
@@ -759,8 +756,8 @@ void main() {
         keys.nextAtSignGeneration(
             PqSigningRoot.keyIdRole, PqSigningRoot.rootKeyAlgoToken),
         2);
-    expect(keys.nextAtSignGeneration(PqSigningRoot.keyIdRole, 'another-algo'),
-        1);
+    expect(
+        keys.nextAtSignGeneration(PqSigningRoot.keyIdRole, 'another-algo'), 1);
   });
 
   group('a record advertising a successor beside a retired predecessor', () {
@@ -781,8 +778,7 @@ void main() {
       MockAtClient client,
       List<UpdateVerbBuilder> published,
       List<VerbBuilder> verbs
-    }) rotating() =>
-        client(publishedRoots: [
+    }) rotating() => client(publishedRoots: [
           (key: successor.publicKey, status: KeyEntryStatus.active),
           (key: predecessor.publicKey, status: KeyEntryStatus.retired),
         ]);
@@ -969,7 +965,8 @@ void main() {
       final keys = await io.read(atSign);
       for (var i = 0; i < pairs.length; i++) {
         keys.addKey(AtKeysMaterial(
-          keyId: '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}${i + 1}',
+          keyId:
+              '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}${i + 1}',
           keyPartType: CryptographicKeyType.privateSigning,
           keyAlgorithmType: PqSigningRoot.rootKeyAlgoToken,
           bytes: AtBytes(pairs[i].secretKey),
@@ -1031,8 +1028,8 @@ void main() {
       ]);
       final io = await keysHolding([first, second]);
 
-      expect(await PqSigningRoot(c.client, keysIo: io).privateHalf(atSign),
-          isNull,
+      expect(
+          await PqSigningRoot(c.client, keysIo: io).privateHalf(atSign), isNull,
           reason: 'both are advertised, so neither is poison — but a retired '
               'key signs nothing, and answering with one would publish an '
               'anchor every verifier rejects');
@@ -1049,8 +1046,8 @@ void main() {
       ]);
       final io = await keysHolding([first, second]);
 
-      final retired =
-          await PqSigningRoot(c.client, keysIo: io).reconcileHeldPrivate(atSign);
+      final retired = await PqSigningRoot(c.client, keysIo: io)
+          .reconcileHeldPrivate(atSign);
 
       expect(retired, isTrue);
       final actives = (await io.read(atSign)).atSignKeys.where((m) =>

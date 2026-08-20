@@ -1,6 +1,5 @@
 import 'package:at_client/src/signing/envelope_signature.dart';
-import 'package:at_commons/at_commons.dart'
-    show AtSigningVerificationException;
+import 'package:at_commons/at_commons.dart' show AtSigningVerificationException;
 import 'package:test/test.dart';
 
 /// The accepted incompatibility between at_client **3.14.0** and this tree,

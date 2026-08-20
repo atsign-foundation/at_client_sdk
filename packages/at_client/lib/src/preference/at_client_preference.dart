@@ -148,8 +148,7 @@ class AtClientPreference {
         sealsToKeyAlgorithms = _sealableOrRefuse(
             sealsToKeyAlgorithms ?? posture.sealsToKeyAlgorithms),
         keyEstablishmentAlgorithms = _advertisableOrRefuse(
-            keyEstablishmentAlgorithms ??
-                posture.keyEstablishmentAlgorithms) {
+            keyEstablishmentAlgorithms ?? posture.keyEstablishmentAlgorithms) {
     // Defaulted in the body rather than the initializer list because the field
     // is mutable: an app may still turn seeding on or off after construction,
     // and the posture only decides where it starts.
@@ -194,7 +193,8 @@ class AtClientPreference {
     // Each line reads "asked for X, running on Y", since the caller is the one
     // holding a preference it expected to take effect.
     void compare(String axis, Object? asked, Object? running) {
-      if (asked != running) differences.add('$axis (asked $asked, running $running)');
+      if (asked != running)
+        differences.add('$axis (asked $asked, running $running)');
     }
 
     compare('posture.writesPqByDefault', other.posture.writesPqByDefault,

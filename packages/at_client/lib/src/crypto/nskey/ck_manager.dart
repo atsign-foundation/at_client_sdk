@@ -58,8 +58,6 @@ class CkManager {
       : resolver = resolver ??
             NskeyResolver(keyRing, sealsToKeyAlgorithms: sealsToKeyAlgorithms);
 
-
-
   /// Ensure `(destination, namespace)` has a current CK sealed to the
   /// destination's *live* nskey generation, minting and conveying one if not.
   ///

@@ -55,7 +55,9 @@ void main() {
 
   Future<List<String>> heldKeyIds() async {
     final keys = await keysIo.read(atSign);
-    return keys.signingKeysFor(enrollmentId).map((k) => k.algorithm.name)
+    return keys
+        .signingKeysFor(enrollmentId)
+        .map((k) => k.algorithm.name)
         .toList();
   }
 
@@ -239,8 +241,7 @@ void main() {
             SigningAlgoType.mldsa65
           }));
 
-      expect(await mint(),
-          [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048]);
+      expect(await mint(), [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048]);
       expect(updates.single.signingKeys!.map((e) => e.alg).toList(),
           [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048],
           reason: 'the two minted keys and nothing else — the APKAM '
@@ -275,8 +276,8 @@ void main() {
       expect(updates, isEmpty);
       expect(published, hasLength(1));
 
-      final advertised = (jsonDecode(published.single)['keys'] as List)
-          .cast<Map>();
+      final advertised =
+          (jsonDecode(published.single)['keys'] as List).cast<Map>();
       expect(advertised.map((e) => e['alg']).toList(), ['mldsa65']);
       expect(advertised.single['status'], isNull,
           reason: 'active, which the wire spells by omitting the field');
@@ -308,8 +309,8 @@ void main() {
   /// against real published values rather than a reconstruction of them.
   group('a stage transition', () {
     void inUse(Set<SigningAlgoType> algorithms) {
-      when(() => atClient.getPreferences()).thenReturn(
-          AtClientPreference(dataSigningKeyAlgorithms: algorithms));
+      when(() => atClient.getPreferences())
+          .thenReturn(AtClientPreference(dataSigningKeyAlgorithms: algorithms));
     }
 
     Future<AtKeys> keyfile() async => keysIo.read(atSign);
@@ -368,9 +369,14 @@ void main() {
           reason: 'strongest first, the active one leading');
       expect(advertised.first.status, KeyEntryStatus.active);
       expect(advertised.last.status, KeyEntryStatus.retired);
-      expect(advertised.last.pub,
-          (await keyfile()).retiredSigningKeysFor(enrollmentId).single.publicKey,
-          reason: 'the advertisement and the keyfile name one key. A withdrawal '
+      expect(
+          advertised.last.pub,
+          (await keyfile())
+              .retiredSigningKeysFor(enrollmentId)
+              .single
+              .publicKey,
+          reason:
+              'the advertisement and the keyfile name one key. A withdrawal '
               'that dropped the entry instead of retiring it would unverify '
               'every envelope it signed, and the key package it signed with it');
     });
@@ -459,7 +465,8 @@ void main() {
       final keys = await keyfile();
       expect(keys.signingKeysFor(enrollmentId).map((k) => k.algorithm).toList(),
           [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048]);
-      expect(keys.getKey(enrollmentId, 'sign:rsa2048:2',
+      expect(
+          keys.getKey(enrollmentId, 'sign:rsa2048:2',
               CryptographicKeyType.publicVerification),
           isNotNull,
           reason: 'the generation is the slot: the returning algorithm lands '
@@ -505,14 +512,16 @@ void main() {
       await minter().reconcileSigningKeys();
 
       final rollout1Key = (await keyfile()).signingKeysFor('primary').single;
-      final envelope = signEnvelope('what rollout 1 signed', keys: [
-        ApkamSigningKeys(
-            algorithm: rollout1Key.algorithm,
-            publicKey: rollout1Key.publicKey,
-            privateKey: rollout1Key.privateKey)
-      ], type: EnvelopeType.app);
-      await verifyEnvelope(envelope, signerPublicKey: published.single,
-          expecting: EnvelopeType.app);
+      final envelope = signEnvelope('what rollout 1 signed',
+          keys: [
+            ApkamSigningKeys(
+                algorithm: rollout1Key.algorithm,
+                publicKey: rollout1Key.publicKey,
+                privateKey: rollout1Key.privateKey)
+          ],
+          type: EnvelopeType.app);
+      await verifyEnvelope(envelope,
+          signerPublicKey: published.single, expecting: EnvelopeType.app);
 
       inUse({SigningAlgoType.mldsa65});
       await minter().reconcileSigningKeys();
@@ -521,8 +530,8 @@ void main() {
           reason: 'the record moved, so it was rewritten — a client that '
               'skipped the publish would leave the withdrawn key advertised '
               'as current');
-      await verifyEnvelope(envelope, signerPublicKey: published.last,
-          expecting: EnvelopeType.app);
+      await verifyEnvelope(envelope,
+          signerPublicKey: published.last, expecting: EnvelopeType.app);
     });
   });
 
@@ -531,7 +540,8 @@ void main() {
       when(() => enrollment.update(any(), any()))
           .thenThrow(StateError('the atServer refused'));
 
-      await expectLater(minter().reconcileSigningKeys(), throwsA(isA<StateError>()));
+      await expectLater(
+          minter().reconcileSigningKeys(), throwsA(isA<StateError>()));
       expect(await heldKeyIds(), isEmpty,
           reason: 'nothing is filed, so the client goes on signing with the '
               'key it already advertises and the next start retries. The '

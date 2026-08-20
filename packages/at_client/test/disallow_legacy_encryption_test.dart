@@ -172,16 +172,15 @@ void main() {
   /// the SDK's own watermarks unwritable and took the notification listener out
   /// with them.
   group('local: keys', () {
-    AtKey watermark() => AtKey.local('lastreceivednotification', alice,
-            namespace: namespace)
-        .build();
+    AtKey watermark() =>
+        AtKey.local('lastreceivednotification', alice, namespace: namespace)
+            .build();
 
     test('a local key is not refused', () {
       final atClient = strictClient(
           crypto: CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()));
 
-      expect(
-          CryptoRuntime.providerIdFor(atClient, null, atKey: watermark()),
+      expect(CryptoRuntime.providerIdFor(atClient, null, atKey: watermark()),
           legacyCryptoProviderId,
           reason: 'the nskey path is (owner, namespace)-scoped and declines a '
               'local key, so the id still falls back to legacy — but the '

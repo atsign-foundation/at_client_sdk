@@ -175,9 +175,9 @@ void main() {
     // root runs inside hydrate and nothing earlier touches that record, so
     // the FIRST root-record get is hydrate's own.
     final hydrateReconcile = firstIndex('get:public:pq_signing_root');
-    final sweepScan = events.indexWhere(
-        (e) => e.startsWith('scan:') && e.contains('__ssenv') ||
-            e.startsWith('cmd:scan') && e.contains('__ssenv'));
+    final sweepScan = events.indexWhere((e) =>
+        e.startsWith('scan:') && e.contains('__ssenv') ||
+        e.startsWith('cmd:scan') && e.contains('__ssenv'));
     expect(sweepScan, isNot(-1),
         reason: 'the collection sweep never scanned for envelopes. '
             'Events:\n${events.join('\n')}');
@@ -205,7 +205,8 @@ void main() {
             'has not anchored itself adds a hop without reaching the root');
   });
 
-  test('reconciliation gates the offer: an orphaned private is retired, '
+  test(
+      'reconciliation gates the offer: an orphaned private is retired, '
       'never offered or anchored', () async {
     // The differential arm: the held private corresponds to NOTHING published
     // (a lost create's residue). Reconcile must retire it — a keyfile write —

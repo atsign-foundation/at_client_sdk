@@ -183,7 +183,8 @@ void main() {
 
     test('the difference reads as asked-versus-running', () {
       final running = preference();
-      final asked = preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65);
+      final asked =
+          preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65);
 
       expect(running.rolloutDifferencesFrom(asked).single,
           'authenticationKeyAlgorithm (asked mldsa65, running rsa2048)',
@@ -204,8 +205,7 @@ void main() {
           preference(authenticationKeyAlgorithm: SigningAlgoType.rsa2048);
 
       final differences = postured.rolloutDifferencesFrom(plain);
-      expect(
-          differences.any((d) => d.contains('authenticationKeyAlgorithm')),
+      expect(differences.any((d) => d.contains('authenticationKeyAlgorithm')),
           isFalse,
           reason: 'the effective algorithm is the same on both sides');
       expect(
@@ -229,7 +229,9 @@ void main() {
                   authenticationKeyAlgorithm: SigningAlgoType.mldsa65),
               cacheKey: '$atSign|enroll-a'),
           throwsA(isA<ArgumentError>().having(
-              (e) => '$e', 'message', allOf(
+              (e) => '$e',
+              'message',
+              allOf(
                   contains('authenticationKeyAlgorithm'),
                   contains('$atSign|enroll-a'),
                   contains('final at construction')))));
@@ -238,9 +240,7 @@ void main() {
     test('says nothing when the settings agree', () {
       expect(
           () => AtClientImpl.refuseChangedRolloutAxes(
-              running: preference(),
-              asked: preference(),
-              cacheKey: atSign),
+              running: preference(), asked: preference(), cacheKey: atSign),
           returnsNormally);
     });
 
@@ -251,19 +251,17 @@ void main() {
       final first = await AtClientImpl.create(atSign, 'wavi', preference());
 
       await expectLater(
-          AtClientImpl.create(
-              atSign,
-              'wavi',
-              preference(
-                  authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
+          AtClientImpl.create(atSign, 'wavi',
+              preference(authenticationKeyAlgorithm: SigningAlgoType.mldsa65)),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('authenticationKeyAlgorithm'))));
 
       // The control, on the same cached client: an equal preference is handed
       // back the client that already exists. Without this the row above passes
       // for a build that refuses every second create.
-      expect(identical(await AtClientImpl.create(atSign, 'wavi', preference()),
-              first),
+      expect(
+          identical(
+              await AtClientImpl.create(atSign, 'wavi', preference()), first),
           isTrue);
     });
 
@@ -277,8 +275,7 @@ void main() {
       await manager.setCurrentAtSign(atSign, 'wavi', preference());
 
       await expectLater(
-          manager.setCurrentAtSign(
-              atSign, 'wavi', preference(posture: strict)),
+          manager.setCurrentAtSign(atSign, 'wavi', preference(posture: strict)),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('disallowLegacyEncryption'))));
 
@@ -294,8 +291,8 @@ void main() {
       final client = await AtClientImpl.create(atSign, 'wavi', preference());
 
       expect(
-          () => client.setPreferences(
-              preference(dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65})),
+          () => client.setPreferences(preference(
+              dataSigningKeyAlgorithms: const {SigningAlgoType.mldsa65})),
           throwsA(isA<ArgumentError>().having(
               (e) => '$e', 'message', contains('dataSigningKeyAlgorithms'))));
 

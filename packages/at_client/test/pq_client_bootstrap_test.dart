@@ -1,12 +1,7 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart'
-    show
-        AtKeys,
-        AtKeysIo,
-        InMemoryAtKeysIo,
-        KeyAlgorithmType,
-        WrittenAtKeysIo;
+    show AtKeys, AtKeysIo, InMemoryAtKeysIo, KeyAlgorithmType, WrittenAtKeysIo;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/response/enrollment.dart' show Enrollment;
@@ -107,18 +102,18 @@ void main() {
       final bootstrap = build();
       expect(identical(bootstrap.seeding.ring, bootstrap.ring), isTrue);
       expect(
-          identical(
-              bootstrap.sharing, AtClientSecretSharing.forClient(client)),
+          identical(bootstrap.sharing, AtClientSecretSharing.forClient(client)),
           isTrue,
           reason: 'forClient caches per client; the bootstrap must hold '
               'that instance, not a rival');
-      expect(identical(bootstrap.seeding.privateFiling, bootstrap.filing),
-          isTrue);
+      expect(
+          identical(bootstrap.seeding.privateFiling, bootstrap.filing), isTrue);
     });
   });
 
   group('startup', () {
-    test('completes despite every step failing or skipping, and is '
+    test(
+        'completes despite every step failing or skipping, and is '
         'idempotent', () async {
       final bootstrap = build();
       // With no keysIo, no preference and unstubbed client calls, every
@@ -133,8 +128,7 @@ void main() {
     test('the sweep runs only for a fully privileged client', () async {
       var swept = 0;
       final privileged = _FakePrivilege(true);
-      await build(privilege: privileged, sweep: () async => ++swept)
-          .startup();
+      await build(privilege: privileged, sweep: () async => ++swept).startup();
       expect(swept, 1);
 
       swept = 0;
@@ -195,7 +189,8 @@ void main() {
   });
 
   group('the record-backed privilege resolver', () {
-    test('a client with no enrollment id is fully privileged by '
+    test(
+        'a client with no enrollment id is fully privileged by '
         'construction', () async {
       final remote = MockRemoteSecondary();
       final lookUp = MockAtLookupImpl();
@@ -295,8 +290,8 @@ void main() {
         return true;
       });
 
-      await runStartup(io,
-          localSecondaryReturning(recordWith(namespace: {'buzz': 'r'})));
+      await runStartup(
+          io, localSecondaryReturning(recordWith(namespace: {'buzz': 'r'})));
 
       expect((await io.read(atSign)).enrollmentInfo(enrollmentId)!.namespaces,
           {'buzz': 'r'},

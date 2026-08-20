@@ -38,7 +38,8 @@ void main() {
             'is real — which is what makes the assertion discriminate');
   });
 
-  test('UC-G1.2 · a retrofit leaves one active auth key, touching nothing '
+  test(
+      'UC-G1.2 · a retrofit leaves one active auth key, touching nothing '
       'legacy', () {
     // GIVEN a legacy keyfile that then retrofits.
     // WHEN  the retrofit completes.

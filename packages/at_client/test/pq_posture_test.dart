@@ -71,8 +71,8 @@ void main() {
       const p = PqPosture.pqActive;
       const before = PqPosture.pqReady;
 
-      expect(p.dataSigningKeyAlgorithms,
-          isNot(before.dataSigningKeyAlgorithms));
+      expect(
+          p.dataSigningKeyAlgorithms, isNot(before.dataSigningKeyAlgorithms));
       expect(p.writesPqByDefault, isNot(before.writesPqByDefault));
 
       expect(p.authenticationKeyAlgorithm, before.authenticationKeyAlgorithm);
@@ -82,7 +82,8 @@ void main() {
       // Refusing legacy writes is what "the PQ path is the default" means from
       // the other side, so it moves WITH writesPqByDefault rather than being a
       // third thing - and the class rejects the combination where it does not.
-      expect(p.disallowLegacyEncryption, isNot(before.disallowLegacyEncryption));
+      expect(
+          p.disallowLegacyEncryption, isNot(before.disallowLegacyEncryption));
     });
 
     test('legacy material is minted at every released stage', () {
@@ -185,20 +186,21 @@ void main() {
       // policy. There is no constructor argument to test, so what is asserted
       // is that the posture is the only thing that moves it.
       expect(AtClientPreference().disallowLegacyEncryption, false);
-      expect(AtClientPreference(posture: PqPosture.pqReady)
+      expect(
+          AtClientPreference(posture: PqPosture.pqReady)
               .disallowLegacyEncryption,
           false);
-      expect(AtClientPreference(posture: PqPosture.pqActive)
+      expect(
+          AtClientPreference(posture: PqPosture.pqActive)
               .disallowLegacyEncryption,
           true);
       // Naming the other axes explicitly does not move it either, which is
       // what makes this posture-only rather than merely posture-defaulted.
       expect(
           AtClientPreference(
-                  posture: PqPosture.pqActive,
-                  authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
-                  dataSigningKeyAlgorithms: const {})
-              .disallowLegacyEncryption,
+              posture: PqPosture.pqActive,
+              authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
+              dataSigningKeyAlgorithms: const {}).disallowLegacyEncryption,
           true);
     });
 
@@ -222,7 +224,8 @@ void main() {
 
   group('the authentication key algorithm', () {
     test('follows the posture, and an explicit value beats it', () {
-      expect(AtClientPreference(posture: PqPosture.pqReady)
+      expect(
+          AtClientPreference(posture: PqPosture.pqReady)
               .authenticationKeyAlgorithm,
           SigningAlgoType.mldsa65);
       expect(
@@ -245,7 +248,8 @@ void main() {
       // stage that exists precisely because they must not.
       const p = PqPosture.pqReady;
       expect(p.authenticationKeyAlgorithm, SigningAlgoType.mldsa65);
-      expect(p.dataSigningKeyAlgorithms, isNot(contains(SigningAlgoType.mldsa65)));
+      expect(
+          p.dataSigningKeyAlgorithms, isNot(contains(SigningAlgoType.mldsa65)));
     });
   });
 
@@ -258,15 +262,13 @@ void main() {
           {SigningAlgoType.mldsa65});
       expect(
           AtClientPreference(
-                  posture: PqPosture.pqActive,
-                  dataSigningKeyAlgorithms: const {})
-              .dataSigningKeyAlgorithms,
+              posture: PqPosture.pqActive,
+              dataSigningKeyAlgorithms: const {}).dataSigningKeyAlgorithms,
           isEmpty);
       expect(
           AtClientPreference(
-              dataSigningKeyAlgorithms: const {
-                SigningAlgoType.rsa2048
-              }).dataSigningKeyAlgorithms,
+                  dataSigningKeyAlgorithms: const {SigningAlgoType.rsa2048})
+              .dataSigningKeyAlgorithms,
           {SigningAlgoType.rsa2048});
     });
 
@@ -291,7 +293,10 @@ void main() {
       // from what canSignEnvelopeWith answers would follow the signer's
       // capability silently, and what an app may ask for is a claim about
       // this release.
-      for (final signable in [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048]) {
+      for (final signable in [
+        SigningAlgoType.mldsa65,
+        SigningAlgoType.rsa2048
+      ]) {
         expect(
             AtClientPreference(dataSigningKeyAlgorithms: {signable})
                 .dataSigningKeyAlgorithms,
@@ -308,7 +313,9 @@ void main() {
           AtClientPreference(dataSigningKeyAlgorithms: requested);
       requested.add(SigningAlgoType.ecc_secp256r1);
       expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
-      expect(() => preference.dataSigningKeyAlgorithms.add(SigningAlgoType.mldsa65),
+      expect(
+          () =>
+              preference.dataSigningKeyAlgorithms.add(SigningAlgoType.mldsa65),
           throwsUnsupportedError);
     });
   });
@@ -345,8 +352,10 @@ void main() {
       expect(fipsOnly.sealsToKeyAlgorithms, [SecretSharingAlgos.mlKem1024]);
       // The default refuses nobody, which is what makes narrowing a decision
       // rather than an accident.
-      expect(AtClientPreference().sealsToKeyAlgorithms,
-          containsAll([SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]));
+      expect(
+          AtClientPreference().sealsToKeyAlgorithms,
+          containsAll(
+              [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]));
     });
 
     test('reordering it is a different client, not an equal one', () {
@@ -374,14 +383,14 @@ void main() {
 
     test('the list a caller keeps cannot be added to afterwards', () {
       final requested = <String>[SecretSharingAlgos.mlKem1024];
-      final preference =
-          AtClientPreference(sealsToKeyAlgorithms: requested);
+      final preference = AtClientPreference(sealsToKeyAlgorithms: requested);
       requested.add(SecretSharingAlgos.xWing);
 
       expect(preference.sealsToKeyAlgorithms, [SecretSharingAlgos.mlKem1024],
           reason: 'the check runs once, so a list the caller still holds a '
               'reference to would be a way past it');
-      expect(() => preference.sealsToKeyAlgorithms.add(SecretSharingAlgos.xWing),
+      expect(
+          () => preference.sealsToKeyAlgorithms.add(SecretSharingAlgos.xWing),
           throwsUnsupportedError);
     });
   });

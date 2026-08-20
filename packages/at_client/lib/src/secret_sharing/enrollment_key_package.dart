@@ -2,11 +2,7 @@ import 'dart:convert' show base64Encode;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
-    show
-        AtKeys,
-        AtKeysIo,
-        AtKeysMaterial,
-        CryptographicKeyType;
+    show AtKeys, AtKeysIo, AtKeysMaterial, CryptographicKeyType;
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, SigningAlgoType;
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -96,8 +92,7 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
     final String? materialAlgo =
         SecretSharingAlgos.materialAlgoFor(keyEstablishmentAlgo);
     if (kem == null || materialAlgo == null) {
-      throw StateError(
-          'enrollmentKeyPackageBuilder: no implementation for '
+      throw StateError('enrollmentKeyPackageBuilder: no implementation for '
           '"$keyEstablishmentAlgo". This is the only moment an enrollment\'s '
           'encapsulation target can be set without the enrollment itself later '
           'sending enroll:update, so it fails rather than quietly minting '

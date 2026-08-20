@@ -11,8 +11,7 @@ import 'package:test/test.dart';
 import 'fake_enrollment_directory.dart';
 import 'test_utils/mocks.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 class TestSharer
     with

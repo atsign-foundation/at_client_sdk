@@ -159,9 +159,8 @@ class PqClientBootstrap {
     // ctor, because a request can arrive as soon as the client listens,
     // not only after the startup steps have run. Without it the gate is
     // null and the substrate fails closed.
-    sharing.perEnrollmentSecretRequestGate =
-        (requesterEnrollmentId) =>
-            _privilege.isEnrollmentFullyPrivileged(requesterEnrollmentId);
+    sharing.perEnrollmentSecretRequestGate = (requesterEnrollmentId) =>
+        _privilege.isEnrollmentFullyPrivileged(requesterEnrollmentId);
     ring = PublishedNskeyKeyRing(
       _atClient,
       privateFiling: filing,
@@ -297,7 +296,10 @@ class PqClientBootstrap {
         (name: 'publishRootLink', run: _publishRootLink),
         (name: 'publishChainLink', run: _publishChainLink),
         (name: 'sweepUnanchoredEnrollments', run: _sweepUnanchoredEnrollments),
-        (name: 'reconcileEnrollmentSnapshot', run: _reconcileEnrollmentSnapshot),
+        (
+          name: 'reconcileEnrollmentSnapshot',
+          run: _reconcileEnrollmentSnapshot
+        ),
       ];
 
   /// Primes the in-memory secret store with the key material this client
@@ -596,8 +598,8 @@ class PqClientBootstrap {
           return false;
         }
         final held = keys.enrollmentInfo(enrollmentId);
-        if (_snapshotAgrees(held, namespaces, record.appName,
-            record.deviceName)) {
+        if (_snapshotAgrees(
+            held, namespaces, record.appName, record.deviceName)) {
           return false;
         }
         // A grant change is something the user may care about, so it is said
@@ -649,7 +651,8 @@ class PqClientBootstrap {
     if (appName != null && held.appName != appName) return false;
     if (deviceName != null && held.deviceName != deviceName) return false;
     if (namespaces != null &&
-        (held.namespaces == null || !_sameGrants(held.namespaces!, namespaces))) {
+        (held.namespaces == null ||
+            !_sameGrants(held.namespaces!, namespaces))) {
       return false;
     }
     return true;

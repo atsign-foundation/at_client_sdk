@@ -52,7 +52,8 @@ void main() {
                 wanted: posture.authenticationKeyAlgorithm,
                 held: SigningAlgoType.mldsa65),
             false,
-            reason: 'key material wins: ${posture.authenticationKeyAlgorithm.name} '
+            reason:
+                'key material wins: ${posture.authenticationKeyAlgorithm.name} '
                 'must not displace a stronger key already held');
       }
     });

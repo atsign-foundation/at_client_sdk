@@ -56,10 +56,9 @@ void main() {
     // instead. Nothing in production writes that key, so the seed stood for a
     // state the SDK never reaches and the fetch-and-parse path below was never
     // exercised. Stubbing the command drives the real one.
-    when(() => mockRemoteSecondary.executeCommand(
-            'enroll:fetch:{"enrollmentId":"$enrollmentId"}\n',
-            auth: true))
-        .thenAnswer((_) async => 'data:${jsonEncode({
+    when(() => mockRemoteSecondary
+        .executeCommand('enroll:fetch:{"enrollmentId":"$enrollmentId"}\n',
+            auth: true)).thenAnswer((_) async => 'data:${jsonEncode({
               'appName': 'wavi',
               'deviceName': 'iphone',
               'namespace': {'wavi': 'rw'},

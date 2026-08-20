@@ -98,8 +98,8 @@ mixin ApkamSigning {
   /// The composition happens **inside** the lock, which is the point: composing
   /// outside it would read a keyfile a mint had not finished writing and then
   /// publish the fallback it computed from it.
-  Future publishPublicSigningKey({String? value}) =>
-      serialiseApskWrite(atClient, () => publishPublicSigningKeyLocked(value: value));
+  Future publishPublicSigningKey({String? value}) => serialiseApskWrite(
+      atClient, () => publishPublicSigningKeyLocked(value: value));
 
   /// [publishPublicSigningKey] without taking the lock, for a caller that
   /// already holds it. Taking it twice from one call chain would deadlock: the
@@ -140,8 +140,7 @@ mixin ApkamSigning {
   ///
   /// The same rule decides the enrollment path's `apsk`-versus-`apskLegacy`,
   /// and the two must agree: they describe one record.
-  Future<String> get publicSigningKeyValue async =>
-      apskValueOf(apskEntries(
+  Future<String> get publicSigningKeyValue async => apskValueOf(apskEntries(
         signing: await heldSigningKeys,
         retired: await retiredSigningKeys,
         authentication: authenticationSigningKey,

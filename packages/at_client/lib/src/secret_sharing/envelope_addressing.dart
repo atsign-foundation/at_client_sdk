@@ -55,9 +55,11 @@ class EnvelopeAddressing {
   /// match every envelope on the atServer.
   static String regexForAny(Iterable<String> kpids) {
     if (kpids.isEmpty) {
-      throw ArgumentError.value(kpids, 'kpids',
+      throw ArgumentError.value(
+          kpids,
+          'kpids',
           'an envelope filter over no addresses matches either nothing or '
-          'everything, and neither is a thing to ask the atServer for');
+              'everything, and neither is a thing to ask the atServer for');
     }
     return '\\.(${kpids.join('|')})\\.$marker\\.';
   }

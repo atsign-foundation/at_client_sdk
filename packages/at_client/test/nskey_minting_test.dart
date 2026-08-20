@@ -1,4 +1,3 @@
-
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
@@ -15,8 +14,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 /// A lock that is taken successfully and hands out a lease that has already
 /// run out — the slow-winner case, without waiting for a real ttl.
@@ -102,8 +100,8 @@ void main() {
         return AtValue()
           ..value = chops.atChopsKeys.atPkamKeyPair!.atPublicKey.publicKey;
       }
-      advertisementReads.add(
-          inv.namedArguments[#getRequestOptions] as GetRequestOptions?);
+      advertisementReads
+          .add(inv.namedArguments[#getRequestOptions] as GetRequestOptions?);
       final serving = advertised[key.namespace];
       if (serving == null) throw AtKeyNotFoundException('$key');
       return AtValue()..value = serving;
@@ -156,8 +154,7 @@ void main() {
             'key rather than decrypting what was written meanwhile');
     // Ordering, not just presence: the lock is taken, then the advertisement
     // goes out. The filing happens between them, off the wire.
-    final published =
-        c.verbs.where((k) => k.key.startsWith('__nskey') == true);
+    final published = c.verbs.where((k) => k.key.startsWith('__nskey') == true);
     expect(published, hasLength(1));
   });
 
@@ -228,9 +225,8 @@ void main() {
     expect(envelope.keys.toList(), ['payload', 'signatures'],
         reason: 'the envelope — RFC 7515 general JSON serialization, pinned '
             'as shape documentation');
-    final payload =
-        (SignedEnvelope.fromJson(envelope).payload as Map)
-            .cast<String, dynamic>();
+    final payload = (SignedEnvelope.fromJson(envelope).payload as Map)
+        .cast<String, dynamic>();
     expect(payload.keys.toList(), ['v', 'createdAt', 'keys', 'suites'],
         reason: 'the payload — frozen forever');
     expect(payload['v'], 1);
@@ -380,7 +376,8 @@ void main() {
 
     expect(c.advertisementReads, isNotEmpty,
         reason: 'the mint asks whether a generation is already published');
-    expect(c.advertisementReads.map((o) => o?.useRemoteAtServer), everyElement(isTrue),
+    expect(c.advertisementReads.map((o) => o?.useRemoteAtServer),
+        everyElement(isTrue),
         reason: 'a local-first read answers out of storage that a sibling '
             'enrollment\'s publication has not synced into yet, and reading '
             'that absence as a cold start is what publishes a second key over '

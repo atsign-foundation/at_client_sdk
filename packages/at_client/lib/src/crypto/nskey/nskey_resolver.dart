@@ -79,8 +79,7 @@ class NskeyResolver {
           // client set. And it is refused rather than reported as a cold
           // start, or a deployment that narrowed the list reads its own
           // configuration as the recipient having published nothing.
-          throw AtEncryptionException(
-              '$owner:$candidate advertises '
+          throw AtEncryptionException('$owner:$candidate advertises '
               '${hit.keys.map((k) => k.alg).toSet().join(', ')} and this '
               'client will seal to ${sealsToKeyAlgorithms.join(', ')} - no '
               'algorithm in common, so nothing is sealed. Widen '

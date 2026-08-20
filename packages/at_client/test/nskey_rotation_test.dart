@@ -17,8 +17,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 class MockSharing extends Mock implements PairwiseSecretSharing {}
 
@@ -301,7 +300,8 @@ void main() {
               'advertised public half from it, which only the SEED can do');
     });
 
-    test('conveys a seed the receiver can re-derive the public half from, '
+    test(
+        'conveys a seed the receiver can re-derive the public half from, '
         'under ML-KEM where seed and decapsulation key differ', () async {
       final c = client();
       when(() => c.client.getPreferences()).thenReturn(AtClientPreference(

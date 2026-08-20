@@ -267,12 +267,12 @@ void main() {
       final filing =
           NskeyPrivateFiling(keysIo: _UnreadableKeysIo(), atSign: atSign);
 
-      await expectLater(filing.read(namespace, 'kid1'),
-          throwsA(isA<AtKeysParseException>()));
+      await expectLater(
+          filing.read(namespace, 'kid1'), throwsA(isA<AtKeysParseException>()));
       await expectLater(filing.readSeed(namespace, 'kid1'),
           throwsA(isA<AtKeysParseException>()));
-      await expectLater(filing.readAllFor(namespace),
-          throwsA(isA<AtKeysParseException>()));
+      await expectLater(
+          filing.readAllFor(namespace), throwsA(isA<AtKeysParseException>()));
     });
 
     test('readAll alone tolerates it, because a client is built through it',

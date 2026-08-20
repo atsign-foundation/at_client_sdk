@@ -38,8 +38,8 @@ void main() {
   });
 
   test('the untouched preference holds the eraDefault marker', () {
-    expect(client.getPreferences().crypto,
-        same(const CryptoConfig.eraDefault()),
+    expect(
+        client.getPreferences().crypto, same(const CryptoConfig.eraDefault()),
         reason: 'the field is non-nullable (published 3.14.0 shape), so this '
             'marker — not null — is how the SDK tells "app named nothing"');
 

@@ -601,8 +601,10 @@ class ParsedApsk {
   /// choice of algorithm to whoever wrote the envelope. The algorithm is
   /// already fixed here by the strongest-shared rule, and every key tried is
   /// one this signer published under it.
-  List<ApskSigningKey> keysFor(SigningAlgoType algo) =>
-      [for (final key in keys) if (key.alg == algo) key];
+  List<ApskSigningKey> keysFor(SigningAlgoType algo) => [
+        for (final key in keys)
+          if (key.alg == algo) key
+      ];
 }
 
 /// Parses a fetched `_apsk` value, bare or array.
@@ -711,8 +713,7 @@ Future<void> verifyEnvelope(
   // Before the version, because "this document is not for you" is the more
   // useful answer about a document that is not for you.
   if (entry.typ != expecting.typ) {
-    throw AtSigningVerificationException(
-        'the envelope is typed '
+    throw AtSigningVerificationException('the envelope is typed '
         '${entry.typ == null ? 'nothing' : '"${entry.typ}"'} and this reader '
         'verifies "${expecting.typ}" — refusing rather than '
         'checking a signature that was made over a document meant for '

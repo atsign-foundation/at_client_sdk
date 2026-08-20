@@ -274,8 +274,8 @@ void main() {
       transformer = PutRequestTransformer()..atClient = client;
     });
 
-    Future<UpdateVerbBuilder> transform(AtKey atKey) => transformer.transform(
-        Tuple<AtKey, dynamic>()
+    Future<UpdateVerbBuilder> transform(AtKey atKey) =>
+        transformer.transform(Tuple<AtKey, dynamic>()
           ..one = atKey
           ..two = 'value');
 

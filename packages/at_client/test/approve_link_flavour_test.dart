@@ -33,8 +33,7 @@ class _FakePrivilege implements EnrollmentPrivilegeResolver {
   Future<bool> isFullyPrivileged() async => answer;
 
   @override
-  Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async =>
-      answer;
+  Future<bool> isEnrollmentFullyPrivileged(String enrollmentId) async => answer;
 }
 
 /// Generation 1 of a root filed under the algorithm this build mints.
@@ -98,7 +97,8 @@ void main() {
             createdAt: DateTime.now().toUtc(),
           )));
     when(() => client.atKeysIo).thenReturn(io);
-    remoteData['public:${PqSigningRoot.recordName}$atSign'] = jsonEncode(apskAdvertisement(keys: [
+    remoteData['public:${PqSigningRoot.recordName}$atSign'] =
+        jsonEncode(apskAdvertisement(keys: [
       ApskSigningKey.forPublicKey(
           alg: PqSigningRoot.rootKeyAlgo, pub: base64Encode(pair.publicKey))
     ]));
@@ -145,8 +145,8 @@ void main() {
 
     final enrolleeClient = enrollee.atClient;
     await PqSigningChain(enrolleeClient).publishPendingLink();
-    final result = await PqSigningChain(enrolleeClient)
-        .verifyChain(enrollee, enrolleeId);
+    final result =
+        await PqSigningChain(enrolleeClient).verifyChain(enrollee, enrolleeId);
     expect(result.verdict, ChainVerdict.anchored,
         reason: 'the conveyed link must verify against the published signing '
             'root, not merely look like one. Reason if not: ${result.reason}');
@@ -185,7 +185,8 @@ void main() {
     expect(status, KeyPackageStatus.present);
 
     expect(await enrollee.sweepOnce(), greaterThan(0));
-    final names = enrollee.secretStore.listSecrets().map((s) => s.name).toList();
+    final names =
+        enrollee.secretStore.listSecrets().map((s) => s.name).toList();
     expect(names, contains(enrollmentApkamSymmetricKeySecretName),
         reason: 'the symmetric key is what the enrollee is blocked polling '
             'for; a missing link must never cost it that');

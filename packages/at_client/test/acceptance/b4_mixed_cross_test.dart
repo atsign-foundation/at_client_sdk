@@ -22,7 +22,8 @@ void main() {
       // THEN  the write fails cold start BY NAME, unless the app opted into
       //       allowLegacyCryptoFallback — in which case it goes out legacy,
       //       stamped as such on the record. Never a silent downgrade.
-      provenIn('tests/at_end2end_test/test/pq/nskey_recipient_not_ready_test.dart',
+      provenIn(
+          'tests/at_end2end_test/test/pq/nskey_recipient_not_ready_test.dart',
           'UC-A4.2: a share to a recipient with no namespace key fails, naming ',
           proves: 'an active-PQ alice writing toward a bob who never enabled '
               'the namespace is refused with an exception naming @bob and the '

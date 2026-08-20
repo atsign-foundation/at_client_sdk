@@ -745,8 +745,8 @@ class PqSigningRoot {
     if (keys == null) return null;
     final material = await _signingPrivate(atSign, keys);
     if (material == null) return null;
-    final public =
-        keys.getAtSignKey(material.keyId, CryptographicKeyType.publicVerification);
+    final public = keys.getAtSignKey(
+        material.keyId, CryptographicKeyType.publicVerification);
     return (
       private: Uint8List.fromList(material.bytes.bytes),
       kid: public == null
@@ -1166,9 +1166,8 @@ class PqSigningRoot {
           'the first filed is used');
       return held.first;
     }
-    final active = advertised
-        .where((e) => e.status == KeyEntryStatus.active)
-        .toList();
+    final active =
+        advertised.where((e) => e.status == KeyEntryStatus.active).toList();
 
     for (final entry in active) {
       for (final material in held) {

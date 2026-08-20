@@ -19,8 +19,7 @@ import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class _MockAtClient extends Mock implements AtClient {
-}
+class _MockAtClient extends Mock implements AtClient {}
 
 void main() {
   final storageDir = '${Directory.current.path}/test/hive_avail';

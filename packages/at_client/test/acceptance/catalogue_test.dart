@@ -90,7 +90,8 @@ void main() {
     // every rail was green. So this reads the headings with a DELIBERATELY
     // permissive pattern and asserts the real one admits each — a cluster can
     // only leave the catalogue on purpose, by deleting its rows.
-    final permissive = RegExp(r'^#{2,4} +(?:[\d.]+ +)?(UC-[A-Z]+\d+\.\d+[a-z]?) +— ',
+    final permissive = RegExp(
+        r'^#{2,4} +(?:[\d.]+ +)?(UC-[A-Z]+\d+\.\d+[a-z]?) +— ',
         multiLine: true);
     final admitted = RegExp('^$ucIdPattern\$');
 

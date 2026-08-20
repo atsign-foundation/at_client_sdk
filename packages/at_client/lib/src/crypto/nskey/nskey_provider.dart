@@ -89,7 +89,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     required this.cache,
     this.keyAlgo = SecretSharingAlgos.xWing,
     AtKemAlgorithm? kem,
-  })  : _kem = kem ??
+  }) : _kem = kem ??
             SecretSharingAlgos.kemFor(keyAlgo) ??
             XWingPureDartAlgo.instance;
 

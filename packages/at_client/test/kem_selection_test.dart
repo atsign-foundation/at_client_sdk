@@ -33,7 +33,8 @@ void main() {
               'claiming it is refused rather than decapsulated');
       expect(SecretSharingAlgos.kemForSuite(SecretSharingAlgos.xWingRfc9180),
           same(XWingPureDartAlgo.instance));
-      expect(SecretSharingAlgos.kemForSuite(SecretSharingAlgos.mlKem1024Rfc9180),
+      expect(
+          SecretSharingAlgos.kemForSuite(SecretSharingAlgos.mlKem1024Rfc9180),
           same(MlKem1024PureDartAlgo.instance));
     });
   });
@@ -55,10 +56,11 @@ void main() {
         final sealed = await pqSeal(kem, pair.publicKey, plaintext,
             info: info, version: version);
         expect(sealed.first, version,
-            reason: 'the version byte on the wire is the one the suite maps to');
+            reason:
+                'the version byte on the wire is the one the suite maps to');
 
-        expect(await pqOpen(kem, pair.secretKey, sealed, info: info),
-            plaintext);
+        expect(
+            await pqOpen(kem, pair.secretKey, sealed, info: info), plaintext);
       });
     }
 
@@ -79,13 +81,12 @@ void main() {
       // The subject is the KEM mismatch, so the binding is held constant at
       // empty on both ends — a differing info would give the refusal below a
       // second possible cause.
-      final sealed = await pqSeal(
-          mlKem, mlKemPair.publicKey, _bytes('secret'),
+      final sealed = await pqSeal(mlKem, mlKemPair.publicKey, _bytes('secret'),
           info: Uint8List(0),
           version: SecretSharingAlgos.sealVersionFor(
               SecretSharingAlgos.mlKem1024Rfc9180)!);
-      expect(() => pqOpen(xWing, xWingPair.secretKey, sealed,
-              info: Uint8List(0)),
+      expect(
+          () => pqOpen(xWing, xWingPair.secretKey, sealed, info: Uint8List(0)),
           throwsA(isA<PqOpenException>()));
     });
   });
@@ -130,8 +131,9 @@ void main() {
           () => AtClientPreference(keyEstablishmentAlgorithms: const []),
           throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
               'message', contains('can receive nothing'))));
-      expect(AtClientPreference(sealsToKeyAlgorithms: const [])
-          .sealsToKeyAlgorithms,
+      expect(
+          AtClientPreference(sealsToKeyAlgorithms: const [])
+              .sealsToKeyAlgorithms,
           isEmpty);
     });
 
@@ -139,8 +141,8 @@ void main() {
       expect(
           () => AtClientPreference(
               keyEstablishmentAlgorithms: const ['ml-kem-768']),
-          throwsA(isA<ArgumentError>().having(
-              (e) => e.message.toString(), 'message', contains('this build mints'))));
+          throwsA(isA<ArgumentError>().having((e) => e.message.toString(),
+              'message', contains('this build mints'))));
     });
 
     test('every advertised option resolves to an implementation', () {

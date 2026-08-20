@@ -1,12 +1,7 @@
 import 'dart:convert' show base64Encode;
 
 import 'package:at_auth/at_auth.dart'
-    show
-        AtKeys,
-        AtKeysIo,
-        AtKeysMaterial,
-        CryptographicKeyType,
-        KeyPartStatus;
+    show AtKeys, AtKeysIo, AtKeysMaterial, CryptographicKeyType, KeyPartStatus;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package.dart'

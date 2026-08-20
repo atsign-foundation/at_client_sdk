@@ -251,12 +251,15 @@ void main() {
       await Future.delayed(const Duration(milliseconds: 20));
       expect(monitor.currentState, NotificationListenerState.listening);
 
-      expect(states, [
-        NotificationListenerState.listening,
-        NotificationListenerState.notConnected,
-        NotificationListenerState.listening,
-      ], reason: 'noports subscribes to this stream for the life of its '
-          'daemon; every transition has to reach it');
+      expect(
+          states,
+          [
+            NotificationListenerState.listening,
+            NotificationListenerState.notConnected,
+            NotificationListenerState.listening,
+          ],
+          reason: 'noports subscribes to this stream for the life of its '
+              'daemon; every transition has to reach it');
     });
 
     test('an unchanged state is not republished', () async {

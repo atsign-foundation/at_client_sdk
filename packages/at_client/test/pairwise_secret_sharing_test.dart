@@ -16,8 +16,7 @@ import 'package:test/test.dart';
 import 'fake_enrollment_directory.dart';
 import 'test_utils/mocks.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 class FakeSyncProgressListener extends Fake implements SyncProgressListener {}
 
@@ -303,8 +302,8 @@ void main() {
     /// The construction the sender actually emitted: the envelope's declared
     /// suite, and the `pqSeal` version byte that leads its wire form.
     ({String suite, int version}) sentConstruction(String kpid) {
-      final key = remoteData.keys
-          .singleWhere((k) => k.contains('.$kpid.__ssenv.'));
+      final key =
+          remoteData.keys.singleWhere((k) => k.contains('.$kpid.__ssenv.'));
       final payload =
           (SignedEnvelope.fromJson(jsonDecode(remoteData[key]!) as Map).payload
                   as Map)
@@ -351,9 +350,11 @@ void main() {
 
       await expectLater(
           sharerA.sendEnvelope(legacyPeer, 'myapp', {'a': 1}),
-          throwsA(isA<StateError>().having((e) => e.message, 'message',
-              allOf(contains('x-wing-hpke-v1'),
-                  contains('x-wing-rfc9180-v1')))),
+          throwsA(isA<StateError>().having(
+              (e) => e.message,
+              'message',
+              allOf(
+                  contains('x-wing-hpke-v1'), contains('x-wing-rfc9180-v1')))),
           reason: 'no shared construction must refuse rather than seal '
               'something the peer cannot open — and the refusal must name '
               'both lists, or the operator cannot tell which side is narrow');
@@ -368,15 +369,12 @@ void main() {
       TestSharer mlKemSharer(String enrollmentId, Uint8List seed) {
         final client = buildMockClient(enrollmentId);
         when(() => client.getPreferences()).thenReturn(AtClientPreference(
-            keyEstablishmentAlgorithms: const [
-              SecretSharingAlgos.mlKem1024
-            ]));
+            keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]));
         final sharer = TestSharer(client)
           ..directory = directory
           ..requestAnswerJitter = Duration.zero;
         sharer.loadApkamKeys = () async => PersistedApkamKeys.single(
-            encSeed: base64Encode(seed),
-            keyAlgo: SecretSharingAlgos.mlKem1024);
+            encSeed: base64Encode(seed), keyAlgo: SecretSharingAlgos.mlKem1024);
         return sharer;
       }
 
@@ -449,8 +447,8 @@ void main() {
     /// other, which is the bug these arms exist to catch.
     final pairwiseInfo =
         Uint8List.fromList(utf8.encode('at_client/secret_sharing/v1'));
-    final nskeyInfo = Uint8List.fromList(
-        utf8.encode('at/nskey/XWING/AES/GCM:@alice:myapp'));
+    final nskeyInfo =
+        Uint8List.fromList(utf8.encode('at/nskey/XWING/AES/GCM:@alice:myapp'));
 
     /// The `sealed` bytes off the envelope A actually wrote to B.
     Uint8List sentSealed(String kpid) {
@@ -574,9 +572,8 @@ void main() {
       // payload is what rejects this, before decryption is even attempted.
       inner['sealed'] = base64Encode(
           base64Decode(inner['sealed'] as String).reversed.toList());
-      signedEnvelope['payload'] = base64Url
-          .encode(utf8.encode(jsonEncode(inner)))
-          .replaceAll('=', '');
+      signedEnvelope['payload'] =
+          base64Url.encode(utf8.encode(jsonEncode(inner))).replaceAll('=', '');
       remoteData[envelopeKeyString] = jsonEncode(signedEnvelope);
 
       expect(await sharerB.sweepOnce(), 0);
@@ -667,8 +664,8 @@ void main() {
     test('an envelope sealed to the superseded key is swept and opened',
         () async {
       await sharerA.sendEnvelope(staleView, 'myapp', {'hello': 'still here'});
-      expect(remoteData.keys.any((k) => k.contains('.$oldKpid.__ssenv.')),
-          isTrue,
+      expect(
+          remoteData.keys.any((k) => k.contains('.$oldKpid.__ssenv.')), isTrue,
           reason: 'the sender addressed the old key, which is the whole '
               'situation being tested');
 
@@ -898,7 +895,9 @@ void main() {
       final futurePeer = KeyPackage(
         enrollmentId: 'enroll-future',
         createdAt: DateTime.utc(2026, 6, 11),
-        keys: [PackageKey(use: 'enc', alg: 'x-wing-99', pub: 'ZnV0dXJlLXB1Yg==')],
+        keys: [
+          PackageKey(use: 'enc', alg: 'x-wing-99', pub: 'ZnV0dXJlLXB1Yg==')
+        ],
       );
       expect(futurePeer.kpid, isNull); // no key in SecretSharingAlgos.keyAlgos
       directory.seed('enroll-future', futurePeer);

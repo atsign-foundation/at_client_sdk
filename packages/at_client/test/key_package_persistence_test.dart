@@ -157,7 +157,8 @@ void main() {
     // the PQ enrollment's tagged with its id — the tagged one newer.
     final keys = AtKeys();
     final legacyPair = await XWingPureDartAlgo.instance.generateKeyPair();
-    final legacyKpid = PackageKey.computeKid(base64Encode(legacyPair.publicKey));
+    final legacyKpid =
+        PackageKey.computeKid(base64Encode(legacyPair.publicKey));
     final pqPair = await XWingPureDartAlgo.instance.generateKeyPair();
     final pqKpid = PackageKey.computeKid(base64Encode(pqPair.publicKey));
     final older = DateTime.now().toUtc().subtract(const Duration(days: 30));
@@ -206,8 +207,7 @@ void main() {
   /// Files both halves of [pair] under its kpid, for `enroll-1`.
   String fileKeyPackage(
       AtKeys keys, ({Uint8List publicKey, Uint8List secretKey}) pair,
-      {required DateTime createdAt,
-      String status = KeyPartStatus.active}) {
+      {required DateTime createdAt, String status = KeyPartStatus.active}) {
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
     for (final (part, bytes) in [
       (CryptographicKeyType.publicEncapsulation, pair.publicKey),

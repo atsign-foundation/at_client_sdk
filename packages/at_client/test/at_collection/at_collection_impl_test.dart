@@ -3,8 +3,7 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import '../test_utils/mocks.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 class MockAtCLientManager extends Mock implements AtClientManager {}
 

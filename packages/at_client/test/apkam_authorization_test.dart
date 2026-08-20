@@ -19,9 +19,9 @@ import 'package:test/test.dart';
 /// It is exercised now, but elsewhere and deliberately so: the fetch is
 /// `local_secondary_test.dart`'s subject, not this file's. Supplying the
 /// record here keeps these tests about authorization.
-void seedEnrollment(AtClient client, Map<String, String> namespace) =>
-    client.getLocalSecondary()!.enrollment = Enrollment()
-      ..namespace = namespace;
+void seedEnrollment(AtClient client, Map<String, String> namespace) => client
+    .getLocalSecondary()!
+    .enrollment = Enrollment()..namespace = namespace;
 
 void main() {
   var storageDir = '${Directory.current.path}/test/hive';

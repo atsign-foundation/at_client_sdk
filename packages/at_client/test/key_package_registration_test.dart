@@ -240,9 +240,9 @@ void main() {
     late Uint8List mlPublicKey;
 
     setUpAll(() async {
-      mlPublicKey = (await MlKem1024PureDartAlgo.instance
-              .keyPairFromSeed(mlSeed))
-          .publicKey;
+      mlPublicKey =
+          (await MlKem1024PureDartAlgo.instance.keyPairFromSeed(mlSeed))
+              .publicKey;
     });
 
     /// A client restarting after a rotation: it advertises the ML-KEM key and
@@ -286,7 +286,8 @@ void main() {
       final pkg = await rotated().register();
 
       expect(pkg.keys, hasLength(2));
-      final retired = pkg.keys.singleWhere((k) => k.alg == SecretSharingAlgos.xWing);
+      final retired =
+          pkg.keys.singleWhere((k) => k.alg == SecretSharingAlgos.xWing);
       expect(retired.status, KeyEntryStatus.retired);
       expect(retired.pub, base64Encode(publicKeyA));
       expect(
@@ -310,8 +311,7 @@ void main() {
       final held = registrant.heldKeyFor(retiredKid);
       expect(held, isNotNull);
       expect(held!.keyAlgo, SecretSharingAlgos.xWing);
-      final rederived =
-          await XWingPureDartAlgo.instance.keyPairFromSeed(seedA);
+      final rederived = await XWingPureDartAlgo.instance.keyPairFromSeed(seedA);
       expect(held.secretKey, rederived.secretKey);
 
       expect(registrant.heldKeyFor('not-a-kid-this-client-holds'), isNull);
@@ -323,14 +323,13 @@ void main() {
         ..directory = FakeEnrollmentDirectory();
       registrant.loadApkamKeys = () async => PersistedApkamKeys(encKeys: [
             PersistedEncKey(
-                encSeed: base64Encode(seedA),
-                status: KeyEntryStatus.retired),
+                encSeed: base64Encode(seedA), status: KeyEntryStatus.retired),
           ]);
 
       await expectLater(
           registrant.register(),
-          throwsA(isA<StateError>().having(
-              (e) => '$e', 'message', contains('every one of them is retired'))),
+          throwsA(isA<StateError>().having((e) => '$e', 'message',
+              contains('every one of them is retired'))),
           reason: 'a retired key is retained to open what is in flight to it, '
               'not to be reached at — advertising one as the address would '
               'point every peer at a key this client has withdrawn');
@@ -531,8 +530,8 @@ void main() {
       // Rather than the build's whole list. This is the shape the enrollment
       // record freezes, and a holder with nothing to decapsulate with can open
       // nothing whatever this build supports.
-      final payload = KeyPackage.payloadFor(
-          createdAt: DateTime.utc(2026), keys: const []);
+      final payload =
+          KeyPackage.payloadFor(createdAt: DateTime.utc(2026), keys: const []);
       expect(payload['suites'], isEmpty);
     });
 
@@ -544,7 +543,9 @@ void main() {
         createdAt: DateTime.utc(2026),
         keys: [
           PackageKey(
-              use: SecretSharingAlgos.useEnc, alg: 'kyber-1024-v9', pub: 'cA=='),
+              use: SecretSharingAlgos.useEnc,
+              alg: 'kyber-1024-v9',
+              pub: 'cA=='),
         ],
       );
       expect(payload['suites'], isEmpty);
@@ -680,8 +681,9 @@ void main() {
       // anyone with their own key can do, and which is exactly why the claim
       // is worth nothing until it is checked against enroll-b's own _apsk.
       final forged = signEnvelope(d.myKeyPackage.toJson(),
-          keys: [(await d.signingKeys).first], enrollmentId: 'enroll-b',
-              type: EnvelopeType.keyPackage);
+          keys: [(await d.signingKeys).first],
+          enrollmentId: 'enroll-b',
+          type: EnvelopeType.keyPackage);
       final atClient = buildMockClient('enroll-self');
       stubListns(atClient, [record('enroll-b', forged)]);
 
@@ -732,7 +734,8 @@ void main() {
             'enroll-future',
             signEnvelope({'shape': 'from a later version'},
                 keys: [(await future.signingKeys).first],
-                enrollmentId: 'enroll-future', type: EnvelopeType.keyPackage)),
+                enrollmentId: 'enroll-future',
+                type: EnvelopeType.keyPackage)),
       ]);
 
       final byId = {
@@ -775,8 +778,9 @@ void main() {
         record(
             'enroll-b',
             signEnvelope(b.myKeyPackage.toJson(),
-                keys: [(await b.signingKeys).first], enrollmentId: null,
-                    type: EnvelopeType.keyPackage)),
+                keys: [(await b.signingKeys).first],
+                enrollmentId: null,
+                type: EnvelopeType.keyPackage)),
       ]);
 
       final member =
@@ -819,8 +823,9 @@ void main() {
       // an entry whose header cannot be read is not an entry, which is the
       // property under test one layer down.
       final signed = signEnvelope(b.myKeyPackage.toJson(),
-          keys: [(await b.signingKeys).first], enrollmentId: 'enroll-b',
-              type: EnvelopeType.keyPackage);
+          keys: [(await b.signingKeys).first],
+          enrollmentId: 'enroll-b',
+          type: EnvelopeType.keyPackage);
       final envelope = {
         ...signed.toJson(),
         'signatures': [

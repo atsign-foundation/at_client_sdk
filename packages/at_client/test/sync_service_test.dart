@@ -18,7 +18,6 @@ import 'test_utils/mocks.dart';
 // coverage in `local_secondary_sync_queue_test.dart`.
 
 class MockAtClient extends Mock implements AtClient {
-
   @override
   String? getCurrentAtSign() => '@alice';
 
@@ -131,9 +130,8 @@ void main() async {
 
       expect(result, 100);
       final captured = verify(() => mockAtClient.put(
-              any(that: SkipDeletesUntilMatcher()), captureAny(),
-              putRequestOptions: captureAny(named: 'putRequestOptions')))
-          .captured;
+          any(that: SkipDeletesUntilMatcher()), captureAny(),
+          putRequestOptions: captureAny(named: 'putRequestOptions'))).captured;
       expect(captured[0], '100',
           reason: 'the value returned must be the value written, or a caller '
               'proceeds believing a window it never persisted');
@@ -178,19 +176,18 @@ void main() async {
   /// "Never throws" is therefore the property to hold it to; if it cannot
   /// throw, it cannot mask.
   group('persistPullCursor (never throws, so it can never mask)', () {
-    AtKey pullCursor() => AtKey.local('lastreceivedservercommitid', '@alice')
-        .build();
+    AtKey pullCursor() =>
+        AtKey.local('lastreceivedservercommitid', '@alice').build();
 
     test('writes the cursor unencrypted', () async {
       when(() => mockAtClient.put(any(), any(),
-          putRequestOptions: any(named: 'putRequestOptions'))).thenAnswer(
-          (_) async => true);
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((_) async => true);
 
       await syncServiceImpl.persistPullCursor(42);
 
       final captured = verify(() => mockAtClient.put(captureAny(), captureAny(),
-              putRequestOptions: captureAny(named: 'putRequestOptions')))
-          .captured;
+          putRequestOptions: captureAny(named: 'putRequestOptions'))).captured;
       expect((captured[0] as AtKey).toString(), pullCursor().toString());
       expect(captured[1], '42');
       expect((captured[2] as PutRequestOptions).shouldEncrypt, isFalse);

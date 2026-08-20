@@ -111,8 +111,7 @@ void main() {
     /// is, because the algorithm is now captured in a closure and there is
     /// nothing on the built object to read it back from.
     test('the resolved algorithm reaches the monitor connection', () {
-      final source = File(
-              'lib/src/service/notification_service_impl.dart')
+      final source = File('lib/src/service/notification_service_impl.dart')
           .readAsStringSync();
       final wiring = source.substring(source.indexOf('lookUp: AtLookUp.'));
 

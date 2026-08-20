@@ -19,19 +19,23 @@ Future<void> main() async {
 
   final rsaPair = AtChopsUtil.generateAtPkamKeyPair();
   final rsaEnvelope = signEnvelope(payload,
-      keys: [ApkamSigningKeys(
-          algorithm: SigningAlgoType.rsa2048,
-          publicKey: rsaPair.atPublicKey.publicKey,
-          privateKey: rsaPair.atPrivateKey.privateKey)],
+      keys: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.rsa2048,
+            publicKey: rsaPair.atPublicKey.publicKey,
+            privateKey: rsaPair.atPrivateKey.privateKey)
+      ],
       type: EnvelopeType.app,
       enrollmentId: 'vector-1');
 
   final mlDsaPair = await MlDsa65PureDartAlgo().generateKeyPair();
   final mlDsaEnvelope = signEnvelope(payload,
-      keys: [ApkamSigningKeys(
-          algorithm: SigningAlgoType.mldsa65,
-          publicKey: base64Encode(mlDsaPair.publicKey),
-          privateKey: base64Encode(mlDsaPair.secretKey))],
+      keys: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.mldsa65,
+            publicKey: base64Encode(mlDsaPair.publicKey),
+            privateKey: base64Encode(mlDsaPair.secretKey))
+      ],
       type: EnvelopeType.app,
       enrollmentId: 'vector-1');
 

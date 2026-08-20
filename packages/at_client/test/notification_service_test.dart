@@ -664,8 +664,8 @@ void main() {
 
     Future<NotificationServiceImpl> service() async =>
         await NotificationServiceImpl.create(mockAtClientImpl,
-            monitor: fakeMonitor,
-            secondaryAddressFinder: mockSecondaryAddressFinder)
+                monitor: fakeMonitor,
+                secondaryAddressFinder: mockSecondaryAddressFinder)
             as NotificationServiceImpl;
 
     test('everything after the first dot is the namespace', () async {
@@ -725,8 +725,8 @@ void main() {
 
       await expectLater(
           () => s.send(to: '@bob'.toAtsign(), idAndNamespace: 'wavi'),
-          throwsA(isA<ArgumentError>().having(
-              (e) => '$e', 'message', contains('joined by a dot'))),
+          throwsA(isA<ArgumentError>()
+              .having((e) => '$e', 'message', contains('joined by a dot'))),
           reason: 'an id in no namespace cannot be encrypted for a recipient. '
               'Before this, it reached the crypto layer, declined every '
               'post-quantum provider, fell back to legacy and surfaced as a '
@@ -1121,7 +1121,8 @@ void main() {
     test('Verify lastReceipt', () async {
       DateTime testStartTime = DateTime.now().toUtc();
 
-      var ns = await NotificationServiceImpl.create(mockAtClientImpl) as NotificationServiceImpl;
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl)
+          as NotificationServiceImpl;
 
       var atNotification = AtNotification(
           '124',
@@ -1148,7 +1149,8 @@ void main() {
     });
 
     test('Verify monitor delivers notification', () async {
-      var ns = await NotificationServiceImpl.create(mockAtClientImpl) as NotificationServiceImpl;
+      var ns = await NotificationServiceImpl.create(mockAtClientImpl)
+          as NotificationServiceImpl;
 
       var atNotification = AtNotification(
           '124',
@@ -1620,8 +1622,7 @@ void main() {
       expect(await service.getLastNotificationTime(), isNull);
 
       final captured = verify(() => mockAtClientImpl.put(any(), captureAny(),
-              putRequestOptions: captureAny(named: 'putRequestOptions')))
-          .captured;
+          putRequestOptions: captureAny(named: 'putRequestOptions'))).captured;
       final written = jsonDecode(captured[0] as String) as Map<String, dynamic>;
 
       expect(written['epochMillis'], isNotNull,
@@ -1659,8 +1660,8 @@ void main() {
       // Older builds stored all twelve AtNotification fields. The reader takes
       // one key out of the JSON, so both shapes open without a compat branch —
       // which is why dropping the fields needs no migration.
-      final legacyShape = AtNotification(Uuid().v4(), 'k', '@bob', '@alice',
-          1234567890123, 'update', true,
+      final legacyShape = AtNotification(
+          Uuid().v4(), 'k', '@bob', '@alice', 1234567890123, 'update', true,
           value: 'a payload an older build persisted', metadata: Metadata());
       // The canonical record has to EXIST for the migration to read it — with
       // `exists` false it takes the first-call seed branch and this would be a
@@ -1671,8 +1672,8 @@ void main() {
               putRequestOptions: any(named: 'putRequestOptions')))
           .thenAnswer((_) async => true);
       when(() => mockAtClientImpl.get(service.lastReceivedNotificationAtKey))
-          .thenAnswer((_) async =>
-              AtValue()..value = jsonEncode(legacyShape.toJson()));
+          .thenAnswer(
+              (_) async => AtValue()..value = jsonEncode(legacyShape.toJson()));
 
       expect(await service.getLastNotificationTime(), 1234567890123);
     });
@@ -1696,8 +1697,9 @@ void main() {
       var lastReceivedNotification =
           AtKey.fromString('local:lastReceivedNotification.wavi@alice');
 
-      NotificationServiceImpl service = await NotificationServiceImpl.create(
-          mockAtClientImpl) as NotificationServiceImpl;
+      NotificationServiceImpl service =
+          await NotificationServiceImpl.create(mockAtClientImpl)
+              as NotificationServiceImpl;
 
       expect(lastReceivedNotification.toString(),
           service.lastReceivedNotificationAtKey.toString());
@@ -1902,8 +1904,9 @@ void main() {
     test('stop() sets isStopped to true', () async {
       when(() => mockAtClientManager.secondaryAddressFinder)
           .thenReturn(MockSecondaryAddressFinder());
-      final notificationService = await NotificationServiceImpl.create(
-          mockAtClientImpl) as NotificationServiceImpl;
+      final notificationService =
+          await NotificationServiceImpl.create(mockAtClientImpl)
+              as NotificationServiceImpl;
 
       await notificationService.stop();
       expect(notificationService.isStopped, true);

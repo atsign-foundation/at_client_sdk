@@ -360,6 +360,7 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   void rememberOwn(
           String owner, String namespace, NskeyAdvertisement advertisement) =>
       _ownCurrent[_scope(owner, namespace)] = advertisement;
+
   /// Drop what this ring cached for `(owner, namespace)`, forcing the next
   /// read to go to the atServer.
   ///
@@ -414,7 +415,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     // that had already fetched it.
     final published = await publishedAdvertisement(owner, namespace);
     if (published != null) {
-      await _warnIfPrivateMissing(owner, namespace, published, 'read as a '
+      await _warnIfPrivateMissing(
+          owner,
+          namespace,
+          published,
+          'read as a '
           'loser of the mint election');
       return published;
     }
@@ -611,9 +616,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     // belongs to; `suites` says which *construction* the owner can unwrap,
     // without which a new one could only ever arrive by upgrading every reader
     // first — release-ordering agility rather than negotiated agility.
-    final payload =
-        await _signer.wrapAndSignAndJsonEncode(advertisement.toPayload(),
-            type: EnvelopeType.nskeyRing);
+    final payload = await _signer.wrapAndSignAndJsonEncode(
+        advertisement.toPayload(),
+        type: EnvelopeType.nskeyRing);
 
     // The last thing before the write, and deliberately not earlier: what
     // matters is whether the lease is still good at the moment of publishing,
@@ -839,8 +844,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final filing = privateFiling;
     if (filing == null) return null;
     return (namespace, secretName) => requestAndFileNskeyPrivate(
-        AtClientSecretSharing.forClient(_atClient), filing,
-        namespace, secretName,
+        AtClientSecretSharing.forClient(_atClient),
+        filing,
+        namespace,
+        secretName,
         logger: _logger);
   }
 

@@ -155,8 +155,8 @@ class NskeyRotation {
     // same discipline the mint-time push uses. The SEED, never the expanded
     // decapsulation key — the receiver re-derives the published public half
     // from what arrives, which only the seed can do.
-    final private = await privateFiling.readSeed(
-        namespace, advertisement.nskeyKid);
+    final private =
+        await privateFiling.readSeed(namespace, advertisement.nskeyKid);
     if (private == null) {
       throw StateError(
           'rotated $owner:$namespace to ${advertisement.nskeyKid} but cannot '

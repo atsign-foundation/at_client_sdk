@@ -8,8 +8,7 @@ import 'package:test/test.dart';
 import 'test_utils/envelope_tamper.dart';
 import 'test_utils/mocks.dart';
 
-class MockAtClient extends Mock implements AtClient {
-}
+class MockAtClient extends Mock implements AtClient {}
 
 class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
   @override

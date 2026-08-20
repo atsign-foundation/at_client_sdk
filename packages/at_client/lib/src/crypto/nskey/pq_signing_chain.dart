@@ -90,8 +90,8 @@ class PqSigningChain {
   /// secret name, [apskUri], the codecs) stays static — it belongs to the
   /// protocol, not to any client.
   PqSigningChain(this._atClient)
-      : _logger = AtSignLogger(
-            'PqSigningChain (${_atClient.getCurrentAtSign()})');
+      : _logger =
+            AtSignLogger('PqSigningChain (${_atClient.getCurrentAtSign()})');
 
   final AtClient _atClient;
   final AtSignLogger _logger;
@@ -437,12 +437,13 @@ class PqSigningChain {
   /// privileged peer that predates the root, one approved afterwards, one
   /// approved by a non-root-holding approver, and a root minted late: the retro
   /// case needs no migration because it is not a special case.
-  Future<bool> publishOwnRootLink( {
+  Future<bool> publishOwnRootLink({
     required Future<bool> Function() isFullyPrivileged,
     AtKeysIo? keysIo,
   }) async {
     final atSign = _atClient.getCurrentAtSign()!;
-    final enrollmentId = AtClientSecretSharing.forClient(_atClient).enrollmentId;
+    final enrollmentId =
+        AtClientSecretSharing.forClient(_atClient).enrollmentId;
 
     // Possession is checked first because it is a local `AtKeys` read, where
     // establishing privilege costs a round trip. An enrollment holding no root
@@ -796,8 +797,7 @@ class PqSigningChain {
             'the root');
       }
 
-      final failure =
-          await _checkChainLink(verifier, atSign, current, link);
+      final failure = await _checkChainLink(verifier, atSign, current, link);
       if (failure != null) {
         return ChainResult(ChainVerdict.broken, path, failure);
       }

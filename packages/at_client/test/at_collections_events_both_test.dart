@@ -14,8 +14,7 @@ import 'package:at_client/at_client.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
-class _MockAtClient extends Mock implements AtClient {
-}
+class _MockAtClient extends Mock implements AtClient {}
 
 class _FakeAtKey extends Fake implements AtKey {}
 

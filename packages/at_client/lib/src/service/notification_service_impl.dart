@@ -131,8 +131,8 @@ class NotificationServiceImpl extends NotificationService {
   /// the live one would have.
   Future<void> _deliver(AtNotification n, NotificationConfig config,
       StreamController controller) async {
-    final transformed = await NotificationResponseTransformer(atClient)
-        .transform(Tuple()
+    final transformed =
+        await NotificationResponseTransformer(atClient).transform(Tuple()
           ..one = n
           ..two = config);
     if (config.regex != emptyRegex && !hasRegexMatch(n.key, config.regex)) {
@@ -180,9 +180,8 @@ class NotificationServiceImpl extends NotificationService {
     var total = _parked.values.fold<int>(0, (sum, l) => sum + l.length);
     while (total > maxParked) {
       final oldestKey = _parked.entries
-          .reduce((a, b) => a.value.first.parkedAt.isBefore(b.value.first.parkedAt)
-              ? a
-              : b)
+          .reduce((a, b) =>
+              a.value.first.parkedAt.isBefore(b.value.first.parkedAt) ? a : b)
           .key;
       final dropped = _parked[oldestKey]!.removeAt(0);
       logger.warning('Dropping parked notification ${dropped.notification.key}'

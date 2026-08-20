@@ -165,8 +165,7 @@ class SymmetricAesGcmProvider
     }
 
     final ck = cache.get(owner, namespace, ckKid) ??
-        await _resolveFromConveyance(
-            context, atKey, owner, namespace, ckKid);
+        await _resolveFromConveyance(context, atKey, owner, namespace, ckKid);
     if (ck == null) {
       throw ContentKeyUnavailableException(
           ckKid,

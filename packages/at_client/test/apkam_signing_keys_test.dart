@@ -117,8 +117,8 @@ void main() {
       // RSA is refused against the _apsk its own record published.
       recordResolvedSigningAlgo(atClient, SigningAlgoType.mldsa65);
 
-      expect((await signer.signingKeys).single.algorithm,
-          SigningAlgoType.mldsa65);
+      expect(
+          (await signer.signingKeys).single.algorithm, SigningAlgoType.mldsa65);
     });
 
     test('the keyfile\'s signing material wins over the authentication keypair',

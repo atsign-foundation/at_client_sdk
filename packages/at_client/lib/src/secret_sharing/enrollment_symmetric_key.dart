@@ -1,8 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysMaterial;
+import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysMaterial;
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64;
@@ -144,8 +143,7 @@ Future<(String, Uint8List, String)> _keyPackageHalves(AtKeys keys) async {
 /// random uuid — the approver chooses the address, and the only part of it
 /// this side knows in advance is its own kpid.
 Future<List<String>> _envelopeKeys(AtLookUp atLookUp, String kpid) async {
-  final builder = ScanVerbBuilder()
-    ..regex = EnvelopeAddressing.regexFor(kpid);
+  final builder = ScanVerbBuilder()..regex = EnvelopeAddressing.regexFor(kpid);
   try {
     final String? response =
         await atLookUp.executeCommand(builder.buildCommand(), auth: true);

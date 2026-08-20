@@ -176,8 +176,7 @@ void main() {
             'keep working; the carrying type is a subtype, not a replacement');
   });
 
-  test('every post-approval conveyance refusal carries the response',
-      () async {
+  test('every post-approval conveyance refusal carries the response', () async {
     // The other way a conveyance refuses: a thrown precondition — the
     // unregistered-approver guard and the no-ordinary-namespace refusal both
     // fire after the server-side approval has succeeded.

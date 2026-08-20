@@ -21,8 +21,7 @@ final _logger = AtSignLogger('EnvelopeEnrollmentConveyance');
 /// advertised key package.
 class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
   EnvelopeEnrollmentConveyance(this._atClient,
-      {required
-      Future<List<Enrollment>> Function(
+      {required Future<List<Enrollment>> Function(
               {EnrollmentListRequestParam? enrollmentListParams})
           listEnrollments,
       required EnrollmentPrivilegeResolver privilege})
@@ -127,9 +126,10 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
     final rootPrivate = rootSigner?.private;
     if (await _privilege.isFullyPrivileged()) {
       if (rootPrivate != null) {
-        final link = await PqSigningChain(_atClient)
-            .signRootLinkFor(enrollment.enrollmentId!,
-                rootPrivate: rootPrivate, rootKid: rootSigner!.kid);
+        final link = await PqSigningChain(_atClient).signRootLinkFor(
+            enrollment.enrollmentId!,
+            rootPrivate: rootPrivate,
+            rootKid: rootSigner!.kid);
         if (link != null) {
           await sharing.shareSecretWith(
               keyPackage,

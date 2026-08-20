@@ -323,7 +323,8 @@ void main() {
       final c = await rootHolder('priv-1', pair.secretKey);
 
       expect(
-          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
           isTrue);
 
       final link = await PqSigningChain(c).readRootLink('priv-1');
@@ -337,15 +338,16 @@ void main() {
             // The domain tag spelled out rather than read from the
             // constant: this rebuilds the bytes the way an independent
             // implementation would, so it pins the prefix too.
-            Uint8List.fromList(utf8
-                .encode('at-root-link:${signableTextOf(link['payload'])}')),
+            Uint8List.fromList(
+                utf8.encode('at-root-link:${signableTextOf(link['payload'])}')),
             signature: base64Decode(link['signature'] as String),
             publicKey: pair.publicKey,
           ),
           isTrue);
 
       expect(
-          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
           isFalse,
           reason: 'this runs at every start, so an anchored enrollment must '
               'not rewrite its record each time');
@@ -356,7 +358,8 @@ void main() {
       final c = await rootHolder('priv-1', pair.secretKey);
 
       expect(
-          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => false, keysIo: c.atKeysIo),
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => false, keysIo: c.atKeysIo),
           isFalse,
           reason: 'only the fully privileged class carries a root link; '
               'possession and privilege should never diverge, and if they do '
@@ -373,10 +376,12 @@ void main() {
 
       var privilegeChecked = false;
       expect(
-          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async {
-            privilegeChecked = true;
-            return true;
-          }, keysIo: io),
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async {
+                privilegeChecked = true;
+                return true;
+              },
+              keysIo: io),
           isFalse);
       expect(privilegeChecked, isFalse,
           reason: 'establishing privilege costs a round trip, so the local '
@@ -390,7 +395,8 @@ void main() {
 
       clearInteractions(c);
       expect(
-          await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
+          await PqSigningChain(c).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: c.atKeysIo),
           isTrue);
 
       expect(apskGetCount(c, atSign, 'priv-1'), 1,
@@ -408,7 +414,8 @@ void main() {
       final chain =
           await PqSigningChain(parentClient).signLinkFor(parent, 'priv-1');
       await PqSigningChain(c).publishLink('priv-1', chain!);
-      await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: c.atKeysIo);
+      await PqSigningChain(c).publishOwnRootLink(
+          isFullyPrivileged: () async => true, keysIo: c.atKeysIo);
 
       expect(await PqSigningChain(c).readLink('priv-1'), isNotNull,
           reason: 'writing one link must not drop the other — they are '
@@ -554,10 +561,12 @@ void main() {
               'predecessor, never over it');
       expect(rootPrivates.map((m) => m.keyId).toSet(), hasLength(2),
           reason: 'two slots, not one slot written twice');
-      expect(
-          {for (final m in rootPrivates) m.status},
-          {KeyPartStatus.active, KeyPartStatus.retired},
-          reason: 'exactly one of them answers "what do I sign with"');
+      expect({
+        for (final m in rootPrivates) m.status
+      }, {
+        KeyPartStatus.active,
+        KeyPartStatus.retired
+      }, reason: 'exactly one of them answers "what do I sign with"');
 
       // (6) SIGNING SELECTS THE SUCCESSOR, and stamps ITS kid — read off the
       // public half filed beside it, never off the record.
@@ -566,8 +575,8 @@ void main() {
               isFullyPrivileged: () async => true, keysIo: io),
           isTrue);
       expect(
-          (await PqSigningChain(holderClient).readRootLink('priv-1'))![
-              PqSigningChain.rootLinkKidField],
+          (await PqSigningChain(holderClient)
+              .readRootLink('priv-1'))![PqSigningChain.rootLinkKidField],
           publicKeyKidOfBase64(base64Encode(successor.publicKey)),
           reason: 'the ACTIVE root signs. A client that went on signing with '
               'the predecessor would publish anchors that a peer narrowing on '
@@ -623,8 +632,8 @@ void main() {
       final childClient = client('child-1');
       final child = await registered(childClient);
 
-      final link = await PqSigningChain(holder).signRootLinkFor('child-1',
-          rootPrivate: predecessor.secretKey);
+      final link = await PqSigningChain(holder)
+          .signRootLinkFor('child-1', rootPrivate: predecessor.secretKey);
       await publishRotatedRoot(
           active: successor.publicKey, retired: predecessor.publicKey);
 
@@ -656,9 +665,8 @@ void main() {
           isTrue);
 
       expect(
-          await PqSigningChain(selfClient)
-              .publishOwnRootLink(isFullyPrivileged: () async => true,
-                  keysIo: io),
+          await PqSigningChain(selfClient).publishOwnRootLink(
+              isFullyPrivileged: () async => true, keysIo: io),
           isTrue);
 
       final link = await PqSigningChain(selfClient).readRootLink('priv-1');
@@ -742,7 +750,8 @@ void main() {
       await PqSigningRoot(c, keysIo: io).store(atSign, secret);
       when(() => c.atKeysIo).thenReturn(io);
       await registered(c);
-      await PqSigningChain(c).publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: io);
+      await PqSigningChain(c)
+          .publishOwnRootLink(isFullyPrivileged: () async => true, keysIo: io);
       return c;
     }
 
@@ -782,8 +791,8 @@ void main() {
       final c = client('lonely-1');
       await registered(c);
 
-      final result = await PqSigningChain(verifierClient).verifyChain(
-          verifier, 'lonely-1');
+      final result = await PqSigningChain(verifierClient)
+          .verifyChain(verifier, 'lonely-1');
 
       expect(result.verdict, ChainVerdict.unsigned,
           reason: 'this is the ordinary state during the changeover, and it '
@@ -916,8 +925,8 @@ void main() {
 
       final link = (await PqSigningChain(c).readRootLink('priv-1'))!;
       final undomained = await MlDsa65PureDartAlgo().signBytes(
-        Uint8List.fromList(utf8.encode(
-            signableTextOf(link['payload'] as Map<String, Object?>))),
+        Uint8List.fromList(utf8
+            .encode(signableTextOf(link['payload'] as Map<String, Object?>))),
         secretKey: pair.secretKey,
       );
       writeRootLink(remoteMetadata, atSign, 'priv-1',
@@ -941,8 +950,8 @@ void main() {
 
       final link = (await PqSigningChain(c).readRootLink('priv-1'))!;
       final undomained = await MlDsa65PureDartAlgo().signBytes(
-        Uint8List.fromList(utf8.encode(
-            signableTextOf(link['payload'] as Map<String, Object?>))),
+        Uint8List.fromList(utf8
+            .encode(signableTextOf(link['payload'] as Map<String, Object?>))),
         secretKey: pair.secretKey,
       );
       writeRootLink(remoteMetadata, atSign, 'priv-1',
@@ -1021,7 +1030,6 @@ void writeRootLink(Map<String, Metadata> remoteMetadata, String atSign,
 int apskGetCount(MockAtClient c, String atSign, String enrollmentId) {
   final uri = PqSigningChain.apskUri(atSign, enrollmentId);
   final captured = verify(() => c.get(captureAny(),
-          getRequestOptions: any(named: 'getRequestOptions')))
-      .captured;
+      getRequestOptions: any(named: 'getRequestOptions'))).captured;
   return captured.where((k) => k.toString() == uri).length;
 }

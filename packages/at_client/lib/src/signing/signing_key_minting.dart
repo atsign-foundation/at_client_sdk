@@ -112,8 +112,7 @@ class SigningKeyMinting with ApkamSigning {
   /// stage that must never see it.
   Future<({List<SigningAlgoType> minted, List<SigningAlgoType> retired})>
       reconcileSigningKeys() async {
-    const nothing =
-        (minted: <SigningAlgoType>[], retired: <SigningAlgoType>[]);
+    const nothing = (minted: <SigningAlgoType>[], retired: <SigningAlgoType>[]);
 
     final wanted = atClient.getPreferences()?.dataSigningKeyAlgorithms ??
         const <SigningAlgoType>{};
@@ -156,7 +155,8 @@ class SigningKeyMinting with ApkamSigning {
           'key(s) for $enrollmentId; publishing before filing');
     }
     if (superseded.isNotEmpty) {
-      logger.info('Retiring ${superseded.map((k) => k.algorithm.name).join(', ')} '
+      logger.info(
+          'Retiring ${superseded.map((k) => k.algorithm.name).join(', ')} '
           'signing key(s) for $enrollmentId: the in-use set no longer names '
           'them. They stay advertised as retired, so what they signed still '
           'verifies');
@@ -352,8 +352,8 @@ class SigningKeyMinting with ApkamSigning {
   Future<void> _retire(
       WrittenAtKeysIo io, String atSign, SigningAlgoType algorithm) async {
     await io.update(AtUtils.fixAtSign(atSign).toAtsign(), (keys) {
-      final retired = keys.retireSigningKeys(
-          enrollmentId, _materialAlgorithmOf(algorithm));
+      final retired =
+          keys.retireSigningKeys(enrollmentId, _materialAlgorithmOf(algorithm));
       if (retired.isEmpty) {
         logger.warning('Nothing to retire for $enrollmentId under '
             '${algorithm.name}, though it was held a moment ago — leaving the '
@@ -369,8 +369,7 @@ class SigningKeyMinting with ApkamSigning {
   /// The keyfile's spelling of [algorithm]. It matches [SigningAlgoType]'s
   /// member name for both, and `AtKeys.signingKeysFor` reads it back by that
   /// name — a second spelling here would file material the reader skips.
-  String _materialAlgorithmOf(SigningAlgoType algorithm) =>
-      switch (algorithm) {
+  String _materialAlgorithmOf(SigningAlgoType algorithm) => switch (algorithm) {
         SigningAlgoType.mldsa65 => KeyAlgorithmType.mlDsa65,
         SigningAlgoType.rsa2048 => KeyAlgorithmType.rsa2048,
         _ => algorithm.name,

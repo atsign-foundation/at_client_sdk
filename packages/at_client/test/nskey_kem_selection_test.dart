@@ -40,8 +40,7 @@ void main() {
           privateKey: pair.secretKey,
           keyAlgo: keyAlgo);
     return (
-      NskeyProvider(
-          keyRing: ring, cache: ContentKeyCache(), keyAlgo: keyAlgo),
+      NskeyProvider(keyRing: ring, cache: ContentKeyCache(), keyAlgo: keyAlgo),
       ring
     );
   }
@@ -49,7 +48,8 @@ void main() {
   group('a conveyance is written under the KEM the destination advertises', () {
     test('ML-KEM-1024 conveys under its own provider id at ver 0x03', () async {
       final (provider, _) = await providerFor(SecretSharingAlgos.mlKem1024);
-      final ck = ContentKey(Uint8List.fromList(List<int>.generate(32, (i) => i)));
+      final ck =
+          ContentKey(Uint8List.fromList(List<int>.generate(32, (i) => i)));
       final atKey = conveyanceKey();
 
       final wire = await provider.encrypt(context, atKey, ck.toBase64());
@@ -129,8 +129,8 @@ void main() {
     for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
       test('$keyAlgo round-trips the content key', () async {
         final (provider, _) = await providerFor(keyAlgo);
-        final ck =
-            ContentKey(Uint8List.fromList(List<int>.generate(32, (i) => i * 3)));
+        final ck = ContentKey(
+            Uint8List.fromList(List<int>.generate(32, (i) => i * 3)));
         final atKey = conveyanceKey();
 
         final wire = await provider.encrypt(context, atKey, ck.toBase64());
@@ -151,8 +151,8 @@ void main() {
           keyAlgo: SecretSharingAlgos.xWing);
 
       await expectLater(
-          wrongProvider.encrypt(context, conveyanceKey(),
-              ContentKey(Uint8List(32)).toBase64()),
+          wrongProvider.encrypt(
+              context, conveyanceKey(), ContentKey(Uint8List(32)).toBase64()),
           throwsA(isA<AtEncryptionException>()));
     });
   });
@@ -209,8 +209,7 @@ void main() {
       // The coupling CryptoConfig.nskey exists to enforce — two caches would
       // let a conveyance cache a CK the data provider then cannot find.
       final config = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
-      final providers =
-          config.providers.whereType<NskeyProvider>().toList();
+      final providers = config.providers.whereType<NskeyProvider>().toList();
 
       expect(providers, hasLength(2));
       expect(providers.first.cache, same(providers.last.cache));
@@ -245,8 +244,8 @@ void main() {
           isNull,
           reason: 'sealing under a construction the recipient never claimed '
               'fails on their side, as an AEAD error naming neither party');
-      expect(SecretSharingAlgos.bestSuiteBetween(['x-wing-hpke-v1'], []),
-          isNull);
+      expect(
+          SecretSharingAlgos.bestSuiteBetween(['x-wing-hpke-v1'], []), isNull);
     });
 
     test('a suite this build has never heard of is still negotiable', () {

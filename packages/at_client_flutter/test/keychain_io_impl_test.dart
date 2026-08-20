@@ -135,7 +135,10 @@ void main() {
       final reread = await io.read('@alice');
       expect(
         reread
-            .getAtSignKey('nskey.wavi', CryptographicKeyType.symmetricEncryption)
+            .getAtSignKey(
+              'nskey.wavi',
+              CryptographicKeyType.symmetricEncryption,
+            )
             ?.bytes
             .toString(),
         base64Encode(utf8.encode('nskey.wavi')),

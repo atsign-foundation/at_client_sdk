@@ -50,11 +50,11 @@ String _slug(String heading) => heading
     .replaceAll(RegExp(r'[^\w\s-]'), '')
     .replaceAll(RegExp(r'\s'), '-');
 
-Set<String> _headingSlugs(String markdown) => RegExp(r'^#{1,6}\s+(.*?)\s*$',
-        multiLine: true)
-    .allMatches(markdown)
-    .map((m) => _slug(m.group(1)!))
-    .toSet();
+Set<String> _headingSlugs(String markdown) =>
+    RegExp(r'^#{1,6}\s+(.*?)\s*$', multiLine: true)
+        .allMatches(markdown)
+        .map((m) => _slug(m.group(1)!))
+        .toSet();
 
 /// The live files.
 ///
@@ -71,7 +71,6 @@ const _liveFiles = <String>[
   'roadmap.md',
   'seal-spec.md',
 ];
-
 
 /// A status marker inside a code span is a CITATION of a past status, not a
 /// status. Both guards below strip code spans before matching, because the
@@ -205,7 +204,8 @@ void main() {
 
       final amended = RegExp(r'\bAmended\b[^.\n]{0,12}?\(?(20\d\d-\d\d-\d\d)',
           caseSensitive: false);
-      final bodies = _read('detail/decisions.md').split(RegExp(r'^## ', multiLine: true));
+      final bodies =
+          _read('detail/decisions.md').split(RegExp(r'^## ', multiLine: true));
 
       final silent = <String>[];
       for (final body in bodies) {
@@ -215,7 +215,8 @@ void main() {
         if (dates.isEmpty) continue;
         final st = (status[head.group(1)] ?? '').toUpperCase();
         // A stronger not-in-force status already tells the reader to look.
-        if (st.contains('AMENDED') || st.contains('SUPERSEDED') ||
+        if (st.contains('AMENDED') ||
+            st.contains('SUPERSEDED') ||
             st.contains('REJECTED')) {
           continue;
         }
@@ -263,13 +264,16 @@ void main() {
     // new cluster is one edit. This guard used to spell it out itself, and
     // adding the G cluster reddened it here — a place that reads as unrelated
     // to "the catalogue gained rows".
-    final row = RegExp('^\\|\\s*($ucIdPattern)\\s*\\|[^|]*\\|\\s*(\\w[\\w ]*?)\\s*\\|',
+    final row = RegExp(
+        '^\\|\\s*($ucIdPattern)\\s*\\|[^|]*\\|\\s*(\\w[\\w ]*?)\\s*\\|',
         multiLine: true);
 
     test('every table row is a use case the catalogue defines', () {
       final defined = catalogueUseCases().map((u) => u.id).toSet();
-      final rows =
-          row.allMatches(_read('acceptance.md')).map((m) => m.group(1)!).toSet();
+      final rows = row
+          .allMatches(_read('acceptance.md'))
+          .map((m) => m.group(1)!)
+          .toSet();
 
       expect(rows, isNotEmpty,
           reason: 'acceptance.md has no status rows. Either the table was '
@@ -302,7 +306,8 @@ void main() {
                 : claimed.contains(id)
                     ? 'PROVEN'
                     : 'NO SCENARIO';
-        if (stated != actual) wrong.add('$id: table says $stated, tree says $actual');
+        if (stated != actual)
+          wrong.add('$id: table says $stated, tree says $actual');
       }
 
       expect(wrong, isEmpty,
@@ -335,11 +340,11 @@ void main() {
           reason: 'the summary sentence did not parse, so this guard checks '
               'nothing — it is the sentence beginning "Today that is"');
 
-      final rows = RegExp(r'^\| (UC-[^|]+)\|[^|]*\|\s*(\w+)\s*\|',
-              multiLine: true)
-          .allMatches(acceptance)
-          .map((m) => m.group(2)!)
-          .toList();
+      final rows =
+          RegExp(r'^\| (UC-[^|]+)\|[^|]*\|\s*(\w+)\s*\|', multiLine: true)
+              .allMatches(acceptance)
+              .map((m) => m.group(2)!)
+              .toList();
       expect(rows, isNotEmpty, reason: 'the status table did not parse');
 
       int count(String s) => rows.where((r) => r == s).length;
@@ -424,7 +429,8 @@ void main() {
     });
   });
 
-  group('a row that says done does not point at a section that says partly', () {
+  group('a row that says done does not point at a section that says partly',
+      () {
     /// The inverse of the guard above, and the one that survived it.
     ///
     /// 14.6 sat in the DONE table while its own body opened "Status: RESOLVED
@@ -572,9 +578,10 @@ void main() {
     /// Transparency log as append-only, which is correct and unrelated. A ban
     /// on the word alone went red on that paragraph the first time it ran.
     final banned = <RegExp, String>{
-      RegExp(r'(rulings?|entries|the ledger|this (doc|file|section))\s+'
+      RegExp(
+              r'(rulings?|entries|the ledger|this (doc|file|section))\s+'
               r'(are|is)\s+append-only',
-          caseSensitive: false):
+              caseSensitive: false):
           'a ledger whose rulings are "append-only" cannot be corrected, so '
               'every falsified claim stays and the heading becomes the stalest '
               'line in the file',
@@ -591,13 +598,17 @@ void main() {
     /// An occurrence is allowed when the same paragraph records that the rule
     /// was overruled: `detail/` keeps the history of decisions this project
     /// reversed, and deleting that is its own kind of dishonesty.
-    bool isHistorical(String text, int at) =>
-        text.substring(at, (at + 260).clamp(0, text.length)).contains('overruled');
+    bool isHistorical(String text, int at) => text
+        .substring(at, (at + 260).clamp(0, text.length))
+        .contains('overruled');
 
     test('no doc carries a rule permitting stale prose', () {
       final offences = <String>[];
-      for (final file in [..._liveFiles, 'detail/decisions.md',
-        'detail/implementation-plan.md']) {
+      for (final file in [
+        ..._liveFiles,
+        'detail/decisions.md',
+        'detail/implementation-plan.md'
+      ]) {
         final text = _read(file);
         for (final entry in banned.entries) {
           for (final m in entry.key.allMatches(text)) {

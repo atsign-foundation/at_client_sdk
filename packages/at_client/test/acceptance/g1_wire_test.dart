@@ -40,7 +40,8 @@ void main() {
             'composer that can only ever emit one form');
   });
 
-  test('UC-G1.6 · an unversioned envelope is refused, and the refusal names '
+  test(
+      'UC-G1.6 · an unversioned envelope is refused, and the refusal names '
       'why', () {
     // GIVEN (a) the released 3.14.0 flat envelope — a bare signature sibling
     //       of the payload, no v — and (b) a current-shape envelope whose
@@ -48,7 +49,8 @@ void main() {
     // WHEN  a current build reads (a) and verifies (b).
     // THEN  (a) is refused at parse and (b) at verify, naming the version.
     //       There is deliberately no tolerant reading.
-    provenIn('packages/at_client/test/released_envelope_incompatibility_test.dart',
+    provenIn(
+        'packages/at_client/test/released_envelope_incompatibility_test.dart',
         'a released envelope is refused, naming the payload',
         proves: 'arm (a): the released flat shape never parses, so it cannot '
             'reach a verifier at all');
@@ -121,7 +123,8 @@ void main() {
             'it would retroactively unverify everything it signed');
   });
 
-  test('UC-G1.9a · the client mints what the in-use set names, advertising '
+  test(
+      'UC-G1.9a · the client mints what the in-use set names, advertising '
       'before filing', () {
     // GIVEN an enrollment holding no signing key of its own and a preference
     //       whose in-use set names one.

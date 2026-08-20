@@ -108,14 +108,15 @@ class MintLock {
       // Refused rather than defaulted. Nothing deletes this record now, so a
       // lock with no ttl is not a lock that releases late — it is one that
       // never releases, and it would block its atSign's minting for good.
-      throw ArgumentError.value(ttlMillis, 'lockKey.metadata.ttl',
+      throw ArgumentError.value(
+          ttlMillis,
+          'lockKey.metadata.ttl',
           'a mint lock needs a ttl: it is released by expiry and by nothing '
-          'else, so without one $lockKey would block minting permanently');
+              'else, so without one $lockKey would block minting permanently');
     }
     // Stamped before the request goes out — see [MintLease.expiresAt].
     final leaseFrom = DateTime.now();
-    if (!await _take(lockKey,
-        ownLockIsNotContention: ownLockIsNotContention)) {
+    if (!await _take(lockKey, ownLockIsNotContention: ownLockIsNotContention)) {
       _logger.info('Another enrollment holds $lockKey; re-reading rather than '
           'waiting for it');
       return null;
@@ -170,9 +171,9 @@ class MintLock {
   /// purpose is to refuse when ownership is unclear.
   Future<bool> _isOwnLock(AtKey lockKey) async {
     try {
-      final held = await atClient.getRemoteSecondary()!.executeCommand(
-          'llookup:${lockKey.toString()}\n',
-          auth: true);
+      final held = await atClient
+          .getRemoteSecondary()!
+          .executeCommand('llookup:${lockKey.toString()}\n', auth: true);
       if (held == null || !held.startsWith('data:')) return false;
       final value = held.replaceFirst('data:', '').trim();
       if (value != _holder) return false;

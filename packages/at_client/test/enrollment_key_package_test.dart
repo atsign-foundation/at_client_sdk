@@ -57,7 +57,8 @@ void main() {
     // before the atServer has assigned an enrollment id — so they sit in the
     // atSign's own container until the persist adopts them into the
     // enrollment.
-    final public = keys.getAtSignKey(kpid, CryptographicKeyType.publicEncapsulation);
+    final public =
+        keys.getAtSignKey(kpid, CryptographicKeyType.publicEncapsulation);
     expect(public, isNotNull);
     expect(base64Encode(public!.bytes.bytes), advertised['pub']);
   });
@@ -110,15 +111,14 @@ void main() {
     // this is the key a verifier will actually check against.
     await verifyEnvelope(envelope,
         signerPublicKey: apkam.atPublicKey.publicKey,
-            expecting: EnvelopeType.keyPackage);
+        expecting: EnvelopeType.keyPackage);
   });
 
   test('a tampered package fails that verification', () async {
     final (io, _, apkam) = await freshKeys();
 
     final metadata = await enrollmentKeyPackageBuilder(atSign)(io);
-    final envelope =
-        SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
+    final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
     final payload = Map<String, Object?>.from(envelope.payload as Map);
     // Substitute an encapsulation target — the attack the signature exists to
     // stop, since every structural field still agrees afterwards.
@@ -135,7 +135,7 @@ void main() {
     await expectLater(
       () => verifyEnvelope(envelope.withPayloadJson(payload),
           signerPublicKey: apkam.atPublicKey.publicKey,
-              expecting: EnvelopeType.keyPackage),
+          expecting: EnvelopeType.keyPackage),
       throwsA(isA<AtSigningVerificationException>()),
     );
   });
@@ -177,18 +177,18 @@ void main() {
       final (io, _, apkam) = await freshKeys();
       final signing = RsaKeyPair.generate();
 
-      final metadata = await enrollmentKeyPackageBuilder(atSign,
-          advertisedSigningKey: (
-            algorithm: SigningAlgoType.rsa2048,
-            publicKey: signing.atPublicKey.publicKey,
-            privateKey: signing.atPrivateKey.privateKey
-          ))(io);
+      final metadata =
+          await enrollmentKeyPackageBuilder(atSign, advertisedSigningKey: (
+        algorithm: SigningAlgoType.rsa2048,
+        publicKey: signing.atPublicKey.publicKey,
+        privateKey: signing.atPrivateKey.privateKey
+      ))(io);
       final envelope = SignedEnvelope.fromJson(metadata!['keyPackage'] as Map);
 
       // The peer's check with the peer's input: _apsk names the signing key.
       await verifyEnvelope(envelope,
           signerPublicKey: signing.atPublicKey.publicKey,
-              expecting: EnvelopeType.keyPackage);
+          expecting: EnvelopeType.keyPackage);
 
       // The differential. Without it this passes for a build that never
       // changed signer, because a package signed by the APKAM key is still a
@@ -196,7 +196,7 @@ void main() {
       await expectLater(
         () => verifyEnvelope(envelope,
             signerPublicKey: apkam.atPublicKey.publicKey,
-                expecting: EnvelopeType.keyPackage),
+            expecting: EnvelopeType.keyPackage),
         throwsA(isA<Exception>()),
         reason: 'a package still signed by the APKAM key verifies against '
             'that key and fails against _apsk, which is the silent conveyance '
@@ -214,7 +214,7 @@ void main() {
       await verifyEnvelope(
           SignedEnvelope.fromJson(metadata!['keyPackage'] as Map),
           signerPublicKey: apkam.atPublicKey.publicKey,
-              expecting: EnvelopeType.keyPackage);
+          expecting: EnvelopeType.keyPackage);
     });
   });
 }

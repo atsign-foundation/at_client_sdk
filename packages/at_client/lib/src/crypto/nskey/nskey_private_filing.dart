@@ -152,8 +152,8 @@ class NskeyPrivateFiling {
     // is what names it. With no advertisement to consult, the hybrid is the
     // only thing it could be: nothing else was ever conveyed.
     final keyAlgo = advertised?.alg ?? SecretSharingAlgos.xWing;
-    if (!await _corresponds(secret.namespace, nskeyKid, seed, keyAlgo,
-        advertised)) {
+    if (!await _corresponds(
+        secret.namespace, nskeyKid, seed, keyAlgo, advertised)) {
       return false;
     }
 
@@ -222,7 +222,6 @@ class NskeyPrivateFiling {
     return true;
   }
 
-
   /// Reads the key source, separating "nothing here yet" from "this process
   /// cannot read what is here".
   ///
@@ -280,8 +279,8 @@ class NskeyPrivateFiling {
         return null;
       }
       try {
-        return NskeyDecapsulationKey((await kem.keyPairFromSeed(
-                Uint8List.fromList(material.bytes.bytes)))
+        return NskeyDecapsulationKey((await kem
+                .keyPairFromSeed(Uint8List.fromList(material.bytes.bytes)))
             .secretKey);
       } on ArgumentError catch (e) {
         // Held, but not a usable seed for the algorithm it is filed under.
