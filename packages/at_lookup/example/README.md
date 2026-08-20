@@ -37,9 +37,8 @@ var updateVerbBuilder = UpdateVerbBuilder()
   ..sharedWith = '@bob'
   ..value = '+1 889 886 7879';
 
-// Sends update command to secondary server
-// Set sync attribute to true sync the value to secondary server.
-var updateResult = atLookupImpl.executeVerb(updateVerbBuilder, sync: true);
+// Sends update command to the secondary server
+var updateResult = atLookupImpl.executeVerb(updateVerbBuilder);
 ```
 
 #### Get the value of the key
@@ -71,5 +70,5 @@ var deleteVerbBuilder = DeleteVerbBuilder()
     ..atKey = 'phone'
     ..sharedBy = '@alice';
 // Sends delete key to secondary server  
-var deleteResult = atLookupImpl.executeVerb(deleteVerbBuilder, sync: true);
+var deleteResult = atLookupImpl.executeVerb(deleteVerbBuilder);
 ```

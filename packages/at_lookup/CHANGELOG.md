@@ -1,5 +1,8 @@
 ## 3.7.0
 
+- deprecated: `AtLookUp.executeVerb`'s `sync` parameter, removal in 4.0. It
+  has never been read: the verb always executes on the remote atServer, and
+  there is no sync behaviour for the parameter to control.
 - fix(deps): raised the `at_commons` constraint to `^5.16.0`. This package now
   reads `AtNetworkTimeouts.defaultResponseBudget`, which does not exist in
   at_commons 5.15.0 or earlier — under the old `^5.13.0` a consumer could

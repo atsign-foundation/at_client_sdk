@@ -86,8 +86,7 @@ void main() {
       await atClient.getRemoteSecondary()!.executeVerb(
           UpdateVerbBuilder()
             ..atKey = scratch
-            ..value = value,
-          sync: true);
+            ..value = value);
     }
 
     final stored = await remote('llookup:${scratch.toString()}\n');
@@ -121,16 +120,14 @@ void main() {
         atClient.getRemoteSecondary()!.executeVerb(
             UpdateVerbBuilder()
               ..atKey = lockKey
-              ..value = DateTime.now().toUtc().toIso8601String(),
-            sync: false);
+              ..value = DateTime.now().toUtc().toIso8601String());
 
     // A leftover from an earlier run of this file would make the FIRST take
     // the refused one and the test would pass for the wrong reason.
     await atClient.getRemoteSecondary()!.executeVerb(
         DeleteVerbBuilder()
           ..atKey = lockKey
-          ..force = true,
-        sync: false);
+          ..force = true);
 
     await take();
     try {
@@ -153,8 +150,7 @@ void main() {
       await atClient.getRemoteSecondary()!.executeVerb(
           DeleteVerbBuilder()
             ..atKey = lockKey
-            ..force = true,
-          sync: false);
+            ..force = true);
     }
 
     // Control: the same client, the same verb, the same key — accepted once
@@ -164,8 +160,7 @@ void main() {
     await atClient.getRemoteSecondary()!.executeVerb(
         DeleteVerbBuilder()
           ..atKey = lockKey
-          ..force = true,
-        sync: false);
+          ..force = true);
   });
 
   test('the published nskey is mutable, because rotation depends on it',

@@ -459,8 +459,7 @@ void main() {
           ..value = jsonEncode({
             'nskeyKid': nskeyKidOf(substituted.publicKeyBytes),
             'publicKey': base64Encode(substituted.publicKeyBytes),
-          }),
-        sync: true);
+          }));
 
     final aliceSide = await nskeyClient(alice);
 

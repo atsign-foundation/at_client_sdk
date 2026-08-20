@@ -62,10 +62,10 @@ that file instead; the list below is the PQ release work.
    log. Three consecutive green packs were run on 2026-08-20 and the item's one
    missing piece is still a red run's log. Three more hypotheses were disproven
    that day and are listed in the section — read them before forming a fourth.
-4. **Decide `executeVerb`'s inert `sync` parameter**
-   ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)) —
-   honour it or delete it from the interface. 52 call sites pass a value into a
-   parameter neither implementation reads.
+4. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
+   ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
+   `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
+   removal owed at 4.0.
 
 **Blocked, and what lifts it:** publishing anything past at_chops waits on
 at_chops 3.6.0 reaching pub.dev, which waits on #2169 merging. at_lookup's
@@ -110,7 +110,7 @@ because a wrap-up is the wrong place to move anchors the acceptance rail parses.
 | [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
-| [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing**, on both `LocalSecondary` and `RemoteSecondary` — declared, never read, and **52 call sites pass a value** (39 `false`, 13 `true`). `MintLock._take` passes `sync: false` and reasons about it in its dartdoc. The real control is `cameFromServer`/`localOnly` under different names. Also here: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | Nothing. Two options with very different blast radius — honour it at 52 sites, or delete it from the interface and let the compiler enumerate them. ⚠️ Deleting only the arguments would leave the misleading parameter for the next caller |
+| [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. Still in the section: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |
 | [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. ✅ **The refusal is fixed too** — it was a namespace check, not immutability, and the sweep now bypasses it. **Owed elsewhere:** the keystore's `get()` does not filter expired records (at_persistence_secondary_server, another repo) | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20) |
 | [14.44](#1444-two-residuals-from-the-at_chops-pr-review) | Two residuals from the at_chops PR review, both answered on #2169 and neither fixable there: the passphrase envelope persists the salt and three costs but **not `hashLength`**, and `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths | Nothing. The first belongs in the **at_auth carve** (train position 5), where that file is already being edited; the second is pre-existing on trunk in both X-Wing backends and unreachable today, so it goes whenever at_chops is next open |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
@@ -2266,12 +2266,37 @@ What actually decides whether a write is enqueued for client→server sync is
 control exists, under different names, and `sync:` is a third name that looks
 like it and is not.
 
-Two ways to close it and they differ in blast radius: honour the parameter
-(a behaviour change at 52 sites, each needing thought about which it meant), or
-delete it from the interface and both implementations and let the compiler
-enumerate the callers. ⚠️ **Do not simply delete the argument at the call
-sites** — that reads as tidying and would leave the misleading parameter in
-place for the next caller.
+**Decided by gkc 2026-08-20: delete it, in two phases.** The parameter is
+`@Deprecated` for the remaining 3.x releases and comes out in 4.0 with the rest
+of the deprecated detritus, the compiler enumerating the call sites at removal.
+Shipped on this branch:
+
+- `@Deprecated` on all six declarations — at_client's `Secondary`,
+  `LocalSecondary`, `RemoteSecondary.executeVerb` **and** `executeAndParse`
+  (found in the sweep, same defect), plus **at_lookup's** `AtLookUp` /
+  `AtLookupImpl`, which 14.46 as filed missed. Deprecating one interface and
+  leaving the identical parameter on the layer below would have kept the trap
+  in the package about to be carved.
+- Every call site whose surrounding prose *reasoned about* the flag no longer
+  passes it: `MintLock._take`, `SyncServiceImpl._pullToLocal` (whose dartdoc
+  claimed `sync: false` "expresses the same intent" — it expressed nothing),
+  the two remote-first publishes in `pq_signing_root.dart` /
+  `published_nskey_key_ring.dart`, and at_lookup's example + README, whose
+  comment "Set sync attribute to true sync the value to secondary server" was
+  the document licensing the wrong pattern.
+- Every **cross-package** site (6 in `tests/at_functional_test`, 1 in
+  `tests/at_end2end_test`) — those are the only ones the deprecation warns on
+  (`deprecated_member_use` is silent within the declaring package), verified
+  by injecting one back as a positive control and reading the warning it
+  produced.
+
+**Remaining, deliberately:** 7 lib and 69 test sites inside at_client still
+pass the argument. They are silent, harmless, and enumerated by the compiler
+the day the parameter is removed — cleaning the test stubs by hand now would
+churn ~15 files for nothing the 4.0 build won't force anyway. The mocktail
+stubs matching `sync: any(named: 'sync')` were proven to still bind when the
+caller omits the argument (the nskey/pq unit tests assert on what the stub
+recorded, and stayed green).
 
 **Also noticed, neither filed elsewhere:**
 
@@ -2371,8 +2396,9 @@ created remote-only (`MintLock._take` → `getRemoteSecondary().executeVerb`, an
 `_isOwnLock` → `getRemoteSecondary().executeCommand`), and arrives locally by
 the sync pull — the never-synced rule covers `public:_`, not self keys, and
 `syncRegex` defaults to null so the pull is unfiltered. Two things stop a client
-suppressing it today: `RemoteSecondary.executeVerb`'s `sync` parameter is
-**inert** (declared and never read, so `_take`'s `sync: false` does nothing),
+suppressing it today: the client API has no working suppression control —
+`RemoteSecondary.executeVerb`'s `sync` parameter was inert and is now
+`@Deprecated` (14.46; `_take` no longer passes it) —
 and `:nc`/`noCommit` — which would stop the atServer logging the commit — exists
 in at_commons (published 5.15.0, syntax groups for `update`, `update:meta` and
 `delete`) but appears in **zero** files of at_server `origin/trunk`.

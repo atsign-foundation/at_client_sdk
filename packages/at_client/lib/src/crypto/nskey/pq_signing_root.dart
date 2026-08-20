@@ -499,8 +499,7 @@ class PqSigningRoot {
             ..value = jsonEncode(apskAdvertisement(keys: [
               ApskSigningKey.forPublicKey(
                   alg: rootKeyAlgo, pub: base64Encode(publicKey))
-            ])),
-          sync: true);
+            ])));
     } catch (e) {
       // A throw here says the call failed, NOT what the atServer did — and the
       // pair of cases this had to tell apart has CHANGED. "The atServer

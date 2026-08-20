@@ -138,8 +138,7 @@ void main() {
       await atClient.getRemoteSecondary()!.executeVerb(
           UpdateVerbBuilder()
             ..atKey = key
-            ..value = 'envelope-payload',
-          sync: true);
+            ..value = 'envelope-payload');
     }
 
     // Control, and the assertion the refusal below depends on: BOTH records

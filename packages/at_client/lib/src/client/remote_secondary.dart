@@ -203,13 +203,17 @@ class RemoteSecondary implements Secondary {
 
   /// Executes the command returned by [VerbBuilder] on a remote
   /// secondary server. Authentication is handled by the injected
-  /// `AtLookUp`. [sync] is accepted for [Secondary] interface
-  /// compatibility but is ignored. [cameFromServer] is also accepted
-  /// for interface compatibility and ignored — remote secondaries
-  /// don't have a client→server sync queue to skip enqueuing into.
+  /// `AtLookUp`. [cameFromServer] is accepted for [Secondary] interface
+  /// compatibility and ignored — remote secondaries don't have a
+  /// client→server sync queue to skip enqueuing into.
   @override
   Future<String> executeVerb(VerbBuilder builder,
-      {sync = false, bool cameFromServer = false}) async {
+      {@Deprecated('Inert: nothing reads it, so passing it suppresses '
+          'nothing. Whether a local write is enqueued for '
+          'client→server sync is decided by cameFromServer. '
+          'Removed in 4.0.')
+      sync = false,
+      bool cameFromServer = false}) async {
     try {
       String verbResult;
       logger.finer('Command sent to server: ${builder.buildCommand()}');
@@ -228,7 +232,12 @@ class RemoteSecondary implements Secondary {
     }
   }
 
-  Future<String> executeAndParse(VerbBuilder builder, {sync = false}) async {
+  Future<String> executeAndParse(VerbBuilder builder,
+      {@Deprecated('Inert: nothing reads it, so passing it suppresses '
+          'nothing. Whether a local write is enqueued for '
+          'client→server sync is decided by cameFromServer. '
+          'Removed in 4.0.')
+      sync = false}) async {
     // ignore: prefer_typing_uninitialized_variables
     var verbResult;
     try {

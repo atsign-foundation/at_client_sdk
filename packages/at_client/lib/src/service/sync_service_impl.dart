@@ -1441,9 +1441,8 @@ class SyncServiceImpl implements SyncService {
   ///
   /// `cameFromServer: true` flags this write as a server-replay so
   /// `LocalSecondary` skips enqueuing it for client→server sync —
-  /// the server is where this entry just came from. `sync: false`
-  /// expresses the same intent on the legacy interface and is
-  /// retained for back-compat. Commit-log-free: there is no local
+  /// the server is where this entry just came from, and it is the only
+  /// thing that decides it. Commit-log-free: there is no local
   /// commit-log entry to stamp the server commitId onto — the pull
   /// watermark advances via `_lastReceivedServerCommitIdAtKey` in
   /// `_syncFromServer`.
@@ -1451,7 +1450,6 @@ class SyncServiceImpl implements SyncService {
     try {
       await _atClient.getLocalSecondary()!.executeVerb(
             builder,
-            sync: false,
             cameFromServer: true,
           );
     } on UnAuthorizedException catch (e) {

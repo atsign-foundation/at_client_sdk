@@ -22,9 +22,8 @@ void main() async {
         (AtKey.shared('phone', sharedBy: '@alice')..sharedWith('@bob')).build()
     ..value = '+1 889 886 7879';
 
-  // Sends update command to secondary server
-  // Set sync attribute to true sync the value to secondary server.
-  await atLookupImpl.executeVerb(updateVerbBuilder, sync: true);
+  // Sends update command to the secondary server
+  await atLookupImpl.executeVerb(updateVerbBuilder);
 
   /// To lookup a value of a key sharedBy a specific atSign
   var lookupVerbBuilder = LookupVerbBuilder()
@@ -47,7 +46,7 @@ void main() async {
   var deleteVerbBuilder = DeleteVerbBuilder()
     ..atKey =
         (AtKey.shared('phone', sharedBy: '@alice')..sharedWith('@bob')).build();
-  await atLookupImpl.executeVerb(deleteVerbBuilder, sync: true);
+  await atLookupImpl.executeVerb(deleteVerbBuilder);
 
   /// To retrieve keys from the secondary server
   var scanVerbBuilder = ScanVerbBuilder();

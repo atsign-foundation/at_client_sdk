@@ -640,11 +640,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     // Straight to the atServer first: an advertisement is only useful once a
     // *peer* can fetch it, and going through the local-first put would leave it
     // unpublished until the next sync.
-    await _atClient.getRemoteSecondary()!.executeVerb(
-        UpdateVerbBuilder()
-          ..atKey = advertisementKey
-          ..value = payload,
-        sync: true);
+    await _atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+      ..atKey = advertisementKey
+      ..value = payload);
 
     // …then locally, so the owner's own clients hold it across restarts without
     // a round trip. A `public:__` key carries a real commit id, so the two

@@ -366,7 +366,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
   /// Catches any exception and throws [AtLookUpException]
   @override
-  Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
+  Future<String> executeVerb(VerbBuilder builder,
+      {@Deprecated('Inert: nothing reads it. The verb always executes '
+          'on the remote atServer; there is no sync behaviour here '
+          'to control. Removed in 4.0.')
+      sync = false}) async {
     String verbResult = '';
     try {
       if (builder is UpdateVerbBuilder) {

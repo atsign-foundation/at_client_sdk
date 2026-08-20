@@ -136,11 +136,9 @@ class MintLock {
   Future<bool> _take(AtKey lockKey,
       {required bool ownLockIsNotContention}) async {
     try {
-      await atClient.getRemoteSecondary()!.executeVerb(
-          UpdateVerbBuilder()
-            ..atKey = lockKey
-            ..value = _holder,
-          sync: false);
+      await atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+        ..atKey = lockKey
+        ..value = _holder);
       return true;
     } catch (e) {
       // The atServer refuses a second write to an immutable record, which is

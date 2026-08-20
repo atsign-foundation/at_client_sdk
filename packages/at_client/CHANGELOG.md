@@ -9,6 +9,12 @@ files, against a positive control of `AtClientPreference` in 20. The BREAKING
 labels below were rewritten in the same pass: as written they sent a reader
 hunting for a constructor argument that never existed in a release. -->
 
+- deprecated: `Secondary.executeVerb`'s `sync` parameter (also on
+  `LocalSecondary`, `RemoteSecondary` and `RemoteSecondary.executeAndParse`),
+  removal in 4.0. It has never been read by either implementation: whether a
+  local write is enqueued for client→server sync is decided by
+  `cameFromServer`, and a remote execution has no sync queue to suppress.
+  Passing `sync: false` for a record that must not sync suppresses nothing.
 - fix: the expiry sweep reclaims expired records regardless of the client
   enrollment's namespace scope. Reclaiming an expired record is storage
   internals, not an operation an enrollment is performing — the record has
