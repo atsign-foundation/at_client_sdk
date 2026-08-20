@@ -38,7 +38,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
-| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **Three red rows on the spike, three different causes** — a notification that never arrives (reproduces LOCALLY, start here), UC-A4.2's failing positive control, and a 30-second silence in `enrollment_setup.dart`. Four mechanisms are already read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
+| [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **One of the three red rows is fixed; two are open.** Row 1, the notification that never arrived, was a closed connection whose pending request waited out its 30-second budget holding at_lookup's request mutex — fixed in at_lookup, green locally. Row 2 is UC-A4.2's failing positive control; row 3 is a 30-second silence in `enrollment_setup.dart` with the SAME fingerprint as row 1, so it may already be fixed — unmeasured, @ce2e-only. Four mechanisms are read and disproven, and listed so nobody re-walks them | Nothing. This is the work that blocks merging the spike |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
@@ -1673,32 +1673,63 @@ Everything below is from those runs plus the re-runs after each fix.
 where the loop cannot succeed either — so every local e2e run silently waits
 the full 60 seconds before doing anything. Harmless, and worth removing.
 
-**Three failures remain, and they are three different problems.** None is the
-image, and none is a flake: gkc ruled out infrastructure on 2026-08-20.
+**Three failures remained. One is fixed; two are open.** None was the image,
+and none was a flake: gkc ruled out infrastructure on 2026-08-20.
 
-1. **`notify_test.dart` — a notification that never arrives.** `end2end_tests`
-   36 of 37. ⭐ **This one reproduces locally**, which takes CI, the @ce2e
-   atSigns and network latency out of the picture entirely:
+1. **`notify_test.dart` — FIXED 2026-08-20. A closed connection held the
+   request mutex for 30 seconds.** `end2end_tests` was 36 of 37.
+
+   Nothing to do with notifications, and nothing to do with the monitor. The
+   monitor start and the teardown 62 ms later — which this row used to lead
+   with — are ordinary atSign-switch behaviour and were a red herring; so is
+   the test's name, which promises listening it never does (it reads back with
+   `notifyList`). What actually happened, from the local log:
+
+   ```
+   12:44:59.882  @bob's PqClientBootstrap sends a verb, and waits for the reply
+   12:44:59.885  the test switches atSign, so AtClientImpl.stop() destroys
+                 @bob's socket 3 ms into that wait
+   12:45:00.468  the test switches back to @bob and calls notifyList
+   12:45:29.885  the test times out, 30 s after it started
+   12:45:29.886  the abandoned read gives up and releases the mutex, one
+                 millisecond too late
+   ```
+
+   `OutboundMessageListener.read` had no way to notice that its connection was
+   gone: it woke only on a queued response or a deadline, so it sat out the
+   full transient budget. `AtLookupImpl._process` holds `requestResponseMutex`
+   across that read, and `AtClientImpl.create` memoises one client per atSign —
+   so switching back to @bob handed the test the same AtLookupImpl, and its
+   first verb queued behind a response that could never arrive.
+
+   **Why it was a regression rather than a long-standing bug:** the defect is on
+   trunk too, but the transient budget there is the parameter default of
+   **10 s**, where this branch takes `AtNetworkTimeouts.effectiveDefault` —
+   **30 s**. Ten seconds fits inside `dart test`'s 30-second per-test timeout;
+   thirty does not. ⚠️ `AtNetworkTimeouts`' own dartdoc records that
+   `defaultResponseBudget`'s 90 s "preserves the long-standing default … so
+   adopting this changes no behaviour" — true of the whole-response budget, and
+   silent about the transient one, which tripled in the same change.
+
+   Fixed in at_lookup: every close routes through one place that fails the
+   pending read first, and the caller gets a `ConnectionInvalidException`
+   naming the closed connection instead of an `AtTimeoutException` pointing at
+   the atServer. Pinned by four arms in
+   `packages/at_lookup/test/socket_delivery_test.dart` — measured at **3003 ms
+   against a 3000 ms budget before, immediate after** — the fourth holding the
+   line that a response already parsed is still returned.
+
+   Re-run it rather than trusting this row:
 
    ```bash
    cd tests/at_end2end_test && ./runLocal.sh 26000 test/notify_test.dart
    ```
 
-   The local log shows the monitor started and torn down 62 ms later, with
-   nothing listening for the following 30 seconds:
-
-   ```
-   12:17:55.024  @alice startListening(): starting notification listener
-   12:17:55.045  SENDING: monitor:selfNotifications
-   12:17:55.107  @alice stopListening(): stopping notification listener
-   12:18:25.16   test times out
-   ```
-
-   The other atSign's monitor never starts at all. **`notify_test.dart` itself
-   is unchanged on this branch** — `git diff origin/trunk...HEAD` over it is
-   empty — while `lib/src/test_initializers.dart` and
-   `lib/src/sync_initializer.dart` both changed, and `concurrent_clients.dart`
-   is new. An unchanged test broken by changed shared setup is where to start.
+   Green twice on 2026-08-20, and the second run carries the proof that the fix
+   is what did it: `Connection closed with a request in flight` at
+   13:01:25.009403, 211 microseconds after `AtClientImpl (@bob) stop()`, where
+   the same request previously took 30.003 seconds. **2 of 2 runs, which bounds
+   a rate and not a kind.**
 
 2. **`nskey_recipient_not_ready_test.dart` UC-A4.2 fails on its own positive
    control.** `pqe2e_tests` 16 of 17. The reason string is
@@ -1712,7 +1743,9 @@ image, and none is a flake: gkc ruled out infrastructure on 2026-08-20.
    failures all read `provided keys file does not exist`, for the keyfile the
    timed-out step never wrote. The throw is `OutboundMessageListener.read`'s
    *transient* branch, meaning `_lastReceivedTime` never moved — no bytes at
-   all, not a partial response. ⚠️ It cannot be reproduced locally: it is
+   all, not a partial response. ⚠️ **That is row 1's exact fingerprint, so row
+   1's fix may already have closed this. Unmeasured — do not record it as fixed
+   until a CI run says so.** ⚠️ It cannot be reproduced locally: it is
    written for the @ce2e atSigns and dies in `setUpAll` at
    `createAtChopsFromDemoKeys` for want of demo keys, so iterating on it costs
    a CI round trip.
