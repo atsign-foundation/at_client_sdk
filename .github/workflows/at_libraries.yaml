@@ -152,6 +152,14 @@ jobs:
 
   functional_tests_at_onboarding_cli:
     runs-on: ubuntu-latest
+    env:
+      # The TRUNK-TRACKING atServer build. at_onboarding_cli_functional_tests
+      # activates an atSign with a post-quantum keypair, which needs an
+      # atServer that verifies ML-DSA PKAM — that lands on trunk well before
+      # it is released, so the published `vip` cannot run it. The proxy leg
+      # does not need it, but runs the same build so the two legs are never
+      # testing against different servers.
+      VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
     strategy:
       fail-fast: false
       matrix:

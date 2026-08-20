@@ -108,6 +108,14 @@ jobs:
 
   functional_tests:
     runs-on: ubuntu-latest
+    env:
+      # The TRUNK-TRACKING atServer build, not the published release. The
+      # post-quantum tests in this pack need server behaviour that ships in
+      # trunk ahead of any release, so pinning CI to `vip` would fail them
+      # for as long as the release lags. `canary` is not the alternative it
+      # looks like: it carries the same digest as the last `canary-<release>`
+      # tag, so it IS a release build.
+      VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
     strategy:
       fail-fast: false
       matrix:
@@ -326,6 +334,10 @@ jobs:
       # an atDirectory that is not there.
       VIRTUALENV_BASE_PORT: 26000
       VE_TOP_PORT: 26099
+      # The TRUNK-TRACKING atServer build. These are the post-quantum e2e
+      # files, so they need server behaviour that is on trunk before it is
+      # released; the published `vip` cannot run them.
+      VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       # No `with:` — this job has no matrix, so the action's own stable
@@ -343,8 +355,8 @@ jobs:
       - name: Add entry to hosts file
         run: echo "127.0.0.1    vip.ve.atsign.zone" | sudo tee -a /etc/hosts
 
-      # No VIRTUALENV_IMAGE set, so docker-compose.yaml takes its default:
-      # the published atsigncompany/virtualenv:vip.
+      # VIRTUALENV_IMAGE above selects the trunk build; docker-compose.yaml
+      # reads it.
       - name: Start docker instance
         working-directory: tests/at_end2end_test/test
         run: docker compose pull && docker compose up -d

@@ -885,12 +885,32 @@ is on at_server `trunk` (8 hits). It is **CI pulling the production VE image**.
   release build and predates #2755. The trunk-tracking pair is **`dev_env` /
   `trunk-gha6542`** (`sha256:5318d0…`, 2026-08-19). Re-derive from
   `https://hub.docker.com/v2/repositories/atsigncompany/virtualenv/tags/`.
-- **Ruled: all four VE jobs move to `atsigncompany/virtualenv:dev_env`** —
-  `functional_tests`, `end2end_tests`, `end2end_test_14`, `pqe2e_tests`. Only
-  `legacy_server_tests` stays pinned at `vip-p3.15.0`, because testing an old
-  server is its whole purpose. Three composes default to `vip`; a fourth,
-  `at_onboarding_cli_functional_tests_proxy`, **hardcodes it with no env
-  override at all**.
+- ⛔ **DONE 2026-08-20 — and the enumeration this bullet used to carry was
+  wrong.** It read "all four VE jobs — `functional_tests`, `end2end_tests`,
+  `end2end_test_14`, `pqe2e_tests`". **Two of those four start no virtualenv
+  at all**: `end2end_tests` and `end2end_test_14` run against the long-lived
+  `@ce2e1..@ce2e4` atServers on the CICD VMs, and
+  `tools/cicd1x64/update_ce2e_images.sh` already rolls those to
+  `atsigncompany/secondary:dev_env` (ce2e1/2) and `:canary` (ce2e3/4) — so
+  they were on the trunk build before this was ruled, and the tree's own use
+  of `dev_env` there is independent corroboration of the tag choice. **Two VE
+  jobs live in a second workflow the bullet never named**: `at_libraries.yaml`'s
+  `functional_tests_at_onboarding_cli`, a matrix of two packs, one of which
+  gained `pq_native_onboard_test.dart` on this branch and needs an atServer
+  that verifies ML-DSA PKAM. Enumerate the real set by what starts a
+  container, not by what anyone remembers:
+  `grep -rn 'docker compose up' .github/workflows/`.
+- **What landed**: `VIRTUALENV_IMAGE: atsigncompany/virtualenv:dev_env` on
+  `functional_tests` and `pqe2e_tests` in `at_client_sdk.yaml`, and on
+  `functional_tests_at_onboarding_cli` in `at_libraries.yaml`;
+  `tests/at_onboarding_cli_functional_tests_proxy/docker-compose.yaml` gained
+  the `${VIRTUALENV_IMAGE:-…}` override it never had. `legacy_server_tests`
+  stays pinned at `vip-p3.15.0`, because testing an old server is its whole
+  purpose — it is the control that proves the others actually moved.
+- ⚠️ **The gate does not block the first carves, only the last ones.** Trunk
+  carries no `tests/at_end2end_test/test/pq/` files (0 against 8 on the spike)
+  and no `pqe2e_tests` job; both arrive with the spike's test packs, which ride
+  with at_client. So `at_commons` and `at_chops` carve against CI as it stands.
 - ⚠️ The tests needing #2755 span **two** packs — 3 files under
   `at_end2end_test/test/pq/` and 4 under `at_functional_test/test/` including
   `self_enrollment_retrofit_live_test.dart`. Moving only the PQ e2e job would
