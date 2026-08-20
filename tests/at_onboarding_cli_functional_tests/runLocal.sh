@@ -13,11 +13,21 @@ set -euo pipefail
 #     demo atSigns, and these tests CRAM-onboard - they need atSigns that hold
 #     no PKAM key yet. Starting it makes onboarding tests fail as "already
 #     activated", which reads like a product bug and is not.
-#  2. The image defaults to the PUBLISHED virtualenv, matching CI. A local run
-#     that needs post-quantum activation opts in, because the published image
-#     has lagged ML-DSA PKAM verification throughout this branch:
+#  2. The image defaults to the PUBLISHED virtualenv, which does NOT match CI:
+#     CI sets VIRTUALENV_IMAGE to the trunk-tracking build, because the
+#     published one cannot verify an ML-DSA PKAM signature and the whole
+#     post-quantum activation test fails against it. A bare run here therefore
+#     reproduces that failure rather than CI. Opt in to match CI:
+#
+#         VIRTUALENV_IMAGE=atsigncompany/virtualenv:dev_env ./runLocal.sh
+#
+#     or use a build the registry does not have yet:
 #
 #         VIRTUALENV_IMAGE=at_virtual_env:local ./runLocal.sh
+#
+#     The symptom of getting this wrong is a server-side
+#     `AT0010-Exception: RangeError` out of PKAM, which reads as a client bug
+#     and is not one.
 #
 # This suite binds the same ports as tests/at_functional_test (64, 443,
 # 25000-25999, 6379), so the two cannot run at the same time.

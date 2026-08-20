@@ -182,9 +182,30 @@ jobs:
         working-directory: tests/${{ matrix.package }}
         run: dart pub get
 
+      # No sudo, and that is the whole point: sudo resets the environment, so
+      # VIRTUALENV_IMAGE above never reached compose and it silently fell back
+      # to the published `vip` in docker-compose.yaml. The runner user is in
+      # the docker group, so plain compose works - it is what every container
+      # job in at_client_sdk.yaml does.
       - name: Start docker instance
         working-directory: tests/${{ matrix.package }}
-        run: sudo docker compose up -d
+        run: docker compose up -d
+
+      # A wrong image does not announce itself: the atServer simply fails to
+      # verify an ML-DSA PKAM signature and the test reports a server-side
+      # `AT0010 RangeError`, which reads as a client bug. Assert what is
+      # actually running rather than what the YAML asked for.
+      - name: Confirm the virtualenv image that is actually running
+        working-directory: tests/${{ matrix.package }}
+        run: |
+          want="$VIRTUALENV_IMAGE"
+          cid=$(docker compose ps -q virtualenv)
+          got=$(docker inspect --format '{{.Config.Image}}' "$cid")
+          echo "wanted $want, running $got"
+          if [ "$want" != "$got" ]; then
+            echo "The virtualenv is not the image this job asked for."
+            exit 1
+          fi
 
       - name: Check for docker container readiness
         working-directory: tests/${{ matrix.package }}
@@ -203,4 +224,4 @@ jobs:
 
       - name: kill docker image
         working-directory: tests/${{ matrix.package }}
-        run: sudo docker compose down
+        run: docker compose down
