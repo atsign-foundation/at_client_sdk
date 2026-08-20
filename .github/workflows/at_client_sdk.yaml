@@ -363,11 +363,31 @@ jobs:
 
       - name: Wait for supervisor
         run: |
+          # `supervisorctl status` exits non-zero whenever ANY program is not
+          # RUNNING, and pkamLoad is deliberately STOPPED until a later step
+          # starts it. So its exit code can never mean "ready" here - and as
+          # the last command of the step it failed the job outright, sixty
+          # seconds after a container that was in fact healthy.
+          #
+          # Wait on the atDirectory instead. Its supervisord program name ends
+          # `_root` whatever bind port the entrypoint shifted it to, so this
+          # reads the same in base-port mode as out of it.
+          ready=
           for i in $(seq 1 30); do
-            docker exec e2e_virtualenv supervisorctl status >/dev/null 2>&1 && break
+            if docker exec e2e_virtualenv supervisorctl status 2>/dev/null \
+                 | grep -qE '_root +RUNNING'; then
+              ready=1
+              break
+            fi
             sleep 2
           done
-          docker exec e2e_virtualenv supervisorctl status
+          # Informational only. It must not decide the step, for the reason
+          # above, so its exit code is discarded deliberately.
+          docker exec e2e_virtualenv supervisorctl status || true
+          if [ -z "$ready" ]; then
+            echo "atDirectory did not reach RUNNING within 60s"
+            exit 1
+          fi
 
       # One atSign gets a zero-hour self-enrollment grace so the retirement row
       # can watch a capped legacy enrollment actually age out instead of waiting
@@ -482,11 +502,31 @@ jobs:
 
       - name: Wait for supervisor
         run: |
+          # `supervisorctl status` exits non-zero whenever ANY program is not
+          # RUNNING, and pkamLoad is deliberately STOPPED until a later step
+          # starts it. So its exit code can never mean "ready" here - and as
+          # the last command of the step it failed the job outright, sixty
+          # seconds after a container that was in fact healthy.
+          #
+          # Wait on the atDirectory instead. Its supervisord program name ends
+          # `_root` whatever bind port the entrypoint shifted it to, so this
+          # reads the same in base-port mode as out of it.
+          ready=
           for i in $(seq 1 30); do
-            docker exec e2e_virtualenv supervisorctl status >/dev/null 2>&1 && break
+            if docker exec e2e_virtualenv supervisorctl status 2>/dev/null \
+                 | grep -qE '_root +RUNNING'; then
+              ready=1
+              break
+            fi
             sleep 2
           done
-          docker exec e2e_virtualenv supervisorctl status
+          # Informational only. It must not decide the step, for the reason
+          # above, so its exit code is discarded deliberately.
+          docker exec e2e_virtualenv supervisorctl status || true
+          if [ -z "$ready" ]; then
+            echo "atDirectory did not reach RUNNING within 60s"
+            exit 1
+          fi
 
       # One atSign gets a zero-hour self-enrollment grace so the retirement row
       # can watch a capped legacy enrollment actually age out instead of waiting
