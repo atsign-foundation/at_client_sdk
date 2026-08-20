@@ -46,6 +46,15 @@ class HpkeSuite {
   /// KDF output length in bytes — 32 for SHA-256.
   final int nh;
 
+  /// Encapsulated-key length in bytes: `Nenc` in RFC 9180's KEM registry, the
+  /// size of the ciphertext this suite's KEM produces.
+  ///
+  /// Carried so a sealer can check that the KEM it was handed is in fact this
+  /// suite's KEM. Nothing else identifies it: two KEMs are told apart here by
+  /// the bytes they produce rather than by asking them what they are, because
+  /// the bytes are what a reader has to work from.
+  final int nEnc;
+
   const HpkeSuite({
     required this.kemId,
     required this.kdfId,
@@ -53,7 +62,15 @@ class HpkeSuite {
     required this.nk,
     required this.nn,
     required this.nh,
-  });
+    required this.nEnc,
+  })  :
+        // The envelope declares the encapsulation length in two bytes, so a
+        // suite whose KEM exceeds that cannot be carried in it at all. Checked
+        // here rather than at seal time because every row is a const, so a new
+        // suite that does not fit fails to compile instead of failing on the
+        // first record somebody seals with it.
+        assert(nEnc <= 0xffff,
+            'Nenc exceeds the 2-byte length field the envelope declares it in');
 
   /// X-Wing + HKDF-SHA256 + ChaCha20-Poly1305.
   ///
@@ -70,6 +87,7 @@ class HpkeSuite {
     nk: 32,
     nn: 12,
     nh: 32,
+    nEnc: 1120,
   );
 
   /// ML-KEM-1024 alone + HKDF-SHA384 + AES-256-GCM: the no-hybrid option.
@@ -88,6 +106,7 @@ class HpkeSuite {
     nk: 32,
     nn: 12,
     nh: 48,
+    nEnc: 1568,
   );
 
   /// `suite_id = "HPKE" || I2OSP(kem_id, 2) || I2OSP(kdf_id, 2) ||

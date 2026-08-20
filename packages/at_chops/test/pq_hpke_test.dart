@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_chops/at_chops.dart';
+import 'package:crypto/crypto.dart' show sha256;
 import 'package:test/test.dart';
 
 import 'x_wing_test_vectors.dart';
@@ -203,6 +204,45 @@ void main() {
           pqSeal(xwing, Uint8List(7), _utf8('payload'), info: _noInfo),
           throwsA(isA<PqSealException>()));
     });
+
+    test('a KEM that is not the version\'s KEM → PqSealException', () async {
+      // The version byte names the whole suite, so an opener picks its KEM
+      // from it and nothing else. Sealing ML-KEM-1024 at 0x02 — whose suite is
+      // X-Wing — therefore produces a record only a peer repeating the same
+      // pairing could open. It round-trips between two such peers, so nothing
+      // downstream detects it; the seal has to.
+      final kem = MlKem1024PureDartAlgo.instance;
+      final kp = await kem.generateKeyPair();
+
+      await expectLater(
+          pqSeal(kem, kp.publicKey, _utf8('payload'),
+              info: _noInfo, version: 0x02),
+          throwsA(isA<PqSealException>()),
+          reason: 'ML-KEM-1024 under the X-Wing suite must be refused');
+
+      // The control: the same KEM and the same key at its OWN version. Without
+      // this the test would pass just as well against a pqSeal that refused
+      // ML-KEM-1024 outright.
+      final envelope = await pqSeal(kem, kp.publicKey, _utf8('payload'),
+          info: _noInfo, version: 0x03);
+      expect(envelope[0], equals(0x03));
+      expect(
+          await pqOpen(kem, kp.secretKey, envelope, info: _noInfo),
+          equals(_utf8('payload')));
+    });
+
+    test('the default version refuses a mismatched KEM too', () async {
+      // The mismatch does not need anyone to pass a version: pqSeal is
+      // exported, so is every KEM, and pqSealDefaultVersion supplies 0x02 to a
+      // caller that names none. ML-KEM-768's 1088-byte encapsulation is not
+      // the X-Wing suite's 1120, so the pairing is wrong by default rather
+      // than by choice.
+      final kem = MlKem768PureDartAlgo.instance;
+      final kp = await kem.generateKeyPair();
+      await expectLater(
+          pqSeal(kem, kp.publicKey, _utf8('payload'), info: _noInfo),
+          throwsA(isA<PqSealException>()));
+    });
   });
 
   group('known-answer vectors (byte-exact)', () {
@@ -215,19 +255,36 @@ void main() {
 
     test('fixed-KEM construction KAT: seal is deterministic + opens', () async {
       final ss = Uint8List.fromList(List<int>.generate(32, (i) => i)); // [0x00..0x1f]
-      final ct = fromHex('aabbccddeeff0011');
+      // 1120 bytes, the 0x02 suite's Nenc: pqSeal refuses a ciphertext that is
+      // not the version's own encapsulation length, so the double has to
+      // produce a realistic one. Deterministic, so the envelope still is.
+      final ct = Uint8List.fromList(List<int>.generate(1120, (i) => i & 0xff));
       final pt = _utf8('hpke-style seal KAT v1');
       final info = _utf8('kat-info');
       final aad = _utf8('kat-aad');
 
-      const goldenHex =
-          '020008aabbccddeeff0011970d4ed3fadb16aed84c9352c9eb630ba40407775f'
-          'b373a3e8fce05c3b788f6a941f3b172527';
-
       // _FixedKem ignores both keys — any value is valid here.
       final envelope = await pqSeal(_FixedKem(ss, ct), Uint8List(0), pt,
           info: info, aad: aad);
-      expect(toHex(envelope), equals(goldenHex));
+
+      // The framing, asserted directly rather than through a golden: at 1120
+      // bytes of ciphertext a whole-envelope hex literal is ~2300 characters,
+      // which pins the same bytes while showing a reader nothing. The header
+      // is the part this test exists for.
+      expect(envelope[0], equals(0x02), reason: 'ver');
+      expect([envelope[1], envelope[2]], equals([0x04, 0x60]),
+          reason: 'ctLen is 1120 big-endian');
+      expect(Uint8List.sublistView(envelope, 3, 3 + 1120), equals(ct),
+          reason: 'kemCt is the KEM ciphertext verbatim');
+      expect(envelope.length, equals(3 + 1120 + pt.length + 16),
+          reason: 'body is ciphertext || 16-byte tag');
+
+      // And the whole envelope pinned by digest, which still catches drift
+      // anywhere in it. Regenerate by printing sha256 of the envelope.
+      expect(
+          sha256.convert(envelope).toString(),
+          equals(
+              '188e8b1945d03116b5d6291dd96fba24048d3fdcabcd90a39dd699c014d3fd8c'));
 
       final opened = await pqOpen(_FixedKem(ss, ct), Uint8List(0), envelope,
           info: info, aad: aad);

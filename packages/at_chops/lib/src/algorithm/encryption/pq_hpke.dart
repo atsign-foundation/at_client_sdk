@@ -76,6 +76,16 @@ final class _SealVersion {
 /// already fixed by the recipient's advertised key: nothing can seal
 /// ML-KEM-1024 to a hybrid encapsulation key or the reverse. The version byte
 /// therefore names the whole suite, and an opener needs no other input.
+///
+/// [pqSeal] enforces that rather than assuming it. `kem` and `version` are
+/// independent arguments, so a caller can pair a KEM with a version that names
+/// a different one — and because [pqSealDefaultVersion] supplies a version to
+/// callers that name none, the mismatch is reachable without anyone choosing
+/// it. Such an envelope round-trips against a peer making the same mistake and
+/// is unopenable by anyone following the rule above, which is why the seal
+/// refuses it outright. The check compares the encapsulation length against
+/// the suite's [HpkeSuite.nEnc].
+///
 /// [pqSealSupportedVersions] is the public face of this table's key set; a
 /// unit test pins them equal.
 const Map<int, _SealVersion> _versions = {
@@ -162,18 +172,29 @@ Future<Uint8List> pqSeal(
   // ArgumentError escaping leaves a caller who catches the documented type
   // with an uncaught error. A recipient's advertised key is peer-supplied on
   // every path that reaches here, so this is reachable input, not a typo.
-  // Encapsulation rejects a wrong-length public key with an ArgumentError.
-  // Mapped here for the same reason pqOpen maps decapsulate's: the documented
-  // contract is that caller misuse arrives as PqSealException, and a raw
-  // ArgumentError escaping leaves a caller who catches the documented type
-  // with an uncaught error. A recipient's advertised key is peer-supplied on
-  // every path that reaches here, so this is reachable input, not a typo.
   final ({Uint8List ciphertext, Uint8List sharedSecret}) enc;
   try {
     enc = await kem.encapsulate(recipientPublicKey);
   } on ArgumentError catch (e) {
     throw PqSealException('encapsulation rejected the recipient key: $e');
   }
+
+  // The version names the whole suite, so the KEM has to be the suite's KEM.
+  // Nothing in the signature ties them together: `kem` and `version` are
+  // independent arguments, and the default version means a caller reaches this
+  // with a mismatched pair without naming a version at all. Compared by
+  // encapsulation length rather than by asking the KEM what it is, because the
+  // bytes are what an opener has to work from — it selects its KEM from the
+  // version byte, so a mismatched seal produces a record no conformant reader
+  // can open. Refused here for the same reason an unsupported version is
+  // refused above.
+  if (enc.ciphertext.length != row.suite.nEnc) {
+    throw PqSealException(
+        'version 0x${version.toRadixString(16)} is KEM '
+        '0x${row.suite.kemId.toRadixString(16)}, whose encapsulation is '
+        '${row.suite.nEnc} bytes; this KEM produced ${enc.ciphertext.length}');
+  }
+
   final _DerivedKey dk = _deriveKeyAndNonce(enc.sharedSecret, version, info);
 
   // body = ciphertext || tag in every version.
