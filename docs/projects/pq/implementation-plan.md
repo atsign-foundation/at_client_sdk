@@ -59,18 +59,20 @@ that file instead; the list below is the PQ release work.
    declares `at_commons: ^5.16.0` and pub.dev's at_commons is still 5.15.0.
    Re-derive that before assuming, with the command in
    [Re-deriving the state](#re-deriving-the-state).
-3. **Diagnose [14.43](#1443-the-functional-suites-convergence-race)'s shape
-   B, and re-measure the pack rate now shape A is fixed.** Shape A (the local
-   red: `stop()` could not stop an in-flight sync run) is diagnosed from its
-   log, fixed in product and harness, and mutation-proven — the section has
-   the full account. Still open: **shape B**, CI run `32418455392`'s beta red
-   in UC-G1.15 — an rsa2048 envelope signature that does not verify against
-   the one key the published `_apsk` advertises (fetch with
-   `gh run view 32418455392 --log-failed`; smells like an advertisement
-   overwrite race between the matrix's stage clients, unproven). And run the
-   pack repeatedly at the fix commit — the pre-fix local rate was 1 red in 4
-   packs; a post-fix rate needs its own denominator. Read the
-   disproven-hypotheses lists in the section before forming new ones.
+3. **Rebuild the rollout matrix with per-stage enrollments**
+   ([14.43](#1443-the-functional-suites-convergence-race), ruled by gkc
+   2026-08-20). Shape A is fixed and mutation-proven; shape B is diagnosed at
+   the family level — all four matrix stages share enrollment `primary`, so
+   every stage client rewrites one `_apsk` record wholesale, an overwrite
+   plurality the product documents as accepted. The four-part rebuild spec is
+   in the section: per-stage enrollments (run-unique ids, approval flow),
+   await sender process EXIT per cell, await bootstrap before signing, dump
+   child stderr on cell failure. Also open there: the sixth family member
+   (`nskey_rotation_live_test` reading a rotated advertisement through a
+   15-minute cache the test's comment claims is a server read), and
+   [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)'s
+   product decision. Post-fix rate at `7f24542eb`: 6 packs, 5 green, 1 red
+   (the new member, not shape A).
 4. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
    ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
    `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
@@ -121,6 +123,7 @@ because a wrap-up is the wrong place to move anchors the acceptance rail parses.
 | [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
+| [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew) | **A `primary` client can sign with a key its own advertisement just withdrew**: fire-and-forget startup minting + publish-before-file + the sign path's auth-key fallback + the bare form's single slot. One client racing itself — distinct from the accepted two-client overwrite plurality | Close the window: sign path awaits a pending mint, or refuses until minting settles, or the composition keeps the authentication entry — check whether the JSON form already rescues enrolled clients before choosing |
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | **A unit-tree isolation flake**: `local_secondary_sync_queue_test.dart` failed 1-in-4 when run after the nskey/pq files in one non-alphabetical invocation — a same-file test's queue entry leaked into a later test, so the per-test store isn't always fresh. Green alone, green in the full suite | Reproduce at rate (~10 runs of the four-file order), then read the file's setUp for what makes the store per-test fresh |
 | [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. Still in the section: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |
 | [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. ✅ **The refusal is fixed too** — it was a namespace check, not immutability, and the sweep now bypasses it. **Owed elsewhere:** the keystore's `get()` does not filter expired records (at_persistence_secondary_server, another repo) | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20) |
@@ -2233,6 +2236,37 @@ as an explanation.
 Two different failure signatures in one family — do not assume one cause
 covers both.
 
+**Shape B is diagnosed at the family level, 2026-08-20, by a three-reader
+sweep over the CI log and the source.** The failing verification read
+`public:_apsk.primary.a.__e@alice🛠` and found one rsa2048 key that appears
+**exactly once in the whole 51,589-line job log — in the failure message
+itself** — and is NOT the demo PKAM key (which appears 31 times), so the
+advertised candidate was a **fresh matrix-minted signing key** and the
+"verifier saw the auth key" scenario is excluded. The mechanism family:
+all four matrix stages sign under enrollment `primary`, so every current-arm
+client publishes the **same** server record; the publish is
+**replace-wholesale** from the client's own keyfile ("anything it leaves out
+is withdrawn" — its own dartdoc); the mint decision reads only the local
+keyfile; and the only serialisation is in-process per-instance. The
+cross-client overwrite plurality is **documented, deliberately accepted
+product behaviour** (`signing_key_minting.dart` records three guards built
+and abandoned), so the defect is the TEST's construction: four "different
+apps" sharing one identity. **Ruled by gkc: each matrix row and column gets
+its own enrollment** — which is also the recorded deployment model, app =
+enrollment = unit. The exact interleaving that fired is unrecoverable from
+this artifact: the matrix children's logs are discarded on success.
+
+**The rebuild owes four things** (pre-authorized, queued behind the post-fix
+pack runs): per-stage enrollments with run-unique `(appName, deviceName)`
+and an approval flow; the driver awaiting each sender process's **exit**
+rather than its `SENT` line (a lingering fire-and-forget mint can publish
+into the next cell, and same-stage cells share an enrollment); the scenario
+harness awaiting bootstrap completion before signing (or the sign path doing
+so — [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
+decides that in product); and the driver dumping child stderr on cell
+**failure**, not only on timeout — the silent-children gap is what made this
+diagnosis need a sweep instead of a read.
+
 **Shape A is diagnosed, from the red log's own lines — a measurement, not a
 hypothesis.** `SyncServiceImpl.stop()` halts future triggers and cannot halt an
 in-flight run: `processSyncRequests` checks `isStopped` only at entry
@@ -2266,6 +2300,32 @@ one that flaked, which is what "a test is the specification of the mechanism
 it guards" is about. Evidence at the fix commit: unit 1484/1484; one
 functional pack 177/177 with the rewritten harness taking 4 extra
 truth-checked sync rounds that the old harness would have skipped.
+**Post-fix packs at `7f24542eb`: 6 runs — 5 green, 1 red**, and the red is
+NOT shape A's test (`atclient_sync_conflict_test` was green in all 6) nor any
+previously recorded family member — it is the new member below. Six packs
+without a shape-A recurrence bound a rate, not a kind; the mutation-proven
+unit tests are what carry the fix's proof.
+
+**A sixth family member, captured 2026-08-20 in post-fix run 6**
+(`untracked/pq-1443-packs/run_6_20260820_235557.log`, this machine only):
+`nskey_rotation_live_test.dart` UC-A5.1(b) — the survivor's read of the
+rotated `__nskey` advertisement returned kid `e05da79630eb0db1` where the
+successor `ceccdd0bb19ba1ad` was expected, and the log's own rotation line
+names `e05da796…` as **the pre-rotation generation**, so the read served the
+superseded advertisement. Measured, from the source: the assertion reads
+`PublishedNskeyKeyRing.currentPublic`, which serves the `_ownCurrent` and
+`_remote` caches before any fetch, with `advertisementTtl` defaulting to
+**15 minutes** — while the test's own comment above the assertion claims
+"the atServer's own copy". The method's dartdoc documents that the MINT path
+must skip both caches precisely because they cannot hold "a generation a
+sibling published a moment ago"; the test used the seal-path read and
+inherited its staleness. Hypothesis (one observation): the survivor fetched
+generation 1 at some earlier point inside the ttl, so the cache structurally
+serves stale at the assertion — the intermittence being whether anything
+caused that earlier fetch, not network timing. The likely fix is the TEST's:
+read through a cache-skipping path (or a fresh ring), because the product's
+caching is deliberate and documented. Discriminator for a second red: find
+the survivor's generation-1 fetch earlier in the log.
 
 **The harness half, also visible in the red log:**
 `FunctionalTestSyncService.syncData` completed 610µs after starting — too fast
@@ -2320,6 +2380,42 @@ call itself. Do not "fix" the product here.
 `SyncStatus.failure`, so a **failed** sync returned to its caller as success.
 The rewrite retries on failure (bounded at five rounds) and throws if still
 not in sync.
+
+### 14.48 A `primary` client can sign with a key its own advertisement just withdrew
+
+Found 2026-08-20 while diagnosing [14.43](#1443-the-functional-suites-convergence-race)'s
+shape B; filed by gkc's ruling as a product row, distinct from the accepted
+overwrite plurality. That acceptance
+(`signing_key_minting.dart` — "three guards were built and all three broke the
+live enrollment path") is about two **clients** overwriting each other's
+`public:_apsk.primary.a.__e` record in turn. This row is about **one** client
+racing itself:
+
+- `PqClientBootstrap.startup()` is fire-and-forget
+  (`at_client_impl.dart:677-698` region), so minting runs concurrently with
+  whatever the app does next;
+- `SigningKeyMinting` **publishes before filing** — the advertisement carries
+  the fresh key before the keyfile does;
+- `ApkamSigning.signingKeys` reads the keyfile per call and **falls back to
+  the APKAM authentication keypair when it holds nothing**
+  (`apkam_signing.dart:171-195`);
+- the bare advertisement form holds exactly one key, so a publish of the
+  fresh mint **withdraws** the authentication key from the record.
+
+Interleave those and a client signs an envelope with the auth fallback in the
+window where its own advertisement already names only the minted key — an
+envelope nothing can verify, thrown by the verifier as "does not verify
+against any of the 1 rsa2048 key(s) the published `_apsk` advertises". The
+mirror-image window (sign first, publish lands before a peer's fetch) fails
+the same way. Per-stage enrollments in the matrix test do not close this —
+it is one process, not two.
+
+What it wants, to be decided at the code: the sign path awaiting a pending
+mint (the bootstrap would expose completion), or `wrapAndSign` refusing until
+minting settles, or the advertisement composition keeping the authentication
+entry alongside the minted key — whether the JSON form's `authentication`
+entry already rescues enrolled clients from the same window needs checking
+there before choosing.
 
 ### 14.47 The at_client unit tree has a cross-file isolation flake
 
