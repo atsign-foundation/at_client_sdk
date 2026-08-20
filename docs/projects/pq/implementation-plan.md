@@ -28,6 +28,69 @@ and merged. Publishing and R-2 follow it and are not D1.
 
 ---
 
+## THE NEXT MOVE
+
+⛔ **This is the one ranked list, and it lives here.** Memory holds a single line
+pointing at it and no detail. `## TODO` below is *what is owed*, unordered; this
+is *what to do first*. Re-read this section against `git log --oneline -10`
+before acting — it has led with finished work before.
+
+Last re-ranked **2026-08-20** against the tree at `e79d63562`.
+
+1. **[RECOMMENDED] Get PR #2169 over the line.** It is `OPEN` with
+   `CHANGES_REQUESTED` and **CI green, 30/30**. All ten review points are
+   answered in its threads; four were fixed in `26a309396`. Nothing is owed on
+   it but a re-review — `gh pr view 2169` to check whether Xlin123 has replied,
+   and answer anything new. It is train position 2 of 8, so everything after it
+   waits.
+2. **Carve at_lookup** — train position 3. Recipe is in
+   [14.18](#1418-the-remaining-d1-initial-development-sequence); the carve gate
+   is `git -C /tmp/carve-<pkg> diff gkc-pq-d1-spike --stat -- packages/<pkg>`
+   returning empty. It can be **carved** now but **not published**: at_lookup
+   declares `at_commons: ^5.16.0` and pub.dev's at_commons is still 5.15.0.
+   Re-derive that before assuming, with the command in
+   [Re-deriving the state](#re-deriving-the-state).
+3. **Capture a failing functional run for
+   [14.43](#1443-the-functional-suites-convergence-race).** Open
+   `tests/at_functional_test` and run `./runLocal.sh` repeatedly, keeping every
+   log. Three consecutive green packs were run on 2026-08-20 and the item's one
+   missing piece is still a red run's log. Three more hypotheses were disproven
+   that day and are listed in the section — read them before forming a fourth.
+4. **Decide `executeVerb`'s inert `sync` parameter**
+   ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)) —
+   honour it or delete it from the interface. 52 call sites pass a value into a
+   parameter neither implementation reads.
+
+**Blocked, and what lifts it:** publishing anything past at_chops waits on
+at_chops 3.6.0 reaching pub.dev, which waits on #2169 merging. at_lookup's
+publish additionally waits on at_commons 5.16.0.
+
+⚠️ **CI on this branch is behind HEAD, and cannot catch up by itself.** Nothing
+fires on push here — the workflow is `workflow_dispatch` only on this branch —
+so the newest run is as new as the last manual dispatch and no newer. As of
+2026-08-20 the newest run is on `f24ee3ab6` while HEAD is `e79d63562`, so the
+two at_client expiry fixes (`7c9f42d70`, `e79d63562`) have **never been through
+CI**. They are unit-green, docs-rail-green and functional-green locally at
+177/177. Dispatch before treating the branch as green, and compare the two SHAs
+rather than reading a conclusion:
+
+```bash
+gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike
+gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 1 \
+  --json headSha,conclusion --jq '.[] | [.headSha[0:9], .conclusion] | @tsv'
+git log --oneline -1
+```
+
+⚠️ **Three `## TODO` rows below are finished and still render as owed** —
+**14.41** (all four red CI rows fixed; its remainder moved to 14.42 and 14.43,
+which have their own rows), **14.45** (both halves fixed; only an out-of-repo
+residual remains) and most of **14.39**. You learn that only by reading to the
+end of each cell. They want demoting to `## DONE` with their detail moved to
+`detail/implementation-plan.md`, per this file's own convention — not done here
+because a wrap-up is the wrong place to move anchors the acceptance rail parses.
+
+---
+
 ## TODO
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
@@ -41,6 +104,7 @@ and merged. Publishing and R-2 follow it and are not D1.
 | [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
+| [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing**, on both `LocalSecondary` and `RemoteSecondary` — declared, never read, and **52 call sites pass a value** (39 `false`, 13 `true`). `MintLock._take` passes `sync: false` and reasons about it in its dartdoc. The real control is `cameFromServer`/`localOnly` under different names. Also here: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | Nothing. Two options with very different blast radius — honour it at 52 sites, or delete it from the interface and let the compiler enumerate them. ⚠️ Deleting only the arguments would leave the misleading parameter for the next caller |
 | [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. ✅ **The refusal is fixed too** — it was a namespace check, not immutability, and the sweep now bypasses it. **Owed elsewhere:** the keystore's `get()` does not filter expired records (at_persistence_secondary_server, another repo) | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20) |
 | [14.44](#1444-two-residuals-from-the-at_chops-pr-review) | Two residuals from the at_chops PR review, both answered on #2169 and neither fixable there: the passphrase envelope persists the salt and three costs but **not `hashLength`**, and `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths | Nothing. The first belongs in the **at_auth carve** (train position 5), where that file is already being edited; the second is pre-existing on trunk in both X-Wing backends and unreachable today, so it goes whenever at_chops is next open |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
@@ -958,12 +1022,26 @@ is on at_server `trunk` (8 hits). It is **CI pulling the production VE image**.
   `at_end2end_test/test/pq/` and 4 under `at_functional_test/test/` including
   `self_enrollment_retrofit_live_test.dart`. Moving only the PQ e2e job would
   leave the gate standing.
-- ⚠️ **CI has never run on this branch and structurally cannot**: the workflow
-  triggers are `push: [trunk]` and `pull_request: [trunk]`. `gh run list
-  --branch gkc-pq-d1-spike` returns 0 against a control returning 5 for trunk.
-  **`workflow_dispatch:` IS enabled**, so CI can be run manually on the spike
-  branch before any PR is carved — worth doing, because CI's at_client job runs
-  a **bare** `dart analyze` that reads `benchmark/`, which the routine
+- ⚠️ **CI does not run on this branch automatically — it has to be dispatched.**
+  The workflow triggers are `push: [trunk]` and `pull_request: [trunk]`, so
+  nothing fires on a push here. **`workflow_dispatch:` IS enabled** and has been
+  used: `gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml`
+  returns **12** runs as of 2026-08-20. ⚠️ This bullet read "CI has never run on
+  this branch and structurally cannot" until 2026-08-20, which was true when
+  written and stopped being true the first time anyone dispatched it.
+
+  **The consequence to watch:** because nothing fires on push, the newest CI run
+  is only ever as new as the last manual dispatch. Compare them before believing
+  any "CI is green" claim —
+
+  ```bash
+  gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 1 \
+    --json headSha,conclusion --jq '.[] | [.headSha[0:9], .conclusion] | @tsv'
+  git log --oneline -1
+  ```
+
+  Dispatching is worth doing before any PR is carved, because CI's at_client job
+  runs a **bare** `dart analyze` that reads `benchmark/`, which the routine
   `dart analyze lib test` never opens. That already hid five errors for six days.
 
 **Stage 0 — scaffolding.**
@@ -2099,6 +2177,24 @@ listener late (they are not: the controller is single-subscription and buffers)
 and that `syncData()` completing on a failed sync is what fires (it is not:
 `SyncStatus.failure` appears zero times in the failing log).
 
+⛔ **Three more disproven, 2026-08-20, so nobody re-walks them.** The expiry hot
+loop of [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop)
+is **not** the cause — the run carrying all three of its loops was green at
+177/177, so presence does not produce the failures (a *rate* effect is not
+excluded and would need the pack run N times either side of that fix).
+`SyncServiceWaitUntilCaughtUp.waitUntilCaughtUp` does **not** guard the null-id
+"server and local are in sync" event that `FunctionalTestSyncService` completes
+on — `sync_service.dart:90-95` deliberately completes on it too, so the two
+waiters do not differ there. And an awaited `put()` **has** reached the sync
+queue by the time it returns: `local_secondary.dart` awaits `_enqueueForSync`
+before `_update` returns, so "the writes were not queued yet" is not available
+as an explanation.
+
+⚠️ **Still no captured failing run.** Three packs were run on 2026-08-20 and all
+three were green, which at roughly 1-in-5 says nothing either way. The item's
+missing evidence is a red run's log, and everything above is a narrowing of
+where to look rather than progress on the cause.
+
 ⚠️ **Start by reading [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart),
 which is very probably the same thing.** It records an unexplained intermittent
 in the same pack, timing out at `await firstNotification`, passing when its file
@@ -2139,6 +2235,49 @@ call itself. Do not "fix" the product here.
 `SyncStatus.failure`, so a **failed** sync returns to its caller as success. It
 did not cause this race, but a harness that reports a failed sync as done will
 eventually hide something that matters.
+
+### 14.46 `executeVerb`'s `sync` parameter is inert, on both secondaries
+
+Found 2026-08-20 while tracing why a `_nskeylock` record reaches local storage.
+`MintLock._take` passes `sync: false` and the surrounding dartdoc reasons about
+it, so it reads as suppressing the sync of a record that must not be synced. It
+suppresses nothing.
+
+`Secondary.executeVerb` declares `{bool? sync, bool cameFromServer = false}`,
+and **neither implementation reads `sync` in its body** —
+`local_secondary.dart:300` and `remote_secondary.dart:211`; in each the word
+appears once, on the signature line (positive control: `builder` appears 10
+times in `LocalSecondary.executeVerb`'s body). **52 call sites pass a value into
+it**, 39 `false` and 13 `true`, counted with
+
+```bash
+perl -0777 -ne 'while(/executeVerb\((?:[^()]|\([^()]*\))*?\bsync:\s*(\w+)/gs){print "$1\n"}' \
+  $(git ls-files 'packages/**/*.dart') | sort | uniq -c
+```
+
+What actually decides whether a write is enqueued for client→server sync is
+`cameFromServer` and `localOnly` in `LocalSecondary._update`/`_delete`. So the
+control exists, under different names, and `sync:` is a third name that looks
+like it and is not.
+
+Two ways to close it and they differ in blast radius: honour the parameter
+(a behaviour change at 52 sites, each needing thought about which it meant), or
+delete it from the interface and both implementations and let the compiler
+enumerate the callers. ⚠️ **Do not simply delete the argument at the call
+sites** — that reads as tidying and would leave the misleading parameter in
+place for the next caller.
+
+**Also noticed, neither filed elsewhere:**
+
+- `at_server`'s `apkam_signature_verifier.dart` carries a comment describing
+  what `AtChopsImpl` does for `mldsa65` — *"it selects MlDsa65PureDartAlgo, then
+  calls the deprecated verify()"*. at_chops #2169 changes that dispatch to
+  `PkamMlDsa65SigningAlgo`, whose verify is synchronous, so the comment goes
+  stale in the sibling repo when 3.6.0 publishes. Lands in **at_server**, not
+  here.
+- `docs/projects/pq/post-quantum-cryptography.md` is **untracked** — 271 lines,
+  an explainer of the PQ choices, referenced by nothing in the doc set. Either
+  finish and track it or delete it; as it stands only this machine has it.
 
 ### 14.45 An expired key the client cannot delete pins it in a hot loop
 
