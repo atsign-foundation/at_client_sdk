@@ -1,3 +1,15 @@
+/// The default 30-second budget is far too small here. These atSigns are
+/// long-lived CI atSigns whose commit logs reach hundreds of thousands of
+/// entries, and a fresh runner replays from commit id -1 while the enrollment
+/// verbs share the same connection. Measured 2026-08-20: every one of the four
+/// approvals timed out at exactly 30 seconds, and the failure then surfaced
+/// three minutes later as eight missing-keyfile errors in a different step.
+///
+/// This is the measurement that separates "slow" from "stuck": with room to
+/// run, an approval either completes or it does not.
+@Timeout(Duration(minutes: 5))
+library;
+
 import 'dart:convert';
 import 'dart:io';
 
@@ -24,20 +36,26 @@ const String selfEncryptionKey = 'selfEncryptionKey';
 const String apkamSymmetricKey = 'apkamSymmetricKey';
 const String enrollmentId = 'enrollmentId';
 
-/// Stops the current client's sync, which this script never needs.
+/// Asks the current client's sync to stop. This script never needs it.
 ///
 /// Enrollments are submitted and approved over the REMOTE secondary; nothing
 /// here reads local storage. So syncing is pure cost — and on the long-lived
-/// @ce2e atSigns the cost is prohibitive rather than merely wasteful. Their
-/// commit logs run to several hundred thousand entries, and a CI runner starts
-/// with empty local storage, so every client replays from commit id -1.
+/// @ce2e atSigns the cost is large: their commit logs run to several hundred
+/// thousand entries and a CI runner starts with empty local storage, so every
+/// client replays from commit id -1.
 ///
-/// Measured 2026-08-20 on `end2end_test_14`: commit ids of 64800, 384337,
-/// 470883 and 836853 all syncing from -1, 3928 records pulled inside a single
-/// 30-second test budget and nowhere near finished. Sync and the enrollment
-/// verbs share one connection, so the approvals never got a slot and all four
-/// timed out — surfacing three minutes later as eight "provided keys file does
-/// not exist" failures in a different step.
+/// ⚠️ **This helps less than it looks, and the measurement says so.** With it
+/// in place the records pulled inside one 30-second budget went UP, 3928 to
+/// 4940. Two reasons, both structural: `stop()` drains the queue and cancels
+/// the periodic timer but does **not** interrupt a run already in flight, and
+/// every `setCurrentAtSign` to a different atSign builds a brand-new
+/// `SyncServiceImpl` with `warmStartSync: true`, which syncs immediately. So
+/// stopping after the client exists is always too late for the run that has
+/// already started.
+///
+/// It is kept because it does stop the periodic timer and any later run, and
+/// removing it would restore load rather than remove a false claim. What it
+/// cannot do is make this script fast.
 ///
 /// `SyncService` declares no way to stop, which is why this reaches for the
 /// implementation.
