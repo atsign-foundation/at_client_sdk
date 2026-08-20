@@ -110,6 +110,7 @@ because a wrap-up is the wrong place to move anchors the acceptance rail parses.
 | [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
+| [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | **A unit-tree isolation flake**: `local_secondary_sync_queue_test.dart` failed 1-in-4 when run after the nskey/pq files in one non-alphabetical invocation — a same-file test's queue entry leaked into a later test, so the per-test store isn't always fresh. Green alone, green in the full suite | Reproduce at rate (~10 runs of the four-file order), then read the file's setUp for what makes the store per-test fresh |
 | [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. Still in the section: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |
 | [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. ✅ **The refusal is fixed too** — it was a namespace check, not immutability, and the sweep now bypasses it. **Owed elsewhere:** the keystore's `get()` does not filter expired records (at_persistence_secondary_server, another repo) | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20) |
 | [14.44](#1444-two-residuals-from-the-at_chops-pr-review) | Two residuals from the at_chops PR review, both answered on #2169 and neither fixable there: the passphrase envelope persists the salt and three costs but **not `hashLength`**, and `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths | Nothing. The first belongs in the **at_auth carve** (train position 5), where that file is already being edited; the second is pre-existing on trunk in both X-Wing backends and unreachable today, so it goes whenever at_chops is next open |
@@ -2241,6 +2242,30 @@ call itself. Do not "fix" the product here.
 `SyncStatus.failure`, so a **failed** sync returns to its caller as success. It
 did not cause this race, but a harness that reports a failed sync as done will
 eventually hide something that matters.
+
+### 14.47 The at_client unit tree has a cross-file isolation flake
+
+Found 2026-08-20 while regression-testing 14.46's edits. Running
+`dart test --concurrency=1 test/pq_signing_root_test.dart
+test/nskey_minting_test.dart test/nskey_rotation_test.dart
+test/local_secondary_sync_queue_test.dart` — that order, which the
+alphabetical full suite never produces — failed
+`local_secondary_sync_queue_test.dart`'s "public key write enqueues with
+op=updateAll" **1 time in 4 runs** (3 green re-runs of the identical
+invocation; the file alone is green; the full suite is green). The failure
+shape: the asserted queue read `['@bob:phone.wavi@alice',
+'public:email@alice']` where only the second entry was expected — an entry
+from an *earlier test in the same file* survived into a later test's queue,
+which only happens when the file's per-test setup fails to give each test a
+fresh store. One baseline run of the same order at the parent commit was
+green, so the 14.46 edits are not excluded as a factor — but nothing in them
+touches enqueue behaviour, and 1-in-4 vs 0-in-1 distinguishes nothing.
+
+Not pooled with [14.43](#1443-the-functional-suites-convergence-race): that is
+the functional pack against a live atServer; this is the unit tree and Hive
+state on disk. What it wants: run the four-file order ~10 times either side of
+any suspect change, and read `local_secondary_sync_queue_test.dart`'s setup
+for what makes its store per-test fresh — the leak says sometimes it isn't.
 
 ### 14.46 `executeVerb`'s `sync` parameter is inert, on both secondaries
 
