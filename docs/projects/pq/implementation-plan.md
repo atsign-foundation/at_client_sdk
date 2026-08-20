@@ -1900,6 +1900,25 @@ introducing a bug. Reading it as "beta-only" was wrong twice over: stable has
 now hit it too, and the framing pointed the search at the Dart channel instead
 of at the window.
 
+**Where the search has got to, and what is NOT established.** The harness's
+`FunctionalTestSyncService.syncData()` waits on a LEVEL — it loops until
+`localCommitId == serverCommitId` and nothing is pending — rather than on
+*this test's writes having been pushed*. The only thing between a test's writes
+and that check is a blind `await Future.delayed(Duration(milliseconds: 100))`.
+In the local failure of 2026-08-20 it returned in **7 ms** reporting
+`pending push count: 0` with the ids already equal, immediately after the test
+had done three writes. ⚠️ **That is a characterisation, not a discriminator:**
+a PASSING run shows a first `syncData` completing just as fast with
+`pending push count: 0` too, so the pattern alone does not separate pass from
+fail. Do not report it as the cause without an arm that does.
+
+⛔ **Disproven, so nobody re-walks them.** The progress events are NOT dropped
+by attaching the listener late — `MySyncProgressListener.streamController` is a
+plain single-subscription `StreamController` and BUFFERS. And `syncData()`'s
+`syncOutcome.complete()` on `SyncStatus.failure` — which does treat a failed
+sync as done, and is a real defect worth fixing on its own — is NOT what fired
+here: `SyncStatus.failure` appears **zero** times in the failing log.
+
 Corroborating: **three of the four observed failures are notify/sync
 convergence** — `sync_multiple_client_test` ("keys synced from multiple clients
 converge"), `atclient_sync_conflict_test` ("notify updating of a key to
