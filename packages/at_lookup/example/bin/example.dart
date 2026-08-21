@@ -1,3 +1,9 @@
+// Names AtLookupImpl directly, which is deprecated in favour of
+// AtLookUp.withSecureSocket but cannot leave the barrel before the next
+// major release.
+// TODO(4.0): rewrite against AtLookUp.withSecureSocket.
+// ignore_for_file: deprecated_member_use
+
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';

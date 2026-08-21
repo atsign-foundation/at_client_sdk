@@ -1,3 +1,8 @@
+// Builds the AtChopsImpl the ladder tests hand to AtLookupImpl, in the
+// vocabulary at_chops has deprecated.
+// TODO(4.0): remove with the credential ladder.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:async';
 import 'dart:io';
 

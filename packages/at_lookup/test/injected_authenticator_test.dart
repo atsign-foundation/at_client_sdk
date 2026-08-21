@@ -1,3 +1,10 @@
+// The injected authenticator is the replacement for the atChops credential
+// ladder, so these tests hold both sides and use the vocabulary at_chops has
+// deprecated (AtChops, AtSigningInput, AtSigningResult) to stand in for the
+// old one.
+// TODO(4.0): remove the ladder side with the credential ladder.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:io';
 
 import 'package:at_chops/at_chops.dart';

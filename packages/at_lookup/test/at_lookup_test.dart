@@ -1,3 +1,9 @@
+// These tests exercise the atChops credential ladder itself, so they are
+// written in the vocabulary at_chops has deprecated (AtChops, AtSigningInput,
+// AtSigningResult). They go when the ladder does.
+// TODO(4.0): remove with the credential ladder.
+// ignore_for_file: deprecated_member_use
+
 import 'dart:async';
 import 'dart:io';
 

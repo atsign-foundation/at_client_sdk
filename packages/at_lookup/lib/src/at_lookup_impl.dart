@@ -116,6 +116,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   ///
   /// Both routes work while this exists. The ladder and the fields feeding it
   /// go once every caller supplies an authenticator.
+  @override
   AtAuthenticator? authenticator;
 
   /// Permitted number of milliseconds before connection to atServer
@@ -134,6 +135,11 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// Represents the client configurations.
   late Map<String, dynamic> _clientConfig;
 
+  // Holds what the deprecated `atChops` accessors set. The type cannot leave
+  // while those accessors are part of this class's API, so it goes when the
+  // credential ladder does.
+  // TODO(4.0): remove with the credential ladder.
+  // ignore: deprecated_member_use
   AtChops? _atChops;
 
   /// Prefer [AtLookUp.withSecureSocket].
@@ -272,6 +278,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       logger.finer('value: $value dataSignature:$dataSignature');
       // RSA SHA-256 verify via at_chops (wraps the same crypton
       // RSAPublicKey.verifySHA256Signature).
+      // TODO(4.0): not part of the credential ladder, so this one outlives
+      // it. at_chops directs it to RsaSignatureAlgo — but that class pins a
+      // modulus size per instance, and this verifies a PEER's key, whose
+      // size we do not control: rsa2048() returns false for a 4096-bit key
+      // that verifies here today. Choose the instance by the key, or keep a
+      // size-agnostic verify.
+      // ignore: deprecated_member_use
       var isDataValid = PkamSigningAlgo(null, HashingAlgoType.sha256).verify(
           Uint8List.fromList(utf8.encode(value)), base64Decode(dataSignature),
           publicKey: publicKeyResult);
@@ -613,8 +626,17 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         logger.finer('fromResponse $fromResponse');
         // RSA SHA-256 sign via at_chops (wraps the same crypton
         // RSAPrivateKey.createSHA256Signature; only the private key is used).
+        // TODO(4.0): remove with the privateKey ladder credential this method
+        // exists to serve. If it outlives the ladder instead, RsaSignatureAlgo
+        // produces identical signature bytes for a 2048-bit key — but refuses
+        // any other modulus size, which this path never checked, so a
+        // caller-supplied 3072- or 4096-bit key that authenticates today
+        // would start throwing.
+        // ignore: deprecated_member_use
         var sha256signature = PkamSigningAlgo(
-                AtPkamKeyPair.create('', privateKey), HashingAlgoType.sha256)
+                // ignore: deprecated_member_use
+                AtPkamKeyPair.create('', privateKey),
+                HashingAlgoType.sha256)
             .sign(Uint8List.fromList(utf8.encode(fromResponse)));
         var signature = base64Encode(sha256signature);
         logger.finer('Sending command pkam:$signature');
@@ -663,9 +685,13 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         logger.finer('fromResponse $fromResponse');
         logger.finer(
             'signingAlgoType: $signingAlgoType hashingAlgoType:$hashingAlgoType');
+        // TODO(4.0): remove with the credential ladder; at_chops directs this
+        // to calling an AtSigningAlgorithm implementation directly.
+        // ignore: deprecated_member_use
         final atSigningInput = AtSigningInput(fromResponse)
           ..signingAlgoType = signingAlgoType
           ..hashingAlgoType = hashingAlgoType
+          // ignore: deprecated_member_use
           ..signingMode = AtSigningMode.pkam;
         var signingResult = _atChops!.sign(atSigningInput);
         var pkamBuilder = PkamVerbBuilder()
@@ -822,6 +848,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     return true;
   }
 
+  @override
   bool isConnectionAvailable() {
     return _connection != null && !_connection!.isInValid();
   }
