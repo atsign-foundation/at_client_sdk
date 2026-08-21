@@ -35,7 +35,8 @@ pointing at it and no detail. `## TODO` below is *what is owed*, unordered; this
 is *what to do first*. Re-read this section against `git log --oneline -10`
 before acting — it has led with finished work before.
 
-Last re-ranked **2026-08-20** against the tree at `31fb4a241`.
+Last re-ranked **2026-08-21** against the tree at `e76b0038b`, with the
+publish gate re-verified live (pub.dev at_chops = 3.5.0).
 
 ⚠️ **A second workstream is now open and is NOT in this table** — the knowledge
 base, agreed with gkc 2026-08-20. Its plan, format, rail design and ordered
@@ -43,7 +44,10 @@ method are in [`docs/knowledge/README.md`](../../knowledge/README.md), which is
 a scaffold with no nuggets written yet. If that is what you are here for, open
 that file instead; the list below is the PQ release work.
 
-1. **[RECOMMENDED] Publish at_chops 3.6.0 to pub.dev.** #2169 **merged**
+1. **[RECOMMENDED] Publish at_chops 3.6.0 to pub.dev.** ⚠️ This is a
+   maintainer step — a session cannot execute it; a session's first
+   executable item is 3 (or 2, which needs commit/push permission).
+   #2169 **merged**
    2026-08-20 as `c4c581834` — approved by Xlin123, CI 47/47, and an
    adversarial re-review confirmed every fix and every argued reply before the
    merge (its one finding, an unrecorded promise, is delivered in ruling 110's
@@ -70,7 +74,8 @@ that file instead; the list below is the PQ release work.
    likely a test-side fix — read the section);
    [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)'s
    product decision; the matrix driver dumping child stderr on cell
-   failure; and pack rate re-measurement once shape C's fix lands. Also
+   failure; and pack rate re-measurement at or after the shape-C fix
+   commit `e76b0038b`. Also
    for gkc: whether the acceptance catalogue should state that pqReady's
    invisibility to deployed peers ends when its enrollment re-mints or
    rotates (retired keys stay advertised, so the record leaves the bare
@@ -84,16 +89,13 @@ that file instead; the list below is the PQ release work.
 at_chops 3.6.0 reaching pub.dev — #2169 is merged, so only the publish itself
 remains. at_lookup's publish additionally waits on at_commons 5.16.0.
 
-⚠️ **CI on this branch is behind HEAD, and cannot catch up by itself.** Nothing
-fires on push here — the workflow is `workflow_dispatch` only on this branch —
-so the newest run is as new as the last manual dispatch and no newer. The
-2026-08-20 dispatch on `cfd511663` (run `32418455392`) **failed three jobs**:
-both `unit_at_client` channels on the `dart format` gate — three files, fixed
-in `be1fb9172` — and `functional_tests (beta)` on UC-G1.15, which is a 14.43
-instance and is captured as evidence there, not a new defect. A fresh dispatch
-on `31fb4a241` (run `32421422064`) was queued the same evening; read its
-conclusion rather than this sentence. Dispatch before treating the branch as
-green, and compare the two SHAs rather than reading a conclusion:
+⚠️ **CI on this branch cannot catch up by itself.** Nothing fires on push
+here — the workflow is `workflow_dispatch` only on this branch — so the newest
+run is as new as the last manual dispatch and no newer. As of 2026-08-21 the
+newest run (`32435733084`) is on `e76b0038b` — HEAD at the time — and
+concluded **success, 11/11 jobs**. That sentence goes stale the moment the
+branch moves: dispatch before treating the branch as green, and compare the
+two SHAs rather than reading a conclusion:
 
 ```bash
 gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike
@@ -124,7 +126,7 @@ because a wrap-up is the wrong place to move anchors the acceptance rail parses.
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
 | [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
-| [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — 1 red in 4 local runs, ~1 in 6 in CI, four distinct tests, all update/notify/sync convergence. Six hypotheses disproven and listed. Also here: `FunctionalTestSyncService.syncData()` calls `syncOutcome.complete()` on `SyncStatus.failure`, so a FAILED sync returns to its caller as success — a separate defect that did not cause this race but will hide something | Nothing. Reproduces locally: `cd tests/at_functional_test && ./runLocal.sh` |
+| [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — MOSTLY CLOSED. Three of the four original shapes have diagnosed, mutation-proven fixes in the tree: shape A (`stop()` could not stop an in-flight sync run), shape B (the rollout matrix's stages contending on `primary`'s one `_apsk` record — rebuilt with per-stage enrollments), shape C (the push round's unconditional queue removal losing a delete that raced it). The harness's complete-on-failure defect is also fixed | Whether `sync_multiple_client_test` reduces to shape C (plausible, unproven); the rotated-advertisement cache member; the matrix driver dumping child stderr on cell failure; pack rate re-measurement at or after `e76b0038b` |
 | [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew) | **A `primary` client can sign with a key its own advertisement just withdrew**: fire-and-forget startup minting + publish-before-file + the sign path's auth-key fallback + the bare form's single slot. One client racing itself — distinct from the accepted two-client overwrite plurality | Close the window: sign path awaits a pending mint, or refuses until minting settles, or the composition keeps the authentication entry — check whether the JSON form already rescues enrolled clients before choosing |
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | **A unit-tree isolation flake**: `local_secondary_sync_queue_test.dart` failed 1-in-4 when run after the nskey/pq files in one non-alphabetical invocation — a same-file test's queue entry leaked into a later test, so the per-test store isn't always fresh. Green alone, green in the full suite | Reproduce at rate (~10 runs of the four-file order), then read the file's setUp for what makes the store per-test fresh |
 | [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. Still in the section: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |

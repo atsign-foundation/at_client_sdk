@@ -167,7 +167,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [107] | A `local:` record is not encrypted, and the legacy refusal exempts it                       | 2026-08-17 | AMENDED 2026-08-17        |
 | [108] | The signing rollout swaps algorithms; it never overlaps them                                | 2026-08-18 | LIVE                      |
 | [109] | at_chops 3.6.0 stays a minor; no major bump for this release                                | 2026-08-18 | AMENDED 2026-08-18        |
-| [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | AMENDED 2026-08-18        |
+| [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | AMENDED 2026-08-20        |
 | [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
 | [112] | An unreadable key source is not an empty one                                                | 2026-08-18 | LIVE                      |
 | [113] | PqPosture: three postures, and the rollout they drive                                       | 2026-08-18 | AMENDED 2026-08-19        |

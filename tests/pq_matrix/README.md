@@ -88,6 +88,15 @@ passes for an inert harness.
 The driver does this for you; by hand, the receiver goes first, because
 notification streams are broadcast and do not replay.
 
+A current-arm client authenticates **as its stage's enrollment** and refuses
+to start without one: it needs `--enrollment-id` and an enrolled keyfile at
+`<storage>/<atSign>.atKeys`. The driver's `setUpAll` creates both (one
+enrollment per stage per role, minted once); by hand, the practical route is
+to run the driver once and reuse a keyfile it left under
+`test/hive/pqmatrix/baseline/<stage>-<role>/`. The published arm has neither
+parameter — an unenrolled 3.14.0 client is `primary` by construction — so a
+published-arm process is the one you can spawn with nothing but demo keys:
+
 ```bash
 cd tests/pq_matrix/published && dart pub get
 cd ../current && dart pub get
@@ -95,7 +104,8 @@ cd ../current && dart pub get
 # receiver, then sender, against a running virtualenv
 dart run current/bin/receiver.dart \
   --stage pqActive --atsign '@bob🛠' --peer '@alice🛠' \
-  --run-id abc123 --storage /tmp/pqm/bob
+  --run-id abc123 --storage /tmp/pqm/bob \
+  --enrollment-id <bob-pqActive-enrollment-id>
 
 dart run published/bin/sender.dart \
   --stage published --atsign '@alice🛠' --peer '@bob🛠' \
