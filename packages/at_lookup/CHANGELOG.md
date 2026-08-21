@@ -1,5 +1,20 @@
 ## 3.7.0
 
+- fix: a connection built before anything reads `notifications` now
+  reconnects when it drops. The stream getter installs the routing seam for
+  the case where a verb opened the connection first, but not the disconnect
+  seam — so a client that authenticated or ran a verb before calling
+  `startNotifications` had a socket whose loss reached nothing: no `false` on
+  `notificationConnectionUp`, no reconnect, and a listener silent for the rest
+  of the process while still reporting itself up.
+- fix: a subscriber applying back-pressure no longer loses its connection to
+  the heartbeat. Pausing the `notifications` stream stops the socket being
+  read, which is the documented point of it, but it also means nothing can
+  answer the `noop:0` probe — so the probe timed out and destroyed a healthy
+  connection. A pause longer than `heartbeatResponseTimeout` (10s by default)
+  was enough, which one slow `await` in an `await for` body will do. The
+  heartbeat now skips while delivery is paused, before and after the probe
+  goes out.
 - deprecated: `AtLookUp.executeVerb`'s `sync` parameter, removal in 4.0. It
   has never been read: the verb always executes on the remote atServer, and
   there is no sync behaviour for the parameter to control.
