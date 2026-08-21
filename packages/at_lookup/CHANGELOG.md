@@ -7,6 +7,15 @@
   `startNotifications` had a socket whose loss reached nothing: no `false` on
   `notificationConnectionUp`, no reconnect, and a listener silent for the rest
   of the process while still reporting itself up.
+- fix: a watermark read that throws no longer leaves the client permanently
+  deaf. `getLastNotificationTime` is caller code running inside the reconnect
+  loop, and an exception aborted the attempt AFTER it had opened and
+  authenticated a connection — which then stayed valid, so every later attempt
+  skipped the connect, re-ran only the throwing call, and backed off forever
+  with `monitor:` never sent. The only symptom was an `up` that never arrived.
+  The read is now guarded: the failure is logged at `warning` and the
+  connection starts without a watermark, which costs a replayed window rather
+  than every future notification.
 - fix: a reconnect no longer re-requests the backlog from where notifications
   first started. `startNotifications`'s `lastNotificationTime` is now
   `getLastNotificationTime`, a function the muxable calls on every connect

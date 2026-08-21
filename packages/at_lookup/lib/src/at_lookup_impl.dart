@@ -1203,7 +1203,23 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       }
       // Asked here rather than held from the start, so a reconnect resumes
       // from the caller's current watermark.
-      final lastNotificationTime = await _getLastNotificationTime?.call();
+      //
+      // Guarded, because this is CALLER code running inside the reconnect
+      // loop. Letting it throw would abort the attempt after the connection
+      // was already opened and authenticated - and that connection stays
+      // valid, so every later attempt skips the connect, re-runs only this
+      // call, and backs off forever without ever sending `monitor:`. The
+      // client would be permanently deaf with no symptom but a missing `up`.
+      // Starting without a watermark instead costs a replayed window, which
+      // the caller can absorb.
+      int? lastNotificationTime;
+      try {
+        lastNotificationTime = await _getLastNotificationTime?.call();
+      } catch (e) {
+        logger.warning('Could not read the last-notification watermark, so '
+            'this connection starts without one and the atServer will replay '
+            'from where it last heard: $e');
+      }
       final command = (MonitorVerbBuilder()
             ..regex = _notifyRegex
             ..lastNotificationTime = lastNotificationTime

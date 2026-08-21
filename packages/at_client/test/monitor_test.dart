@@ -37,6 +37,11 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   int? startedWithWatermark;
   int startCalls = 0;
 
+  /// The function Monitor handed down, kept so a test can invoke it AGAIN —
+  /// which is what a reconnect does. Holding only the value it first returned
+  /// cannot tell a live callback from one that captured a stale number.
+  Future<int?> Function()? heldWatermarkSource;
+
   /// Set to make [startNotifications] fail, as an unreachable or rejecting
   /// atServer does.
   Object? startError;
@@ -61,6 +66,7 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
     started = true;
     // Invoked, as the real muxable does on every (re)connect - so these
     // assertions also prove the callback the Monitor hands down is callable.
+    heldWatermarkSource = getLastNotificationTime;
     startedWithWatermark = await getLastNotificationTime?.call();
     _up.add(true);
   }
@@ -148,6 +154,31 @@ void main() {
       expect(muxable.startedWithWatermark, 1755600000000,
           reason: 'the watermark is what stops the atServer replaying every '
               'notification it has ever held');
+    });
+
+    test('hands down a LIVE watermark source, not a value read once', () async {
+      // The muxable owns reconnection, so it asks this function again on every
+      // reconnect. Monitor must therefore pass the function itself: reading
+      // the number here and passing that pins every later reconnect to the
+      // position held at start, which is the frozen-watermark defect. Every
+      // other test in this group would pass with that defect present, because
+      // they only ever look at the FIRST call.
+      watermark = 1755600000000;
+      monitor.start();
+      await Future.delayed(const Duration(milliseconds: 20));
+      expect(muxable.startedWithWatermark, 1755600000000);
+
+      // The client consumes notifications and its stored watermark advances.
+      watermark = 1755600009999;
+
+      expect(muxable.heldWatermarkSource, isNotNull,
+          reason: 'Monitor must hand a function down at all - without one the '
+              'muxable has nothing to re-ask and every reconnect goes out '
+              'with no watermark');
+      expect(await muxable.heldWatermarkSource!(), 1755600009999,
+          reason: 'invoking it again - which is exactly what a reconnect '
+              'does - must read the CURRENT watermark, not the number that '
+              'was current when notifications started');
     });
 
     /// Reading the watermark is a local keystore operation, not part of

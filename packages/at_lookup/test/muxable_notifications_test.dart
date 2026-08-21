@@ -214,7 +214,7 @@ void main() {
 
   group('reconnect, reauth and heartbeat', () {
     test('losing the connection reconnects, reauthenticates, and re-issues '
-        'the SAME monitor:', () async {
+        'monitor: with the same regex', () async {
       var authCount = 0;
       final atLookup = build(authenticator: (_) async {
         authCount++;
@@ -248,9 +248,11 @@ void main() {
               'must run again - reconnecting without reauthenticating gives a '
               'socket the atServer will not send notifications on');
       expect(socket.written, ['monitor:selfNotifications:1755600000000 .wavi\n'],
-          reason: 'the reconnect must re-issue the SAME monitor: - dropping '
-              'the regex would start delivering everything, and dropping the '
-              'watermark would replay from the beginning');
+          reason: 'the regex is REMEMBERED across a reconnect - dropping it '
+              'would start delivering everything. The watermark beside it is '
+              'not remembered but re-asked, and this callback returns a '
+              'constant, so the command matches; the advancing case is its '
+              'own test');
       expect(atLookup.isReconnectingNotifications, isFalse,
           reason: 'and the loop must finish once it succeeds');
 
@@ -407,6 +409,51 @@ void main() {
           reason: 'and the pre-stop subscription learns nothing about the new '
               'connection - the reason a caller must re-read the getter after '
               'each start');
+    });
+
+    test('a watermark read that throws does not leave the client deaf',
+        () async {
+      // This callback is CALLER code running inside the reconnect loop. If it
+      // throws and the attempt aborts, the connection it already opened and
+      // authenticated stays valid - so every later attempt skips the connect,
+      // re-runs only this call, and backs off forever with `monitor:` never
+      // sent. The symptom is nothing at all: no notifications, no error, just
+      // an `up` that never arrives.
+      var boom = false;
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      addTearDown(atLookup.stopNotifications);
+
+      await atLookup.startNotifications(getLastNotificationTime: () async {
+        if (boom) throw StateError('watermark store unreadable');
+        return 1755600000000;
+      });
+      expect(socket.written, ['monitor:selfNotifications:1755600000000\n']);
+
+      boom = true;
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(sockets, hasLength(2),
+          reason: 'the attempt must have reached the point of opening a '
+              'socket, or this proves nothing about what follows the connect');
+      expect(sockets.last.written,
+          ['monitor:selfNotifications\n'],
+          reason: 'a failed watermark read must still send monitor: - without '
+              'one the atServer replays a window, which is recoverable, where '
+              'sending nothing is a connection that can never deliver');
+      expect(atLookup.isReconnectingNotifications, isFalse,
+          reason: 'and the reconnect must be considered finished, not left '
+              'spinning on a connection it will never speak to');
+
+      // The control arm: the same callback recovering must behave normally,
+      // so this cannot pass by the watermark being ignored altogether.
+      boom = false;
+      await sockets.last.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 1400));
+      expect(sockets.last.written,
+          ['monitor:selfNotifications:1755600000000\n'],
+          reason: 'a transient watermark failure is not terminal');
     });
 
     test('a reconnect asks the caller for its CURRENT watermark', () async {
