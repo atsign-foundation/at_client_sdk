@@ -12,6 +12,8 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, apskUri, canSignEnvelopeWith;
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show signingAlgoOf;
+import 'package:at_client/src/signing/signing_key_mint_barrier.dart'
+    show signingKeyMintSettled;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
 /// The tail of each client's `_apsk` write chain, so [serialiseApskWrite] can
@@ -168,12 +170,29 @@ mixin ApkamSigning {
   /// rule and cannot drift apart. Once the enrollment does hold a signing key
   /// the authentication key stops signing here and stops being advertised
   /// there, in the same step.
+  ///
+  /// **Waits for the client's signing-key mint to settle** before reading
+  /// ([signingKeyMintSettled]). The startup mints concurrently with whatever
+  /// the application does next, and publishing a minted key withdraws the
+  /// authentication fallback from the advertisement before the keyfile holds
+  /// the minted one — a read in that window would fall back to a key the
+  /// record no longer names, and the envelope would verify against nothing.
+  /// The one rule above holds only outside that window; waiting is what keeps
+  /// a caller outside it.
   Future<List<ApkamSigningKeys>> get signingKeys async {
+    if (awaitsSigningKeyMint) {
+      await signingKeyMintSettled(atClient);
+    }
     final held = await heldSigningKeys;
     if (held.isNotEmpty) return held;
 
     return [authenticationSigningKey!];
   }
+
+  /// Whether [signingKeys] waits for this client's own signing-key mint to
+  /// settle before reading what may sign. True for every signer; the one
+  /// override is the mint itself, which cannot wait for its own completion.
+  bool get awaitsSigningKeyMint => true;
 
   /// The APKAM **authentication** keypair as a signing key, or null when this
   /// client holds no `AtChops` keypair.

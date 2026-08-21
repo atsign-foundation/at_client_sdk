@@ -1,3 +1,4 @@
+import 'dart:async' show Completer, FutureOr;
 import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
 
@@ -8,6 +9,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show recordResolvedSigningAlgo;
+import 'package:at_client/src/signing/signing_key_mint_barrier.dart'
+    show registerSigningKeyMintBarrier;
 import 'package:at_commons/at_commons.dart'
     show AtKey, AtKeyNotFoundException, AtValue;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -41,6 +44,32 @@ class TestEnvelopeSigner with ApkamSigning, EnvelopeSigning {
       null;
 
   TestEnvelopeSigner(this.atClient);
+}
+
+/// Counts keyfile reads, so a test can assert the mint barrier gates the READ
+/// rather than only reordering results.
+class CountingKeysIo extends InMemoryAtKeysIo {
+  int reads = 0;
+
+  @override
+  FutureOr<AtKeys> read(String atSign) {
+    reads++;
+    return super.read(atSign);
+  }
+}
+
+/// The mint's own shape: it cannot wait for its own completion.
+class TestMintShapedSigner with ApkamSigning {
+  @override
+  final AtClient atClient;
+
+  @override
+  final AtSignLogger logger = AtSignLogger('TestMintShapedSigner');
+
+  @override
+  bool get awaitsSigningKeyMint => false;
+
+  TestMintShapedSigner(this.atClient);
 }
 
 /// Where a client's signing keys come from, and what answers when the keyfile
@@ -183,6 +212,65 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(InMemoryAtKeysIo());
 
       expect((await signer.signingKeys).single.publicKey, pkamPublicKey());
+    });
+  });
+
+  group('signingKeys waits for the mint barrier', () {
+    test(
+        'does not read the keyfile until the mint settles, then signs with '
+        'the minted key', () async {
+      final io = CountingKeysIo();
+      final keyfile = AtKeys(atsign: atSign.toAtsign());
+      await io.write(atSign, keyfile);
+      when(() => atClient.atKeysIo).thenReturn(io);
+
+      final mint = Completer<void>();
+      registerSigningKeyMintBarrier(atClient, mint.future);
+
+      final pending = signer.signingKeys;
+      await pumpEventQueue();
+      expect(io.reads, 0,
+          reason: 'the wait must gate the READ: a read in the window falls '
+              'back to the authentication key at the exact moment the '
+              'advertisement withdraws it');
+
+      // The mint lands — files the signing key — and then settles.
+      keyfile.fileSigningMaterial(
+          enrollmentId: enrollmentId,
+          algorithm: KeyAlgorithmType.rsa2048,
+          publicKey: b64('minted-pub'),
+          privateKey: b64('minted-priv'));
+      mint.complete();
+
+      final keys = await pending;
+      expect(io.reads, greaterThan(0));
+      expect(keys.single.publicKey, b64('minted-pub'),
+          reason: 'after the mint settles the keyfile holds the minted key, '
+              'so the fallback must not answer');
+    });
+
+    test('the mint itself does not wait', () async {
+      final io = CountingKeysIo();
+      await io.write(atSign, AtKeys(atsign: atSign.toAtsign()));
+      when(() => atClient.atKeysIo).thenReturn(io);
+
+      // Deliberately never settled: only the override lets this return.
+      registerSigningKeyMintBarrier(atClient, Completer<void>().future);
+
+      final keys = await TestMintShapedSigner(atClient)
+          .signingKeys
+          .timeout(const Duration(seconds: 5));
+      expect(io.reads, greaterThan(0));
+      expect(keys.single.publicKey, pkamPublicKey(),
+          reason: 'the mint cannot wait for its own completion; until it '
+              'settles, what may sign is still the authentication fallback');
+    });
+
+    test('no barrier registered: proceeds immediately', () async {
+      final keys = await signer.signingKeys.timeout(const Duration(seconds: 5));
+      expect(keys.single.publicKey, pkamPublicKey(),
+          reason: 'a client built without the PQ startup has no mint in '
+              'flight to wait for');
     });
   });
 

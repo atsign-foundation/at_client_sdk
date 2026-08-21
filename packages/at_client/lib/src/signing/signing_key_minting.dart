@@ -83,6 +83,11 @@ class SigningKeyMinting with ApkamSigning {
   @override
   final AtSignLogger logger = AtSignLogger('SigningKeyMinting');
 
+  /// The mint cannot wait for its own completion: [signingKeys]'s wait is for
+  /// this class's work to settle.
+  @override
+  bool get awaitsSigningKeyMint => false;
+
   final AtEnrollment _enrollment;
 
   /// Mints, advertises and files what the in-use set names and the enrollment

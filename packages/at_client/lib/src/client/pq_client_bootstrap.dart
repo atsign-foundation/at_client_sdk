@@ -20,6 +20,8 @@ import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/key_package_minting.dart'
     show KeyPackageMinting;
+import 'package:at_client/src/signing/signing_key_mint_barrier.dart'
+    show registerSigningKeyMintBarrier;
 import 'package:at_client/src/signing/signing_key_minting.dart'
     show SigningKeyMinting;
 import 'package:at_commons/atsign.dart' show AtsignString;
@@ -200,6 +202,10 @@ class PqClientBootstrap {
     chain = PqSigningChain(_atClient);
     minting = SigningKeyMinting(_atClient);
     keyPackageMinting = KeyPackageMinting(_atClient);
+    // Registered in the constructor rather than at startup so a signer that
+    // runs before startup() is fired still waits: the window it closes opens
+    // the moment minting becomes possible, not the moment it begins.
+    registerSigningKeyMintBarrier(_atClient, mintSettled);
   }
 
   final AtClient _atClient;
@@ -247,6 +253,21 @@ class PqClientBootstrap {
   /// it answers "has the startup finished?", not "did every step work?".
   Future<void> get startupComplete => _startupComplete.future;
 
+  final Completer<void> _mintSettled = Completer<void>();
+
+  /// Completes when the signing-key mint step has run — or will not run this
+  /// session, because the startup was stopped or failed before reaching it or
+  /// the step is gated off. Never completes with an error.
+  ///
+  /// This is what a signer waits on before reading which keys may sign
+  /// ([registerSigningKeyMintBarrier] hands it over in the constructor):
+  /// publishing a minted key withdraws the authentication fallback from the
+  /// advertisement before the keyfile holds the minted one, so a sign in that
+  /// window produces an envelope nothing can verify. Waiting on
+  /// [startupComplete] instead would deadlock — the steps after the mint sign
+  /// envelopes themselves.
+  Future<void> get mintSettled => _mintSettled.future;
+
   bool _stopped = false;
 
   /// Halts the startup at the next step boundary. A step already running
@@ -277,6 +298,11 @@ class PqClientBootstrap {
         await step.run();
       }
     } finally {
+      // A startup that stopped or failed before the mint step still settles
+      // the barrier: everything that signs waits on it, and those signers
+      // should sign with what the keyfile holds today rather than wait for a
+      // mint that is not coming this session.
+      if (!_mintSettled.isCompleted) _mintSettled.complete();
       _startupComplete.complete();
     }
   }
@@ -400,13 +426,17 @@ class PqClientBootstrap {
   /// that moment did not name, and one start's worth signed by a key that has
   /// left service.
   Future<void> _mintInUseSigningKeys() async {
-    if (!_gates.mintInUseSigningKeys) return;
     try {
+      if (!_gates.mintInUseSigningKeys) return;
       await minting.reconcileSigningKeys();
     } catch (e, st) {
       _logger.warning('Minting this enrollment\'s own signing keys failed for '
           '$_atSign; it keeps signing with the key it already advertises, and '
           'the next start retries: $e, $st');
+    } finally {
+      // Success, failure and gated-off all settle the barrier: whatever the
+      // keyfile holds after this point is what may sign.
+      if (!_mintSettled.isCompleted) _mintSettled.complete();
     }
   }
 

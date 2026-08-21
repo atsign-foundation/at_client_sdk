@@ -588,13 +588,12 @@ class ParsedApsk {
 
   /// Every advertised key for [algo], in published order.
   ///
-  /// One algorithm can name several keys, and the case is not exotic: an
-  /// enrollment that mints its own signing key keeps publishing the APKAM
-  /// authentication key it used to sign with, because that is what verifies
-  /// everything it signed earlier — and where both are ML-DSA, which is what a
-  /// post-quantum-native enrollment holds, the two entries share an algorithm.
-  /// A verifier that took only the first would refuse every envelope signed
-  /// before the split.
+  /// One algorithm can name several keys, and the case is not exotic: a
+  /// rotation keeps the superseded generation advertised as `retired`,
+  /// because that is what verifies everything it signed earlier — and the
+  /// successor it mints shares its algorithm, so the two entries collide on
+  /// any algorithm-keyed lookup. A verifier that took only the first would
+  /// refuse every envelope signed before the rotation.
   ///
   /// Trying each is **not** the algorithm fallback this signer forbids. That
   /// refusal is about algorithms: dropping to a weaker one after a failure hands the

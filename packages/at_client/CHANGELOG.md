@@ -9,6 +9,19 @@ files, against a positive control of `AtClientPreference` in 20. The BREAKING
 labels below were rewritten in the same pass: as written they sent a reader
 hunting for a constructor argument that never existed in a release. -->
 
+- fix: a signer can no longer sign with the authentication key in the window
+  where its own advertisement has already withdrawn it. The PQ startup mints
+  an enrollment's signing keys concurrently with whatever the app does next,
+  and publishing a minted key withdraws the authentication fallback from the
+  `_apsk` record before the keyfile holds the minted one — a sign in that
+  window fell back to a key the record no longer named, producing an
+  envelope nothing could verify. `ApkamSigning.signingKeys` now waits for
+  the client's mint to settle (`PqClientBootstrap.mintSettled`, handed over
+  via `registerSigningKeyMintBarrier`) before reading what may sign; the
+  mint itself is the one exempt signer, since it cannot wait for its own
+  completion. A startup that is stopped, fails, or has the mint gated off
+  still settles the barrier, so signing never waits for a mint that is not
+  coming.
 - fix: a local write racing an in-flight sync push can no longer be lost.
   The sync queue keeps one entry per atKey, so a `delete()` (or a newer
   value) landing while that key's previous op was on the wire replaced the

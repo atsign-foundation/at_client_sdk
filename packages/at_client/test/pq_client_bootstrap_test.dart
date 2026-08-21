@@ -166,6 +166,70 @@ void main() {
           reason: 'no step after the stop may run at all');
     });
 
+    test('mintSettled settles once the mint step has run', () async {
+      final bootstrap = build();
+      var done = false;
+      unawaited(bootstrap.mintSettled.then((_) => done = true));
+      await pumpEventQueue();
+      expect(done, isFalse,
+          reason: 'nothing may settle the barrier before startup reaches '
+              'the mint step — a signer that proceeded early would sign in '
+              'the exact window the barrier exists to close');
+      await bootstrap.startup();
+      expect(done, isTrue);
+    });
+
+    test('mintSettled settles at the mint step, not at startup\'s end',
+        () async {
+      // Park the sweep — a step after the mint — so startup is still running
+      // when the assertion looks.
+      final parked = Completer<int>();
+      final bootstrap =
+          build(privilege: _FakePrivilege(true), sweep: () => parked.future);
+      final startup = bootstrap.startup();
+      await bootstrap.mintSettled.timeout(const Duration(seconds: 5),
+          onTimeout: () =>
+              fail('the barrier must lift when the mint step has run, not when '
+                  'the whole startup tail has — the steps after the mint sign '
+                  'envelopes, and each of those signs would wait on itself'));
+      parked.complete(0);
+      await startup;
+    });
+
+    test('a startup stopped before the mint step still settles mintSettled',
+        () async {
+      final keysIo = MockAtKeysIo();
+      final readGate = Completer<Never>();
+      when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
+
+      final bootstrap = PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+      );
+
+      final startup = bootstrap.startup();
+      bootstrap.stop();
+      readGate.completeError(Exception('the test releases the parked read'));
+      await startup;
+
+      await bootstrap.mintSettled.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail(
+              'a stopped startup never reaches the mint step, and a signer '
+              'waiting on a barrier nothing settles waits forever'));
+    });
+
+    test('a gated-off mint still settles mintSettled', () async {
+      final bootstrap =
+          build(gates: const PqStartupGates(mintInUseSigningKeys: false));
+      await bootstrap.startup();
+      await bootstrap.mintSettled.timeout(const Duration(seconds: 5),
+          onTimeout: () =>
+              fail('gated-off must settle the barrier: whatever the keyfile '
+                  'holds after the step is what may sign'));
+    });
+
     test('gates silence the active steps', () async {
       var swept = 0;
       final privilege = _FakePrivilege(true);

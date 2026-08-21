@@ -1,8 +1,7 @@
 import 'dart:convert' show base64Decode;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_auth/src/enroll/key_entry_status.dart'
-    show KeyEntryStatus;
+import 'package:at_auth/src/enroll/key_entry_status.dart' show KeyEntryStatus;
 import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo, SigningAlgoType;
 
 /// The `_apsk` value an enrollment publishes: the signing keys that verify
@@ -22,13 +21,13 @@ import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo, SigningAlgoType;
 /// protocol. `keys` has been an array from the outset, and a second
 /// algorithm's key is added beside the first rather than replacing it:
 /// envelopes are stored durably and verified later, so a key that stops being
-/// used must still be able to verify what it already signed. An enrollment that
-/// mints a signing key of its own therefore advertises at least two: that key,
-/// and the APKAM authentication key it used to sign with, marked `retired`.
-/// One enrollment can also advertise two keys of one **algorithm**, which is
-/// what a post-quantum-native enrollment publishes — its authentication key is
-/// ML-DSA and so is what it mints — so a reader selecting by algorithm must
-/// consider every entry naming it, not the first.
+/// used must still be able to verify what it already signed. That is why a
+/// **rotation** keeps the superseded generation advertised, marked `retired`,
+/// beside its successor — which is also how one enrollment comes to advertise
+/// two keys of one **algorithm**, so a reader selecting by algorithm must
+/// consider every entry naming it, not the first. The APKAM authentication
+/// key is the exception: it is advertised only while the enrollment holds no
+/// signing key of its own, and the first mint withdraws it.
 ///
 /// ```json
 /// {"v": 1, "keys": [
@@ -57,8 +56,7 @@ Map<String, dynamic> apskAdvertisement({
             'use': 'sign',
             'alg': key.alg.name,
             'pub': key.pub,
-            if (key.status != KeyEntryStatus.active)
-              'status': key.status.name,
+            if (key.status != KeyEntryStatus.active) 'status': key.status.name,
           }
       ],
     };
