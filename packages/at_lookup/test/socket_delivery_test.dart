@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:at_commons/at_commons.dart' show ConnectionInvalidException;
 import 'package:at_lookup/at_lookup.dart';
 // Not in the barrel by design - decision 4 keeps the listener private
 // to the package, so tests reach it by path as the fake socket does.
@@ -347,9 +348,13 @@ void main() {
       await done;
       sw.stop();
 
-      expect(thrown, isNotNull,
-          reason: 'a read with no response and a dead connection must fail, '
-              'not return');
+      expect(thrown, isA<ConnectionInvalidException>(),
+          reason: 'the TYPE is the user-visible half of this fix: a caller '
+              'told the connection went away can reconnect, where an '
+              'AtTimeoutException sends it looking at the atServer. Asserting '
+              'only that something was thrown leaves that swap unpinned - the '
+              'timing bound below catches the mechanism being absent, not the '
+              'wrong exception coming out of it');
       return sw.elapsedMilliseconds;
     }
 
