@@ -9,9 +9,12 @@ import 'dart:io' show stdout;
 /// carry one — "it failed" would let a cell start failing for a different
 /// reason unnoticed (`docs/projects/pq/acceptance.md` 16.5).
 ///
-/// Everything else the executables emit — at_client's own logging among it —
-/// goes to stderr, so a chatty build cannot corrupt the channel the driver
-/// parses.
+/// Everything else the executables emit shares stdout with this protocol —
+/// at_client's own logging among it, which is why the entrypoint runs it at
+/// `severe` — and the verb prefix is what keeps a log line from parsing as a
+/// verb. stderr carries only the entrypoint's final exception and stack,
+/// written after the FAILED line, so a driver dumping stderr must let the
+/// pipe drain first.
 enum MatrixVerb {
   /// The receiver is subscribed and the sender may start. The driver waits for
   /// this before spawning the sender: notification streams are broadcast and do

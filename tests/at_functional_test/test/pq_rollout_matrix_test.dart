@@ -2,8 +2,7 @@
 @Timeout(Duration(minutes: 30))
 library;
 
-import 'dart:async'
-    show Completer, StreamSubscription, TimeoutException, unawaited;
+import 'dart:async' show Completer, StreamSubscription, TimeoutException;
 import 'dart:convert' show LineSplitter, jsonDecode, utf8;
 import 'dart:io';
 
@@ -356,33 +355,52 @@ void main() {
           if (!result.isCompleted) result.complete(parsed.body);
         case 'FAILED':
           final failure = StateError('receiver ($receiverStage) failed: '
-              '${parsed.body['type']}: ${parsed.body['message']}');
+              '${parsed.body['type']}: ${parsed.body['message']}'
+              '${parsed.body['during'] == null ? '' : ' (during ${parsed.body['during']})'}'
+              '\n${parsed.body['stack']}');
           if (!ready.isCompleted) ready.completeError(failure);
           if (!result.isCompleted) result.completeError(failure);
       }
     });
-    unawaited(receiver.stderr
+    final receiverDrained = receiver.stderr
         .transform(utf8.decoder)
         .transform(const LineSplitter())
-        .forEach(receiverNoise.add));
+        .forEach(receiverNoise.add);
+
+    // A child writes its FAILED line to stdout before its stack reaches
+    // stderr, so a dump taken when FAILED is parsed is usually empty: let the
+    // pipe drain (bounded — the child exits right after writing) before
+    // dumping. Timeouts pass through: their arms already carry a dump.
+    Future<T> orDumpStderr<T>(Future<T> future, String who,
+        Future<void> drained, List<String> noise) async {
+      try {
+        return await future;
+      } on StateError catch (e) {
+        await drained.timeout(const Duration(seconds: 10), onTimeout: () {});
+        throw StateError('$e\n$who stderr (first 40 lines):\n'
+            '${noise.take(40).join('\n')}');
+      }
+    }
 
     try {
-      await ready.future.timeout(const Duration(minutes: 3),
-          onTimeout: () => throw TimeoutException(
-              'receiver ($receiverStage) never became ready. stderr:\n'
-              '${receiverNoise.take(40).join('\n')}'));
+      await orDumpStderr(
+          ready.future.timeout(const Duration(minutes: 3),
+              onTimeout: () => throw TimeoutException(
+                  'receiver ($receiverStage) never became ready. stderr:\n'
+                  '${receiverNoise.take(40).join('\n')}')),
+          'receiver ($receiverStage)',
+          receiverDrained,
+          receiverNoise);
 
       final sender = await spawn('sender', senderStage, senderAtSign,
           receiverAtSign, senderStorage,
           peerEnrollmentId: enrollmentIdFor(receiverStage, 'receiver'));
-      final senderOut = <String>[];
       final senderNoise = <String>[];
       final sent = Completer<Map<String, Object?>>();
       final senderLines = sender.stdout
           .transform(utf8.decoder)
           .transform(const LineSplitter())
           .listen((line) {
-        senderOut.add(line);
         final parsed = _parseLine(line);
         if (parsed == null) return;
         if (parsed.verb == 'SENT' && !sent.isCompleted) {
@@ -390,25 +408,35 @@ void main() {
         }
         if (parsed.verb == 'FAILED' && !sent.isCompleted) {
           sent.completeError(StateError('sender ($senderStage) failed: '
-              '${parsed.body['type']}: ${parsed.body['message']}'));
+              '${parsed.body['type']}: ${parsed.body['message']}'
+              '${parsed.body['during'] == null ? '' : ' (during ${parsed.body['during']})'}'
+              '\n${parsed.body['stack']}'));
         }
       });
-      unawaited(sender.stderr
+      final senderDrained = sender.stderr
           .transform(utf8.decoder)
           .transform(const LineSplitter())
-          .forEach(senderNoise.add));
+          .forEach(senderNoise.add);
 
-      final sentBody = await sent.future.timeout(const Duration(minutes: 3),
-          onTimeout: () => throw TimeoutException(
-              'sender ($senderStage) never reported. stderr:\n'
-              '${senderNoise.take(40).join('\n')}'));
+      final sentBody = await orDumpStderr(
+          sent.future.timeout(const Duration(minutes: 3),
+              onTimeout: () => throw TimeoutException(
+                  'sender ($senderStage) never reported. stderr:\n'
+                  '${senderNoise.take(40).join('\n')}')),
+          'sender ($senderStage)',
+          senderDrained,
+          senderNoise);
       await sender.exitCode;
       await senderLines.cancel();
 
-      final resultBody = await result.future.timeout(const Duration(minutes: 3),
-          onTimeout: () => throw TimeoutException(
-              'receiver ($receiverStage) never reported a result. stderr:\n'
-              '${receiverNoise.take(40).join('\n')}'));
+      final resultBody = await orDumpStderr(
+          result.future.timeout(const Duration(minutes: 3),
+              onTimeout: () => throw TimeoutException(
+                  'receiver ($receiverStage) never reported a result. stderr:\n'
+                  '${receiverNoise.take(40).join('\n')}')),
+          'receiver ($receiverStage)',
+          receiverDrained,
+          receiverNoise);
       await receiver.exitCode;
       return (
         sent: sentBody,
