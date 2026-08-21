@@ -1031,6 +1031,17 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   /// flag.
   Future<void> _heartbeat() async {
     if (!_isNotifying) return;
+    // A paused subscriber is not reading the socket, so nothing can fill the
+    // read queue and the probe below could never be answered - it would time
+    // out and destroy a healthy connection. Pausing is a documented feature of
+    // [notifications], not misuse, so skip this round and try again at the
+    // next interval. A connection that really has gone is still detected: the
+    // done event is buffered by the paused subscription and delivered when
+    // delivery resumes.
+    if (messageListener.isDeliveryPaused) {
+      _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
+      return;
+    }
     try {
       await requestResponseMutex.acquire();
       try {
@@ -1043,6 +1054,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       }
       _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
     } catch (e) {
+      // The same pause, landing after the probe went out rather than before
+      // it: the failure is our own reader being starved, not the connection.
+      // Tearing down here would destroy a healthy socket for doing exactly
+      // what the back-pressure contract invites.
+      if (messageListener.isDeliveryPaused) {
+        logger.info('Notification heartbeat could not complete while delivery '
+            'is paused - leaving the connection alone and retrying');
+        _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
+        return;
+      }
       logger.info('Notification heartbeat failed ($e) - closing the '
           'connection so it reconnects');
       // Closing is what starts recovery: the socket going away drives the
@@ -1065,9 +1086,15 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
       onResume: () => _setNotificationDelivery(paused: false),
     );
     // A connection may already exist - `notifications` can be read after the
-    // first verb - so the seam is installed here too, not only on connect.
+    // first verb - so the seams are installed here too, not only on connect.
+    // BOTH of them: a listener given a route but no disconnect callback loses
+    // its connection silently, because `_notifyDisconnect` is the only path to
+    // `_onNotificationConnectionLost` and so the only thing that emits `false`
+    // and starts a reconnect. Installing the disconnect seam before anything
+    // is notifying is harmless - it returns immediately unless `_isNotifying`.
     if (_connection != null) {
       messageListener.onNotification = _routeNotification;
+      messageListener.onDisconnect = _onNotificationConnectionLost;
     }
     return _notificationController!.stream;
   }

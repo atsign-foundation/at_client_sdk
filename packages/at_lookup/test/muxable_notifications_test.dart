@@ -325,6 +325,102 @@ void main() {
 
       await atLookup.stopNotifications();
     });
+
+    test('a paused subscriber does not lose its connection to the heartbeat',
+        () async {
+      // Pausing is the back-pressure contract this stream advertises, not
+      // misuse - and a paused subscription stops the socket being read, so
+      // nothing can fill the read queue and a probe could never be answered.
+      // Probing anyway times the read out and destroys a healthy connection.
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(milliseconds: 30)
+        ..heartbeatResponseTimeout = const Duration(milliseconds: 60);
+      await atLookup.startNotifications();
+      final s = socket;
+      final states = <bool>[];
+      atLookup.notificationConnectionUp.listen(states.add);
+
+      final sub = atLookup.notifications.listen((_) {});
+      sub.pause();
+      // Several intervals and several response budgets.
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      expect(s.written.where((w) => w.startsWith('noop:')), isEmpty,
+          reason: 'the probe must be SKIPPED while delivery is paused. This '
+              'is the mechanism: asserting only that the socket survived '
+              'would pass even if a probe went out and happened to be '
+              'answered');
+      expect(s.destroyed, isFalse,
+          reason: 'a subscriber applying back-pressure must not have its '
+              'connection torn down underneath it');
+      expect(states, isNot(contains(false)),
+          reason: 'and must not be told the connection went down');
+
+      sub.resume();
+      await atLookup.stopNotifications();
+    });
+
+    test('close() fails a pending read even while delivery is paused',
+        () async {
+      // The case `_closeConnection`'s own dartdoc names: with delivery paused
+      // the socket's done event is buffered, so the onDone route that fails a
+      // pending read never runs, and the abort inside `_closeConnection` is
+      // the only thing left. A test that closes while delivery is live cannot
+      // see that - onDone gets there first and the abort could be deleted
+      // without anything going red.
+      final atLookup = authenticated();
+      await atLookup.pkamAuthenticate();
+      await atLookup.startNotifications();
+      final sub = atLookup.notifications.listen((_) {});
+      sub.pause();
+
+      Object? thrown;
+      final pending = atLookup.executeCommand('noop:0\n').then<void>(
+        (_) {},
+        onError: (Object e) => thrown = e,
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      await atLookup.close();
+      await pending.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('the pending read was never failed, so it is '
+              'sitting out its transient budget holding the request mutex - '
+              'the next request on this instance would queue behind a '
+              'response that can never arrive'));
+
+      expect(thrown, isNotNull,
+          reason: 'closing must fail the request in flight, and while paused '
+              'only the abort inside _closeConnection can do it');
+
+      sub.resume();
+    });
+
+    test('a connection built before the stream is read still reconnects',
+        () async {
+      // The ordering the `notifications` getter exists for: authenticating -
+      // or any verb - builds the connection while no controller exists, so
+      // createConnection installs no seams at all. Reading the stream
+      // afterwards has to install BOTH of them. With only the routing seam,
+      // the socket going away reaches nothing and the muxable never learns it
+      // is down.
+      final atLookup = authenticated();
+      await atLookup.pkamAuthenticate();
+      await atLookup.startNotifications();
+      final states = <bool>[];
+      atLookup.notificationConnectionUp.listen(states.add);
+
+      await socket.serverCloses();
+      await socket.settle();
+
+      expect(states, contains(false),
+          reason: 'the disconnect seam must be installed by the stream getter '
+              'as well as by createConnection - without it a connection built '
+              'before the first read goes down in silence');
+      expect(atLookup.isReconnectingNotifications, isTrue,
+          reason: 'and losing it must start the reconnect loop');
+
+      await atLookup.stopNotifications();
+    });
   });
 
   group('a connection that cannot be established', () {
