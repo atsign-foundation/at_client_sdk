@@ -171,6 +171,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
 | [112] | An unreadable key source is not an empty one                                                | 2026-08-18 | LIVE                      |
 | [113] | PqPosture: three postures, and the rollout they drive                                       | 2026-08-18 | AMENDED 2026-08-19        |
+| [114] | A signer waits for its own mint; the mint alone does not                                    | 2026-08-21 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -286,3 +287,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [111]: detail/decisions.md#111-a-key-ring-files-where-its-client-files-2026-08-18
 [112]: detail/decisions.md#112-an-unreadable-key-source-is-not-an-empty-one-2026-08-18
 [113]: detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18
+[114]: detail/decisions.md#114-a-signer-waits-for-its-own-mint-the-mint-alone-does-not-2026-08-21

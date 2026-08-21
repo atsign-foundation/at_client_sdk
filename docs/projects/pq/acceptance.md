@@ -2091,6 +2091,15 @@ what is gone is the claim that this matrix demonstrates it.
   public key, exactly as it does for a `legacy` sender — so the released reader
   cannot tell the two stages apart.
 
+  ⚠️ **The invisibility is bounded: it ends when this enrollment re-mints or
+  rotates its signing key.** Retired keys stay advertised, so the first re-mint
+  takes the record out of the bare form permanently — it becomes the JSON array
+  form, which the released reader cannot parse. From then on the stage is
+  fail-closed visible: the deployed peer gets an error rather than a key it can
+  misread. Observed when a per-cell-minting draft of the live matrix
+  (`pq_rollout_matrix_test.dart`) failed this row's own cell; the fail-closed
+  half rests on that observation and is not separately proven as a row.
+
   ⚠️ **This row used to read "rollout 1 changes nothing on the wire", asserting
   the envelopes and the `_apsk` were byte-identical to the `legacy`/`legacy` cell.**
   That is false under [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14):

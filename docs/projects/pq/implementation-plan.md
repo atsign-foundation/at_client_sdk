@@ -68,18 +68,27 @@ that file instead; the list below is the PQ release work.
    diagnosed, mutation-proven fixes: shape A (`stop()` couldn't stop an
    in-flight run), shape B (the matrix's shared-`primary` contention,
    rebuilt with per-stage enrollments), and shape C (the push round's
-   unconditional removal losing a delete that raced it). Left: whether
-   `sync_multiple_client_test` reduces to shape C (plausible, unproven);
-   the rotated-advertisement cache member (`nskey_rotation_live_test`,
-   likely a test-side fix — read the section);
+   unconditional removal losing a delete that raced it). Progress
+   2026-08-21: `sync_multiple_client_test`'s one examined red is
+   ~~plausible, unproven~~ **classified — it carries shape C's own signature
+   on the diverged key** (the CI log, once fetched un-truncated, shows the
+   pre-fix keystore-miss drop firing on it 1.5s before the assertion; the
+   section has the discriminators for any future red). The
+   rotated-advertisement member's mechanism is corrected in the section
+   (empty caches; a sync pull regressed the shared local box — the recorded
+   ttl hypothesis was wrong) with a drafted test-side fix:
+   `publishedAdvertisement` at four assertions across three files. The
+   catalogue question is settled — UC-G1.14 is qualified in place. Left:
+   apply the nskey test edits and the matrix driver's
+   dump-child-stderr-on-failure (drafted, waiting for the virtualenv);
    [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)'s
-   product decision; the matrix driver dumping child stderr on cell
-   failure; and pack rate re-measurement at or after the shape-C fix
-   commit `e76b0038b`. Also
-   for gkc: whether the acceptance catalogue should state that pqReady's
-   invisibility to deployed peers ends when its enrollment re-mints or
-   rotates (retired keys stay advertised, so the record leaves the bare
-   form permanently).
+   product decision — **ruled by gkc and built 2026-08-21: sign awaits
+   mint** (decisions.md 114; differential, mutation runs and a full pack
+   all green). The pack-rate soak is done: **0 family reds in 10 valid
+   packs at `112e1f740`** (one eleventh run excluded, gkc-confirmed machine
+   suspend; the rate paragraph in the section has the evidence). With that,
+   every item this cell listed is closed: what remains of 14.43 is watching
+   the rate hold — and 14.48's open residue is recorded under ruling 114.
 4. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
    ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
    `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
@@ -2045,7 +2054,10 @@ flake: gkc ruled out infrastructure on 2026-08-20.
 a kind.** `functional_tests (beta)` has failed **3 of 5** runs on 2026-08-20 —
 `sync_multiple_client_test.dart` once and `pq_rollout_matrix_test.dart`'s
 UC-G1.15 **twice, consecutively**. `functional_tests (stable)` is 0 of 5, and a
-local full pack on stable was 177/177.
+local full pack on stable was 177/177. (Established 2026-08-21: this window's
+sync_multiple red is the SAME instance as the sixth row's below — the day's
+beta runs held exactly one — so these two rows share a numerator; and it is
+classified in [14.43](#1443-the-functional-suites-convergence-race).)
 
 ⭐ **This is a RACE, not a channel defect** (gkc, 2026-08-20). The rates say
 so: **beta 3 red in 6, stable 1 red in 6**, and a race is what produces that
@@ -2121,7 +2133,11 @@ from multiple clients converge to the same value") at 176 of 177 on the
 `functional_tests (stable)` passed both, and both channels passed again on run
 32369016084. So: **1 red in 3 beta runs, 0 in 3 stable runs** — not enough to
 call it anything. Do not describe it as a flake or as a regression without
-more runs.
+more runs. Classified 2026-08-21: this red carries shape C's signature on the
+diverged key itself, and it is the SAME instance the later "3 of 5" window
+counted — the day's beta runs held exactly one sync_multiple red. Evidence
+and discriminators in
+[14.43](#1443-the-functional-suites-convergence-race)'s shape C paragraphs.
 
 **Four mechanisms were read and disproven** for rows 1 and 3, recorded so
 nobody re-walks them: the monitor and verb sockets are *not* collapsed
@@ -2179,8 +2195,16 @@ rather than expecting a local loop.
 
 **CI: beta 3 failures in 10 runs, stable 1 in 10** — measured 2026-08-20 by the
 command in the re-derivation block at the end of this file, not transcribed.
-Locally, **1 red in 5** packs the same day. ⛔ **Those two figures are the ONLY
-rates to quote for this row. Every other one written on this page came from a
+Locally, **1 red in 5** packs the same day — both PRE-fix figures.
+**Post-fix, local, 2026-08-21 at `112e1f740` (code-identical to the shape-C
+fix commit): 0 family reds in 10 valid packs.** Eleven ran; one is excluded
+as an instrument artifact with the cause confirmed by gkc — the machine
+suspended mid-run (a single 46-minute wall-clock gap in the log,
+08:33:15→09:19:39), and the matrix cell's 3-minute timer fired on resume as
+"sender (pqReady) never reported" with empty stderr. Every pre-fix local
+loop had a family red inside 6 runs; this is the first loop with none. Ten
+runs bound a rate, not a kind. ⛔ **These three figures are the ONLY rates to
+quote for this row. Every other one written on this page came from a
 partial view and is superseded** — the page has carried six mutually
 incompatible versions, which is why the command exists.
 
@@ -2316,10 +2340,38 @@ keystore value, so it must survive that drop too). Pinned three ways: queue-
 level race tests, a service-level differential whose batch stub performs the
 racing delete itself and then asserts the second batch carries `delete:` on
 the wire, and a mutation run — reverting to unconditional removal reddens
-the differential with the defect's own message. ⚠️ Whether
-`sync_multiple_client_test`'s reds — the one original family member still
-unattributed — reduce to this same lost update is plausible and NOT
-established.
+the differential with the defect's own message.
+
+**`sync_multiple_client_test`'s one examined red carries shape C's own
+signature, 2026-08-21.** This paragraph said "plausible and NOT established"
+until the CI log was actually fetched (`gh api .../jobs/96404479619/logs` —
+`gh run view --log-failed` returns a TRUNCATED log for this job and greps as
+a false absence). The 16b00787c beta red's failure is
+`Value divergence for country_4-987522804: client1=null client2=3242750-…`,
+and the log shows, on that exact key, `updateAll` pushed → `delete` queued →
+`updateAll` re-queued → **`keystore miss … dropping queue entry`** (the
+pre-fix unconditional drop) at 11:22:20.557 — 1.5s before the assertion —
+with the healing pulls landing only after it. No `AtTimeoutException`, no
+"Have synced 5 times": the channels that would refute shape C are absent.
+Also settled: the day's beta runs held exactly ONE sync_multiple red, so the
+"1 in 3" and "3 of 5" rate rows counted the SAME instance in overlapping
+windows; the other two beta functional reds that day were both UC-G1.15
+(shape B), and the one stable functional red (run 32382811883) was
+`atclient_sync_conflict_test`'s conflictInfo case — shape A's test. One
+classified instance is not proof every past red was shape C, but no
+unattributed sync_multiple observation remains. Mechanism context, measured
+from local pack logs: this test is the pack's only manufacturer of the shape
+C window — every post-fix "re-enqueued mid-push" save and every
+"keystore miss" drop in any pack log falls inside its window, on its own
+keys — and a plain ack-path loss self-heals here (the pull re-applies the
+acked server value; `isInSync` is cursor-based), so only the narrower
+orderings redden it. Discriminators for any FUTURE red of this test, which
+at or after `e76b0038b` would be evidence of something shape C's fix does
+NOT cover: SEVERE `Value divergence` with one side null and no
+`Will push SyncQueueOp.delete` for that key afterwards points back at a
+queue drop (check for a `re-enqueued mid-push` line for the key); a red
+presenting as a timeout or "Have synced 5 times" was never shape C's
+signature at all.
 
 **Shape A is diagnosed, from the red log's own lines — a measurement, not a
 hypothesis.** `SyncServiceImpl.stop()` halts future triggers and cannot halt an
@@ -2366,20 +2418,37 @@ unit tests are what carry the fix's proof.
 rotated `__nskey` advertisement returned kid `e05da79630eb0db1` where the
 successor `ceccdd0bb19ba1ad` was expected, and the log's own rotation line
 names `e05da796…` as **the pre-rotation generation**, so the read served the
-superseded advertisement. Measured, from the source: the assertion reads
-`PublishedNskeyKeyRing.currentPublic`, which serves the `_ownCurrent` and
-`_remote` caches before any fetch, with `advertisementTtl` defaulting to
-**15 minutes** — while the test's own comment above the assertion claims
-"the atServer's own copy". The method's dartdoc documents that the MINT path
-must skip both caches precisely because they cannot hold "a generation a
-sibling published a moment ago"; the test used the seal-path read and
-inherited its staleness. Hypothesis (one observation): the survivor fetched
-generation 1 at some earlier point inside the ttl, so the cache structurally
-serves stale at the assertion — the intermittence being whether anything
-caused that earlier fetch, not network timing. The likely fix is the TEST's:
-read through a cache-skipping path (or a fresh ring), because the product's
-caching is deliberate and documented. Discriminator for a second red: find
-the survivor's generation-1 fetch earlier in the log.
+superseded advertisement. The assertion reads
+`PublishedNskeyKeyRing.currentPublic` — while the test's own comment above
+it claims "the atServer's own copy" — and `currentPublic` never promises
+that: it serves this ring's `_ownCurrent` and `_remote` caches inside a
+15-minute `advertisementTtl`, and then a **LOCAL-first** get. **The recorded
+hypothesis here — that the survivor fetched generation 1 earlier inside the
+ttl and the cache served stale — is contradicted by the source, 2026-08-21:**
+`survivor.ring` is a fresh per-test instance whose first-ever use IS the
+assertion, so both per-instance caches were empty; the ttl is irrelevant to
+a first read. What fired is the fetch arm itself: for an own-atSign public
+key the get routes to a local llookup of the one Hive box every same-atSign
+client in the process shares, and the red log shows sync-pull writes of
+`public:__nskey.buzz` landing between the rotation's local generation-2 put
+and the failing read — an in-flight pull regressed the shared box to
+generation 1 while the atServer already held generation 2. The fix is still
+the TEST's (the product's caching and local-first sender read are deliberate
+and documented), but "a fresh ring" would NOT fix it — a fresh ring's
+`currentPublic` still reads local-first and inherits exactly the staleness
+that fired. The one genuinely cache-skipping read is
+`publishedAdvertisement` (remote-only, signature-verified — what the mint
+path uses for the same reason). Three sibling assertions share the shape:
+the same file's UC-A5.3 read (self-confirming — it answers from the cache
+the rotation itself just wrote), `nskey_published_ring_test.dart`'s
+post-rotate fresh-ring read, and `pq_signing_root_mint_lock_test.dart`'s.
+Discriminator for a second red: NOT "find the survivor's generation-1 fetch
+earlier in the log" (its local read logs nothing, and there was no earlier
+fetch) — look for `Pulling to local: UPDATE: public:__nskey.<ns>` between
+the rotation's publish and the assertion. Side observation for a product
+ruling: the regression this rides on is the sync pull applying an OLDER
+server entry over NEWER local state — the pull-side face of this family,
+which shape C's push-side versioning does not cover.
 
 **The harness half, also visible in the red log:**
 `FunctionalTestSyncService.syncData` completed 610µs after starting — too fast
@@ -2453,8 +2522,11 @@ racing itself:
 - `ApkamSigning.signingKeys` reads the keyfile per call and **falls back to
   the APKAM authentication keypair when it holds nothing**
   (`apkam_signing.dart:171-195`);
-- the bare advertisement form holds exactly one key, so a publish of the
-  fresh mint **withdraws** the authentication key from the record.
+- the composition **withdraws** the authentication key on the first mint:
+  `apskEntries` (`apsk_composition.dart`) adds the auth key only while the
+  enrollment holds no signing key of its own — the same condition the
+  signing fallback keys on, by design, "so what signs and what is advertised
+  cannot disagree".
 
 Interleave those and a client signs an envelope with the auth fallback in the
 window where its own advertisement already names only the minted key — an
@@ -2464,12 +2536,59 @@ mirror-image window (sign first, publish lands before a peer's fetch) fails
 the same way. Per-stage enrollments in the matrix test do not close this —
 it is one process, not two.
 
-What it wants, to be decided at the code: the sign path awaiting a pending
-mint (the bootstrap would expose completion), or `wrapAndSign` refusing until
-minting settles, or the advertisement composition keeping the authentication
-entry alongside the minted key — whether the JSON form's `authentication`
-entry already rescues enrolled clients from the same window needs checking
-there before choosing.
+**The prerequisite check is answered, 2026-08-21, and it narrows nothing:
+ENROLLED clients share the window.** This section used to say the withdrawal
+came from "the bare advertisement form holds exactly one key" and to ask
+"whether the JSON form's `authentication` entry already rescues enrolled
+clients". Checked at the source: no such entry exists — the wire form
+(`apsk_advertisement.dart`) emits only `v` and `keys`, `enroll:update` sends
+the entries verbatim, and the withdrawal lives in the shared composer, so
+the JSON/array form withdraws the auth key identically. (The bare form's
+single slot is a second, independent constraint on fix 3 below, not the
+withdrawal mechanism.) Two stale dartdocs — `apsk_advertisement.dart` and
+`envelope_signature.dart` — still describe auth-key *retention* that commit
+`4c4279be4` deliberately removed; they want correcting whichever way the
+decision goes.
+
+**Ruled by gkc, 2026-08-21: candidate 1 — the sign path awaits the mint.
+Built the same day; the mechanism and evidence are decisions.md 114.**
+`signingKeys` waits on a per-client barrier the bootstrap settles at its
+mint step (and on stop, failure and gated-off); the mint itself is the one
+exempt signer. Differential and mutation runs green, unit 1495/1495, one
+functional pack 177/177 with the barrier live. The other two candidates
+stay recorded below with the trade-offs that argued them down:
+
+1. **Sign awaits mint.** A mint-settled completer on `PqClientBootstrap`
+   (settled in a `finally` so gated-off/failed paths release it), awaited in
+   the sign path. Closes both windows for every in-process signer; costs an
+   early sign one round trip. It must NOT await `startupComplete` — the
+   bootstrap's own later steps sign, so that deadlocks. Real design cost:
+   `ApkamSigning` holds only the `AtClient` spec, which does not expose the
+   bootstrap — a spec addition breaks every `Mock implements AtClient` at
+   runtime, so it is a downcast or constructor injection.
+2. **`wrapAndSign` refuses until minting settles.** Same plumbing, throw
+   instead of await. No deadlock risk, no silent delay — but the race becomes
+   visible refusals, including for envelope-listener responses (the listener
+   starts one bootstrap step before minting), and every refused response
+   needs a retry story or it is a silent drop.
+3. **Composition keeps the auth key as a retired entry.** ~5 lines in
+   `apskEntries`, and the verifier already accepts it (retired entries are
+   kept and every candidate key is tried). Uniquely, it also rescues durable
+   envelopes signed with the auth fallback BEFORE the first mint — a superset
+   of the race, and the composer's own doc names revisiting exactly that
+   premise. But at the bare stage two entries force the JSON array onto a
+   record every deployed consumer base64-decodes as a bare RSA key — the
+   breakage rollout 1 exists to prevent, and the reason `4c4279be4` removed
+   retention. A scoped variant (retain only when the value is the array
+   anyway) is deploy-compatible but leaves the bare stage — where the window
+   was measured — open, so it can only accompany 1 or 2, not replace them.
+
+Open beneath the choice: whether any deployment already holds durable
+auth-fallback-signed envelopes from before a first mint (if so, the first
+mint unverifies them all regardless of the race, and only 3 helps); and the
+verifier's pubKeyCache asymmetry — a peer holding the pre-mint advertisement
+verifies window-signed envelopes for up to the cache expiry while a
+fresh-fetching peer refuses them.
 
 ### 14.47 The at_client unit tree has a cross-file isolation flake
 

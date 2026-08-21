@@ -11183,3 +11183,60 @@ verifier, it is writing the first one.
   rejected because a rotated key would start breaking reads that work today.
   It wants the signer's `_apsk` cached, or every public read pays a remote
   lookup on someone else's atServer.
+
+## 114. A signer waits for its own mint; the mint alone does not (2026-08-21)
+
+**Ruled by gkc, 2026-08-21**, closing the race
+[14.48](../implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
+filed as a product row: the PQ startup mints an enrollment's signing keys
+concurrently with whatever the app does next, and the composition withdraws
+the authentication key from the published `_apsk` the moment the mint
+publishes — before the keyfile holds the minted key. A signer reading the
+keyfile in that window fell back to the authentication key and produced an
+envelope the record no longer named a key for.
+
+**The window is not a bare-form quirk, and enrolled clients share it.** The
+plan's original framing blamed the bare form's single slot and asked whether
+the JSON form's `authentication` entry rescued enrolled clients. Checked at
+the source before ruling: no such entry exists — the wire form emits only
+`v` and `keys`, and the withdrawal lives in the shared composer
+(`apskEntries` adds the authentication key only while the enrollment holds
+no signing key of its own, deliberately mirroring the signing fallback, so
+what signs and what is advertised stay one rule).
+
+Three candidates were investigated; **sign-awaits-mint won**:
+
+1. **Sign awaits mint** (chosen): closes both windows for every in-process
+   signer, silently; costs an early sign one round trip.
+2. `wrapAndSign` refuses until minted: turns the race into visible refusals,
+   including for envelope-listener responses arriving in the window — each
+   refused response needs a retry story or it is a silent drop.
+3. Retired-entry retention: ~5 lines, and the verifier already accepts
+   retired entries; it alone rescues durable envelopes signed before a first
+   mint — but at the bare stage it puts the JSON array on a record deployed
+   readers base64-decode as a bare RSA key, re-creating the breakage
+   rollout 1 exists to prevent. A scoped variant (retain only where the
+   value is the array anyway) can only accompany 1 or 2, never replace them.
+
+**As built:** `ApkamSigning.signingKeys` awaits a per-client barrier
+(`signing_key_mint_barrier.dart`, an `Expando` keyed on the `AtClient`
+instance — two clients of one atSign mint independently, so each waits only
+for its own). The bootstrap registers `mintSettled` at construction and
+settles it at the mint step — and on stop, failure and gated-off, so
+signing never waits for a mint that is not coming this session.
+`SigningKeyMinting` overrides the wait off: the mint cannot wait for its
+own completion. Waiting on `startupComplete` instead would deadlock — the
+steps after the mint sign envelopes themselves.
+
+**Evidence:** the differential's read-counting keyfile proves the wait
+gates the READ, not just the result order, and removing the await reddens
+it with its own reason string; removing the settle paths kills the four
+bootstrap barrier tests, each with its own message; unit 1495/1495; one
+full functional pack 177/177 with the barrier live.
+
+**Left open beneath the ruling:** whether any deployment holds durable
+auth-fallback-signed envelopes from before a first mint (only retention
+rescues those — the composer's own doc names that premise as the one to
+revisit), and the verifier's public-key cache asymmetry: a peer holding the
+pre-mint advertisement verifies window-signed envelopes until its cache
+expires, while a fresh-fetching peer refuses them.
