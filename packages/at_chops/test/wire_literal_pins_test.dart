@@ -91,8 +91,7 @@ void main() {
   });
 
   group('KEM sizes that frame the envelope', () {
-    test('X-Wing: 1120-byte ciphertext (the 0x0460 in every v1/v2 header)',
-        () {
+    test('X-Wing: 1120-byte ciphertext (the 0x0460 in every v1/v2 header)', () {
       expect(XWingPureDartAlgo.ciphertextLength, 1120);
       expect(XWingPureDartAlgo.publicKeyLength, 1216);
       expect(XWingPureDartAlgo.seedLength, 32);
