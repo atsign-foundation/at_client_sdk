@@ -1,4 +1,4 @@
-## 3.7.0
+## 3.7.0-rc1
 
 - fix: a connection built before anything reads `notifications` now
   reconnects when it drops. The stream getter installs the routing seam for

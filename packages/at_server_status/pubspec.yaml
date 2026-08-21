@@ -14,7 +14,7 @@ dependencies:
   # first use: workspace resolution would otherwise mask the break, and
   # publish validation only checks satisfiability - so a consumer could
   # resolve 3.0.49 and get a package that does not compile.
-  at_lookup: ^3.7.0
+  at_lookup: ^3.7.0-rc1
   # Direct now, for AtRootDomain and SecureSocketConfig, which the factory
   # signature names. It was arriving transitively through at_lookup.
   at_commons: ^5.13.0
