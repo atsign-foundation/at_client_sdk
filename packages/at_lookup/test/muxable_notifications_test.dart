@@ -172,7 +172,8 @@ void main() {
       // interlock that does not exist, and the atServer would not refuse it.
       final atLookup = authenticated();
 
-      await atLookup.startNotifications(lastNotificationTime: 1755600000000);
+      await atLookup.startNotifications(
+          getLastNotificationTime: () async => 1755600000000);
 
       expect(socket.written, ['monitor:selfNotifications:1755600000000\n']);
       expect(socket.written.single, isNot(contains('multiplexed')),
@@ -223,7 +224,8 @@ void main() {
         ..heartbeatInterval = const Duration(hours: 1);
 
       await atLookup.startNotifications(
-          regex: '.wavi', lastNotificationTime: 1755600000000);
+          regex: '.wavi',
+          getLastNotificationTime: () async => 1755600000000);
       expect(sockets, hasLength(1));
       expect(authCount, 1);
       final first = socket;
@@ -359,6 +361,78 @@ void main() {
           reason: 'and must not be told the connection went down');
 
       sub.resume();
+      await atLookup.stopNotifications();
+    });
+
+    test('a reconnect asks the caller for its CURRENT watermark', () async {
+      // The caller's position moves as it consumes notifications, and it is
+      // the caller that holds it durably. Freezing the value at
+      // startNotifications makes every reconnect re-request the whole retained
+      // backlog — which is exactly what a caller keeping a watermark is
+      // keeping one to avoid.
+      var watermark = 1755600000000;
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications(
+          getLastNotificationTime: () async => watermark);
+      final first = socket;
+      expect(first.written, ['monitor:selfNotifications:1755600000000\n']);
+
+      // The caller consumes notifications and advances; then the far end goes.
+      watermark = 1755600009999;
+      await first.serverCloses();
+      await first.settle();
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(sockets, hasLength(2),
+          reason: 'the test needs an actual reconnect to have happened');
+      expect(sockets.last.written,
+          ['monitor:selfNotifications:1755600009999\n'],
+          reason: 'the reconnect must carry where the caller has got to, not '
+              'where it was when notifications started');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('a restart inside the backoff window is not disturbed by the old loop',
+        () async {
+      // stopNotifications puts `_isNotifying` back to false and a following
+      // startNotifications puts it back to true - so a reconnect loop still
+      // sleeping from before the stop wakes to a flag that says "carry on",
+      // and would act on the connection the RESTART established: a second
+      // `monitor:` on a live socket, its heartbeat reset, and an `up` with no
+      // preceding down.
+      final atLookup = authenticated();
+      await atLookup.startNotifications();
+
+      // Drop the connection so a reconnect loop starts and parks on its
+      // first backoff (1s), then stop and restart well inside that window.
+      await socket.serverCloses();
+      await socket.settle();
+      expect(atLookup.isReconnectingNotifications, isTrue,
+          reason: 'the test needs a loop actually sleeping, or it proves '
+              'nothing about what happens when one wakes');
+
+      await atLookup.stopNotifications();
+      expect(atLookup.isReconnectingNotifications, isFalse,
+          reason: 'a stop must not leave this reading true - it is what '
+              'disarms the disconnect handler on the next connection');
+
+      await atLookup.startNotifications();
+      final restarted = socket;
+      final states = <bool>[];
+      atLookup.notificationConnectionUp.listen(states.add);
+
+      // Past the first backoff, so the orphaned loop has woken.
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(restarted.written.where((w) => w.startsWith('monitor:')),
+          hasLength(1),
+          reason: 'the restart sent its own monitor:; a loop from the '
+              'previous session must not send a second one on this socket');
+      expect(states, isNot(contains(true)),
+          reason: 'and must not announce an `up` the restart already made');
+
       await atLookup.stopNotifications();
     });
 
