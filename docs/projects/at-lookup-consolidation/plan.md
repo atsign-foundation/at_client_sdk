@@ -874,7 +874,15 @@ it from `AtSigningInput`. Worth doing for at_chops' other callers.
   live stream subscription and no `test()` at all. `samples/lookup.dart:10` is
   also one of the 64 sites, so deleting first shrinks step 8 by one.
 - **`monitor:` has no acknowledgement, and the atServer should grow one — a
-  FOLLOW-UP PR, ruled by gkc 2026-08-21.** `_openNotificationStream` writes the
+  FOLLOW-UP PR, ruled by gkc 2026-08-21. Tracked as
+  [at_protocol#367](https://github.com/atsign-foundation/at_protocol/issues/367),
+  with sub-issues
+  [at_client_sdk#2175](https://github.com/atsign-foundation/at_client_sdk/issues/2175)
+  (at_commons syntax),
+  [at_client_sdk#2176](https://github.com/atsign-foundation/at_client_sdk/issues/2176)
+  (at_lookup reader) and
+  [at_server#2764](https://github.com/atsign-foundation/at_server/issues/2764)
+  (both server behaviours).** `_openNotificationStream` writes the
   command and never reads a reply, so nothing establishes the atServer accepted
   it: an enrollment lacking notification permission gets a connection reported
   up on which no notification will ever arrive. An adversarial review filed this
