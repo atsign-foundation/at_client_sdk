@@ -59,20 +59,19 @@ that file instead; the list below is the PQ release work.
    declares `at_commons: ^5.16.0` and pub.dev's at_commons is still 5.15.0.
    Re-derive that before assuming, with the command in
    [Re-deriving the state](#re-deriving-the-state).
-3. **Rebuild the rollout matrix with per-stage enrollments**
-   ([14.43](#1443-the-functional-suites-convergence-race), ruled by gkc
-   2026-08-20). Shape A is fixed and mutation-proven; shape B is diagnosed at
-   the family level — all four matrix stages share enrollment `primary`, so
-   every stage client rewrites one `_apsk` record wholesale, an overwrite
-   plurality the product documents as accepted. The four-part rebuild spec is
-   in the section: per-stage enrollments (run-unique ids, approval flow),
-   await sender process EXIT per cell, await bootstrap before signing, dump
-   child stderr on cell failure. Also open there: the sixth family member
-   (`nskey_rotation_live_test` reading a rotated advertisement through a
-   15-minute cache the test's comment claims is a server read), and
+3. **Close out [14.43](#1443-the-functional-suites-convergence-race)'s
+   remainder.** Shape A is fixed and mutation-proven; shape B's matrix
+   rebuild landed 2026-08-21 (per-stage enrollments, one-time driver-side
+   mints, all 28 cells green — the section has the account). Left in the
+   family: the sixth member (`nskey_rotation_live_test` reading a rotated
+   advertisement through a 15-minute cache the test's comment claims is a
+   server read — likely a test-side fix, read the section),
    [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)'s
-   product decision. Post-fix rate at `7f24542eb`: 6 packs, 5 green, 1 red
-   (the new member, not shape A).
+   product decision, the driver dumping child stderr on cell failure, and
+   pack rate re-measurement at the rebuilt tree. Also for gkc: whether the
+   acceptance catalogue should state that pqReady's invisibility to deployed
+   peers ends when its enrollment re-mints or rotates (retired keys stay
+   advertised, so the record leaves the bare form permanently).
 4. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
    ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
    `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
@@ -2256,16 +2255,41 @@ its own enrollment** — which is also the recorded deployment model, app =
 enrollment = unit. The exact interleaving that fired is unrecoverable from
 this artifact: the matrix children's logs are discarded on success.
 
-**The rebuild owes four things** (pre-authorized, queued behind the post-fix
-pack runs): per-stage enrollments with run-unique `(appName, deviceName)`
-and an approval flow; the driver awaiting each sender process's **exit**
-rather than its `SENT` line (a lingering fire-and-forget mint can publish
-into the next cell, and same-stage cells share an enrollment); the scenario
-harness awaiting bootstrap completion before signing (or the sign path doing
-so — [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
-decides that in product); and the driver dumping child stderr on cell
-**failure**, not only on timeout — the silent-children gap is what made this
-diagnosis need a sweep instead of a read.
+**The rebuild landed 2026-08-21, and the full matrix is green at +18.**
+What shipped, against the spec as refined by reading the code (two of the
+spec's four items were already true — the driver awaits sender exit, and the
+child's `exit(0)` means nothing lingers across cells):
+
+- **Per-stage enrollments**, one per stage per role: legacy gets a
+  legacy-mode (RSA APKAM) enrollment and the pq stages get pq-mode (ML-DSA)
+  ones — the same split the postures' own `authenticationKeyAlgorithm`
+  draws, so each stage's envelope-signing fallback is the algorithm the
+  stage means. Run-unique `(appName, deviceName)`; the approver relays the
+  wrapped symmetric key for legacy and registers its own key package first
+  (a pq approval refuses without one). `published` stays unenrolled — it has
+  no keyfile parameter and never writes an `_apsk`, so it cannot contend.
+- **Minting happens once, driver-side, at enrolment time** — cells copy a
+  keyfile that already holds the stage's signing key, so no cell ever
+  re-mints and the advertisement is one stable value per stage for the whole
+  file. Per-cell minting was tried first and failed UC-G1.14, which taught a
+  real product fact: **a re-mint on an enrollment leaves the bare form
+  permanently** — retired keys stay advertised, so the record becomes the
+  JSON array after the first re-mint, and a deployed reader can no longer
+  parse it. Stated for rollout: *pqReady is invisible to a deployed peer
+  until its enrollment rotates or re-mints its signing key; after that it is
+  fail-closed visible.* Whether the acceptance catalogue should say this is
+  gkc's call.
+- **The child awaits the mint settled before signing** (bounded, loud) — a
+  guard now that cells start pre-minted, and the harness-side answer to the
+  race [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
+  still owes a product-side decision on.
+- The receiver is handed the sender's enrollment id — an `_apsk` address is
+  `(atSign, enrollment)`, and a reader handed only the atSign would read a
+  record an enrolled sender never writes.
+
+Still owed from the diagnosis: the driver dumping child stderr on cell
+**failure**, not only on timeout — the two red iterations above each needed
+an inference where a dumped log would have been a read.
 
 **Shape A is diagnosed, from the red log's own lines — a measurement, not a
 hypothesis.** `SyncServiceImpl.stop()` halts future triggers and cannot halt an

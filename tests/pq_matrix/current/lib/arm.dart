@@ -5,7 +5,9 @@
 // `connect.dart` carries, for the same reason.
 // ignore_for_file: deprecated_member_use
 
-import 'package:at_auth/at_auth.dart' show FileAtKeysIo;
+import 'package:at_auth/at_auth.dart'
+    show AtAuth, AtAuthRequest, FileAtKeysIo;
+import 'package:at_commons/at_commons.dart' show AtRootDomain;
 import 'package:at_chops/at_chops.dart' show AtChops;
 import 'package:at_client/at_client.dart'
     show AtClientManager, AtClientPreference, PqPosture;
@@ -52,18 +54,49 @@ PqPosture _postureFor(String stage) => switch (stage) {
           stage, 'stage', 'not a posture - expected legacy|pqReady|pqActive'),
     };
 
-/// Attaches with a key source, which the control arm structurally cannot do.
+/// Attaches as the stage's own enrollment, from the per-cell keyfile.
 ///
-/// This is the difference that matters at `pqActive`. `SigningKeyMinting` is
-/// inert for a client whose `atKeysIo` is null, and inert again for one whose
-/// `AtKeysIo` cannot persist — so an arm attached without one would mint
-/// nothing, publish nothing, and pass every cell while measuring an inert
-/// client. The keyfile is per-cell (the driver copies a fresh one in), so a
-/// minted key does not leak into the next cell.
+/// Each stage of the matrix is its own enrollment — the deployment model is
+/// app = enrollment = unit, and four stages sharing one identity is what made
+/// every stage client rewrite one shared `_apsk` record in turn. The keyfile
+/// the driver copies in was written by the driver's enrolment of this stage,
+/// so it holds the enrollment's APKAM keypair and conveyed encryption keys;
+/// authenticating from it is the same restart path a production app walks.
+///
+/// The keyfile also keeps `SigningKeyMinting` live — an arm attached without
+/// a key source would mint nothing, publish nothing, and pass every cell
+/// while measuring an inert client. The keyfile is per-cell (the driver
+/// copies a fresh one in), so a minted key does not leak into the next cell.
+///
+/// The demo [atChops] the shared scenario built is deliberately unused: this
+/// client's identity is the enrollment's, and authenticating it with the
+/// atSign's demo PKAM keys would make it `primary` — the shared identity the
+/// per-stage enrollments exist to end. A current-arm cell spawned without an
+/// enrollment id is refused for the same reason.
 Future<AtClientManager> attachWithKeyfile(
-        ClientSpec spec, AtClientPreference preference, AtChops atChops) =>
-    AtClientManager(spec.atSign).setCurrentAtSign(
-        spec.atSign, spec.namespace, preference,
-        atChops: atChops,
-        atKeysIo: FileAtKeysIo(
-            filePath: (atSign) => '${spec.storagePath}/$atSign.atKeys'));
+    ClientSpec spec, AtClientPreference preference, AtChops atChops) async {
+  final enrollmentId = spec.enrollmentId;
+  if (enrollmentId == null) {
+    throw ArgumentError(
+        'the current arm authenticates as a stage enrollment and was spawned '
+        'without --enrollment-id; a cell run as primary would write the '
+        'shared _apsk record the per-stage enrollments exist to avoid');
+  }
+  final io = FileAtKeysIo(
+      filePath: (atSign) => '${spec.storagePath}/$atSign.atKeys');
+  final auth = AtAuth.create();
+  final response = await auth.authenticate(AtAuthRequest(
+    spec.atSign,
+    rootDomain: AtRootDomain(spec.rootDomain, spec.rootPort),
+    atKeysIo: io,
+  ));
+  if (response.isSuccessful != true) {
+    throw StateError('authenticating as enrollment $enrollmentId failed: '
+        '${response.atAuthKeys == null ? 'no keys' : 'auth refused'}');
+  }
+  return AtClientManager(spec.atSign).setCurrentAtSign(
+      spec.atSign, spec.namespace, preference,
+      atChops: auth.atChops,
+      atKeysIo: io,
+      enrollmentId: enrollmentId);
+}

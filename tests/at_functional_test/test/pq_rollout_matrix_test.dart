@@ -7,7 +7,31 @@ import 'dart:async'
 import 'dart:convert' show LineSplitter, jsonDecode, utf8;
 import 'dart:io';
 
+// The enrollment key-package surface is @experimental; driving it is the
+// point of the per-stage enrolments.
+// ignore_for_file: experimental_member_use
+
+import 'package:at_auth/at_auth.dart'
+    show
+        AtAuthSession,
+        AtEnrollment,
+        AtEnrollmentRequest,
+        EnrollmentRequestDecision,
+        FileAtKeysIo;
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
+import 'package:at_client/at_client.dart' show AtClient;
+
+// ignore: implementation_imports
+import 'package:at_client/src/signing/signing_key_minting.dart'
+    show SigningKeyMinting;
+import 'package:at_functional_test/src/enrolled_client.dart'
+    show enrolAndAuthenticate;
+import 'package:at_client/at_client_mixins.dart'
+    show AtClientSecretSharing;
+import 'package:at_commons/at_commons.dart'
+    show AtBytes, AtRootDomain, SecureSocketConfig;
 import 'package:at_functional_test/src/config_util.dart';
+import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -46,6 +70,136 @@ void main() {
   final workRoot = Directory('${Directory.current.path}/test/hive/pqmatrix');
   final baselineKeys = Directory('${workRoot.path}/baseline');
 
+  /// Each row and column of the matrix is its own enrollment (gkc,
+  /// 2026-08-20): the deployment model is app = enrollment = unit, and four
+  /// stages sharing `primary` made every stage client rewrite one shared
+  /// `_apsk` record in turn — the overwrite the product documents as an
+  /// accepted plurality of `primary`, and the race behind UC-G1.15's red.
+  /// `published` stays unenrolled: 3.14.0's arm has no keyfile parameter, and
+  /// it never writes an `_apsk`, so it cannot contend.
+  ///
+  /// Keyed by stage; senders are [senderAtSign]'s enrollments, receivers
+  /// [receiverAtSign]'s. Filled by `setUpAll`, which also writes each
+  /// enrollment's keyfile under `baseline/<stage>-<role>/`.
+  final senderEnrollmentIds = <String, String>{};
+  final receiverEnrollmentIds = <String, String>{};
+
+  Directory stageKeyDir(String stage, String role) =>
+      Directory('${baselineKeys.path}/$stage-$role');
+
+  /// Enrols one stage on [atSign], approves it from [approver], **mints the
+  /// stage's signing keys once, here**, and leaves the enrollment's keyfile
+  /// in [keyDir].
+  ///
+  /// The legacy stage gets a legacy-mode (RSA APKAM) enrollment and the pq
+  /// stages get pq-mode (ML-DSA APKAM) ones — the same split the postures'
+  /// own `authenticationKeyAlgorithm` draws, so each stage's envelope-signing
+  /// fallback is the algorithm the stage means. `(appName, deviceName)` is
+  /// run-unique: enrollments are one-shot server state, and a second run of
+  /// this file against the same virtualenv must not collide with the first's.
+  ///
+  /// Minting happens ONCE, at enrolment time, never in the cells: each cell
+  /// copies a keyfile that already holds the stage's signing key, so no cell
+  /// re-mints and the published advertisement is one stable value for the
+  /// whole file. Per-cell minting was tried and is wrong twice over — a
+  /// re-mint per cell churns the enrollment's advertisement (retired keys
+  /// stay advertised, so the record leaves the bare form after the first
+  /// re-mint, which is exactly the shape UC-G1.14's released reader cannot
+  /// take), and the fire-and-forget startup mint is the race 14.48 records.
+  Future<String> enrolStage({
+    required AtClient approver,
+    required String atSign,
+    required String stage,
+    required Directory keyDir,
+  }) async {
+    keyDir.createSync(recursive: true);
+    final io = FileAtKeysIo(filePath: (a) => '${keyDir.path}/$a.atKeys');
+    final rootDomain =
+        AtRootDomain('vip.ve.atsign.zone', TestUtils.rootServerPort);
+    final deviceName = 'pqm-$stage-${DateTime.now().microsecondsSinceEpoch}';
+
+    if (stage == 'legacy') {
+      // A legacy-mode (RSA APKAM) enrollment, by hand: the shared
+      // `enrolAndAuthenticate` is pq-mode only. Legacy mints no signing key,
+      // so there is no client to build and nothing to reconcile — the
+      // enrollment's advertisement is its RSA APKAM key, published by the
+      // atServer at approval, and it never changes.
+      final session =
+          AtAuthSession(atSign: atSign, rootDomain: rootDomain, atKeysIo: io);
+      final otp = (await approver.getOTP()).response;
+      final response = await AtEnrollment.create().submit(
+        AtEnrollmentRequest(
+          session: session,
+          appName: 'pqmatrix',
+          deviceName: deviceName,
+          namespaces: {namespace: 'rw'},
+          otp: otp,
+        ),
+        AtLookUp.withSecureSocket(
+          atSign: atSign,
+          rootDomain: rootDomain,
+          secureSocketConfig: SecureSocketConfig(),
+          authenticator: null,
+        ),
+      );
+      // The wrapped symmetric key rides the pending record and the approver
+      // relays it — pq approvals mint their own and ignore this argument.
+      final pending =
+          await approver.enrollmentService!.fetchEnrollmentRequests();
+      final wrapped = pending
+              .firstWhere((e) => e.enrollmentId == response.enrollmentId)
+              .encryptedAPKAMSymmetricKey ??
+          '';
+      await approver.enrollmentService!
+          .approve(EnrollmentRequestDecision.approved(
+        atSign: atSign,
+        enrollmentId: response.enrollmentId,
+        apkamSymmetricKey: AtBytes.fromString(wrapped),
+      ));
+      await AtEnrollment.create().waitForApproval(response);
+      return response.enrollmentId;
+    }
+
+    // pq stages: the shared helper runs the real flow and hands back a live
+    // client, which is what the one-time mint needs.
+    final signingSet = stage == 'pqReady'
+        ? const {SigningAlgoType.rsa2048}
+        : const {SigningAlgoType.mldsa65};
+    final enrolled = await enrolAndAuthenticate(
+      approver: approver,
+      atSign: atSign,
+      namespace: namespace,
+      preference: TestUtils.getPreference(atSign,
+          dataSigningKeyAlgorithms: signingSet),
+      rootDomain: 'vip.ve.atsign.zone',
+      rootPort: TestUtils.rootServerPort,
+      deviceName: deviceName,
+      atKeysIo: io,
+    );
+    try {
+      final reconciled =
+          await SigningKeyMinting(enrolled.client).reconcileSigningKeys();
+      // The mechanism assertion for "a stage reaches the keyfile at all",
+      // made where the mint now happens. Without it, every cell would run
+      // against a keyfile the mint never touched and measure an inert stage.
+      expect(reconciled.minted.toSet(), signingSet,
+          reason: '$stage/$atSign: the one-time mint did not mint the '
+              'stage\'s set');
+      expect((await io.read(atSign)).signingKeysFor(enrolled.enrollmentId),
+          isNotEmpty,
+          reason: '$stage/$atSign: the mint reported success but filed '
+              'nothing — cells copied from this keyfile would measure an '
+              'inert stage');
+    } finally {
+      // The cells spawn their own processes for this enrollment; a live
+      // driver-side client of the same enrollment running monitors and heals
+      // underneath them is the cross-client interference this rebuild
+      // removed.
+      await enrolled.client.stop();
+    }
+    return enrolled.enrollmentId;
+  }
+
   setUpAll(() async {
     expect(matrixRoot.existsSync(), isTrue,
         reason: 'the programme pair lives at ${matrixRoot.path}; without it '
@@ -68,15 +222,33 @@ void main() {
           reason: 'pub get failed in $arm:\n${result.stdout}\n${result.stderr}');
     }
 
-    // The keyfile the current arm's clients read. The published arm has no
-    // parameter to hand one to, which is the asymmetry the matrix is built
-    // around rather than an oversight.
-    final built = await Process.run(
-        'dart', ['run', 'test/build_test_atkeys.dart', baselineKeys.path],
-        workingDirectory: Directory.current.path);
-    expect(built.exitCode, 0,
-        reason: 'could not build the baseline keyfiles:\n'
-            '${built.stdout}\n${built.stderr}');
+    // One enrollment per stage per role. Batched per atSign because the
+    // approver comes from the singleton AtClientManager, and initialising the
+    // second atSign's approver evicts the first's client — so every alice
+    // enrolment completes before bob's approver exists.
+    final senderApprover =
+        (await TestUtils.initAtClient(senderAtSign, namespace)).atClient;
+    // A pq-mode approval seals the symmetric key from the approver's own
+    // registered key package; an approver without one refuses the approval
+    // and says so.
+    await AtClientSecretSharing.forClient(senderApprover).register();
+    for (final stage in ['legacy', 'pqReady', 'pqActive']) {
+      senderEnrollmentIds[stage] = await enrolStage(
+          approver: senderApprover,
+          atSign: senderAtSign,
+          stage: stage,
+          keyDir: stageKeyDir(stage, 'sender'));
+    }
+    final receiverApprover =
+        (await TestUtils.initAtClient(receiverAtSign, namespace)).atClient;
+    await AtClientSecretSharing.forClient(receiverApprover).register();
+    for (final stage in ['legacy', 'pqReady', 'pqActive']) {
+      receiverEnrollmentIds[stage] = await enrolStage(
+          approver: receiverApprover,
+          atSign: receiverAtSign,
+          stage: stage,
+          keyDir: stageKeyDir(stage, 'receiver'));
+    }
   });
 
   /// Runs one cell and returns what both sides reported.
@@ -100,7 +272,7 @@ void main() {
     // earlier one's data.
     final runId = 'c${DateTime.now().microsecondsSinceEpoch}';
 
-    Future<String> storageFor(String role, String atSign) async {
+    Future<String> storageFor(String role, String stage, String atSign) async {
       // The runId is in the path, not just the stage pair. UC-G1.14 runs a
       // legacy/legacy cell of its own and compares its keyfile against a
       // pqReady/pqReady one; if a cell's directory were keyed on the stages
@@ -108,22 +280,38 @@ void main() {
       // comparison would be of one file with itself.
       final dir = Directory('${workRoot.path}/$cell-$runId/$role');
       dir.createSync(recursive: true);
-      // A fresh keyfile per cell, so a pqActive mint does not leak into the
-      // next cell's baseline.
-      final baseline = File('${baselineKeys.path}/${atSign}_key.atKeys');
-      // Not a silent skip: every stage's client is handed the same starting
-      // key material, and a cell that quietly started without any would be a
-      // cell measuring an inert client while reporting a pass.
-      expect(baseline.existsSync(), isTrue,
-          reason: 'no baseline keyfile at ${baseline.path} — '
-              'build_test_atkeys.dart names its output differently than this '
-              'driver expects');
-      baseline.copySync('${dir.path}/$atSign.atKeys');
+      // The published arm has no keyfile parameter, so its cells get storage
+      // and nothing else.
+      if (stage == 'published') return dir.path;
+      // A fresh copy of the stage's ENROLLED keyfile per cell, so a pqActive
+      // mint does not leak into the next cell's starting state. The source is
+      // the enrolment setUpAll performed for this stage and role.
+      final source = File('${stageKeyDir(stage, role).path}/$atSign.atKeys');
+      // Not a silent skip: a cell that quietly started without key material
+      // would be a cell measuring an inert client while reporting a pass.
+      expect(source.existsSync(), isTrue,
+          reason: 'no enrolled keyfile at ${source.path} — setUpAll\'s '
+              'enrolment for $stage/$role did not write where this driver '
+              'reads');
+      source.copySync('${dir.path}/$atSign.atKeys');
       return dir.path;
     }
 
+    // A current-arm client authenticates as its stage's enrollment; the
+    // published arm has no enrolment to be, and its absent id reaches the
+    // shared code as `primary` — which is what an unenrolled 3.14.0 client
+    // genuinely is. The peer's id rides along so the receiver can fetch the
+    // sender's `_apsk`: the address is `(atSign, enrollment)`, and a reader
+    // handed only the atSign would read a record an enrolled sender never
+    // writes.
+    String? enrollmentIdFor(String stage, String role) => stage == 'published'
+        ? null
+        : (role == 'sender' ? senderEnrollmentIds : receiverEnrollmentIds)[
+            stage];
+
     Future<Process> spawn(String role, String stage, String atSign,
-        String peer, String storage) {
+        String peer, String storage, {required String? peerEnrollmentId}) {
+      final ownEnrollmentId = enrollmentIdFor(stage, role);
       return Process.start(
         'dart',
         [
@@ -137,14 +325,20 @@ void main() {
           '--root-domain', 'vip.ve.atsign.zone',
           '--root-port', '${TestUtils.rootServerPort}',
           '--storage', storage,
+          if (ownEnrollmentId != null) ...['--enrollment-id', ownEnrollmentId],
+          if (peerEnrollmentId != null) ...[
+            '--peer-enrollment-id',
+            peerEnrollmentId
+          ],
         ],
         workingDirectory: '${matrixRoot.path}/${armFor(stage)}',
       );
     }
 
-    final senderStorage = await storageFor('sender', senderAtSign);
+    final senderStorage = await storageFor('sender', senderStage, senderAtSign);
     final receiver = await spawn('receiver', receiverStage, receiverAtSign,
-        senderAtSign, await storageFor('receiver', receiverAtSign));
+        senderAtSign, await storageFor('receiver', receiverStage, receiverAtSign),
+        peerEnrollmentId: enrollmentIdFor(senderStage, 'sender'));
     final ready = Completer<Map<String, Object?>>();
     final result = Completer<Map<String, Object?>>();
     final receiverNoise = <String>[];
@@ -179,7 +373,8 @@ void main() {
               '${receiverNoise.take(40).join('\n')}'));
 
       final sender = await spawn('sender', senderStage, senderAtSign,
-          receiverAtSign, senderStorage);
+          receiverAtSign, senderStorage,
+          peerEnrollmentId: enrollmentIdFor(receiverStage, 'receiver'));
       final senderOut = <String>[];
       final senderNoise = <String>[];
       final sent = Completer<Map<String, Object?>>();
@@ -363,7 +558,8 @@ void main() {
         reason: 'a pqReady sender advertises its own freshly minted RSA-2048 '
             'SIGNING key where legacy advertises its AUTHENTICATION key. Both are '
             'a single active rsa2048 entry, so both spell as the bare string, '
-            'and at_client 3.14.0 cannot tell the two stages apart');
+            'and at_client 3.14.0 cannot tell the two stages apart. '
+            'The record actually held: ${pqReadyVerdict['value']}');
 
     // Positive control 1: the stage actually moved the key. Without it every
     // assertion above passes for a harness in which pqReady did nothing at
@@ -385,12 +581,10 @@ void main() {
             'shape a released reader cannot take. If that parses as RSA then '
             'the parse discriminates nothing and pqReady\'s green is empty');
 
-    File keyfile(String storage) => File('$storage/$senderAtSign.atKeys');
-    expect(keyfile(asPqActive.senderStorage).readAsBytesSync(),
-        isNot(keyfile(asLegacy.senderStorage).readAsBytesSync()),
-        reason: 'and pqActive mints a signing key and files it, so its '
-            'keyfile must differ from now\'s — the check that a stage reaches '
-            'the keyfile at all');
+    // The "a stage reaches the keyfile at all" check lives in `enrolStage`
+    // now: minting happens once, driver-side, and the assertion that the
+    // minted key was filed sits beside the mint. A cell-side keyfile
+    // comparison stopped measuring anything when cells stopped minting.
   });
 }
 

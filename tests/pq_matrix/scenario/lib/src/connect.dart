@@ -36,12 +36,23 @@ class ClientSpec {
   /// without the atServer being involved at all.
   final String storagePath;
 
+  /// The enrollment this client authenticates as, or null for a client with
+  /// no enrollment record (which signs and advertises under `primary`).
+  ///
+  /// A String rather than anything richer because this type compiles against
+  /// both at_clients, and the id is all either needs: the current arm hands
+  /// it to `setCurrentAtSign` and the published arm has nothing to hand it
+  /// to — 3.14.0's clients in this matrix authenticate with the demo PKAM
+  /// keys and are `primary` by construction.
+  final String? enrollmentId;
+
   const ClientSpec({
     required this.atSign,
     required this.namespace,
     required this.rootDomain,
     required this.rootPort,
     required this.storagePath,
+    this.enrollmentId,
   });
 }
 

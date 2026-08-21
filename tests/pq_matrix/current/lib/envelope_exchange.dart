@@ -62,6 +62,32 @@ Future<Map<String, Object?>?> signEnvelopeForPeer(
   final me = client.getCurrentAtSign()!;
   final signer = _MatrixEnvelopeSigner(client);
 
+  // The startup minting is fire-and-forget, and the sign path falls back to
+  // the APKAM authentication key while the keyfile holds no signing key — so
+  // signing before the mint has FILED produces an envelope carrying a key the
+  // freshly published advertisement just withdrew, and the cell fails on a
+  // race rather than on anything the stage means. Wait for the keyfile to
+  // hold a signing key for every algorithm the stage's in-use set names.
+  // Bounded and loud: a mint that never settles is a finding, not a wait.
+  final wanted = client.getPreferences()!.dataSigningKeyAlgorithms;
+  if (wanted.isNotEmpty) {
+    final deadline = DateTime.now().add(const Duration(seconds: 30));
+    while (true) {
+      final held = (await signer.heldSigningKeys)
+          .map((k) => k.algorithm)
+          .toSet();
+      if (held.containsAll(wanted)) break;
+      if (DateTime.now().isAfter(deadline)) {
+        throw StateError(
+            'the startup mint never settled: the stage names $wanted and '
+            'the keyfile holds $held after 30s — signing now would fall '
+            'back to the authentication key and measure a race, not the '
+            'stage');
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 100));
+    }
+  }
+
   final envelopeJson = await signer.wrapAndSignAndJsonEncode({
     'runId': spec.runId,
     'from': me,

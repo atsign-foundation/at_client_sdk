@@ -55,12 +55,15 @@ Future<void> runArm(
       rootDomain: opts['root-domain'] ?? 'vip.ve.atsign.zone',
       rootPort: int.parse(opts['root-port'] ?? '64'),
       storagePath: opts['storage']!,
+      enrollmentId: opts['enrollment-id'],
     );
     final exchange = ExchangeSpec(
       runId: opts['run-id']!,
       namespace: spec.namespace,
       peerAtSign: opts['peer']!,
       putCount: int.parse(opts['puts'] ?? '3'),
+      ownEnrollmentId: opts['enrollment-id'] ?? 'primary',
+      peerEnrollmentId: opts['peer-enrollment-id'] ?? 'primary',
     );
 
     final client = await connect(

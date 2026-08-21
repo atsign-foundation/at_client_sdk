@@ -41,6 +41,17 @@ class ExchangeSpec {
   /// The other side of this cell.
   final String peerAtSign;
 
+  /// The enrollment id this client publishes and signs under — `primary` for
+  /// a client with no enrollment record. It addresses this client's own
+  /// `_apsk` read-back in [runSender].
+  final String ownEnrollmentId;
+
+  /// The enrollment id the PEER publishes and signs under. The receiver needs
+  /// it to fetch the sender's advertisement: an `_apsk` address is
+  /// `(atSign, enrollment)`, and a reader handed only the atSign would read
+  /// `primary`, which an enrolled sender never writes.
+  final String peerEnrollmentId;
+
   /// **Several, not one.** A shape that survives the first exchange and breaks
   /// on the second is the failure this catches, and one put cannot see it
   /// (`docs/projects/pq/acceptance.md` 16.1).
@@ -52,6 +63,8 @@ class ExchangeSpec {
     required this.runId,
     required this.namespace,
     required this.peerAtSign,
+    this.ownEnrollmentId = 'primary',
+    this.peerEnrollmentId = 'primary',
     this.putCount = 3,
     this.timeout = const Duration(minutes: 2),
   });
@@ -145,7 +158,7 @@ Future<void> runSender(AtClient client, ExchangeSpec spec,
     // What this stage left on the atServer for peers to verify against. Read
     // back rather than reported from memory: UC-G1.14's claim is about the
     // published record, and a client's idea of what it published is not that.
-    'apsk': await readApsk(client),
+    'apsk': await readApsk(client, spec.ownEnrollmentId),
     if (stepResult != null) ...stepResult,
   });
 }
@@ -153,20 +166,20 @@ Future<void> runSender(AtClient client, ExchangeSpec spec,
 /// The `_apsk` record this client has published, verbatim, or null when there
 /// is none.
 ///
-/// The address is spelled as a **raw literal** on purpose. It is a wire
+/// The address shape is spelled as a **raw literal** on purpose. It is a wire
 /// contract, and a harness that composed it from the same constants the
 /// production code uses would follow a renamed constant silently — the record
-/// could move and every assertion here would keep passing.
-///
-/// `primary` is the enrollment id a client with no enrollment publishes under;
-/// these clients authenticate with demo PKAM keys and have no enrollment
-/// record, so that is the address for all four stages.
-Future<String?> readApsk(AtClient client) async {
+/// could move and every assertion here would keep passing. Only the
+/// enrollment id varies: `primary` for a client with no enrollment record,
+/// the enrollment's own id otherwise — an `_apsk` address is
+/// `(atSign, enrollment)`.
+Future<String?> readApsk(AtClient client, String enrollmentId) async {
   final me = client.getCurrentAtSign()!;
   try {
     final response = await client
         .getRemoteSecondary()!
-        .executeCommand('llookup:public:_apsk.primary.a.__e$me\n', auth: true);
+        .executeCommand('llookup:public:_apsk.$enrollmentId.a.__e$me\n',
+            auth: true);
     if (response == null || !response.startsWith('data:')) return null;
     final value = response.replaceFirst('data:', '').trim();
     return value.isEmpty || value == 'null' ? null : value;
@@ -197,13 +210,14 @@ Future<String?> readApsk(AtClient client) async {
 /// is the result this row exists to detect and an exception here would be
 /// indistinguishable from the harness failing.
 Future<Map<String, Object?>> readPeerApskAsReleasedReader(
-    AtClient client, String peerAtSign) async {
+    AtClient client, String peerAtSign, String peerEnrollmentId) async {
   final reader = _ReleasedApskReader(client);
   String value;
   try {
-    // 'primary' because these clients have no enrollment record — the same id
-    // the sender publishes under, spelled the same way for the same reason.
-    value = await reader.getApkamPublicKey(peerAtSign, 'primary');
+    // The sender's own enrollment id — `primary` when it has no enrollment
+    // record. A released reader can read any enrollment's record given the
+    // id; what it cannot do is guess one, which is why the driver threads it.
+    value = await reader.getApkamPublicKey(peerAtSign, peerEnrollmentId);
   } on Object catch (e) {
     return {'fetched': false, 'rsa': false, 'error': '$e'};
   }
@@ -297,7 +311,8 @@ Future<void> runReceiver(AtClient client, ExchangeSpec spec,
       // What this build makes of the SENDER's advertisement. On the published
       // arm this is at_client 3.14.0's own verdict, which is the only thing
       // that can say a deployed peer is unaffected by the sender's stage.
-      'peerApsk': await readPeerApskAsReleasedReader(client, spec.peerAtSign),
+      'peerApsk': await readPeerApskAsReleasedReader(
+          client, spec.peerAtSign, spec.peerEnrollmentId),
     });
   } finally {
     await subscription.cancel();
