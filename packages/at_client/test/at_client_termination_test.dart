@@ -361,7 +361,7 @@ class _StubMuxable extends Fake implements AtLookupMuxable {
   @override
   Future<void> startNotifications({
     String? regex,
-    int? lastNotificationTime,
+    Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
   }) async =>
       _up.add(true);

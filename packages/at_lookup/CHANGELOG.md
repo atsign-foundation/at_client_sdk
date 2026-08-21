@@ -7,6 +7,19 @@
   `startNotifications` had a socket whose loss reached nothing: no `false` on
   `notificationConnectionUp`, no reconnect, and a listener silent for the rest
   of the process while still reporting itself up.
+- fix: a reconnect no longer re-requests the backlog from where notifications
+  first started. `startNotifications`'s `lastNotificationTime` is now
+  `getLastNotificationTime`, a function the muxable calls on every connect
+  rather than a value it remembers — restoring what the caller-owned monitor
+  loop did before the muxable took over reconnection.
+- fix: `stopNotifications` retires any reconnect loop still sleeping on a
+  backoff, and clears the `_reconnecting` flag it used to leave set. A stop
+  followed by a start inside that window let the orphaned loop wake, see
+  notifications running again, and act on the connection the restart had just
+  made — a second `monitor:` on a live socket, its heartbeat reset, and an
+  `up` with no preceding down — while the stale flag disarmed the disconnect
+  handler for up to 34 seconds. `isReconnectingNotifications` also no longer
+  reads true after a stop.
 - fix: a subscriber applying back-pressure no longer loses its connection to
   the heartbeat. Pausing the `notifications` stream stops the socket being
   read, which is the documented point of it, but it also means nothing can
@@ -99,9 +112,14 @@
 - feat: the muxable owns reconnect, reauth and heartbeat, because it owns the
   socket. Losing the notification connection re-establishes it on the
   `[1,2,3,5,8,13,21,34]`-second backoff, re-runs the authenticator, and
-  re-issues the **same** `monitor:` — a reconnect that dropped the regex would
-  start delivering everything, and one that dropped the watermark would replay
-  from the beginning. A quiet connection is probed with `noop:0`, because a
+  re-issues `monitor:` with the same regex — one that dropped it would start
+  delivering everything. The **watermark is asked for again**, not replayed
+  from the start value: `startNotifications` takes a
+  `getLastNotificationTime` function and the muxable calls it on every
+  connect, so a reconnect resumes from where the caller has actually got to.
+  This is the behaviour at_client's `Monitor` had when it owned reconnection
+  and re-read the watermark on each start; holding the number instead would
+  re-request the whole retained backlog on every reconnect. A quiet connection is probed with `noop:0`, because a
   connection that only ever reads cannot tell a quiet atServer from a dead
   socket. at_client's `Monitor` carries an identical delay list; both cannot
   own reconnection.

@@ -129,17 +129,25 @@ class Monitor {
     // Its own guard: reading the watermark is a local keystore operation, not
     // part of connecting, so a failure here must neither be reported as nor
     // abort a failed connection. Starting without one costs a replayed window.
-    int? lastNotificationTime;
-    try {
-      lastNotificationTime = await getLastNotificationTime();
-    } catch (e) {
-      logger.warning('Could not read the last-notification watermark, so the '
-          'monitor is starting without one: $e');
+    //
+    // Handed down as the FUNCTION, not as a value read once here. The muxable
+    // owns reconnection now, and it asks again on every reconnect - so the
+    // command carries where this client has actually got to. Reading it here
+    // and passing the number would pin every later reconnect to the position
+    // held at start, re-requesting the whole retained backlog each time.
+    Future<int?> currentWatermark() async {
+      try {
+        return await getLastNotificationTime();
+      } catch (e) {
+        logger.warning('Could not read the last-notification watermark, so the '
+            'monitor is (re)starting without one: $e');
+        return null;
+      }
     }
 
     try {
       await lookUp.startNotifications(
-          lastNotificationTime: lastNotificationTime);
+          getLastNotificationTime: currentWatermark);
       // Re-checked AFTER the await, not only before it. stop() can land while
       // this is in flight - it sets targetState and tears down, and then this
       // await completes and puts the connection straight back up. The old
@@ -150,8 +158,7 @@ class Monitor {
         await lookUp.stopNotifications();
         return;
       }
-      logger.info('monitor started, last notification time: '
-          '$lastNotificationTime');
+      logger.info('monitor started');
     } catch (e) {
       // Not fatal, and deliberately not retried here: the muxable reconnects
       // on its own backoff, and a second retry loop on top of it would

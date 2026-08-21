@@ -53,13 +53,15 @@ class FakeMuxable extends Fake implements AtLookupMuxable {
   @override
   Future<void> startNotifications({
     String? regex,
-    int? lastNotificationTime,
+    Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
   }) async {
     startCalls++;
     if (startError != null) throw startError!;
     started = true;
-    startedWithWatermark = lastNotificationTime;
+    // Invoked, as the real muxable does on every (re)connect - so these
+    // assertions also prove the callback the Monitor hands down is callable.
+    startedWithWatermark = await getLastNotificationTime?.call();
     _up.add(true);
   }
 

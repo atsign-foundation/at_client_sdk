@@ -942,11 +942,23 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   Duration heartbeatResponseTimeout = const Duration(seconds: 10);
 
   String? _notifyRegex;
-  int? _notifyLastNotificationTime;
+  /// The caller's watermark source, asked on every (re)connect.
+  ///
+  /// A function rather than a value because the caller's position moves as it
+  /// consumes notifications, and a reconnect should resume from where it has
+  /// got to - not from where it was when notifications started.
+  Future<int?> Function()? _getLastNotificationTime;
   bool _notifySelfNotifications = true;
 
   int _reconnectIx = 0;
   bool _reconnecting = false;
+
+  /// Bumped by every start of a reconnect loop and by every
+  /// [stopNotifications], so a loop can tell whether the notification session
+  /// it belongs to is still the current one. A stop followed by a start puts
+  /// `_isNotifying` back to true, which is why that flag alone cannot answer
+  /// it.
+  int _notifyGeneration = 0;
   Timer? _heartbeatTimer;
 
   /// Whether a reconnect is in flight. Visible so a test can assert the loop
@@ -980,9 +992,16 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   }
 
   Future<void> _reconnectNotifications() async {
+    // The generation this loop belongs to. `_isNotifying` alone is not enough
+    // to decide whether waking is safe: a stop followed by a start inside the
+    // backoff window sets it back to true, and a loop orphaned by that stop
+    // would then act on a connection somebody else established - writing a
+    // second `monitor:` on it, resetting its heartbeat and announcing an `up`
+    // that never went down.
+    final generation = ++_notifyGeneration;
     _reconnecting = true;
     try {
-      while (_isNotifying) {
+      while (_isNotifying && generation == _notifyGeneration) {
         final delay = notificationReconnectDelays[
             min(_reconnectIx, notificationReconnectDelays.length - 1)];
         _reconnectIx++;
@@ -991,8 +1010,10 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         await Future.delayed(delay);
         // Re-checked after the delay, not only before it: stopNotifications
         // can land while this is sleeping, and reconnecting after that would
-        // resurrect a connection the caller asked to be rid of.
-        if (!_isNotifying) return;
+        // resurrect a connection the caller asked to be rid of - or, if a
+        // start followed that stop, interfere with the connection the restart
+        // just made.
+        if (!_isNotifying || generation != _notifyGeneration) return;
         try {
           await _openNotificationStream();
           logger.info('Notification connection re-established');
@@ -1005,7 +1026,9 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         }
       }
     } finally {
-      _reconnecting = false;
+      // Only if this loop is still the current one. A superseded loop clearing
+      // the flag would disarm nothing and re-arm the live loop's guard.
+      if (generation == _notifyGeneration) _reconnecting = false;
     }
   }
 
@@ -1129,7 +1152,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   @override
   Future<void> startNotifications({
     String? regex,
-    int? lastNotificationTime,
+    Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
   }) async {
     if (_isNotifying) {
@@ -1141,11 +1164,17 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // notifications arrive with nowhere to go.
     notifications;
 
-    // Remembered, because reconnecting has to re-issue the SAME monitor:. A
-    // reconnect that dropped the regex would start delivering everything, and
-    // one that dropped the watermark would replay from the beginning.
+    // Remembered, because reconnecting has to re-issue the same monitor:. A
+    // reconnect that dropped the regex would start delivering everything.
+    //
+    // The watermark is remembered as the CALLER'S FUNCTION, not as a value:
+    // it is asked again on every reconnect, so the command carries where the
+    // caller has actually got to rather than where it had got to when
+    // notifications first started. Freezing the value re-requests the whole
+    // retained backlog on every reconnect, which is what a caller holding a
+    // durable watermark is keeping one to avoid.
     _notifyRegex = regex;
-    _notifyLastNotificationTime = lastNotificationTime;
+    _getLastNotificationTime = getLastNotificationTime;
     _notifySelfNotifications = selfNotificationsEnabled;
 
     await _openNotificationStream();
@@ -1172,9 +1201,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
               'monitor requires authentication and no authenticator is set');
         }
       }
+      // Asked here rather than held from the start, so a reconnect resumes
+      // from the caller's current watermark.
+      final lastNotificationTime = await _getLastNotificationTime?.call();
       final command = (MonitorVerbBuilder()
             ..regex = _notifyRegex
-            ..lastNotificationTime = _notifyLastNotificationTime
+            ..lastNotificationTime = lastNotificationTime
             ..selfNotificationsEnabled = _notifySelfNotifications)
           .buildCommand();
       // ⚠️ `multiplexed` is deliberately NOT set. It is accepted by the shared
@@ -1194,6 +1226,12 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
     // would trip the disconnect handler into reconnecting the very connection
     // this method is tearing down.
     _isNotifying = false;
+    // Retires any reconnect loop still sleeping on a backoff, and clears the
+    // flag it would otherwise leave set: `_reconnecting` disarms
+    // [_onNotificationConnectionLost], so a stale one left true means a real
+    // loss on a later connection is ignored.
+    _notifyGeneration++;
+    _reconnecting = false;
     _stopHeartbeat();
     _emitConnectionUp(false);
     await _closeConnection();

@@ -267,7 +267,7 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// call when already notifying: it returns without re-sending.
   Future<void> startNotifications({
     String? regex,
-    int? lastNotificationTime,
+    Future<int?> Function()? getLastNotificationTime,
     bool selfNotificationsEnabled = true,
   });
 
