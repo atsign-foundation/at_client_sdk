@@ -14,7 +14,7 @@ dependencies:
   at_commons: ^5.16.0
   mutex: ^3.0.0
   meta: ^1.16.0
-  at_chops: ^3.3.0
+  at_chops: ^3.6.0
 
 dev_dependencies:
   mocktail: ^1.0.4

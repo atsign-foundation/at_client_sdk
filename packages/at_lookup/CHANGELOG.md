@@ -3,6 +3,12 @@
 - deprecated: `AtLookUp.executeVerb`'s `sync` parameter, removal in 4.0. It
   has never been read: the verb always executes on the remote atServer, and
   there is no sync behaviour for the parameter to control.
+- fix(deps): raised the `at_chops` constraint to `^3.6.0`. The old `^3.3.0`
+  floor was never exercised — the only build evidence for this package is
+  against at_chops 3.5.0 and later, so a consumer resolving 3.3.0 or 3.4.x
+  was relying on a combination nothing had tested. Workspace resolution hides
+  that gap locally, because it always supplies the in-tree at_chops. 3.6.0 is
+  what this release is built and tested against.
 - fix(deps): raised the `at_commons` constraint to `^5.16.0`. This package now
   reads `AtNetworkTimeouts.defaultResponseBudget`, which does not exist in
   at_commons 5.15.0 or earlier — under the old `^5.13.0` a consumer could
