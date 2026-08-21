@@ -22,7 +22,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -140,7 +140,7 @@ class AtAuthImpl implements AtAuth {
     atLookUp ??= AtLookUp.withSecureSocket(
       atSign: atAuthRequest.atSign,
       rootDomain: atAuthRequest.rootDomain,
-      secureSocketConfig: SecureSocketConfig(),
+      transport: secureSocketTransport(SecureSocketConfig()),
       // Installed a few lines below, once the algorithm has been resolved
       // from the keyfile.
       authenticator: null,
@@ -248,7 +248,7 @@ class AtAuthImpl implements AtAuth {
     atLookUp ??= AtLookUp.withSecureSocket(
       atSign: atOnboardingRequest.atSign,
       rootDomain: atOnboardingRequest.rootDomain,
-      secureSocketConfig: SecureSocketConfig(),
+      transport: secureSocketTransport(SecureSocketConfig()),
       // Onboarding installs its own once it knows whether this is the CRAM
       // leg or the PKAM one.
       authenticator: null,

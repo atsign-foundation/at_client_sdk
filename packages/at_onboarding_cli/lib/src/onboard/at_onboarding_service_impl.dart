@@ -13,7 +13,7 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart'
     show makeActivationPqNative, mintSigningRootAfterActivation;
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
 import 'package:at_server_status/at_server_status.dart';
@@ -55,7 +55,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
           atOnboardingPreference.rootDomain,
           atOnboardingPreference.rootPort,
         ),
-        secureSocketConfig: SecureSocketConfig(),
+        transport: secureSocketTransport(SecureSocketConfig()),
         authenticator: null,
       );
 

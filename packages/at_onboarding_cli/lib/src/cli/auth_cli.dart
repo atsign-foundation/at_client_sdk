@@ -7,7 +7,7 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/util/home_directory_util.dart';
 import 'package:at_utils/at_progress.dart';
@@ -415,7 +415,7 @@ Future<int> status(ArgResults ar) async {
     final AtLookUp al = AtLookUp.withSecureSocket(
       atSign: atSign,
       rootDomain: rootDomain,
-      secureSocketConfig: SecureSocketConfig(),
+      transport: secureSocketTransport(SecureSocketConfig()),
       authenticator: null,
     );
     try {

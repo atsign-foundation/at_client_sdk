@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 
 import 'at_server_status.dart';
 
@@ -112,7 +112,7 @@ class AtStatusImpl implements AtServerStatus {
       final atLookupImpl = AtLookUp.withSecureSocket(
         atSign: atSign!,
         rootDomain: AtRootDomain(_rootUrl!, _rootPort!),
-        secureSocketConfig: SecureSocketConfig(),
+        transport: secureSocketTransport(SecureSocketConfig()),
         authenticator: null,
       );
       await atLookupImpl.executeCommand('from:$atSign\n');

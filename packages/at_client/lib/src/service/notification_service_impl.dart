@@ -29,7 +29,7 @@ import 'package:at_client/src/util/at_client_validation.dart';
 import 'package:at_client/src/util/regex_match_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_auth/at_auth.dart' show authenticatorForChops;
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart'
     as at_persistence_secondary_server;
 import 'package:at_utils/at_utils.dart';
@@ -257,10 +257,10 @@ class NotificationServiceImpl extends NotificationService {
             atSign: atSign,
             rootDomain:
                 AtRootDomain(preference.rootDomain, preference.rootPort),
-            secureSocketConfig: SecureSocketConfig()
+            transport: secureSocketTransport(SecureSocketConfig()
               ..decryptPackets = preference.decryptPackets
               ..pathToCerts = preference.pathToCerts
-              ..tlsKeysSavePath = preference.tlsKeysSavePath,
+              ..tlsKeysSavePath = preference.tlsKeysSavePath),
             // Reproduces exactly what Monitor's own PKAM did: the same
             // AtChops, the same signing and hashing algorithms, the same
             // enrollment id. `null` when there is no signer, which fails the

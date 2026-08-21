@@ -9,7 +9,7 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_progress.dart';
 
@@ -58,7 +58,7 @@ class EnrollmentHandshake {
     atLookup ??= AtLookUp.withSecureSocket(
       atSign: enrollmentResponse.atSign!,
       rootDomain: enrollmentResponse.rootDomain!,
-      secureSocketConfig: SecureSocketConfig(),
+      transport: secureSocketTransport(SecureSocketConfig()),
       // Installed below, from the in-memory keys this handshake just wrote.
       authenticator: null,
     );

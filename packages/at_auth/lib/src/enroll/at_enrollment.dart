@@ -115,7 +115,7 @@ abstract class AtEnrollment {
   /// final atLookup = AtLookUp.withSecureSocket(
   ///   atSign: '@alice',
   ///   rootDomain: AtRootDomain.atsignDomain,
-  ///   secureSocketConfig: SecureSocketConfig(),
+  ///   transport: secureSocketTransport(SecureSocketConfig()),
   ///   authenticator: authenticatorFor(keysIo, '@alice'),
   /// );
   ///
@@ -150,7 +150,7 @@ abstract class AtEnrollment {
   /// final atLookup = AtLookUp.withSecureSocket(
   ///   atSign: '@alice',
   ///   rootDomain: AtRootDomain.atsignDomain,
-  ///   secureSocketConfig: SecureSocketConfig(),
+  ///   transport: secureSocketTransport(SecureSocketConfig()),
   ///   authenticator: authenticatorFor(keysIo, '@alice'),
   /// );
   ///
@@ -174,7 +174,7 @@ abstract class AtEnrollment {
   /// final atLookup = AtLookUp.withSecureSocket(
   ///   atSign: '@alice',
   ///   rootDomain: AtRootDomain.atsignDomain,
-  ///   secureSocketConfig: SecureSocketConfig(),
+  ///   transport: secureSocketTransport(SecureSocketConfig()),
   ///   authenticator: authenticatorFor(keysIo, '@alice'),
   /// );
   ///

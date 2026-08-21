@@ -20,7 +20,7 @@ directory for usage of the at_lookup library.
 final atLookUp = AtLookUp.withSecureSocket(
   atSign: '@alice',
   rootDomain: AtRootDomain.atsignDomain,
-  secureSocketConfig: SecureSocketConfig(),
+  transport: secureSocketTransport(SecureSocketConfig()),
   // at_auth builds this from whatever credential you hold. Pass null for a
   // connection that never authenticates.
   authenticator: authenticatorFor(keysIo, '@alice'),

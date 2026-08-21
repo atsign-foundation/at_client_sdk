@@ -8,7 +8,7 @@ import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show SignedEnvelope;
 import 'package:at_commons/at_commons.dart' show AtBytes;
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:uuid/uuid.dart';
 
 /// A live, APKAM-authenticated client for one approved enrollment.
@@ -129,7 +129,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
     AtLookUp.withSecureSocket(
       atSign: atSign,
       rootDomain: AtRootDomain(rootDomain, rootPort),
-      secureSocketConfig: SecureSocketConfig(),
+      transport: secureSocketTransport(SecureSocketConfig()),
       authenticator: null,
     ),
   );

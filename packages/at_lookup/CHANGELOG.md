@@ -60,18 +60,30 @@
 - feat: `AtLookUp.withSecureSocket(...)` — the entry point, returning an
   `AtLookupMuxable`. Static, so it adds nothing to the `implements` contract
   and breaks none of the classes that mock `AtLookUp`. It takes an
-  `AtRootDomain` rather than a `String, int` pair, requires
-  `secureSocketConfig` and `authenticator` (the latter nullable, because "this
-  connection never authenticates" is a real mode that ought to be stated), and
-  takes an `AtLookupTransport`.
+  `AtRootDomain` rather than a `String, int` pair, and requires both
+  `authenticator` (nullable, because "this connection never authenticates" is
+  a real mode that ought to be stated) and `transport`. No socket settings
+  appear in its signature: they belong to the transport.
 - feat: `AtLookupTransport` bundles the three connection factories
   `AtLookupImpl` has always accepted into one value, so a caller holding only
   the `AtLookupMuxable` interface can still say how connections are made. It
   bundles rather than abstracts on purpose: the web-port plan records that
   these factories are already injectable and that the blocker is their
   **return type**, so a second abstraction here would be one more seam for that
-  work to reconcile. It is not yet sufficient for a non-socket transport, and
-  does not claim to be — `AtConnection.getSocket()` still returns a `Socket`.
+  work to reconcile. It also carries the `SecureSocketConfig`, because how a
+  transport reaches an atServer is a property of the transport — TLS
+  certificates and a keylog path mean nothing to one that is not TLS over TCP.
+  It is not yet sufficient for a non-socket transport, and does not claim to
+  be — `AtConnection.getSocket()` still returns a `Socket`.
+- feat: the socket transport is `secureSocketTransport(...)` in a new
+  `package:at_lookup/at_lookup_io.dart`, and `transport` has no default.
+  A default naming an implementation pulls that implementation's imports in
+  whatever the caller injects, which is how a transport swap fails silently
+  instead of failing to compile; naming the transport is therefore also what
+  selects the library carrying it. Callers import the `_io` barrel, which
+  re-exports everything in `at_lookup.dart`. This does not make a web build
+  possible on its own — `AtConnection.getSocket()` still has to go, which is a
+  major — but it means that change will not also have to remove a default.
 - feat: `AtLookupImpl`'s constructor is `@Deprecated` in favour of the factory.
   The class itself is **not** deprecated and does not move: it is exported from
   the barrel, so renaming it or making it private would remove a public class,

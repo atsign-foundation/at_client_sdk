@@ -10,6 +10,7 @@ import 'dart:io';
 // point of the per-stage enrolments.
 // ignore_for_file: experimental_member_use
 
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_auth/at_auth.dart'
     show
         AtAuthSession,
@@ -30,7 +31,6 @@ import 'package:at_client/at_client_mixins.dart'
 import 'package:at_commons/at_commons.dart'
     show AtBytes, AtRootDomain, SecureSocketConfig;
 import 'package:at_functional_test/src/config_util.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUp;
 import 'package:test/test.dart';
 
 import 'test_utils.dart';
@@ -137,7 +137,7 @@ void main() {
         AtLookUp.withSecureSocket(
           atSign: atSign,
           rootDomain: rootDomain,
-          secureSocketConfig: SecureSocketConfig(),
+          transport: secureSocketTransport(SecureSocketConfig()),
           authenticator: null,
         ),
       );

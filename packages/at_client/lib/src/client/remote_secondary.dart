@@ -17,7 +17,7 @@ import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
-import 'package:at_lookup/at_lookup.dart';
+import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_utils/at_utils.dart';
 import 'package:internet_connection_checker/internet_connection_checker.dart';
 
@@ -160,7 +160,7 @@ class RemoteSecondary implements Secondary {
         AtLookUp.withSecureSocket(
           atSign: atSign,
           rootDomain: AtRootDomain(preference.rootDomain, preference.rootPort),
-          secureSocketConfig: secureSocketConfig,
+          transport: secureSocketTransport(secureSocketConfig),
           authenticator: null,
           secondaryAddressFinder: processSecondaryAddressFinder(),
           clientConfig: _getClientConfig(),
