@@ -41,14 +41,21 @@ Feel free to fork a copy of the source from the [GitHub Repo](https://github.com
 ### To get the instance of at_lookup
 
 ```dart
-AtLookUp atLookUp = AtLookupImpl(
-  '@alice',
-  'root.atsign.com',
-  64,
-  privateKey: 'privateKey',
-  cramSecret: 'cramSecret',
+final AtLookupMuxable atLookUp = AtLookUp.withSecureSocket(
+  atSign: '@alice',
+  rootDomain: AtRootDomain.atsignDomain,
+  transport: secureSocketTransport(SecureSocketConfig()),
+  // How this connection authenticates, as one closure. at_lookup holds no key
+  // material of its own; at_auth builds an authenticator from whatever
+  // credential you have - a keystore, an AtChops, or a bare private key.
+  // Pass null for a connection that never authenticates.
+  authenticator: authenticatorFor(keysIo, '@alice'),
 );
 ```
+
+`withSecureSocket` returns an [`AtLookupMuxable`], which is an `AtLookUp` that
+also carries the atServer's notification stream, so one connection and one
+parser handle both of the atServer's framings.
 Please refer to [examples](https://github.com/atsign-foundation/at_libraries/blob/doc_at_lookup/at_lookup/example/bin/example.dart) for more details.
 
 ## Open source usage and contributions

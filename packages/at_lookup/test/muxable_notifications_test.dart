@@ -1,0 +1,701 @@
+import 'dart:async';
+import 'dart:io';
+
+import 'package:at_commons/at_commons.dart';
+import 'package:at_lookup/at_lookup.dart';
+import 'package:mocktail/mocktail.dart';
+import 'package:test/test.dart';
+
+import 'at_lookup_test_utils.dart';
+import 'fake_at_server_socket.dart';
+
+/// [AtLookupMuxable] - the notification stream, over a REAL listener.
+///
+/// The factories are mocked only to get a [FakeAtServerSocket] underneath; the
+/// connection, the listener and the framing are all production code, so a
+/// notification here travels the same path it does against a live atServer.
+/// A test that stubbed the listener would pass whether or not the framing
+/// worked.
+void main() {
+  const host = '127.0.0.1';
+  const port = 12345;
+
+  /// Every socket the factory has handed out, in order.
+  ///
+  /// A fresh one per connection, because reconnection is under test: a rig
+  /// that returned the same destroyed socket would make a successful
+  /// reconnect indistinguishable from a failed one.
+  late List<FakeAtServerSocket> sockets;
+
+  /// The socket currently in use - the most recent one the factory handed out.
+  late FakeAtServerSocket socket;
+  late MockSecondaryAddressFinder addressFinder;
+  late MockSecureSocketFactory socketFactory;
+
+  setUp(() {
+    sockets = [];
+    addressFinder = MockSecondaryAddressFinder();
+    socketFactory = MockSecureSocketFactory();
+    registerFallbackValue(SecureSocketConfig());
+
+    when(() => addressFinder.findSecondary('@alice'))
+        .thenAnswer((_) async => SecondaryAddress(host, port));
+    // The ONE injection point: a fresh fake socket per connection, reaching
+    // the muxable through the factory's `transport` parameter. Everything
+    // above it - the connection, the listener, both framings, reconnect - is
+    // production code, so a notification here travels the path it travels
+    // live. A fresh socket per call because reconnection is under test: reuse
+    // a destroyed one and a successful reconnect looks like a failed one.
+    when(() => socketFactory.createSocket(host, '$port', any()))
+        .thenAnswer((_) async {
+      final s = FakeAtServerSocket();
+      sockets.add(s);
+      socket = s;
+      return s;
+    });
+  });
+
+  /// Built through the FACTORY, and held as the INTERFACE.
+  ///
+  /// Not a stylistic choice: this is the shape every caller has at the end of
+  /// this project, so testing through it is what proves the factory produces
+  /// something fully usable without naming the concrete class. Reaching for
+  /// `AtLookupImpl(...)` here would test a constructor the plan is retiring
+  /// and would leave the factory's own seam unexercised.
+  AtLookupMuxable build({AtAuthenticator? authenticator}) =>
+      AtLookUp.withSecureSocket(
+        atSign: '@alice',
+        rootDomain: const AtRootDomain(host, 64),
+        authenticator: authenticator,
+        secondaryAddressFinder: addressFinder,
+        transport: AtLookupTransport(
+          secureSocketConfig: SecureSocketConfig(),
+          socketFactory: socketFactory,
+        ),
+      );
+
+  /// An authenticator that succeeds without doing anything. `_authenticateWith`
+  /// records the authentication itself, so returning true is enough to get
+  /// past `monitor:`'s auth gate.
+  AtLookupMuxable authenticated() => build(authenticator: (_) async => true);
+
+  group('the notification stream', () {
+    test('a notification from the atServer arrives on it', () async {
+      final atLookup = authenticated();
+      await atLookup.startNotifications();
+      final seen = <String>[];
+      atLookup.notifications.listen(seen.add);
+
+      await socket.serverSends('notification: {"id":"n1"}\n');
+      await socket.settle();
+
+      expect(seen, ['notification: {"id":"n1"}']);
+    });
+
+    test('notifications arriving BEFORE a listener attaches are not lost',
+        () async {
+      // The single-subscription property, and the reason for it. A broadcast
+      // controller drops everything sent before someone subscribes, and a
+      // dropped notification is indistinguishable from one never sent.
+      final atLookup = authenticated();
+      await atLookup.startNotifications();
+
+      await socket.serverSends('notification: {"id":"early"}\n');
+      await socket.settle();
+
+      final seen = <String>[];
+      atLookup.notifications.listen(seen.add);
+      await socket.settle();
+
+      expect(seen, ['notification: {"id":"early"}'],
+          reason: 'a buffered notification must be delivered on subscribe - '
+              'this is exactly what a broadcast controller would have lost');
+    });
+
+    test('it is single-subscription, so a second listener is refused',
+        () async {
+      final atLookup = authenticated();
+      atLookup.notifications.listen((_) {});
+
+      expect(() => atLookup.notifications.listen((_) {}), throwsStateError,
+          reason: 'a broadcast stream would accept this, and with it lose '
+              'buffering and pause');
+    });
+
+    test('a verb response is not delivered as a notification', () async {
+      final atLookup = authenticated();
+      await atLookup.startNotifications();
+      final seen = <String>[];
+      atLookup.notifications.listen(seen.add);
+
+      await socket.serverSends('data:the_key_is\n@bob:phone@alice\n@alice@');
+      await socket.settle();
+
+      expect(seen, isEmpty,
+          reason: 'a multi-line data value still reads as data: on its prefix, '
+              'so it is never routed to the notification stream');
+    });
+  });
+
+  group('back-pressure reaches the socket through the stream', () {
+    test('pausing the notification stream pauses the socket', () async {
+      final atLookup = authenticated();
+      await atLookup.startNotifications();
+      final seen = <String>[];
+      final sub = atLookup.notifications.listen(seen.add);
+      await socket.settle();
+
+      sub.pause();
+      await socket.settle();
+      expect(socket.pauseCount, greaterThanOrEqualTo(1),
+          reason: 'pausing the notification stream must reach the SOCKET, not '
+              'merely buffer in this process - onPause is wired through to '
+              'the listener, which pauses its subscription');
+
+      sub.resume();
+      await socket.settle();
+      await socket.serverSends('notification: {"id":"after"}\n');
+      await socket.settle();
+      expect(seen, ['notification: {"id":"after"}'],
+          reason: 'and resuming must restore delivery');
+
+      await sub.cancel();
+    });
+  });
+
+  group('startNotifications', () {
+    test('sends monitor: with selfNotifications, and NOT multiplexed',
+        () async {
+      // A RAW-LITERAL wire pin. `multiplexed` is accepted by the shared verb
+      // syntax and read by no atServer - measured against at_server
+      // origin/trunk, zero occurrences - so setting it would advertise an
+      // interlock that does not exist, and the atServer would not refuse it.
+      final atLookup = authenticated();
+
+      await atLookup.startNotifications(
+          getLastNotificationTime: () async => 1755600000000);
+
+      expect(socket.written, ['monitor:selfNotifications:1755600000000\n']);
+      expect(socket.written.single, isNot(contains('multiplexed')),
+          reason: 'no atServer implements this flag; sending it would claim a '
+              'safety property that is not there');
+      expect(atLookup.isNotifying, isTrue);
+    });
+
+    test('a regex is passed through', () async {
+      final atLookup = authenticated();
+
+      await atLookup.startNotifications(regex: '.wavi');
+
+      expect(socket.written, ['monitor:selfNotifications .wavi\n']);
+    });
+
+    test('called twice, it sends once', () async {
+      final atLookup = authenticated();
+
+      await atLookup.startNotifications();
+      await atLookup.startNotifications();
+
+      expect(socket.written, hasLength(1),
+          reason: 'a second monitor: on the same connection would duplicate '
+              'every notification');
+    });
+
+    test('it refuses when nothing can authenticate', () async {
+      // No authenticator, and the ladder has no credential either.
+      final atLookup = build();
+
+      expect(() => atLookup.startNotifications(),
+          throwsA(isA<UnAuthenticatedException>()),
+          reason: 'monitor requires authentication; failing loudly beats a '
+              'connection that silently never receives anything');
+    });
+  });
+
+  group('reconnect, reauth and heartbeat', () {
+    test('losing the connection reconnects, reauthenticates, and re-issues '
+        'monitor: with the same regex', () async {
+      var authCount = 0;
+      final atLookup = build(authenticator: (_) async {
+        authCount++;
+        return true;
+      })
+        // Parked, so this test measures reconnection and not the probe.
+        ..heartbeatInterval = const Duration(hours: 1);
+
+      await atLookup.startNotifications(
+          regex: '.wavi',
+          getLastNotificationTime: () async => 1755600000000);
+      expect(sockets, hasLength(1));
+      expect(authCount, 1);
+      final first = socket;
+      expect(first.written, ['monitor:selfNotifications:1755600000000 .wavi\n']);
+
+      // The far end goes away.
+      await first.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(atLookup.isReconnectingNotifications, isTrue,
+          reason: 'the listener must tell the muxable the socket died - '
+              'without the onDisconnect seam nothing here ever learns it');
+
+      // First delay in the backoff is 1s.
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(sockets, hasLength(2),
+          reason: 'a new connection must have been opened');
+      expect(authCount, 2,
+          reason: 'the new connection is unauthenticated, so the authenticator '
+              'must run again - reconnecting without reauthenticating gives a '
+              'socket the atServer will not send notifications on');
+      expect(socket.written, ['monitor:selfNotifications:1755600000000 .wavi\n'],
+          reason: 'the regex is REMEMBERED across a reconnect - dropping it '
+              'would start delivering everything. The watermark beside it is '
+              'not remembered but re-asked, and this callback returns a '
+              'constant, so the command matches; the advancing case is its '
+              'own test');
+      expect(atLookup.isReconnectingNotifications, isFalse,
+          reason: 'and the loop must finish once it succeeds');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('notifications flow again on the reconnected socket', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications();
+      final seen = <String>[];
+      atLookup.notifications.listen(seen.add);
+
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 1400));
+      await socket.serverSends('notification: {"id":"after-reconnect"}\n');
+      await socket.settle();
+
+      expect(seen, ['notification: {"id":"after-reconnect"}'],
+          reason: 'the framing seam must be re-installed on the NEW listener - '
+              'createConnection builds a fresh one, so a seam wired only at '
+              'startup would go quiet after the first outage');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('stopNotifications ends the reconnect loop', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications();
+
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(atLookup.isReconnectingNotifications, isTrue);
+
+      await atLookup.stopNotifications();
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(sockets, hasLength(1),
+          reason: 'a reconnect landing after stopNotifications would resurrect '
+              'the connection the caller just asked to be rid of');
+    });
+
+    test('the heartbeat probes a quiet connection with noop:0', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(milliseconds: 40);
+      await atLookup.startNotifications();
+      final s = socket;
+      expect(s.written, hasLength(1), reason: 'just the monitor: so far');
+
+      await Future.delayed(const Duration(milliseconds: 90));
+
+      expect(s.written.last, 'noop:0\n',
+          reason: 'a connection that only ever reads cannot tell a quiet '
+              'atServer from a dead socket');
+      await s.serverSends('data:ok\n@alice@');
+      await atLookup.stopNotifications();
+    });
+
+    test('an unanswered heartbeat starts recovery', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(milliseconds: 30)
+        ..heartbeatResponseTimeout = const Duration(milliseconds: 60);
+      await atLookup.startNotifications();
+      final s = socket;
+
+      // Probe goes out at ~30ms, times out at ~90ms, closes the connection,
+      // whose onDone drives the disconnect seam.
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      expect(s.destroyed, isTrue,
+          reason: 'an unanswered probe must close the connection');
+      expect(atLookup.isReconnectingNotifications, isTrue,
+          reason: 'and closing it must start the reconnect loop - closing '
+              'without reconnecting leaves a listener that is silent forever');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('a paused subscriber does not lose its connection to the heartbeat',
+        () async {
+      // Pausing is the back-pressure contract this stream advertises, not
+      // misuse - and a paused subscription stops the socket being read, so
+      // nothing can fill the read queue and a probe could never be answered.
+      // Probing anyway times the read out and destroys a healthy connection.
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(milliseconds: 30)
+        ..heartbeatResponseTimeout = const Duration(milliseconds: 60);
+      await atLookup.startNotifications();
+      final s = socket;
+      final states = <bool>[];
+      atLookup.notificationConnectionUp.listen(states.add);
+
+      final sub = atLookup.notifications.listen((_) {});
+      sub.pause();
+      // Several intervals and several response budgets.
+      await Future.delayed(const Duration(milliseconds: 300));
+
+      expect(s.written.where((w) => w.startsWith('noop:')), isEmpty,
+          reason: 'the probe must be SKIPPED while delivery is paused. This '
+              'is the mechanism: asserting only that the socket survived '
+              'would pass even if a probe went out and happened to be '
+              'answered');
+      expect(s.destroyed, isFalse,
+          reason: 'a subscriber applying back-pressure must not have its '
+              'connection torn down underneath it');
+      expect(states, isNot(contains(false)),
+          reason: 'and must not be told the connection went down');
+
+      sub.resume();
+      await atLookup.stopNotifications();
+    });
+
+    test('a restart replaces the connection-up stream, it does not reuse it',
+        () async {
+      // stopNotifications closes this stream. A caller that held one
+      // subscription across a stop/start would be listening to a closed
+      // stream and would never learn the new connection came up - so the
+      // contract is that both streams are re-read after each start, and this
+      // pins it rather than leaving it to the dartdoc alone.
+      final atLookup = authenticated();
+      // Registered up front: a failing expect below would otherwise skip the
+      // teardown and leave a live reconnect loop, which then builds sockets
+      // into the NEXT test's list through the shared factory.
+      addTearDown(atLookup.stopNotifications);
+
+      await atLookup.startNotifications();
+      final before = <bool>[];
+      var beforeClosed = false;
+      atLookup.notificationConnectionUp
+          .listen(before.add, onDone: () => beforeClosed = true);
+      await socket.settle();
+
+      await atLookup.stopNotifications();
+      await socket.settle();
+      expect(beforeClosed, isTrue,
+          reason: 'the stop must close the stream, which is what makes the '
+              'old subscription useless rather than merely silent');
+      // The stop emits its own `false` before closing, so this subscriber has
+      // seen its own session end. What it must never see is anything about
+      // the session that follows.
+      final seenByStopTime = before.length;
+
+      await atLookup.startNotifications();
+      final after = <bool>[];
+      atLookup.notificationConnectionUp.listen(after.add);
+      await socket.serverCloses();
+      await socket.settle();
+
+      expect(after, contains(false),
+          reason: 'a subscription taken after the restart tracks the new '
+              'connection');
+      expect(before, hasLength(seenByStopTime),
+          reason: 'and the pre-stop subscription learns nothing about the new '
+              'connection - the reason a caller must re-read the getter after '
+              'each start');
+    });
+
+    test('a watermark read that throws does not leave the client deaf',
+        () async {
+      // This callback is CALLER code running inside the reconnect loop. If it
+      // throws and the attempt aborts, the connection it already opened and
+      // authenticated stays valid - so every later attempt skips the connect,
+      // re-runs only this call, and backs off forever with `monitor:` never
+      // sent. The symptom is nothing at all: no notifications, no error, just
+      // an `up` that never arrives.
+      var boom = false;
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      addTearDown(atLookup.stopNotifications);
+
+      await atLookup.startNotifications(getLastNotificationTime: () async {
+        if (boom) throw StateError('watermark store unreadable');
+        return 1755600000000;
+      });
+      expect(socket.written, ['monitor:selfNotifications:1755600000000\n']);
+
+      boom = true;
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(sockets, hasLength(2),
+          reason: 'the attempt must have reached the point of opening a '
+              'socket, or this proves nothing about what follows the connect');
+      expect(sockets.last.written,
+          ['monitor:selfNotifications\n'],
+          reason: 'a failed watermark read must still send monitor: - without '
+              'one the atServer replays a window, which is recoverable, where '
+              'sending nothing is a connection that can never deliver');
+      expect(atLookup.isReconnectingNotifications, isFalse,
+          reason: 'and the reconnect must be considered finished, not left '
+              'spinning on a connection it will never speak to');
+
+      // The control arm: the same callback recovering must behave normally,
+      // so this cannot pass by the watermark being ignored altogether.
+      boom = false;
+      await sockets.last.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 1400));
+      expect(sockets.last.written,
+          ['monitor:selfNotifications:1755600000000\n'],
+          reason: 'a transient watermark failure is not terminal');
+    });
+
+    test('a reconnect asks the caller for its CURRENT watermark', () async {
+      // The caller's position moves as it consumes notifications, and it is
+      // the caller that holds it durably. Freezing the value at
+      // startNotifications makes every reconnect re-request the whole retained
+      // backlog — which is exactly what a caller keeping a watermark is
+      // keeping one to avoid.
+      var watermark = 1755600000000;
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      await atLookup.startNotifications(
+          getLastNotificationTime: () async => watermark);
+      final first = socket;
+      expect(first.written, ['monitor:selfNotifications:1755600000000\n']);
+
+      // The caller consumes notifications and advances; then the far end goes.
+      watermark = 1755600009999;
+      await first.serverCloses();
+      await first.settle();
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(sockets, hasLength(2),
+          reason: 'the test needs an actual reconnect to have happened');
+      expect(sockets.last.written,
+          ['monitor:selfNotifications:1755600009999\n'],
+          reason: 'the reconnect must carry where the caller has got to, not '
+              'where it was when notifications started');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('a restart inside the backoff window is not disturbed by the old loop',
+        () async {
+      // stopNotifications puts `_isNotifying` back to false and a following
+      // startNotifications puts it back to true - so a reconnect loop still
+      // sleeping from before the stop wakes to a flag that says "carry on",
+      // and would act on the connection the RESTART established: a second
+      // `monitor:` on a live socket, its heartbeat reset, and an `up` with no
+      // preceding down.
+      final atLookup = authenticated();
+      await atLookup.startNotifications();
+
+      // Drop the connection so a reconnect loop starts and parks on its
+      // first backoff (1s), then stop and restart well inside that window.
+      await socket.serverCloses();
+      await socket.settle();
+      expect(atLookup.isReconnectingNotifications, isTrue,
+          reason: 'the test needs a loop actually sleeping, or it proves '
+              'nothing about what happens when one wakes');
+
+      await atLookup.stopNotifications();
+      expect(atLookup.isReconnectingNotifications, isFalse,
+          reason: 'a stop must not leave this reading true - it is what '
+              'disarms the disconnect handler on the next connection');
+
+      await atLookup.startNotifications();
+      final restarted = socket;
+      final states = <bool>[];
+      atLookup.notificationConnectionUp.listen(states.add);
+
+      // Past the first backoff, so the orphaned loop has woken.
+      await Future.delayed(const Duration(milliseconds: 1400));
+
+      expect(restarted.written.where((w) => w.startsWith('monitor:')),
+          hasLength(1),
+          reason: 'the restart sent its own monitor:; a loop from the '
+              'previous session must not send a second one on this socket');
+      expect(states, isNot(contains(true)),
+          reason: 'and must not announce an `up` the restart already made');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('close() fails a pending read even while delivery is paused',
+        () async {
+      // The case `_closeConnection`'s own dartdoc names: with delivery paused
+      // the socket's done event is buffered, so the onDone route that fails a
+      // pending read never runs, and the abort inside `_closeConnection` is
+      // the only thing left. A test that closes while delivery is live cannot
+      // see that - onDone gets there first and the abort could be deleted
+      // without anything going red.
+      final atLookup = authenticated();
+      await atLookup.pkamAuthenticate();
+      await atLookup.startNotifications();
+      final sub = atLookup.notifications.listen((_) {});
+      sub.pause();
+
+      Object? thrown;
+      final pending = atLookup.executeCommand('noop:0\n').then<void>(
+        (_) {},
+        onError: (Object e) => thrown = e,
+      );
+      await Future.delayed(const Duration(milliseconds: 50));
+
+      await atLookup.close();
+      await pending.timeout(const Duration(seconds: 5),
+          onTimeout: () => fail('the pending read was never failed, so it is '
+              'sitting out its transient budget holding the request mutex - '
+              'the next request on this instance would queue behind a '
+              'response that can never arrive'));
+
+      expect(thrown, isNotNull,
+          reason: 'closing must fail the request in flight, and while paused '
+              'only the abort inside _closeConnection can do it');
+
+      sub.resume();
+    });
+
+    test('a connection built before the stream is read still reconnects',
+        () async {
+      // The ordering the `notifications` getter exists for: authenticating -
+      // or any verb - builds the connection while no controller exists, so
+      // createConnection installs no seams at all. Reading the stream
+      // afterwards has to install BOTH of them. With only the routing seam,
+      // the socket going away reaches nothing and the muxable never learns it
+      // is down.
+      final atLookup = authenticated();
+      await atLookup.pkamAuthenticate();
+      await atLookup.startNotifications();
+      final states = <bool>[];
+      atLookup.notificationConnectionUp.listen(states.add);
+
+      await socket.serverCloses();
+      await socket.settle();
+
+      expect(states, contains(false),
+          reason: 'the disconnect seam must be installed by the stream getter '
+              'as well as by createConnection - without it a connection built '
+              'before the first read goes down in silence');
+      expect(atLookup.isReconnectingNotifications, isTrue,
+          reason: 'and losing it must start the reconnect loop');
+
+      await atLookup.stopNotifications();
+    });
+  });
+
+  group('a connection that cannot be established', () {
+    // Ported from at_client's monitor_test.dart, which asserted the same
+    // behaviour on machinery that now lives here: a monitor that cannot
+    // connect must not report itself as listening. The failure has to surface
+    // rather than be swallowed, or a permanently deaf client looks healthy.
+    test('a failure to connect surfaces, and reports nothing as up', () async {
+      final atLookup = authenticated();
+      final seen = <bool>[];
+      atLookup.notificationConnectionUp.listen(seen.add);
+      when(() => socketFactory.createSocket(host, '$port', any()))
+          .thenAnswer((_) async => throw const SocketException('refused'));
+
+      await expectLater(
+          atLookup.startNotifications(), throwsA(isA<Exception>()));
+
+      expect(atLookup.isNotifying, isFalse,
+          reason: 'a connection that never opened is not notifying');
+      expect(seen, isEmpty,
+          reason: 'nothing may report the connection up - a subscriber that '
+              'saw `true` here would wait forever for notifications on a '
+              'socket that does not exist');
+    });
+
+    test('a failure to send monitor: surfaces the same way', () async {
+      final atLookup = authenticated();
+      final seen = <bool>[];
+      atLookup.notificationConnectionUp.listen(seen.add);
+      // Connect succeeds; the write does not. at_client's monitor_test had
+      // this as "secondary reachable but rejecting commands".
+      when(() => socketFactory.createSocket(host, '$port', any()))
+          .thenAnswer((_) async {
+        final s = FakeAtServerSocket()..failWrites = true;
+        sockets.add(s);
+        socket = s;
+        return s;
+      });
+
+      await expectLater(
+          atLookup.startNotifications(), throwsA(isA<Exception>()));
+
+      expect(atLookup.isNotifying, isFalse);
+      expect(seen, isEmpty);
+    });
+  });
+
+  group('notificationConnectionUp', () {
+    test('reports up on start, down on loss, up again on reconnect', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      // Subscribed BEFORE the trigger: it is a broadcast stream, so it does
+      // not replay, and a listener attached afterwards sees nothing.
+      final seen = <bool>[];
+      atLookup.notificationConnectionUp.listen(seen.add);
+
+      await atLookup.startNotifications();
+      await socket.settle();
+      expect(seen, [true], reason: 'monitor: accepted on a live connection');
+
+      await socket.serverCloses();
+      await Future.delayed(const Duration(milliseconds: 50));
+      expect(seen, [true, false],
+          reason: 'the muxable owns reconnection, so it is the only thing that '
+              'knows the connection dropped - a subscriber cannot tell an '
+              'outage from a quiet atServer any other way');
+
+      await Future.delayed(const Duration(milliseconds: 1400));
+      expect(seen, [true, false, true],
+          reason: 'and it must say so again when the reconnect succeeds');
+
+      await atLookup.stopNotifications();
+    });
+
+    test('reports down when notifications are stopped', () async {
+      final atLookup = authenticated()
+        ..heartbeatInterval = const Duration(hours: 1);
+      final seen = <bool>[];
+      atLookup.notificationConnectionUp.listen(seen.add);
+
+      await atLookup.startNotifications();
+      await socket.settle();
+      await atLookup.stopNotifications();
+      await socket.settle();
+
+      expect(seen, [true, false],
+          reason: 'a deliberate stop is still a transition a subscriber must '
+              'see - otherwise it reads as a connection that is still up');
+    });
+  });
+
+  group('stopNotifications', () {
+    test('closes the stream and the connection', () async {
+      final atLookup = authenticated();
+      await atLookup.startNotifications();
+      var done = false;
+      atLookup.notifications.listen((_) {}, onDone: () => done = true);
+      await socket.settle();
+
+      await atLookup.stopNotifications();
+      await socket.settle();
+
+      expect(atLookup.isNotifying, isFalse);
+      expect(done, isTrue,
+          reason: 'a stream that can never produce another event must close, '
+              'not hang');
+      expect(socket.destroyed, isTrue);
+    });
+  });
+}
