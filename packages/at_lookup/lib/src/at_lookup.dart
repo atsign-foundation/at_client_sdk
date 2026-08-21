@@ -276,14 +276,26 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// There is no verb that turns `monitor:` off — the atServer streams until
   /// the connection goes away — so this closes it. [notifications] is closed
   /// too, because a stream that can never produce another event should say so
-  /// rather than hang.
+  /// rather than hang, and so is [notificationConnectionUp].
+  ///
+  /// Both are replaced on the next [startNotifications], so a caller that
+  /// restarts must take fresh subscriptions: the ones it held are closed and
+  /// will report nothing about the new connection.
   Future<void> stopNotifications();
 
   /// Whether [startNotifications] is in force.
   bool get isNotifying;
 
-  // The two places `AtLookupImpl` accepts more than `AtLookUp` does, restated
-  // here so a caller can hold this interface without losing anything.
+  // Where `AtLookupImpl` accepts more than `AtLookUp` does, restated here so
+  // a caller can hold this interface without losing anything: two methods,
+  // three parameters - `scan(auth:)`, `scan(showHiddenKeys:)` and
+  // `lookup(metadata:)`.
+  //
+  // ⚠️ Dart lets an implementer ADD optional named parameters, so a gap here
+  // is invisible: the analyzer stays clean and the only symptom is a caller
+  // holding the interface unable to pass something the class accepts.
+  // `showHiddenKeys` was missed for exactly that reason, and this comment
+  // claimed the restatement was complete while it was not.
   //
   // Found with the analyzer, not by reading: a hand-written comparison of the
   // two signature lists missed `scan` entirely, because nested generics in
@@ -298,9 +310,14 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   // its only implementer.
 
   /// As [AtLookUp.scan], and additionally [auth] - whether to scan as the
-  /// authenticated atSign. `at_server_status` scans unauthenticated.
+  /// authenticated atSign (`at_server_status` scans unauthenticated) - and
+  /// [showHiddenKeys], which asks the atServer to include `public:__` keys.
   @override
-  Future<List<String>> scan({String? regex, String? sharedBy, bool auth = true});
+  Future<List<String>> scan(
+      {String? regex,
+      String? sharedBy,
+      bool auth = true,
+      bool showHiddenKeys = false});
 
   /// As [AtLookUp.lookup], and additionally [metadata].
   @override
@@ -361,6 +378,12 @@ abstract interface class AtLookupMuxable implements AtLookUp {
   /// *notification* is gone. ⚠️ A late subscriber does not get the current
   /// state on attach, matching what `Monitor.currentStateStream` has always
   /// done.
+  ///
+  /// ⚠️ **[stopNotifications] closes this stream**, so a subscription does not
+  /// survive a stop: a caller that stops and starts again is holding a closed
+  /// stream and will never see the new connection come up. Read this getter
+  /// again after each [startNotifications] rather than once for the life of
+  /// the object.
   Stream<bool> get notificationConnectionUp;
 
   /// How often a quiet notification connection is probed, and how long the

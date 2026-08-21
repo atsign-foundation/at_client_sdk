@@ -364,6 +364,51 @@ void main() {
       await atLookup.stopNotifications();
     });
 
+    test('a restart replaces the connection-up stream, it does not reuse it',
+        () async {
+      // stopNotifications closes this stream. A caller that held one
+      // subscription across a stop/start would be listening to a closed
+      // stream and would never learn the new connection came up - so the
+      // contract is that both streams are re-read after each start, and this
+      // pins it rather than leaving it to the dartdoc alone.
+      final atLookup = authenticated();
+      // Registered up front: a failing expect below would otherwise skip the
+      // teardown and leave a live reconnect loop, which then builds sockets
+      // into the NEXT test's list through the shared factory.
+      addTearDown(atLookup.stopNotifications);
+
+      await atLookup.startNotifications();
+      final before = <bool>[];
+      var beforeClosed = false;
+      atLookup.notificationConnectionUp
+          .listen(before.add, onDone: () => beforeClosed = true);
+      await socket.settle();
+
+      await atLookup.stopNotifications();
+      await socket.settle();
+      expect(beforeClosed, isTrue,
+          reason: 'the stop must close the stream, which is what makes the '
+              'old subscription useless rather than merely silent');
+      // The stop emits its own `false` before closing, so this subscriber has
+      // seen its own session end. What it must never see is anything about
+      // the session that follows.
+      final seenByStopTime = before.length;
+
+      await atLookup.startNotifications();
+      final after = <bool>[];
+      atLookup.notificationConnectionUp.listen(after.add);
+      await socket.serverCloses();
+      await socket.settle();
+
+      expect(after, contains(false),
+          reason: 'a subscription taken after the restart tracks the new '
+              'connection');
+      expect(before, hasLength(seenByStopTime),
+          reason: 'and the pre-stop subscription learns nothing about the new '
+              'connection - the reason a caller must re-read the getter after '
+              'each start');
+    });
+
     test('a reconnect asks the caller for its CURRENT watermark', () async {
       // The caller's position moves as it consumes notifications, and it is
       // the caller that holds it durably. Freezing the value at

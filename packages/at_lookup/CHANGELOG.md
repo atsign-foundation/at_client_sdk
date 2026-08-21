@@ -64,9 +64,13 @@
 
 - feat: `AtLookupMuxable` gains the members callers were reaching for through
   a cast to the concrete class: `authenticator`, `isConnectionAvailable` and
-  `readResponse`, plus `scan(auth:)` and `lookup(metadata:)`. Those last two
-  are a defect this surfaced - `AtLookupImpl` accepted **more** than `AtLookUp`
-  declared, so a caller moving to the interface silently lost parameters. They
+  `readResponse`, plus `scan(auth:)`, `scan(showHiddenKeys:)` and
+  `lookup(metadata:)`. Those last three are a defect this surfaced -
+  `AtLookupImpl` accepted **more** than `AtLookUp` declared, so a caller
+  moving to the interface silently lost parameters. Dart permits an
+  implementer to add optional named parameters, so nothing goes red when the
+  restatement is incomplete: `showHiddenKeys` was missed on the first pass and
+  this entry named only two parameters until it was found. They
   are restated on the muxable rather than added to `AtLookUp`, which is frozen:
   adding a parameter there forces every `implements AtLookUp` to redeclare it.
 
@@ -219,9 +223,13 @@
   between-chunks budget to `AtNetworkTimeouts.effectiveDefault`, which moves
   that default from **10s to 30s**. Ten seconds of silence is not evidence a
   busy atServer has gone away, and the two budgets measure different things:
-  one bounds the whole response, the other restarts on every chunk. Callers
-  passing explicit values are unaffected, and a process that sets
-  `AtNetworkTimeouts.defaultTimeout` at startup now moves this too.
+  one bounds the whole response, the other restarts on every chunk. The
+  defaulting is **per parameter**: a budget you pass is used as you passed it,
+  but passing only one of the two leaves the other on the new default — so a
+  caller that set only `maxWaitMilliSeconds` moves from a 10s silence budget
+  to 30s. A process that sets `AtNetworkTimeouts.defaultTimeout` at startup
+  now moves this too, which puts the response read under the same
+  process-wide setting that already governs connect, atDirectory and auth.
 
 - fix: a response carrying no colon no longer destroys the connection.
   `OutboundMessageListener._stripPrompt` ran `substring(0, -1)` when
