@@ -873,6 +873,22 @@ it from `AtSigningInput`. Worth doing for at_chops' other callers.
   has no `dart_test.yaml`, so CI collects it — and it declares a `main()` with a
   live stream subscription and no `test()` at all. `samples/lookup.dart:10` is
   also one of the 64 sites, so deleting first shrinks step 8 by one.
+- **`monitor:` has no acknowledgement, and the atServer should grow one — a
+  FOLLOW-UP PR, ruled by gkc 2026-08-21.** `_openNotificationStream` writes the
+  command and never reads a reply, so nothing establishes the atServer accepted
+  it: an enrollment lacking notification permission gets a connection reported
+  up on which no notification will ever arrive. An adversarial review filed this
+  against the client and it was correctly refuted *as a client defect* — on
+  success today the atServer writes an empty string, so there is genuinely
+  nothing to read. The deficiency is in the protocol. What gkc wants: a
+  **`prompts`** parameter on the `monitor:` verb, and an atServer that, when it
+  is set, (1) answers the monitor command with `data:ok\n<prompt>` and
+  (2) writes `\n<prompt>` after **every** notification rather than a bare
+  `\n`. ⚠️ This is a multi-repo protocol seam — at_commons for the verb syntax,
+  at_server for both behaviours, at_client_sdk for the reader — and is not done
+  until the same shape lands on every side with cross-referencing PRs. The
+  client must keep working against an atServer that does not know the
+  parameter, which is what makes it opt-in rather than a wire change.
 
 ## 7. Corrections
 
