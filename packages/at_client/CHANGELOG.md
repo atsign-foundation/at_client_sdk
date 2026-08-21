@@ -9,6 +9,17 @@ files, against a positive control of `AtClientPreference` in 20. The BREAKING
 labels below were rewritten in the same pass: as written they sent a reader
 hunting for a constructor argument that never existed in a release. -->
 
+- fix: a local write racing an in-flight sync push can no longer be lost.
+  The sync queue keeps one entry per atKey, so a `delete()` (or a newer
+  value) landing while that key's previous op was on the wire replaced the
+  queue entry — and the push round's success path then removed the entry by
+  key, discarding the newer op with nothing left to retry it. The server
+  kept what was pushed, the queue read empty, and the client reported
+  itself in sync: an awaited `delete()` that silently never synced,
+  observed live as the server's latest commit entry for a deleted key
+  still reading `*`. Queue entries now carry a monotonic sequence number
+  and the push round removes only the exact version it pushed; a
+  superseded entry stays queued and goes out on the next round.
 - fix: `SyncServiceImpl.stop()` now actually halts sync activity. A sync
   run in flight when `stop()` was called kept executing after `stop()`
   returned: it resumed from its network await, read whatever local state

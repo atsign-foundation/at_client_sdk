@@ -179,6 +179,15 @@ class LocalSecondary implements Secondary {
   /// drain attempt finds the underlying keystore value missing
   /// (race-tolerated removal: a queue write may have committed
   /// without the keystore write landing, e.g. across a crash).
+  /// Removes [atKey]'s queue entry only while it is still the version
+  /// stamped [seq]; returns whether it removed. The drain's success-path
+  /// removal — see [AtSyncQueue.removeIfUnchanged] for why unconditional
+  /// removal there loses whichever write replaced the entry mid-flight.
+  Future<bool> removeFromSyncQueueIfUnchanged(String atKey, int seq) async {
+    final q = await _ensureSyncQueueOpen();
+    return q.removeIfUnchanged(atKey, seq);
+  }
+
   Future<void> removeFromSyncQueue(String atKey) async {
     final q = await _ensureSyncQueueOpen();
     await q.remove(atKey);

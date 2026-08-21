@@ -224,4 +224,77 @@ void main() {
       expect(() => q.size, throwsStateError);
     });
   });
+
+  group('removeIfUnchanged — the drain\'s success-path removal', () {
+    test('removes exactly the version it was given, and reports which',
+        () async {
+      final q = AtSyncQueue(atSign: '@alice');
+      await q.open();
+      await q.enqueue('k1', SyncQueueOp.updateAll);
+      final pushed = q.readEntry('k1')!;
+
+      // Control: nothing replaced the entry, so the pushed version is the
+      // current version and the removal removes.
+      expect(await q.removeIfUnchanged('k1', pushed.seq), isTrue);
+      expect(q.readEntry('k1'), isNull);
+      expect(q.size, 0);
+
+      // And a removal for a version that no longer exists reports false
+      // rather than throwing.
+      expect(await q.removeIfUnchanged('k1', pushed.seq), isFalse);
+      await q.close();
+    });
+
+    test(
+        'a delete replacing an in-flight update survives the update\'s '
+        'removal', () async {
+      final q = AtSyncQueue(atSign: '@alice');
+      await q.open();
+
+      // The drain reads the entry it is about to push...
+      await q.enqueue('k1', SyncQueueOp.updateAll);
+      final pushed = q.readEntry('k1')!;
+      expect(pushed.op, SyncQueueOp.updateAll);
+
+      // ...and while the push is in flight, a local delete replaces it.
+      // Same key, so this is one record being overwritten — the per-key
+      // dedup working as designed.
+      await q.enqueue('k1', SyncQueueOp.delete);
+
+      // The drain's success-path removal must NOT take the delete with it.
+      // An unconditional remove here is how an awaited delete() used to
+      // vanish: the server kept the update, the queue read empty, and the
+      // client reported itself in sync.
+      expect(await q.removeIfUnchanged('k1', pushed.seq), isFalse,
+          reason: 'the entry the drain pushed is not the entry that is '
+              'queued now, so the removal must decline');
+      final survivor = q.readEntry('k1');
+      expect(survivor, isNotNull,
+          reason: 'the superseding delete must stay queued for the next '
+              'round');
+      expect(survivor!.op, SyncQueueOp.delete);
+
+      // The next round pushes the delete and ITS removal succeeds.
+      expect(await q.removeIfUnchanged('k1', survivor.seq), isTrue);
+      expect(q.size, 0);
+      await q.close();
+    });
+
+    test('seq survives a restart and is never reissued', () async {
+      final q1 = AtSyncQueue(atSign: '@alice');
+      await q1.open();
+      await q1.enqueue('k1', SyncQueueOp.updateAll);
+      final before = q1.readEntry('k1')!.seq;
+      await q1.close();
+
+      // A new instance over the same box must stamp strictly newer seqs —
+      // a reissued seq would let removeIfUnchanged remove an entry the
+      // previous process's drain never pushed.
+      final q2 = AtSyncQueue(atSign: '@alice');
+      await q2.open();
+      await q2.enqueue('k2', SyncQueueOp.updateAll);
+      expect(q2.readEntry('k2')!.seq, greaterThan(before));
+      await q2.close();
+    });
+  });
 }

@@ -313,8 +313,7 @@ class SyncServiceImpl implements SyncService {
         syncRequest.result!
           ..syncStatus = SyncStatus.failure
           ..atClientException = AtClientException(
-              error_codes['AtClientException'],
-              'SyncService has been stopped');
+              error_codes['AtClientException'], 'SyncService has been stopped');
         _syncError(syncRequest);
         return;
       }
@@ -701,10 +700,12 @@ class SyncServiceImpl implements SyncService {
           // case: queue write committed but the backing keystore
           // write never landed (a crash between them). Drop the
           // queue entry — there's nothing we can push, and the
-          // user-level write is already lost.
+          // user-level write is already lost. Version-checked: a delete
+          // needs no keystore value, so one that replaced this entry after
+          // the read above must survive this drop and push next round.
           _logger
               .info('keystore miss for $atKey on push; dropping queue entry');
-          await localSecondary.removeFromSyncQueue(atKey);
+          await localSecondary.removeFromSyncQueueIfUnchanged(atKey, entry.seq);
           continue;
         }
         _logger.info('Will push ${entry.op} for $atKey');
@@ -714,6 +715,7 @@ class SyncServiceImpl implements SyncService {
         batchSources.add(_BatchSource(
           atKey: atKey,
           op: entry.op,
+          seq: entry.seq,
         ));
       }
       if (batchRequests.isEmpty) {
@@ -761,7 +763,18 @@ class SyncServiceImpl implements SyncService {
               commitId > _highestPushedCommitId!) {
             _highestPushedCommitId = commitId;
           }
-          await localSecondary.removeFromSyncQueue(source.atKey);
+          final removed = await localSecondary.removeFromSyncQueueIfUnchanged(
+              source.atKey, source.seq);
+          if (!removed) {
+            // A newer local write to this atKey replaced the queue entry
+            // while this batch was in flight. The server has the version
+            // this batch carried; the newer op pushes next round. Removing
+            // unconditionally here is how an awaited delete() used to
+            // vanish: the server kept the update, the queue read empty, and
+            // the client reported itself in sync.
+            _logger.info('${source.atKey} re-enqueued mid-push; '
+                'keeping the newer entry queued for the next round');
+          }
           keyInfoList.add(KeyInfo(
             source.atKey,
             SyncDirection.localToRemote,
@@ -1653,8 +1666,16 @@ class _BatchSource {
   final String atKey;
   final SyncQueueOp op;
 
+  /// The queue entry's [SyncQueueEntry.seq] at batch-build time — the
+  /// version this batch actually pushed. Success-path removal passes it to
+  /// [LocalSecondary.removeFromSyncQueueIfUnchanged], so an entry replaced
+  /// mid-flight (an update superseded by a delete, or by a newer value)
+  /// stays queued for the next round instead of being discarded.
+  final int seq;
+
   const _BatchSource({
     required this.atKey,
     required this.op,
+    required this.seq,
   });
 }

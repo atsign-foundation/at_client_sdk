@@ -27,13 +27,24 @@ class SyncQueueEntry {
   /// recent enqueue for [atKey]. Used for ordering on startup replay.
   final int ts;
 
+  /// Monotonic per-queue enqueue counter, stamped by [AtSyncQueue.enqueue].
+  ///
+  /// This is the identity a drain uses to remove exactly the version it
+  /// pushed. `ts` cannot serve: it is milliseconds, and an update followed by
+  /// a delete of the same key lands well inside one millisecond — the exact
+  /// pair the removal must tell apart. Entries persisted before this field
+  /// existed read back as 0.
+  final int seq;
+
   SyncQueueEntry({
     required this.atKey,
     required this.op,
     required this.ts,
+    this.seq = 0,
   });
 
-  Map<String, dynamic> _toJson() => <String, dynamic>{'op': op.name, 'ts': ts};
+  Map<String, dynamic> _toJson() =>
+      <String, dynamic>{'op': op.name, 'ts': ts, 'seq': seq};
 
   String _serialise() => jsonEncode(_toJson());
 
@@ -50,6 +61,7 @@ class SyncQueueEntry {
       atKey: atKey,
       op: op,
       ts: map['ts'] as int,
+      seq: (map['seq'] as int?) ?? 0,
     );
   }
 }
@@ -144,6 +156,11 @@ class AtSyncQueue {
     }
     entries.sort((a, b) => a.ts.compareTo(b.ts));
     for (final e in entries) {
+      // Seed the enqueue counter past everything persisted, so a restart
+      // cannot stamp a seq an in-flight drain from the previous process
+      // already read — removeIfUnchanged's comparison depends on seqs never
+      // being reissued.
+      if (e.seq >= _nextSeq) _nextSeq = e.seq + 1;
       _inMemoryQueue.add(e.atKey);
     }
   }
@@ -169,6 +186,10 @@ class AtSyncQueue {
   ///
   /// Use [DateTime.now().millisecondsSinceEpoch] as the timestamp
   /// unless [ts] is supplied (for tests).
+  /// Monotonic enqueue counter for this queue instance, seeded past the
+  /// highest persisted `seq` by [open] so a restart cannot reissue one.
+  int _nextSeq = 1;
+
   Future<void> enqueue(
     String atKey,
     SyncQueueOp op, {
@@ -179,6 +200,7 @@ class AtSyncQueue {
       atKey: atKey,
       op: op,
       ts: ts ?? DateTime.now().millisecondsSinceEpoch,
+      seq: _nextSeq++,
     );
     await _box!.put(atKey, entry._serialise());
     _inMemoryQueue.add(atKey);
@@ -203,6 +225,26 @@ class AtSyncQueue {
     _ensureOpen();
     _inMemoryQueue.remove(atKey);
     await _box!.delete(atKey);
+  }
+
+  /// Removes [atKey] only while its entry is still the one stamped [seq];
+  /// returns whether it removed.
+  ///
+  /// This is the drain's success-path removal. Between a drain reading an
+  /// entry and the server accepting the push, a new local write to the same
+  /// atKey replaces the entry — an update superseded by a delete, or by a
+  /// newer value. An unconditional remove at that point discards the newer
+  /// op with nothing left to retry it: the server keeps what was pushed, the
+  /// queue reads empty, and the client reports itself in sync. Removing only
+  /// the pushed version leaves a superseded entry queued for the next round.
+  Future<bool> removeIfUnchanged(String atKey, int seq) async {
+    _ensureOpen();
+    final raw = _box!.get(atKey);
+    if (raw == null) return false;
+    if (SyncQueueEntry._deserialise(atKey, raw).seq != seq) return false;
+    _inMemoryQueue.remove(atKey);
+    await _box!.delete(atKey);
+    return true;
   }
 
   /// Returns up to [limit] atKey strings from the front of the

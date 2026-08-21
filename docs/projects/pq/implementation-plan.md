@@ -60,18 +60,21 @@ that file instead; the list below is the PQ release work.
    Re-derive that before assuming, with the command in
    [Re-deriving the state](#re-deriving-the-state).
 3. **Close out [14.43](#1443-the-functional-suites-convergence-race)'s
-   remainder.** Shape A is fixed and mutation-proven; shape B's matrix
-   rebuild landed 2026-08-21 (per-stage enrollments, one-time driver-side
-   mints, all 28 cells green — the section has the account). Left in the
-   family: the sixth member (`nskey_rotation_live_test` reading a rotated
-   advertisement through a 15-minute cache the test's comment claims is a
-   server read — likely a test-side fix, read the section),
+   remainder.** Three of the family's four original observations now have
+   diagnosed, mutation-proven fixes: shape A (`stop()` couldn't stop an
+   in-flight run), shape B (the matrix's shared-`primary` contention,
+   rebuilt with per-stage enrollments), and shape C (the push round's
+   unconditional removal losing a delete that raced it). Left: whether
+   `sync_multiple_client_test` reduces to shape C (plausible, unproven);
+   the rotated-advertisement cache member (`nskey_rotation_live_test`,
+   likely a test-side fix — read the section);
    [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)'s
-   product decision, the driver dumping child stderr on cell failure, and
-   pack rate re-measurement at the rebuilt tree. Also for gkc: whether the
-   acceptance catalogue should state that pqReady's invisibility to deployed
-   peers ends when its enrollment re-mints or rotates (retired keys stay
-   advertised, so the record leaves the bare form permanently).
+   product decision; the matrix driver dumping child stderr on cell
+   failure; and pack rate re-measurement once shape C's fix lands. Also
+   for gkc: whether the acceptance catalogue should state that pqReady's
+   invisibility to deployed peers ends when its enrollment re-mints or
+   rotates (retired keys stay advertised, so the record leaves the bare
+   form permanently).
 4. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
    ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
    `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
@@ -2290,6 +2293,31 @@ child's `exit(0)` means nothing lingers across cells):
 Still owed from the diagnosis: the driver dumping child stderr on cell
 **failure**, not only on timeout — the two red iterations above each needed
 an inference where a dumped log would have been a read.
+
+**Shape C — the lost delete — diagnosed and fixed 2026-08-21, from a red
+the post-rebuild soak captured.** `atclient_sync_callback_test` ("latest
+commit entry is updated when same key is updated and deleted", expected `-`
+got `*`) — one of this section's ORIGINAL four observations. The red log
+(`untracked/pq-1443-packs/run_3_20260821_010609.log`, this machine only)
+shows firstkey pushed as `updateAll`, **no delete ever pushed**, and the
+pending count at 0 afterwards. The mechanism, confirmed in code: the sync
+queue keeps ONE entry per atKey and a second enqueue replaces it, while the
+push round's success path removed the entry **by key** — so a `delete()`
+landing between the round reading the entry and the server acking the push
+replaced the entry and was then discarded with nothing left to retry it.
+The same window loses a newer VALUE, invisibly. An awaited `delete()` that
+silently never syncs is data loss, not a flake. Fixed: queue entries carry
+a monotonic `seq`, the round removes only the exact version it pushed
+(`AtSyncQueue.removeIfUnchanged`), and a superseded entry pushes next
+round; the keystore-miss drop got the same version check (a delete needs no
+keystore value, so it must survive that drop too). Pinned three ways: queue-
+level race tests, a service-level differential whose batch stub performs the
+racing delete itself and then asserts the second batch carries `delete:` on
+the wire, and a mutation run — reverting to unconditional removal reddens
+the differential with the defect's own message. ⚠️ Whether
+`sync_multiple_client_test`'s reds — the one original family member still
+unattributed — reduce to this same lost update is plausible and NOT
+established.
 
 **Shape A is diagnosed, from the red log's own lines — a measurement, not a
 hypothesis.** `SyncServiceImpl.stop()` halts future triggers and cannot halt an

@@ -99,8 +99,8 @@ void main() {
     verifyNever(() => local.peekSyncQueue(limit: any(named: 'limit')));
     expect(errorResult, isNotNull,
         reason: 'the stranded request must be answered, not left dangling');
-    expect(errorResult!.atClientException?.message,
-        contains('has been stopped'),
+    expect(
+        errorResult!.atClientException?.message, contains('has been stopped'),
         reason: 'the request is answered as stopped, not as any other error');
   });
 
