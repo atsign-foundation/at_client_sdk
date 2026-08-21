@@ -36,8 +36,9 @@ is *what to do first*. Re-read this section against `git log --oneline -10`
 before acting — it has led with finished work before.
 
 Last re-ranked **2026-08-21** against the tree at `2965330f1`, with the
-publish gate re-verified live the same morning (pub.dev at_chops = 3.5.0,
-at_commons = 5.15.0).
+publish gate re-verified live that afternoon: gkc published **at_chops 3.6.0
+and at_commons 5.16.0** to pub.dev on 2026-08-21, so the train's first two
+positions are released.
 
 ⚠️ **A second workstream is now open and is NOT in this table** — the knowledge
 base, agreed with gkc 2026-08-20. Its plan, format, rail design and ordered
@@ -45,26 +46,28 @@ method are in [`docs/knowledge/README.md`](../../knowledge/README.md), which is
 a scaffold with no nuggets written yet. If that is what you are here for, open
 that file instead; the list below is the PQ release work.
 
-1. **[RECOMMENDED] Publish at_chops 3.6.0 to pub.dev.** ⚠️ This is a
-   maintainer step — a session cannot execute it; a session's first
-   executable item is the finished-row demotion at the end of this list
-   (or the carve, which needs commit/push permission).
-   #2169 **merged**
-   2026-08-20 as `c4c581834` — approved by Xlin123, CI 47/47, and an
-   adversarial re-review confirmed every fix and every argued reply before the
-   merge (its one finding, an unrecorded promise, is delivered in ruling 110's
-   addendum). Merged is not published, and the train's gate is the publish:
-   nothing after at_chops can declare `at_chops: ^3.6.0` until it is on
-   pub.dev. No workflow in this repo publishes to pub.dev (checked
-   `.github/workflows/` 2026-08-20), so the publish is a maintainer step —
-   gkc's.
-2. **Carve at_lookup** — train position 3. Recipe is in
-   [14.18](#1418-the-remaining-d1-initial-development-sequence); the carve gate
-   is `git -C /tmp/carve-<pkg> diff gkc-pq-d1-spike --stat -- packages/<pkg>`
-   returning empty. It can be **carved** now but **not published**: at_lookup
-   declares `at_commons: ^5.16.0` and pub.dev's at_commons is still 5.15.0.
-   Re-derive that before assuming, with the command in
-   [Re-deriving the state](#re-deriving-the-state).
+1. ~~Publish at_chops 3.6.0 to pub.dev~~ **Done by gkc 2026-08-21, and
+   at_commons 5.16.0 with it.** Verified live the same day:
+   `curl -s https://pub.dev/api/packages/<pkg> | jq -r .latest.version`
+   returns **at_chops 3.6.0** and **at_commons 5.16.0**, both published
+   2026-08-21. #2169 merged 2026-08-20 as `c4c581834` (approved by Xlin123,
+   CI 47/47, adversarial re-review clean — its one finding, an unrecorded
+   promise, is delivered in ruling 110's addendum). **The train's first two
+   positions are now released, which lifts the gate on everything after
+   them.** No workflow in this repo publishes to pub.dev (checked
+   `.github/workflows/` 2026-08-20), so each publish stays gkc's step.
+2. **[RECOMMENDED] Carve at_lookup** — train position 3, and **now
+   unblocked for publish as well as carve**: its `at_commons: ^5.16.0` floor
+   is satisfiable on pub.dev as of 2026-08-21, and 14.18's compile
+   differential already established it needs nothing newer than the
+   at_chops it was tested against. Recipe is in
+   [14.18](#1418-the-remaining-d1-initial-development-sequence) — worktree
+   off `origin/trunk`, hyphenated branch name (`gkc-pq-d1-at-lookup`), and
+   the gate is
+   `git -C /tmp/carve-at_lookup diff gkc-pq-d1-spike --stat -- packages/at_lookup`
+   returning **empty**. Then analyze and test the package *and its
+   consumers*, dispatch CI, and raise with the org template. Needs
+   commit/push permission.
 3. ~~Close out [14.43](#1443-the-functional-suites-convergence-race)'s
    remainder~~ **Done 2026-08-21, all of it.** All four original shapes have
    diagnosed, mutation-proven fixes; the last open members closed today:
@@ -95,9 +98,15 @@ that file instead; the list below is the PQ release work.
    after the LAST move. Unblocked, needs no permission beyond the commit,
    and is the precondition for this list staying trustworthy.
 
-**Blocked, and what lifts it:** publishing anything past at_chops waits on
-at_chops 3.6.0 reaching pub.dev — #2169 is merged, so only the publish itself
-remains. at_lookup's publish additionally waits on at_commons 5.16.0.
+**Blocked, and what lifts it:** ~~publishing anything past at_chops waits on
+at_chops 3.6.0 reaching pub.dev; at_lookup's publish additionally waits on
+at_commons 5.16.0~~ — **both published 2026-08-21, so nothing in the train is
+publish-blocked today.** Each package still waits on its own predecessor
+being released before it can declare a floor against it, which is what the
+order in [14.18](#1418-the-remaining-d1-initial-development-sequence) is for.
+The remaining external gate is the one 14.18 records for the LAST carves, not
+the next: the spike's test packs need a VE image that verifies ML-DSA PKAM,
+settled by moving CI to `dev_env`.
 
 ⚠️ **CI on this branch cannot catch up by itself.** Nothing fires on push
 here — the workflow is `workflow_dispatch` only on this branch — so the newest
@@ -128,7 +137,7 @@ to move anchors the acceptance rail parses.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. ✅ **at_commons PR #2168 is MERGED to trunk** (2026-08-20) and the spike's at_commons is now byte-identical to trunk. at_chops **PR #2169** is raised and green. Next: at_lookup, at_server_status, at_auth, at_client (stacked), at_client_flutter, at_onboarding_cli | ⚠️ **MERGED IS NOT PUBLISHED, and at_lookup is gated on the difference.** at_lookup declares `at_commons: ^5.16.0` because it reads `AtNetworkTimeouts.defaultResponseBudget`, and pub.dev's latest at_commons is still **5.15.0** — re-derive, never quote: `curl -s https://pub.dev/api/packages/at_commons | python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`. So at_lookup can be CARVED now and cannot be PUBLISHED until at_commons 5.16.0 is on pub.dev |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. ✅ **at_commons PR #2168 is MERGED to trunk** (2026-08-20) and the spike's at_commons is now byte-identical to trunk. at_chops **PR #2169** is raised and green. Next: at_lookup, at_server_status, at_auth, at_client (stacked), at_client_flutter, at_onboarding_cli | ✅ **The at_commons/at_chops publish gate LIFTED 2026-08-21** — gkc published at_commons **5.16.0** and at_chops **3.6.0**, so at_lookup (which declares `at_commons: ^5.16.0` for `AtNetworkTimeouts.defaultResponseBudget`) is now free to carve **and** publish. ⚠️ This cell read "MERGED IS NOT PUBLISHED, and at_lookup is gated on the difference" until that afternoon; the distinction still matters for every later package. Re-derive, never quote: `curl -s https://pub.dev/api/packages/at_commons \| python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`. **What is gated now is at_client**, whose floors `at_lookup: ^3.7.0` and `at_auth: ^3.4.0` are both ahead of pub.dev (3.6.1 and 3.3.0) — that is the train order doing its job, not a new blocker |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
