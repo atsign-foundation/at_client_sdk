@@ -35,8 +35,9 @@ pointing at it and no detail. `## TODO` below is *what is owed*, unordered; this
 is *what to do first*. Re-read this section against `git log --oneline -10`
 before acting — it has led with finished work before.
 
-Last re-ranked **2026-08-21** against the tree at `e76b0038b`, with the
-publish gate re-verified live (pub.dev at_chops = 3.5.0).
+Last re-ranked **2026-08-21** against the tree at `2965330f1`, with the
+publish gate re-verified live the same morning (pub.dev at_chops = 3.5.0,
+at_commons = 5.15.0).
 
 ⚠️ **A second workstream is now open and is NOT in this table** — the knowledge
 base, agreed with gkc 2026-08-20. Its plan, format, rail design and ordered
@@ -46,7 +47,8 @@ that file instead; the list below is the PQ release work.
 
 1. **[RECOMMENDED] Publish at_chops 3.6.0 to pub.dev.** ⚠️ This is a
    maintainer step — a session cannot execute it; a session's first
-   executable item is 3 (or 2, which needs commit/push permission).
+   executable item is the finished-row demotion at the end of this list
+   (or the carve, which needs commit/push permission).
    #2169 **merged**
    2026-08-20 as `c4c581834` — approved by Xlin123, CI 47/47, and an
    adversarial re-review confirmed every fix and every argued reply before the
@@ -63,36 +65,35 @@ that file instead; the list below is the PQ release work.
    declares `at_commons: ^5.16.0` and pub.dev's at_commons is still 5.15.0.
    Re-derive that before assuming, with the command in
    [Re-deriving the state](#re-deriving-the-state).
-3. **Close out [14.43](#1443-the-functional-suites-convergence-race)'s
-   remainder.** Three of the family's four original observations now have
-   diagnosed, mutation-proven fixes: shape A (`stop()` couldn't stop an
-   in-flight run), shape B (the matrix's shared-`primary` contention,
-   rebuilt with per-stage enrollments), and shape C (the push round's
-   unconditional removal losing a delete that raced it). Progress
-   2026-08-21: `sync_multiple_client_test`'s one examined red is
-   ~~plausible, unproven~~ **classified — it carries shape C's own signature
-   on the diverged key** (the CI log, once fetched un-truncated, shows the
-   pre-fix keystore-miss drop firing on it 1.5s before the assertion; the
-   section has the discriminators for any future red). The
-   rotated-advertisement member's mechanism is corrected in the section
-   (empty caches; a sync pull regressed the shared local box — the recorded
-   ttl hypothesis was wrong) with a drafted test-side fix:
-   `publishedAdvertisement` at four assertions across three files. The
-   catalogue question is settled — UC-G1.14 is qualified in place. Left:
-   apply the nskey test edits and the matrix driver's
-   dump-child-stderr-on-failure (drafted, waiting for the virtualenv);
+3. ~~Close out [14.43](#1443-the-functional-suites-convergence-race)'s
+   remainder~~ **Done 2026-08-21, all of it.** All four original shapes have
+   diagnosed, mutation-proven fixes; the last open members closed today:
+   `sync_multiple_client_test`'s one examined red is classified — shape C's
+   own signature on the diverged key (the section has the discriminators
+   for any future red) — and the rotated-advertisement member was a
+   test-side stale read, fixed in `ccf4987a4` (`publishedAdvertisement` at
+   four assertions across three files). The matrix driver dumps child
+   output on cell failure (`fce13ca52`).
    [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)'s
-   product decision — **ruled by gkc and built 2026-08-21: sign awaits
-   mint** (decisions.md 114; differential, mutation runs and a full pack
-   all green). The pack-rate soak is done: **0 family reds in 10 valid
-   packs at `112e1f740`** (one eleventh run excluded, gkc-confirmed machine
-   suspend; the rate paragraph in the section has the evidence). With that,
-   every item this cell listed is closed: what remains of 14.43 is watching
-   the rate hold — and 14.48's open residue is recorded under ruling 114.
+   ruling landed as decisions.md 114 — sign awaits mint, built and proven
+   (`09f9a974c`). UC-G1.14 is qualified in place. The pack-rate soak
+   measured **0 family reds in 10 valid packs at `112e1f740`** (an eleventh
+   run excluded, gkc-confirmed machine suspend; the rate paragraph in the
+   section has the evidence). What remains: watch the rate hold; 14.48's
+   residue is under ruling 114; the pull-side sync question and the parked
+   driver gap are in 14.43's TODO row.
 4. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
    ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
    `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
    removal owed at 4.0.
+5. **Demote the finished `## TODO` rows to `## DONE`** — 14.41, 14.43,
+   14.45, 14.48 and most of 14.39 are complete and still sit in the owed
+   table; each wants its heading moved under `## DONE` and its body demoted
+   to `detail/implementation-plan.md`, per this file's convention. The
+   acceptance rail parses these anchors, so run
+   `dart test test/acceptance --concurrency=1` in `packages/at_client`
+   after the LAST move. Unblocked, needs no permission beyond the commit,
+   and is the precondition for this list staying trustworthy.
 
 **Blocked, and what lifts it:** publishing anything past at_chops waits on
 at_chops 3.6.0 reaching pub.dev — #2169 is merged, so only the publish itself
@@ -101,7 +102,7 @@ remains. at_lookup's publish additionally waits on at_commons 5.16.0.
 ⚠️ **CI on this branch cannot catch up by itself.** Nothing fires on push
 here — the workflow is `workflow_dispatch` only on this branch — so the newest
 run is as new as the last manual dispatch and no newer. As of 2026-08-21 the
-newest run (`32435733084`) is on `e76b0038b` — HEAD at the time — and
+newest run (`32468769474`) is on `2965330f1` — HEAD at the time — and
 concluded **success, 11/11 jobs**. That sentence goes stale the moment the
 branch moves: dispatch before treating the branch as green, and compare the
 two SHAs rather than reading a conclusion:
@@ -113,13 +114,13 @@ gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 1 \
 git log --oneline -1
 ```
 
-⚠️ **Three `## TODO` rows below are finished and still render as owed** —
+⚠️ **Five `## TODO` rows below are finished and still sit in the owed table** —
 **14.41** (all four red CI rows fixed; its remainder moved to 14.42 and 14.43,
-which have their own rows), **14.45** (both halves fixed; only an out-of-repo
-residual remains) and most of **14.39**. You learn that only by reading to the
-end of each cell. They want demoting to `## DONE` with their detail moved to
-`detail/implementation-plan.md`, per this file's own convention — not done here
-because a wrap-up is the wrong place to move anchors the acceptance rail parses.
+which have their own rows), **14.43** and **14.48** (both closed 2026-08-21;
+their cells say so), **14.45** (both halves fixed; only an out-of-repo
+residual remains) and most of **14.39**. Demoting them is the finished-row
+item in THE NEXT MOVE above — not done in a wrap-up, which is the wrong place
+to move anchors the acceptance rail parses.
 
 ---
 
@@ -135,8 +136,8 @@ because a wrap-up is the wrong place to move anchors the acceptance rail parses.
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
 | [14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found) | **ALL FOUR red rows are fixed and CI is fully green** (run 32392240064, 11 of 11, on `f24ee3ab6` — the head with **origin/trunk merged in**, so it covers at_commons #2168 and the 15 commits trunk brought). Only ONE of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What remains from this section is the convergence RACE and the two items below it | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
-| [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — MOSTLY CLOSED. Three of the four original shapes have diagnosed, mutation-proven fixes in the tree: shape A (`stop()` could not stop an in-flight sync run), shape B (the rollout matrix's stages contending on `primary`'s one `_apsk` record — rebuilt with per-stage enrollments), shape C (the push round's unconditional queue removal losing a delete that raced it). The harness's complete-on-failure defect is also fixed | Whether `sync_multiple_client_test` reduces to shape C (plausible, unproven); the rotated-advertisement cache member; the matrix driver dumping child stderr on cell failure; pack rate re-measurement at or after `e76b0038b` |
-| [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew) | **A `primary` client can sign with a key its own advertisement just withdrew**: fire-and-forget startup minting + publish-before-file + the sign path's auth-key fallback + the bare form's single slot. One client racing itself — distinct from the accepted two-client overwrite plurality | Close the window: sign path awaits a pending mint, or refuses until minting settles, or the composition keeps the authentication entry — check whether the JSON form already rescues enrolled clients before choosing |
+| [14.43](#1443-the-functional-suites-convergence-race) | **The functional suite's convergence race** — CLOSED 2026-08-21, bar a watch. All four original shapes have diagnosed, mutation-proven fixes; the last members were classified (`sync_multiple`'s red carries shape C's signature) or fixed (the rotated-advertisement stale read, `ccf4987a4`); the driver dumps child output on failure (`fce13ca52`); rate at `112e1f740`: 0 family reds in 10 valid packs | Nothing blocks. Remaining: watch the rate hold; a product question recorded in the section — a sync pull applies an OLDER server entry over NEWER local state, the pull-side face shape C's push-side versioning does not cover; parked: a driver-side `expect` failure on a protocol-green cell still dumps nothing. Row wants demoting to `## DONE` |
+| [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew) | **A `primary` client can sign with a key its own advertisement just withdrew**: fire-and-forget startup minting + publish-before-file + the sign path's auth-key fallback + the shared composer withdrawing the auth key on the first mint — so enrolled clients share the window; the JSON form has no `authentication` entry to rescue them | CLOSED by ruling 114 (2026-08-21): the sign path awaits the mint — built (`09f9a974c`), differential- and mutation-proven, pack green. Residue under the ruling: the durable pre-mint-envelope question and the verifier cache asymmetry. Row wants demoting to `## DONE` |
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | **A unit-tree isolation flake**: `local_secondary_sync_queue_test.dart` failed 1-in-4 when run after the nskey/pq files in one non-alphabetical invocation — a same-file test's queue entry leaked into a later test, so the per-test store isn't always fresh. Green alone, green in the full suite | Reproduce at rate (~10 runs of the four-file order), then read the file's setUp for what makes the store per-test fresh |
 | [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. Still in the section: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |
 | [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. ✅ **The refusal is fixed too** — it was a namespace check, not immutability, and the sweep now bypasses it. **Owed elsewhere:** the keystore's `get()` does not filter expired records (at_persistence_secondary_server, another repo) | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20) |
@@ -2306,19 +2307,24 @@ child's `exit(0)` means nothing lingers across cells):
   JSON array after the first re-mint, and a deployed reader can no longer
   parse it. Stated for rollout: *pqReady is invisible to a deployed peer
   until its enrollment rotates or re-mints its signing key; after that it is
-  fail-closed visible.* Whether the acceptance catalogue should say this is
-  gkc's call.
+  fail-closed visible.* Ruled by gkc 2026-08-21: the catalogue says it —
+  UC-G1.14 is qualified in place.
 - **The child awaits the mint settled before signing** (bounded, loud) — a
-  guard now that cells start pre-minted, and the harness-side answer to the
+  guard now that cells start pre-minted, and the harness-side twin of the
   race [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
-  still owes a product-side decision on.
+  recorded — since closed product-side by ruling 114 (the sign path awaits
+  the mint), which makes this guard redundant-but-harmless.
 - The receiver is handed the sender's enrollment id — an `_apsk` address is
   `(atSign, enrollment)`, and a reader handed only the atSign would read a
   record an enrolled sender never writes.
 
-Still owed from the diagnosis: the driver dumping child stderr on cell
-**failure**, not only on timeout — the two red iterations above each needed
-an inference where a dumped log would have been a read.
+The dump-on-failure the diagnosis called for landed 2026-08-21
+(`fce13ca52`): a FAILED cell's error carries the child's `during` and
+`stack` fields, and its stderr is dumped after the pipe drains — the child
+writes FAILED to stdout before its stack reaches stderr, so an undrained
+dump is usually empty. Parked, recorded here so it is not re-derived: a
+driver-side `expect` failure on a protocol-green cell still dumps nothing
+(the noise lists are `runCell` locals, discarded on return).
 
 **Shape C — the lost delete — diagnosed and fixed 2026-08-21, from a red
 the post-rebuild soak captured.** `atclient_sync_callback_test` ("latest
@@ -2448,7 +2454,9 @@ fetch) — look for `Pulling to local: UPDATE: public:__nskey.<ns>` between
 the rotation's publish and the assertion. Side observation for a product
 ruling: the regression this rides on is the sync pull applying an OLDER
 server entry over NEWER local state — the pull-side face of this family,
-which shape C's push-side versioning does not cover.
+which shape C's push-side versioning does not cover. The test-side fix
+landed 2026-08-21 (`ccf4987a4`): all four exposed assertions read through
+`publishedAdvertisement`, and one functional pack ran 177/177 with them.
 
 **The harness half, also visible in the red log:**
 `FunctionalTestSyncService.syncData` completed 610µs after starting — too fast
