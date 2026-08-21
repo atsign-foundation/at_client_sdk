@@ -63,23 +63,30 @@ abstract interface class AtLookUp {
   /// request goes out unauthenticated. Requiring it forces the caller to say
   /// which it meant.
   ///
-  /// [secureSocketConfig] is required for the same reason: a caller wanting
-  /// the defaults writes `SecureSocketConfig()` and thereby states it. One
-  /// production site today omits what its neighbour sets.
+  /// [transport] is required, and deliberately has no default. A default
+  /// naming an implementation pulls that implementation's imports in whatever
+  /// the caller injects, which is what makes a transport swap fail silently
+  /// rather than loudly. The socket transport is `secureSocketTransport` in
+  /// `package:at_lookup/at_lookup_io.dart`, so naming it is also what selects
+  /// the library that carries it.
+  ///
+  /// It carries its own configuration, which is why no socket settings appear
+  /// here: a caller wanting the TLS defaults writes
+  /// `secureSocketTransport(SecureSocketConfig())` and thereby states it,
+  /// while a caller on another transport says nothing about TLS at all.
   static AtLookupMuxable withSecureSocket({
     required String atSign,
     required AtRootDomain rootDomain,
-    required SecureSocketConfig secureSocketConfig,
     required AtAuthenticator? authenticator,
+    required AtLookupTransport transport,
     Map<String, dynamic> clientConfig = const {},
     SecondaryAddressFinder? secondaryAddressFinder,
-    AtLookupTransport transport = AtLookupTransport.secureSocket,
   }) {
     return AtLookupImpl(
       atSign,
       rootDomain.rootDomain,
       rootDomain.rootPort,
-      secureSocketConfig: secureSocketConfig,
+      secureSocketConfig: transport.secureSocketConfig,
       clientConfig: clientConfig,
       secondaryAddressFinder: secondaryAddressFinder,
       secureSocketFactory: transport.socketFactory,
@@ -396,12 +403,19 @@ class AtLookupTransport {
   final AtLookupOutboundConnectionFactory connectionFactory;
   final AtLookupSecureSocketListenerFactory listenerFactory;
 
+  /// How this transport is configured to reach an atServer.
+  ///
+  /// Here rather than on [AtLookUp.withSecureSocket] because it is a property
+  /// of the transport, not of the lookup: TLS certificates, a keylog path and
+  /// a cert-check toggle mean nothing to a transport that is not TLS over TCP.
+  /// A WebSocket transport would carry its own settings in its own type and
+  /// leave the factory's signature alone.
+  final SecureSocketConfig secureSocketConfig;
+
   const AtLookupTransport({
+    required this.secureSocketConfig,
     this.socketFactory = const AtLookupSecureSocketFactory(),
     this.connectionFactory = const AtLookupOutboundConnectionFactory(),
     this.listenerFactory = const AtLookupSecureSocketListenerFactory(),
   });
-
-  /// TLS over TCP: what every caller gets unless it says otherwise.
-  static const AtLookupTransport secureSocket = AtLookupTransport();
 }

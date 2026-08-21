@@ -66,10 +66,12 @@ void main() {
       AtLookUp.withSecureSocket(
         atSign: '@alice',
         rootDomain: const AtRootDomain(host, 64),
-        secureSocketConfig: SecureSocketConfig(),
         authenticator: authenticator,
         secondaryAddressFinder: addressFinder,
-        transport: AtLookupTransport(socketFactory: socketFactory),
+        transport: AtLookupTransport(
+          secureSocketConfig: SecureSocketConfig(),
+          socketFactory: socketFactory,
+        ),
       );
 
   /// An authenticator that succeeds without doing anything. `_authenticateWith`
