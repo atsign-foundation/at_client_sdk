@@ -25,4 +25,19 @@ abstract class AtConnectionMetaData {
   DateTime? created;
   bool isClosed = false;
   bool isStale = false;
+
+  /// The enrollment id this connection authenticated as, or null where the
+  /// authentication carried none — a CRAM authentication, or a PKAM
+  /// authentication made without one.
+  ///
+  /// This is what the connection *holds*, not what the next authentication
+  /// will ask for. `AtLookUp.enrollmentId` is the latter: setting it does not
+  /// move a socket that is already up, so a client whose enrollment changes
+  /// must re-authenticate each connection and read this field back to know it
+  /// happened.
+  String? authenticatedAsEnrollmentId;
+
+  /// When this connection last completed authentication, in UTC. Null until it
+  /// authenticates; set on the same paths as [isAuthenticated].
+  DateTime? authenticatedAt;
 }

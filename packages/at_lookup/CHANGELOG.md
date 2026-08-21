@@ -1,3 +1,199 @@
+## 3.7.0
+
+- deprecated: `AtLookUp.executeVerb`'s `sync` parameter, removal in 4.0. It
+  has never been read: the verb always executes on the remote atServer, and
+  there is no sync behaviour for the parameter to control.
+- fix(deps): raised the `at_chops` constraint to `^3.6.0`. The old `^3.3.0`
+  floor was never exercised — the only build evidence for this package is
+  against at_chops 3.5.0 and later, so a consumer resolving 3.3.0 or 3.4.x
+  was relying on a combination nothing had tested. Workspace resolution hides
+  that gap locally, because it always supplies the in-tree at_chops. 3.6.0 is
+  what this release is built and tested against.
+- fix(deps): raised the `at_commons` constraint to `^5.16.0`. This package now
+  reads `AtNetworkTimeouts.defaultResponseBudget`, which does not exist in
+  at_commons 5.15.0 or earlier — under the old `^5.13.0` a consumer could
+  resolve an at_commons that this package does not compile against.
+
+- fix: a request in flight when its connection closes now fails immediately
+  instead of waiting out its response budget. `AtLookupImpl` holds
+  `requestResponseMutex` across that wait, so a connection that had already gone
+  stalled the **next** request on the same instance for the whole transient
+  budget - 30 seconds by default. Stopping an atSign's client while its startup
+  work was still in flight was enough to trigger it, and the request that
+  followed read as a hang rather than as a closed connection. Every close now
+  routes through one place that fails the pending read first, and the caller
+  gets a `ConnectionInvalidException` naming what happened rather than an
+  `AtTimeoutException` pointing at the atServer. A response already parsed and
+  queued before the connection went away is still returned.
+
+- feat: `AtLookupMuxable.notificationConnectionUp` — `true` when `monitor:` is
+  accepted on a live connection, `false` when it is lost or stopped. The
+  muxable owns reconnection, so it is the only thing that knows; at_client's
+  `Monitor` re-broadcasts it as a listener state, which noports' daemon
+  subscribes to for its whole life. Broadcast, unlike `notifications`, because
+  it is a state signal whose latest value supersedes the last — a dropped
+  notification is gone, a dropped state event is re-derivable.
+
+- feat: `AtLookupMuxable` gains the members callers were reaching for through
+  a cast to the concrete class: `authenticator`, `isConnectionAvailable` and
+  `readResponse`, plus `scan(auth:)` and `lookup(metadata:)`. Those last two
+  are a defect this surfaced - `AtLookupImpl` accepted **more** than `AtLookUp`
+  declared, so a caller moving to the interface silently lost parameters. They
+  are restated on the muxable rather than added to `AtLookUp`, which is frozen:
+  adding a parameter there forces every `implements AtLookUp` to redeclare it.
+
+- feat: `AtLookUp.withSecureSocket(...)` — the entry point, returning an
+  `AtLookupMuxable`. Static, so it adds nothing to the `implements` contract
+  and breaks none of the classes that mock `AtLookUp`. It takes an
+  `AtRootDomain` rather than a `String, int` pair, requires
+  `secureSocketConfig` and `authenticator` (the latter nullable, because "this
+  connection never authenticates" is a real mode that ought to be stated), and
+  takes an `AtLookupTransport`.
+- feat: `AtLookupTransport` bundles the three connection factories
+  `AtLookupImpl` has always accepted into one value, so a caller holding only
+  the `AtLookupMuxable` interface can still say how connections are made. It
+  bundles rather than abstracts on purpose: the web-port plan records that
+  these factories are already injectable and that the blocker is their
+  **return type**, so a second abstraction here would be one more seam for that
+  work to reconcile. It is not yet sufficient for a non-socket transport, and
+  does not claim to be — `AtConnection.getSocket()` still returns a `Socket`.
+- feat: `AtLookupImpl`'s constructor is `@Deprecated` in favour of the factory.
+  The class itself is **not** deprecated and does not move: it is exported from
+  the barrel, so renaming it or making it private would remove a public class,
+  which this release is not. The warnings at each construction site are the
+  deliverable — 45 of them, `info`, so nothing breaks while they are worked
+  through.
+- feat: `MonitorClient` is `@Deprecated` with no replacement. A tree-wide
+  search finds its own declaration and nothing else, and it predates the
+  connect timeouts — it builds its socket directly rather than through
+  `SecureSocketUtil`, so it never got them. Use `withSecureSocket` and
+  `AtLookupMuxable.notifications`.
+
+- feat: the muxable owns reconnect, reauth and heartbeat, because it owns the
+  socket. Losing the notification connection re-establishes it on the
+  `[1,2,3,5,8,13,21,34]`-second backoff, re-runs the authenticator, and
+  re-issues the **same** `monitor:` — a reconnect that dropped the regex would
+  start delivering everything, and one that dropped the watermark would replay
+  from the beginning. A quiet connection is probed with `noop:0`, because a
+  connection that only ever reads cannot tell a quiet atServer from a dead
+  socket. at_client's `Monitor` carries an identical delay list; both cannot
+  own reconnection.
+- feat: `OutboundMessageListener.onDisconnect`. The listener knows the socket
+  died before anything else does and used to keep it to itself, so a
+  subscriber just stopped hearing anything, with no event separating "the
+  atServer is quiet" from "the socket is gone".
+- fix: `stopNotifications` no longer awaits the notification controller's
+  `close()`. On a single-subscription controller that future completes only
+  once a subscriber has received the done event, so starting notifications and
+  stopping them without ever listening — a legal sequence — hung forever.
+
+- feat: `AtLookupMuxable`, an `AtLookUp` that also carries the atServer's
+  asynchronous notification stream, so one class knows both of the atServer's
+  framings instead of the framing code existing twice. `AtLookupImpl`
+  implements it: `notifications` is a **single-subscription** stream whose
+  pause reaches the socket, `startNotifications` sends `monitor:` under the
+  request-response mutex, and `stopNotifications` closes both. A broadcast
+  stream was rejected — it does not buffer, ignores pause and drops anything
+  arriving before a listener attaches, and each of those is a lost
+  notification, which is indistinguishable from one the atServer never sent.
+- feat: `OutboundMessageListener` keeps the subscription `listen()` used to
+  discard, and exposes `pauseDelivery`/`resumeDelivery`. That is what makes
+  back-pressure real: pausing stops reading the socket, so TCP closes the
+  window on the atServer rather than this process buffering without bound.
+  Note that `StreamSubscription` **counts** pauses — two need two resumes.
+- fix: ⚠️ `MonitorVerbBuilder.multiplexed` does not do what it says, and
+  nothing in at_lookup sets it. Its dartdoc claims the atServer "will only send
+  notifications once there is no request currently in progress". No atServer
+  implements it: zero occurrences in `at_server` `origin/trunk`, against a
+  probe proven positive on `selfNotifications` (16). The monitor verb's syntax
+  — shared by both sides — does capture `multiplexed`, so the atServer parses
+  the flag and ignores it rather than refusing it. Until an atServer
+  implements the interlock, give the notification stream a connection of its
+  own.
+
+- feat: the six credential members are `@Deprecated` — `atChops`,
+  `signingAlgoType`, `hashingAlgoType` and `enrollmentId` on both `AtLookUp`
+  and `AtLookupImpl`, plus `privateKey` and `cramSecret` on the impl.
+  Authentication runs through an injected `AtAuthenticator`, which at_auth
+  builds from whichever credential shape a caller holds, so at_lookup no
+  longer needs key material of its own. The fallback ladder still reads these
+  fields and nothing breaks; the fields and the ladder are removed together in
+  the next major. `signingAlgoType` and `hashingAlgoType` are one setting —
+  they are read on the same lines when the PKAM signature is built — so
+  deprecating either without the other would say the survivor lives on into
+  the major, which is not true.
+- fix: `privateKey`'s deprecation message claimed "privateKey reference is no
+  longer used". That was false: the ladder in `_process` reads the field and
+  signs with it, and before the authenticator seam landed it was the leg most
+  of the traffic took. The message now names the replacement instead.
+
+- fix: `pkamAuthenticate` prefers an injected authenticator too, not only
+  `executeCommand`. at_auth reaches that method directly rather than through a
+  verb, so a seam wired into the verb path alone would have looked connected
+  while doing nothing on the one call that matters most. The enrollment id is
+  now threaded to the recording, because a caller of `pkamAuthenticate` names
+  it in the call while a verb has only the field.
+
+- feat: `validatedFromChallenge` is public API rather than
+  `@visibleForTesting`. Authentication is moving to at_auth, where the key
+  material is, and the side that signs a challenge is the side that must refuse
+  a malformed one. The alternative was a second copy of a security control,
+  and two copies drift.
+- feat: `AtCommandExecutor.sendSync` accepts the same two timeout budgets as
+  `OutboundMessageListener.read`. Authentication does not want one answer: the
+  CRAM leg of onboarding waits far less than a verb response does, and moving
+  that code out of at_lookup must not change its timing.
+
+- feat: `AtLookupImpl` accepts an injected authenticator. Two new types,
+  `AtAuthenticator` and `AtCommandExecutor`, let a caller hand over the whole
+  of authentication as one closure instead of handing at_lookup a credential
+  to store. at_lookup cannot name `AtKeys` or `AtKeysIo` - they live in
+  at_auth, which depends on at_lookup - so the keystore, the enrollment and
+  the signing algorithm stay on the caller's side of the seam. When set, the
+  authenticator is preferred over the existing
+  atChops/privateKey/cramSecret ladder; when absent, nothing changes. Both
+  routes work, and the ladder goes once every caller supplies one.
+
+- feat: `OutboundMessageListener` can route asynchronous notifications, via a
+  new `onNotification` callback. The atServer frames the two kinds of message
+  differently - a verb response ends with a newline and the ready prompt
+  `@<atSign>@`, while a notification is a reply to nothing, so no prompt
+  follows it and it ends at a bare newline. One listener now knows both. While
+  `onNotification` is null the second framing is not applied at all and parsing
+  is byte-for-byte what it was, because routing notifications to a callback
+  nobody installed would drop them.
+
+- feat: `OutboundMessageListener.read` waits on an event instead of polling.
+  It slept 10ms at a time and re-checked a queue, so every response carried up
+  to a polling interval of latency for no reason. It now sleeps until a
+  response is queued or until the nearer of its two deadlines, whichever comes
+  first.
+- feat: `read`'s two timeouts come from `AtNetworkTimeouts` and are now
+  nullable. The whole-response budget defaults to
+  `AtNetworkTimeouts.defaultResponseBudget` (90s, unchanged in value) and the
+  between-chunks budget to `AtNetworkTimeouts.effectiveDefault`, which moves
+  that default from **10s to 30s**. Ten seconds of silence is not evidence a
+  busy atServer has gone away, and the two budgets measure different things:
+  one bounds the whole response, the other restarts on every chunk. Callers
+  passing explicit values are unaffected, and a process that sets
+  `AtNetworkTimeouts.defaultTimeout` at startup now moves this too.
+
+- fix: a response carrying no colon no longer destroys the connection.
+  `OutboundMessageListener._stripPrompt` ran `substring(0, -1)` when
+  `indexOf(':')` found nothing, and the bare `@<atSign>@` that completes the
+  handshake is exactly such a response - one `_isValidResponse` accepts. The
+  RangeError was raised inside the socket's data handler, so `runZonedGuarded`
+  reported it as a socket error and closed a healthy connection, leaving the
+  caller with an `AtTimeoutException` naming the wrong cause. Guarded, as the
+  copy of this method in at_client's `Monitor` already was.
+
+- feat: a connection records the identity it authenticated as.
+  `AtConnectionMetaData` gains `authenticatedAsEnrollmentId` and
+  `authenticatedAt` beside `isAuthenticated`, set by every path in
+  `AtLookupImpl` that authenticates. `AtLookUp.enrollmentId` is what the *next*
+  PKAM will send, so it cannot answer which enrollment a socket that is already
+  up holds; this can.
+
 ## 3.6.1
 
 - fix: strengthen the from challenge. A client now checks that a `from:`
