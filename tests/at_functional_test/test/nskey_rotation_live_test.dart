@@ -165,8 +165,15 @@ void main() {
 
     // The atServer's own copy, read by an enrollment that did not do the
     // rotation. Reading the rotator's own memory would prove nothing about
-    // what a peer will seal to.
-    final published = await survivor.ring.currentPublic(atSign, namespace);
+    // what a peer will seal to — and `currentPublic` would not read the
+    // atServer either: it serves this ring's caches and then a LOCAL-first
+    // get, and for an own-atSign key that get reads the storage every client
+    // of this atSign in the process shares, which an in-flight sync pull can
+    // regress to the superseded generation moments after a rotation.
+    // `publishedAdvertisement` reads the atServer directly and verifies the
+    // signature on the way — the record this assertion is about.
+    final published =
+        await survivor.ring.publishedAdvertisement(atSign, namespace);
     expect(published?.nskeyKid, outcome.advertisement.nskeyKid,
         reason: 'the advertisement is OVERWRITTEN — that is what makes new '
             'content keys seal to the successor, and it is the only signal a '
@@ -585,7 +592,9 @@ void main() {
     expect(rotated.supersededKid, before.nskeyKid);
     expect(rotated.excluded, {target.enrolled.enrollmentId});
 
-    expect((await owner.ring.currentPublic(atSign, ns))?.nskeyKid,
+    // The atServer's record, not this ring's memory: `currentPublic` here
+    // would answer from the cache the rotation itself just wrote.
+    expect((await owner.ring.publishedAdvertisement(atSign, ns))?.nskeyKid,
         rotated.advertisement.nskeyKid);
     // The pull gets its chance and still comes up empty. That is the whole
     // difference from a bare exclusion: the revoke has already dropped this

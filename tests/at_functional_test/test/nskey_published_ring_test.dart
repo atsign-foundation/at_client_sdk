@@ -98,8 +98,14 @@ void main() {
 
     // The advertisement is mutable by design, so the atServer now serves only
     // the new generation — that is what a sender re-plookups and picks up.
-    expect((await PublishedNskeyKeyRing(atClient).currentPublic(atSign, ns))
-        ?.nskeyKid, second.nskeyKid);
+    // Read the atServer's copy: a fresh ring's `currentPublic` still reads
+    // local-first for its own atSign, and a sync pull can regress that copy
+    // to the superseded generation moments after the rotation.
+    expect(
+        (await PublishedNskeyKeyRing(atClient)
+                .publishedAdvertisement(atSign, ns))
+            ?.nskeyKid,
+        second.nskeyKid);
 
     // But the ring keeps the superseded private, or every conveyance sealed to
     // it before the rotation would become unreadable.

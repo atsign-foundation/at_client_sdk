@@ -190,8 +190,11 @@ void main() {
         reason: 'a rotation mints a NEW generation; if these match, the second '
             'publish was a no-op and this proves nothing about mutability');
 
+    // The atServer's copy, not the shared local store: a fresh ring's
+    // `currentPublic` reads local-first and a sync pull can regress that copy
+    // to the superseded generation moments after the rotation.
     final resolved =
-        await PublishedNskeyKeyRing(atClient).currentPublic(atSign, ns);
+        await PublishedNskeyKeyRing(atClient).publishedAdvertisement(atSign, ns);
     expect(resolved?.nskeyKid, second.nskeyKid,
         reason: 'the advertisement must now name the new generation — an '
             'immutable nskey record would have pinned peers to the old key '
