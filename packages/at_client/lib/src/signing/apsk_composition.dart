@@ -1,13 +1,12 @@
 import 'dart:convert' show jsonEncode;
 
-import 'package:at_auth/at_auth.dart'
-    show ApskSigningKey, KeyEntryStatus, apskAdvertisement;
+import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys;
 
 /// The `_apsk` entries an enrollment advertises: **the keys that sign for it
-/// now, plus the signing keys it has retired.**
+/// now, plus the signing keys it has withdrawn.**
 ///
 /// One composer for both publishers. `_apsk` is one record whether the
 /// atServer writes it from an `enroll:request`/`enroll:update` or a client
@@ -15,9 +14,16 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 /// record are two chances to disagree about what an enrollment can verify.
 ///
 /// [signing] is what the enrollment holds of its own, strongest first — the
-/// active entries. [retired] is the public half of every signing key it has
-/// withdrawn, which stays advertised because envelopes are stored durably and
-/// verified whenever they are read: a key is retained for **what it signed**.
+/// active entries. [withdrawn] is the public half of every signing key it has
+/// taken out of service, each with the status the keyfile gives it, which
+/// stays advertised because envelopes are stored durably and verified whenever
+/// they are read: a key is retained for **what it signed**.
+///
+/// A withdrawn entry's status is written through, not replaced with `retired`.
+/// The advertisement is rewritten whole on every publish, so this composer
+/// decides what the record says about every key an enrollment has ever used;
+/// substituting a token here would republish the owner's record with their own
+/// statement about a key overwritten by a build that could not read it.
 ///
 /// [authentication] is the APKAM authentication keypair, and its treatment is
 /// the whole point of this function:
@@ -43,7 +49,8 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 /// document a verifier has to choose between with nothing to choose on.
 List<ApskSigningKey> apskEntries({
   required List<ApkamSigningKeys> signing,
-  required List<({SigningAlgoType algorithm, String publicKey})> retired,
+  required List<({SigningAlgoType algorithm, String publicKey, String status})>
+      withdrawn,
   required ApkamSigningKeys? authentication,
 }) {
   final entries = [
@@ -60,12 +67,10 @@ List<ApskSigningKey> apskEntries({
         alg: authentication.algorithm, pub: authentication.publicKey));
   }
 
-  for (final key in retired) {
+  for (final key in withdrawn) {
     if (entries.any((entry) => entry.pub == key.publicKey)) continue;
     entries.add(ApskSigningKey.forPublicKey(
-        alg: key.algorithm,
-        pub: key.publicKey,
-        status: KeyEntryStatus.retired));
+        alg: key.algorithm, pub: key.publicKey, status: key.status));
   }
   return entries;
 }

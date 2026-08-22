@@ -338,7 +338,7 @@ void main() {
               'rather than two');
 
       final keys = await keyfile();
-      final retired = keys.retiredSigningKeysFor(enrollmentId).single;
+      final retired = keys.withdrawnSigningKeysFor(enrollmentId).single;
       expect(retired.algorithm, SigningAlgoType.rsa2048);
       expect(retired.publicKey, wasSigning.publicKey,
           reason: 'the same key, moved rather than replaced — a fresh RSA key '
@@ -372,7 +372,7 @@ void main() {
       expect(
           advertised.last.pub,
           (await keyfile())
-              .retiredSigningKeysFor(enrollmentId)
+              .withdrawnSigningKeysFor(enrollmentId)
               .single
               .publicKey,
           reason:

@@ -9,6 +9,15 @@ files, against a positive control of `AtClientPreference` in 20. The BREAKING
 labels below were rewritten in the same pass: as written they sent a reader
 hunting for a constructor argument that never existed in a release. -->
 
+- **BREAKING** refactor: `apskEntries`' `retired` parameter becomes
+  `withdrawn` and takes the status alongside each key, and
+  `ApkamSigning.retiredSigningKeys` becomes `withdrawnSigningKeys` to match.
+  The composer writes each withdrawn entry's token through instead of stamping
+  every one of them `retired` — it decides what the record says about every key
+  an enrollment has ever used, because `_apsk` is rewritten whole on every
+  publish. Keys this call is withdrawing right now are still stated as
+  `retired`, which is what it is doing to them. See at_auth's CHANGELOG for the
+  selector this pairs with.
 - **BREAKING** refactor: `KeyEntryStatus` (re-exported from at_auth) is an open
   `String` vocabulary rather than an `enum`, so `PackageKey.status` and
   `PersistedEncKey.status` are `String`. `PackageKey.offeredForNewOperations`

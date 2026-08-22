@@ -896,7 +896,7 @@ void main() {
     // label has to be encoded to be filed and encoded again to be asserted
     // against. Declared here rather than inside `signingKeysFor` because the
     // selection it fixtures is read by that accessor, by
-    // `retiredSigningKeysFor` and by `retireSigningKeys` — three views of one
+    // `withdrawnSigningKeysFor` and by `retireSigningKeys` — three views of one
     // shape, which are only comparable if they are given the same material.
     String b64(String label) => base64Encode(utf8.encode(label));
 
@@ -1051,7 +1051,7 @@ void main() {
             [SigningAlgoType.mldsa65],
             reason: 'the withdrawn key stops being one this enrollment signs '
                 'with');
-        expect(atKeys.retiredSigningKeysFor('E1').single.publicKey,
+        expect(atKeys.withdrawnSigningKeysFor('E1').single.publicKey,
             b64('rsa-pub'),
             reason: 'and starts being one it advertises as retired — the same '
                 'key, which is what keeps what it signed verifiable');
@@ -1135,6 +1135,52 @@ void main() {
         expect(atKeys.signingKeysFor('E1'), hasLength(1));
       });
 
+      test('a status this build cannot read is advertised, with its token',
+          () {
+        // The keyfile's status vocabulary is open, so a newer build may say
+        // something about a signing key that this one has never heard of. This
+        // selector read exactly `retired` until 2026-08-22 and SKIPPED such a
+        // key — which sounds cautious and is not: the advertisement is
+        // rewritten whole on every publish, so an omitted entry withdraws the
+        // key, taking with it both what verifies its old envelopes and
+        // whatever its owner last said about it. Now that the advertisement's
+        // own status is an open token there is nothing left to guess: the
+        // keyfile's word travels out unchanged.
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          ...signingPair('E1', KeyAlgorithmType.rsa2048,
+              value: 'rsa', status: 'revoked'),
+          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'mldsa'),
+        ]);
+
+        final withdrawn = atKeys.withdrawnSigningKeysFor('E1');
+        // Length before fields, so skipping the entry fails saying the key is
+        // missing rather than crashing inside `.single` and naming nothing.
+        expect(withdrawn, hasLength(1),
+            reason: 'the key is still advertised, so what it signed still '
+                'verifies for anyone who can read the status - dropping it '
+                'from a record that is rewritten whole IS a withdrawal');
+        expect(withdrawn.single.publicKey, b64('rsa-pub'));
+        expect(withdrawn.single.status, 'revoked',
+            reason: 'and it goes out saying what the keyfile says, not what '
+                'this build would have guessed');
+        expect(atKeys.signingKeysFor('E1').map((k) => k.algorithm).toList(),
+            [SigningAlgoType.mldsa65],
+            reason: 'it is not active either - the control that stops this '
+                'row passing on a selector that simply returns everything');
+      });
+
+      test('dead signing material is advertised by nothing', () {
+        // The other side of "not active". `dead` was never adopted, so it has
+        // nothing to verify and nothing to say - it is the one non-active
+        // status that stays out.
+        final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
+          ...signingPair('E1', KeyAlgorithmType.rsa2048,
+              value: 'rsa', status: KeyPartStatus.dead),
+        ]);
+
+        expect(atKeys.withdrawnSigningKeysFor('E1'), isEmpty);
+      });
+
       test('leaves an already-retired key where it is', () {
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
           ...signingPair('E1', KeyAlgorithmType.rsa2048,
@@ -1145,7 +1191,7 @@ void main() {
             isEmpty,
             reason: 'selected on active material, so a start after the '
                 'withdrawal has nothing to do and rewrites nothing');
-        expect(atKeys.retiredSigningKeysFor('E1'), hasLength(1));
+        expect(atKeys.withdrawnSigningKeysFor('E1'), hasLength(1));
       });
     });
 

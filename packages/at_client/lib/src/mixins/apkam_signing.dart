@@ -136,14 +136,14 @@ mixin ApkamSigning {
   }
 
   /// What [publishPublicSigningKey] writes: what signs for this enrollment now
-  /// plus the signing keys it has retired, composed by [apskEntries] and
+  /// plus the signing keys it has withdrawn, composed by [apskEntries] and
   /// spelled by [apskValueOf].
   ///
   /// The same rule decides the enrollment path's `apsk`-versus-`apskLegacy`,
   /// and the two must agree: they describe one record.
   Future<String> get publicSigningKeyValue async => apskValueOf(apskEntries(
         signing: await heldSigningKeys,
-        retired: await retiredSigningKeys,
+        withdrawn: await withdrawnSigningKeys,
         authentication: authenticationSigningKey,
       ));
 
@@ -244,9 +244,15 @@ mixin ApkamSigning {
     ];
   }
 
-  /// The public half of every signing key this enrollment has retired — the
-  /// `retired` entries of its advertisement, which keep envelopes signed
-  /// before the key was withdrawn verifiable.
+  /// The public half of every signing key this enrollment has taken out of
+  /// service, each with the status the keyfile gives it — the non-active
+  /// entries of its advertisement, which keep envelopes signed before the key
+  /// was withdrawn verifiable.
+  ///
+  /// The status travels because the keyfile's vocabulary is open and so is the
+  /// advertisement's: a token a newer build wrote is what this enrollment's
+  /// owner said about that key, and the composer republishes it rather than
+  /// substituting one this build knows.
   ///
   /// ⚠️ **Not filtered by [canSignEnvelopeWith], unlike [heldSigningKeys].**
   /// That filter asks what *this* build can sign with, and these entries exist
@@ -256,22 +262,22 @@ mixin ApkamSigning {
   /// envelopes for every reader that could have handled them.
   ///
   /// Empty when the client has no key source, when the read fails, or when
-  /// nothing has been retired — which is every enrollment until a signing key
-  /// leaves the in-use set.
-  Future<List<({SigningAlgoType algorithm, String publicKey})>>
-      get retiredSigningKeys async {
+  /// nothing has been withdrawn — which is every enrollment until a signing
+  /// key leaves the in-use set.
+  Future<List<({SigningAlgoType algorithm, String publicKey, String status})>>
+      get withdrawnSigningKeys async {
     final io = atClient.atKeysIo;
     final atSign = atClient.getCurrentAtSign();
     if (io == null || atSign == null) return const [];
 
     try {
       final keys = await io.read(atSign);
-      return keys.retiredSigningKeysFor(enrollmentId);
+      return keys.withdrawnSigningKeysFor(enrollmentId);
     } on Object catch (e) {
       // warning, not info: publishing without these entries retroactively
       // unverifies every envelope the retired keys signed, and a verification
       // failure read months later names nothing that points back to here.
-      logger.warning('Cannot read $atSign\'s retired signing keys ($e) — '
+      logger.warning('Cannot read $atSign\'s withdrawn signing keys ($e) — '
           'advertising without them, so anything they signed will not verify '
           'until a later publish succeeds');
       return const [];

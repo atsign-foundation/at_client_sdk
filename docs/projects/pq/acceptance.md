@@ -1870,9 +1870,10 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   ⚠️ **This row named the APKAM authentication key, and no code path can put
   that key in `_apsk` as `retired`.** `apskEntries` adds the authentication key
   on exactly one condition — the entry list being empty — and adds it
-  **active**; the only thing that stamps `retired` is fed from
-  `AtKeys.retiredSigningKeysFor`, which selects `sign:` keyIds while the APKAM
-  keypair is filed under `auth:`. The Given was impossible too: at rollout 1
+  **active**; the only thing that carries a withdrawn status is fed from
+  `AtKeys.withdrawnSigningKeysFor` (named `retiredSigningKeysFor` until
+  2026-08-22), which selects `sign:` keyIds while the APKAM keypair is filed
+  under `auth:`. The Given was impossible too: at rollout 1
   the enrollment holds its own signing key from birth, so the auth key never
   signs and there is no envelope of its to preserve — [`decisions.md` 98](detail/decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14)
   ruling 2 reversed the retention this row was written against. The cited group

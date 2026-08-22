@@ -443,10 +443,11 @@ class AtKeys {
     return held;
   }
 
-  /// The **public** half of every signing keypair [enrollmentId] has retired,
-  /// strongest algorithm first — the entries an `_apsk` advertisement carries
-  /// as `retired`, so that envelopes signed before a key was withdrawn still
-  /// verify.
+  /// The **public** half of every signing keypair [enrollmentId] has
+  /// withdrawn from signing, strongest algorithm first, each with the status
+  /// the keyfile gives it — the entries an `_apsk` advertisement carries
+  /// alongside the active ones, so that envelopes signed before a key was
+  /// withdrawn still verify.
   ///
   /// **Public-only, deliberately.** A retired key exists to verify what it
   /// already signed and must never sign again, so handing back its private
@@ -456,34 +457,53 @@ class AtKeys {
   /// entry when it does would retroactively unverify everything that key
   /// signed — the precise loss retention exists to prevent.
   ///
-  /// Selected on exactly [KeyPartStatus.retired]. `dead` material was never
-  /// adopted and has nothing to verify, and a status this build has never seen
-  /// is skipped rather than guessed at: advertising a key whose standing
-  /// cannot be read would state something about it this build does not know.
+  /// Selected on **not active and not [KeyPartStatus.dead]**, and the token
+  /// itself is carried out rather than replaced. `dead` material was never
+  /// adopted and has nothing to verify, so it stays out.
+  ///
+  /// This read "selected on exactly [KeyPartStatus.retired]" until 2026-08-22,
+  /// skipping a status this build had never seen on the grounds that
+  /// advertising such a key would state something about it this build does not
+  /// know. That was right while the advertisement could only say `active` or
+  /// `retired`; now that its `status` is an open token the entry can carry the
+  /// keyfile's own word for it, so nothing is guessed — and skipping is not the
+  /// cautious option it looks like. The advertisement is rewritten whole on
+  /// every publish, so an omitted entry is a **withdrawal**: it erases both the
+  /// key that verifies what it signed and whatever its owner last said about
+  /// it.
   ///
   /// Same keyId shape and same unknown-algorithm skip as [signingKeysFor]; an
   /// enrollment's other `privateSigning` material is not a signing key of its
   /// own and is not advertised as one.
-  List<({SigningAlgoType algorithm, String publicKey})> retiredSigningKeysFor(
-      String enrollmentId) {
-    final retired = <({SigningAlgoType algorithm, String publicKey})>[];
+  List<({SigningAlgoType algorithm, String publicKey, String status})>
+      withdrawnSigningKeysFor(String enrollmentId) {
+    final withdrawn =
+        <({SigningAlgoType algorithm, String publicKey, String status})>[];
     for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
         const <String>[]) {
       if (!isRoleKeyId(keyId, 'sign')) continue;
 
       final public =
           getKey(enrollmentId, keyId, CryptographicKeyType.publicVerification);
-      if (public == null || public.status != KeyPartStatus.retired) continue;
+      if (public == null ||
+          public.status == KeyPartStatus.active ||
+          public.status == KeyPartStatus.dead) {
+        continue;
+      }
 
       final algorithm = SigningAlgoType.values
           .where((a) => a.name == public.keyAlgorithmType)
           .firstOrNull;
       if (algorithm == null) continue;
 
-      retired.add((algorithm: algorithm, publicKey: public.bytes.toString()));
+      withdrawn.add((
+        algorithm: algorithm,
+        publicKey: public.bytes.toString(),
+        status: public.status,
+      ));
     }
-    retired.sort((a, b) => _strongestFirst(a.algorithm, b.algorithm));
-    return retired;
+    withdrawn.sort((a, b) => _strongestFirst(a.algorithm, b.algorithm));
+    return withdrawn;
   }
 
   /// Retires every active signing keypair [enrollmentId] holds for
@@ -501,10 +521,10 @@ class AtKeys {
   /// [fileSigningMaterial] files under and [signingKeysFor] reads back.
   ///
   /// Retires the keypair rather than removing it, and **both halves**. The
-  /// public half is what [retiredSigningKeysFor] reads back so the enrollment
-  /// can go on advertising it as `retired`, which is what keeps envelopes
-  /// signed before the withdrawal verifiable; the private half stays because
-  /// nothing in this file is ever deleted.
+  /// public half is what [withdrawnSigningKeysFor] reads back so the
+  /// enrollment can go on advertising it as `retired`, which is what keeps
+  /// envelopes signed before the withdrawal verifiable; the private half stays
+  /// because nothing in this file is ever deleted.
   ///
   /// Selects exactly what [signingKeysFor] would have returned for
   /// [algorithm]: the `sign:<algo>:<n>` shape, not the `privateSigning` role,

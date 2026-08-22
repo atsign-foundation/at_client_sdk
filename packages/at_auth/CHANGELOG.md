@@ -1,5 +1,20 @@
 ## 3.4.0-rc1
 
+- **BREAKING** refactor: `AtKeys.retiredSigningKeysFor` becomes
+  `withdrawnSigningKeysFor`, selects on **not active and not `dead`** rather
+  than on exactly `retired`, and returns the keyfile's status token alongside
+  each key. The third of the three advertising records, and the same fix as
+  the two below.
+  - It skipped a signing key whose keyfile status this build had never seen,
+    on the grounds that advertising one would state something about it this
+    build does not know. That held while the advertisement could only say
+    `active` or `retired`; now that its status is an open token the entry
+    carries the keyfile's own word and nothing is guessed. Skipping was never
+    the cautious option it looked like: `_apsk` is rewritten whole on every
+    publish, so an omitted entry is a **withdrawal** — it erases both the key
+    that verifies what it signed and whatever its owner last said about it.
+  - `dead` material still stays out. It was never adopted and has nothing to
+    verify.
 - **BREAKING** refactor: `KeyEntryStatus` is an open `String` vocabulary rather
   than an `enum`, matching `KeyPartStatus` beside it. The field it types —
   `ApskSigningKey.status`, and `PackageKey.status` in at_client — is now a

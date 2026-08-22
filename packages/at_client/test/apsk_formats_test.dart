@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_auth/at_auth.dart'
-    show ApskSigningKey, KeyEntryStatus, apskAdvertisement;
+    show ApskSigningKey, KeyEntryStatus, apskAdvertisement, apskSigningKeys;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/signing/apsk_composition.dart'
     show apskEntries, apskValueOf;
@@ -198,7 +198,7 @@ void main() {
 
     test('one active rsa2048 key is spelled bare, not as the array', () {
       final value = apskValueOf(apskEntries(
-          signing: const [], retired: const [], authentication: rsa(pub)));
+          signing: const [], withdrawn: const [], authentication: rsa(pub)));
 
       expect(value, pub);
       expect(value, isNot(startsWith('{')),
@@ -213,7 +213,7 @@ void main() {
       // untested rather than proven.
       final value = apskValueOf(apskEntries(
           signing: [rsa(pub), rsa(base64Encode(utf8.encode('second')))],
-          retired: const [],
+          withdrawn: const [],
           authentication: null));
 
       expect(value, startsWith('{'));
@@ -225,9 +225,55 @@ void main() {
             algorithm: SigningAlgoType.mldsa65,
             publicKey: base64Encode(utf8.encode('mldsa-public-half')),
             privateKey: 'priv')
-      ], retired: const [], authentication: null));
+      ], withdrawn: const [], authentication: null));
 
       expect(value, startsWith('{'));
+    });
+
+    test('a withdrawn key is advertised with the status it was handed', () {
+      // The composer decides what the record says about every key the
+      // enrollment has ever used, because the advertisement is rewritten whole
+      // on every publish. It used to stamp every withdrawn entry `retired`,
+      // which is only correct for the tokens it can read.
+      final entries = apskEntries(signing: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.mldsa65,
+            publicKey: base64Encode(utf8.encode('mldsa-public-half')),
+            privateKey: 'priv')
+      ], withdrawn: [
+        (algorithm: SigningAlgoType.rsa2048, publicKey: pub, status: 'revoked')
+      ], authentication: null);
+
+      expect(entries.map((e) => e.status).toList(),
+          [KeyEntryStatus.active, 'revoked'],
+          reason: 'raw literal on the right: the composer writes the token '
+              'through rather than substituting one it knows');
+      expect(jsonDecode(apskValueOf(entries))['keys'][1]['status'], 'revoked',
+          reason: 'and that is what lands on the record');
+    });
+
+    test('but the verify reader will not check a signature against it', () {
+      // The asymmetry, deliberately, and pinned so nobody unifies the two
+      // readers: at_auth's `apskSigningKeys` KEEPS an entry whose status it
+      // cannot read, because the writers above republish what it returns and
+      // deleting the entry would withdraw the key. at_client's verify reader
+      // DROPS it, because trusting a signature made with a key its owner may
+      // have disowned is the one outcome nothing recovers from.
+      final value = apskValueOf(apskEntries(signing: [
+        ApkamSigningKeys(
+            algorithm: SigningAlgoType.mldsa65,
+            publicKey: base64Encode(utf8.encode('mldsa-public-half')),
+            privateKey: 'priv')
+      ], withdrawn: [
+        (algorithm: SigningAlgoType.rsa2048, publicKey: pub, status: 'revoked')
+      ], authentication: null));
+
+      expect(apskSigningKeys(jsonDecode(value)).map((k) => k.alg).toList(),
+          [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048],
+          reason: 'the writers\' reader keeps it, or republishing deletes it');
+      expect(parseApskValue(value).keys.map((k) => k.alg).toList(),
+          [SigningAlgoType.mldsa65],
+          reason: 'the verifier\'s reader does not');
     });
 
     test('what it emits bare reads back as what it wrote', () {
@@ -235,7 +281,7 @@ void main() {
       // writer's output is this reader's input, and a change to either that
       // did not move the other would show up here.
       final value = apskValueOf(apskEntries(
-          signing: const [], retired: const [], authentication: rsa(pub)));
+          signing: const [], withdrawn: const [], authentication: rsa(pub)));
       final parsed = parseApskValue(value);
 
       expect(parsed.keys, hasLength(1));

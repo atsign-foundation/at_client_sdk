@@ -3,6 +3,7 @@ import 'package:at_auth/at_auth.dart'
         AtEnrollment,
         EnrollmentUpdateRequest,
         KeyAlgorithmType,
+        KeyEntryStatus,
         WrittenAtKeysIo;
 import 'package:at_chops/at_chops.dart'
     show MlDsa65KeyPair, RsaKeyPair, SigningAlgoType;
@@ -290,10 +291,17 @@ class SigningKeyMinting with ApkamSigning {
       {required List<ApkamSigningKeys> retiring}) async {
     final entries = apskEntries(
         signing: active,
-        retired: _strongestFirst([
+        withdrawn: _strongestFirst([
           for (final key in retiring)
-            (algorithm: key.algorithm, publicKey: key.publicKey),
-          ...await retiredSigningKeys,
+            (
+              algorithm: key.algorithm,
+              publicKey: key.publicKey,
+              // Stated, not read: this call is the one withdrawing them, and
+              // `retired` is what it is doing to them. Everything in the
+              // second list carries whatever the keyfile already says.
+              status: KeyEntryStatus.retired,
+            ),
+          ...await withdrawnSigningKeys,
         ], (key) => key.algorithm),
         authentication: authenticationSigningKey);
     final atLookUp = atClient.getRemoteSecondary()?.atLookUp;
