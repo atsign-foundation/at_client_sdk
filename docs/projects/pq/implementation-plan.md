@@ -2765,7 +2765,7 @@ review of the behaviour change.
 #### 14.49.2 Every remaining package publishes as a release candidate
 
 Ruled by gkc. at_lookup `3.7.0-rc1` and at_server_status `1.1.2-rc1` are
-merged; at_auth `3.4.0-rc1`, at_client `3.15.0-rc1`, at_client_flutter
+merged; at_auth `4.0.0-rc1`, at_client `3.15.0-rc1`, at_client_flutter
 `1.1.5-rc1` and at_onboarding_cli `1.17.0-rc1` are on the spike awaiting their
 carves.
 
@@ -2783,9 +2783,22 @@ changes while the others needed none.
 not a durable home for it:** every constraint moved to a `-rc1` floor reverts
 to its stable form when these publish, or a stable release ships requiring a
 candidate. The sites: `at_lookup: ^3.7.0-rc1` in at_auth, at_client and
-at_server_status; `at_auth: ^3.4.0-rc1` in at_client, at_client_flutter,
-at_onboarding_cli and `tests/pq_matrix/current`. Re-derive with
-`git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'`.
+at_server_status; `at_auth: ^4.0.0-rc1` in at_client, at_client_flutter,
+at_onboarding_cli, `tests/pq_matrix/current`, both live test packages and
+three at_client_flutter examples. Re-derive with
+`git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'` -
+measured, `*` crosses `/` in a git pathspec so it reaches the nested ones.
+
+**at_auth is a MAJOR, ruled by gkc 2026-08-22** - `4.0.0-rc1`, not
+`3.4.0-rc1`, which is what this section said until that ruling. The typed
+keyfile's field names change (`keyParts`/`keyPartType`/`keyAlgorithmType`
+become `material`/`role`/`algorithm`) and `KeyPartStatus` becomes
+`CryptographicMaterialStatus`. The five constraint sites that floored at_auth
+at a stable `^3.0.0` - both live test packages and three at_client_flutter
+examples - moved to the candidate floor with the rest, so they revert too.
+`packages/at_chat_flutter/example` is deliberately left at `^3.0.0`: it has no
+path override, so it resolves published at_auth and a candidate floor would
+strand it.
 
 #### 14.49.3 Considered while building 14.49.1, and deliberately not done
 

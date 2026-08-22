@@ -16,7 +16,7 @@ environment:
 
 dependencies:
   at_client: ^3.14.0
-  at_auth: ^3.4.0-rc1
+  at_auth: ^4.0.0-rc1
   at_chops: ^3.6.0
   pq_matrix_scenario:
     path: ../scenario

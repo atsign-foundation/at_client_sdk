@@ -1,4 +1,4 @@
-## 3.4.0-rc1
+## 4.0.0-rc1
 
 - **BREAKING** refactor: the typed keyfile's field names lose the "key part"
   vocabulary. At rest, `keyParts` becomes `material`, `keyPartType` becomes

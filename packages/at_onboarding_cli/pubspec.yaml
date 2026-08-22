@@ -20,7 +20,7 @@ dependencies:
   meta: ^1.16.0
   path: ^1.9.0
   zxing2: ^0.2.0
-  at_auth: ^3.4.0-rc1
+  at_auth: ^4.0.0-rc1
   at_chops: ^3.0.0
   at_client: ^3.10.0
   at_commons: ^5.6.0
