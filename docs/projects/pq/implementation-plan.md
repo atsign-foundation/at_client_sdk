@@ -23,8 +23,13 @@ this project has been wrong at least once by being carried forward; the
 commands that re-derive these are in
 [Re-deriving the state](#re-deriving-the-state) at the end.
 
-**D1 initial development ends at step 34** — the spike carved into stacked PRs
-and merged. Publishing and R-2 follow it and are not D1.
+**D1 initial development ends when at_auth 4.0.0 is published, the staged
+status value is added and step 20's rotation arm is green** — ruled by gkc
+2026-08-23. ⚠️ **This read "ends at step 34 — the spike carved into stacked PRs
+and merged. Publishing and R-2 follow it and are not D1" until then.** The
+boundary moved because the rotation arm stays in D1 and its chain runs through
+the at_auth publish, so the publish is now inside D1 rather than after it. R-2
+still follows D1 and is still not part of it.
 
 ---
 
@@ -299,18 +304,16 @@ to move anchors the acceptance rail parses.
 | [14.45](detail/implementation-plan.md#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) residue | ⚠️ **In another repo: `at_persistence_secondary_server`.** Its keystore `get()` does not filter expired records, which is what let an expired key be read back and re-swept. Named here because this is where the work that found it lives; it does not land here | Separately owned. Not a D1 gate |
 | [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | **The e2e teardown revokes enrollments belonging to other runs.** `tests/at_end2end_test/test/enrollment_teardown.dart` revokes every approved enrollment on the shared `@ce2e1`-`@ce2e4` atSigns with `force: true`, not only the ones its own run created, so two overlapping CI runs tear down each other. **Diagnosed 2026-08-22** from the *other* run's log - the section carries the two timestamps 430 ms apart and the shared enrollment id. This row read *undiagnosed, and the newest CI run is red* until then. CI has since been green three times — 24/24 twice and 47/47 on [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) — but every one of those windows was free of another run, so that is a rate and not a fix. Owed: a run-unique marker, so a teardown revokes only what its own run made | Nothing. Needs no permission and no publish, and it does not gate the at_auth carve |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. **Five of eight positions are through.** at_commons #2168, at_chops #2169, at_lookup #2174 and at_server_status #2177/#2178 are all **merged to trunk**; at_auth is [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179), **open with CI 47/47 green**. Remaining to carve: **at_client, at_client_flutter, at_onboarding_cli**. Re-derive the whole picture rather than reading this cell — for each package compare `pubspec.yaml` on trunk, on this branch, and `curl -s https://pub.dev/api/packages/<pkg> \| python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`. Measured 2026-08-22: pub.dev has at_commons 5.16.0, at_chops 3.6.0, at_lookup **3.6.1**, at_server_status **1.1.1**, at_auth **3.3.0**, at_client **3.14.0** | ⚠️ **Merged is not published, and only the publishes still gate anything.** at_lookup 3.7.0-rc1 and at_server_status 1.1.2-rc1 are on trunk and **not on pub.dev**, so every later package can carve and merge but none can publish until gkc publishes those. ⛔ **This cell used to say the at_auth PR's CI would fail to resolve until at_lookup published. That was wrong** — a pub workspace resolves siblings by path, so #2179 resolved and went green with at_lookup unpublished; the gate is on publishing, never on carving or merging. ⚠️ **at_client's `at_commons: ^5.15.0` floor is too low and will ship broken** — `notify_request_transformer.dart:154` calls `metadata.copy()`, which first exists in at_commons **5.16.0**. The same defect was found and fixed in at_auth during its carve; check every floor against first-use before carving at_client. ⚠️ **Owed at the real release, and it belongs to this row because it is the train's:** every constraint moved to an `-rc1` floor reverts to its stable form when these publish, or a stable release ships requiring a candidate. The rule is in [14.49.2](detail/implementation-plan.md#14492-every-remaining-package-publishes-as-a-release-candidate); re-derive the sites — `git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'` |
-| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) | **Step 20's rotation arm — STAYS IN D1** (gkc, 2026-08-23), which is why D1 now ends past the carve. Chain: publish at_auth 4.0.0 → add the `pending` value → build the arm | The publish, and a dedicated CRAM atSign. ⛔ **The "wait for the fleet" gate is CLOSED** — the two keyfile formats are disjoint for every file that exists (3.3.0 dispatches on `version` and never reaches its `keys` parse without one; a 4.0.0 typed document emits `version: 1` and no `keys`), and the one reachable conflict needs a 4.0.0 typed write into a keyfile a 3.3.0 app also opens, which cannot have happened: **no production `.atKeys` or keychain entry holds any PQ key material** (gkc, 2026-08-23) |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
 | S-5 residual | **The registrar's switch to validating TLS certificates is untested, here and in CI.** `RegistrarService`'s default client used to accept ANY certificate - `badCertificateCallback` returning true unconditionally, on calls carrying the registrar API key. It is now a plain `package:http` client that validates, with the bypass behind `RegistrarIoClient.allowBadCertificates`, off by default and shouted when used. **Neither arm has a test**, and CI cannot catch a regression: `RegistrarIoClient` appears in ZERO CI job logs (control: `RegistrarService` appears), and `RegistrarIoClient.create()` has **no in-tree caller at all** - it is a public opt-in for consumers, which is deliberate, so do not delete it as dead code. Owed: a test pinning both arms against a self-signed local server. ⚠️ **Attempted and parked 2026-08-22**, so the next reader does not start cold: the shape works — mint a cert at test time with `openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=localhost`, serve it with `HttpServer.bindSecure`, and point `RegistrarService` at `localhost:<port>`, which `Uri.https` accepts as an authority. Three arms, and the third is the positive control that proves the server is up: the default client refuses, `RegistrarIoClient.create()` with the flag off refuses, and with it on succeeds — without that third arm a refusal is indistinguishable from a server that never started, because `package:http` wraps connection-refused in the same `ClientException`. ⛔ **Do not commit a PEM fixture** — GitHub push protection can block a private key; mint it in `setUpAll`. | Nothing |
-| [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
-| [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
-| [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
+| [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | ⛔ **STEP 29 LEAVES D1 — all four dispositioned 2026-08-23.** ① perf ceiling on real low-end hardware → post-D1 cleanup (#2153). ② UC-A3.4 → done 2026-08-17. ③ SS-4 resume → **ruled NO RESUME** (the election makes republishing a filed pair a regression) and **re-filed as orphan growth**: `store()` calls `addKey`, nothing in `crypto/nskey/` retires a filed private, so every abandoned mint — crash or the designed lease-expiry abandon — permanently adds key material to the user's `.atKeys`. ④ IS-1 drift → not D1; at_server #2683 is open, untouched since 2026-08-06, and already ruled to be pared back | Only ③'s orphan-growth half is owed here, and it is a decision before it is code |
+| [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | ⛔ **NOT D1 (gkc, 2026-08-23) — it gates the post-R-2 stop-release.** A `mintLegacyMaterial:false` atSign cannot write a public record. Out of D1 because both moves it needs are B-3 phase 1, which is parked, and nothing about it blocks the carve; the live assertion in `pq_legacy_interop_live_test.dart` keeps it pinned and the flag must still not be recommended | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | **A unit-tree isolation flake**: `local_secondary_sync_queue_test.dart` failed 1-in-4 when run after the nskey/pq files in one non-alphabetical invocation — a same-file test's queue entry leaked into a later test, so the per-test store isn't always fresh. Green alone, green in the full suite | Reproduce at rate (~10 runs of the four-file order), then read the file's setUp for what makes the store per-test fresh |
 | [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. Still in the section: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |
 | [14.44](#1444-residuals-from-the-at_chops-pr-review) | Residuals from the at_chops PR review. ✅ **The first is DONE 2026-08-22**, in the at_auth carve as this row said it should be — `encode` refuses an `ArgonHashParams` whose `hashLength` is not the value `decode` will use, which was the section's own preferred option over persisting it. **Two remain:** `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths; and at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence whose durable record is ruling 110's addendum | Nothing. Both remaining ones go whenever at_chops is next open |
-| [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
-| [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
+| [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | **STAYS IN D1, with the bucket-B migration** (gkc, 2026-08-23). Re-measured 2026-08-23: **754** findings — at_client 396, at_onboarding_cli 205, at_auth 153, at_lookup **0** (the section's 345/183/110/28 table is stale). Five buckets, and only **B** has a replacement that exists today: 71 credential-ladder uses (`enrollmentId` 59, `signingAlgoType` 12) moving onto the `AtAuthenticator` seam at_lookup 3.7.0 ships — **24 sites in `lib/`, 47 in tests**. A (AtChops compatibility API, 530) and C (legacy flat keyfile fields, 118) are transient and get **no ignores yet**; D (27) is at v5 | Nothing. Every package exits 0, so none of this blocks a carve |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green and **live-green** — functional 174/174 (after one 173/174 whose single failure was [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)), e2e pq 54/54, and the `legacy-server` arm 2/2 against the pinned `atsigncompany/virtualenv:vip-p3.15.0`. **Owed: public-data signature verification** (undesigned) | Nothing |
@@ -652,8 +655,11 @@ which 5.15.0 does not have — its floor is already raised to `^5.16.0`.
 Ruled 2026-08-11 by a walk through every open item
 ([`decisions.md` 93](detail/decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)).
 This is the **order**, not the inventory — each row points at the entry that
-holds the detail. **D1 initial development ends at step 34**, when the stacked
-PRs are merged; publishing and R-2 follow it.
+holds the detail. **D1 initial development runs past step 34**: it ends when
+at_auth 4.0.0 is published, the staged status value is added and step 20's
+rotation arm is green (gkc, 2026-08-23). ⚠️ This said D1 "ends at step 34, when
+the stacked PRs are merged; publishing and R-2 follow it" until then — the
+at_auth publish moved inside D1 with the rotation arm. R-2 still follows.
 
 ⛔ **What actually gates D1 (established 2026-08-20, after two misdiagnoses).**
 D1 is done when the spike is in trunk **and the eight packages are released**
@@ -1104,13 +1110,34 @@ heading said 299 and named only at_client before that). Per package,
 separately, counted with `grep -c deprecated_member_use`. Every package exited
 0, and only `at_client` moved:
 
-| package | findings |
-|---|---|
-| `at_client` | 345 |
-| `at_onboarding_cli` | 183 |
-| `at_auth` | 110 |
-| `at_lookup` | 28 |
-| `at_chops`, `at_commons` | 0 |
+| package | 2026-08-18 | **2026-08-23** |
+|---|---|---|
+| `at_client` | 345 | **396** |
+| `at_onboarding_cli` | 183 | **205** |
+| `at_auth` | 110 | **153** |
+| `at_lookup` | 28 | **0** |
+| `at_chops`, `at_commons` | 0 | 0 |
+
+**754 today**, and at_lookup went to zero — its deprecated members went with the
+`AtLookUp.withSecureSocket` work. Every package still exits 0, so none of this
+blocks a carve.
+
+**The five buckets** (gkc, 2026-08-23: "it's not all or nothing; some we should
+ignore because they are a transient state; others will need to be actually
+fixed"). Re-derive rather than quoting — group the findings by the symbol the
+message quotes:
+
+| bucket | n | what it is | replacement? |
+|---|---|---|---|
+| **A** AtChops compatibility API | 530 | `AtChops*`, `AtPkamKeyPair`, `AtEncryptionKeyPair`, `AtSigningInput`/`Mode`, `PkamSigningAlgo`, `RsaSigningAlgo` | ✗ — no dispatcher selects by `SigningAlgoType`. gkc: `// ignore:` when we act, PKAM signing especially |
+| **B** credential ladder | 71 | `enrollmentId` 59, `signingAlgoType` 12 | ✓ **`AtAuthenticator` / `authenticatorForChops()`** — shipped in at_lookup 3.7.0 |
+| **C** legacy flat keyfile fields | 118 | `defaultSelfEncryptionKey`, `apkamPrivateKey`/`PublicKey`, `apkamSymmetricKey`, `defaultEncryption*` | ✗ — retained until the ecosystem is PQ ([37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)) |
+| **D** at_auth response family | 27 | `atAuthKeys`, `AtAuthResponse`, `AtOnboardingResponse` | scheduled — relabelled to **v5** on 2026-08-22 |
+| **E** singletons | 8 | `metadata`, `hashingAlgoType`, `atSign`, `AtLookupImpl` | case by case |
+
+⛔ **Only bucket B is D1 work**, ruled 2026-08-23: 24 sites in `lib/` and 47 in
+tests move onto the authenticator seam. A and C get **no ignores yet** — the
+decision was to record the buckets and change no code. D waits for v5.
 
 ⚠️ **Scope this before starting it — a straight "migrate off the deprecated
 member" sweep is not available for the PKAM signing path.** `PkamSigningAlgo`
@@ -1123,13 +1150,20 @@ nothing non-deprecated selects an algorithm from a `SigningAlgoType` the way
 `AtChopsImpl.sign` does in pkam mode. A caller wanting both algorithms writes
 the two-way branch itself.
 
-And the RSA arm is not a free swap: the atServer's `ApkamSignatureVerifier`
-records that **`RsaSignatureAlgo` refuses any modulus that is not exactly 2048
-bits, which `PkamSigningAlgo` does not**, so adopting it would stop an
-enrollment holding an off-size RSA key from authenticating. That is a change to
-what verifies on the authentication path, not a refactor. Any sweep that
-touches signing has to decide this deliberately; the rest of the findings
-(models, `apkamPublicKey`, collection APIs) are ordinary migrations.
+⚠️ **This paragraph used to read as though the atServer imposed a modulus
+check on the authentication path. It does not, and the correction matters
+because the old wording reads as a live hazard.** What at_server's
+`apkam_signature_verifier.dart` actually carries is its own *reason for
+declining a migration*: "rsa2048 and ecc_secp256r1 stay on the compatibility
+API **deliberately**. `RsaSignatureAlgo` refuses any modulus that is not
+exactly 2048 bits, which `PkamSigningAlgo` does not… Both are changes to what
+verifies on the authentication path, which is not a refactor's to make." PKAM
+authenticates today under both `rsa2048` and `mldsa65`, and nothing in this
+tree is at risk. What is genuinely true on our side is narrower: at_client_sdk
+**signs** rather than verifies, and bucket A has no drop-in replacement because
+nothing non-deprecated selects an algorithm from a `SigningAlgoType` — a caller
+writes the two-way branch itself. That is a missing convenience, not a
+behaviour risk.
 
 
 ### After D1
@@ -1427,6 +1461,8 @@ the reason is the point of the row.
 
 | Item  | What it is                                           | Why it is parked |
 |-------|------------------------------------------------------|-----------------------------------------------------------------------------------------------------|
+| [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is fully privileged, and signs as `primary` | ✅ **CLOSED 2026-08-23 — both halves were already ruled, and nobody had closed the row.** Privilege: the resolver's own dartdoc says a client with no enrollment id authenticates with the atSign's own keys, *"which is full privilege by construction rather than by grant"*. Identity: [14.18](#1418-the-remaining-d1-initial-development-sequence) step 13 ruled that such a client publishes its `_apsk` under `primary` deliberately, as the only writer for an `_apsk` no `enroll:request` can carry. Kept so the question is not re-derived |
+| [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | ⛔ **NOT D1 (gkc, 2026-08-23).** Its own text says a migration here does **not** break NoPorts — it signs with the encryption keypair and fetches `getRemotePK`, not `_apsk`. The obligation to name it as a second migration is conditional and **has not fired**: it needs RFC 7515 to become a **consumer-facing** claim, and measured 2026-08-22 the string appears in `design.md` and `detail/decisions.md` and in no file under `packages/` |
 | S-5 residual | **Two String vocabularies stay untyped** | ⛔ **Considered and left, not a task.** The keyId slot prefix (`auth`/`sign`/`root`, taken by `AtKeys.keyIdPrefix` and `isRoleKeyId`) is **not** a `CryptographicMaterialRole`: typing it as one was tried on 2026-08-22 and reverted when the compiler rejected every call site. `keyAlgo`, the secret-sharing protocol id, is a third vocabulary again. Recorded so the next reader does not re-derive that these are the same thing |
 | 14.26 | A false comment in at_server's `at_metadata_builder` | ⛔ **NOT PART OF D1** (gkc, 2026-08-16). It lands in at_server, off `trunk`, and nothing in D1 waits on it. Detail: [14.26](detail/implementation-plan.md#1426-a-comment-in-at_server-is-now-false) |
 | 14.1  | The signing root's `keys[]` shape                    | SUPERSEDED by decisions 101 and 14.22. Kept for the reasoning; two of its conclusions are now false |

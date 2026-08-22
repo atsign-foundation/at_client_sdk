@@ -2726,8 +2726,11 @@ and it found things the plan's own owed-tables had lost.
 Ruled 2026-08-11 by a walk through every open item
 ([`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)).
 This is the **order**, not the inventory — each row points at the entry that
-holds the detail. **D1 initial development ends at step 34**, when the stacked
-PRs are merged; publishing and R-2 follow it.
+holds the detail. **D1 initial development runs past step 34**: it ends when
+at_auth 4.0.0 is published, the staged status value is added and step 20's
+rotation arm is green (gkc, 2026-08-23). ⚠️ This said D1 "ends at step 34, when
+the stacked PRs are merged; publishing and R-2 follow it" until then — the
+at_auth publish moved inside D1 with the rotation arm. R-2 still follows.
 
 **Stage 0 — scaffolding.**
 
@@ -3087,9 +3090,36 @@ its own. None blocks anything.
     unmodified, with the forward order stated as `CryptographicMaterialStatus.rankOf`.
 
     **What is still owed, in order:** an at_auth release carrying that reader;
-    then the `pending` value; then the rotation arm itself. The staged value is
-    deliberately **not** added yet — a writer may emit one only once the fleet
-    is running a build that can read it.
+    then the `pending` value; then the rotation arm itself.
+
+    ⛔ **The "wait for the fleet" gate is CLOSED, 2026-08-23.** This paragraph
+    ended "the staged value is deliberately **not** added yet — a writer may
+    emit one only once the fleet is running a build that can read it", and that
+    was written when the status enum was the only incompatibility. Two things
+    retired it, both measured:
+
+    - **The two keyfile formats are disjoint for every file that exists.**
+      at_auth 3.3.0's `fromJson` dispatches on `version`: absent → the legacy
+      path, which never looks at `keys`; present and `== 1` → `keys` is
+      required, else `AtKeysParseException('Expected array at keys')`. at_auth
+      4.0.0's `toJson` emits no `version` when there is no typed material, and
+      `version: 1` with `atsignKeys`/`enrollments` and **no top-level `keys`**
+      when there is. So dropping a legacy `keys: []` is harmless precisely
+      because no `version` is emitted beside it, and a released reader stays on
+      its legacy path.
+    - **The one reachable conflict has never occurred.** It needs a 4.0.0
+      typed write into a keyfile a 3.3.0 app also opens — and **no production
+      `.atKeys` file or keychain entry holds any PQ key material** (gkc,
+      2026-08-23). With no holder outside this tree, the compatibility
+      argument is void.
+
+    ⚠️ **Do not attribute the tolerant reader to
+    [14.49.1](#14491-keyentrystatus-becomes-a-typed-string-wrapper--done-2026-08-22).**
+    That section converts `KeyEntryStatus`, the *advertised record* status, and
+    says in terms that the refusal-based justification does not transfer to it:
+    its problem was **lossy** tolerance, not refusal. The tolerant *keyfile*
+    reader this item depends on is `CryptographicMaterialStatus`, converted
+    earlier and typed by `c81bf045c`.
 
     The `_apsk` and metadata arms carry no such hazard — neither changes what
     authenticates — which is why the advertisement path step 18 needs is
@@ -4488,26 +4518,31 @@ stale** — that is the failure mode every "current state" table in this project
 has had, so it is stated rather than hoped for. Re-derive before acting; do not
 cite this table as evidence.
 
-**D1 initial development ends at step 34** — the spike carved into stacked PRs
-and merged. Publishing and R-2 follow it and are not D1.
+**D1 initial development ends when at_auth 4.0.0 is published, the staged
+status value is added and step 20's rotation arm is green** — ruled by gkc
+2026-08-23. ⚠️ **This read "ends at step 34 — the spike carved into stacked PRs
+and merged. Publishing and R-2 follow it and are not D1" until then.** The
+boundary moved because the rotation arm stays in D1 and its chain runs through
+the at_auth publish, so the publish is now inside D1 rather than after it. R-2
+still follows D1 and is still not part of it.
 
 ### 15.1 Open work — re-derive before acting
 
 | # | What is owed | Owner | State |
 |---|---|---|---|
 | 1 | ✅ **14.22 is COMPLETE — all seven rows landed 2026-08-15** | [14.22](#1422-making-the-signing-root-rotatable--decisions-101) | Row 6 made the record mutable behind `_rootlock@<atSign>` and generalised `NskeyMintLock` into `MintLock`; row 7 proved the boundary and needed no new mechanism, only the composite scenario. **`decisions.md` 101 is fully built.** Nothing in this row is owed. ⚠️ **Step 27 (row 5) has since landed too**, 2026-08-15, and it was the right one to take first for the reason recorded there: it changed the signed bytes, so everything signed after it is signed under the shape that stays |
-| 2 | **Step 20's rotation arm** — enrollment then an `enroll:update` APKAM rotation mid-run | [14.18](#1418-the-remaining-d1-initial-development-sequence) step 20 | ⛔ Blocked on an **at_auth release** carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
-| 3 | **Step 24** — a client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | Open; **wants a ruling** on whether an owner-keys client belongs in the enrollment trust model |
-| 4 | **Step 25** — a `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | Open. Gates the stop-release: closing it means public-record signing moves to the ML-DSA root and self data moves off `selfEncryptionKey` |
+| 2 | **Step 20's rotation arm** — enrollment then an `enroll:update` APKAM rotation mid-run | [14.18](#1418-the-remaining-d1-initial-development-sequence) step 20 | **Stays in D1** (gkc, 2026-08-23) — which is why D1's boundary moved past the carve. Chain: publish at_auth 4.0.0 → add the `pending` value → build the arm. Needs its own CRAM atSign. ⛔ **The "wait for the fleet" gate is CLOSED**: it assumed a released reader could meet a `pending` status, and the two formats are disjoint for every file that exists — 3.3.0 dispatches on `version`, and a document without one never reaches its `keys` parse, while a 4.0.0 document with typed material emits `version: 1` and no `keys`. The only reachable conflict needs a 4.0.0 typed write into a keyfile a 3.3.0 app also opens, and **no production `.atKeys` or keychain entry holds any PQ key material** (gkc, 2026-08-23) |
+| 3 | **Step 24** — a client with no enrollment id is treated as fully privileged | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | ✅ **CLOSED 2026-08-23** — both halves were already ruled elsewhere and nobody had closed the row. Privilege: the resolver's own dartdoc, *"a client with no enrollment id is authenticating with the atSign's own keys, which is full privilege by construction rather than by grant"*. Identity: [14.18](#1418-the-remaining-d1-initial-development-sequence) step 13 ruled that a client with no enrollment publishes its `_apsk` under `primary` deliberately. Moved to PARKED so the question is not re-derived |
+| 4 | **Step 25** — a `mintLegacyMaterial:false` atSign cannot write a public record | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | ⛔ **NOT D1 (gkc, 2026-08-23)** — it gates the **post-R-2 stop-release**, not this one. Both moves it needs (public-record signing onto the ML-DSA root, self data off `selfEncryptionKey`) are B-3 phase 1, which is parked, and nothing about it blocks the carve. The live assertion in `pq_legacy_interop_live_test.dart` keeps it pinned, and the flag must still not be recommended to anyone |
 | 5 | ✅ **Step 27 — DONE 2026-08-15.** Domain separation on the signed envelope | [14.8](#148-domain-separation-on-the-signed-envelope) | Landed: per-use `EnvelopeType` in the protected header, `expecting` at both verify entry points, `at-root-link:` on the root link's signed bytes, and the re-anchor that change forced. [`decisions.md` 103](decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15) |
-| 6 | **Step 28** — NoPorts carries its own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | Open. A separately-owned second migration to *name*, not to fix here |
-| 7 | **Step 29** — three audit residuals (was four; UC-A3.4's live self-direction is done) | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Open: perf ceiling on real low-end hardware, UC-A3.4 live self-direction, SS-4 interrupted-mint resume, IS-1 record-name drift |
-| 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | Open. A call-site migration, not a lint sweep |
-| 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | Open |
+| 6 | **Step 28** — NoPorts carries its own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) | ⛔ **NOT D1 (gkc, 2026-08-23)** — moved to PARKED with its trigger stated: the obligation to name NoPorts fires when **RFC 7515 becomes a consumer-facing claim**, which it is not. Measured 2026-08-22: the string appears in `design.md` and `detail/decisions.md` and in **no file under `packages/`**. 14.7's own text says a migration here does not break NoPorts |
+| 7 | **Step 29** — three audit residuals (was four; UC-A3.4's live self-direction is done) | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | ⛔ **STEP 29 LEAVES D1 — all four dispositioned 2026-08-23.** ⚠️ This cell listed four as open while saying three, and included UC-A3.4 which it had just called done. ① perf ceiling → post-D1 cleanup (#2153). ② UC-A3.4 → done 2026-08-17. ③ SS-4 resume → **ruled NO RESUME**: the election makes republishing a filed-but-unpublished pair a regression, since it can overwrite a newer winner's advertisement with a key only the loser holds; re-filed as **orphan growth**, because `store()` calls `addKey` and nothing in `crypto/nskey/` retires a filed private. ④ IS-1 drift → not D1: a separate track whose implementation is at_server #2683, open and untouched since 2026-08-06, and already ruled to be pared back |
+| 8 | **Step 30** — `deprecated_member_use` across the workspace | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | **STAYS IN D1, with the bucket-B migration** (gkc, 2026-08-23). Re-measured 2026-08-23: **754** findings (at_client 396, at_onboarding_cli 205, at_auth 153, at_lookup **0**) — the table in [14.11](implementation-plan.md#1411-deprecated_member_use-findings-across-the-workspace) said 345/183/110/28. Five buckets; only **B** has a replacement that exists: 71 credential-ladder uses (`enrollmentId` 59, `signingAlgoType` 12) that move onto the `AtAuthenticator` seam at_lookup 3.7.0 ships — 24 sites in `lib/`, 47 in tests. A (AtChops API, 530) and C (legacy flat fields, 118) are transient and get no ignores yet; D (27) is at v5 |
+| 9 | **Step 31** — pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) | ✅ **NOTHING OWED since 2026-08-10** — this cell said "Open" while 14.15's own body opened "✅ NOTHING OWED". Its single item is struck; what remained was the external image gate, which is settled (see row 13) |
 | 10 | ✅ **D1's tail — DONE 2026-08-15.** `signingAlgo`'s dartdoc in at_commons | [14.20](#1420-building-rulings-98-and-99--the-sequence) row D1 | Landed on **three** declarations, not the one the row named: `EnrollParams`, `EnrollVerbBuilder` and `PkamVerbBuilder`. at_commons **517/517**, re-run at this state rather than carried forward from `224460d8b` |
 | 11 | **14.19's open small items — 17 unstruck of 36, of which item 15 is resolved and kept only for its findings, and items 20–22 are examined-and-deliberately-left rather than work.** ⚠️ *This cell said **18** until 2026-08-18 against an actual 10, then **10** until 2026-08-19 against an actual 18 — the same number, wrong in both directions a day apart; re-derive it with the command below rather than reading any of them.* ✅ **Item 15 (the `_apsk` third writer) is EXAMINED, RULED and CLOSED** (2026-08-15) — do not pick it up. Re-derive the count rather than trusting it: `awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.md \| grep -cE "^[0-9]+\. \*\*"` — ⚠️ **this named the LIVE file until 2026-08-18**, where the list does not live, so it printed `0` and exited 1, which reads as "no open work". That exact bug was found and fixed in the plan's own state block on 2026-08-16; this second copy survived the fix, which is why a re-derivation command gets grepped for rather than corrected where you found it | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Open. **Item 8 is the only one waiting on a ruling** (typed key material is not self-encrypted at rest while the flat fields are). Item 10 is an unexplained functional run with two disproven theories. Item 14 is not PQ at all |
 | 12 | **The nskey mint elects a winner** — one record, the lock becomes an election token with a cooldown, and only one of several enrollments that all decide to mint eventually does | [14.24](#1424-the-nskey-mint-elects-a-winner--decisions-105) | ✅ **DONE 2026-08-16**, all seven rows, **in D1**. The at_server fix rows 3 and 5 needed merged as [PR #2751](https://github.com/atsign-foundation/at_server/pull/2751) (`00c2f9a6` on trunk) — ⚠️ merged is not deployed: `at_virtual_env:local` runs it, `virtualenv:vip` does not. ⛔ **[14.23](#1423-per-generation-nskey-records--decisions-104-rejected) is REJECTED** — do not build it. Re-derive: `git grep -n "nskeyMintLockKey\|withLock" -- packages/at_client/lib` |
-| 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ Blocked on the **published atServer image verifying ML-DSA PKAM**. This gate touches step 32 **only** — nothing above it waits. The spike branch itself never merges |
+| 13 | **Steps 32–34** — carve into stacked PRs, merge to trunk | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ✅ **THE IMAGE GATE IS SETTLED** — it was closed by moving CI to `dev_env`, and this cell claimed it was still blocking until 2026-08-23. Re-derive: `grep -n VIRTUALENV_IMAGE .github/workflows/at_client_sdk.yaml` shows `atsigncompany/virtualenv:dev_env` at both the functional and e2e jobs. **Five of eight train positions are through** — at_commons, at_chops, at_lookup and at_server_status merged; at_auth is PR #2179, open and CI-green. Left to carve: at_client, at_client_flutter, at_onboarding_cli. The spike branch itself never merges |
 
 **Not owed, and worth stating so nobody re-opens them:** step 11 was labelled
 `PARTLY DONE` while its own cell closed with `✅ DONE 2026-08-13, with step 12`.
