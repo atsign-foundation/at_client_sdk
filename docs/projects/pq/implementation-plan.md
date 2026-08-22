@@ -35,9 +35,16 @@ pointing at it and no detail. `## TODO` below is *what is owed*, unordered; this
 is *what to do first*. Re-read this section against `git log --oneline -10`
 before acting — it has led with finished work before.
 
-Last re-ranked **2026-08-22** against the tree at `64480808d`, entry by entry,
-with the publish gate and CI both re-derived live rather than carried forward.
-What that pass found, because a re-rank that reports only successes is one
+Re-ranked again **2026-08-22 evening**, after the at_auth carve landed as
+[PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179): entry
+4 is struck, **4b is the new head**, and two claims entry 4 had been making
+about the carve turned out to be false the moment the carve was actually run —
+both are recorded there rather than deleted, since they are the kind a reader
+would otherwise re-derive.
+
+The pass before it, **2026-08-22** against the tree at `64480808d`, went entry
+by entry with the publish gate and CI both re-derived live rather than carried
+forward. What that pass found, because a re-rank that reports only successes is one
 whose checks were too weak to fail: the CI paragraph below was reporting a
 **success on a superseded run while the newest was a failure**, the *Blocked*
 note said the train was unblocked when 14.49.2 had re-gated it on an
@@ -81,30 +88,57 @@ that file instead; the list below is the PQ release work.
    the entry said it had to be. **The harness defect is still open** and is in
    `## TODO`; CI is 24/24 green on `64480808d` but both green windows had no
    other run in flight, so that is a rate, not a fix.
-4. **[RECOMMENDED] Carve at_auth** — ⚠️ **buildable now, not mergeable now:**
-   at_auth floors `at_lookup: ^3.7.0-rc1` and pub.dev's at_lookup is 3.6.1, so
-   the PR can be raised and its CI will fail to resolve until **gkc publishes
-   at_lookup 3.7.0-rc1**. That publish is the one action that lifts it, and it
-   is gkc's. Train position 5, and it now carries the
-   keyfile fix (an empty `keys[]` is read, not refused), the `KeyEntryStatus`
-   change above, **and it is now a MAJOR — `4.0.0-rc1`, ruled by gkc
-   2026-08-22.** This entry said "the evidence for staying a minor" until then;
-   the keyfile's field names changed (`keyParts`/`keyPartType`/`keyAlgorithmType`
-   became `material`/`role`/`algorithm`), the four status/role/algorithm
-   vocabularies became types, the `AtKeysMaterial` alias went, and S-5 split the
-   package into a WASM-safe core plus `at_auth_io.dart`. The compatibility
-   evidence still holds and is still worth citing — a keyfile CRAM-onboarded
-   with published at_auth 3.3.0 loads — it just no longer argues for a minor. Recipe is in
-   [14.18](#1418-the-remaining-d1-initial-development-sequence) — worktree off
-   `origin/trunk`, hyphenated branch name (`gkc-pq-d1-at-auth`), and the gate is
-   `git -C /tmp/carve-at_auth diff gkc-pq-d1-spike --stat -- packages/at_auth`
-   returning **empty**, run with a positive control that proves it
-   discriminates. ⚠️ at_auth's pubspec floors `at_lookup: ^3.7.0-rc1`, which is
-   **not on pub.dev yet** — gkc publishes at_lookup 3.7.0-rc1 first, or the
-   carve merges a package nobody can resolve. Needs commit/push permission.
-   ⚠️ [14.44](#1444-residuals-from-the-at_chops-pr-review)'s first residual —
-   the passphrase envelope persisting the salt and three costs but not
-   `hashLength` — belongs in this carve, where that file is already open.
+4. ~~Carve at_auth~~ **Done 2026-08-22 — [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)
+   is open against trunk, CI green.** 89 files, +11130/−1008: 70 in at_auth
+   and 19 outside it totalling **29 lines** — eight pubspecs flooring at_auth
+   at `4.0.0-rc1` and eleven files importing `at_auth_io.dart`. Those had to
+   ride the same commit: `tests/at_functional_test` alone pinning
+   `at_auth: ^3.0.0` makes the workspace fail to resolve, so every job dies at
+   `dart pub get`.
+   - ⛔ **Two claims this entry made are DISPROVEN, so nobody re-derives
+     them.** It said "buildable now, **not mergeable** now … the PR can be
+     raised and its CI will fail to resolve until gkc publishes at_lookup
+     3.7.0-rc1". False: at_lookup 3.7.0-rc1 is **on trunk**, and a Dart pub
+     workspace resolves its siblings by path, not from pub.dev. `dart pub get`
+     returned 0 and CI ran **47/47 green**. The publish gate is on *publishing
+     at_auth to pub.dev*, which still waits on at_lookup — it was never a gate
+     on raising or merging the PR. And the entry's gate recipe — the carved
+     tree "byte-identical to the spike over that package" — is **not** what
+     this carve satisfies; see the amended recipe in
+     [14.18](#1418-the-remaining-d1-initial-development-sequence).
+   - What the carve corrected beyond a copy, each measured: at_auth's floors
+     `at_commons: ^5.15.0` and `at_chops: ^3.4.2` were **too low** — it uses
+     `EnrollVerbBuilder.apkamPublicKeySignature` (first in at_commons 5.16.0)
+     and `SigningAlgoType.strongestFirst` (first in at_chops 3.6.0), and
+     `at_chops 3.4.2` was never published at all. They compiled only because
+     the workspace resolves by path. Raised to `^5.16.0` and `^3.6.0`.
+   - The "remove in v4" deprecations are settled, since this **is** v4. Ten
+     annotation sites promised it; three members are removed
+     (`AtOnboardingRequest.atKeys`, `AtAuthRequest.encryptedKeysMap`, the
+     ignored `atSign` on `AtKeysIo.generateKeyPairs`) and the rest say
+     **v5** — `AuthResponse` and its two subclasses and
+     `AtAuthRequest.atAuthKeys` are the return types of `onboard`/
+     `authenticate` and how a caller supplies enrollment-derived keys, with
+     201 references outside at_auth, so retiring them is an API change of its
+     own and is in `## TODO`.
+   - ⭐ `AtOnboardingRequest.atKeys` **never worked**: `onboard()` overwrote
+     whatever a caller set with the result of reading `atKeysIo` before
+     anything read it, then threw "already onboarded" if that read returned
+     keys — so the branch consuming it was unreachable. The analyzer confirmed
+     it independently once the field was gone.
+   - [14.44](#1444-residuals-from-the-at_chops-pr-review)'s first residual
+     landed here as its second commit, taking that section's preferred option:
+     `encode` refuses an `ArgonHashParams` whose `hashLength` is not the value
+     `decode` will use. Two tests, mutation-proven separately.
+   - Rails: at_auth 344/344, at_client 651 (+39 skipped), at_onboarding_cli
+     33/33, at_client_flutter 17/17, both format gates clean, every other
+     workspace package analyze exit 0, and **five live functional packs, four
+     green**. ⚠️ The one red is `atclient_sync_conflict_test`'s `conflictInfo`
+     case — [14.43](#1443-the-functional-suites-convergence-race)'s shape A,
+     whose fix (`_throwIfStopped`, the `stop()` done-completer,
+     `sync_stop_race_test.dart`) is on this branch and **not on trunk**, so
+     the carve necessarily runs the unfixed sync service. Re-derive rather
+     than believe: `git grep -c _throwIfStopped origin/trunk -- packages/at_client/lib/src/service/sync_service_impl.dart`.
 4a. ~~The at_auth 4.0 major~~ **Done 2026-08-22, and this list carried no
    trace of it until the wrap-up that day** — 14 commits, all pushed, CI 24/24
    green on `64480808d`. Recorded here because a reader working top-down would
@@ -118,15 +152,21 @@ that file instead; the list below is the PQ release work.
    `dart:io` in at_auth's own sources, guarded by
    `packages/at_auth/test/wasm_barrel_test.dart`.
 
-4b. **Test the registrar's certificate validation** — the one behaviour change
-   from S-5 that nothing exercises. Open
+4b. **[RECOMMENDED] Test the registrar's certificate validation** — the one
+   behaviour change from S-5 that still exercises nothing, and now the only
+   uncovered one, since 14.44's `hashLength` guard shipped with its own two
+   mutation-proven tests. Open
    `packages/at_auth/test/registrar_test.dart`, which today only injects a
    `MockClient`. `RegistrarService`'s default used to accept **any** TLS
    certificate on calls carrying the registrar API key and now validates; the
    bypass is `RegistrarIoClient.allowBadCertificates`, off by default. Neither
    arm has a test and CI cannot catch a regression — `RegistrarIoClient`
    appears in zero CI job logs. Pin both arms against a self-signed local
-   server. Unblocked, needs no permission; needs commit permission to land.
+   server. ⭐ **Do it as a third commit on [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)
+   while that is open and unmerged** — it is at_auth's own test tree, it is
+   the security-relevant half of the change the PR makes, and the alternative
+   is a follow-up PR against an at_auth whose rc has already gone out. Once
+   #2179 merges this becomes its own PR. Needs commit/push permission.
 
 4c. **Stop the e2e teardown revoking other runs' enrollments** —
    [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs). Open
@@ -261,7 +301,7 @@ to move anchors the acceptance rail parses.
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | **A unit-tree isolation flake**: `local_secondary_sync_queue_test.dart` failed 1-in-4 when run after the nskey/pq files in one non-alphabetical invocation — a same-file test's queue entry leaked into a later test, so the per-test store isn't always fresh. Green alone, green in the full suite | Reproduce at rate (~10 runs of the four-file order), then read the file's setUp for what makes the store per-test fresh |
 | [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. Still in the section: a stale at_server comment #2169 will falsify, and the untracked `post-quantum-cryptography.md` | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |
 | [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | ✅ **The spin is FIXED** — a sweep that removed nothing now backs off 30s instead of re-arming at zero. Was: **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines. Designed-in — `MintLock` releases by ttl alone (`mint_lock.dart:80`), so every mint and rotation makes another one. Pre-existing on trunk. ✅ **The refusal is fixed too** — it was a namespace check, not immutability, and the sweep now bypasses it. **Owed elsewhere:** the keystore's `get()` does not filter expired records (at_persistence_secondary_server, another repo) | Nothing. ⛔ **NOT the cause of [14.43](#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was **green, 177/177**. A rate effect is not excluded; presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20) |
-| [14.44](#1444-residuals-from-the-at_chops-pr-review) | Residuals from the at_chops PR review, none fixable there: the passphrase envelope persists the salt and three costs but **not `hashLength`**; `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths; and at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence whose durable record is ruling 110's addendum | Nothing. The first belongs in the **at_auth carve** (train position 5), where that file is already being edited; the other two go whenever at_chops is next open |
+| [14.44](#1444-residuals-from-the-at_chops-pr-review) | Residuals from the at_chops PR review. ✅ **The first is DONE 2026-08-22**, in the at_auth carve as this row said it should be — `encode` refuses an `ArgonHashParams` whose `hashLength` is not the value `decode` will use, which was the section's own preferred option over persisting it. **Two remain:** `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths; and at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence whose durable record is ruling 110's addendum | Nothing. Both remaining ones go whenever at_chops is next open |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | `deprecated_member_use` across the workspace | A call-site migration, not a lint sweep |
 | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) | NoPorts carries its own copy of the envelope shape | Separately owned — named here, not fixed here |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | `self_enrollment_retrofit_live_test.dart` failed once in five pack runs | Unexplained. Not a flake and not fixed — a rate, not a kind |
@@ -1120,6 +1160,23 @@ git -C /tmp/carve-<pkg> checkout gkc-pq-d1-spike -- packages/<pkg>
 # the gate: the carved tree must be byte-identical to the spike over that package
 git -C /tmp/carve-<pkg> diff gkc-pq-d1-spike --stat -- packages/<pkg>   # must be EMPTY
 ```
+
+⚠️ **The byte-identical gate held for three carves and NOT for at_auth, so
+"empty" is the default rather than the rule.** at_auth's carve departs from the
+spike in three files on purpose, each recorded in entry 4 of
+[`## THE NEXT MOVE`](#the-next-move): two dependency floors that were too low,
+a CHANGELOG sentence justifying a breaking change by naming a consumer that
+does not do the thing on trunk, and a test dartdoc citing a `docs/projects/`
+path. The gate's value is that every departure is *deliberate and named* —
+treat a non-empty result as a list to justify line by line, not as a failure,
+and carry the same edits back to the spike when trunk merges in.
+
+⚠️ **A carve of a package with dependents is NOT package-only when the version
+is a MAJOR.** A pub workspace refuses to resolve if any member's constraint
+excludes the new version, so every job dies at `dart pub get` before a single
+test runs — the failure looks nothing like a version problem. Widen every
+workspace member's constraint in the same commit, and grep unscoped:
+`git grep -n -P '^\s+at_<pkg>:' -- '*pubspec.yaml'`.
 
 Then analyze and test the package **and its consumers**, and raise with the org
 template. Order: **at_commons → at_chops → at_lookup → at_server_status →
@@ -3262,6 +3319,21 @@ alongside the other three, or have `encode` refuse an `ArgonHashParams` whose
 `hashLength` is not the default, since nothing in-tree varies it and a stored
 parameter nobody sets is a format that cannot be tested. Do it in the at_auth
 carve, where that file is already being touched.
+
+✅ **Done 2026-08-22, the second way**, as the second commit of
+[PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179).
+`encode` compares against `ArgonHashParams().hashLength` rather than a literal
+32, so at_auth holds no second copy of at_chops' default and the guard tracks
+the value `decode` will actually derive at — confirmed by reading `decode`,
+which sets only `memory`, `iterations` and `parallelism` and lets the length
+fall through. The refusal names the parameter and the offending value, because
+the failure it replaces blamed the passphrase. Two tests, mutation-proven
+**separately**: disabling the guard reddens only the refusal and the failure
+quotes that test's own message matcher; inverting it reddens the control that
+proves the default is still accepted. Nothing outside the new test varies
+`hashLength` anywhere in the tree, which is what made the guard the cheaper
+option — the persisted-field version would have shipped a format no test could
+exercise.
 
 **`XWingCore.combine` writes at hardcoded offsets.** It sizes its buffer from
 the four inputs' actual lengths and then writes at literal 0/32/64/96/128, so
