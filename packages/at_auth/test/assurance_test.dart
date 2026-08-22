@@ -83,7 +83,8 @@ void main() {
       assurance.validateMapUpdate(existing: existing, candidate: candidate);
     });
 
-    test('accepts the upgrade when the legacy spelling normalizes to the '
+    test(
+        'accepts the upgrade when the legacy spelling normalizes to the '
         'candidate atSign', () {
       // `AtKeys.fromJson` normalizes the reserved field through `toAtsign()`,
       // so the two sides are only comparable in that form: a legacy entry
@@ -112,8 +113,8 @@ void main() {
           existing: existing,
           candidate: candidate,
         ),
-        throwsA(isA<AtKeysAssuranceException>().having(
-            (e) => e.message, 'message', contains('map.atsign'))),
+        throwsA(isA<AtKeysAssuranceException>()
+            .having((e) => e.message, 'message', contains('map.atsign'))),
         reason: 'writing one atSign\'s keys over another\'s is the loss this '
             'check exists to refuse — and it must be the owner check that '
             'catches it, not the legacy comparison it was taken out of',
@@ -335,12 +336,13 @@ void main() {
     });
 
     group('one live enrollment per keyfile', () {
-      CryptographicMaterial authMaterial(String keyId, {String? enrollmentId}) =>
+      CryptographicMaterial authMaterial(String keyId,
+              {String? enrollmentId}) =>
           CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
-            keyPartType: CryptographicKeyType.privateAuthentication,
-            keyAlgorithmType: KeyAlgorithmType.rsa2048,
+            keyPartType: CryptographicMaterialRole.privateAuthentication,
+            keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
             bytes: AtBytes.fromString('dmFsdWU='),
             createdAt: _createdAt,
           );
@@ -390,8 +392,8 @@ void main() {
             candidate: CryptographicMaterial(
               keyId: 'auth:mldsa65:1',
               enrollmentId: 'e1',
-              keyPartType: CryptographicKeyType.privateAuthentication,
-              keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+              keyPartType: CryptographicMaterialRole.privateAuthentication,
+              keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
               bytes: AtBytes.fromString('dmFsdWU='),
               createdAt: _createdAt,
             ),
@@ -406,8 +408,8 @@ void main() {
             existing: [authMaterial('auth:rsa2048:1')],
             candidate: authMaterial('auth:rsa2048:2', enrollmentId: 'e2'),
           ),
-          throwsA(isA<ArgumentError>().having((e) => e.toString(), 'message',
-              contains('no enrollment id'))),
+          throwsA(isA<ArgumentError>().having(
+              (e) => e.toString(), 'message', contains('no enrollment id'))),
         );
       });
 
@@ -428,8 +430,8 @@ final _createdAt = DateTime.utc(2024, 1, 1);
 CryptographicMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
   return CryptographicMaterial(
     keyId: 'symmetric',
-    keyPartType: CryptographicKeyType.symmetricEncryption,
-    keyAlgorithmType: KeyAlgorithmType.aes256,
+    keyPartType: CryptographicMaterialRole.symmetricEncryption,
+    keyAlgorithmType: CryptographicMaterialAlgorithm.aes256,
     bytes: AtBytes.fromString(bytes),
     createdAt: _createdAt,
   );
@@ -439,15 +441,15 @@ List<CryptographicMaterial> _rsaPairMaterials() {
   return [
     CryptographicMaterial(
       keyId: 'pair',
-      keyPartType: CryptographicKeyType.publicEncryption,
-      keyAlgorithmType: KeyAlgorithmType.rsa2048,
+      keyPartType: CryptographicMaterialRole.publicEncryption,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
       bytes: AtBytes.fromString('cHVibGlj'),
       createdAt: _createdAt,
     ),
     CryptographicMaterial(
       keyId: 'pair',
-      keyPartType: CryptographicKeyType.privateDecryption,
-      keyAlgorithmType: KeyAlgorithmType.rsa2048,
+      keyPartType: CryptographicMaterialRole.privateDecryption,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
       bytes: AtBytes.fromString('cHJpdmF0ZQ=='),
       createdAt: _createdAt,
     ),
@@ -457,8 +459,8 @@ List<CryptographicMaterial> _rsaPairMaterials() {
 CryptographicMaterial _wrapperMaterial() {
   return CryptographicMaterial(
     keyId: 'wrapper',
-    keyPartType: CryptographicKeyType.symmetricEncryption,
-    keyAlgorithmType: KeyAlgorithmType.aes256,
+    keyPartType: CryptographicMaterialRole.symmetricEncryption,
+    keyAlgorithmType: CryptographicMaterialAlgorithm.aes256,
     bytes: AtBytes.fromString('d3JhcHBlcg=='),
     createdAt: _createdAt,
   );
@@ -472,8 +474,8 @@ CryptographicMaterial _enrollMaterial({
   return CryptographicMaterial(
     keyId: keyId,
     enrollmentId: enrollmentId,
-    keyPartType: CryptographicKeyType.privateDecryption,
-    keyAlgorithmType: KeyAlgorithmType.rsa2048,
+    keyPartType: CryptographicMaterialRole.privateDecryption,
+    keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
     operations: operations,
     bytes: AtBytes.fromString('c2VjcmV0'),
     createdAt: _createdAt,
@@ -533,8 +535,8 @@ Map<String, dynamic> _recordJson({String keyId = 'symmetric'}) {
     'keyId': keyId,
     'keyParts': [
       {
-        'keyPartType': CryptographicKeyType.symmetricEncryption,
-        'keyAlgorithmType': KeyAlgorithmType.aes256,
+        'keyPartType': CryptographicMaterialRole.symmetricEncryption,
+        'keyAlgorithmType': CryptographicMaterialAlgorithm.aes256,
         'createdAt': _createdAt.toIso8601String(),
         'status': KeyPartStatus.active,
         'bytes': 'dmFsdWU=',

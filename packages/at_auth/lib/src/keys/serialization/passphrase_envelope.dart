@@ -81,8 +81,7 @@ class AtKeysPassphraseEnvelopeCodec {
     }
 
     if (hashingAlgoType != HashingAlgoType.argon2id) {
-      throw AtException(
-          'a version $currentVersion envelope is Argon2id only; '
+      throw AtException('a version $currentVersion envelope is Argon2id only; '
           '${hashingAlgoType.name} is a single unsalted pass and gives a '
           'passphrase almost no protection, so it can be read for old files '
           'but never written');

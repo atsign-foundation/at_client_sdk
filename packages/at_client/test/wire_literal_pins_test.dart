@@ -28,7 +28,7 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyMintLockKey, pqSigningRootMintLockKey;
 import 'package:at_client/src/secret_sharing/envelope_addressing.dart';
 import 'package:at_client/src/signing/envelope_signature.dart';
-import 'package:at_auth/at_auth.dart' show KeyAlgorithmType;
+import 'package:at_auth/at_auth.dart' show CryptographicMaterialAlgorithm;
 import 'package:at_chops/at_chops.dart'
     show
         AESKey,
@@ -221,12 +221,13 @@ void main() {
 
     test('the root algorithm has one spelling across both vocabularies', () {
       // SigningAlgoType.mldsa65 is what the _apsk advertisement carries;
-      // KeyAlgorithmType.mlDsa65 is what AtKeys files material under. Slot ids
+      // CryptographicMaterialAlgorithm.mlDsa65 is what AtKeys files material under. Slot ids
       // are composed from the first and material is matched by the second, so
       // a drift between them would leave every root filed under an id no
       // reader assembles — with nothing to go red on the way past.
       expect(PqSigningRoot.rootKeyAlgoToken, 'mldsa65');
-      expect(PqSigningRoot.rootKeyAlgoToken, KeyAlgorithmType.mlDsa65);
+      expect(PqSigningRoot.rootKeyAlgoToken,
+          CryptographicMaterialAlgorithm.mlDsa65);
     });
   });
 

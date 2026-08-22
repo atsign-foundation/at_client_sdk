@@ -566,12 +566,8 @@ class AtAuthImpl implements AtAuth {
   /// Whatever the metadataBuilder minted — the key package's two halves —
   /// is re-tagged with the enrollment id either way. It is the only copy of
   /// that private half in existence.
-  void _fileFirstEnrollmentMaterial(
-      AtKeys atAuthKeys,
-      AtKeys constructionKeys,
-      OnboardingMint mint,
-      SigningAlgoType signingAlgo,
-      String enrollmentId) {
+  void _fileFirstEnrollmentMaterial(AtKeys atAuthKeys, AtKeys constructionKeys,
+      OnboardingMint mint, SigningAlgoType signingAlgo, String enrollmentId) {
     if (signingAlgo != SigningAlgoType.rsa2048) {
       atAuthKeys.fileApkamMaterial(
           enrollmentId: enrollmentId,

@@ -1,4 +1,4 @@
-import 'package:at_auth/at_auth.dart' show KeyAlgorithmType;
+import 'package:at_auth/at_auth.dart' show CryptographicMaterialAlgorithm;
 import 'package:at_chops/at_chops.dart'
     show AtKemAlgorithm, MlKem1024PureDartAlgo, XWingPureDartAlgo;
 import 'package:meta/meta.dart' show experimental;
@@ -199,8 +199,8 @@ class SecretSharingAlgos {
   /// these protocol ids. This and [keyAlgoForMaterial] are the only places the
   /// two meet.
   static String? materialAlgoFor(String keyAlgo) => switch (keyAlgo) {
-        xWing => KeyAlgorithmType.xWing,
-        mlKem1024 => KeyAlgorithmType.mlKem1024,
+        xWing => CryptographicMaterialAlgorithm.xWing,
+        mlKem1024 => CryptographicMaterialAlgorithm.mlKem1024,
         _ => null,
       };
 
@@ -213,8 +213,8 @@ class SecretSharingAlgos {
   /// so an unknown token means "not mine", not "malformed".
   static String? keyAlgoForMaterial(String materialAlgo) =>
       switch (materialAlgo) {
-        KeyAlgorithmType.xWing => xWing,
-        KeyAlgorithmType.mlKem1024 => mlKem1024,
+        CryptographicMaterialAlgorithm.xWing => xWing,
+        CryptographicMaterialAlgorithm.mlKem1024 => mlKem1024,
         _ => null,
       };
 

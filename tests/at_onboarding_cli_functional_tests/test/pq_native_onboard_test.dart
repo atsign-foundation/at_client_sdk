@@ -141,7 +141,7 @@ void main() {
         mine['apkamPubKey'],
         keys
             .getKey(enrollmentId, 'auth:mldsa65:1',
-                CryptographicKeyType.publicAuthentication)!
+                CryptographicMaterialRole.publicAuthentication)!
             .bytes
             .toString(),
         reason: 'the APKAM the atServer holds is the ML-DSA one, byte for '

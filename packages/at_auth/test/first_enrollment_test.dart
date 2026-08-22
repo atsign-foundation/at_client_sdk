@@ -18,7 +18,8 @@ class MockAtLookUp extends Mock implements AtLookupImpl {}
 /// record and never again, so this is the only moment it can be set at all.
 void main() {
   const atSign = '@alice';
-  const approvedResponse = 'data:{"enrollmentId":"first-1","status":"approved"}';
+  const approvedResponse =
+      'data:{"enrollmentId":"first-1","status":"approved"}';
 
   String b64(String s) => base64Encode(utf8.encode(s));
 
@@ -30,8 +31,10 @@ void main() {
   }
 
   Map<String, dynamic> paramsOf(MockAtLookUp mock) {
-    final command = verify(() => mock.executeCommand(captureAny(),
-        auth: any(named: 'auth'))).captured.single as String;
+    final command = verify(
+            () => mock.executeCommand(captureAny(), auth: any(named: 'auth')))
+        .captured
+        .single as String;
     expect(command, startsWith('enroll:request:'));
     return jsonDecode(command.substring('enroll:request:'.length))
         as Map<String, dynamic>;
@@ -42,7 +45,8 @@ void main() {
     ..apkamPrivateKey = AtBytes.fromString(b64('apkam-private'));
 
   group('FirstEnrollmentRequest', () {
-    test('defaults to rsa2048, sends no metadata, and publishes the same bare '
+    test(
+        'defaults to rsa2048, sends no metadata, and publishes the same bare '
         '_apsk a legacy onboard always has', () async {
       final mock = approvingLookUp();
 
@@ -87,8 +91,7 @@ void main() {
       expect(params['signingAlgo'], 'mldsa65',
           reason: 'the atServer verifies this enrollment\'s PKAM signatures '
               'with the algorithm its record names');
-      expect(
-          (params['apsk']['keys'] as List).single['alg'], 'mldsa65',
+      expect((params['apsk']['keys'] as List).single['alg'], 'mldsa65',
           reason: 'and the request carries the signing key itself, because the '
               'atServer composes no _apsk — an mldsa65 enrollment that sent '
               'none would publish nothing any verifier could read');
@@ -131,8 +134,8 @@ void main() {
                 final handed = await keysIo.read(atSign);
                 handed.addKey(CryptographicMaterial(
                     keyId: 'kpid-1',
-                    keyPartType: CryptographicKeyType.privateDecapsulation,
-                    keyAlgorithmType: KeyAlgorithmType.xWing,
+                    keyPartType: CryptographicMaterialRole.privateDecapsulation,
+                    keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
                     bytes: AtBytes.fromString(b64('the-seed')),
                     createdAt: DateTime.now().toUtc()));
                 return {'keyPackage': 'signed-envelope'};
@@ -140,7 +143,7 @@ void main() {
           approvingLookUp());
 
       final filed = callersKeys.getAtSignKey(
-          'kpid-1', CryptographicKeyType.privateDecapsulation);
+          'kpid-1', CryptographicMaterialRole.privateDecapsulation);
       expect(filed, isNotNull,
           reason: 'the builder must mutate the caller\'s own AtKeys, not a '
               'copy — this is the only place the private half is written');

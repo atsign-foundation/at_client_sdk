@@ -32,7 +32,6 @@ import 'package:at_chops/at_chops.dart';
 /// passcode expiry is decided whichever of the two types it holds. The
 /// collaborators then take those values explicitly.
 class AtEnrollmentImpl implements AtEnrollment {
-
   AtEnrollmentImpl();
 
   final EnrollmentProgress _progress = EnrollmentProgress();
@@ -72,8 +71,7 @@ class AtEnrollmentImpl implements AtEnrollment {
 
   @override
   Future<AtEnrollmentResponse> update(
-          EnrollmentUpdateRequest enrollmentUpdateRequest,
-          AtLookUp atLookUp) =>
+          EnrollmentUpdateRequest enrollmentUpdateRequest, AtLookUp atLookUp) =>
       _updater.update(enrollmentUpdateRequest, atLookUp);
 
   @override

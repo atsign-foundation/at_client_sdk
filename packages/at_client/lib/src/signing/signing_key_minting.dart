@@ -2,7 +2,7 @@ import 'package:at_auth/at_auth.dart'
     show
         AtEnrollment,
         EnrollmentUpdateRequest,
-        KeyAlgorithmType,
+        CryptographicMaterialAlgorithm,
         KeyEntryStatus,
         WrittenAtKeysIo;
 import 'package:at_chops/at_chops.dart'
@@ -383,8 +383,8 @@ class SigningKeyMinting with ApkamSigning {
   /// member name for both, and `AtKeys.signingKeysFor` reads it back by that
   /// name — a second spelling here would file material the reader skips.
   String _materialAlgorithmOf(SigningAlgoType algorithm) => switch (algorithm) {
-        SigningAlgoType.mldsa65 => KeyAlgorithmType.mlDsa65,
-        SigningAlgoType.rsa2048 => KeyAlgorithmType.rsa2048,
+        SigningAlgoType.mldsa65 => CryptographicMaterialAlgorithm.mlDsa65,
+        SigningAlgoType.rsa2048 => CryptographicMaterialAlgorithm.rsa2048,
         _ => algorithm.name,
       };
 }

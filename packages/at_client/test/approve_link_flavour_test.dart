@@ -10,9 +10,9 @@ import 'package:at_auth/at_auth.dart'
         ApskSigningKey,
         AtKeys,
         CryptographicMaterial,
-        CryptographicKeyType,
+        CryptographicMaterialRole,
         InMemoryAtKeysIo,
-        KeyAlgorithmType;
+        CryptographicMaterialAlgorithm;
 import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
@@ -91,8 +91,8 @@ void main() {
         AtKeys()
           ..addKey(CryptographicMaterial(
             keyId: rootSlot1,
-            keyPartType: CryptographicKeyType.privateSigning,
-            keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+            keyPartType: CryptographicMaterialRole.privateSigning,
+            keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
             bytes: AtBytes(pair.secretKey),
             createdAt: DateTime.now().toUtc(),
           )));

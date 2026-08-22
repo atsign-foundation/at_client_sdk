@@ -72,14 +72,14 @@ void main() {
     const doc = '{"aesPkamPublicKey":"abc","x":1}';
 
     test('what gets written carries a version, a salt and its costs', () async {
-      final e = jsonDecode(await codec.encode(doc, 'right'))
-          as Map<String, dynamic>;
+      final e =
+          jsonDecode(await codec.encode(doc, 'right')) as Map<String, dynamic>;
 
       expect(e['v'], 1);
       expect(base64Decode(e['salt'] as String).length,
           AtKeysPassphraseEnvelopeCodec.saltLength);
-      expect(e['kdfParams'],
-          {'memory': 19456, 'iterations': 2, 'parallelism': 1});
+      expect(
+          e['kdfParams'], {'memory': 19456, 'iterations': 2, 'parallelism': 1});
       expect(await codec.decode(e, passPhrase: 'right'), jsonDecode(doc));
     });
 
@@ -118,8 +118,8 @@ void main() {
           'content': 'x',
           'hashingAlgoType': 'argon2id',
         }, passPhrase: 'right'),
-        throwsA(isA<AtDecryptionException>().having(
-            (e) => '$e', 'message', contains('no code for'))),
+        throwsA(isA<AtDecryptionException>()
+            .having((e) => '$e', 'message', contains('no code for'))),
         reason: 'falling back to the legacy derivation would report a version '
             'mismatch as a wrong passphrase',
       );
@@ -139,8 +139,7 @@ void main() {
 
     test('a single-pass hash cannot be written as a version 1 envelope', () {
       expect(
-        () => codec.encode(doc, 'right',
-            hashingAlgoType: HashingAlgoType.md5),
+        () => codec.encode(doc, 'right', hashingAlgoType: HashingAlgoType.md5),
         throwsA(isA<AtException>()),
       );
     });
@@ -163,8 +162,7 @@ void main() {
 
     test('an ASCII-passphrase file written before the salt existed', () async {
       expect(
-        await codec.decode(
-            jsonDecode(asciiEnvelope) as Map<String, dynamic>,
+        await codec.decode(jsonDecode(asciiEnvelope) as Map<String, dynamic>,
             passPhrase: 'plain-ascii'),
         expected,
       );
@@ -175,8 +173,7 @@ void main() {
       // UTF-8 would be the obvious tidy-up and would silently orphan every
       // file whose owner used a non-ASCII passphrase.
       expect(
-        await codec.decode(
-            jsonDecode(nonAsciiEnvelope) as Map<String, dynamic>,
+        await codec.decode(jsonDecode(nonAsciiEnvelope) as Map<String, dynamic>,
             passPhrase: 'passwörd-☃'),
         expected,
       );

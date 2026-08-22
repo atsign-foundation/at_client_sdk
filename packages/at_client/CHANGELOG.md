@@ -760,7 +760,7 @@ hunting for a constructor argument that never existed in a release. -->
     `:1` in its own line rather than inheriting a counter.
 - feat: `PqSigningRoot.rootKeyAlgoToken` — `rootKeyAlgo` in the vocabulary
   `AtKeys` files material under. Slot ids are composed from the enum and
-  material is matched by at_auth's `KeyAlgorithmType` constant; the two are
+  material is matched by at_auth's `CryptographicMaterialAlgorithm` constant; the two are
   separate declarations that agree today, and are now pinned against each
   other so a drift cannot leave roots filed under an id no reader assembles.
 - feat: the PQ startup records what the atServer's enrollment record says

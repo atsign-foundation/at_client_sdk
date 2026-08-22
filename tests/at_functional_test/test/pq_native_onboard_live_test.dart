@@ -80,7 +80,7 @@ void main() {
     expect(
         base64Decode(keys
                 .getKey(enrollmentId, 'auth:mldsa65:1',
-                    CryptographicKeyType.publicAuthentication)!
+                    CryptographicMaterialRole.publicAuthentication)!
                 .bytes
                 .toString())
             .length,
@@ -155,7 +155,7 @@ void main() {
     // The APKAM the atServer holds is the ML-DSA one, byte for byte.
     expect(mine['apkamPubKey'],
         keys.getKey(enrollmentId, 'auth:mldsa65:1',
-                CryptographicKeyType.publicAuthentication)!.bytes.toString());
+                CryptographicMaterialRole.publicAuthentication)!.bytes.toString());
 
     // --- legacy material is cut and published, BY DEFAULT ------------------
     expect(keys.defaultEncryptionPublicKey, isNotNull);

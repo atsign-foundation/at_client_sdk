@@ -170,8 +170,8 @@ void main() {
           AtKeys()
             ..addKey(CryptographicMaterial(
               keyId: rootSlot1,
-              keyPartType: CryptographicKeyType.privateSigning,
-              keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+              keyPartType: CryptographicMaterialRole.privateSigning,
+              keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
               bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 7))),
               createdAt: DateTime.now().toUtc(),
             )));

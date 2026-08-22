@@ -49,10 +49,10 @@ void main() {
     final atChopsImpl = AtChopsImpl(atChopsKeys);
     final iv = AtChopsUtil.generateIVLegacy();
 
-    Future<String> sealed(String value) async => (await atChopsImpl
-            .encryptString(value, EncryptionKeyType.aes256,
+    Future<String> sealed(String value) async =>
+        (await atChopsImpl.encryptString(value, EncryptionKeyType.aes256,
                 keyName: 'apkamSymmetricKey', iv: iv))
-        .result;
+            .result;
 
     final sealedPrivateKey = await sealed(encryptionPrivateKey);
     final sealedSelfKey = await sealed(selfEncryptionKey);
@@ -77,12 +77,10 @@ void main() {
       }
     });
     when(() => lookup.executeCommand(
-            any(
-                that: startsWith(
-                    'keys:get:keyName:123.default_enc_private_key')),
-            auth: any(named: 'auth')))
-        .thenAnswer(
-            (_) async => 'data:${jsonEncode({'value': sealedPrivateKey})}');
+        any(that: startsWith('keys:get:keyName:123.default_enc_private_key')),
+        auth:
+            any(named: 'auth'))).thenAnswer(
+        (_) async => 'data:${jsonEncode({'value': sealedPrivateKey})}');
     when(() => lookup.executeCommand(
             any(that: startsWith('keys:get:keyName:123.default_self_enc_key')),
             auth: any(named: 'auth')))
@@ -154,7 +152,8 @@ void main() {
       // The escape hatch from an atServer that is genuinely gone: one more
       // consecutive failure than the budget allows, and the cause propagates
       // rather than being swallowed into another retry.
-      final (response, lookup, polled) = await rig(List.filled(9, Poll.unreachable));
+      final (response, lookup, polled) =
+          await rig(List.filled(9, Poll.unreachable));
 
       await expectLater(
           waitFor(response, lookup, 2), throwsA(isA<AtLookUpException>()));
@@ -170,12 +169,13 @@ void main() {
       // three handled codes and fell out of the catch unlogged and unthrown,
       // so the poll ran every retryInterval for the life of the process
       // saying nothing.
-      final (response, lookup, polled) = await rig(List.filled(9, Poll.refused));
+      final (response, lookup, polled) =
+          await rig(List.filled(9, Poll.refused));
 
       await expectLater(
           waitFor(response, lookup, 2),
-          throwsA(isA<AtEnrollmentException>().having((e) => e.message,
-              'message', contains('AT0027'))),
+          throwsA(isA<AtEnrollmentException>()
+              .having((e) => e.message, 'message', contains('AT0027'))),
           reason: 'the atServer said why; the exception must carry it');
 
       expect(polled.length, 3,

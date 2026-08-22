@@ -48,12 +48,12 @@ void main() {
     final keys = await io.read(atSign);
     final material = keys.getAtSignKey(
         NskeyPrivateFiling.keyIdFor(namespace, 'kid-one'),
-        CryptographicKeyType.privateDecapsulation);
+        CryptographicMaterialRole.privateDecapsulation);
     expect(material, isNotNull,
         reason: 'this is the only copy that survives a restart — the transit '
             'store is in-memory by design');
     expect(material!.bytes.bytes, privateBytes);
-    expect(material.keyAlgorithmType, KeyAlgorithmType.xWing);
+    expect(material.keyAlgorithmType, CryptographicMaterialAlgorithm.xWing);
   });
 
   test('the same kid in two namespaces files as two keys', () async {
@@ -65,11 +65,11 @@ void main() {
     final keys = await io.read(atSign);
     expect(
         keys.getAtSignKey(NskeyPrivateFiling.keyIdFor(namespace, 'shared-kid'),
-            CryptographicKeyType.privateDecapsulation),
+            CryptographicMaterialRole.privateDecapsulation),
         isNotNull);
     expect(
         keys.getAtSignKey(NskeyPrivateFiling.keyIdFor('other', 'shared-kid'),
-            CryptographicKeyType.privateDecapsulation),
+            CryptographicMaterialRole.privateDecapsulation),
         isNotNull,
         reason: 'kids are truncated hashes and are not unique across '
             'namespaces, so keying on the kid alone would let one namespace '
@@ -169,7 +169,7 @@ void main() {
             'own — an app secret is none of the crypto layer\'s business');
     expect(
         keys.getAtSignKey(NskeyPrivateFiling.keyIdFor(namespace, 'kid-two'),
-            CryptographicKeyType.privateDecapsulation),
+            CryptographicMaterialRole.privateDecapsulation),
         isNotNull);
   });
 

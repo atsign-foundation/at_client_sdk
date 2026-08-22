@@ -8,7 +8,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeysSourceAbsentException,
         AtKeysIo,
         CryptographicMaterial,
-        CryptographicKeyType,
+        CryptographicMaterialRole,
         WrittenAtKeysIo;
 import 'package:at_client/src/crypto/crypto.dart' show FiledNskeyPrivate;
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
@@ -266,7 +266,7 @@ class NskeyPrivateFiling {
     if (keys == null) return null;
     try {
       final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
-          CryptographicKeyType.privateDecapsulation);
+          CryptographicMaterialRole.privateDecapsulation);
       if (material == null) return null;
       final keyAlgo =
           SecretSharingAlgos.keyAlgoForMaterial(material.keyAlgorithmType);
@@ -308,7 +308,7 @@ class NskeyPrivateFiling {
     if (keys == null) return null;
     try {
       final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
-          CryptographicKeyType.privateDecapsulation);
+          CryptographicMaterialRole.privateDecapsulation);
       if (material == null) return null;
       return NskeySeed(Uint8List.fromList(material.bytes.bytes));
     } catch (e) {
@@ -344,7 +344,8 @@ class NskeyPrivateFiling {
     // with no enrollment, and every enrollment holding the grant reads the
     // same entry.
     for (final material in keys.atSignKeys) {
-      if (material.keyPartType != CryptographicKeyType.privateDecapsulation ||
+      if (material.keyPartType !=
+              CryptographicMaterialRole.privateDecapsulation ||
           !material.keyId.startsWith(prefix)) {
         continue;
       }
@@ -376,7 +377,7 @@ class NskeyPrivateFiling {
       return {
         for (final material in keys.atSignKeys)
           if (material.keyPartType ==
-                  CryptographicKeyType.privateDecapsulation &&
+                  CryptographicMaterialRole.privateDecapsulation &&
               material.keyId.startsWith(prefix))
             material.keyId.substring(prefix.length):
                 NskeySeed(Uint8List.fromList(material.bytes.bytes))
@@ -440,7 +441,7 @@ class NskeyPrivateFiling {
     try {
       await io.update(atSign.toAtsign(), (keys) {
         if (keys.getAtSignKey(
-                keyId, CryptographicKeyType.privateDecapsulation) !=
+                keyId, CryptographicMaterialRole.privateDecapsulation) !=
             null) {
           // Re-delivery is expected: the substrate converges by re-sending,
           // and putIfNewer already made arrival idempotent upstream.
@@ -448,7 +449,7 @@ class NskeyPrivateFiling {
         }
         keys.addKey(CryptographicMaterial(
           keyId: keyId,
-          keyPartType: CryptographicKeyType.privateDecapsulation,
+          keyPartType: CryptographicMaterialRole.privateDecapsulation,
           keyAlgorithmType: materialAlgo,
           bytes: AtBytes(seed.bytes),
           createdAt: createdAt ?? DateTime.now().toUtc(),

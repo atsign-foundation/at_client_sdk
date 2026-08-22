@@ -69,8 +69,9 @@ void main() {
   Map<String, dynamic> paramsOf(String command) {
     expect(command, startsWith('enroll:update:'));
     expect(command, endsWith('\n'));
-    return jsonDecode(command.substring(
-        'enroll:update:'.length, command.length - 1)) as Map<String, dynamic>;
+    return jsonDecode(
+            command.substring('enroll:update:'.length, command.length - 1))
+        as Map<String, dynamic>;
   }
 
   group('the possession proof verifies the way the atServer verifies it', () {
@@ -194,9 +195,12 @@ void main() {
           l.lookUp);
 
       final params = paramsOf(l.commands.single);
-      expect(params.keys.toList(),
-          ['enrollmentId', 'apkamPublicKey', 'signingAlgo',
-            'apkamPublicKeySignature']);
+      expect(params.keys.toList(), [
+        'enrollmentId',
+        'apkamPublicKey',
+        'signingAlgo',
+        'apkamPublicKeySignature'
+      ]);
       expect(params['apkamPublicKey'], publicKey);
       expect(params['signingAlgo'], 'rsa2048');
       // The proof the atServer will run, over exactly what was sent — not over

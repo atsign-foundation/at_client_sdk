@@ -88,9 +88,10 @@ class AtKeys {
 
   final Map<String, _EnrollmentSlot> _enrollments = {};
 
-  // Keyed by keyId, then keyPartType (see CryptographicKeyType for the known
+  // Keyed by keyId, then keyPartType (see CryptographicMaterialRole for the known
   // tokens; unknown tokens are held too).
-  final Map<String, Map<String, CryptographicMaterial>> _atSignMaterialsByKeyId = {};
+  final Map<String, Map<String, CryptographicMaterial>>
+      _atSignMaterialsByKeyId = {};
 
   /// Every typed material in the document, both containers, in no particular
   /// order.
@@ -126,7 +127,8 @@ class AtKeys {
   /// The public constructor above is a writer's — app code assembling keys —
   /// and keeps the write-side policy. Sharing one path is what made the
   /// reader inherit the writer's refusal, which is the state this replaces.
-  AtKeys._parsed({this.atsign, required List<CryptographicMaterial> materials}) {
+  AtKeys._parsed(
+      {this.atsign, required List<CryptographicMaterial> materials}) {
     for (final material in materials) {
       _file(material);
     }
@@ -159,8 +161,9 @@ class AtKeys {
   }
 
   /// Looks up one of [enrollmentId]'s materials by `(keyId, keyPartType)` —
-  /// [type] is a [CryptographicKeyType] token.
-  CryptographicMaterial? getKey(String enrollmentId, String keyId, String type) =>
+  /// [type] is a [CryptographicMaterialRole] token.
+  CryptographicMaterial? getKey(
+          String enrollmentId, String keyId, String type) =>
       _enrollments[enrollmentId]?.materialsByKeyId[keyId]?[type];
 
   /// Looks up one of the atSign's own materials by `(keyId, keyPartType)`.
@@ -171,7 +174,8 @@ class AtKeys {
   /// public+private halves of one keypair.
   ///
   /// Potentially might only contain a half of a keypair. Typically the public one.
-  Iterable<CryptographicMaterial> keysForKeyId(String enrollmentId, String keyId) =>
+  Iterable<CryptographicMaterial> keysForKeyId(
+          String enrollmentId, String keyId) =>
       _enrollments[enrollmentId]?.materialsByKeyId[keyId]?.values ?? const [];
 
   /// Every atSign-scope material sharing [keyId].
@@ -212,7 +216,8 @@ class AtKeys {
         .putIfAbsent(material.keyId, () => {})[material.keyPartType] = material;
   }
 
-  Map<String, Map<String, CryptographicMaterial>> _containerFor(String? enrollmentId) {
+  Map<String, Map<String, CryptographicMaterial>> _containerFor(
+      String? enrollmentId) {
     if (enrollmentId == null) return _atSignMaterialsByKeyId;
     return _enrollments
         .putIfAbsent(enrollmentId, () => _EnrollmentSlot(enrollmentId))
@@ -233,7 +238,7 @@ class AtKeys {
   /// because an enrollment moving from one to another holds both at once, and
   /// they must not collide.
   ///
-  /// [algorithm] is a [KeyAlgorithmType] token, which is also the enrollment
+  /// [algorithm] is a [CryptographicMaterialAlgorithm] token, which is also the enrollment
   /// `signingAlgo` spelling — the keyfile and the wire use the same strings.
   /// Both halves are filed and share one creation timestamp: the private one
   /// is what PKAM signs with, and the public one is what a reader checks this
@@ -254,14 +259,14 @@ class AtKeys {
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.privateAuthentication,
+        keyPartType: CryptographicMaterialRole.privateAuthentication,
         keyAlgorithmType: algorithm,
         bytes: AtBytes.fromString(privateKey),
         createdAt: now));
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.publicAuthentication,
+        keyPartType: CryptographicMaterialRole.publicAuthentication,
         keyAlgorithmType: algorithm,
         bytes: AtBytes.fromString(publicKey),
         createdAt: now));
@@ -298,14 +303,14 @@ class AtKeys {
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.privateSigning,
+        keyPartType: CryptographicMaterialRole.privateSigning,
         keyAlgorithmType: algorithm,
         bytes: AtBytes.fromString(privateKey),
         createdAt: now));
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.publicVerification,
+        keyPartType: CryptographicMaterialRole.publicVerification,
         keyAlgorithmType: algorithm,
         bytes: AtBytes.fromString(publicKey),
         createdAt: now));
@@ -325,9 +330,8 @@ class AtKeys {
   /// place and keeps its generation forever, so the next mint lands beside it
   /// rather than over it; `addKey` refuses a duplicate keyId, which is what
   /// makes that safe rather than merely tidy.
-  int nextAtSignGeneration(String role, String algorithm) =>
-      _nextGeneration(
-          _atSignMaterialsByKeyId.keys, keyIdPrefix(role, algorithm));
+  int nextAtSignGeneration(String role, String algorithm) => _nextGeneration(
+      _atSignMaterialsByKeyId.keys, keyIdPrefix(role, algorithm));
 
   /// The keyId prefix a [role]/[algorithm] pair is filed under —
   /// `<role>:<algorithm>:`, completed by a generation number.
@@ -410,9 +414,9 @@ class AtKeys {
       if (!isRoleKeyId(keyId, 'sign')) continue;
 
       final private =
-          getKey(enrollmentId, keyId, CryptographicKeyType.privateSigning);
-      final public =
-          getKey(enrollmentId, keyId, CryptographicKeyType.publicVerification);
+          getKey(enrollmentId, keyId, CryptographicMaterialRole.privateSigning);
+      final public = getKey(
+          enrollmentId, keyId, CryptographicMaterialRole.publicVerification);
       if (private == null || public == null) continue;
       if (private.status != KeyPartStatus.active ||
           public.status != KeyPartStatus.active) {
@@ -483,8 +487,8 @@ class AtKeys {
         const <String>[]) {
       if (!isRoleKeyId(keyId, 'sign')) continue;
 
-      final public =
-          getKey(enrollmentId, keyId, CryptographicKeyType.publicVerification);
+      final public = getKey(
+          enrollmentId, keyId, CryptographicMaterialRole.publicVerification);
       if (public == null ||
           public.status == KeyPartStatus.active ||
           public.status == KeyPartStatus.dead) {
@@ -517,7 +521,7 @@ class AtKeys {
   /// to reconstruct `sign:<algo>:<n>` would be holding a second copy of that
   /// grammar, and the two would drift.
   ///
-  /// [algorithm] is a [KeyAlgorithmType] token — the same spelling
+  /// [algorithm] is a [CryptographicMaterialAlgorithm] token — the same spelling
   /// [fileSigningMaterial] files under and [signingKeysFor] reads back.
   ///
   /// Retires the keypair rather than removing it, and **both halves**. The
@@ -592,8 +596,8 @@ class AtKeys {
   void retireAtSignKey(String keyId, {String to = KeyPartStatus.retired}) =>
       _retire(_atSignMaterialsByKeyId, keyId, to, 'the atSign');
 
-  void _retire(Map<String, Map<String, CryptographicMaterial>>? container, String keyId,
-      String to, String ownerLabel) {
+  void _retire(Map<String, Map<String, CryptographicMaterial>>? container,
+      String keyId, String to, String ownerLabel) {
     if (to == KeyPartStatus.active) {
       throw ArgumentError.value(to, 'to', 'retireKey cannot reactivate a key');
     }
@@ -708,7 +712,7 @@ class AtKeys {
   /// belong to somebody else.
   Iterable<String> get authenticatableEnrollmentIds => _enrollments.values
       .where((slot) => slot.materialsByKeyId.values.any((byType) =>
-          byType[CryptographicKeyType.privateAuthentication]?.status ==
+          byType[CryptographicMaterialRole.privateAuthentication]?.status ==
           KeyPartStatus.active))
       .map((slot) => slot.enrollmentId);
 
@@ -952,8 +956,8 @@ class AtKeys {
     return materials.every((material) {
       final counterpart = material.enrollmentId == null
           ? other.getAtSignKey(material.keyId, material.keyPartType)
-          : other.getKey(material.enrollmentId!, material.keyId,
-              material.keyPartType);
+          : other.getKey(
+              material.enrollmentId!, material.keyId, material.keyPartType);
       return counterpart == material;
     });
   }
@@ -1081,12 +1085,12 @@ class AtKeys {
     // here enumerates.
     final privateAuthentication = materials
         .where((m) =>
-            m.keyPartType == CryptographicKeyType.privateAuthentication &&
+            m.keyPartType == CryptographicMaterialRole.privateAuthentication &&
             m.status == KeyPartStatus.active)
         .firstOrNull;
     final publicAuthentication = materials
         .where((m) =>
-            m.keyPartType == CryptographicKeyType.publicAuthentication &&
+            m.keyPartType == CryptographicMaterialRole.publicAuthentication &&
             m.status == KeyPartStatus.active)
         .firstOrNull;
     if (privateAuthentication == null || publicAuthentication == null) {
@@ -1137,7 +1141,8 @@ class AtKeys {
   CryptographicMaterial? _activeAuthenticationMaterial(String enrollmentId) =>
       keysForEnrollment(enrollmentId)
           .where((m) =>
-              m.keyPartType == CryptographicKeyType.privateAuthentication &&
+              m.keyPartType ==
+                  CryptographicMaterialRole.privateAuthentication &&
               m.status == KeyPartStatus.active)
           .firstOrNull;
 

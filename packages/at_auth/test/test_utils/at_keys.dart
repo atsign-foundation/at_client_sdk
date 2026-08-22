@@ -26,7 +26,7 @@ final _defaultCreatedAt = DateTime.utc(2024, 1, 1);
 CryptographicMaterial symmetricKey(
   String keyId, {
   String value = 'c2VjcmV0',
-  String algorithm = KeyAlgorithmType.aes256,
+  String algorithm = CryptographicMaterialAlgorithm.aes256,
   List<String> operations = const [],
   String? enrollmentId,
   DateTime? createdAt,
@@ -34,7 +34,7 @@ CryptographicMaterial symmetricKey(
   return CryptographicMaterial(
     keyId: keyId,
     enrollmentId: enrollmentId,
-    keyPartType: CryptographicKeyType.symmetricEncryption,
+    keyPartType: CryptographicMaterialRole.symmetricEncryption,
     keyAlgorithmType: algorithm,
     bytes: AtBytes.fromString(value),
     operations: operations,
@@ -56,16 +56,16 @@ List<CryptographicMaterial> rsaKeyPair(
     CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
-      keyPartType: CryptographicKeyType.publicEncryption,
-      keyAlgorithmType: KeyAlgorithmType.rsa2048,
+      keyPartType: CryptographicMaterialRole.publicEncryption,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
       bytes: AtBytes.fromString(publicValue),
       createdAt: at,
     ),
     CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
-      keyPartType: CryptographicKeyType.privateDecryption,
-      keyAlgorithmType: KeyAlgorithmType.rsa2048,
+      keyPartType: CryptographicMaterialRole.privateDecryption,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
       bytes: AtBytes.fromString(privateValue),
       createdAt: at,
     ),

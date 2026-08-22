@@ -1,7 +1,12 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysIo, InMemoryAtKeysIo, KeyAlgorithmType, WrittenAtKeysIo;
+    show
+        AtKeys,
+        AtKeysIo,
+        InMemoryAtKeysIo,
+        CryptographicMaterialAlgorithm,
+        WrittenAtKeysIo;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/response/enrollment.dart' show Enrollment;
@@ -280,7 +285,7 @@ void main() {
       final keys = AtKeys(atsign: atSign.toAtsign())
         ..fileApkamMaterial(
           enrollmentId: id,
-          algorithm: KeyAlgorithmType.rsa2048,
+          algorithm: CryptographicMaterialAlgorithm.rsa2048,
           // AtBytes.fromString base64-decodes, so these have to be valid
           // base64 rather than readable placeholders.
           publicKey: 'cHVibGlj',

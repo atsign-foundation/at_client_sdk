@@ -46,7 +46,8 @@ class EnrollmentApprover {
     String apkamSymmetricKey = enrollmentRequestDecision
             .mintedApkamSymmetricKey ??
         utf8.decode((RsaEncryptionAlgo()
-              ..atPrivateKey = AtPrivateKey.fromString(chops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey))
+              ..atPrivateKey = AtPrivateKey.fromString(chops
+                  .atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey))
             .decrypt(base64Decode(
                 enrollmentRequestDecision.encryptedAPKAMSymmetricKey)));
 
@@ -57,19 +58,17 @@ class EnrollmentApprover {
         AtChopsUtil.generateRandomIV(16);
     // Fetch the encryptionPrivateKey from the atChops and encrypt with APKAM Symmetric key.
     String encryptedDefaultEncryptionPrivateKey = (await chops.encryptString(
-                chops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey,
-                EncryptionKeyType.aes256,
-                keyName: 'apkamSymmetricKey',
-                iv: encryptionPrivateKeyIV))
+            chops.atChopsKeys.atEncryptionKeyPair!.atPrivateKey.privateKey,
+            EncryptionKeyType.aes256,
+            keyName: 'apkamSymmetricKey',
+            iv: encryptionPrivateKeyIV))
         .result;
 
     InitialisationVector selfEncryptionKeyIV = AtChopsUtil.generateRandomIV(16);
     // Fetch the selfEncryptionKey from the atChops and encrypt with APKAM Symmetric key.
     String encryptedDefaultSelfEncryptionKey = (await chops.encryptString(
-                chops.atChopsKeys.selfEncryptionKey!.key,
-                EncryptionKeyType.aes256,
-                keyName: 'apkamSymmetricKey',
-                iv: selfEncryptionKeyIV))
+            chops.atChopsKeys.selfEncryptionKey!.key, EncryptionKeyType.aes256,
+            keyName: 'apkamSymmetricKey', iv: selfEncryptionKeyIV))
         .result;
 
     String command = 'enroll:approve:${jsonEncode({

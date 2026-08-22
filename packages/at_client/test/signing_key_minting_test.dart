@@ -5,10 +5,10 @@ import 'package:at_auth/at_auth.dart'
         AtEnrollment,
         AtEnrollmentResponse,
         AtKeys,
-        CryptographicKeyType,
+        CryptographicMaterialRole,
         EnrollmentUpdateRequest,
         InMemoryAtKeysIo,
-        KeyAlgorithmType,
+        CryptographicMaterialAlgorithm,
         KeyEntryStatus,
         KeyPartStatus;
 import 'package:at_chops/at_chops.dart';
@@ -138,7 +138,7 @@ void main() {
       await keysIo.update(atSign.toAtsign(), (keys) {
         keys.fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.mlDsa65,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
             publicKey: base64Encode(utf8.encode('held-pub')),
             privateKey: base64Encode(utf8.encode('held-priv')));
         return true;
@@ -345,8 +345,8 @@ void main() {
               'here would verify nothing that was signed before the move');
 
       for (final part in [
-        CryptographicKeyType.privateSigning,
-        CryptographicKeyType.publicVerification
+        CryptographicMaterialRole.privateSigning,
+        CryptographicMaterialRole.publicVerification
       ]) {
         final material = keys.getKey(enrollmentId, 'sign:rsa2048:1', part);
         expect(material?.status, KeyPartStatus.retired,
@@ -467,7 +467,7 @@ void main() {
           [SigningAlgoType.mldsa65, SigningAlgoType.rsa2048]);
       expect(
           keys.getKey(enrollmentId, 'sign:rsa2048:2',
-              CryptographicKeyType.publicVerification),
+              CryptographicMaterialRole.publicVerification),
           isNotNull,
           reason: 'the generation is the slot: the returning algorithm lands '
               'beside its retired predecessor rather than over it');

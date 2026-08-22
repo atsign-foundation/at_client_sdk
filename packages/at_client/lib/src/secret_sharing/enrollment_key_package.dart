@@ -2,7 +2,7 @@ import 'dart:convert' show base64Encode;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysIo, CryptographicMaterial, CryptographicKeyType;
+    show AtKeys, AtKeysIo, CryptographicMaterial, CryptographicMaterialRole;
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, SigningAlgoType;
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -113,14 +113,14 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
     // private half back to the package a sender sealed to.
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicKeyType.publicEncapsulation,
+      keyPartType: CryptographicMaterialRole.publicEncapsulation,
       keyAlgorithmType: materialAlgo,
       bytes: AtBytes(pair.publicKey),
       createdAt: now,
     ));
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicKeyType.privateDecapsulation,
+      keyPartType: CryptographicMaterialRole.privateDecapsulation,
       keyAlgorithmType: materialAlgo,
       bytes: AtBytes(seed),
       createdAt: now,

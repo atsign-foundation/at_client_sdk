@@ -45,8 +45,8 @@ Future<OnboardingMint> mintOnboardingKeys({
   if (mintLegacyMaterial) {
     final encryptionKeyPair = AtChopsUtil.generateAtEncryptionKeyPair();
     keys
-      ..defaultEncryptionPublicKey = AtBytes.fromString(
-          encryptionKeyPair.atPublicKey.publicKey.toString())
+      ..defaultEncryptionPublicKey =
+          AtBytes.fromString(encryptionKeyPair.atPublicKey.publicKey.toString())
       ..defaultEncryptionPrivateKey = AtBytes.fromString(
           encryptionKeyPair.atPrivateKey.privateKey.toString())
       ..defaultSelfEncryptionKey = AtBytes.fromString(

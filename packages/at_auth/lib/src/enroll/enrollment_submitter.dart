@@ -176,8 +176,8 @@ class EnrollmentSubmitter {
   /// spelling here would file material the reader skips.
   static String _materialAlgorithmOf(SigningAlgoType algorithm) =>
       switch (algorithm) {
-        SigningAlgoType.mldsa65 => KeyAlgorithmType.mlDsa65,
-        SigningAlgoType.rsa2048 => KeyAlgorithmType.rsa2048,
+        SigningAlgoType.mldsa65 => CryptographicMaterialAlgorithm.mlDsa65,
+        SigningAlgoType.rsa2048 => CryptographicMaterialAlgorithm.rsa2048,
         _ => throw AtEnrollmentException(
             'a self-enrollment mints rsa2048 or mldsa65; '
             '${algorithm.name} has no keyfile material spelling here'),
@@ -240,8 +240,8 @@ class EnrollmentSubmitter {
     // seals this atSign's existing secrets to the new device — so its presence
     // says nothing about how the symmetric key travels. Only the declared mode
     // does.
-    final bool isPq = atEnrollmentRequest.keyExchangeMode ==
-        EnrollmentKeyExchangeMode.pq;
+    final bool isPq =
+        atEnrollmentRequest.keyExchangeMode == EnrollmentKeyExchangeMode.pq;
 
     // AtEnrollmentRequest.pq requires the builder and the resolver, so the
     // only pq mistake still reachable here is a builder that returned no key
@@ -348,9 +348,9 @@ class EnrollmentSubmitter {
     final String materialAlgo;
     switch (request.signingAlgo) {
       case SigningAlgoType.mldsa65:
-        materialAlgo = KeyAlgorithmType.mlDsa65;
+        materialAlgo = CryptographicMaterialAlgorithm.mlDsa65;
       case SigningAlgoType.rsa2048:
-        materialAlgo = KeyAlgorithmType.rsa2048;
+        materialAlgo = CryptographicMaterialAlgorithm.rsa2048;
       default:
         throw AtEnrollmentException(
             'a self-enrollment mints rsa2048 or mldsa65; '
@@ -376,14 +376,14 @@ class EnrollmentSubmitter {
       //    rsa2048 would have it believe it holds a mode it does not.
       final alreadyRetrofitted = existing.keys
           .where((m) =>
-              m.keyPartType == CryptographicKeyType.privateAuthentication &&
+              m.keyPartType ==
+                  CryptographicMaterialRole.privateAuthentication &&
               m.status == KeyPartStatus.active &&
               m.enrollmentId != null)
           .firstOrNull;
       if (alreadyRetrofitted != null &&
           alreadyRetrofitted.keyAlgorithmType != materialAlgo) {
-        throw AtEnrollmentException(
-            'this keyfile already holds enrollment '
+        throw AtEnrollmentException('this keyfile already holds enrollment '
             '${alreadyRetrofitted.enrollmentId} '
             '(${alreadyRetrofitted.keyAlgorithmType}); a keyfile is '
             'retrofitted once, so it cannot also take a $materialAlgo '

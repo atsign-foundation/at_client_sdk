@@ -38,8 +38,8 @@ void main() {
       ..addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.privateDecapsulation,
-        keyAlgorithmType: KeyAlgorithmType.xWing,
+        keyPartType: CryptographicMaterialRole.privateDecapsulation,
+        keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
         bytes: AtBytes(
             Uint8List.fromList(List<int>.generate(32, (i) => i + seed))),
         createdAt: at,
@@ -47,8 +47,8 @@ void main() {
       ..addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.publicEncapsulation,
-        keyAlgorithmType: KeyAlgorithmType.xWing,
+        keyPartType: CryptographicMaterialRole.publicEncapsulation,
+        keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
         bytes: AtBytes(
             Uint8List.fromList(List<int>.generate(32, (i) => i + seed + 100))),
         createdAt: at,
@@ -230,8 +230,8 @@ void main() {
     final keys = AtKeys()
       ..addKey(CryptographicMaterial(
         keyId: 'nskey-private',
-        keyPartType: CryptographicKeyType.privateDecapsulation,
-        keyAlgorithmType: KeyAlgorithmType.xWing,
+        keyPartType: CryptographicMaterialRole.privateDecapsulation,
+        keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
         bytes: AtBytes(Uint8List.fromList(List<int>.generate(32, (i) => i))),
         createdAt: DateTime.now().toUtc(),
       ));

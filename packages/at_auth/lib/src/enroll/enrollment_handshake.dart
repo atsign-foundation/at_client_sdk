@@ -68,10 +68,9 @@ class EnrollmentHandshake {
     // demands the encryption private key this enrollment is here to fetch. Its
     // APKAM keypair is all PKAM authentication needs, so build the chops from
     // that directly and fill the symmetric key in once it arrives.
-    AtChops atChops =
-        enrollmentResponse.atAuthKeys!.apkamSymmetricKey != null
-            ? enrollmentResponse.atAuthKeys!.toAtChops()
-            : _apkamChopsAwaitingSymmetricKey(enrollmentResponse.atAuthKeys!);
+    AtChops atChops = enrollmentResponse.atAuthKeys!.apkamSymmetricKey != null
+        ? enrollmentResponse.atAuthKeys!.toAtChops()
+        : _apkamChopsAwaitingSymmetricKey(enrollmentResponse.atAuthKeys!);
     atLookup.atChops = atChops;
     // The chops is injected rather than resolved: this enrollment's keys are
     // deliberately not a complete keyfile yet - the symmetric key is the thing

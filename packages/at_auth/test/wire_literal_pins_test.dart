@@ -88,8 +88,8 @@ void main() {
     });
 
     test('enroll:deny is the builder form', () async {
-      final l = lookUp(
-          response: 'data:{"status":"denied","enrollmentId":"id-1"}');
+      final l =
+          lookUp(response: 'data:{"status":"denied","enrollmentId":"id-1"}');
 
       await AtEnrollmentImpl()
           .deny(EnrollmentRequestDecision.denied('id-1', atSign), l.lookUp);
@@ -98,8 +98,8 @@ void main() {
     });
 
     test('enroll:revoke is the builder form', () async {
-      final l = lookUp(
-          response: 'data:{"status":"revoked","enrollmentId":"id-1"}');
+      final l =
+          lookUp(response: 'data:{"status":"revoked","enrollmentId":"id-1"}');
 
       await AtEnrollmentImpl()
           .revoke(EnrollmentRequestDecision.denied('id-1', atSign), l.lookUp);
@@ -212,8 +212,7 @@ void main() {
       // The key is valid base64 because the kid's preimage is the DECODED
       // material now; a placeholder that is not base64 no longer has a kid.
       final json = jsonEncode(apskAdvertisement(keys: [
-        ApskSigningKey.forPublicKey(
-            alg: SigningAlgoType.rsa2048, pub: 'AAEC')
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.rsa2048, pub: 'AAEC')
       ]));
 
       expect(
@@ -241,8 +240,7 @@ void main() {
 
     test('mldsa65 spells its algorithm the same as the pkam verb', () {
       final entry = (apskAdvertisement(keys: [
-        ApskSigningKey.forPublicKey(
-            alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: 'AAEC')
       ])['keys'] as List)
           .single as Map;
 
@@ -252,8 +250,7 @@ void main() {
 
     test('what is composed is what is read back', () {
       final advertisement = apskAdvertisement(keys: [
-        ApskSigningKey.forPublicKey(
-            alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: 'AAEC')
       ]);
 
       final read = apskSigningKeys(advertisement).single;
@@ -262,11 +259,9 @@ void main() {
       expect(read.kid, publicKeyKidOfBase64('AAEC'));
     });
 
-    test('a composed entry says nothing about status, and reads as active',
-        () {
+    test('a composed entry says nothing about status, and reads as active', () {
       final advertisement = apskAdvertisement(keys: [
-        ApskSigningKey.forPublicKey(
-            alg: SigningAlgoType.mldsa65, pub: 'AAEC')
+        ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: 'AAEC')
       ]);
       final entry = (advertisement['keys'] as List).single as Map;
 
@@ -274,8 +269,8 @@ void main() {
           reason: 'absent already reads as active, so emitting the default '
               'would change the bytes of every advertisement in the protocol '
               'to state what their silence states');
-      expect(apskSigningKeys(advertisement).single.status,
-          KeyEntryStatus.active);
+      expect(
+          apskSigningKeys(advertisement).single.status, KeyEntryStatus.active);
     });
 
     test('several keys are several entries, in the order given', () {
@@ -488,13 +483,13 @@ void main() {
   });
 
   group('FROZEN: keyfile tokens shared with the wire', () {
-    test('KeyAlgorithmType tokens, as raw strings', () {
+    test('CryptographicMaterialAlgorithm tokens, as raw strings', () {
       // rsa2048 / mldsa65 / ecc_secp256r1 double as the pkam and
       // enroll-request signingAlgo wire values; xwing / mlkem1024 are the
       // deliberately-unhyphenated keyfile twins of the wire's 'x-wing' /
       // 'ml-kem-1024'. The field is an open String — unknown tokens must
       // round-trip — so these pins protect writers, never reject readers.
-      expect(KeyAlgorithmType.known, {
+      expect(CryptographicMaterialAlgorithm.known, {
         'aes256',
         'rsa2048',
         'ecc_secp256r1',
@@ -512,13 +507,16 @@ void main() {
       // SigningAlgoType by `.name` equality, and at_auth files material with
       // `signingAlgo.name` directly — renaming either side breaks every PQ
       // keyfile's ability to authenticate, with no compile error.
-      expect(KeyAlgorithmType.mlDsa65, SigningAlgoType.mldsa65.name);
-      expect(KeyAlgorithmType.rsa2048, SigningAlgoType.rsa2048.name);
-      expect(KeyAlgorithmType.eccSecp256r1, SigningAlgoType.ecc_secp256r1.name);
+      expect(
+          CryptographicMaterialAlgorithm.mlDsa65, SigningAlgoType.mldsa65.name);
+      expect(
+          CryptographicMaterialAlgorithm.rsa2048, SigningAlgoType.rsa2048.name);
+      expect(CryptographicMaterialAlgorithm.eccSecp256r1,
+          SigningAlgoType.ecc_secp256r1.name);
     });
 
-    test('CryptographicKeyType tokens and KeyPartStatus names', () {
-      expect(CryptographicKeyType.known, {
+    test('CryptographicMaterialRole tokens and KeyPartStatus names', () {
+      expect(CryptographicMaterialRole.known, {
         'symmetricEncryption',
         'symmetricAuthentication',
         'publicEncryption',
@@ -559,7 +557,7 @@ void main() {
 
       atKeys.fileApkamMaterial(
           enrollmentId: 'enroll-1',
-          algorithm: KeyAlgorithmType.mlDsa65,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
           publicKey: 'QUJD',
           privateKey: 'REVG');
       expect(atKeys.keysForKeyId('enroll-1', 'auth:mldsa65:1'), hasLength(2),
@@ -570,7 +568,7 @@ void main() {
 
       atKeys.fileSigningMaterial(
           enrollmentId: 'enroll-1',
-          algorithm: KeyAlgorithmType.mlDsa65,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
           publicKey: 'R0hJ',
           privateKey: 'SktM');
       expect(atKeys.keysForKeyId('enroll-1', 'sign:mldsa65:1'), hasLength(2),
@@ -580,7 +578,7 @@ void main() {
       expect(
           atKeys
               .getKey('enroll-1', 'auth:mldsa65:1',
-                  CryptographicKeyType.privateAuthentication)!
+                  CryptographicMaterialRole.privateAuthentication)!
               .toJson()['keyAlgorithmType'],
           'mldsa65');
 
@@ -589,7 +587,7 @@ void main() {
       // collide.
       atKeys.fileSigningMaterial(
           enrollmentId: 'enroll-1',
-          algorithm: KeyAlgorithmType.rsa2048,
+          algorithm: CryptographicMaterialAlgorithm.rsa2048,
           publicKey: 'TU5P',
           privateKey: 'UFFS');
       expect(atKeys.keysForKeyId('enroll-1', 'sign:rsa2048:1'), hasLength(2),

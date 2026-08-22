@@ -629,7 +629,7 @@ void main() {
       final keys = await io.read(atSign);
       final rootPrivates = keys.atSignKeys
           .where((m) =>
-              m.keyPartType == CryptographicKeyType.privateSigning &&
+              m.keyPartType == CryptographicMaterialRole.privateSigning &&
               AtKeys.isRoleKeyId(m.keyId, PqSigningRoot.keyIdRole))
           .toList();
       expect(rootPrivates, hasLength(2),

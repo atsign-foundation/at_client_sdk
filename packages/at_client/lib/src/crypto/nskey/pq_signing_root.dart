@@ -8,7 +8,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeys,
         AtKeysIo,
         CryptographicMaterial,
-        CryptographicKeyType,
+        CryptographicMaterialRole,
         KeyPartStatus,
         WrittenAtKeysIo,
         apskAdvertisement,
@@ -129,7 +129,7 @@ class PqSigningRoot {
   /// [rootKeyAlgo] in the vocabulary `AtKeys` files material under — the same
   /// word, and the one this class composes slot ids from.
   ///
-  /// Pinned against `KeyAlgorithmType.mlDsa65` rather than written as it,
+  /// Pinned against `CryptographicMaterialAlgorithm.mlDsa65` rather than written as it,
   /// because the enum and that constant are separate declarations that agree
   /// today: an id composed from one and material filed under the other would
   /// stop matching the moment either moved, and nothing would go red on the
@@ -385,8 +385,8 @@ class PqSigningRoot {
     final held = keys == null ? null : _activePrivates(keys).firstOrNull;
 
     if (held != null) {
-      final heldPublic = keys!
-          .getAtSignKey(held.keyId, CryptographicKeyType.publicVerification);
+      final heldPublic = keys!.getAtSignKey(
+          held.keyId, CryptographicMaterialRole.publicVerification);
       if (heldPublic != null) {
         // The crash between filing and publishing: finish the publish with
         // the pair already filed.
@@ -678,7 +678,7 @@ class PqSigningRoot {
         final createdAt = DateTime.now().toUtc();
         keys.addKey(CryptographicMaterial(
           keyId: slot,
-          keyPartType: CryptographicKeyType.privateSigning,
+          keyPartType: CryptographicMaterialRole.privateSigning,
           keyAlgorithmType: rootKeyAlgoToken,
           bytes: AtBytes(private),
           createdAt: createdAt,
@@ -689,7 +689,7 @@ class PqSigningRoot {
         if (public != null) {
           keys.addKey(CryptographicMaterial(
             keyId: slot,
-            keyPartType: CryptographicKeyType.publicVerification,
+            keyPartType: CryptographicMaterialRole.publicVerification,
             keyAlgorithmType: rootKeyAlgoToken,
             bytes: AtBytes(public),
             createdAt: createdAt,
@@ -752,7 +752,7 @@ class PqSigningRoot {
     final material = await _signingPrivate(atSign, keys);
     if (material == null) return null;
     final public = keys.getAtSignKey(
-        material.keyId, CryptographicKeyType.publicVerification);
+        material.keyId, CryptographicMaterialRole.publicVerification);
     return (
       private: Uint8List.fromList(material.bytes.bytes),
       kid: public == null
@@ -1137,7 +1137,7 @@ class PqSigningRoot {
   /// be available without a round trip.
   Iterable<CryptographicMaterial> _activePrivates(AtKeys keys) =>
       keys.atSignKeys.where((m) =>
-          m.keyPartType == CryptographicKeyType.privateSigning &&
+          m.keyPartType == CryptographicMaterialRole.privateSigning &&
           m.status == KeyPartStatus.active &&
           _isRootSlot(m.keyId));
 
@@ -1163,7 +1163,8 @@ class PqSigningRoot {
   /// answering pulls, and broadcast for a key it already held every time the
   /// atServer hiccupped would be a worse failure than one that occasionally
   /// signs with a superseded key.
-  Future<CryptographicMaterial?> _signingPrivate(String atSign, AtKeys keys) async {
+  Future<CryptographicMaterial?> _signingPrivate(
+      String atSign, AtKeys keys) async {
     final held = _activePrivates(keys).toList();
     if (held.length <= 1) return held.firstOrNull;
 
@@ -1264,14 +1265,14 @@ class PqSigningRoot {
         final createdAt = DateTime.now().toUtc();
         keys.addKey(CryptographicMaterial(
           keyId: slot!,
-          keyPartType: CryptographicKeyType.privateSigning,
+          keyPartType: CryptographicMaterialRole.privateSigning,
           keyAlgorithmType: rootKeyAlgoToken,
           bytes: AtBytes(pair.secretKey),
           createdAt: createdAt,
         ));
         keys.addKey(CryptographicMaterial(
           keyId: slot!,
-          keyPartType: CryptographicKeyType.publicVerification,
+          keyPartType: CryptographicMaterialRole.publicVerification,
           keyAlgorithmType: rootKeyAlgoToken,
           bytes: AtBytes(pair.publicKey),
           createdAt: createdAt,

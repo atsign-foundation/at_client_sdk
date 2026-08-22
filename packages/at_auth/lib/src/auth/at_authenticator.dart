@@ -227,8 +227,8 @@ Future<bool> _pkam(
     // AtChops this call is about to discard, and it throws on a keyfile
     // missing material a caller with its own signer never needed.
     signer = injectedChops;
-    signingAlgo =
-        keys.authenticationAlgorithmFor(enrollmentId) ?? SigningAlgoType.rsa2048;
+    signingAlgo = keys.authenticationAlgorithmFor(enrollmentId) ??
+        SigningAlgoType.rsa2048;
   } else {
     final resolved = keys.authenticationFor(enrollmentId);
     signer = resolved.chops;
@@ -261,8 +261,7 @@ Future<bool> _pkam(
     _logger.info('pkam auth success for $atSign');
     return true;
   }
-  throw UnAuthenticatedException(
-      'Failed connecting to $atSign. $pkamResponse');
+  throw UnAuthenticatedException('Failed connecting to $atSign. $pkamResponse');
 }
 
 /// Ported from at_lookup's own `cramAuthenticate`, verbatim - including that it
@@ -292,7 +291,8 @@ Future<bool> _cram(
   }
   fromResponse = fromResponse.trim().replaceFirst(RegExp(r'^data:'), '');
 
-  final digest = SHA512HashingAlgo().hash(utf8.encode('$cramSecret$fromResponse'));
+  final digest =
+      SHA512HashingAlgo().hash(utf8.encode('$cramSecret$fromResponse'));
   final cramResponse = await executor.sendSync('cram:$digest\n',
       maxWaitMilliSeconds: _cramMaxWaitMillis,
       transientWaitTimeMillis: _cramTransientWaitMillis);

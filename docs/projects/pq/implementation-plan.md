@@ -2795,7 +2795,7 @@ was left open on purpose.
 
 - **`KeyEntryStatus.known` is not dead code — do not delete it.** Its only
   consumer is a raw-literal wire pin, which is exactly the arrangement
-  `KeyPartStatus.known`, `KeyAlgorithmType.known` and `CryptographicKeyType.known`
+  `KeyPartStatus.known`, `CryptographicMaterialAlgorithm.known` and `CryptographicMaterialRole.known`
   already have beside it. The pin is the point: it makes re-spelling the
   vocabulary an edit somebody has to review.
 - **`fromWire` stringifying a non-String value is deliberate.** It keeps a

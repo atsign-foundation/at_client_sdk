@@ -57,15 +57,15 @@ void main() {
     final keys = AtKeys();
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicKeyType.publicEncapsulation,
-      keyAlgorithmType: KeyAlgorithmType.xWing,
+      keyPartType: CryptographicMaterialRole.publicEncapsulation,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
       bytes: AtBytes(pair.publicKey),
       createdAt: now,
     ));
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicKeyType.privateDecapsulation,
-      keyAlgorithmType: KeyAlgorithmType.xWing,
+      keyPartType: CryptographicMaterialRole.privateDecapsulation,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
       bytes: AtBytes(pair.secretKey),
       createdAt: now,
     ));

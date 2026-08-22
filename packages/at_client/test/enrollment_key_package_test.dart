@@ -43,14 +43,14 @@ void main() {
     final kpid = advertised['kid'] as String;
 
     final private =
-        keys.getAtSignKey(kpid, CryptographicKeyType.privateDecapsulation);
+        keys.getAtSignKey(kpid, CryptographicMaterialRole.privateDecapsulation);
     expect(private, isNotNull,
         reason:
             'this AtKeys is the object at_auth flushes into the app keyfile '
             'on approval — a published encapsulation target whose private half '
             'was never kept leaves every sender sealing to a key that can '
             'never be opened');
-    expect(private!.keyAlgorithmType, KeyAlgorithmType.xWing);
+    expect(private!.keyAlgorithmType, CryptographicMaterialAlgorithm.xWing);
 
     // The public half is stored too, under the same keyId, so the pair can be
     // recovered together. Both are untagged at this point — the builder runs
@@ -58,7 +58,7 @@ void main() {
     // atSign's own container until the persist adopts them into the
     // enrollment.
     final public =
-        keys.getAtSignKey(kpid, CryptographicKeyType.publicEncapsulation);
+        keys.getAtSignKey(kpid, CryptographicMaterialRole.publicEncapsulation);
     expect(public, isNotNull);
     expect(base64Encode(public!.bytes.bytes), advertised['pub']);
   });
@@ -84,8 +84,8 @@ void main() {
       info: Uint8List(0),
     );
     // ...and open it with the half that was filed away.
-    final private =
-        keys.getAtSignKey(kpid, CryptographicKeyType.privateDecapsulation)!;
+    final private = keys.getAtSignKey(
+        kpid, CryptographicMaterialRole.privateDecapsulation)!;
     final opened = await pqOpen(
       XWingPureDartAlgo.instance,
       Uint8List.fromList(private.bytes.bytes),

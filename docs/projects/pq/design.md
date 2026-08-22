@@ -2048,8 +2048,8 @@ which is why its format can change without a server release.
 
 ### 9.2 The keyfile
 
-`CryptographicKeyType` gains `privateAuthentication` and
-`publicAuthentication`. `KeyAlgorithmType` is unchanged — the algorithm tokens
+`CryptographicMaterialRole` gains `privateAuthentication` and
+`publicAuthentication`. `CryptographicMaterialAlgorithm` is unchanged — the algorithm tokens
 already cover what is needed.
 
 `AtKeys.fileApkamMaterial` files under the generation-suffixed id and tags the
@@ -2297,7 +2297,7 @@ skipped. The reasoning for each of those is in
 
 Order: `SigningAlgoType.strongestFirst` — `mldsa65` > `rsa4096` > `ed25519` >
 `ecc_secp256r1` > `rsa2048`, pinned by a raw-literal tripwire test in the style
-of `KeyAlgorithmType`'s. It is **total**, covering every member: a partial
+of `CryptographicMaterialAlgorithm`'s. It is **total**, covering every member: a partial
 order leaves the choice undefined for exactly the pair nobody thought about,
 and the pin fails on a new member left unplaced.
 

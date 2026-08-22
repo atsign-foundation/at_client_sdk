@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, InMemoryAtKeysIo, KeyAlgorithmType;
+    show AtKeys, InMemoryAtKeysIo, CryptographicMaterialAlgorithm;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
@@ -155,12 +155,12 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.rsa2048,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
             publicKey: b64('rsa-pub'),
             privateKey: b64('rsa-priv'))
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.mlDsa65,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
             publicKey: b64('mldsa-pub'),
             privateKey: b64('mldsa-priv'))));
 
@@ -186,7 +186,7 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileSigningMaterial(
               enrollmentId: enrollmentId,
-              algorithm: KeyAlgorithmType.ed25519,
+              algorithm: CryptographicMaterialAlgorithm.ed25519,
               publicKey: b64('ed-pub'),
               privateKey: b64('ed-priv'))));
 
@@ -199,7 +199,7 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileSigningMaterial(
               enrollmentId: 'enroll-b',
-              algorithm: KeyAlgorithmType.mlDsa65,
+              algorithm: CryptographicMaterialAlgorithm.mlDsa65,
               publicKey: b64('b-pub'),
               privateKey: b64('b-priv'))));
 
@@ -237,7 +237,7 @@ void main() {
       // The mint lands — files the signing key — and then settles.
       keyfile.fileSigningMaterial(
           enrollmentId: enrollmentId,
-          algorithm: KeyAlgorithmType.rsa2048,
+          algorithm: CryptographicMaterialAlgorithm.rsa2048,
           publicKey: b64('minted-pub'),
           privateKey: b64('minted-priv'));
       mint.complete();
@@ -280,12 +280,12 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.rsa2048,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
             publicKey: rsaPair.atPublicKey.publicKey,
             privateKey: rsaPair.atPrivateKey.privateKey)
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.mlDsa65,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
             publicKey: base64Encode(mlDsaPair.publicKey),
             privateKey: base64Encode(mlDsaPair.secretKey))));
 
@@ -337,12 +337,12 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.rsa2048,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
             publicKey: b64('rsa-pub'),
             privateKey: b64('rsa-priv'))
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.mlDsa65,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
             publicKey: b64('mldsa-pub'),
             privateKey: b64('mldsa-priv'))));
 
@@ -367,7 +367,7 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) =>
           keys.fileSigningMaterial(
               enrollmentId: enrollmentId,
-              algorithm: KeyAlgorithmType.rsa2048,
+              algorithm: CryptographicMaterialAlgorithm.rsa2048,
               publicKey: pkamPublicKey(),
               privateKey: b64('rsa-priv'))));
 
@@ -383,12 +383,12 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.rsa2048,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
             publicKey: b64('old-rsa-pub'),
             privateKey: b64('old-rsa-priv'))
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.mlDsa65,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
             publicKey: b64('mldsa-pub'),
             privateKey: b64('mldsa-priv'))
         ..retireKey(enrollmentId, 'sign:rsa2048:1')));
@@ -411,7 +411,7 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.rsa2048,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
             publicKey: b64('old-rsa-pub'),
             privateKey: b64('old-rsa-priv'))
         ..retireKey(enrollmentId, 'sign:rsa2048:1')));
@@ -434,13 +434,13 @@ void main() {
       when(() => atClient.atKeysIo).thenReturn(await keySource((keys) => keys
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.rsa2048,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
             publicKey: b64('rsa-pub'),
             privateKey: b64('rsa-priv'))
         ..retireKey(enrollmentId, 'sign:rsa2048:1')
         ..fileSigningMaterial(
             enrollmentId: enrollmentId,
-            algorithm: KeyAlgorithmType.rsa2048,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
             publicKey: b64('rsa-pub'),
             privateKey: b64('rsa-priv'))));
 

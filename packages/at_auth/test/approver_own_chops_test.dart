@@ -17,8 +17,8 @@ void main() {
   const atSign = '@alice🛠';
 
   AtChops approverChops() => AtChopsImpl(AtChopsKeys.create(
-      AtEncryptionKeyPair.create(
-          demo.encryptionPublicKeyMap[atSign]!, demo.encryptionPrivateKeyMap[atSign]!),
+      AtEncryptionKeyPair.create(demo.encryptionPublicKeyMap[atSign]!,
+          demo.encryptionPrivateKeyMap[atSign]!),
       AtPkamKeyPair.create(
           demo.pkamPublicKeyMap[atSign]!, demo.pkamPrivateKeyMap[atSign]!))
     ..selfEncryptionKey = AESKey(demo.aesKeyMap[atSign]!));
@@ -35,8 +35,8 @@ void main() {
     final lookUp = MockAtLookUp();
     when(() => lookUp.atChops).thenReturn(null);
     when(() => lookUp.executeCommand(any(), auth: any(named: 'auth')))
-        .thenAnswer((_) async =>
-            'data:{"enrollmentId":"abc-123","status":"approved"}');
+        .thenAnswer(
+            (_) async => 'data:{"enrollmentId":"abc-123","status":"approved"}');
 
     final response = await EnrollmentApprover()
         .approve(decision(), lookUp, approverChops: approverChops());

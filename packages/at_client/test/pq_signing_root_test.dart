@@ -167,12 +167,12 @@ void main() {
 
     expect(publicKey, isNotNull);
     final filed = (await io.read(atSign))
-        .getAtSignKey(rootSlot1, CryptographicKeyType.privateSigning);
+        .getAtSignKey(rootSlot1, CryptographicMaterialRole.privateSigning);
     expect(filed, isNotNull,
         reason: 'a published root whose private did not survive strands every '
             'enrollment on the atSign, and D1 builds no rotation to replace '
             'it with');
-    expect(filed!.keyAlgorithmType, KeyAlgorithmType.mlDsa65);
+    expect(filed!.keyAlgorithmType, CryptographicMaterialAlgorithm.mlDsa65);
 
     final record = c.published.single;
     expect(record.atKey.key, PqSigningRoot.recordName);
@@ -594,15 +594,15 @@ void main() {
     final createdAt = DateTime.now().toUtc();
     keys.addKey(CryptographicMaterial(
       keyId: rootSlot1,
-      keyPartType: CryptographicKeyType.privateSigning,
-      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      keyPartType: CryptographicMaterialRole.privateSigning,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
       bytes: AtBytes(held.secretKey),
       createdAt: createdAt,
     ));
     keys.addKey(CryptographicMaterial(
       keyId: rootSlot1,
-      keyPartType: CryptographicKeyType.publicVerification,
-      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      keyPartType: CryptographicMaterialRole.publicVerification,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
       bytes: AtBytes(held.publicKey),
       createdAt: createdAt,
     ));
@@ -677,7 +677,7 @@ void main() {
         final keys = await io.read(atSign);
         keys.addKey(CryptographicMaterial(
           keyId: rootSlot1,
-          keyPartType: CryptographicKeyType.privateSigning,
+          keyPartType: CryptographicMaterialRole.privateSigning,
           keyAlgorithmType: PqSigningRoot.rootKeyAlgoToken,
           bytes: AtBytes(arrived.secretKey),
           createdAt: DateTime.now().toUtc(),
@@ -698,7 +698,7 @@ void main() {
         reason: 'nothing is published for a pair that was never filed');
     final keys = await io.read(atSign);
     final actives = keys.atSignKeys.where((m) =>
-        m.keyPartType == CryptographicKeyType.privateSigning &&
+        m.keyPartType == CryptographicMaterialRole.privateSigning &&
         m.status == KeyPartStatus.active);
     expect(actives, hasLength(1),
         reason: 'two active root privates make "what do I sign with" a '
@@ -715,7 +715,7 @@ void main() {
     // such a slot simply reads as holding no root at all.
     //
     // The token is deliberately one this build knows nothing about:
-    // `KeyAlgorithmType.known` exists for warn-level tooling and explicitly
+    // `CryptographicMaterialAlgorithm.known` exists for warn-level tooling and explicitly
     // does not gate what may be filed, so a reader that recognised only known
     // tokens would be a second, undocumented gate.
     const laterAlgo = 'some-later-signing-algo';
@@ -725,7 +725,7 @@ void main() {
     final held = Uint8List.fromList([7, 8, 9]);
     keys.addKey(CryptographicMaterial(
       keyId: '${PqSigningRoot.keyIdPrefixFor(laterAlgo)}1',
-      keyPartType: CryptographicKeyType.privateSigning,
+      keyPartType: CryptographicMaterialRole.privateSigning,
       keyAlgorithmType: laterAlgo,
       bytes: AtBytes(held),
       createdAt: DateTime.now().toUtc(),
@@ -746,7 +746,7 @@ void main() {
     final keys = await io.read(atSign);
     keys.addKey(CryptographicMaterial(
       keyId: '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1',
-      keyPartType: CryptographicKeyType.privateSigning,
+      keyPartType: CryptographicMaterialRole.privateSigning,
       keyAlgorithmType: PqSigningRoot.rootKeyAlgoToken,
       bytes: AtBytes(Uint8List.fromList([1])),
       createdAt: DateTime.now().toUtc(),
@@ -833,7 +833,7 @@ void main() {
           reason: 'the active private is the successor once it is filed');
       final keys = await io.read(atSign);
       final predecessorSlot = keys.atSignKeys.firstWhere((m) =>
-          m.keyPartType == CryptographicKeyType.privateSigning &&
+          m.keyPartType == CryptographicMaterialRole.privateSigning &&
           _bytesEqual(m.bytes.bytes, predecessor.secretKey));
       expect(predecessorSlot.status, KeyPartStatus.retired,
           reason: 'the predecessor keeps its slot and its bytes — they are '
@@ -967,7 +967,7 @@ void main() {
         keys.addKey(CryptographicMaterial(
           keyId:
               '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}${i + 1}',
-          keyPartType: CryptographicKeyType.privateSigning,
+          keyPartType: CryptographicMaterialRole.privateSigning,
           keyAlgorithmType: PqSigningRoot.rootKeyAlgoToken,
           bytes: AtBytes(pairs[i].secretKey),
           createdAt: DateTime.now().toUtc(),
@@ -1051,7 +1051,7 @@ void main() {
 
       expect(retired, isTrue);
       final actives = (await io.read(atSign)).atSignKeys.where((m) =>
-          m.keyPartType == CryptographicKeyType.privateSigning &&
+          m.keyPartType == CryptographicMaterialRole.privateSigning &&
           m.status == KeyPartStatus.active);
       expect(actives, isEmpty,
           reason: 'both correspond to nothing advertised, so both go');

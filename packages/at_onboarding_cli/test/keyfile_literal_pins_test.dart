@@ -122,8 +122,8 @@ void main() {
         ..addKey(CryptographicMaterial(
           keyId: 'auth:mldsa65:1',
           enrollmentId: '456',
-          keyPartType: CryptographicKeyType.privateAuthentication,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          keyPartType: CryptographicMaterialRole.privateAuthentication,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
           // Shape, not substance — this pin is about the document the store
           // emits, so any well-formed base64 stands in for key material.
           bytes: AtBytes.fromString(base64Encode(utf8.encode('stand-in'))),

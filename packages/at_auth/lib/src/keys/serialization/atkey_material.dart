@@ -4,7 +4,7 @@ import 'package:at_commons/at_commons.dart';
 
 /// Known values for [CryptographicMaterial.keyAlgorithmType] — the algorithm family
 /// used by a key material, independent of its cryptographic role (see
-/// [CryptographicKeyType]).
+/// [CryptographicMaterialRole]).
 ///
 /// The field is an open `String`, not an enum: a reader must accept — and
 /// round-trip unmodified on flush — values it does not recognise, so a
@@ -24,7 +24,7 @@ import 'package:at_commons/at_commons.dart';
 /// exactly. New algorithms get a new token appended; existing tokens are
 /// permanent once shipped. See
 /// `test/atkey_material_test.dart` for the tripwire test that pins these.
-abstract final class KeyAlgorithmType {
+abstract final class CryptographicMaterialAlgorithm {
   static const String aes256 = 'aes256';
   static const String rsa2048 = 'rsa2048';
   static const String eccSecp256r1 = 'ecc_secp256r1';
@@ -62,19 +62,19 @@ abstract final class KeyAlgorithmType {
 
 /// Known values for [CryptographicMaterial.keyPartType] — the mechanical role a key
 /// material plays, independent of the algorithm family (see
-/// [KeyAlgorithmType]).
+/// [CryptographicMaterialAlgorithm]).
 ///
 /// An open `String` with the same forward-compatibility contract as
-/// [KeyAlgorithmType]. Roles describe what the mathematics does; whether an
+/// [CryptographicMaterialAlgorithm]. Roles describe what the mathematics does; whether an
 /// algorithm is classical, post-quantum or hybrid is a property of the
-/// [KeyAlgorithmType] token, and deployment purpose belongs in the keyId
+/// [CryptographicMaterialAlgorithm] token, and deployment purpose belongs in the keyId
 /// and [CryptographicMaterial.operations].
 ///
 /// **Do not change any existing value below** — same rationale as
-/// [KeyAlgorithmType]: these strings are already persisted on disk and on
+/// [CryptographicMaterialAlgorithm]: these strings are already persisted on disk and on
 /// the wire, so renaming one orphans existing key material. See
 /// `test/atkey_material_test.dart` for the tripwire test that pins these.
-abstract final class CryptographicKeyType {
+abstract final class CryptographicMaterialRole {
   static const String symmetricEncryption = 'symmetricEncryption';
   static const String symmetricAuthentication = 'symmetricAuthentication';
   static const String publicEncryption = 'publicEncryption';
@@ -121,9 +121,9 @@ abstract final class CryptographicKeyType {
 
 /// Whether a key material is in use, withdrawn, or gone.
 ///
-/// An **open `String`**, exactly like [KeyAlgorithmType] and
-/// [CryptographicKeyType] beside it, and for the reason
-/// [KeyAlgorithmType]'s own documentation gives: a reader must accept — and
+/// An **open `String`**, exactly like [CryptographicMaterialAlgorithm] and
+/// [CryptographicMaterialRole] beside it, and for the reason
+/// [CryptographicMaterialAlgorithm]'s own documentation gives: a reader must accept — and
 /// round-trip unmodified on flush — values it does not recognise, so a keyfile
 /// written by a newer client stays readable and losslessly flushable by an
 /// older one.
@@ -188,11 +188,11 @@ final class CryptographicMaterial {
   final String keyId;
   final String? enrollmentId;
 
-  /// The material's cryptographic role — see [CryptographicKeyType] for the
+  /// The material's cryptographic role — see [CryptographicMaterialRole] for the
   /// known tokens. Unknown values are preserved, never rejected.
   final String keyPartType;
 
-  /// The material's algorithm family — see [KeyAlgorithmType] for the known
+  /// The material's algorithm family — see [CryptographicMaterialAlgorithm] for the known
   /// tokens. Unknown values are preserved, never rejected.
   final String keyAlgorithmType;
 

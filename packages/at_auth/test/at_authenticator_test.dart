@@ -56,8 +56,8 @@ void main() {
       final io = InMemoryAtKeysIo();
       final executor = RecordingExecutor(['data:$challenge', 'data:success']);
 
-      final ok = await authenticatorFor(io, atSign, cramSecret: cramSecret)(
-          executor);
+      final ok =
+          await authenticatorFor(io, atSign, cramSecret: cramSecret)(executor);
 
       expect(ok, isTrue);
       expect(executor.sent.first, startsWith('from:$atSign'));
@@ -134,8 +134,7 @@ void main() {
           AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
               demo.pkamPrivateKeyMap[atSign]!)));
 
-      final ok =
-          await authenticatorFor(io, atSign, chops: injected)(executor);
+      final ok = await authenticatorFor(io, atSign, chops: injected)(executor);
 
       expect(ok, isTrue);
       expect(executor.sent.last, startsWith('pkam:'));
@@ -220,8 +219,7 @@ void main() {
           AtPkamKeyPair.create(demo.pkamPublicKeyMap[atSign]!,
               demo.pkamPrivateKeyMap[atSign]!)));
 
-      await expectLater(
-          () => authenticatorForChops(atSign, chops)(executor),
+      await expectLater(() => authenticatorForChops(atSign, chops)(executor),
           throwsA(isA<UnAuthenticatedException>()));
       expect(executor.sent, hasLength(1));
     });
@@ -264,8 +262,7 @@ void main() {
       final executor = RecordingExecutor(
           ['data:$challenge', 'error:AT0401-Exception: auth failed']);
 
-      await expectLater(
-          () => authenticatorFor(io, atSign)(executor),
+      await expectLater(() => authenticatorFor(io, atSign)(executor),
           throwsA(isA<UnAuthenticatedException>()));
     });
   });

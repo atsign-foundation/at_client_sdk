@@ -60,8 +60,7 @@ void main() {
     registerFallbackValue(SigningAlgoType.rsa2048);
 
     tempDir = Directory.systemTemp.createTempSync('pq_onboard_test');
-    keysIo =
-        FileAtKeysIo(filePath: (a) => '${tempDir.path}/${a}_key.atKeys');
+    keysIo = FileAtKeysIo(filePath: (a) => '${tempDir.path}/${a}_key.atKeys');
 
     mockAtLookUp = MockAtLookUp();
     mockAtEnrollment = MockAtEnrollment();
@@ -74,10 +73,12 @@ void main() {
         atSignStatus: AtSignStatus.teapot));
     when(() => mockAtLookUp.cramAuthenticate(cramSecret))
         .thenAnswer((_) async => true);
-    when(() => mockAtLookUp.executeVerb(any())).thenAnswer((_) async => 'data:2');
+    when(() => mockAtLookUp.executeVerb(any()))
+        .thenAnswer((_) async => 'data:2');
     when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
     when(() => mockPkam.authenticate(any(), any(),
-        enrollmentId: any(named: 'enrollmentId'))).thenAnswer((_) async => true);
+            enrollmentId: any(named: 'enrollmentId')))
+        .thenAnswer((_) async => true);
     when(() => mockAtEnrollment.submit(any(), any())).thenAnswer((_) async =>
         AtEnrollmentResponse(enrollmentId, EnrollmentStatus.approved));
 
@@ -103,12 +104,12 @@ void main() {
 
   /// The request the onboard actually submitted.
   FirstEnrollmentRequest submittedRequest() =>
-      verify(() => mockAtEnrollment.submit(captureAny(), any()))
-          .captured
-          .single as FirstEnrollmentRequest;
+      verify(() => mockAtEnrollment.submit(captureAny(), any())).captured.single
+          as FirstEnrollmentRequest;
 
   group('PQ-native activation', () {
-    test('the APKAM is ML-DSA-65, typed under the enrollment id, and the flat '
+    test(
+        'the APKAM is ML-DSA-65, typed under the enrollment id, and the flat '
         'fields stay empty', () async {
       final response = await atAuth.onboard(
           requestFor(signingAlgo: SigningAlgoType.mldsa65), cramSecret);
@@ -125,9 +126,9 @@ void main() {
           reason: 'this is what AtAuthImpl.authenticate reads to pick the '
               'signing routine on every later connection');
       final signing = keys.getKey(enrollmentId, 'auth:mldsa65:1',
-          CryptographicKeyType.privateAuthentication);
+          CryptographicMaterialRole.privateAuthentication);
       final verification = keys.getKey(enrollmentId, 'auth:mldsa65:1',
-          CryptographicKeyType.publicAuthentication);
+          CryptographicMaterialRole.publicAuthentication);
       expect(signing, isNotNull);
       expect(verification, isNotNull);
       // A genuine raw ML-DSA-65 keypair, not a placeholder.
@@ -151,7 +152,7 @@ void main() {
           request.apkamPublicKey,
           keys
               .getKey(enrollmentId, 'auth:mldsa65:1',
-                  CryptographicKeyType.publicAuthentication)!
+                  CryptographicMaterialRole.publicAuthentication)!
               .bytes
               .toString(),
           reason: 'the key advertised to the atServer and the key kept in the '
@@ -223,7 +224,8 @@ void main() {
   });
 
   group('the legacy activation is unchanged', () {
-    test('rsa2048 is the default and fills the flat fields, with no typed '
+    test(
+        'rsa2048 is the default and fills the flat fields, with no typed '
         'signing material', () async {
       await atAuth.onboard(requestFor(), cramSecret);
 

@@ -69,8 +69,9 @@ void main() {
 
     await AtEnrollmentImpl().submit(requestFor(session), mock);
 
-    final captured = verify(() => mock.executeCommand(captureAny(),
-        auth: captureAny(named: 'auth'))).captured;
+    final captured = verify(() =>
+            mock.executeCommand(captureAny(), auth: captureAny(named: 'auth')))
+        .captured;
     final command = captured[0] as String;
     expect(captured[1], true,
         reason: 'the atServer discriminates this path solely by the '
@@ -102,14 +103,14 @@ void main() {
     expect(response.enrollStatus, EnrollmentStatus.approved);
 
     final after = await keysIo.read(atSign);
-    final signing = after.getKey(
-        'new-123', 'auth:mldsa65:1', CryptographicKeyType.privateAuthentication);
-    final verification = after.getKey(
-        'new-123', 'auth:mldsa65:1', CryptographicKeyType.publicAuthentication);
+    final signing = after.getKey('new-123', 'auth:mldsa65:1',
+        CryptographicMaterialRole.privateAuthentication);
+    final verification = after.getKey('new-123', 'auth:mldsa65:1',
+        CryptographicMaterialRole.publicAuthentication);
     expect(signing, isNotNull);
     expect(verification, isNotNull);
     expect(signing!.enrollmentId, 'new-123');
-    expect(signing.keyAlgorithmType, KeyAlgorithmType.mlDsa65);
+    expect(signing.keyAlgorithmType, CryptographicMaterialAlgorithm.mlDsa65);
     expect(base64Decode(signing.bytes.toString()).length, 4032,
         reason: 'the persisted private is the raw ML-DSA-65 secret key');
     expect(base64Decode(verification!.bytes.toString()).length, 1952);
@@ -141,8 +142,8 @@ void main() {
           .submit(requestWithAlgo(session, SigningAlgoType.rsa2048), mock);
       expect(response.enrollmentId, 'new-123');
 
-      final command = verify(() =>
-              mock.executeCommand(captureAny(), auth: any(named: 'auth')))
+      final command = verify(
+              () => mock.executeCommand(captureAny(), auth: any(named: 'auth')))
           .captured
           .single as String;
       final params = jsonDecode(command.substring('enroll:request:'.length))
@@ -156,9 +157,9 @@ void main() {
       final after = await keysIo.read(atSign);
       // The algorithm is in the id now, so an rsa2048 retrofit files under
       // auth:rsa2048:1 — reading auth:mldsa65:1 here would find nothing.
-      final signing = after.getKey(
-          'new-123', 'auth:rsa2048:1', CryptographicKeyType.privateAuthentication);
-      expect(signing!.keyAlgorithmType, KeyAlgorithmType.rsa2048);
+      final signing = after.getKey('new-123', 'auth:rsa2048:1',
+          CryptographicMaterialRole.privateAuthentication);
+      expect(signing!.keyAlgorithmType, CryptographicMaterialAlgorithm.rsa2048);
       expect(signing.enrollmentId, 'new-123');
     });
 
@@ -195,7 +196,8 @@ void main() {
       expect(calls, 1, reason: 'exactly one enrollment was ever minted');
     });
 
-    test('an algorithm outside the retrofit set is refused before anything '
+    test(
+        'an algorithm outside the retrofit set is refused before anything '
         'is minted or sent', () async {
       final (_, session) = await sessionWithLegacyKeyfile();
       final mock = approvingLookUp();
@@ -246,8 +248,8 @@ void main() {
     final mock = MockAtLookUp();
     when(() => mock.executeCommand(any(that: startsWith('enroll:')),
             auth: any(named: 'auth')))
-        .thenAnswer((_) async =>
-            'data:{"enrollmentId":"new-123","status":"pending"}');
+        .thenAnswer(
+            (_) async => 'data:{"enrollmentId":"new-123","status":"pending"}');
 
     await expectLater(
         () => AtEnrollmentImpl().submit(requestFor(session), mock),
@@ -259,12 +261,11 @@ void main() {
     // An atServer without the self-retrofit auto-approve parks the request as
     // `pending`, so aborting without this leaves a record nobody will act on —
     // and a client that retries leaves one behind per attempt.
-    final commands = verify(() => mock.executeCommand(captureAny(),
-            auth: any(named: 'auth')))
+    final commands = verify(
+            () => mock.executeCommand(captureAny(), auth: any(named: 'auth')))
         .captured
         .cast<String>();
-    final denials =
-        commands.where((c) => c.startsWith('enroll:deny')).toList();
+    final denials = commands.where((c) => c.startsWith('enroll:deny')).toList();
     expect(denials, hasLength(1),
         reason: 'the abort must deny the enrollment it just created');
     expect(denials.single, contains('new-123'));
@@ -277,8 +278,8 @@ void main() {
     final mock = MockAtLookUp();
     when(() => mock.executeCommand(any(that: startsWith('enroll:request')),
             auth: any(named: 'auth')))
-        .thenAnswer((_) async =>
-            'data:{"enrollmentId":"new-123","status":"pending"}');
+        .thenAnswer(
+            (_) async => 'data:{"enrollmentId":"new-123","status":"pending"}');
     // Denying needs `__manage`, which a scoped parent enrollment does not
     // hold. Observed live against a legacy atServer as AT0009, "The approving
     // enrollment does not have access to __manage namespace" — so the cleanup
@@ -313,8 +314,8 @@ void main() {
           expect(base64Decode(keys.apkamPublicKey.toString()).length, 1952);
           keys.addKey(CryptographicMaterial(
               keyId: 'kp-abc123',
-              keyPartType: CryptographicKeyType.privateDecapsulation,
-              keyAlgorithmType: KeyAlgorithmType.xWing,
+              keyPartType: CryptographicMaterialRole.privateDecapsulation,
+              keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
               bytes: AtBytes(Uint8List.fromList([1, 2, 3])),
               createdAt: DateTime.now().toUtc()));
           return {'keyPackage': 'signed-package'};
@@ -322,8 +323,8 @@ void main() {
 
     await AtEnrollmentImpl().submit(request, mock);
 
-    final command = verify(() =>
-            mock.executeCommand(captureAny(), auth: any(named: 'auth')))
+    final command = verify(
+            () => mock.executeCommand(captureAny(), auth: any(named: 'auth')))
         .captured
         .first as String;
     final params = jsonDecode(command.substring('enroll:request:'.length));
@@ -331,7 +332,7 @@ void main() {
 
     final after = await keysIo.read(atSign);
     final filed = after.getKey(
-        'new-123', 'kp-abc123', CryptographicKeyType.privateDecapsulation);
+        'new-123', 'kp-abc123', CryptographicMaterialRole.privateDecapsulation);
     expect(filed, isNotNull);
     expect(filed!.enrollmentId, 'new-123',
         reason: 'the builder files material before the id exists; the '
@@ -357,7 +358,8 @@ void main() {
       ..signingAlgoType = SigningAlgoType.mldsa65
       ..signingMode = AtSigningMode.pkam);
     final publicKey = after
-        .getKey('new-123', 'auth:mldsa65:1', CryptographicKeyType.publicAuthentication)!
+        .getKey('new-123', 'auth:mldsa65:1',
+            CryptographicMaterialRole.publicAuthentication)!
         .bytes
         .toString();
     final ok = await MlDsa65PureDartAlgo().verifyBytes(
@@ -396,8 +398,10 @@ void main() {
       final (_, session) = await sessionWithLegacyKeyfile();
       final mock = approvingLookUp();
       await AtEnrollmentImpl().submit(build(session), mock);
-      final command = verify(() => mock.executeCommand(captureAny(),
-          auth: any(named: 'auth'))).captured.single as String;
+      final command = verify(
+              () => mock.executeCommand(captureAny(), auth: any(named: 'auth')))
+          .captured
+          .single as String;
       return jsonDecode(command.substring('enroll:request:'.length))
           as Map<String, dynamic>;
     }

@@ -1,7 +1,12 @@
 import 'dart:convert' show base64Encode;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysIo, CryptographicMaterial, CryptographicKeyType, KeyPartStatus;
+    show
+        AtKeys,
+        AtKeysIo,
+        CryptographicMaterial,
+        CryptographicMaterialRole,
+        KeyPartStatus;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package.dart'
@@ -111,7 +116,8 @@ Future<PersistedApkamKeys?> _load(
 /// The live private half of a key package in [keys], or null — the first entry
 /// of [keyPackageMaterials], which is where the selection rule lives.
 @experimental
-CryptographicMaterial? keyPackageMaterial(AtKeys keys, {String? enrollmentId}) =>
+CryptographicMaterial? keyPackageMaterial(AtKeys keys,
+        {String? enrollmentId}) =>
     keyPackageMaterials(keys, enrollmentId: enrollmentId).firstOrNull;
 
 /// Every usable private half of a key package in [keys] that belongs to one
@@ -147,7 +153,8 @@ CryptographicMaterial? keyPackageMaterial(AtKeys keys, {String? enrollmentId}) =
 /// PQ enrollment's kpid — an address its own enrollment record never
 /// advertised.
 @experimental
-List<CryptographicMaterial> keyPackageMaterials(AtKeys keys, {String? enrollmentId}) {
+List<CryptographicMaterial> keyPackageMaterials(AtKeys keys,
+    {String? enrollmentId}) {
   // Any key-establishment algorithm this build implements, not X-Wing alone:
   // an atSign configured for ML-KEM-1024 files its package under that token,
   // and an X-Wing-only filter would make it invisible — the client would then
@@ -163,13 +170,13 @@ List<CryptographicMaterial> keyPackageMaterials(AtKeys keys, {String? enrollment
   // own enrollment record never advertised.
   final publicIds = {
     for (final m in keys.keys)
-      if (m.keyPartType == CryptographicKeyType.publicEncapsulation &&
+      if (m.keyPartType == CryptographicMaterialRole.publicEncapsulation &&
           isKeyEstablishment(m))
         (m.enrollmentId, m.keyId)
   };
   final candidates = keys.keys
       .where((m) =>
-          m.keyPartType == CryptographicKeyType.privateDecapsulation &&
+          m.keyPartType == CryptographicMaterialRole.privateDecapsulation &&
           isKeyEstablishment(m) &&
           m.status != KeyPartStatus.dead &&
           publicIds.contains((m.enrollmentId, m.keyId)) &&

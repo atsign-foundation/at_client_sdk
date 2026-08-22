@@ -41,16 +41,16 @@ void main() {
         ..addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
-          keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          keyPartType: CryptographicMaterialRole.privateSigning,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
           bytes: AtBytes.fromString('UFJJVg=='),
           createdAt: DateTime.utc(2026, 6, 11),
         ))
         ..addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
-          keyPartType: CryptographicKeyType.publicVerification,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          keyPartType: CryptographicMaterialRole.publicVerification,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
           bytes: AtBytes.fromString('UFVC'),
           operations: const ['verify'],
           createdAt: DateTime.utc(2026, 6, 11),
@@ -63,8 +63,8 @@ void main() {
         // which every enrollment holding the grant reads from one place.
         ..addKey(CryptographicMaterial(
           keyId: 'nskey.buzz.abc123',
-          keyPartType: CryptographicKeyType.privateDecapsulation,
-          keyAlgorithmType: KeyAlgorithmType.xWing,
+          keyPartType: CryptographicMaterialRole.privateDecapsulation,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
           bytes: AtBytes.fromString('U0VFRA=='),
           createdAt: DateTime.utc(2026, 6, 11),
           status: KeyPartStatus.retired,
@@ -122,19 +122,18 @@ void main() {
         ..addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
-          keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          keyPartType: CryptographicMaterialRole.privateSigning,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
           bytes: AtBytes.fromString('UFJJVg=='),
           createdAt: DateTime.utc(2026, 6, 11),
         ));
 
-      final reread =
-          AtKeys.fromJson(jsonDecode(jsonEncode(golden.toJson())));
+      final reread = AtKeys.fromJson(jsonDecode(jsonEncode(golden.toJson())));
       expect(reread.atsign, golden.atsign);
       expect(reread.apkamPublicKey, golden.apkamPublicKey);
       expect(reread.enrollmentId, golden.enrollmentId);
-      final material = reread.getKey(
-          'enroll-2', 'sign:mldsa65:1', CryptographicKeyType.privateSigning);
+      final material = reread.getKey('enroll-2', 'sign:mldsa65:1',
+          CryptographicMaterialRole.privateSigning);
       expect(material, isNotNull);
       expect(material!.keyAlgorithmType, 'mldsa65');
       expect(material.bytes.toString(), 'UFJJVg==');
@@ -147,8 +146,8 @@ void main() {
       final json = (AtKeys(atsign: '@alice'.toAtsign())
             ..addKey(CryptographicMaterial(
               keyId: 'sign:mldsa65:1',
-              keyPartType: CryptographicKeyType.privateSigning,
-              keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+              keyPartType: CryptographicMaterialRole.privateSigning,
+              keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
               bytes: AtBytes.fromString('QQ=='),
               createdAt: DateTime.utc(2026, 6, 11),
             )))
@@ -168,8 +167,7 @@ void main() {
       }
     });
 
-    test('a legacy-only AtKeys emits the flat shape with no typed fields',
-        () {
+    test('a legacy-only AtKeys emits the flat shape with no typed fields', () {
       // The 52.1 boundary from the other side: no atsign and no materials
       // means the legacy format, exactly — a version/atsign/keys tripod
       // appearing here would reformat every legacy keyfile on next write.

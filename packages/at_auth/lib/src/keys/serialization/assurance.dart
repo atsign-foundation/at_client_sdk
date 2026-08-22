@@ -117,7 +117,7 @@ class AtKeysAssurance {
   // ---- cross-record structural invariants ----
 
   /// An enrollment may not contribute more than one **active** material of
-  /// the same `(CryptographicKeyType, KeyAlgorithmType)`.
+  /// the same `(CryptographicMaterialRole, CryptographicMaterialAlgorithm)`.
   /// (Duplicate `keyId`s within a container are rejected earlier, by
   /// [parseAtKeysDocument].)
   ///
@@ -165,8 +165,7 @@ class AtKeysAssurance {
         continue;
       }
       final types = typesByEnrollment.putIfAbsent(enrollmentId, () => {});
-      if (!types.add(
-          '${material.keyPartType}/${material.keyAlgorithmType}')) {
+      if (!types.add('${material.keyPartType}/${material.keyAlgorithmType}')) {
         throw AtKeysEnrollmentException(
             'Enrollment "$enrollmentId" has more than one active '
             '${material.keyPartType} key material for '
@@ -212,16 +211,18 @@ class AtKeysAssurance {
           material.enrollmentId == candidate.enrollmentId &&
           material.keyPartType == candidate.keyPartType &&
           material.keyAlgorithmType == candidate.keyAlgorithmType) {
-        throw ArgumentError.value(candidate.enrollmentId, 'material',
+        throw ArgumentError.value(
+            candidate.enrollmentId,
+            'material',
             'Enrollment "${candidate.enrollmentId}" already has an active '
-            '${candidate.keyPartType} key material for '
-            '${candidate.keyAlgorithmType}');
+                '${candidate.keyPartType} key material for '
+                '${candidate.keyAlgorithmType}');
       }
     }
   }
 
   /// Refuses a **second live enrollment** — a second active
-  /// [CryptographicKeyType.privateAuthentication] anywhere in the document.
+  /// [CryptographicMaterialRole.privateAuthentication] anywhere in the document.
   ///
   /// The one rule here that is a **policy about what this build writes**
   /// rather than a structural invariant, which is why it is separate and why
@@ -240,25 +241,28 @@ class AtKeysAssurance {
     required CryptographicMaterial candidate,
   }) {
     if (candidate.status != KeyPartStatus.active ||
-        candidate.keyPartType != CryptographicKeyType.privateAuthentication) {
+        candidate.keyPartType !=
+            CryptographicMaterialRole.privateAuthentication) {
       return;
     }
     for (final material in existing) {
       if (material.status != KeyPartStatus.active ||
           material.keyPartType !=
-              CryptographicKeyType.privateAuthentication) {
+              CryptographicMaterialRole.privateAuthentication) {
         continue;
       }
       // Whatever the owner, and whatever the algorithm. The same enrollment
       // filing a second under a different algorithm is refused too: an
       // enrollment holds at most one active authentication pair, which is
-      // what CryptographicKeyType.privateAuthentication documents and what
+      // what CryptographicMaterialRole.privateAuthentication documents and what
       // the per-(role, algorithm) rule above cannot see, since the two name
       // different algorithms.
-      throw ArgumentError.value(candidate.enrollmentId, 'material',
+      throw ArgumentError.value(
+          candidate.enrollmentId,
+          'material',
           'AtKeys already holds an active authentication key, for '
-          '${_enrollmentLabel(material.enrollmentId)}; retire it before '
-          'filing another');
+              '${_enrollmentLabel(material.enrollmentId)}; retire it before '
+              'filing another');
     }
   }
 
@@ -374,8 +378,11 @@ class AtKeysAssurance {
     for (final material in existing) {
       final owner = material.enrollmentId ?? 'atSign';
       final path = 'map.keys.$owner.${material.keyId}.${material.keyPartType}';
-      final counterpart = candidateByPart[
-          (material.enrollmentId, material.keyId, material.keyPartType)];
+      final counterpart = candidateByPart[(
+        material.enrollmentId,
+        material.keyId,
+        material.keyPartType
+      )];
       if (counterpart == null) {
         throw AtKeysAssuranceException('$path is not preserved');
       }

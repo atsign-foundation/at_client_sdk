@@ -483,8 +483,8 @@ void main() {
       final (mockAtLookUp, sent) = mockLookUpRecordingEnrollCommands();
 
       await expectLater(
-          AtEnrollmentImpl().submit(pqRequestWith((_) async => null),
-              mockAtLookUp),
+          AtEnrollmentImpl()
+              .submit(pqRequestWith((_) async => null), mockAtLookUp),
           throwsA(isA<AtEnrollmentException>()));
 
       expect(sent, isEmpty,
@@ -538,15 +538,13 @@ void main() {
                         'keys:get:keyName:123.default_enc_private_key')),
                 auth: any(named: 'auth')))
             .thenAnswer((_) async => 'data:${jsonEncode({
-                  'value': await sealed(encryptionPrivateKey),
-                  if (storedIvB64 != null) 'iv': storedIvB64,
-                })}');
+                      'value': await sealed(encryptionPrivateKey),
+                      if (storedIvB64 != null) 'iv': storedIvB64,
+                    })}');
         when(() => mockAtLookUp.executeCommand(
-                any(
-                    that: startsWith(
-                        'keys:get:keyName:123.default_self_enc_key')),
-                auth: any(named: 'auth')))
-            .thenAnswer((_) async => 'data:${jsonEncode({
+            any(that: startsWith('keys:get:keyName:123.default_self_enc_key')),
+            auth: any(
+                named: 'auth'))).thenAnswer((_) async => 'data:${jsonEncode({
                   'value': await sealed(selfEncryptionKey),
                   if (storedIvB64 != null) 'iv': storedIvB64,
                 })}');

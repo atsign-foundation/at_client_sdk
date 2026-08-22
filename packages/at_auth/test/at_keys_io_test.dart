@@ -294,19 +294,22 @@ void main() {
         final readKeys = await io.read(atsign);
         expect(
             readKeys
-                .getAtSignKey('sym', CryptographicKeyType.symmetricEncryption)
+                .getAtSignKey(
+                    'sym', CryptographicMaterialRole.symmetricEncryption)
                 ?.bytes
                 .toString(),
             'c2VjcmV0');
         expect(
             readKeys
-                .getAtSignKey('pair', CryptographicKeyType.publicEncryption)
+                .getAtSignKey(
+                    'pair', CryptographicMaterialRole.publicEncryption)
                 ?.bytes
                 .toString(),
             'cHVibGlj');
         expect(
             readKeys
-                .getAtSignKey('pair', CryptographicKeyType.privateDecryption)
+                .getAtSignKey(
+                    'pair', CryptographicMaterialRole.privateDecryption)
                 ?.bytes
                 .toString(),
             'cHJpdmF0ZQ==');

@@ -30,8 +30,9 @@ void main() {
                 'keyId': 'k1',
                 'keyParts': [
                   {
-                    'keyPartType': CryptographicKeyType.privateAuthentication,
-                    'keyAlgorithmType': KeyAlgorithmType.rsa2048,
+                    'keyPartType':
+                        CryptographicMaterialRole.privateAuthentication,
+                    'keyAlgorithmType': CryptographicMaterialAlgorithm.rsa2048,
                     'createdAt': '2026-08-14T00:00:00.000Z',
                     'status': status,
                     'bytes': 'dmFsdWU=',
@@ -58,7 +59,11 @@ void main() {
       // The positive control: the identical document with a known status
       // reads too, so "it parsed" above is not passing for some unrelated
       // reason.
-      expect(AtKeys.fromJson(documentWith(KeyPartStatus.retired)).keys.single.status,
+      expect(
+          AtKeys.fromJson(documentWith(KeyPartStatus.retired))
+              .keys
+              .single
+              .status,
           KeyPartStatus.retired);
     });
 
@@ -115,8 +120,7 @@ void main() {
 
     test('may not be retired TO, either', () {
       final keys = AtKeys.fromJson(documentWith(KeyPartStatus.active));
-      expect(
-          () => keys.retireKey('e1', 'k1', to: unknown),
+      expect(() => keys.retireKey('e1', 'k1', to: unknown),
           throwsA(isA<ArgumentError>()),
           reason: 'moving a key INTO a status this build does not understand '
               'is the same guess in the other direction');

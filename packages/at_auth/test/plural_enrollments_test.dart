@@ -15,7 +15,7 @@ import 'package:test/test.dart';
 /// not exist.
 void main() {
   Map<String, dynamic> authPart(String algorithm) => {
-        'keyPartType': CryptographicKeyType.privateAuthentication,
+        'keyPartType': CryptographicMaterialRole.privateAuthentication,
         'keyAlgorithmType': algorithm,
         'createdAt': '2026-08-14T00:00:00.000Z',
         'status': KeyPartStatus.active,
@@ -33,7 +33,7 @@ void main() {
             'keys': [
               {
                 'keyId': 'auth:rsa2048:1',
-                'keyParts': [authPart(KeyAlgorithmType.rsa2048)],
+                'keyParts': [authPart(CryptographicMaterialAlgorithm.rsa2048)],
               },
             ],
           },
@@ -42,7 +42,7 @@ void main() {
             'keys': [
               {
                 'keyId': 'auth:mldsa65:1',
-                'keyParts': [authPart(KeyAlgorithmType.mlDsa65)],
+                'keyParts': [authPart(CryptographicMaterialAlgorithm.mlDsa65)],
               },
             ],
           },
@@ -53,7 +53,7 @@ void main() {
       CryptographicMaterial(
         keyId: 'auth:$algorithm:1',
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicKeyType.privateAuthentication,
+        keyPartType: CryptographicMaterialRole.privateAuthentication,
         keyAlgorithmType: algorithm,
         bytes: AtBytes.fromString('dmFsdWU='),
         createdAt: DateTime.utc(2026, 8, 14),
@@ -70,7 +70,9 @@ void main() {
       // The positive control: the same document with ONE enrollment reads
       // too, so "it parsed" above is not passing for some unrelated reason.
       final single = twoLiveEnrollments()
-        ..['enrollments'] = [(twoLiveEnrollments()['enrollments'] as List).first];
+        ..['enrollments'] = [
+          (twoLiveEnrollments()['enrollments'] as List).first
+        ];
       expect(AtKeys.fromJson(single).enrollmentIds, ['e1']);
     });
 
@@ -94,14 +96,15 @@ void main() {
               'with its id');
     });
 
-    test('refuses to name one of them, and says which two it could not '
+    test(
+        'refuses to name one of them, and says which two it could not '
         'choose between', () {
       final keys = AtKeys.fromJson(twoLiveEnrollments());
 
       expect(
           keys.resolveAuthenticatingEnrollment,
-          throwsA(isA<AtKeysEnrollmentException>().having(
-              (e) => e.toString(), 'message', allOf(contains('e1'), contains('e2')))),
+          throwsA(isA<AtKeysEnrollmentException>().having((e) => e.toString(),
+              'message', allOf(contains('e1'), contains('e2')))),
           reason: 'this is where the ambiguity belongs — the caller is asking '
               'for one answer and there are two. Picking the first silently '
               'is how a client authenticates as the wrong principal');
@@ -109,7 +112,9 @@ void main() {
       // The contrast arm: with one live enrollment it answers, so the throw
       // above is about the ambiguity rather than the method being broken.
       final single = twoLiveEnrollments()
-        ..['enrollments'] = [(twoLiveEnrollments()['enrollments'] as List).first];
+        ..['enrollments'] = [
+          (twoLiveEnrollments()['enrollments'] as List).first
+        ];
       expect(AtKeys.fromJson(single).resolveAuthenticatingEnrollment(), 'e1');
     });
 
@@ -118,9 +123,12 @@ void main() {
       // enrollment it is gets its own keys, and the ambiguity never arises.
       final keys = AtKeys.fromJson(twoLiveEnrollments());
 
-      expect(keys.getKey('e2', 'auth:mldsa65:1',
-              CryptographicKeyType.privateAuthentication)!.keyAlgorithmType,
-          KeyAlgorithmType.mlDsa65);
+      expect(
+          keys
+              .getKey('e2', 'auth:mldsa65:1',
+                  CryptographicMaterialRole.privateAuthentication)!
+              .keyAlgorithmType,
+          CryptographicMaterialAlgorithm.mlDsa65);
       expect(keys.signingAlgorithmForEnrollment('e1'), SigningAlgoType.rsa2048);
       expect(keys.signingAlgorithmForEnrollment('e2'), SigningAlgoType.mldsa65);
     });
@@ -131,16 +139,18 @@ void main() {
       // it, and this build would start producing the documents it merely
       // tolerates.
       final keys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-        authMaterial('e1', KeyAlgorithmType.rsa2048),
+        authMaterial('e1', CryptographicMaterialAlgorithm.rsa2048),
       ]);
 
-      expect(() => keys.addKey(authMaterial('e2', KeyAlgorithmType.mlDsa65)),
+      expect(
+          () => keys.addKey(
+              authMaterial('e2', CryptographicMaterialAlgorithm.mlDsa65)),
           throwsArgumentError);
 
       // ...and retiring the sitting one frees it, which is what a retrofit
       // does and must still be allowed.
       keys.retireKey('e1', 'auth:rsa2048:1');
-      keys.addKey(authMaterial('e2', KeyAlgorithmType.mlDsa65));
+      keys.addKey(authMaterial('e2', CryptographicMaterialAlgorithm.mlDsa65));
       expect(keys.resolveAuthenticatingEnrollment(), 'e2');
     });
   });

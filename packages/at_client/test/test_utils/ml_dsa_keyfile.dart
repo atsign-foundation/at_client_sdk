@@ -17,16 +17,16 @@ Future<InMemoryAtKeysIo> mlDsaKeyfile(
     ..addKey(CryptographicMaterial(
       keyId: 'apkam:$enrollmentId:1',
       enrollmentId: enrollmentId,
-      keyPartType: CryptographicKeyType.privateAuthentication,
-      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      keyPartType: CryptographicMaterialRole.privateAuthentication,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
       bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 3))),
       createdAt: now,
     ))
     ..addKey(CryptographicMaterial(
       keyId: 'apkam:$enrollmentId:1',
       enrollmentId: enrollmentId,
-      keyPartType: CryptographicKeyType.publicAuthentication,
-      keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+      keyPartType: CryptographicMaterialRole.publicAuthentication,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
       bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 4))),
       createdAt: now,
     ));

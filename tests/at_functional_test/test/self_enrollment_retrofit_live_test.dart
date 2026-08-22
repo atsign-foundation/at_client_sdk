@@ -407,8 +407,8 @@ void main() {
     // writer yet. Filtering on privateSigning matches nothing, so this
     // assertion would fail for a reason that has nothing to do with reuse.
     final pqMaterials = keys.keys.where((m) =>
-        m.keyAlgorithmType == KeyAlgorithmType.mlDsa65 &&
-        m.keyPartType == CryptographicKeyType.privateAuthentication);
+        m.keyAlgorithmType == CryptographicMaterialAlgorithm.mlDsa65 &&
+        m.keyPartType == CryptographicMaterialRole.privateAuthentication);
     expect(pqMaterials, hasLength(1),
         reason: 'a keyfile that already carries a PQ enrollment must reuse '
             'it, not mint a second — this is UC-A2.2\'s other arm');

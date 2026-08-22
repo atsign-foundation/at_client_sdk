@@ -99,7 +99,7 @@ void main() {
 
     final material = (await inner.read(atSign)).getAtSignKey(
         NskeyPrivateFiling.keyIdFor('buzz', nskeyKid),
-        CryptographicKeyType.privateDecapsulation);
+        CryptographicMaterialRole.privateDecapsulation);
     expect(material, isNotNull,
         reason: 'the advertisement for generation $nskeyKid is live on the '
             'atServer, so peers are already sealing to it — but the private '

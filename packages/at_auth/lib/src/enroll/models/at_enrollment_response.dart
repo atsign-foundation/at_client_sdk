@@ -140,7 +140,8 @@ class AtEnrollmentResponse extends AtEnrollmentRecord {
   AtRootDomain? rootDomain;
 
   /// The authentication keys associated with the enrollment.
-  @Deprecated('Use `session` instead; the keys are sourced via `session.atKeysIo`.')
+  @Deprecated(
+      'Use `session` instead; the keys are sourced via `session.atKeysIo`.')
   AtKeys? atAuthKeys;
 
   /// The hand-off session for the newly enrolled app, populated on the

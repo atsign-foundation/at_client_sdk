@@ -7,7 +7,7 @@ import 'package:at_auth/at_auth.dart'
         AtEnrollmentResponse,
         AtKeys,
         CryptographicMaterial,
-        CryptographicKeyType,
+        CryptographicMaterialRole,
         EnrollmentUpdateRequest,
         InMemoryAtKeysIo,
         KeyEntryStatus,
@@ -59,7 +59,7 @@ void main() {
   late List<Set<String>> heldWhenPublished;
 
   Future<List<CryptographicMaterial>> encMaterials(
-      {String part = CryptographicKeyType.publicEncapsulation}) async {
+      {String part = CryptographicMaterialRole.publicEncapsulation}) async {
     final keys = await keysIo.read(atSign);
     // Both containers: production files an enrollment's first package
     // untagged, and anything this class mints is tagged.
@@ -112,7 +112,7 @@ void main() {
       keys.addKey(CryptographicMaterial(
         enrollmentId: tagged ? enrollmentId : null,
         keyId: kpid,
-        keyPartType: CryptographicKeyType.publicEncapsulation,
+        keyPartType: CryptographicMaterialRole.publicEncapsulation,
         keyAlgorithmType: materialAlgo,
         bytes: AtBytes(pair.publicKey),
         createdAt: DateTime.now().toUtc(),
@@ -121,7 +121,7 @@ void main() {
       keys.addKey(CryptographicMaterial(
         enrollmentId: tagged ? enrollmentId : null,
         keyId: kpid,
-        keyPartType: CryptographicKeyType.privateDecapsulation,
+        keyPartType: CryptographicMaterialRole.privateDecapsulation,
         keyAlgorithmType: materialAlgo,
         bytes: AtBytes(seed),
         createdAt: DateTime.now().toUtc(),
@@ -269,8 +269,8 @@ void main() {
 
       await minter().reconcileKeyPackage();
 
-      final privates =
-          await encMaterials(part: CryptographicKeyType.privateDecapsulation);
+      final privates = await encMaterials(
+          part: CryptographicMaterialRole.privateDecapsulation);
       final seed = Uint8List.fromList(privates.single.bytes.bytes);
       final pair =
           await SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!
@@ -380,8 +380,8 @@ void main() {
 
       await minter().reconcileKeyPackage();
 
-      final privates =
-          await encMaterials(part: CryptographicKeyType.privateDecapsulation);
+      final privates = await encMaterials(
+          part: CryptographicMaterialRole.privateDecapsulation);
       final retired = privates.firstWhere((m) => m.keyId == leaving);
       expect(retired.status, KeyPartStatus.retired);
       expect(retired.bytes.bytes, isNotEmpty,

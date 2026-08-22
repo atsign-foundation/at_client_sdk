@@ -203,7 +203,7 @@ Persistence has three verbs:
   ```dart
   await atKeysIo.update(atSign.toAtsign(), (keys) {
     if (keys.getKey(enrollmentId, keyId,
-            CryptographicKeyType.privateDecapsulation) !=
+            CryptographicMaterialRole.privateDecapsulation) !=
         null) {
       return false; // already filed; nothing to write
     }

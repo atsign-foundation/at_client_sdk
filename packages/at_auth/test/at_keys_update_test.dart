@@ -30,8 +30,8 @@ void main() {
 
   CryptographicMaterial keyNamed(String keyId) => CryptographicMaterial(
         keyId: keyId,
-        keyPartType: CryptographicKeyType.privateDecapsulation,
-        keyAlgorithmType: KeyAlgorithmType.xWing,
+        keyPartType: CryptographicMaterialRole.privateDecapsulation,
+        keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
         bytes: AtBytes.fromString('c2VlZA=='),
         createdAt: DateTime.utc(2026, 1, 1),
       );
@@ -94,12 +94,14 @@ void main() {
       final after = await io.read(atSign);
       expect(
           after
-              .getAtSignKey('first', CryptographicKeyType.privateDecapsulation)
+              .getAtSignKey(
+                  'first', CryptographicMaterialRole.privateDecapsulation)
               ?.bytes,
           isNotNull);
       expect(
           after
-              .getAtSignKey('second', CryptographicKeyType.privateDecapsulation)
+              .getAtSignKey(
+                  'second', CryptographicMaterialRole.privateDecapsulation)
               ?.bytes,
           isNotNull,
           reason: 'the second update reads AFTER the first wrote, because the '
@@ -116,7 +118,7 @@ void main() {
       var sawFirst = false;
       await io.update(atSign.toAtsign(), (keys) {
         sawFirst = keys.getAtSignKey(
-                'first', CryptographicKeyType.privateDecapsulation) !=
+                'first', CryptographicMaterialRole.privateDecapsulation) !=
             null;
         keys.addKey(keyNamed('second'));
         return true;
@@ -209,8 +211,8 @@ void main() {
       });
 
       expect(
-          (await io.read(atSign))
-              .getAtSignKey('first', CryptographicKeyType.privateDecapsulation),
+          (await io.read(atSign)).getAtSignKey(
+              'first', CryptographicMaterialRole.privateDecapsulation),
           isNotNull);
     });
 

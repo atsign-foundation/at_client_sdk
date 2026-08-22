@@ -65,15 +65,15 @@ void main() {
     final now = DateTime.now().toUtc();
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicKeyType.publicEncapsulation,
-      keyAlgorithmType: KeyAlgorithmType.xWing,
+      keyPartType: CryptographicMaterialRole.publicEncapsulation,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
       bytes: AtBytes(pair.publicKey),
       createdAt: now,
     ));
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicKeyType.privateDecapsulation,
-      keyAlgorithmType: KeyAlgorithmType.xWing,
+      keyPartType: CryptographicMaterialRole.privateDecapsulation,
+      keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
       bytes: AtBytes(pair.secretKey),
       createdAt: now,
     ));
@@ -170,15 +170,15 @@ void main() {
       keys.addKey(CryptographicMaterial(
           keyId: kpid,
           enrollmentId: id,
-          keyPartType: CryptographicKeyType.publicEncapsulation,
-          keyAlgorithmType: KeyAlgorithmType.xWing,
+          keyPartType: CryptographicMaterialRole.publicEncapsulation,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
           bytes: AtBytes(pair.publicKey),
           createdAt: at));
       keys.addKey(CryptographicMaterial(
           keyId: kpid,
           enrollmentId: id,
-          keyPartType: CryptographicKeyType.privateDecapsulation,
-          keyAlgorithmType: KeyAlgorithmType.xWing,
+          keyPartType: CryptographicMaterialRole.privateDecapsulation,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
           bytes: AtBytes(pair.secretKey),
           createdAt: at));
     }
@@ -210,14 +210,14 @@ void main() {
       {required DateTime createdAt, String status = KeyPartStatus.active}) {
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
     for (final (part, bytes) in [
-      (CryptographicKeyType.publicEncapsulation, pair.publicKey),
-      (CryptographicKeyType.privateDecapsulation, pair.secretKey),
+      (CryptographicMaterialRole.publicEncapsulation, pair.publicKey),
+      (CryptographicMaterialRole.privateDecapsulation, pair.secretKey),
     ]) {
       keys.addKey(CryptographicMaterial(
           keyId: kpid,
           enrollmentId: 'enroll-1',
           keyPartType: part,
-          keyAlgorithmType: KeyAlgorithmType.xWing,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
           bytes: AtBytes(bytes),
           createdAt: createdAt,
           status: status));

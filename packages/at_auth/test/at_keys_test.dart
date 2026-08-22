@@ -101,8 +101,9 @@ void main() {
       // comes back with the same entries in a different sequence. The test
       // said "byte-identically" until 2026-08-18, which is what made an
       // acceptance row claiming byte identity read as already proven.
-      final reread = AtKeys.fromJson(Map<String, dynamic>.from(encryptedAtKeysMap))
-        ..atsign = '@alice🛠'.toAtsign();
+      final reread =
+          AtKeys.fromJson(Map<String, dynamic>.from(encryptedAtKeysMap))
+            ..atsign = '@alice🛠'.toAtsign();
       expect(reread.toJson(), equals(encryptedAtKeysMap));
     });
 
@@ -256,7 +257,7 @@ void main() {
     AtKeys retrofitted() => createKeys()
       ..fileApkamMaterial(
           enrollmentId: typedEnrollmentId,
-          algorithm: KeyAlgorithmType.mlDsa65,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
           publicKey: typedApkamPublicKey,
           privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
 
@@ -297,7 +298,8 @@ void main() {
       expect(resolved.algorithm, isNull);
     });
 
-    test('an algorithm this build cannot sign with is refused, not fallen '
+    test(
+        'an algorithm this build cannot sign with is refused, not fallen '
         'back from', () {
       // A keyfile written by a newer client. Its material is still this
       // enrollment's, so serving the flat fields would authenticate as the
@@ -325,7 +327,7 @@ void main() {
       final typedOnly = AtKeys()
         ..fileApkamMaterial(
             enrollmentId: typedEnrollmentId,
-            algorithm: KeyAlgorithmType.mlDsa65,
+            algorithm: CryptographicMaterialAlgorithm.mlDsa65,
             publicKey: typedApkamPublicKey,
             privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
 
@@ -410,16 +412,18 @@ void main() {
       final pair = rsaKeyPair('shared-pair');
       final atKeys = AtKeys(keysList: pair);
       final publicMaterial = pair.firstWhere(
-          (m) => m.keyPartType == CryptographicKeyType.publicEncryption);
+          (m) => m.keyPartType == CryptographicMaterialRole.publicEncryption);
       final privateMaterial = pair.firstWhere(
-          (m) => m.keyPartType == CryptographicKeyType.privateDecryption);
+          (m) => m.keyPartType == CryptographicMaterialRole.privateDecryption);
 
       expect(
-        atKeys.getAtSignKey('shared-pair', CryptographicKeyType.publicEncryption),
+        atKeys.getAtSignKey(
+            'shared-pair', CryptographicMaterialRole.publicEncryption),
         same(publicMaterial),
       );
       expect(
-        atKeys.getAtSignKey('shared-pair', CryptographicKeyType.privateDecryption),
+        atKeys.getAtSignKey(
+            'shared-pair', CryptographicMaterialRole.privateDecryption),
         same(privateMaterial),
       );
     });
@@ -428,7 +432,8 @@ void main() {
       final atKeys = AtKeys(keysList: [symmetricKey('shared-id')]);
 
       expect(
-        atKeys.getAtSignKey('shared-id', CryptographicKeyType.privateDecryption),
+        atKeys.getAtSignKey(
+            'shared-id', CryptographicMaterialRole.privateDecryption),
         isNull,
       );
     });
@@ -474,7 +479,8 @@ void main() {
       final atKeys = AtKeys(
         keysList: [rsaKeyPair('pair', enrollmentId: 'enroll-1').first],
       );
-      final sameIdOtherOwner = rsaKeyPair('pair', enrollmentId: 'enroll-2').last;
+      final sameIdOtherOwner =
+          rsaKeyPair('pair', enrollmentId: 'enroll-2').last;
 
       atKeys.addKey(sameIdOtherOwner);
 
@@ -482,7 +488,8 @@ void main() {
       expect(atKeys.keysForKeyId('enroll-2', 'pair'), hasLength(1));
       expect(
           atKeys
-              .getKey('enroll-1', 'pair', CryptographicKeyType.publicEncryption)!
+              .getKey('enroll-1', 'pair',
+                  CryptographicMaterialRole.publicEncryption)!
               .enrollmentId,
           'enroll-1',
           reason: 'each container answers with its own, not with whichever '
@@ -566,7 +573,8 @@ void main() {
       // The deprecated flat field is carried through untouched alongside it.
       expect(reflushed['enrollmentId'], 'old-capped-enrollment');
       expect(
-          reread.getAtSignKey('familiar', CryptographicKeyType.symmetricEncryption),
+          reread.getAtSignKey(
+              'familiar', CryptographicMaterialRole.symmetricEncryption),
           isNotNull);
     });
   });
@@ -582,7 +590,7 @@ void main() {
       expect(retired.map((m) => m.status), everyElement(KeyPartStatus.retired));
       expect(
         atKeys
-            .getAtSignKey('pair', CryptographicKeyType.publicEncryption)!
+            .getAtSignKey('pair', CryptographicMaterialRole.publicEncryption)!
             .bytes
             .toString(),
         rsaKeyPair('pair').first.bytes.toString(),
@@ -607,7 +615,8 @@ void main() {
       atKeys.retireAtSignKey('solo');
       atKeys.retireAtSignKey('solo', to: KeyPartStatus.dead);
 
-      expect(atKeys.atSignKeysForKeyId('solo').single.status, KeyPartStatus.dead);
+      expect(
+          atKeys.atSignKeysForKeyId('solo').single.status, KeyPartStatus.dead);
     });
 
     test('throws on a backward transition', () {
@@ -618,7 +627,8 @@ void main() {
         () => atKeys.retireAtSignKey('solo'),
         throwsA(isA<ArgumentError>()),
       );
-      expect(atKeys.atSignKeysForKeyId('solo').single.status, KeyPartStatus.dead);
+      expect(
+          atKeys.atSignKeysForKeyId('solo').single.status, KeyPartStatus.dead);
     });
 
     test('throws for an unknown keyId', () {
@@ -641,13 +651,12 @@ void main() {
   });
 
   group('AtKeys fileApkamMaterial', () {
-    test('files both halves under one auth:<algorithm>:<generation> keyId',
-        () {
+    test('files both halves under one auth:<algorithm>:<generation> keyId', () {
       final atKeys = AtKeys();
 
       atKeys.fileApkamMaterial(
           enrollmentId: 'enroll-9',
-          algorithm: KeyAlgorithmType.mlDsa65,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
           publicKey: 'cHVibGljLWhhbGY=',
           privateKey: 'cHJpdmF0ZS1oYWxm');
 
@@ -655,28 +664,33 @@ void main() {
       // and a keyfile written with it has to stay readable by every later
       // build. The enrollment is stated by the container, not the id.
       final filed = atKeys
-          .keysForKeyId('enroll-9', 'auth:${KeyAlgorithmType.mlDsa65}:1')
+          .keysForKeyId(
+              'enroll-9', 'auth:${CryptographicMaterialAlgorithm.mlDsa65}:1')
           .toList();
       expect(filed, hasLength(2));
       expect(
         atKeys
-            .getKey('enroll-9', 'auth:${KeyAlgorithmType.mlDsa65}:1',
-                CryptographicKeyType.privateAuthentication)!
+            .getKey(
+                'enroll-9',
+                'auth:${CryptographicMaterialAlgorithm.mlDsa65}:1',
+                CryptographicMaterialRole.privateAuthentication)!
             .bytes
             .toString(),
         'cHJpdmF0ZS1oYWxm',
       );
       expect(
         atKeys
-            .getKey('enroll-9', 'auth:${KeyAlgorithmType.mlDsa65}:1',
-                CryptographicKeyType.publicAuthentication)!
+            .getKey(
+                'enroll-9',
+                'auth:${CryptographicMaterialAlgorithm.mlDsa65}:1',
+                CryptographicMaterialRole.publicAuthentication)!
             .bytes
             .toString(),
         'cHVibGljLWhhbGY=',
       );
       expect(filed.map((m) => m.enrollmentId), everyElement('enroll-9'));
       expect(filed.map((m) => m.keyAlgorithmType),
-          everyElement(KeyAlgorithmType.mlDsa65));
+          everyElement(CryptographicMaterialAlgorithm.mlDsa65));
       // One mint is one event: both halves carry the same timestamp.
       expect(filed.first.createdAt, filed.last.createdAt);
     });
@@ -686,7 +700,7 @@ void main() {
 
       atKeys.fileApkamMaterial(
           enrollmentId: 'enroll-9',
-          algorithm: KeyAlgorithmType.rsa2048,
+          algorithm: CryptographicMaterialAlgorithm.rsa2048,
           publicKey: 'cHVibGljLWhhbGY=',
           privateKey: 'cHJpdmF0ZS1oYWxm');
 
@@ -709,17 +723,22 @@ void main() {
 
       target.adoptMaterials(source.keys, enrollmentId: 'the-new-enrollment');
 
-      final adopted = target.keysForKeyId('the-new-enrollment', 'kem:xwing').single;
+      final adopted =
+          target.keysForKeyId('the-new-enrollment', 'kem:xwing').single;
       expect(adopted.enrollmentId, 'the-new-enrollment');
       expect(adopted.keyId, 'kem:xwing');
-      expect(adopted.keyPartType, CryptographicKeyType.symmetricEncryption);
-      expect(adopted.keyAlgorithmType, KeyAlgorithmType.aes256);
+      expect(
+          adopted.keyPartType, CryptographicMaterialRole.symmetricEncryption);
+      expect(adopted.keyAlgorithmType, CryptographicMaterialAlgorithm.aes256);
       expect(adopted.bytes.toString(), 'c2VjcmV0');
       // The builder's own timestamp, not the adoption's.
       expect(adopted.createdAt, built);
       // The source keeps its own tag: adoption copies, it does not move.
       expect(
-          source.keysForKeyId('the-old-enrollment', 'kem:xwing').single.enrollmentId,
+          source
+              .keysForKeyId('the-old-enrollment', 'kem:xwing')
+              .single
+              .enrollmentId,
           'the-old-enrollment');
     });
 
@@ -728,8 +747,8 @@ void main() {
         CryptographicMaterial(
             keyId: 'kem:xwing',
             enrollmentId: 'the-old-enrollment',
-            keyPartType: CryptographicKeyType.privateDecapsulation,
-            keyAlgorithmType: KeyAlgorithmType.xWing,
+            keyPartType: CryptographicMaterialRole.privateDecapsulation,
+            keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
             bytes: AtBytes.fromString('c2VjcmV0'),
             operations: const ['decapsulate'],
             createdAt: DateTime.utc(2026, 3, 4),
@@ -739,10 +758,11 @@ void main() {
 
       target.adoptMaterials(source.keys, enrollmentId: 'the-new-enrollment');
 
-      final adopted = target.keysForKeyId('the-new-enrollment', 'kem:xwing').single;
+      final adopted =
+          target.keysForKeyId('the-new-enrollment', 'kem:xwing').single;
       expect(adopted.status, KeyPartStatus.retired);
       expect(adopted.operations, ['decapsulate']);
-      expect(adopted.keyAlgorithmType, KeyAlgorithmType.xWing);
+      expect(adopted.keyAlgorithmType, CryptographicMaterialAlgorithm.xWing);
     });
 
     test('adopts every material of a multi-part keyId', () {
@@ -769,16 +789,16 @@ void main() {
         CryptographicMaterial(
             keyId: 'kem:xwing',
             enrollmentId: 'the-old-enrollment',
-            keyPartType: CryptographicKeyType.privateDecapsulation,
-            keyAlgorithmType: KeyAlgorithmType.xWing,
+            keyPartType: CryptographicMaterialRole.privateDecapsulation,
+            keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
             bytes: AtBytes.fromString('c2VjcmV0'),
             createdAt: DateTime.utc(2026, 3, 4)),
       ]);
 
       target.adoptMaterials(source.keys, enrollmentId: 'the-new-enrollment');
 
-      expect(target.keysForKeyId('the-new-enrollment', 'kem:xwing'),
-          hasLength(1));
+      expect(
+          target.keysForKeyId('the-new-enrollment', 'kem:xwing'), hasLength(1));
       expect(target.keysForKeyId('the-sitting-enrollment', 'kem:xwing'),
           hasLength(1),
           reason: 'the sitting enrollment keeps its own material — an '
@@ -794,8 +814,8 @@ void main() {
         CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
-            keyPartType: CryptographicKeyType.privateAuthentication,
-            keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+            keyPartType: CryptographicMaterialRole.privateAuthentication,
+            keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
             bytes: AtBytes.fromString(value),
             createdAt: DateTime.utc(2026, 1, 1),
             status: status);
@@ -808,8 +828,7 @@ void main() {
           atsign: '@alice'.toAtsign(),
           keysList: [authKey('auth:rsa2048:1', enrollmentId: 'E1')]);
 
-      expect(
-          () => atKeys.addKey(authKey('auth:rsa2048:2', enrollmentId: 'E1')),
+      expect(() => atKeys.addKey(authKey('auth:rsa2048:2', enrollmentId: 'E1')),
           throwsArgumentError,
           reason: 'two ACTIVE authentication keys for one enrollment must be '
               'refused');
@@ -820,7 +839,7 @@ void main() {
       expect(
           atKeys
               .getKey('E1', 'auth:rsa2048:1',
-                  CryptographicKeyType.privateAuthentication)!
+                  CryptographicMaterialRole.privateAuthentication)!
               .status,
           KeyPartStatus.retired);
       expect(atKeys.resolveAuthenticatingEnrollment(), 'E1');
@@ -850,8 +869,8 @@ void main() {
         CryptographicMaterial(
             keyId: 'sign:mldsa65:1',
             enrollmentId: 'E1',
-            keyPartType: CryptographicKeyType.privateSigning,
-            keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+            keyPartType: CryptographicMaterialRole.privateSigning,
+            keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
             bytes: AtBytes.fromString('YQ=='),
             createdAt: DateTime.utc(2026, 1, 1)),
       ]);
@@ -859,8 +878,8 @@ void main() {
       atKeys.addKey(CryptographicMaterial(
           keyId: 'sign:rsa2048:1',
           enrollmentId: 'E1',
-          keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: KeyAlgorithmType.rsa2048,
+          keyPartType: CryptographicMaterialRole.privateSigning,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
           bytes: AtBytes.fromString('Yg=='),
           createdAt: DateTime.utc(2026, 1, 1)));
 
@@ -874,8 +893,8 @@ void main() {
           () => atKeys.addKey(CryptographicMaterial(
               keyId: 'sign:mldsa65:2',
               enrollmentId: 'E1',
-              keyPartType: CryptographicKeyType.privateSigning,
-              keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+              keyPartType: CryptographicMaterialRole.privateSigning,
+              keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
               bytes: AtBytes.fromString('Yw=='),
               createdAt: DateTime.utc(2026, 1, 1))),
           throwsArgumentError);
@@ -886,8 +905,8 @@ void main() {
       atKeys.addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:2',
           enrollmentId: 'E1',
-          keyPartType: CryptographicKeyType.privateSigning,
-          keyAlgorithmType: KeyAlgorithmType.mlDsa65,
+          keyPartType: CryptographicMaterialRole.privateSigning,
+          keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
           bytes: AtBytes.fromString('Yw=='),
           createdAt: DateTime.utc(2026, 1, 1)));
     });
@@ -900,7 +919,8 @@ void main() {
     // shape, which are only comparable if they are given the same material.
     String b64(String label) => base64Encode(utf8.encode(label));
 
-    CryptographicMaterial part(String keyId, String type, String algo, String value,
+    CryptographicMaterial part(
+            String keyId, String type, String algo, String value,
             {String? enrollmentId, String status = KeyPartStatus.active}) =>
         CryptographicMaterial(
             keyId: keyId,
@@ -917,11 +937,11 @@ void main() {
             String value = 'a',
             String status = KeyPartStatus.active}) =>
         [
-          part('sign:$algo:$generation', CryptographicKeyType.privateSigning,
-              algo, '$value-priv',
+          part('sign:$algo:$generation',
+              CryptographicMaterialRole.privateSigning, algo, '$value-priv',
               enrollmentId: enrollmentId, status: status),
           part('sign:$algo:$generation',
-              CryptographicKeyType.publicVerification, algo, '$value-pub',
+              CryptographicMaterialRole.publicVerification, algo, '$value-pub',
               enrollmentId: enrollmentId, status: status),
         ];
 
@@ -930,10 +950,10 @@ void main() {
     /// keyId, with **no** enrollment id — so it lands in the atSign's own
     /// container rather than any enrollment's.
     List<CryptographicMaterial> signingRoot() => [
-          part('root:mldsa65:1', CryptographicKeyType.privateSigning,
-              KeyAlgorithmType.mlDsa65, 'root-priv'),
-          part('root:mldsa65:1', CryptographicKeyType.publicVerification,
-              KeyAlgorithmType.mlDsa65, 'root-pub'),
+          part('root:mldsa65:1', CryptographicMaterialRole.privateSigning,
+              CryptographicMaterialAlgorithm.mlDsa65, 'root-priv'),
+          part('root:mldsa65:1', CryptographicMaterialRole.publicVerification,
+              CryptographicMaterialAlgorithm.mlDsa65, 'root-pub'),
         ];
 
     group('signingKeysFor', () {
@@ -941,8 +961,10 @@ void main() {
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
           // Filed weakest-first, so the order under test is the accessor's
           // rather than the order the keyfile happened to hold them in.
-          ...signingPair('E1', KeyAlgorithmType.rsa2048, value: 'rsa'),
-          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'mldsa'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.rsa2048,
+              value: 'rsa'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
+              value: 'mldsa'),
         ]);
 
         expect(atKeys.signingKeysFor('E1').map((k) => k.algorithm).toList(),
@@ -972,7 +994,8 @@ void main() {
         // which is the shape in which the wrong one could win.
         final withOwn = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
           ...signingRoot(),
-          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'own'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
+              value: 'own'),
         ]);
         expect(withOwn.signingKeysFor('E1').single.privateKey, b64('own-priv'));
       });
@@ -981,15 +1004,16 @@ void main() {
           () {
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
           // No publicVerification half, so nothing could verify what it signs.
-          part('sign:rsa2048:1', CryptographicKeyType.privateSigning,
-              KeyAlgorithmType.rsa2048, 'lonely',
+          part('sign:rsa2048:1', CryptographicMaterialRole.privateSigning,
+              CryptographicMaterialAlgorithm.rsa2048, 'lonely',
               enrollmentId: 'E1'),
           // Retained to verify what it signed, but no longer signing.
-          ...signingPair('E1', KeyAlgorithmType.ed25519,
+          ...signingPair('E1', CryptographicMaterialAlgorithm.ed25519,
               value: 'old', status: KeyPartStatus.retired),
           // What a newer client's keyfile looks like from here.
           ...signingPair('E1', 'pq-something-later', value: 'future'),
-          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'live'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
+              value: 'live'),
         ]);
 
         expect(atKeys.signingKeysFor('E1').single.privateKey, b64('live-priv'),
@@ -997,18 +1021,17 @@ void main() {
                 'the rest of the keyfile is still usable');
       });
 
-      test('skips a keyId whose two halves disagree about their algorithm',
-          () {
+      test('skips a keyId whose two halves disagree about their algorithm', () {
         // Reachable: the invariants are per (keyPartType, keyAlgorithmType),
         // so nothing compares a keyId's two halves with each other — verified
         // by probe, `addKey` accepts this. Handing the pair out would sign
         // ML-DSA while advertising an RSA public key.
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-          part('sign:mldsa65:1', CryptographicKeyType.privateSigning,
-              KeyAlgorithmType.mlDsa65, 'mldsa-priv',
+          part('sign:mldsa65:1', CryptographicMaterialRole.privateSigning,
+              CryptographicMaterialAlgorithm.mlDsa65, 'mldsa-priv',
               enrollmentId: 'E1'),
-          part('sign:mldsa65:1', CryptographicKeyType.publicVerification,
-              KeyAlgorithmType.rsa2048, 'rsa-pub',
+          part('sign:mldsa65:1', CryptographicMaterialRole.publicVerification,
+              CryptographicMaterialAlgorithm.rsa2048, 'rsa-pub',
               enrollmentId: 'E1'),
         ]);
 
@@ -1022,11 +1045,13 @@ void main() {
         // — each enrollment has its own container — and this pins that the
         // structural version holds just as the parse-based one did.
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-          ...signingPair('E1:sub', KeyAlgorithmType.mlDsa65, value: 'sub'),
+          ...signingPair('E1:sub', CryptographicMaterialAlgorithm.mlDsa65,
+              value: 'sub'),
         ]);
 
         expect(atKeys.signingKeysFor('E1'), isEmpty);
-        expect(atKeys.signingKeysFor('E1:sub').single.privateKey, b64('sub-priv'));
+        expect(
+            atKeys.signingKeysFor('E1:sub').single.privateKey, b64('sub-priv'));
       });
     });
 
@@ -1040,11 +1065,15 @@ void main() {
       test('retires both halves of the named algorithm and returns its keyId',
           () {
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-          ...signingPair('E1', KeyAlgorithmType.rsa2048, value: 'rsa'),
-          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'mldsa'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.rsa2048,
+              value: 'rsa'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
+              value: 'mldsa'),
         ]);
 
-        expect(atKeys.retireSigningKeys('E1', KeyAlgorithmType.rsa2048),
+        expect(
+            atKeys.retireSigningKeys(
+                'E1', CryptographicMaterialAlgorithm.rsa2048),
             ['sign:rsa2048:1']);
 
         expect(atKeys.signingKeysFor('E1').map((k) => k.algorithm).toList(),
@@ -1056,8 +1085,8 @@ void main() {
             reason: 'and starts being one it advertises as retired — the same '
                 'key, which is what keeps what it signed verifiable');
         for (final type in [
-          CryptographicKeyType.privateSigning,
-          CryptographicKeyType.publicVerification
+          CryptographicMaterialRole.privateSigning,
+          CryptographicMaterialRole.publicVerification
         ]) {
           final material = atKeys.getKey('E1', 'sign:rsa2048:1', type);
           expect(material!.status, KeyPartStatus.retired,
@@ -1075,17 +1104,21 @@ void main() {
         // identity is (enrollment, keyId).
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
           ...signingRoot(),
-          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'own'),
-          ...signingPair('E2', KeyAlgorithmType.mlDsa65, value: 'other'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
+              value: 'own'),
+          ...signingPair('E2', CryptographicMaterialAlgorithm.mlDsa65,
+              value: 'other'),
         ]);
 
-        expect(atKeys.retireSigningKeys('E1', KeyAlgorithmType.mlDsa65),
+        expect(
+            atKeys.retireSigningKeys(
+                'E1', CryptographicMaterialAlgorithm.mlDsa65),
             ['sign:mldsa65:1']);
 
         expect(
             atKeys
                 .getAtSignKey(
-                    'root:mldsa65:1', CryptographicKeyType.privateSigning)!
+                    'root:mldsa65:1', CryptographicMaterialRole.privateSigning)!
                 .status,
             KeyPartStatus.active);
         expect(atKeys.signingKeysFor('E2').single.privateKey, b64('other-priv'),
@@ -1103,17 +1136,19 @@ void main() {
         // all, where a role-based selector would withdraw the other thing and
         // report that it had retired a signing key.
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-          part('root:mldsa65:1', CryptographicKeyType.privateSigning,
-              KeyAlgorithmType.mlDsa65, 'not-a-signing-key',
+          part('root:mldsa65:1', CryptographicMaterialRole.privateSigning,
+              CryptographicMaterialAlgorithm.mlDsa65, 'not-a-signing-key',
               enrollmentId: 'E1'),
         ]);
 
         expect(
-            atKeys.retireSigningKeys('E1', KeyAlgorithmType.mlDsa65), isEmpty);
+            atKeys.retireSigningKeys(
+                'E1', CryptographicMaterialAlgorithm.mlDsa65),
+            isEmpty);
         expect(
             atKeys
                 .getKey('E1', 'root:mldsa65:1',
-                    CryptographicKeyType.privateSigning)!
+                    CryptographicMaterialRole.privateSigning)!
                 .status,
             KeyPartStatus.active);
       });
@@ -1121,12 +1156,17 @@ void main() {
       test('is a no-op when the enrollment holds nothing of that algorithm',
           () {
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'mldsa'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
+              value: 'mldsa'),
         ]);
 
-        expect(atKeys.retireSigningKeys('E1', KeyAlgorithmType.rsa2048),
+        expect(
+            atKeys.retireSigningKeys(
+                'E1', CryptographicMaterialAlgorithm.rsa2048),
             isEmpty);
-        expect(atKeys.retireSigningKeys('E-unknown', KeyAlgorithmType.mlDsa65),
+        expect(
+            atKeys.retireSigningKeys(
+                'E-unknown', CryptographicMaterialAlgorithm.mlDsa65),
             isEmpty,
             reason: 'an enrollment this file does not hold is not an error '
                 'here: retireKey throws on an unknown keyId, and turning that '
@@ -1135,8 +1175,7 @@ void main() {
         expect(atKeys.signingKeysFor('E1'), hasLength(1));
       });
 
-      test('a status this build cannot read is advertised, with its token',
-          () {
+      test('a status this build cannot read is advertised, with its token', () {
         // The keyfile's status vocabulary is open, so a newer build may say
         // something about a signing key that this one has never heard of. This
         // selector read exactly `retired` until 2026-08-22 and SKIPPED such a
@@ -1147,9 +1186,10 @@ void main() {
         // own status is an open token there is nothing left to guess: the
         // keyfile's word travels out unchanged.
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-          ...signingPair('E1', KeyAlgorithmType.rsa2048,
+          ...signingPair('E1', CryptographicMaterialAlgorithm.rsa2048,
               value: 'rsa', status: 'revoked'),
-          ...signingPair('E1', KeyAlgorithmType.mlDsa65, value: 'mldsa'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
+              value: 'mldsa'),
         ]);
 
         final withdrawn = atKeys.withdrawnSigningKeysFor('E1');
@@ -1174,7 +1214,7 @@ void main() {
         // nothing to verify and nothing to say - it is the one non-active
         // status that stays out.
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-          ...signingPair('E1', KeyAlgorithmType.rsa2048,
+          ...signingPair('E1', CryptographicMaterialAlgorithm.rsa2048,
               value: 'rsa', status: KeyPartStatus.dead),
         ]);
 
@@ -1183,11 +1223,13 @@ void main() {
 
       test('leaves an already-retired key where it is', () {
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-          ...signingPair('E1', KeyAlgorithmType.rsa2048,
+          ...signingPair('E1', CryptographicMaterialAlgorithm.rsa2048,
               value: 'rsa', status: KeyPartStatus.retired),
         ]);
 
-        expect(atKeys.retireSigningKeys('E1', KeyAlgorithmType.rsa2048),
+        expect(
+            atKeys.retireSigningKeys(
+                'E1', CryptographicMaterialAlgorithm.rsa2048),
             isEmpty,
             reason: 'selected on active material, so a start after the '
                 'withdrawal has nothing to do and rewrites nothing');
@@ -1200,19 +1242,19 @@ void main() {
           atsign: '@alice'.toAtsign(),
           keysList: [authKey('auth:rsa2048:1', enrollmentId: 'E1')]);
 
-      atKeys.replaceKey(
-          'E1', 'auth:rsa2048:1',
+      atKeys.replaceKey('E1', 'auth:rsa2048:1',
           [authKey('auth:rsa2048:2', enrollmentId: 'E1', value: 'bmV3')]);
 
       expect(
           atKeys
               .getKey('E1', 'auth:rsa2048:1',
-                  CryptographicKeyType.privateAuthentication)!
+                  CryptographicMaterialRole.privateAuthentication)!
               .status,
           KeyPartStatus.retired);
       expect(
           atKeys
-              .getKey('E1', 'auth:rsa2048:2', CryptographicKeyType.privateAuthentication)!
+              .getKey('E1', 'auth:rsa2048:2',
+                  CryptographicMaterialRole.privateAuthentication)!
               .bytes
               .toString(),
           'bmV3');
@@ -1238,13 +1280,13 @@ void main() {
       expect(
           atKeys
               .getKey('E1', 'auth:rsa2048:1',
-                  CryptographicKeyType.privateAuthentication)!
+                  CryptographicMaterialRole.privateAuthentication)!
               .status,
           KeyPartStatus.active,
           reason: 'the outgoing key must still be active after a rollback');
       expect(
-          atKeys.getKey(
-              'E1', 'auth:rsa2048:2', CryptographicKeyType.privateAuthentication),
+          atKeys.getKey('E1', 'auth:rsa2048:2',
+              CryptographicMaterialRole.privateAuthentication),
           isNull,
           reason: 'nothing from the failed rotation may survive');
       expect(atKeys.resolveAuthenticatingEnrollment(), 'E1');
@@ -1253,7 +1295,9 @@ void main() {
     test('the authenticating enrollment is null with no typed auth material',
         () {
       // A legacy keyfile: its APKAM keypair is in the flat fields.
-      expect(legacyAtKeys(atsign: '@alice'.toAtsign()).resolveAuthenticatingEnrollment(),
+      expect(
+          legacyAtKeys(atsign: '@alice'.toAtsign())
+              .resolveAuthenticatingEnrollment(),
           isNull);
     });
   });

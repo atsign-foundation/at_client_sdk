@@ -6,7 +6,7 @@ import 'package:at_auth/at_auth.dart'
         AtEnrollment,
         AtKeys,
         CryptographicMaterial,
-        CryptographicKeyType,
+        CryptographicMaterialRole,
         EnrollmentUpdateRequest,
         KeyEntryStatus,
         KeyPartStatus,
@@ -167,7 +167,7 @@ class KeyPackageMinting with ApkamSigning {
         keys.addKey(CryptographicMaterial(
           enrollmentId: enrolment,
           keyId: key.kpid,
-          keyPartType: CryptographicKeyType.publicEncapsulation,
+          keyPartType: CryptographicMaterialRole.publicEncapsulation,
           keyAlgorithmType: key.materialAlgo,
           bytes: AtBytes(key.publicKey),
           createdAt: key.createdAt,
@@ -175,7 +175,7 @@ class KeyPackageMinting with ApkamSigning {
         keys.addKey(CryptographicMaterial(
           enrollmentId: enrolment,
           keyId: key.kpid,
-          keyPartType: CryptographicKeyType.privateDecapsulation,
+          keyPartType: CryptographicMaterialRole.privateDecapsulation,
           keyAlgorithmType: key.materialAlgo,
           // The SEED, not the decapsulation key: they are the same bytes for
           // X-Wing and not for ML-KEM, whose decapsulation key is expanded and
@@ -276,7 +276,8 @@ class KeyPackageMinting with ApkamSigning {
             ? material.enrollmentId == enrolment
             : material.enrollmentId == null;
         if (!owned) continue;
-        if (material.keyPartType != CryptographicKeyType.publicEncapsulation) {
+        if (material.keyPartType !=
+            CryptographicMaterialRole.publicEncapsulation) {
           continue;
         }
         if (material.status == KeyPartStatus.dead) continue;
