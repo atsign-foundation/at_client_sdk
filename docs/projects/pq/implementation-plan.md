@@ -56,7 +56,19 @@ that file instead; the list below is the PQ release work.
    positions are now released, which lifts the gate on everything after
    them.** No workflow in this repo publishes to pub.dev (checked
    `.github/workflows/` 2026-08-20), so each publish stays gkc's step.
-2. **[RECOMMENDED] Carve at_lookup** — train position 3, and **now
+2. **[RECOMMENDED] Make `KeyEntryStatus` a typed String wrapper** —
+   [14.49.1](#1491-keyentrystatus-becomes-a-typed-string-wrapper--ruled-not-yet-built)
+   has the ruling, the evidence and the shape wanted. Ruled by gkc 2026-08-22
+   and cheap only while at_auth is unpublished. Start at
+   `packages/at_auth/lib/src/enroll/key_entry_status.dart`; the seam that
+   proves it matters is `key_package_persistence.dart:86`. ⛔ Do NOT convert
+   `EnrollmentKeyExchangeMode` — 14.49.1 says why.
+3. **Carve at_auth** — train position 5, and it now carries the keyfile fix
+   (an empty `keys[]` is read, not refused) plus the evidence for staying a
+   minor: a keyfile CRAM-onboarded with published at_auth 3.3.0 loads, and
+   published at_client 3.14.0 compiles against this branch. Do the
+   `KeyEntryStatus` change first so it rides with the same carve.
+4. ~~Carve at_lookup~~ **Done — merged as #2174** — train position 3, and **now
    unblocked for publish as well as carve**: its `at_commons: ^5.16.0` floor
    is satisfiable on pub.dev as of 2026-08-21, and 14.18's compile
    differential already established it needs nothing newer than the
@@ -2520,6 +2532,92 @@ call itself. Do not "fix" the product here.
 `SyncStatus.failure`, so a **failed** sync returned to its caller as success.
 The rewrite retries on failure (bounded at five rounds) and throws if still
 not in sync.
+
+### 14.49 `KeyEntryStatus` becomes a typed String, and the release train is all candidates
+
+**Two rulings by gkc, 2026-08-22.** Recorded together because both are cheap
+only while these packages are unpublished.
+
+#### 14.49.1 `KeyEntryStatus` becomes a typed String wrapper — RULED, NOT YET BUILT
+
+Give `KeyEntryStatus` the shape `KeyPartStatus` already has: a class of
+`static const String` constants, an open value, and an unknown token
+**preserved** rather than flattened.
+
+⚠️ **The `KeyPartStatus` justification does NOT transfer, and stating it
+wrongly would send the next reader looking for a bug that is not there.**
+That conversion was forced because the old reader *threw*: an unknown status
+refused the whole keyfile, so any new value was a permanent at-rest break.
+`KeyEntryStatus.fromWire` already tolerates unknowns without throwing
+(`key_entry_status.dart`: absent or `active` → active, **anything else →
+retired**). Its problem is not refusal but **lossy** tolerance.
+
+What is actually wrong, measured 2026-08-22:
+
+- **The open type feeds the closed one and the openness is discarded one hop
+  later.** `key_package_persistence.dart:86` maps
+  `material.status == KeyPartStatus.active ? KeyEntryStatus.active :
+  KeyEntryStatus.retired`. `KeyPartStatus` was made open precisely so an
+  unrecognised value round-trips unmodified; that value is collapsed to
+  `retired` at this seam.
+- **A round trip rewrites a newer client's stronger statement.** The reader
+  collapses any unknown to `retired` (`apsk_advertisement.dart:145`) and the
+  writer emits `key.status.name` (`:59`), so a `revoked` read by this build
+  and written back becomes `retired`.
+- **The collapse is fail-OPEN in the direction that matters.** Retirement
+  withdraws the future and preserves the past — a retired signing key still
+  verifies what it signed. A compromised key must not. Mapping an unknown
+  `revoked` to `retired` therefore leaves an older build verifying forgeries.
+
+Extensions to expect, in rough order of likelihood: **`revoked`/`compromised`**
+(must restrict verification, which the binary cannot express), **`suspended`**
+(temporary, where `retired` is a one-way door), **`pending`/`provisional`**
+(advertised ahead of activation, never becoming usable for a build that
+predates the value).
+
+The shape wanted: keep the raw token; offer `bool get offeredForNewOperations`
+for the sign/seal decision and something honest for the verify decision, so an
+unknown status can be treated as **more** restrictive rather than silently as
+`retired`.
+
+⛔ **`EnrollmentKeyExchangeMode` stays an enum. Do not convert it.** It is
+never parsed from any wire or JSON value — every use site sets it locally (two
+named constructors fix it, `enrollment_submitter.dart` branches on it,
+at_client re-exports it for `PqPosture`). Nothing outside this process writes
+it, so there is no forward-compatibility problem; a third mode later is
+additive and the only thing it breaks is an exhaustive `switch` the compiler
+will point at. An open String would trade a checked domain for stringly-typed
+branching and buy nothing. Revisit only if an atServer or a peer starts
+reporting it back.
+
+Scope: `KeyEntryStatus` has **107** references across the tree and is pinned by
+raw-literal wire tests in `at_auth/test/wire_literal_pins_test.dart`. Re-derive
+that count rather than trusting it.
+
+#### 14.49.2 Every remaining package publishes as a release candidate
+
+Ruled by gkc. at_lookup `3.7.0-rc1` and at_server_status `1.1.2-rc1` are
+merged; at_auth `3.4.0-rc1`, at_client `3.15.0-rc1`, at_client_flutter
+`1.1.5-rc1` and at_onboarding_cli `1.17.0-rc1` are on the spike awaiting their
+carves.
+
+**Why all of them, not just at_lookup:** a package that declares a candidate
+floor and publishes as STABLE resolves its consumers onto the candidate anyway,
+through a version bump they take without thinking.
+
+**The prerelease rule this rests on, measured rather than assumed:** a caret
+range does **not** admit a prerelease of its own lower bound (`^3.7.0` rejects
+`3.7.0-rc1`), but **does** admit one strictly above it (`^3.6.0` accepts
+`3.7.0-rc1`). That is why at_lookup's and at_auth's bumps forced constraint
+changes while the others needed none.
+
+⚠️ **OWED AT THE REAL RELEASE, and recorded here because a commit message is
+not a durable home for it:** every constraint moved to a `-rc1` floor reverts
+to its stable form when these publish, or a stable release ships requiring a
+candidate. The sites: `at_lookup: ^3.7.0-rc1` in at_auth, at_client and
+at_server_status; `at_auth: ^3.4.0-rc1` in at_client, at_client_flutter,
+at_onboarding_cli and `tests/pq_matrix/current`. Re-derive with
+`git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'`.
 
 ### 14.48 A `primary` client can sign with a key its own advertisement just withdrew
 
