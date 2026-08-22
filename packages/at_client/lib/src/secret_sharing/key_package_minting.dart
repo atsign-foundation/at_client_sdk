@@ -134,7 +134,7 @@ class KeyPackageMinting with ApkamSigning {
     final held = advertised.keys;
     final active = [
       for (final key in held)
-        if (key.status == KeyEntryStatus.active) key
+        if (key.offeredForNewOperations) key
     ];
 
     final missing = [
@@ -287,15 +287,18 @@ class KeyPackageMinting with ApkamSigning {
           use: SecretSharingAlgos.useEnc,
           alg: alg,
           pub: Uint8List.fromList(material.bytes.bytes),
-          status: material.status == KeyPartStatus.active
-              ? KeyEntryStatus.active
-              : KeyEntryStatus.retired,
+          // The keyfile's own token, carried across rather than collapsed to
+          // one of the two this build knows. Both vocabularies are open and
+          // they agree on `active`/`retired`; a third value written by a newer
+          // client says something narrower about the key than either, and
+          // rewriting it here would republish the record with that statement
+          // weakened.
+          status: material.status,
         ));
       }
       entries.sort((a, b) {
-        if ((a.status == KeyEntryStatus.active) !=
-            (b.status == KeyEntryStatus.active)) {
-          return a.status == KeyEntryStatus.active ? -1 : 1;
+        if (a.offeredForNewOperations != b.offeredForNewOperations) {
+          return a.offeredForNewOperations ? -1 : 1;
         }
         return 0;
       });

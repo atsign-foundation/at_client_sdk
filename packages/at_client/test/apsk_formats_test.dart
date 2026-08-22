@@ -134,6 +134,38 @@ void main() {
       expect(parsed.publicKey, 'AAEC');
     });
 
+    test('a status this build cannot read is NOT a verification candidate', () {
+      // The asymmetry with the test above, and the reason `status` is an open
+      // token rather than a two-valued enum. `retired` says "withdrawn from
+      // new use, still vouches for the past". A token this build has never
+      // seen says something else, and the likeliest something else - a key
+      // whose owner has disowned it - is precisely one whose signatures must
+      // STOP checking out here. Reading it as `retired`, which is what this
+      // did until 2026-08-22, left an older build verifying forgeries.
+      final parsed = parseApskValue('{"v":1,"keys":['
+          '{"kid":"k1","use":"sign","alg":"mldsa65","pub":"AAEC",'
+          '"status":"revoked"},'
+          '{"kid":"k2","use":"sign","alg":"rsa2048","pub":"CCEC"}]}');
+
+      expect(parsed.keys.map((k) => k.kid), ['k2'],
+          reason: 'the revoked entry is not offered to the verifier at all');
+      expect(parsed.signingAlgo, SigningAlgoType.rsa2048,
+          reason: 'and it does not win the strength contest either - an '
+              'entry that is dropped cannot select the algorithm');
+    });
+
+    test('an advertisement of nothing verifiable is refused, not half-read',
+        () {
+      // Same rule as an advertisement of algorithms this build does not know:
+      // empty means refuse outright rather than fall back to a key derived
+      // some other way.
+      expect(
+          () => parseApskValue('{"v":1,"keys":['
+              '{"kid":"k1","use":"sign","alg":"mldsa65","pub":"AAEC",'
+              '"status":"revoked"}]}'),
+          throwsA(isA<AtSigningVerificationException>()));
+    });
+
     test('the array form is unmistakable to a bare-RSA consumer', () {
       final array = jsonEncode(apskAdvertisement(keys: [
         ApskSigningKey.forPublicKey(alg: SigningAlgoType.mldsa65, pub: 'AAEC')

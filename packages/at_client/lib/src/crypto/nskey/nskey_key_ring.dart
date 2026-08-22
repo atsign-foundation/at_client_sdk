@@ -2,8 +2,7 @@ import 'dart:typed_data';
 
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
-import 'package:at_client/src/secret_sharing/key_package.dart'
-    show KeyEntryStatus, PackageKey;
+import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_auth/at_auth.dart' show publicKeyKid;
 
 /// The version stamped on the nskey advertisement payload.
@@ -181,9 +180,7 @@ class NskeyAdvertisement {
       {String use = SecretSharingAlgos.useEnc}) {
     for (final alg in supportedAlgos) {
       for (final key in keys) {
-        if (key.alg == alg &&
-            key.use == use &&
-            key.status == KeyEntryStatus.active) {
+        if (key.alg == alg && key.use == use && key.offeredForNewOperations) {
           return key;
         }
       }

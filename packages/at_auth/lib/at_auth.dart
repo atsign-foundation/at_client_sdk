@@ -21,7 +21,8 @@ export 'src/enroll/apsk_advertisement.dart';
 export 'src/enroll/apkam_possession_proof.dart';
 // What an approved enrollment is asking to change about its own record.
 export 'src/enroll/models/enrollment_update_request.dart';
-// The active/retired status every advertised key entry in the protocol carries.
+// The status every advertised key entry in the protocol carries: an open
+// token whose two known values are active and retired.
 export 'src/enroll/key_entry_status.dart';
 // Contains fields related to enrollment response received from the secondary server
 export 'src/enroll/models/at_enrollment_response.dart';

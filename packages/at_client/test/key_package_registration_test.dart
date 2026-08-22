@@ -328,11 +328,32 @@ void main() {
 
       await expectLater(
           registrant.register(),
-          throwsA(isA<StateError>().having((e) => '$e', 'message',
-              contains('every one of them is retired'))),
+          throwsA(isA<StateError>().having(
+              (e) => '$e', 'message', contains('not one of them is active'))),
           reason: 'a retired key is retained to open what is in flight to it, '
               'not to be reached at — advertising one as the address would '
               'point every peer at a key this client has withdrawn');
+    });
+
+    test('and it names the statuses it actually found, not "retired"',
+        () async {
+      // `status` is an open token, so reaching this throw proves "none is
+      // active" and NOT "all are retired". The message said the latter until
+      // 2026-08-22, which for a holding carrying, say, a revoked key would
+      // have described it as merely superseded and gone on to explain that it
+      // still opens what is in flight to it.
+      final registrant = TestRegistrant(buildMockClient('enroll-a'))
+        ..directory = FakeEnrollmentDirectory();
+      registrant.loadApkamKeys = () async => PersistedApkamKeys(encKeys: [
+            PersistedEncKey(encSeed: base64Encode(seedA), status: 'revoked'),
+          ]);
+
+      await expectLater(
+          registrant.register(),
+          throwsA(isA<StateError>()
+              .having((e) => '$e', 'message', contains('"revoked"'))),
+          reason: 'the diagnostic has to say what the holding actually is, or '
+              'it sends a reader looking for a rotation that never happened');
     });
 
     test('an empty holding refuses rather than minting behind the app\'s back',

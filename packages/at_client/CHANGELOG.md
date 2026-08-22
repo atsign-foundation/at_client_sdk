@@ -9,6 +9,24 @@ files, against a positive control of `AtClientPreference` in 20. The BREAKING
 labels below were rewritten in the same pass: as written they sent a reader
 hunting for a constructor argument that never existed in a release. -->
 
+- **BREAKING** refactor: `KeyEntryStatus` (re-exported from at_auth) is an open
+  `String` vocabulary rather than an `enum`, so `PackageKey.status` and
+  `PersistedEncKey.status` are `String`. `PackageKey.offeredForNewOperations`
+  is the sender-side question - whether to seal to this key - and it answers
+  **no** for a token this build has never seen. at_auth's CHANGELOG has the
+  full reasoning; nothing published has ever held the type.
+  - Two seams stop collapsing the keyfile's own open `KeyPartStatus` into one
+    of the two values this build knows: the key package a client adopts from
+    its keyfile at startup, and the advertisement `reconcileKeyPackage`
+    republishes. Both now carry the keyfile's token across unchanged, so a
+    build that does not understand a status cannot republish the owner's record
+    with that status weakened.
+  - Verification is fail-closed on an unreadable status. `parseApskValue` drops
+    an advertised entry whose status it cannot read, and the signing-chain
+    verifier drops such a root from its candidates - so an advertisement of
+    nothing verifiable is refused outright rather than half-read. A `retired`
+    entry is still a candidate, which is the whole reason retired entries stay
+    advertised.
 - fix: a signer can no longer sign with the authentication key in the window
   where its own advertisement has already withdrawn it. The PQ startup mints
   an enrollment's signing keys concurrently with whatever the app does next,
@@ -1072,7 +1090,8 @@ hunting for a constructor argument that never existed in a release. -->
   dead is the end of that road. `keyPackageMaterial` keeps its signature and is
   now the first entry of that list.
 - feat: a key entry can say it is `retired` — retained, but not offered for new
-  operations. `PackageKey` gains a `status` of `active` or `retired`
+  operations. `PackageKey` gains a `status`, an open token whose two known
+  values are `active` and `retired`
   (`KeyEntryStatus`, which lives in **at_auth** so that all three records
   advertising keys name one type for one field — at_client depends on at_auth
   and not the reverse, the same reason `publicKeyKid` lives there; re-exported
@@ -1085,8 +1104,10 @@ hunting for a constructor argument that never existed in a release. -->
   the operation a key serves — a retired signing key still verifies what it
   signed. Emitted only when a key is retired, since absent already reads as
   active, so no record that has never rotated changes a byte. A `status` this
-  build does not recognise reads as retired, the one reading that cannot make
-  it use a key its owner has withdrawn. Nothing in this release produces a
+  build does not recognise is carried through verbatim and is neither used nor
+  trusted — see the open-`String` entry at the top of this heading, which
+  replaced an earlier reading of "unrecognised means retired" before either
+  shipped. Nothing in this release produces a
   retired entry; the reader has to understand the shape before any writer can
   emit it.
 - **breaking (unreleased surface): the nskey advertisement carries a list of

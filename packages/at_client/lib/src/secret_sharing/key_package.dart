@@ -25,9 +25,13 @@ class PackageKey {
   final String alg;
   final String pub;
 
-  /// Whether this key is still offered for new operations — see
-  /// [KeyEntryStatus].
-  final KeyEntryStatus status;
+  /// Whether this key is still offered for new operations — an open token,
+  /// see [KeyEntryStatus].
+  ///
+  /// Ask [offeredForNewOperations] rather than comparing the token: that is
+  /// the decision this field exists for on the sender's side, and it answers
+  /// correctly for a token this build has never heard of.
+  final String status;
 
   PackageKey({
     required this.use,
@@ -47,7 +51,7 @@ class PackageKey {
     required String use,
     required String alg,
     required Uint8List pub,
-    KeyEntryStatus status = KeyEntryStatus.active,
+    String status = KeyEntryStatus.active,
   }) : this(use: use, alg: alg, pub: base64Encode(pub), status: status);
 
   /// The key material [pub] encodes.
@@ -70,17 +74,26 @@ class PackageKey {
   /// not verify, or a sender sealing to a kid nobody listens on.
   static String computeKid(String pub) => publicKeyKidOfBase64(pub);
 
-  /// `status` is emitted only when the key is retired, because absent already
-  /// means [KeyEntryStatus.active] and every record written before rotation
-  /// existed says it that way. Emitting the default on every entry would move
-  /// the bytes of every advertisement in the protocol to state what their
-  /// absence already states.
+  /// Whether a sender may seal to this key — see
+  /// [KeyEntryStatus.offersNewOperations]. A holder deciding whether it can
+  /// **open** an envelope already addressed here does not ask: a retired key
+  /// is retained precisely so that it still opens what was sealed to it.
+  bool get offeredForNewOperations =>
+      KeyEntryStatus.offersNewOperations(status);
+
+  /// `status` is emitted for any key that is not active and omitted for one
+  /// that is, because absent already means [KeyEntryStatus.active] and every
+  /// record written before rotation existed says it that way. Emitting the
+  /// default on every entry would move the bytes of every advertisement in the
+  /// protocol to state what their absence already states. Whatever token is
+  /// emitted is the one that was read: an older build republishing a record
+  /// must not weaken what its owner said about a key.
   Map<String, Object?> toJson() => {
         'kid': kid,
         'use': use,
         'alg': alg,
         'pub': pub,
-        if (status != KeyEntryStatus.active) 'status': status.name,
+        if (status != KeyEntryStatus.active) 'status': status,
       };
 
   static PackageKey? fromJson(Object? json) {
@@ -225,9 +238,7 @@ class KeyPackage {
       {String use = SecretSharingAlgos.useEnc}) {
     for (final alg in supportedAlgos) {
       for (final key in keys) {
-        if (key.alg == alg &&
-            key.use == use &&
-            key.status == KeyEntryStatus.active) {
+        if (key.alg == alg && key.use == use && key.offeredForNewOperations) {
           return key;
         }
       }

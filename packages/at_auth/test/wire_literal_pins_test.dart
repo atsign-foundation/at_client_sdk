@@ -346,9 +346,63 @@ void main() {
           read.firstWhere((k) => k.kid == 'k1').status, KeyEntryStatus.retired);
       expect(
           read.firstWhere((k) => k.kid == 'k2').status, KeyEntryStatus.active);
-      expect(read.firstWhere((k) => k.kid == 'k1').status.name, 'retired',
+      expect(read.firstWhere((k) => k.kid == 'k1').status, 'retired',
           reason: 'raw-literal: the atServer stores this document verbatim '
               'and every implementation reads these spellings');
+    });
+
+    test('an unrecognised status is read verbatim and written back verbatim',
+        () {
+      // A property of the reader/writer PAIR, and deliberately so: no caller
+      // reads an `_apsk` record and republishes its entries today - every
+      // `_apsk` writer composes from local key material - so this pins the
+      // format rather than covering a live path. It is what stops a future
+      // writer being wrong, and the live version of the same loss (rebuilding
+      // a key package advertisement from the keyfile) is pinned in at_client's
+      // key_package_minting_test.dart. Until 2026-08-22 the read collapsed to
+      // `retired` and the write emitted `retired`.
+      final read = apskSigningKeys({
+        'v': 1,
+        'keys': [
+          {
+            'kid': 'k1',
+            'use': 'sign',
+            'alg': 'rsa2048',
+            'pub': 'AAEC',
+            'status': 'revoked'
+          },
+        ]
+      });
+
+      expect(read.single.status, 'revoked');
+      expect(read.single.offeredForNewOperations, isFalse,
+          reason: 'a token this build does not know is never chosen to sign '
+              'something new with');
+      expect(read.single.vouchesForPastOperations, isFalse,
+          reason: 'nor does it verify what it already signed - `retired` '
+              'would have said it does, and a revoked key whose signatures '
+              'go on checking out is the one outcome nothing recovers from');
+
+      final rewritten =
+          (apskAdvertisement(keys: read)['keys'] as List).cast<Map>();
+      expect(rewritten.single['status'], 'revoked');
+    });
+
+    test('active and retired are the two statuses that verify the past', () {
+      // The pair of decisions the field exists for. Retirement withdraws the
+      // future and keeps the past; only `active` offers the future.
+      expect(KeyEntryStatus.offersNewOperations(KeyEntryStatus.active), isTrue);
+      expect(
+          KeyEntryStatus.offersNewOperations(KeyEntryStatus.retired), isFalse);
+      expect(KeyEntryStatus.vouchesForPastOperations(KeyEntryStatus.active),
+          isTrue);
+      expect(KeyEntryStatus.vouchesForPastOperations(KeyEntryStatus.retired),
+          isTrue,
+          reason: 'a retired signing key still verifies every envelope it '
+              'signed, which is the whole reason its entry is kept');
+      expect(KeyEntryStatus.known, {'active', 'retired'},
+          reason: 'raw literals: these spellings are on records the atServer '
+              'stores verbatim, so re-spelling one is a protocol change');
     });
 
     test('an entry with no kid is skipped, so a writer cannot omit it', () {

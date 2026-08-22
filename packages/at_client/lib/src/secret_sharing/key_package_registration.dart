@@ -39,8 +39,15 @@ class PersistedEncKey {
   final String keyAlgo;
 
   /// Defaults to [KeyEntryStatus.active], which is what every seed written
-  /// before this field existed was — there was only ever one.
-  final KeyEntryStatus status;
+  /// before this field existed was — there was only ever one. An open token:
+  /// ask [offeredForNewOperations] rather than comparing it.
+  final String status;
+
+  /// Whether this is the key the enrollment advertises and is addressed at —
+  /// see [KeyEntryStatus.offersNewOperations]. A key that is not still opens
+  /// what is already in flight to it.
+  bool get offeredForNewOperations =>
+      KeyEntryStatus.offersNewOperations(status);
 
   PersistedEncKey({
     required this.encSeed,
@@ -91,7 +98,10 @@ class _HeldEncKey {
   final Uint8List secretKey;
 
   final String keyAlgo;
-  final KeyEntryStatus status;
+  final String status;
+
+  bool get offeredForNewOperations =>
+      KeyEntryStatus.offersNewOperations(status);
 
   _HeldEncKey({
     required this.seed,
@@ -162,16 +172,17 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
     }
     for (final alg in SecretSharingAlgos.keyAlgos) {
       for (final held in _encKeys) {
-        if (held.keyAlgo == alg && held.status == KeyEntryStatus.active) {
+        if (held.keyAlgo == alg && held.offeredForNewOperations) {
           return held;
         }
       }
     }
     throw StateError(
-        'this client holds ${_encKeys.length} enc key(s) and every one of them '
-        'is retired, so it advertises no address for new traffic. A retired '
-        'key is retained to open what is already in flight to it; it is not '
-        'something to be reached at.');
+        'this client holds ${_encKeys.length} enc key(s) and not one of them '
+        'is active, so it advertises no address for new traffic. Their '
+        'statuses are ${_encKeys.map((k) => '"${k.status}"').join(', ')}. '
+        'A key that is not active is retained to open what is already in '
+        'flight to it; it is not something to be reached at.');
   }
 
   /// This APKAM keypair's encapsulation public key (raw bytes) — the active
@@ -326,8 +337,7 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// Changing the preference therefore takes effect on the next enrollment, not
   /// on this one.
   Future<_HeldEncKey> _expandEncKey(PersistedEncKey entry) async {
-    if (entry.status == KeyEntryStatus.active &&
-        entry.keyAlgo != configuredKeyAlgo) {
+    if (entry.offeredForNewOperations && entry.keyAlgo != configuredKeyAlgo) {
       logger.info(
           'This enrollment holds a ${entry.keyAlgo} key package and the '
           'preference asks for $configuredKeyAlgo. Keeping the '
@@ -342,7 +352,7 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// seed; ML-KEM's is an expanded decapsulation key that nothing turns back
   /// into a public half.
   Future<_HeldEncKey> _heldFrom(
-      Uint8List seed, String algo, KeyEntryStatus status) async {
+      Uint8List seed, String algo, String status) async {
     final kp = await _kemFor(algo).keyPairFromSeed(seed);
     return _HeldEncKey(
       seed: seed,

@@ -50,11 +50,18 @@ void bindKeyPackageToAtKeys(
 /// The KEM enc seeds [atSign]'s keyfile holds for its key packages, or null
 /// if it holds none.
 ///
-/// A superseded package is adopted alongside the live one, as
-/// [KeyEntryStatus.retired]. That is what lets a client restarting after a
+/// A superseded package is adopted alongside the live one, carrying whatever
+/// status the keyfile gives it. That is what lets a client restarting after a
 /// rotation open envelopes a peer addressed before it — up to `envelopeTtl`,
 /// seven days, of traffic that a client holding only its current key could not
 /// even look for.
+///
+/// The status token crosses **verbatim**. Both vocabularies are open and they
+/// agree on `active` and `retired`, so there is nothing to translate; a third
+/// value a newer build wrote says something narrower than either, and mapping
+/// it onto one of the two would hand this client a key its own keyfile says
+/// more about than that. Only [KeyEntryStatus.active] is offered for new
+/// traffic, so an unknown token is never the advertised address.
 ///
 /// The status is the keyfile's own [KeyPartStatus], not a guess from age.
 /// `AtKeys.retireKey` is how a rotation records the transition, and
@@ -83,17 +90,21 @@ Future<PersistedApkamKeys?> _load(
         // whose algorithm token this build recognises.
         keyAlgo:
             SecretSharingAlgos.keyAlgoForMaterial(material.keyAlgorithmType)!,
-        status: material.status == KeyPartStatus.active
-            ? KeyEntryStatus.active
-            : KeyEntryStatus.retired,
+        // The keyfile's own token, carried across rather than collapsed to
+        // one of the two this build knows. Both vocabularies are open and they
+        // agree on `active`/`retired`; a third value written by a newer client
+        // says something narrower about the key than either, and flattening it
+        // to `retired` here would hand this client a key its own keyfile says
+        // more about than that.
+        status: material.status,
       ),
   ];
-  final retired =
-      entries.where((e) => e.status == KeyEntryStatus.retired).length;
+  final retained = entries.where((e) => !e.offeredForNewOperations).toList();
   _logger.info('Adopted the ${entries.first.keyAlgo} key package $atSign '
       'already holds (kpid ${materials.first.keyId})'
-      '${retired > 0 ? ', plus $retired superseded key(s) it can still be '
-          'addressed at' : ''}');
+      '${retained.isEmpty ? '' : ', plus ${retained.length} retained key(s) it '
+          'can still open envelopes with '
+          '(${retained.map((e) => e.status).join(', ')})'}');
   return PersistedApkamKeys(encKeys: entries);
 }
 

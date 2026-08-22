@@ -553,21 +553,64 @@ void main() {
     });
 
     test('the status spellings a reader accepts are frozen', () {
-      // Raw literals rather than `KeyEntryStatus.retired.name`, which would
-      // follow a rename through and pin nothing. The atServer stores these
-      // verbatim and every implementation reads them, so a change here is a
-      // protocol change and editing this line is what makes it reviewable.
-      expect(KeyEntryStatus.fromWire('active'), KeyEntryStatus.active);
-      expect(KeyEntryStatus.fromWire('retired'), KeyEntryStatus.retired);
-      expect(KeyEntryStatus.fromWire(null), KeyEntryStatus.active,
+      // Raw literals on the right rather than the constants, which would
+      // follow a re-spelling through and pin nothing. The atServer stores
+      // these verbatim and every implementation reads them, so a change here
+      // is a protocol change and editing this line is what makes it
+      // reviewable.
+      expect(KeyEntryStatus.fromWire('active'), 'active');
+      expect(KeyEntryStatus.fromWire('retired'), 'retired');
+      expect(KeyEntryStatus.fromWire(null), 'active',
           reason: 'absent is how every record written before rotation existed '
               'spells active');
-      expect(KeyEntryStatus.fromWire('verifyOnly'), KeyEntryStatus.retired,
-          reason: 'the spelling this one replaced, and an example of the rule '
-              'that governs every value this build does not know: narrower '
-              'than active, so never sealed to');
-      expect(KeyEntryStatus.fromWire(7), KeyEntryStatus.retired,
-          reason: 'a non-String status is not a licence to use the key');
+    });
+
+    test('an unrecognised status is carried through, not flattened', () {
+      // Until 2026-08-22 both of these read as `retired`, and the writers
+      // then emitted `retired` back - an older build rewriting a newer one's
+      // statement about a key the newer one owns.
+      expect(KeyEntryStatus.fromWire('verifyOnly'), 'verifyOnly',
+          reason: 'a token this build has never heard of survives the read, '
+              'so republishing the record does not weaken what it says');
+      expect(KeyEntryStatus.fromWire(7), '7',
+          reason: 'a status that is not a string is malformed rather than '
+              'unknown, and stringifying keeps what was written visible '
+              'without repairing it into a token that means something');
+
+      // Both decisions say no, which is the whole point of preserving it: an
+      // unknown token is MORE restrictive than either value this build knows,
+      // never less. `retired` was permissive on the second of these, and a
+      // revoked key that goes on verifying is unrecoverable.
+      for (final unknown in ['verifyOnly', 'revoked', '7', '']) {
+        expect(KeyEntryStatus.offersNewOperations(unknown), isFalse,
+            reason: '"$unknown" must never be signed with or sealed to');
+        expect(KeyEntryStatus.vouchesForPastOperations(unknown), isFalse,
+            reason: '"$unknown" must not verify what it signed either');
+      }
+      expect(KeyEntryStatus.offersNewOperations('active'), isTrue);
+      expect(KeyEntryStatus.offersNewOperations('retired'), isFalse);
+      expect(KeyEntryStatus.vouchesForPastOperations('active'), isTrue);
+      expect(KeyEntryStatus.vouchesForPastOperations('retired'), isTrue,
+          reason: 'retirement withdraws the future and keeps the past - a '
+              'retired key still verifies every envelope it signed');
+    });
+
+    test('an unrecognised status survives a PackageKey round trip', () {
+      // The half the tolerance above would be worthless without: the reader
+      // keeps the token and the writer emits it back, so a record read and
+      // republished by this build still says what its owner wrote.
+      final read = PackageKey.fromJson({
+        'kid': 'b5d4045c3f466fa9',
+        'use': 'enc',
+        'alg': 'x-wing',
+        'pub': 'QUJD',
+        'status': 'revoked',
+      })!;
+      expect(read.status, 'revoked');
+      expect(read.offeredForNewOperations, isFalse);
+      expect(read.toJson()['status'], 'revoked',
+          reason: 'emitting "retired" here would republish the record with '
+              'its owner\'s statement about this key weakened');
     });
 
     test('computeKid hashes the decoded key BYTES, not the base64 text', () {

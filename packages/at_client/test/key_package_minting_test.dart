@@ -101,7 +101,8 @@ void main() {
   /// wrong in the direction that hides a defect: every row passed while the
   /// production reader saw no held key at all, mint a duplicate under the same
   /// algorithm, and advertised it beside the one already in the record.
-  Future<String> fileHeldKey(String algorithm, {bool tagged = false}) async {
+  Future<String> fileHeldKey(String algorithm,
+      {bool tagged = false, String status = KeyPartStatus.active}) async {
     final kem = SecretSharingAlgos.kemFor(algorithm)!;
     final seed = kem.newSeed();
     final pair = await kem.keyPairFromSeed(seed);
@@ -115,6 +116,7 @@ void main() {
         keyAlgorithmType: materialAlgo,
         bytes: AtBytes(pair.publicKey),
         createdAt: DateTime.now().toUtc(),
+        status: status,
       ));
       keys.addKey(AtKeysMaterial(
         enrollmentId: tagged ? enrollmentId : null,
@@ -123,6 +125,7 @@ void main() {
         keyAlgorithmType: materialAlgo,
         bytes: AtBytes(seed),
         createdAt: DateTime.now().toUtc(),
+        status: status,
       ));
       return true;
     });
@@ -331,6 +334,42 @@ void main() {
       expect(byKid[staying]!.status, KeyEntryStatus.active);
       expect(package.bestKeyFor(SecretSharingAlgos.keyAlgos)!.kid, staying,
           reason: 'nothing new is sealed to a retired key');
+    });
+
+    test('a keyfile status this build cannot read is republished verbatim',
+        () async {
+      // The advertisement is rewritten WHOLE on every reconcile, so whatever
+      // this seam decides an entry's status is becomes what the record says.
+      // Until 2026-08-22 it read the keyfile's open token and wrote one of the
+      // two values this build knows - so a newer build marking a key, say,
+      // revoked would have had an older one republish it as merely retired,
+      // in the owner's own record.
+      final unreadable =
+          await fileHeldKey(SecretSharingAlgos.xWing, status: 'revoked');
+      final live = await fileHeldKey(SecretSharingAlgos.mlKem1024);
+      configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+
+      // The revoked key is not active, so X-Wing counts as missing and a fresh
+      // one is minted beside it. That is what forces the republish, and it is
+      // the realistic shape: the entry is RETAINED, not superseded.
+      final reconciled = await minter().reconcileKeyPackage();
+      expect(reconciled.minted, [SecretSharingAlgos.xWing]);
+      expect(reconciled.retired, isEmpty,
+          reason: 'nothing was withdrawn by this run - the key was already '
+              'carrying a status of its own');
+
+      final package = await advertised();
+      final byKid = {for (final k in package.keys) k.kid: k};
+      expect(byKid.keys, contains(unreadable));
+      expect(byKid[unreadable]!.status, 'revoked',
+          reason: 'raw literal: the token the keyfile holds is the token the '
+              'record gets, so an older build cannot weaken it');
+      expect(byKid[unreadable]!.offeredForNewOperations, isFalse);
+      expect(byKid[live]!.status, KeyEntryStatus.active);
+      expect(package.bestKeyFor(const [SecretSharingAlgos.xWing])!.kid,
+          isNot(unreadable),
+          reason: 'and nothing new is sealed to it - the freshly minted '
+              'X-Wing key is the address for that algorithm now');
     });
 
     test('the retired private half is retained, so old envelopes still open',

@@ -91,7 +91,7 @@ List<ApskSigningKey> apskEntries({
 String? bareApskValueOf(List<ApskSigningKey> entries) {
   if (entries.length == 1 &&
       entries.single.alg == SigningAlgoType.rsa2048 &&
-      entries.single.status == KeyEntryStatus.active) {
+      entries.single.offeredForNewOperations) {
     return entries.single.pub;
   }
   return null;

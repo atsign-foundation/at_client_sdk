@@ -266,6 +266,45 @@ void main() {
         KeyEntryStatus.active);
   });
 
+  test('a status this build does not know is carried across, not flattened',
+      () async {
+    // Both vocabularies are open. Until 2026-08-22 this seam mapped anything
+    // that was not `active` to `KeyEntryStatus.retired`, which threw away the
+    // openness one hop after the keyfile preserved it — and `retired` is the
+    // permissive answer, because a retired key still verifies what it signed.
+    // A newer build of this client writing, say, `revoked` would have had an
+    // older one read it back as merely superseded.
+    final keys = AtKeys();
+    final unknownKpid = fileKeyPackage(
+        keys, await XWingPureDartAlgo.instance.generateKeyPair(),
+        createdAt: DateTime.now().toUtc().subtract(const Duration(days: 3)),
+        status: 'revoked');
+    final liveKpid = fileKeyPackage(
+        keys, await XWingPureDartAlgo.instance.generateKeyPair(),
+        createdAt: DateTime.now().toUtc());
+
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, keys);
+    final registrant = TestRegistrant(buildMockClient())
+      ..directory = FakeEnrollmentDirectory();
+    bindKeyPackageToAtKeys(registrant,
+        keysIo: io, atSign: atSign, enrollmentId: 'enroll-1');
+    final pkg = await registrant.register();
+
+    expect(registrant.kpid, liveKpid,
+        reason: 'the address is still the active key - an unknown status is '
+            'never the one advertised');
+    expect(pkg.keys.singleWhere((k) => k.kid == unknownKpid).status, 'revoked',
+        reason: 'the keyfile token reaches the advertisement unchanged');
+    expect(
+        pkg.keys
+            .singleWhere((k) => k.kid == unknownKpid)
+            .offeredForNewOperations,
+        isFalse,
+        reason: 'and it is not offered for new traffic, which is what the '
+            'collapse to `retired` got right and the only thing it did');
+  });
+
   test('a dead key package is not adopted at all', () async {
     // Retirement is as close to deletion as a keyfile gets — status only moves
     // forward and dead is the end of that road — so a dead key is not

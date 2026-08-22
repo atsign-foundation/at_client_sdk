@@ -913,12 +913,21 @@ class PqSigningChain {
   /// would turn every superseded link into `broken` — reported as tampering —
   /// the moment a successor appeared.
   ///
+  /// **An entry whose status this build does not understand is NOT a
+  /// candidate.** Active and retired are the two statuses that vouch for what
+  /// a key already signed; a token from a newer client says something else,
+  /// and the likeliest something else — a key its owner has disowned — is one
+  /// whose signatures must stop checking out here rather than go on doing so.
+  /// A link signed with such a key reads as unverifiable, which is the
+  /// fail-closed answer.
+  ///
   /// Empty for absent and unreadable alike: verification wants one answer,
   /// "nothing to check against", and the distinction matters only to code that
   /// mints or retires on it.
   Future<List<ApskSigningKey>> _rootCandidates(String atSign) async {
     try {
-      return await PqSigningRoot.publishedRoots(_atClient, atSign);
+      final roots = await PqSigningRoot.publishedRoots(_atClient, atSign);
+      return roots.where((r) => r.vouchesForPastOperations).toList();
     } catch (e) {
       _logger.info('No readable signing root for $atSign: $e');
       return const [];

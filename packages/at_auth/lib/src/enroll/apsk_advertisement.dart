@@ -40,10 +40,13 @@ import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo, SigningAlgoType;
 /// consumers select by algorithm — but makes the record read the way the
 /// signer chooses.
 ///
-/// `status` is emitted **only for a retired key**. Absent already reads as
-/// active ([KeyEntryStatus.fromWire]), so an advertisement that has never
-/// rotated is byte-for-byte what a build predating the field would have
-/// written, and the field appears exactly when it has something to say.
+/// `status` is emitted for **any key that is not active**, and omitted for one
+/// that is. Absent already reads as active ([KeyEntryStatus.fromWire]), so an
+/// advertisement that has never rotated is byte-for-byte what a build predating
+/// the field would have written, and the field appears exactly when it has
+/// something to say. Whatever token a caller hands over is written verbatim: a
+/// writer that reshaped a value it did not understand would be publishing a
+/// statement about a key that its owner did not make.
 Map<String, dynamic> apskAdvertisement({
   required List<ApskSigningKey> keys,
 }) =>
@@ -56,7 +59,7 @@ Map<String, dynamic> apskAdvertisement({
             'use': 'sign',
             'alg': key.alg.name,
             'pub': key.pub,
-            if (key.status != KeyEntryStatus.active) 'status': key.status.name,
+            if (key.status != KeyEntryStatus.active) 'status': key.status,
           }
       ],
     };
@@ -67,13 +70,29 @@ class ApskSigningKey {
   final SigningAlgoType alg;
   final String pub;
 
-  /// Whether this key still signs — see [KeyEntryStatus].
+  /// Whether this key still signs — an open token, see [KeyEntryStatus].
   ///
   /// A retired entry is **kept** rather than skipped, because the keys an
   /// enrollment has retired are exactly the ones its stored envelopes were
   /// signed with, and this list is what verifies them. What a caller must not
   /// do is choose a retired key to sign something new with.
-  final KeyEntryStatus status;
+  ///
+  /// Ask [offeredForNewOperations] and [vouchesForPastOperations] rather than
+  /// comparing the token: those are the two decisions the field exists for, and
+  /// they answer correctly for a token this build has never heard of.
+  final String status;
+
+  /// Whether this key may be chosen to sign something **new** — see
+  /// [KeyEntryStatus.offersNewOperations].
+  bool get offeredForNewOperations =>
+      KeyEntryStatus.offersNewOperations(status);
+
+  /// Whether this key still verifies what it already signed — see
+  /// [KeyEntryStatus.vouchesForPastOperations]. A verifier narrowing an
+  /// advertisement to its candidates asks this, not [offeredForNewOperations],
+  /// or every superseded envelope would read as tampered.
+  bool get vouchesForPastOperations =>
+      KeyEntryStatus.vouchesForPastOperations(status);
 
   const ApskSigningKey({
     required this.kid,
@@ -92,7 +111,7 @@ class ApskSigningKey {
   factory ApskSigningKey.forPublicKey({
     required SigningAlgoType alg,
     required String pub,
-    KeyEntryStatus status = KeyEntryStatus.active,
+    String status = KeyEntryStatus.active,
   }) =>
       ApskSigningKey(
           kid: publicKeyKidOfBase64(pub), alg: alg, pub: pub, status: status);

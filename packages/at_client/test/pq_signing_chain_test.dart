@@ -450,10 +450,13 @@ void main() {
       return pair;
     }
 
-    /// Publishes a record advertising [active] beside a retired [retired].
+    /// Publishes a record advertising [active] beside [retired], which
+    /// carries [retiredStatus] — `retired` unless a caller wants to see what
+    /// a status this build cannot read does.
     Future<void> publishRotatedRoot({
       required Uint8List active,
       required Uint8List retired,
+      String retiredStatus = KeyEntryStatus.retired,
     }) async {
       remoteData['public:${PqSigningRoot.recordName}$atSign'] =
           jsonEncode(apskAdvertisement(keys: [
@@ -462,7 +465,7 @@ void main() {
         ApskSigningKey.forPublicKey(
             alg: PqSigningRoot.rootKeyAlgo,
             pub: base64Encode(retired),
-            status: KeyEntryStatus.retired),
+            status: retiredStatus),
       ]));
     }
 
@@ -494,6 +497,79 @@ void main() {
           reason: 'and the chain verifier reaches the same conclusion — these '
               'are two separate verifiers of one shape, and the plan row named '
               'only one. Reason if not: ${result.reason}');
+    });
+
+    test('a link signed under a root of UNKNOWN status does not verify',
+        () async {
+      // The differential against the row above, and the reason the status is
+      // an open token. `retired` means "withdrawn from new use, still vouches
+      // for what it signed", so that link verifies. A token this build has
+      // never seen means something else the owner chose to say, and the
+      // likeliest something else is a key they have disowned - so its
+      // signatures must stop checking out here rather than go on doing so.
+      // Until 2026-08-22 an unknown token READ as `retired`, which made these
+      // two rows indistinguishable.
+      final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final successor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final holder = client('priv-1');
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link = await PqSigningChain(holder)
+          .signRootLinkFor('child-1', rootPrivate: predecessor.secretKey);
+      await publishRotatedRoot(
+          active: successor.publicKey,
+          retired: predecessor.publicKey,
+          retiredStatus: 'revoked');
+      await conveyRoot(child, link!);
+
+      expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
+          reason: 'the conveyance verifier must not stamp a link whose only '
+              'candidate is an entry it cannot read the status of');
+    });
+
+    test(
+        'and a link already published stops anchoring once the record '
+        'disowns its root', () async {
+      // The CHAIN verifier's arm of the row above, and it has to be staged
+      // this way round to reach it at all: with the record already carrying an
+      // unreadable status nothing is ever published, so `verifyChain` returns
+      // `unsigned` without entering `_checkRootLink` — a green that proves
+      // only that no link exists. So the link is published while the record
+      // still vouches for the key, and the record then disowns it.
+      final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final successor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final holder = client('priv-1');
+      final childClient = client('child-1');
+      final child = await registered(childClient);
+
+      final link = await PqSigningChain(holder)
+          .signRootLinkFor('child-1', rootPrivate: predecessor.secretKey);
+      await publishRotatedRoot(
+          active: successor.publicKey, retired: predecessor.publicKey);
+      await conveyRoot(child, link!);
+      expect(await PqSigningChain(childClient).publishPendingLink(), isTrue,
+          reason: 'the setup has to leave a real link on the record, or the '
+              'assertion below passes on there being nothing to verify');
+      final anchored =
+          await PqSigningChain(childClient).verifyChain(child, 'child-1');
+      expect(anchored.verdict, ChainVerdict.anchored,
+          reason: 'the control: while the record calls the root retired the '
+              'link verifies. Reason if not: ${anchored.reason}');
+
+      // The owner disowns that root. Nothing about the link changes.
+      await publishRotatedRoot(
+          active: successor.publicKey,
+          retired: predecessor.publicKey,
+          retiredStatus: 'revoked');
+
+      final result =
+          await PqSigningChain(childClient).verifyChain(child, 'child-1');
+      expect(result.verdict, isNot(ChainVerdict.anchored),
+          reason: 'the entry no longer vouches for what it signed, so the '
+              'link it signed no longer anchors. Until 2026-08-22 an '
+              'unreadable status read as `retired` and this link went on '
+              'verifying. Verdict was ${result.verdict}: ${result.reason}');
     });
 
     test('D1 boundary: a keyfile and a record both carrying two root entries',

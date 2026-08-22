@@ -986,18 +986,23 @@ stores and returns it opaquely and has no opinion on its contents.
 
 The payload is `{v, createdAt, keys: [{kid, use, alg, pub, status?}], suites: [...]}`.
 
-**`status`** is `active` or `retired`, and it is **absent on every entry that is
+**`status`** is an **open token** — `active` and `retired` are the two this
+version knows — and it is **absent on every entry that is
 active** — which is every entry a client that has never rotated writes, so the
 four-field spelling above is what a reader sees in practice. It is the same field, with
-the same two values and the same use-neutral meaning, on all three records that
+the same vocabulary and the same use-neutral meaning, on all three records that
 advertise keys (`_apsk`, the key package, the nskey advertisement): *retained, not
 offered for new operations*. A retired entry is skipped when choosing what to seal to
 or sign with, and kept for everything already sealed to or signed by it — an envelope
 lives seven days, so dropping a rotated key's entry would strand a week of traffic, and
 dropping a rotated signing key's entry would retroactively unverify everything it ever
-signed. A value a reader does not recognise reads as `retired`, never as `active`: an
-unknown state is narrower than "offered for new operations", and the permissive reading
-is the one that can make a build use a key its owner has withdrawn. The nskey
+signed. A value a reader does not recognise is carried through verbatim and is neither offered
+for new operations nor trusted to verify what the key already did — narrower than
+either token above, and narrower in both directions. (This read "reads as `retired`,
+never as `active`" until 2026-08-22. That was right that an unknown state must not be
+*used* and wrong that `retired` says so: a retired key still verifies what it signed,
+so the flattening left an older build trusting signatures made with a key its owner had
+disowned, and re-emitting the flattened value rewrote the owner's statement.) The nskey
 advertisement's writer never emits the field — a rotation there overwrites the record —
 and its reader honours it anyway, so the vocabulary means one thing everywhere rather
 than something per record ([`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
@@ -2143,7 +2148,17 @@ keys with algorithms. `status` is the shared
 which lives in at_auth so that all three advertising records name one type:
 at_client depends on at_auth and not the reverse, which is the only direction a
 shared type can travel, and `publicKeyKid` sits there for the same reason.
-Absent reads as `active`; a value this build does not know reads as `retired`.
+Absent reads as `active`. A value this build does not know is carried through
+**verbatim** — read unchanged, and written back unchanged by any writer handed
+it, so a record rebuilt by an older build cannot weaken what its owner said
+about a key — and it answers **no** to both questions the field exists for: it
+is not offered for new operations, and it does not vouch for what the key
+already did. Unknown is *more* restrictive
+than either value here, never less. (This sentence read "a value this build does
+not know reads as `retired`" until 2026-08-22. That flattening rewrote a newer
+client's statement on a round trip, and `retired` is the permissive answer on
+the second question, because a retired key still verifies what it signed and a
+revoked one must not.)
 
 A reader accepts this and the released bare string (an `rsa2048` key published
 by at_client **3.13.0**'s `mixins/apkam_signing.dart`). A writer emits only

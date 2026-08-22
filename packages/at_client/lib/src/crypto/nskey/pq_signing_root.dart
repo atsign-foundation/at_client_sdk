@@ -9,7 +9,6 @@ import 'package:at_auth/at_auth.dart'
         AtKeysIo,
         AtKeysMaterial,
         CryptographicKeyType,
-        KeyEntryStatus,
         KeyPartStatus,
         WrittenAtKeysIo,
         apskAdvertisement,
@@ -266,11 +265,11 @@ class PqSigningRoot {
   }) =>
       apskSigningKeys(record)
           .where((e) => verifiableRootAlgos.contains(e.alg))
-          .where((e) => !activeOnly || e.status == KeyEntryStatus.active)
+          .where((e) => !activeOnly || e.offeredForNewOperations)
           .toList()
-        ..sort((a, b) => a.status == b.status
+        ..sort((a, b) => a.offeredForNewOperations == b.offeredForNewOperations
             ? 0
-            : a.status == KeyEntryStatus.active
+            : a.offeredForNewOperations
                 ? -1
                 : 1);
 
@@ -439,11 +438,14 @@ class PqSigningRoot {
   /// Reconciles what this keyfile holds against a record that turned out to be
   /// published after all.
   ///
-  /// An active private that corresponds to no ADVERTISED entry is the poisoned
+  /// An active private that corresponds to no VOUCHING entry is the poisoned
   /// leftover of a mint that lost, and while it stays active the pull's
   /// "already holding it" check can never fire — the one heal such an
   /// enrollment has. A private matching a retired entry is not that: it is a
-  /// predecessor the record still vouches for.
+  /// predecessor the record still vouches for. One matching only an entry
+  /// whose status this build cannot read IS that, because the record is saying
+  /// something about the key that this build has no grounds to read as
+  /// vouching — see [_retireUnadvertised].
   Future<void> _reconcileAgainstPublished(
       String atSign, List<ApskSigningKey> roots) async {
     final keys = await _readKeys(atSign);
@@ -643,7 +645,7 @@ class PqSigningRoot {
           'survive the process is no root at all');
       return false;
     }
-    final superseded = <({String keyId, bool wasAdvertised})>[];
+    final superseded = <({String keyId, String? advertisedAs})>[];
     try {
       // One read-mutate-write, not three steps: a client's start fires this
       // and the namespace-key seeding as sibling unawaited tasks, and two
@@ -663,7 +665,11 @@ class PqSigningRoot {
             keys.retireAtSignKey(material.keyId);
             superseded.add((
               keyId: material.keyId,
-              wasAdvertised: heldCorrespondence.containsKey(material.keyId),
+              // The status the record gives it, or null when the record gives
+              // it nothing. Printed rather than named, because `status` is an
+              // open token and this line used to assert "retired" for every
+              // value that was not active.
+              advertisedAs: heldCorrespondence[material.keyId]?.status,
             ));
           }
         }
@@ -696,8 +702,8 @@ class PqSigningRoot {
       return false;
     }
     for (final entry in superseded) {
-      final because = entry.wasAdvertised
-          ? 'the record advertises it as retired'
+      final because = entry.advertisedAs != null
+          ? 'the record advertises it as "${entry.advertisedAs}"'
           : 'it corresponds to no root the record advertises, so it is the '
               'leftover of a lost create';
       // Warning for the unadvertised case: a private nothing vouches for was
@@ -706,7 +712,9 @@ class PqSigningRoot {
       final message = 'Retired the signing root private in ${entry.keyId} for '
           '$atSign: $because, and the private just filed corresponds to the '
           'active entry';
-      entry.wasAdvertised ? _logger.info(message) : _logger.warning(message);
+      entry.advertisedAs != null
+          ? _logger.info(message)
+          : _logger.warning(message);
     }
     // Re-read rather than trusting the callback: the update may have refused
     // the addition, and "is this private held" is a question about the store.
@@ -809,10 +817,11 @@ class PqSigningRoot {
     // without reading the record. The client signed root links with a key the
     // record calls retired. Refusing here rather than in `store` keeps the
     // "may this key sign" judgement in the one place that has the record.
-    if (matched.status != KeyEntryStatus.active) {
+    if (!matched.offeredForNewOperations) {
       _logger.info('Not filing a signing root private conveyed to $atSign: the '
-          'record advertises it as retired, so it can sign nothing. The pull '
-          'asks again and a holder of the active root can answer');
+          'record advertises it as "${matched.status}", so it can sign '
+          'nothing. The pull asks again and a holder of the active root can '
+          'answer');
       return false;
     }
 
@@ -965,11 +974,23 @@ class PqSigningRoot {
   /// had the same logic written twice and only [reconcileHeldPrivate] was ever
   /// reasoned about.
   ///
-  /// Judged against the whole advertised set, retired entries included — a
-  /// predecessor the record still vouches for is not a leftover, and retiring
-  /// it here would take a legitimate key out of service for being superseded.
+  /// Judged against the advertised entries that still **vouch** for what a key
+  /// did — active and retired both. A predecessor the record still vouches for
+  /// is not a leftover, and retiring it here would take a legitimate key out of
+  /// service for being superseded.
+  ///
+  /// An entry whose status this build cannot read does **not** vouch, so a
+  /// private matching only such an entry IS retired. That is the same judgement
+  /// `PqSigningChain`'s verifier makes about which entries it will check a
+  /// signature against, and the two have to be the same judgement: a private
+  /// this client goes on holding as active, while its own verifier will not
+  /// accept anything that private signs, is a client anchoring links it then
+  /// rejects. Retiring it is what lets the pull ask a holder for the root the
+  /// record does vouch for.
   Future<bool> _retireUnadvertised(
       String atSign, AtKeys keys, List<ApskSigningKey> roots) async {
+    final vouching =
+        roots.where((root) => root.vouchesForPastOperations).toList();
     // Materialised before any retire: _retireSlot writes through the same store
     // this was read from, so a lazy filter on `status == active` would be
     // re-evaluated against material it had just moved.
@@ -977,7 +998,7 @@ class PqSigningRoot {
     var retired = false;
     for (final material in held) {
       if (await _correspondingRoot(
-              Uint8List.fromList(material.bytes.bytes), roots) !=
+              Uint8List.fromList(material.bytes.bytes), vouching) !=
           null) {
         continue;
       }
@@ -1164,8 +1185,7 @@ class PqSigningRoot {
           'the first filed is used');
       return held.first;
     }
-    final active =
-        advertised.where((e) => e.status == KeyEntryStatus.active).toList();
+    final active = advertised.where((e) => e.offeredForNewOperations).toList();
 
     for (final entry in active) {
       for (final material in held) {

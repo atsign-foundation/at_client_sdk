@@ -17,8 +17,6 @@ import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
     show AtClientSecretSharing;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
-import 'package:at_client/src/secret_sharing/key_package.dart'
-    show KeyEntryStatus;
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
@@ -154,7 +152,7 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
       // A retired entry is still checked — it has to be well formed to be
       // believed at all — but it is not something to seal to, so it does not
       // count towards this advertisement having an encapsulation target.
-      if (key.status == KeyEntryStatus.active) sealable++;
+      if (key.offeredForNewOperations) sealable++;
       // Length before anything is sealed to it. A kid is the digest of
       // whatever bytes are carried, so it matches a forged key as readily as a
       // real one and the check below cannot see a wrong-length key at all.

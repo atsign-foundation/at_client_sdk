@@ -1,5 +1,34 @@
 ## 3.4.0-rc1
 
+- **BREAKING** refactor: `KeyEntryStatus` is an open `String` vocabulary rather
+  than an `enum`, matching `KeyPartStatus` beside it. The field it types —
+  `ApskSigningKey.status`, and `PackageKey.status` in at_client — is now a
+  `String`. No release holds a `KeyEntryStatus`: it appears in zero files of
+  at_auth 3.3.0 and at_client 3.14.0 on pub.dev, and `ApskSigningKey` is not in
+  either. `PackageKey` *is* published, in at_client 3.14.0, without a `status`
+  field — so no released consumer can be holding the type this changes.
+  - The enum did not *refuse* an unknown status, it **flattened** one: anything
+    it did not recognise read as `retired`. Two things were wrong with that.
+    `retired` is the permissive answer in the direction that matters - a
+    retired key still verifies what it signed, and a key its owner has
+    *revoked* must not - so an older build went on trusting signatures made
+    with a disowned key. And it was lossy wherever a record is rebuilt from
+    stored state: at_client's key package advertisement is composed afresh on
+    every reconcile from the keyfile, whose status vocabulary is open too, so
+    flattening on the way out republished the owner's record with their
+    statement weakened. An unrecognised token now survives the read verbatim
+    and is written back verbatim.
+  - `KeyEntryStatus.offersNewOperations` and
+    `KeyEntryStatus.vouchesForPastOperations` are the two questions the field
+    exists for, with `ApskSigningKey.offeredForNewOperations` /
+    `.vouchesForPastOperations` as the getters. An unknown token answers **no**
+    to both — more restrictive than either known value, never less. Comparing
+    `status == KeyEntryStatus.active` still compiles and still means what it
+    did; what breaks is enum-ness — `KeyEntryStatus.values`, `status.name`, and
+    `KeyEntryStatus` as a type annotation.
+  - at_client's verifiers act on the second question: an advertised entry whose
+    status this build cannot read is not a verification candidate, so a
+    signature made with it stops checking out rather than going on doing so.
 - feat: `authenticatorForCramSecret` - the fourth credential shape, a CRAM
   secret with no keystore behind it. `authenticatorFor` already falls back to
   CRAM, but only for a caller with an `AtKeysIo` to read, because it decides by
@@ -308,16 +337,17 @@
   principal. `authenticationAlgorithmFor` answers without building an AtChops,
   because a caller holding an injected one still has to name the algorithm and
   `toAtChops` throws on a keyfile missing material that caller never needed.
-- feat: add `KeyEntryStatus` — `active` or `retired`, the status every
-  advertised key entry in the protocol carries — and read it on `_apsk`, where
+- feat: add `KeyEntryStatus` — the status every advertised key entry in the
+  protocol carries, `active` or `retired` — and read it on `_apsk`, where
   `ApskSigningKey` gains a `status`. It lives here rather than in at_client
   because at_auth is the lower package: all three records that advertise keys
-  carry the same field with the same two values, at_client depends on at_auth
+  carry the same field with the same vocabulary, at_client depends on at_auth
   and not the reverse, so this is the only direction a shared type can travel.
-  `publicKeyKid` sits here for the same reason. Absent reads as `active`, and a
-  value this build does not recognise reads as `retired` — an unknown state is
-  narrower than "offered for new operations", and the permissive reading is the
-  one that can make a build use a key its owner has withdrawn.
+  `publicKeyKid` sits here for the same reason. Absent reads as `active`. What
+  an unrecognised value does is settled by the open-`String` entry at the top
+  of this heading, which supersedes this one on that point before either
+  shipped: it is carried through verbatim, and is neither offered for new
+  operations nor trusted to verify old ones.
 - feat: `apskSigningKeys` **keeps** a retired entry rather than skipping it.
   This list is what verifies stored envelopes, and the keys an enrollment has
   retired are precisely the ones that signed its older ones, so filtering here

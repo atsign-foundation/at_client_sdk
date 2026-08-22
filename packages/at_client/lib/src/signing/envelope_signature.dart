@@ -639,11 +639,23 @@ ParsedApsk parseApskValue(String value) {
   // The array form an enrollment publishes. Entries whose `use` or `alg` this
   // build does not know are skipped by apskSigningKeys, so an advertisement
   // that is all future algorithms arrives empty rather than half-read.
-  final advertised = apskSigningKeys(advertisement);
+  //
+  // An entry whose STATUS this build does not understand is dropped here for
+  // the same reason, and it is this reader's job rather than apskSigningKeys'
+  // — that one also feeds the writers, which have to republish a token they
+  // do not understand rather than delete it. Active and retired are the two
+  // statuses that vouch for what a key already signed; anything else is a
+  // newer client saying something narrower, and the narrowing that matters is
+  // a key its owner has disowned. Verifying with it anyway is the one outcome
+  // that cannot be recovered from.
+  final advertised = apskSigningKeys(advertisement)
+      .where((k) => k.vouchesForPastOperations)
+      .toList();
   if (advertised.isEmpty) {
     throw AtSigningVerificationException(
-        'the _apsk advertises no signing key this build understands — '
-        'refusing to verify rather than guessing');
+        'the _apsk advertises no signing key this build can verify with — '
+        'every entry names an algorithm or a status it does not understand. '
+        'Refusing to verify rather than guessing');
   }
   // Every usable entry, not a choice made here: which one verifies an envelope
   // depends on what that envelope carries, and only the verifier knows it.

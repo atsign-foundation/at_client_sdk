@@ -87,7 +87,7 @@ void main() {
       bool publishFails = false,
       String? enrollmentId = 'enrollment-1',
       Uint8List? publishedRoot,
-      List<({Uint8List key, KeyEntryStatus status})>? publishedRoots,
+      List<({Uint8List key, String status})>? publishedRoots,
       bool rootUnreadable = false}) {
     // One entry or several. `publishedRoots` is what a record mid-rotation
     // looks like — a successor active beside its retired predecessor — and
@@ -1098,6 +1098,54 @@ void main() {
       expect(await root.privateHalf(atSign), minted.secretKey,
           reason: 'the ordinary case is a holder holding the right key, and '
               'retiring it would destroy the atSign\'s only copy');
+    });
+
+    test('a private matching only a RETIRED entry is left alone', () async {
+      // The control arm for the row below, and the doctrine this heal was
+      // built on: a predecessor the record still vouches for is not a
+      // poisoned leftover. Without this arm the row below would pass on a
+      // heal that simply retired everything not active.
+      final successor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final predecessor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(publishedRoots: [
+        (key: successor.publicKey, status: KeyEntryStatus.active),
+        (key: predecessor.publicKey, status: KeyEntryStatus.retired),
+      ]);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      expect(await root.store(atSign, predecessor.secretKey), isTrue);
+
+      expect(await root.reconcileHeldPrivate(atSign), isFalse);
+      expect(await root.privateHalf(atSign), predecessor.secretKey,
+          reason: 'retirement withdraws the future and keeps the past, so the '
+              'record still vouches for this key and it is not a leftover');
+    });
+
+    test('a private matching only a status this build cannot read is retired',
+        () async {
+      // The differential against the arm above, and the reason this heal has
+      // to make the SAME judgement the verifier makes. `PqSigningChain` will
+      // not check a signature against an entry whose status it cannot read, so
+      // a client that went on holding the matching private as active would
+      // anchor links its own verifier then rejects — and the heal that clears
+      // that state is this one. Until 2026-08-22 an unreadable status read as
+      // `retired`, so this row and the one above were indistinguishable.
+      final successor = await MlDsa65PureDartAlgo().generateKeyPair();
+      final disowned = await MlDsa65PureDartAlgo().generateKeyPair();
+      final c = client(publishedRoots: [
+        (key: successor.publicKey, status: KeyEntryStatus.active),
+        (key: disowned.publicKey, status: 'revoked'),
+      ]);
+      final io = await keysIo();
+      final root = PqSigningRoot(c.client, keysIo: io);
+      expect(await root.store(atSign, disowned.secretKey), isTrue);
+
+      expect(await root.reconcileHeldPrivate(atSign), isTrue);
+      expect(await root.privateHalf(atSign), isNull,
+          reason: 'the record says something about this key that this build '
+              'cannot read, so it does not vouch for it - and while the '
+              'private stays active the pull never asks a holder for the one '
+              'the record does vouch for');
     });
 
     test('with no root published, a held private is left alone', () async {
