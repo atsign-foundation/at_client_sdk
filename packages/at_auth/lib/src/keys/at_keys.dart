@@ -741,20 +741,36 @@ class AtKeys {
       throw AtKeysUnsupportedVersionException(
           'Unsupported atKeys version: $version');
     }
-    // A typed document whose materials sit under a top-level `keys` predates
-    // the enrollments[]/atsignKeys[] split. Refused by name, because the
-    // alternative is silent and much worse: `keys` is no longer a reserved
-    // field, so the whole array would be swept into [metadata] as a legacy
-    // value, the document would read as holding no typed material at all, and
-    // the caller would authenticate from the flat block — as the legacy
-    // enrollment — while the live enrollment's credentials sat unread beside
-    // it.
+    // A top-level `keys` array predates the enrollments[]/atsignKeys[] split.
+    //
+    // Refused only when it CARRIES something. A populated one cannot be read
+    // here silently: `keys` is no longer a reserved field, so the array would
+    // be swept into [metadata] as a legacy value, the document would read as
+    // holding no typed material at all, and the caller would authenticate
+    // from the flat block — as the legacy enrollment — while the live
+    // enrollment's credentials sat unread beside it.
+    //
+    // An EMPTY one is accepted, because that is the only shape any released
+    // build ever wrote. The version that introduced `keys` never populated
+    // it: `addKey` has no caller outside `AtKeys` itself there, so every
+    // keyfile it onboarded carries `"keys": []` with the real material in the
+    // flat block below. Refusing those would strand every keyfile a released
+    // build produced, to guard against mis-filing an array holding nothing.
+    // Measured, not assumed: a keyfile written by the published version was
+    // read back here, and it differs from one this build accepts by exactly
+    // this empty array.
     if (json.containsKey('keys')) {
-      throw AtKeysValidationException(
-          'This keyfile carries a top-level "keys" array, the shape that '
-          'preceded enrollments[]/atsignKeys[]. It must be regenerated; '
-          'reading it here would file its key material as legacy metadata '
-          'and authenticate as the wrong enrollment.');
+      final legacyKeys = json['keys'];
+      if (legacyKeys is! List || legacyKeys.isNotEmpty) {
+        throw AtKeysValidationException(
+            'This keyfile carries a non-empty top-level "keys" array, the '
+            'shape that preceded enrollments[]/atsignKeys[]. It must be '
+            'regenerated; reading it here would file its key material as '
+            'legacy metadata and authenticate as the wrong enrollment.');
+      }
+      // Dropped rather than carried, so it does not reach [metadata] and get
+      // written back out on the next save.
+      json = Map<String, dynamic>.from(json)..remove('keys');
     }
 
     final atsign =

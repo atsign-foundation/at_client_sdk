@@ -163,6 +163,17 @@
     *and* an active `auth:mldsa65:1` is refused. The per-(role, algorithm)
     rule structurally cannot see that pair, since the two name different
     algorithms.
+- fix: a keyfile written by at_auth 3.3.0 is read, not refused. Its
+  `enrollments[]` guard rejected any document carrying a top-level `keys`
+  array — including an **empty** one, which is the only shape 3.3.0 ever
+  wrote: that version never populated the array (`addKey` has no caller
+  outside `AtKeys` there), so every keyfile it onboarded carries `"keys": []`
+  with the real material in the flat block. Measured, not assumed: a keyfile
+  CRAM-onboarded with published 3.3.0 was refused here, and deleting only the
+  empty array made the same file load with the right atsign and enrollmentId.
+  An empty array is now dropped and the document read; a POPULATED one is
+  still refused, because reading that silently would authenticate as the
+  wrong enrollment.
 - **BREAKING** feat: the `.atKeys` typed document groups by enrollment. The
   flat document-wide `keys[]` becomes `enrollments[]` — one entry per
   enrollment, carrying its id, its `namespaces`/`appName`/`deviceName`

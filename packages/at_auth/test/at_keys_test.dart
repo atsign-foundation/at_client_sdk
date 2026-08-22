@@ -113,34 +113,58 @@ void main() {
       );
     });
 
-    test('a version 1 document carrying a top-level keys array is refused', () {
-      // The shape at_auth 3.3.0 wrote before the document grouped by
-      // enrollment. It is refused rather than read, because `keys` is no
-      // longer reserved: parsing one would sweep the whole array into
-      // `metadata` as a legacy value, leave the document reading as untyped,
-      // and authenticate from the flat block as the LEGACY enrollment while
-      // the live enrollment's credentials sat unread beside it.
+    test('a version 1 document carrying a POPULATED keys array is refused', () {
+      // The shape that preceded grouping by enrollment. A populated one is
+      // refused rather than read, because `keys` is no longer reserved:
+      // parsing it would sweep the whole array into `metadata` as a legacy
+      // value, leave the document reading as untyped, and authenticate from
+      // the flat block as the LEGACY enrollment while the live enrollment's
+      // credentials sat unread beside it.
+      expect(
+        () => AtKeys.fromJson({
+          'version': 1,
+          'atsign': '@alice',
+          'keys': [
+            {'keyId': 'auth:rsa2048:1'}
+          ]
+        }),
+        throwsA(isA<AtKeysValidationException>().having(
+            (e) => e.message, 'message', contains('top-level "keys" array'))),
+        reason: 'refused by its own message, not by any validation throw: '
+            'a test satisfied by an unrelated exception would stay green '
+            'through a change that removed this guard',
+      );
+    });
+
+    test('an EMPTY keys array is accepted, because that is what shipped', () {
+      // ⚠️ This arm asserted the opposite until it was measured. The refusal
+      // covered the empty array too, on the reasoning that it "matters as
+      // much as a populated one" — but the harm named above cannot occur when
+      // the array holds nothing: there are no credentials to leave unread,
+      // and the flat block IS where such a document's material lives.
       //
-      // The empty array matters as much as a populated one, and is the arm
-      // that reads as harmless — 3.3.0 emitted `keys: []` on any flush of a
-      // file holding no typed material.
-      final shapes = <List<Object?>>[
-        [],
-        [
-          {'keyId': 'auth:rsa2048:1'}
-        ],
-      ];
-      for (final keys in shapes) {
-        expect(
-          () => AtKeys.fromJson(
-              {'version': 1, 'atsign': '@alice', 'keys': keys}),
-          throwsA(isA<AtKeysValidationException>().having(
-              (e) => e.message, 'message', contains('top-level "keys" array'))),
-          reason: 'refused by its own message, not by any validation throw: '
-              'a test satisfied by an unrelated exception would stay green '
-              'through a change that removed this guard',
-        );
-      }
+      // What settled it: a keyfile was CRAM-onboarded with the published
+      // at_auth that introduced `keys`, and it carries `"keys": []` — that
+      // version never populated the array, since `addKey` has no caller
+      // outside `AtKeys` itself there. Reading that real file here refused
+      // it; deleting only the empty array made the same file load with the
+      // right atsign and enrollmentId. Refusing the empty shape therefore
+      // stranded every keyfile a released build had ever written, to guard
+      // an array carrying nothing.
+      final keys = AtKeys.fromJson({
+        'version': 1,
+        'atsign': '@alice',
+        'keys': <Object?>[],
+        'enrollmentId': 'abc-123',
+      });
+
+      expect(keys.atsign, '@alice'.toAtsign());
+      expect(keys.enrollmentId, 'abc-123',
+          reason: 'the flat block must still be read - accepting the empty '
+              'array is worthless if the material beside it is dropped');
+      expect(keys.toJson().containsKey('keys'), isFalse,
+          reason: 'and the dead field must not be carried into `metadata` '
+              'and written back out on the next flush');
     });
 
     test('and the same document without it parses', () {
