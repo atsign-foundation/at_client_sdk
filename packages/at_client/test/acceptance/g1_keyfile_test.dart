@@ -74,8 +74,10 @@ void main() {
     // WHEN  a new build reads it, changes nothing, and flushes.
     // THEN  the same fields with the same values and no version key — field
     //       for field, not byte for byte, because the emitter has one fixed
-    //       order. A version:1 document carrying a top-level keys array is
-    //       refused by name rather than read as legacy.
+    //       order. A version:1 document carrying a POPULATED top-level keys
+    //       array is refused by name rather than read as legacy; an EMPTY one
+    //       is accepted, because that is the only shape any released build
+    //       wrote and refusing it stranded every keyfile they produced.
     provenIn('packages/at_auth/test/at_keys_test.dart',
         'a legacy document round-trips field-for-field through a new build',
         proves: 'no upgrade markers are added. This test was named '
@@ -85,10 +87,16 @@ void main() {
         'an atsign alone does not stamp a legacy file with a version',
         proves: 'the no-version half, with its own positive control');
     provenIn('packages/at_auth/test/at_keys_test.dart',
-        'a version 1 document carrying a top-level keys array is refused',
-        proves: 'the clause the row had backwards. Both the empty and the '
-            'populated array, asserted on the refusal message so an '
+        'a version 1 document carrying a POPULATED keys array is refused',
+        proves: 'the refusal half, asserted on the refusal message so an '
             'unrelated validation throw cannot satisfy it');
+    provenIn('packages/at_auth/test/at_keys_test.dart',
+        'an EMPTY keys array is accepted, because that is what shipped',
+        proves: 'the other half, which this row asserted backwards until '
+            '2026-08-22. A keyfile CRAM-onboarded with the published at_auth '
+            'that introduced `keys` carries it EMPTY - that build never '
+            'populated the array - so refusing the empty shape refused every '
+            'keyfile a release had written. Measured against a real one');
     provenIn('packages/at_auth/test/at_keys_test.dart',
         'and the same document without it parses',
         proves: 'the control: fromJson does not simply refuse everything');

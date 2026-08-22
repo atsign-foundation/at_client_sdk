@@ -1,6 +1,6 @@
 # CHANGELOG
 
-## 1.1.5
+## 1.1.5-rc1
 
 - refactor: the enrollment service builds its lookup with
   `AtLookUp.withSecureSocket`, passing `authenticator: null` - submitting an

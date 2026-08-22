@@ -1,4 +1,4 @@
-## 3.15.0
+## 3.15.0-rc1
 
 <!-- Was `## 3.14.1` until 2026-08-20. A patch heading carrying 229 entries and
 three **BREAKING** labels. Ruled a MINOR because semver keys on what a consumer

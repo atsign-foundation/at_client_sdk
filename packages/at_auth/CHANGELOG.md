@@ -1,4 +1,4 @@
-## 3.4.0
+## 3.4.0-rc1
 
 - feat: `authenticatorForCramSecret` - the fourth credential shape, a CRAM
   secret with no keystore behind it. `authenticatorFor` already falls back to

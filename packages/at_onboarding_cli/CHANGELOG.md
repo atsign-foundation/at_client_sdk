@@ -1,4 +1,4 @@
-## 1.17.0
+## 1.17.0-rc1
 
 - refactor: the five lookups this service built, which differed only in
   formatting, come from one `_newLookUp()` helper over

@@ -1,6 +1,6 @@
 name: at_client_flutter
 description: A Flutter extension to the at_client library which adds support for mobile, desktop and IoT devices.
-version: 1.1.5
+version: 1.1.5-rc1
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_client_flutter
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -22,7 +22,7 @@ dependencies:
   # 3.4.0 for WrittenAtKeysIo.update — the keychain store's flush is what makes
   # it reachable on this platform, and workspace resolution would hide a floor
   # too low for a consumer resolving from pub.dev.
-  at_auth: ^3.4.0
+  at_auth: ^3.4.0-rc1
   # 3.14.1 for EnrollmentConveyanceException — approve() rethrows it, and
   # workspace resolution would hide a floor too low for a consumer resolving
   # from pub.dev.
