@@ -203,9 +203,6 @@ extension type const CryptographicMaterialStatus._(String value)
       };
 }
 
-@Deprecated('Use CryptographicMaterial instead. This will be removed in v4')
-typedef AtKeysMaterial = CryptographicMaterial;
-
 /// One cryptographic key material — e.g. the public half of an encryption
 /// keypair. This is the object app code interacts with everywhere in
 /// [AtKeys]'s API (`addKey`, `getKey`, `keysForKeyId`, `keysForEnrollment`,
