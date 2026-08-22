@@ -129,7 +129,7 @@ void main() {
               atKeys: callersKeys,
               metadataBuilder: (keysIo) async {
                 final handed = await keysIo.read(atSign);
-                handed.addKey(AtKeysMaterial(
+                handed.addKey(CryptographicMaterial(
                     keyId: 'kpid-1',
                     keyPartType: CryptographicKeyType.privateDecapsulation,
                     keyAlgorithmType: KeyAlgorithmType.xWing,

@@ -7,7 +7,7 @@ import 'package:at_auth/at_auth.dart'
         ApskSigningKey,
         AtKeys,
         AtKeysIo,
-        AtKeysMaterial,
+        CryptographicMaterial,
         CryptographicKeyType,
         KeyPartStatus,
         WrittenAtKeysIo,
@@ -676,7 +676,7 @@ class PqSigningRoot {
 
         final slot = _freeSlot(keys, rootKeyAlgoToken);
         final createdAt = DateTime.now().toUtc();
-        keys.addKey(AtKeysMaterial(
+        keys.addKey(CryptographicMaterial(
           keyId: slot,
           keyPartType: CryptographicKeyType.privateSigning,
           keyAlgorithmType: rootKeyAlgoToken,
@@ -687,7 +687,7 @@ class PqSigningRoot {
         // one key arriving under two locks is how a keyfile ends up holding a
         // private whose public half a crash left behind.
         if (public != null) {
-          keys.addKey(AtKeysMaterial(
+          keys.addKey(CryptographicMaterial(
             keyId: slot,
             keyPartType: CryptographicKeyType.publicVerification,
             keyAlgorithmType: rootKeyAlgoToken,
@@ -1135,7 +1135,7 @@ class PqSigningRoot {
   /// Local and synchronous, and it must stay that way: [store] asks this
   /// question inside the store's own update callback, where the answer has to
   /// be available without a round trip.
-  Iterable<AtKeysMaterial> _activePrivates(AtKeys keys) =>
+  Iterable<CryptographicMaterial> _activePrivates(AtKeys keys) =>
       keys.atSignKeys.where((m) =>
           m.keyPartType == CryptographicKeyType.privateSigning &&
           m.status == KeyPartStatus.active &&
@@ -1163,7 +1163,7 @@ class PqSigningRoot {
   /// answering pulls, and broadcast for a key it already held every time the
   /// atServer hiccupped would be a worse failure than one that occasionally
   /// signs with a superseded key.
-  Future<AtKeysMaterial?> _signingPrivate(String atSign, AtKeys keys) async {
+  Future<CryptographicMaterial?> _signingPrivate(String atSign, AtKeys keys) async {
     final held = _activePrivates(keys).toList();
     if (held.length <= 1) return held.firstOrNull;
 
@@ -1262,14 +1262,14 @@ class PqSigningRoot {
         }
         slot = _freeSlot(keys, rootKeyAlgoToken);
         final createdAt = DateTime.now().toUtc();
-        keys.addKey(AtKeysMaterial(
+        keys.addKey(CryptographicMaterial(
           keyId: slot!,
           keyPartType: CryptographicKeyType.privateSigning,
           keyAlgorithmType: rootKeyAlgoToken,
           bytes: AtBytes(pair.secretKey),
           createdAt: createdAt,
         ));
-        keys.addKey(AtKeysMaterial(
+        keys.addKey(CryptographicMaterial(
           keyId: slot!,
           keyPartType: CryptographicKeyType.publicVerification,
           keyAlgorithmType: rootKeyAlgoToken,

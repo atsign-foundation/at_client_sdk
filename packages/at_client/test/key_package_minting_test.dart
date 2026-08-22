@@ -6,7 +6,7 @@ import 'package:at_auth/at_auth.dart'
         AtEnrollment,
         AtEnrollmentResponse,
         AtKeys,
-        AtKeysMaterial,
+        CryptographicMaterial,
         CryptographicKeyType,
         EnrollmentUpdateRequest,
         InMemoryAtKeysIo,
@@ -58,7 +58,7 @@ void main() {
   /// "advertised, then filed" from "filed, then advertised".
   late List<Set<String>> heldWhenPublished;
 
-  Future<List<AtKeysMaterial>> encMaterials(
+  Future<List<CryptographicMaterial>> encMaterials(
       {String part = CryptographicKeyType.publicEncapsulation}) async {
     final keys = await keysIo.read(atSign);
     // Both containers: production files an enrollment's first package
@@ -109,7 +109,7 @@ void main() {
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
     final materialAlgo = SecretSharingAlgos.materialAlgoFor(algorithm)!;
     await keysIo.update(atSign.toAtsign(), (keys) {
-      keys.addKey(AtKeysMaterial(
+      keys.addKey(CryptographicMaterial(
         enrollmentId: tagged ? enrollmentId : null,
         keyId: kpid,
         keyPartType: CryptographicKeyType.publicEncapsulation,
@@ -118,7 +118,7 @@ void main() {
         createdAt: DateTime.now().toUtc(),
         status: status,
       ));
-      keys.addKey(AtKeysMaterial(
+      keys.addKey(CryptographicMaterial(
         enrollmentId: tagged ? enrollmentId : null,
         keyId: kpid,
         keyPartType: CryptographicKeyType.privateDecapsulation,

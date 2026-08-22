@@ -55,14 +55,14 @@ void main() {
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
     final now = DateTime.now().toUtc();
     final keys = AtKeys();
-    keys.addKey(AtKeysMaterial(
+    keys.addKey(CryptographicMaterial(
       keyId: kpid,
       keyPartType: CryptographicKeyType.publicEncapsulation,
       keyAlgorithmType: KeyAlgorithmType.xWing,
       bytes: AtBytes(pair.publicKey),
       createdAt: now,
     ));
-    keys.addKey(AtKeysMaterial(
+    keys.addKey(CryptographicMaterial(
       keyId: kpid,
       keyPartType: CryptographicKeyType.privateDecapsulation,
       keyAlgorithmType: KeyAlgorithmType.xWing,

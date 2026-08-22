@@ -9,7 +9,7 @@ import 'package:at_auth/at_auth.dart'
         apskAdvertisement,
         ApskSigningKey,
         AtKeys,
-        AtKeysMaterial,
+        CryptographicMaterial,
         CryptographicKeyType,
         InMemoryAtKeysIo,
         KeyAlgorithmType;
@@ -89,7 +89,7 @@ void main() {
     await io.write(
         atSign,
         AtKeys()
-          ..addKey(AtKeysMaterial(
+          ..addKey(CryptographicMaterial(
             keyId: rootSlot1,
             keyPartType: CryptographicKeyType.privateSigning,
             keyAlgorithmType: KeyAlgorithmType.mlDsa65,

@@ -154,7 +154,7 @@ class AtKeysAssurance {
   /// has nothing to state it from. This rule is a write-side invariant now,
   /// and a reader meeting a document with two live enrollments gets a refusal
   /// from here rather than a silently chosen one.
-  void validateKeyMaterials(List<AtKeysMaterial> materials) {
+  void validateKeyMaterials(List<CryptographicMaterial> materials) {
     final typesByEnrollment = <String, Set<String>>{};
     for (final material in materials) {
       if (material.status != KeyPartStatus.active) {
@@ -196,8 +196,8 @@ class AtKeysAssurance {
   /// Throws [ArgumentError] rather than an [AtKeysValidationException]:
   /// addKey misuse is a caller programming error, not a malformed file.
   void validateAddKey({
-    required Iterable<AtKeysMaterial> existing,
-    required AtKeysMaterial candidate,
+    required Iterable<CryptographicMaterial> existing,
+    required CryptographicMaterial candidate,
   }) {
     for (final material in existing) {
       if (material.keyId == candidate.keyId &&
@@ -236,8 +236,8 @@ class AtKeysAssurance {
   /// `AtKeys.resolveAuthenticatingEnrollment()`, where a caller is asking for
   /// the one answer that does not exist.
   void refuseSecondLiveEnrollment({
-    required Iterable<AtKeysMaterial> existing,
-    required AtKeysMaterial candidate,
+    required Iterable<CryptographicMaterial> existing,
+    required CryptographicMaterial candidate,
   }) {
     if (candidate.status != KeyPartStatus.active ||
         candidate.keyPartType != CryptographicKeyType.privateAuthentication) {
@@ -300,11 +300,11 @@ class AtKeysAssurance {
 
   /// Both typed containers of [json], flattened — every material carrying the
   /// owner its container names.
-  List<AtKeysMaterial> _decode(Map<String, dynamic> json) {
+  List<CryptographicMaterial> _decode(Map<String, dynamic> json) {
     if (!json.containsKey('version')) {
       return const [];
     }
-    final materials = <AtKeysMaterial>[];
+    final materials = <CryptographicMaterial>[];
     if (json.containsKey('atsignKeys')) {
       materials.addAll(parseAtKeysDocument(
           expectList(json['atsignKeys'], 'atsignKeys'),
@@ -363,8 +363,8 @@ class AtKeysAssurance {
   /// enrollment's key entirely reads as preserved because the other's answers
   /// for it.
   void _assertMaterialsPreserved(
-    List<AtKeysMaterial> existing,
-    List<AtKeysMaterial> candidate,
+    List<CryptographicMaterial> existing,
+    List<CryptographicMaterial> candidate,
   ) {
     final candidateByPart = {
       for (final material in candidate)

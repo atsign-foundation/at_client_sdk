@@ -335,8 +335,8 @@ void main() {
     });
 
     group('one live enrollment per keyfile', () {
-      AtKeysMaterial authMaterial(String keyId, {String? enrollmentId}) =>
-          AtKeysMaterial(
+      CryptographicMaterial authMaterial(String keyId, {String? enrollmentId}) =>
+          CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
             keyPartType: CryptographicKeyType.privateAuthentication,
@@ -387,7 +387,7 @@ void main() {
         expect(
           () => assurance.refuseSecondLiveEnrollment(
             existing: [authMaterial('auth:rsa2048:1', enrollmentId: 'e1')],
-            candidate: AtKeysMaterial(
+            candidate: CryptographicMaterial(
               keyId: 'auth:mldsa65:1',
               enrollmentId: 'e1',
               keyPartType: CryptographicKeyType.privateAuthentication,
@@ -425,8 +425,8 @@ void main() {
 
 final _createdAt = DateTime.utc(2024, 1, 1);
 
-AtKeysMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
-  return AtKeysMaterial(
+CryptographicMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
+  return CryptographicMaterial(
     keyId: 'symmetric',
     keyPartType: CryptographicKeyType.symmetricEncryption,
     keyAlgorithmType: KeyAlgorithmType.aes256,
@@ -435,16 +435,16 @@ AtKeysMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
   );
 }
 
-List<AtKeysMaterial> _rsaPairMaterials() {
+List<CryptographicMaterial> _rsaPairMaterials() {
   return [
-    AtKeysMaterial(
+    CryptographicMaterial(
       keyId: 'pair',
       keyPartType: CryptographicKeyType.publicEncryption,
       keyAlgorithmType: KeyAlgorithmType.rsa2048,
       bytes: AtBytes.fromString('cHVibGlj'),
       createdAt: _createdAt,
     ),
-    AtKeysMaterial(
+    CryptographicMaterial(
       keyId: 'pair',
       keyPartType: CryptographicKeyType.privateDecryption,
       keyAlgorithmType: KeyAlgorithmType.rsa2048,
@@ -454,8 +454,8 @@ List<AtKeysMaterial> _rsaPairMaterials() {
   ];
 }
 
-AtKeysMaterial _wrapperMaterial() {
-  return AtKeysMaterial(
+CryptographicMaterial _wrapperMaterial() {
+  return CryptographicMaterial(
     keyId: 'wrapper',
     keyPartType: CryptographicKeyType.symmetricEncryption,
     keyAlgorithmType: KeyAlgorithmType.aes256,
@@ -464,12 +464,12 @@ AtKeysMaterial _wrapperMaterial() {
   );
 }
 
-AtKeysMaterial _enrollMaterial({
+CryptographicMaterial _enrollMaterial({
   String keyId = 'enroll-priv',
   String enrollmentId = 'enroll-1',
   List<String> operations = const ['decrypt'],
 }) {
-  return AtKeysMaterial(
+  return CryptographicMaterial(
     keyId: keyId,
     enrollmentId: enrollmentId,
     keyPartType: CryptographicKeyType.privateDecryption,
@@ -484,8 +484,8 @@ AtKeysMaterial _enrollMaterial({
 /// enrollment id to the materials filed under it, for the cases where WHICH
 /// container a material sits in is the thing under test.
 Map<String, dynamic> _documentMap({
-  required List<AtKeysMaterial> keys,
-  Map<String, List<AtKeysMaterial>> enrollments = const {},
+  required List<CryptographicMaterial> keys,
+  Map<String, List<CryptographicMaterial>> enrollments = const {},
   Map<String, dynamic> legacyJson = const {},
   String atsign = '@alice',
 }) {

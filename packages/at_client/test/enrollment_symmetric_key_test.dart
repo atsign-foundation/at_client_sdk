@@ -35,7 +35,7 @@ void main() {
   }) {
     final at = createdAt ?? DateTime.now().toUtc();
     keys
-      ..addKey(AtKeysMaterial(
+      ..addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.privateDecapsulation,
@@ -44,7 +44,7 @@ void main() {
             Uint8List.fromList(List<int>.generate(32, (i) => i + seed))),
         createdAt: at,
       ))
-      ..addKey(AtKeysMaterial(
+      ..addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.publicEncapsulation,
@@ -228,7 +228,7 @@ void main() {
     // atServer. Adopting it as the recipient identity would make this
     // enrollment answer at an address it never advertised.
     final keys = AtKeys()
-      ..addKey(AtKeysMaterial(
+      ..addKey(CryptographicMaterial(
         keyId: 'nskey-private',
         keyPartType: CryptographicKeyType.privateDecapsulation,
         keyAlgorithmType: KeyAlgorithmType.xWing,

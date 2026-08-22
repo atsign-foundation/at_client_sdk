@@ -2,7 +2,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_commons/at_commons.dart';
 
-/// Known values for [AtKeysMaterial.keyAlgorithmType] — the algorithm family
+/// Known values for [CryptographicMaterial.keyAlgorithmType] — the algorithm family
 /// used by a key material, independent of its cryptographic role (see
 /// [CryptographicKeyType]).
 ///
@@ -60,7 +60,7 @@ abstract final class KeyAlgorithmType {
   };
 }
 
-/// Known values for [AtKeysMaterial.keyPartType] — the mechanical role a key
+/// Known values for [CryptographicMaterial.keyPartType] — the mechanical role a key
 /// material plays, independent of the algorithm family (see
 /// [KeyAlgorithmType]).
 ///
@@ -68,7 +68,7 @@ abstract final class KeyAlgorithmType {
 /// [KeyAlgorithmType]. Roles describe what the mathematics does; whether an
 /// algorithm is classical, post-quantum or hybrid is a property of the
 /// [KeyAlgorithmType] token, and deployment purpose belongs in the keyId
-/// and [AtKeysMaterial.operations].
+/// and [CryptographicMaterial.operations].
 ///
 /// **Do not change any existing value below** — same rationale as
 /// [KeyAlgorithmType]: these strings are already persisted on disk and on
@@ -175,13 +175,16 @@ class KeyPartStatus {
       };
 }
 
+@Deprecated('Use CryptographicMaterial instead. This will be removed in v4')
+typedef AtKeysMaterial = CryptographicMaterial;
+
 /// One cryptographic key material — e.g. the public half of an encryption
 /// keypair. This is the object app code interacts with everywhere in
 /// [AtKeys]'s API (`addKey`, `getKey`, `keysForKeyId`, `keysForEnrollment`,
 /// `retireKey`); it is fully self-describing (`keyId`/`enrollmentId`
 /// included) so it never needs an owning wrapper to be meaningful on
 /// its own.
-final class AtKeysMaterial {
+final class CryptographicMaterial {
   final String keyId;
   final String? enrollmentId;
 
@@ -201,7 +204,7 @@ final class AtKeysMaterial {
   /// tokens. Unknown values are preserved, never rejected.
   final String status;
 
-  const AtKeysMaterial({
+  const CryptographicMaterial({
     required this.keyId,
     this.enrollmentId,
     required this.keyPartType,
@@ -212,13 +215,13 @@ final class AtKeysMaterial {
     this.status = KeyPartStatus.active,
   });
 
-  factory AtKeysMaterial.fromJson(
+  factory CryptographicMaterial.fromJson(
     Map<String, dynamic> json, {
     required String keyId,
     String? enrollmentId,
   }) {
     const assurance = AtKeysAssurance();
-    final material = AtKeysMaterial(
+    final material = CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
       keyPartType:
@@ -241,8 +244,8 @@ final class AtKeysMaterial {
   }
 
   /// A copy of this material with only [status] replaced.
-  AtKeysMaterial withStatus(String status) {
-    return AtKeysMaterial(
+  CryptographicMaterial withStatus(String status) {
+    return CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
       keyPartType: keyPartType,
@@ -270,7 +273,7 @@ final class AtKeysMaterial {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    if (other is! AtKeysMaterial) return false;
+    if (other is! CryptographicMaterial) return false;
     return keyId == other.keyId &&
         enrollmentId == other.enrollmentId &&
         keyPartType == other.keyPartType &&
@@ -294,7 +297,7 @@ final class AtKeysMaterial {
       );
 }
 
-/// Parses one container's `keys` array into a flat list of [AtKeysMaterial],
+/// Parses one container's `keys` array into a flat list of [CryptographicMaterial],
 /// validating each entry's `keyParts` (no duplicate `keyPartType` within one
 /// `keyId`) and rejecting a `keyId` that repeats within this container.
 ///
@@ -311,13 +314,13 @@ final class AtKeysMaterial {
 /// `(enrollment, keyId)`.
 ///
 /// [fieldPrefix] names this container in parse diagnostics.
-List<AtKeysMaterial> parseAtKeysDocument(
+List<CryptographicMaterial> parseAtKeysDocument(
   List<dynamic> keysJson, {
   String? enrollmentId,
   String fieldPrefix = 'keys',
 }) {
   const assurance = AtKeysAssurance();
-  final materials = <AtKeysMaterial>[];
+  final materials = <CryptographicMaterial>[];
   final seenKeyIds = <String>{};
 
   for (final entry in keysJson.asMap().entries) {
@@ -342,7 +345,7 @@ List<AtKeysMaterial> parseAtKeysDocument(
     for (final part in keyPartsJson.asMap().entries) {
       final partJson =
           assurance.expectMap(part.value, '$fieldPrefix.keyParts[${part.key}]');
-      final material = AtKeysMaterial.fromJson(
+      final material = CryptographicMaterial.fromJson(
         partJson,
         keyId: keyId,
         enrollmentId: enrollmentId,
@@ -367,9 +370,9 @@ List<AtKeysMaterial> parseAtKeysDocument(
 /// check stays, because a group whose halves name different owners is a
 /// programming error that would now be encoded as if it had none.
 List<Map<String, dynamic>> encodeAtKeysDocument(
-  Iterable<AtKeysMaterial> materials,
+  Iterable<CryptographicMaterial> materials,
 ) {
-  final groups = <String, List<AtKeysMaterial>>{};
+  final groups = <String, List<CryptographicMaterial>>{};
   for (final material in materials) {
     final group = groups.putIfAbsent(material.keyId, () => []);
     if (group.isNotEmpty) {

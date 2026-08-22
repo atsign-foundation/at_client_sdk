@@ -514,7 +514,7 @@ void main() {
       // keyPartType and keyAlgorithmType are open Strings: a reader must
       // hold and re-emit tokens it does not recognise, so a keyfile written
       // by a newer client survives a read-modify-flush by an older one.
-      final futuristic = AtKeysMaterial(
+      final futuristic = CryptographicMaterial(
         keyId: 'from-the-future',
         keyPartType: 'somethingNotInventedYet',
         keyAlgorithmType: 'slhdsa128s',
@@ -725,7 +725,7 @@ void main() {
 
     test('carries a non-default status and operations across', () {
       final source = AtKeys(keysList: [
-        AtKeysMaterial(
+        CryptographicMaterial(
             keyId: 'kem:xwing',
             enrollmentId: 'the-old-enrollment',
             keyPartType: CryptographicKeyType.privateDecapsulation,
@@ -766,7 +766,7 @@ void main() {
         symmetricKey('kem:xwing', enrollmentId: 'the-sitting-enrollment'),
       ]);
       final source = AtKeys(keysList: [
-        AtKeysMaterial(
+        CryptographicMaterial(
             keyId: 'kem:xwing',
             enrollmentId: 'the-old-enrollment',
             keyPartType: CryptographicKeyType.privateDecapsulation,
@@ -787,11 +787,11 @@ void main() {
   });
 
   group('AtKeys authentication material and rotation', () {
-    AtKeysMaterial authKey(String keyId,
+    CryptographicMaterial authKey(String keyId,
             {required String enrollmentId,
             String value = 'YXV0aA==',
             String status = KeyPartStatus.active}) =>
-        AtKeysMaterial(
+        CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
             keyPartType: CryptographicKeyType.privateAuthentication,
@@ -847,7 +847,7 @@ void main() {
       // The asymmetry that motivates the split: one authentication key, many
       // signing keys, because signature agility means one per algorithm.
       final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
-        AtKeysMaterial(
+        CryptographicMaterial(
             keyId: 'sign:mldsa65:1',
             enrollmentId: 'E1',
             keyPartType: CryptographicKeyType.privateSigning,
@@ -856,7 +856,7 @@ void main() {
             createdAt: DateTime.utc(2026, 1, 1)),
       ]);
 
-      atKeys.addKey(AtKeysMaterial(
+      atKeys.addKey(CryptographicMaterial(
           keyId: 'sign:rsa2048:1',
           enrollmentId: 'E1',
           keyPartType: CryptographicKeyType.privateSigning,
@@ -871,7 +871,7 @@ void main() {
       // duplicate, and permitting it would make "which key signs mldsa65"
       // ambiguous.
       expect(
-          () => atKeys.addKey(AtKeysMaterial(
+          () => atKeys.addKey(CryptographicMaterial(
               keyId: 'sign:mldsa65:2',
               enrollmentId: 'E1',
               keyPartType: CryptographicKeyType.privateSigning,
@@ -883,7 +883,7 @@ void main() {
       // ...and retiring the first frees that algorithm's slot, which is what
       // a signing-key rotation within one algorithm needs.
       atKeys.retireKey('E1', 'sign:mldsa65:1');
-      atKeys.addKey(AtKeysMaterial(
+      atKeys.addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:2',
           enrollmentId: 'E1',
           keyPartType: CryptographicKeyType.privateSigning,
@@ -900,9 +900,9 @@ void main() {
     // shape, which are only comparable if they are given the same material.
     String b64(String label) => base64Encode(utf8.encode(label));
 
-    AtKeysMaterial part(String keyId, String type, String algo, String value,
+    CryptographicMaterial part(String keyId, String type, String algo, String value,
             {String? enrollmentId, String status = KeyPartStatus.active}) =>
-        AtKeysMaterial(
+        CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
             keyPartType: type,
@@ -912,7 +912,7 @@ void main() {
             status: status);
 
     /// A complete signing keypair for [enrollmentId], both halves.
-    List<AtKeysMaterial> signingPair(String enrollmentId, String algo,
+    List<CryptographicMaterial> signingPair(String enrollmentId, String algo,
             {int generation = 1,
             String value = 'a',
             String status = KeyPartStatus.active}) =>
@@ -929,7 +929,7 @@ void main() {
     /// `privateSigning` role an enrollment's signing key uses, under its own
     /// keyId, with **no** enrollment id — so it lands in the atSign's own
     /// container rather than any enrollment's.
-    List<AtKeysMaterial> signingRoot() => [
+    List<CryptographicMaterial> signingRoot() => [
           part('root:mldsa65:1', CryptographicKeyType.privateSigning,
               KeyAlgorithmType.mlDsa65, 'root-priv'),
           part('root:mldsa65:1', CryptographicKeyType.publicVerification,

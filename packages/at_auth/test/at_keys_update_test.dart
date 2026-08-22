@@ -28,7 +28,7 @@ void main() {
 
   String pathFor(String _) => '${tempDir.path}/keys.atKeys';
 
-  AtKeysMaterial keyNamed(String keyId) => AtKeysMaterial(
+  CryptographicMaterial keyNamed(String keyId) => CryptographicMaterial(
         keyId: keyId,
         keyPartType: CryptographicKeyType.privateDecapsulation,
         keyAlgorithmType: KeyAlgorithmType.xWing,

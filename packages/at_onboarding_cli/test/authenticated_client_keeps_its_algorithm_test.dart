@@ -48,7 +48,7 @@ void main() {
     final now = DateTime.now().toUtc();
     final keys = AtKeys()
       ..enrollmentId = enrollmentId
-      ..addKey(AtKeysMaterial(
+      ..addKey(CryptographicMaterial(
         keyId: 'apkam:$enrollmentId:1',
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.privateAuthentication,
@@ -56,7 +56,7 @@ void main() {
         bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 3))),
         createdAt: now,
       ))
-      ..addKey(AtKeysMaterial(
+      ..addKey(CryptographicMaterial(
         keyId: 'apkam:$enrollmentId:1',
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.publicAuthentication,

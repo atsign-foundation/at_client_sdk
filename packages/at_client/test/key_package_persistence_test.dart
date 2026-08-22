@@ -63,14 +63,14 @@ void main() {
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
     final keys = AtKeys();
     final now = DateTime.now().toUtc();
-    keys.addKey(AtKeysMaterial(
+    keys.addKey(CryptographicMaterial(
       keyId: kpid,
       keyPartType: CryptographicKeyType.publicEncapsulation,
       keyAlgorithmType: KeyAlgorithmType.xWing,
       bytes: AtBytes(pair.publicKey),
       createdAt: now,
     ));
-    keys.addKey(AtKeysMaterial(
+    keys.addKey(CryptographicMaterial(
       keyId: kpid,
       keyPartType: CryptographicKeyType.privateDecapsulation,
       keyAlgorithmType: KeyAlgorithmType.xWing,
@@ -167,14 +167,14 @@ void main() {
       (legacyKpid, legacyPair, null, older),
       (pqKpid, pqPair, 'pq-enrollment-1', newer),
     ]) {
-      keys.addKey(AtKeysMaterial(
+      keys.addKey(CryptographicMaterial(
           keyId: kpid,
           enrollmentId: id,
           keyPartType: CryptographicKeyType.publicEncapsulation,
           keyAlgorithmType: KeyAlgorithmType.xWing,
           bytes: AtBytes(pair.publicKey),
           createdAt: at));
-      keys.addKey(AtKeysMaterial(
+      keys.addKey(CryptographicMaterial(
           keyId: kpid,
           enrollmentId: id,
           keyPartType: CryptographicKeyType.privateDecapsulation,
@@ -213,7 +213,7 @@ void main() {
       (CryptographicKeyType.publicEncapsulation, pair.publicKey),
       (CryptographicKeyType.privateDecapsulation, pair.secretKey),
     ]) {
-      keys.addKey(AtKeysMaterial(
+      keys.addKey(CryptographicMaterial(
           keyId: kpid,
           enrollmentId: 'enroll-1',
           keyPartType: part,

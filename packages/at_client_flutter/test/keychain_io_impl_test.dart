@@ -78,7 +78,7 @@ void main() {
     )
     ..enrollmentId = 'e-$atSign';
 
-  AtKeysMaterial material(String keyId) => AtKeysMaterial(
+  CryptographicMaterial material(String keyId) => CryptographicMaterial(
     keyId: keyId,
     keyPartType: CryptographicKeyType.symmetricEncryption,
     keyAlgorithmType: KeyAlgorithmType.aes256,

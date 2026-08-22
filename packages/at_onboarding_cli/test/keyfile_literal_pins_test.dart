@@ -119,7 +119,7 @@ void main() {
         ..apkamPublicKey = AtBytes.fromString(pkamPair.atPublicKey.publicKey)
         ..apkamPrivateKey = AtBytes.fromString(pkamPair.atPrivateKey.privateKey)
         ..apkamSymmetricKey = AtBytes.fromString(service.generateAESKey())
-        ..addKey(AtKeysMaterial(
+        ..addKey(CryptographicMaterial(
           keyId: 'auth:mldsa65:1',
           enrollmentId: '456',
           keyPartType: CryptographicKeyType.privateAuthentication,

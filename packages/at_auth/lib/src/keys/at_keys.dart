@@ -39,7 +39,7 @@ class _EnrollmentSlot {
   Map<String, String>? namespaces;
   String? appName;
   String? deviceName;
-  final Map<String, Map<String, AtKeysMaterial>> materialsByKeyId = {};
+  final Map<String, Map<String, CryptographicMaterial>> materialsByKeyId = {};
 
   AtKeysEnrollment get snapshot => AtKeysEnrollment(
         enrollmentId: enrollmentId,
@@ -55,7 +55,7 @@ class _EnrollmentSlot {
 /// at-rest concern (the passphrase envelope, self-encryption of the legacy
 /// fields) lives in `FileAtKeysIo`, not here.
 ///
-/// Typed key material ([AtKeysMaterial]) sits in one of two containers, and
+/// Typed key material ([CryptographicMaterial]) sits in one of two containers, and
 /// which one is a statement about who the material belongs to:
 ///
 /// - an **enrollment's** keys — its authentication keypair, its signing keys,
@@ -90,11 +90,11 @@ class AtKeys {
 
   // Keyed by keyId, then keyPartType (see CryptographicKeyType for the known
   // tokens; unknown tokens are held too).
-  final Map<String, Map<String, AtKeysMaterial>> _atSignMaterialsByKeyId = {};
+  final Map<String, Map<String, CryptographicMaterial>> _atSignMaterialsByKeyId = {};
 
   /// Every typed material in the document, both containers, in no particular
   /// order.
-  Iterable<AtKeysMaterial> get keys => [
+  Iterable<CryptographicMaterial> get keys => [
         ..._atSignMaterialsByKeyId.values.expand((byType) => byType.values),
         ..._enrollments.values.expand(
             (slot) => slot.materialsByKeyId.values.expand((b) => b.values)),
@@ -102,7 +102,7 @@ class AtKeys {
 
   /// The atSign's own materials — the signing root, nskey privates — with no
   /// enrollment between them and the document.
-  Iterable<AtKeysMaterial> get atSignKeys =>
+  Iterable<CryptographicMaterial> get atSignKeys =>
       _atSignMaterialsByKeyId.values.expand((byType) => byType.values);
 
   /// Every enrollment this keyfile holds. Writers emit one; the reader
@@ -112,7 +112,7 @@ class AtKeys {
 
   AtKeys({
     this.atsign,
-    List<AtKeysMaterial> keysList = const [],
+    List<CryptographicMaterial> keysList = const [],
   }) {
     for (final key in keysList) {
       addKey(key);
@@ -126,7 +126,7 @@ class AtKeys {
   /// The public constructor above is a writer's — app code assembling keys —
   /// and keeps the write-side policy. Sharing one path is what made the
   /// reader inherit the writer's refusal, which is the state this replaces.
-  AtKeys._parsed({this.atsign, required List<AtKeysMaterial> materials}) {
+  AtKeys._parsed({this.atsign, required List<CryptographicMaterial> materials}) {
     for (final material in materials) {
       _file(material);
     }
@@ -160,26 +160,26 @@ class AtKeys {
 
   /// Looks up one of [enrollmentId]'s materials by `(keyId, keyPartType)` —
   /// [type] is a [CryptographicKeyType] token.
-  AtKeysMaterial? getKey(String enrollmentId, String keyId, String type) =>
+  CryptographicMaterial? getKey(String enrollmentId, String keyId, String type) =>
       _enrollments[enrollmentId]?.materialsByKeyId[keyId]?[type];
 
   /// Looks up one of the atSign's own materials by `(keyId, keyPartType)`.
-  AtKeysMaterial? getAtSignKey(String keyId, String type) =>
+  CryptographicMaterial? getAtSignKey(String keyId, String type) =>
       _atSignMaterialsByKeyId[keyId]?[type];
 
   /// Every material of [enrollmentId] sharing [keyId] — e.g. the
   /// public+private halves of one keypair.
   ///
   /// Potentially might only contain a half of a keypair. Typically the public one.
-  Iterable<AtKeysMaterial> keysForKeyId(String enrollmentId, String keyId) =>
+  Iterable<CryptographicMaterial> keysForKeyId(String enrollmentId, String keyId) =>
       _enrollments[enrollmentId]?.materialsByKeyId[keyId]?.values ?? const [];
 
   /// Every atSign-scope material sharing [keyId].
-  Iterable<AtKeysMaterial> atSignKeysForKeyId(String keyId) =>
+  Iterable<CryptographicMaterial> atSignKeysForKeyId(String keyId) =>
       _atSignMaterialsByKeyId[keyId]?.values ?? const [];
 
   /// Returns every material tagged with [enrollmentId].
-  Iterable<AtKeysMaterial> keysForEnrollment(String enrollmentId) =>
+  Iterable<CryptographicMaterial> keysForEnrollment(String enrollmentId) =>
       _enrollments[enrollmentId]
           ?.materialsByKeyId
           .values
@@ -193,7 +193,7 @@ class AtKeys {
   /// per install is what this build produces. Reading does not, and the
   /// asymmetry is deliberate — see
   /// [AtKeysAssurance.refuseSecondLiveEnrollment].
-  void addKey(AtKeysMaterial material) {
+  void addKey(CryptographicMaterial material) {
     const AtKeysAssurance()
         .refuseSecondLiveEnrollment(existing: keys, candidate: material);
     _file(material);
@@ -206,13 +206,13 @@ class AtKeys {
   /// apply to it are the ones about whether it is *coherent* — no duplicate
   /// `(owner, keyId, part)`, no two active keys of one role and algorithm in
   /// one enrollment — and not the ones about what this build chooses to emit.
-  void _file(AtKeysMaterial material) {
+  void _file(CryptographicMaterial material) {
     const AtKeysAssurance().validateAddKey(existing: keys, candidate: material);
     _containerFor(material.enrollmentId)
         .putIfAbsent(material.keyId, () => {})[material.keyPartType] = material;
   }
 
-  Map<String, Map<String, AtKeysMaterial>> _containerFor(String? enrollmentId) {
+  Map<String, Map<String, CryptographicMaterial>> _containerFor(String? enrollmentId) {
     if (enrollmentId == null) return _atSignMaterialsByKeyId;
     return _enrollments
         .putIfAbsent(enrollmentId, () => _EnrollmentSlot(enrollmentId))
@@ -251,14 +251,14 @@ class AtKeys {
     final now = DateTime.now().toUtc();
     final keyId = keyIdPrefix('auth', algorithm) +
         '${nextAuthenticationGeneration(enrollmentId, algorithm)}';
-    addKey(AtKeysMaterial(
+    addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.privateAuthentication,
         keyAlgorithmType: algorithm,
         bytes: AtBytes.fromString(privateKey),
         createdAt: now));
-    addKey(AtKeysMaterial(
+    addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.publicAuthentication,
@@ -295,14 +295,14 @@ class AtKeys {
     final now = DateTime.now().toUtc();
     final keyId = keyIdPrefix('sign', algorithm) +
         '${nextSigningGeneration(enrollmentId, algorithm)}';
-    addKey(AtKeysMaterial(
+    addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.privateSigning,
         keyAlgorithmType: algorithm,
         bytes: AtBytes.fromString(privateKey),
         createdAt: now));
-    addKey(AtKeysMaterial(
+    addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.publicVerification,
@@ -533,7 +533,7 @@ class AtKeys {
   /// sign.
   List<String> retireSigningKeys(String enrollmentId, String algorithm,
       {String to = KeyPartStatus.retired}) {
-    final Map<String, Map<String, AtKeysMaterial>> byKeyId =
+    final Map<String, Map<String, CryptographicMaterial>> byKeyId =
         _enrollments[enrollmentId]?.materialsByKeyId ?? const {};
     final keyIds = [
       for (final entry in byKeyId.entries)
@@ -561,10 +561,10 @@ class AtKeys {
   /// Every other field rides across untouched, `createdAt` and `status`
   /// included: at_auth carries key material and does not interpret it, so the
   /// only thing an adoption may change is whose enrollment it is.
-  void adoptMaterials(Iterable<AtKeysMaterial> materials,
+  void adoptMaterials(Iterable<CryptographicMaterial> materials,
       {required String enrollmentId}) {
     for (final material in materials.toList()) {
-      addKey(AtKeysMaterial(
+      addKey(CryptographicMaterial(
           keyId: material.keyId,
           enrollmentId: enrollmentId,
           keyPartType: material.keyPartType,
@@ -592,7 +592,7 @@ class AtKeys {
   void retireAtSignKey(String keyId, {String to = KeyPartStatus.retired}) =>
       _retire(_atSignMaterialsByKeyId, keyId, to, 'the atSign');
 
-  void _retire(Map<String, Map<String, AtKeysMaterial>>? container, String keyId,
+  void _retire(Map<String, Map<String, CryptographicMaterial>>? container, String keyId,
       String to, String ownerLabel) {
     if (to == KeyPartStatus.active) {
       throw ArgumentError.value(to, 'to', 'retireKey cannot reactivate a key');
@@ -663,7 +663,7 @@ class AtKeys {
   /// successor root is added beside its retired predecessor rather than
   /// replacing it — the predecessor is what verifies everything it signed.
   void replaceKey(String enrollmentId, String keyId,
-      Iterable<AtKeysMaterial> replacements,
+      Iterable<CryptographicMaterial> replacements,
       {String to = KeyPartStatus.retired}) {
     final outgoing = keysForKeyId(enrollmentId, keyId).toList();
     if (outgoing.isEmpty) {
@@ -671,7 +671,7 @@ class AtKeys {
           'AtKeys holds no such keyId for enrollment "$enrollmentId"');
     }
     retireKey(enrollmentId, keyId, to: to);
-    final filed = <AtKeysMaterial>[];
+    final filed = <CryptographicMaterial>[];
     try {
       for (final replacement in replacements) {
         addKey(replacement);
@@ -744,7 +744,7 @@ class AtKeys {
   /// (delegates to [_fromLegacyJson]); a `version` other than
   /// [supportedVersion] throws [AtKeysUnsupportedVersionException]. Each
   /// container's entries are parsed and validated by [parseAtKeysDocument],
-  /// which returns the flattened [AtKeysMaterial]s that are actually stored.
+  /// which returns the flattened [CryptographicMaterial]s that are actually stored.
   ///
   /// Several `enrollments` entries are read, and the caller says which one it
   /// authenticates as (or asks [resolveAuthenticatingEnrollment]). Writers
@@ -796,7 +796,7 @@ class AtKeys {
     final atsign =
         assurance.expectNonEmptyString(json['atsign'], 'atsign').toAtsign();
 
-    final materials = <AtKeysMaterial>[];
+    final materials = <CryptographicMaterial>[];
     if (json.containsKey('atsignKeys')) {
       materials.addAll(parseAtKeysDocument(
           assurance.expectList(json['atsignKeys'], 'atsignKeys'),
@@ -1134,7 +1134,7 @@ class AtKeys {
   /// them apart: a keyfile written by a newer client still holds that
   /// enrollment's key, so answering "none" for it would send the caller to the
   /// flat fields, which on a retrofitted keyfile belong to somebody else.
-  AtKeysMaterial? _activeAuthenticationMaterial(String enrollmentId) =>
+  CryptographicMaterial? _activeAuthenticationMaterial(String enrollmentId) =>
       keysForEnrollment(enrollmentId)
           .where((m) =>
               m.keyPartType == CryptographicKeyType.privateAuthentication &&

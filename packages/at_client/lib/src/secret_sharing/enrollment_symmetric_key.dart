@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:at_auth/at_auth.dart' show AtKeys, AtKeysMaterial;
+import 'package:at_auth/at_auth.dart' show AtKeys, CryptographicMaterial;
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm;
 import 'package:at_client/src/secret_sharing/pq_envelope.dart'
     show pqOpenFromBase64;
@@ -120,7 +120,7 @@ Future<(String, Uint8List, String)> _keyPackageHalves(AtKeys keys) async {
   //
   // No enrollment id to scope by: this runs before one has been filed against
   // the freshly minted package, and that is the case the untagged arm serves.
-  final AtKeysMaterial? private = keyPackageMaterial(keys);
+  final CryptographicMaterial? private = keyPackageMaterial(keys);
   if (private == null) {
     throw StateError(
         'These AtKeys hold no key-establishment decapsulation private key, so '

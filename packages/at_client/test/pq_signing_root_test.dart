@@ -592,14 +592,14 @@ void main() {
     final held = await MlDsa65PureDartAlgo().generateKeyPair();
     final keys = await freshIo.read(atSign);
     final createdAt = DateTime.now().toUtc();
-    keys.addKey(AtKeysMaterial(
+    keys.addKey(CryptographicMaterial(
       keyId: rootSlot1,
       keyPartType: CryptographicKeyType.privateSigning,
       keyAlgorithmType: KeyAlgorithmType.mlDsa65,
       bytes: AtBytes(held.secretKey),
       createdAt: createdAt,
     ));
-    keys.addKey(AtKeysMaterial(
+    keys.addKey(CryptographicMaterial(
       keyId: rootSlot1,
       keyPartType: CryptographicKeyType.publicVerification,
       keyAlgorithmType: KeyAlgorithmType.mlDsa65,
@@ -675,7 +675,7 @@ void main() {
       atUpdate: 1,
       beforeUpdate: (io) async {
         final keys = await io.read(atSign);
-        keys.addKey(AtKeysMaterial(
+        keys.addKey(CryptographicMaterial(
           keyId: rootSlot1,
           keyPartType: CryptographicKeyType.privateSigning,
           keyAlgorithmType: PqSigningRoot.rootKeyAlgoToken,
@@ -723,7 +723,7 @@ void main() {
     final io = await keysIo();
     final keys = await io.read(atSign);
     final held = Uint8List.fromList([7, 8, 9]);
-    keys.addKey(AtKeysMaterial(
+    keys.addKey(CryptographicMaterial(
       keyId: '${PqSigningRoot.keyIdPrefixFor(laterAlgo)}1',
       keyPartType: CryptographicKeyType.privateSigning,
       keyAlgorithmType: laterAlgo,
@@ -744,7 +744,7 @@ void main() {
     // independent.
     final io = await keysIo();
     final keys = await io.read(atSign);
-    keys.addKey(AtKeysMaterial(
+    keys.addKey(CryptographicMaterial(
       keyId: '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}1',
       keyPartType: CryptographicKeyType.privateSigning,
       keyAlgorithmType: PqSigningRoot.rootKeyAlgoToken,
@@ -964,7 +964,7 @@ void main() {
       final io = await keysIo();
       final keys = await io.read(atSign);
       for (var i = 0; i < pairs.length; i++) {
-        keys.addKey(AtKeysMaterial(
+        keys.addKey(CryptographicMaterial(
           keyId:
               '${PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken)}${i + 1}',
           keyPartType: CryptographicKeyType.privateSigning,

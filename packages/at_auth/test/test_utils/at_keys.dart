@@ -23,7 +23,7 @@ AtKeys legacyAtKeys({Atsign? atsign}) {
 
 final _defaultCreatedAt = DateTime.utc(2024, 1, 1);
 
-AtKeysMaterial symmetricKey(
+CryptographicMaterial symmetricKey(
   String keyId, {
   String value = 'c2VjcmV0',
   String algorithm = KeyAlgorithmType.aes256,
@@ -31,7 +31,7 @@ AtKeysMaterial symmetricKey(
   String? enrollmentId,
   DateTime? createdAt,
 }) {
-  return AtKeysMaterial(
+  return CryptographicMaterial(
     keyId: keyId,
     enrollmentId: enrollmentId,
     keyPartType: CryptographicKeyType.symmetricEncryption,
@@ -44,7 +44,7 @@ AtKeysMaterial symmetricKey(
 
 /// The public+private halves of one RSA keypair sharing [keyId] — spread
 /// this into a `keysList` (`[...rsaKeyPair('id')]`) since it's two materials.
-List<AtKeysMaterial> rsaKeyPair(
+List<CryptographicMaterial> rsaKeyPair(
   String keyId, {
   String publicValue = 'cHVibGlj',
   String privateValue = 'cHJpdmF0ZQ==',
@@ -53,7 +53,7 @@ List<AtKeysMaterial> rsaKeyPair(
 }) {
   final at = createdAt ?? _defaultCreatedAt;
   return [
-    AtKeysMaterial(
+    CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
       keyPartType: CryptographicKeyType.publicEncryption,
@@ -61,7 +61,7 @@ List<AtKeysMaterial> rsaKeyPair(
       bytes: AtBytes.fromString(publicValue),
       createdAt: at,
     ),
-    AtKeysMaterial(
+    CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
       keyPartType: CryptographicKeyType.privateDecryption,

@@ -38,7 +38,7 @@ void main() {
         ..apkamSymmetricKey = AtBytes.fromString('QVBLU1lN')
         ..enrollmentId = 'enroll-1'
         ..metadata['note'] = 'kept'
-        ..addKey(AtKeysMaterial(
+        ..addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
           keyPartType: CryptographicKeyType.privateSigning,
@@ -46,7 +46,7 @@ void main() {
           bytes: AtBytes.fromString('UFJJVg=='),
           createdAt: DateTime.utc(2026, 6, 11),
         ))
-        ..addKey(AtKeysMaterial(
+        ..addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
           keyPartType: CryptographicKeyType.publicVerification,
@@ -61,7 +61,7 @@ void main() {
             deviceName: 'iphone')
         // No enrollment id, so it is the atSign's own — an nskey private,
         // which every enrollment holding the grant reads from one place.
-        ..addKey(AtKeysMaterial(
+        ..addKey(CryptographicMaterial(
           keyId: 'nskey.buzz.abc123',
           keyPartType: CryptographicKeyType.privateDecapsulation,
           keyAlgorithmType: KeyAlgorithmType.xWing,
@@ -119,7 +119,7 @@ void main() {
         ..defaultSelfEncryptionKey = AtBytes.fromString('U0VMRkVOQw==')
         ..apkamSymmetricKey = AtBytes.fromString('QVBLU1lN')
         ..enrollmentId = 'enroll-1'
-        ..addKey(AtKeysMaterial(
+        ..addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
           keyPartType: CryptographicKeyType.privateSigning,
@@ -145,7 +145,7 @@ void main() {
       // A reader distinguishes "field with null" from "no such field"; the
       // legacy shape has always carried the full field set.
       final json = (AtKeys(atsign: '@alice'.toAtsign())
-            ..addKey(AtKeysMaterial(
+            ..addKey(CryptographicMaterial(
               keyId: 'sign:mldsa65:1',
               keyPartType: CryptographicKeyType.privateSigning,
               keyAlgorithmType: KeyAlgorithmType.mlDsa65,

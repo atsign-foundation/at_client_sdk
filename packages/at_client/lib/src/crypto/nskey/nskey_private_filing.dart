@@ -7,7 +7,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeys,
         AtKeysSourceAbsentException,
         AtKeysIo,
-        AtKeysMaterial,
+        CryptographicMaterial,
         CryptographicKeyType,
         WrittenAtKeysIo;
 import 'package:at_client/src/crypto/crypto.dart' show FiledNskeyPrivate;
@@ -446,7 +446,7 @@ class NskeyPrivateFiling {
           // and putIfNewer already made arrival idempotent upstream.
           return false;
         }
-        keys.addKey(AtKeysMaterial(
+        keys.addKey(CryptographicMaterial(
           keyId: keyId,
           keyPartType: CryptographicKeyType.privateDecapsulation,
           keyAlgorithmType: materialAlgo,

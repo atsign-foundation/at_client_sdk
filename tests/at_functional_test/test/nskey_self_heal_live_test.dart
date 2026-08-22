@@ -198,7 +198,7 @@ void main() {
     final seeded = AtKeys();
     const kid = 'startprime0000';
     final bytes = Uint8List.fromList(List<int>.generate(32, (i) => i));
-    seeded.addKey(AtKeysMaterial(
+    seeded.addKey(CryptographicMaterial(
       keyId: NskeyPrivateFiling.keyIdFor(namespace, kid),
       keyPartType: CryptographicKeyType.privateDecapsulation,
       keyAlgorithmType: KeyAlgorithmType.xWing,

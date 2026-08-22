@@ -1,7 +1,7 @@
 import 'dart:convert' show base64Encode;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysIo, AtKeysMaterial, CryptographicKeyType, KeyPartStatus;
+    show AtKeys, AtKeysIo, CryptographicMaterial, CryptographicKeyType, KeyPartStatus;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package.dart'
@@ -111,7 +111,7 @@ Future<PersistedApkamKeys?> _load(
 /// The live private half of a key package in [keys], or null — the first entry
 /// of [keyPackageMaterials], which is where the selection rule lives.
 @experimental
-AtKeysMaterial? keyPackageMaterial(AtKeys keys, {String? enrollmentId}) =>
+CryptographicMaterial? keyPackageMaterial(AtKeys keys, {String? enrollmentId}) =>
     keyPackageMaterials(keys, enrollmentId: enrollmentId).firstOrNull;
 
 /// Every usable private half of a key package in [keys] that belongs to one
@@ -147,13 +147,13 @@ AtKeysMaterial? keyPackageMaterial(AtKeys keys, {String? enrollmentId}) =>
 /// PQ enrollment's kpid — an address its own enrollment record never
 /// advertised.
 @experimental
-List<AtKeysMaterial> keyPackageMaterials(AtKeys keys, {String? enrollmentId}) {
+List<CryptographicMaterial> keyPackageMaterials(AtKeys keys, {String? enrollmentId}) {
   // Any key-establishment algorithm this build implements, not X-Wing alone:
   // an atSign configured for ML-KEM-1024 files its package under that token,
   // and an X-Wing-only filter would make it invisible — the client would then
   // mint a fresh key and answer at a kpid its enrollment never advertised, so
   // nothing addressed to it could ever arrive.
-  bool isKeyEstablishment(AtKeysMaterial m) =>
+  bool isKeyEstablishment(CryptographicMaterial m) =>
       SecretSharingAlgos.keyAlgoForMaterial(m.keyAlgorithmType) != null;
 
   // Paired by `(owner, keyId)`, not by keyId alone. A keyId is unique within

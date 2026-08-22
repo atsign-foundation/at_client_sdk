@@ -49,8 +49,8 @@ void main() {
         ],
       };
 
-  AtKeysMaterial authMaterial(String enrollmentId, String algorithm) =>
-      AtKeysMaterial(
+  CryptographicMaterial authMaterial(String enrollmentId, String algorithm) =>
+      CryptographicMaterial(
         keyId: 'auth:$algorithm:1',
         enrollmentId: enrollmentId,
         keyPartType: CryptographicKeyType.privateAuthentication,

@@ -5,7 +5,7 @@ import 'package:at_auth/at_auth.dart'
     show
         AtEnrollment,
         AtKeys,
-        AtKeysMaterial,
+        CryptographicMaterial,
         CryptographicKeyType,
         EnrollmentUpdateRequest,
         KeyEntryStatus,
@@ -164,7 +164,7 @@ class KeyPackageMinting with ApkamSigning {
     // would drop the other's addition.
     await io.update(AtUtils.fixAtSign(atSign).toAtsign(), (keys) {
       for (final key in minted) {
-        keys.addKey(AtKeysMaterial(
+        keys.addKey(CryptographicMaterial(
           enrollmentId: enrolment,
           keyId: key.kpid,
           keyPartType: CryptographicKeyType.publicEncapsulation,
@@ -172,7 +172,7 @@ class KeyPackageMinting with ApkamSigning {
           bytes: AtBytes(key.publicKey),
           createdAt: key.createdAt,
         ));
-        keys.addKey(AtKeysMaterial(
+        keys.addKey(CryptographicMaterial(
           enrollmentId: enrolment,
           keyId: key.kpid,
           keyPartType: CryptographicKeyType.privateDecapsulation,

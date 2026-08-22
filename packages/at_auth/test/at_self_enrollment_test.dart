@@ -311,7 +311,7 @@ void main() {
           final keys = await metadataKeysIo.read(atSign);
           // The handed keys carry the freshly minted ML-DSA APKAM keypair.
           expect(base64Decode(keys.apkamPublicKey.toString()).length, 1952);
-          keys.addKey(AtKeysMaterial(
+          keys.addKey(CryptographicMaterial(
               keyId: 'kp-abc123',
               keyPartType: CryptographicKeyType.privateDecapsulation,
               keyAlgorithmType: KeyAlgorithmType.xWing,
