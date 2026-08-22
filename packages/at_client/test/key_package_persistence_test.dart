@@ -65,15 +65,15 @@ void main() {
     final now = DateTime.now().toUtc();
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicMaterialRole.publicEncapsulation,
-      keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+      role: CryptographicMaterialRole.publicEncapsulation,
+      algorithm: CryptographicMaterialAlgorithm.xWing,
       bytes: AtBytes(pair.publicKey),
       createdAt: now,
     ));
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicMaterialRole.privateDecapsulation,
-      keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+      role: CryptographicMaterialRole.privateDecapsulation,
+      algorithm: CryptographicMaterialAlgorithm.xWing,
       bytes: AtBytes(pair.secretKey),
       createdAt: now,
     ));
@@ -170,15 +170,15 @@ void main() {
       keys.addKey(CryptographicMaterial(
           keyId: kpid,
           enrollmentId: id,
-          keyPartType: CryptographicMaterialRole.publicEncapsulation,
-          keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+          role: CryptographicMaterialRole.publicEncapsulation,
+          algorithm: CryptographicMaterialAlgorithm.xWing,
           bytes: AtBytes(pair.publicKey),
           createdAt: at));
       keys.addKey(CryptographicMaterial(
           keyId: kpid,
           enrollmentId: id,
-          keyPartType: CryptographicMaterialRole.privateDecapsulation,
-          keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+          role: CryptographicMaterialRole.privateDecapsulation,
+          algorithm: CryptographicMaterialAlgorithm.xWing,
           bytes: AtBytes(pair.secretKey),
           createdAt: at));
     }
@@ -207,7 +207,8 @@ void main() {
   /// Files both halves of [pair] under its kpid, for `enroll-1`.
   String fileKeyPackage(
       AtKeys keys, ({Uint8List publicKey, Uint8List secretKey}) pair,
-      {required DateTime createdAt, String status = KeyPartStatus.active}) {
+      {required DateTime createdAt,
+      String status = CryptographicMaterialStatus.active}) {
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
     for (final (part, bytes) in [
       (CryptographicMaterialRole.publicEncapsulation, pair.publicKey),
@@ -216,8 +217,8 @@ void main() {
       keys.addKey(CryptographicMaterial(
           keyId: kpid,
           enrollmentId: 'enroll-1',
-          keyPartType: part,
-          keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+          role: part,
+          algorithm: CryptographicMaterialAlgorithm.xWing,
           bytes: AtBytes(bytes),
           createdAt: createdAt,
           status: status));
@@ -236,7 +237,7 @@ void main() {
     final oldKpid = fileKeyPackage(
         keys, await XWingPureDartAlgo.instance.generateKeyPair(),
         createdAt: DateTime.now().toUtc().subtract(const Duration(days: 3)),
-        status: KeyPartStatus.retired);
+        status: CryptographicMaterialStatus.retired);
     final newKpid = fileKeyPackage(
         keys, await XWingPureDartAlgo.instance.generateKeyPair(),
         createdAt: DateTime.now().toUtc());
@@ -312,7 +313,7 @@ void main() {
     final keys = AtKeys();
     fileKeyPackage(keys, await XWingPureDartAlgo.instance.generateKeyPair(),
         createdAt: DateTime.now().toUtc().subtract(const Duration(days: 9)),
-        status: KeyPartStatus.dead);
+        status: CryptographicMaterialStatus.dead);
     final liveKpid = fileKeyPackage(
         keys, await XWingPureDartAlgo.instance.generateKeyPair(),
         createdAt: DateTime.now().toUtc());

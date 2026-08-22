@@ -19,7 +19,7 @@ import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
 void main() {
-  // The keyIds and keyPartTypes below are arbitrary PAYLOAD: these pins hold
+  // The keyIds and roles below are arbitrary PAYLOAD: these pins hold
   // the document's STRUCTURE — field names, nesting, which container an entry
   // sits in, encoding — and the ids are just strings passing through it. Do
   // not read them as the canonical shapes; those are pinned against their
@@ -41,16 +41,16 @@ void main() {
         ..addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
-          keyPartType: CryptographicMaterialRole.privateSigning,
-          keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
+          role: CryptographicMaterialRole.privateSigning,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
           bytes: AtBytes.fromString('UFJJVg=='),
           createdAt: DateTime.utc(2026, 6, 11),
         ))
         ..addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
-          keyPartType: CryptographicMaterialRole.publicVerification,
-          keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
+          role: CryptographicMaterialRole.publicVerification,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
           bytes: AtBytes.fromString('UFVC'),
           operations: const ['verify'],
           createdAt: DateTime.utc(2026, 6, 11),
@@ -63,11 +63,11 @@ void main() {
         // which every enrollment holding the grant reads from one place.
         ..addKey(CryptographicMaterial(
           keyId: 'nskey.buzz.abc123',
-          keyPartType: CryptographicMaterialRole.privateDecapsulation,
-          keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+          role: CryptographicMaterialRole.privateDecapsulation,
+          algorithm: CryptographicMaterialAlgorithm.xWing,
           bytes: AtBytes.fromString('U0VFRA=='),
           createdAt: DateTime.utc(2026, 6, 11),
-          status: KeyPartStatus.retired,
+          status: CryptographicMaterialStatus.retired,
         ));
 
       // The golden, spelled out: legacy flat fields first (merged, not
@@ -90,8 +90,8 @@ void main() {
           '"version":1,'
           '"atsign":"@alice",'
           '"atsignKeys":['
-          '{"keyId":"nskey.buzz.abc123","keyParts":['
-          '{"keyPartType":"privateDecapsulation","keyAlgorithmType":"xwing",'
+          '{"keyId":"nskey.buzz.abc123","material":['
+          '{"role":"privateDecapsulation","algorithm":"xwing",'
           '"createdAt":"2026-06-11T00:00:00.000Z","status":"retired",'
           '"bytes":"U0VFRA=="}]}],'
           '"enrollments":['
@@ -100,11 +100,11 @@ void main() {
           '"appName":"wavi",'
           '"deviceName":"iphone",'
           '"keys":['
-          '{"keyId":"sign:mldsa65:1","keyParts":['
-          '{"keyPartType":"privateSigning","keyAlgorithmType":"mldsa65",'
+          '{"keyId":"sign:mldsa65:1","material":['
+          '{"role":"privateSigning","algorithm":"mldsa65",'
           '"createdAt":"2026-06-11T00:00:00.000Z","status":"active",'
           '"bytes":"UFJJVg=="},'
-          '{"keyPartType":"publicVerification","keyAlgorithmType":"mldsa65",'
+          '{"role":"publicVerification","algorithm":"mldsa65",'
           '"operations":["verify"],'
           '"createdAt":"2026-06-11T00:00:00.000Z","status":"active",'
           '"bytes":"UFVC"}]}]}]}');
@@ -122,8 +122,8 @@ void main() {
         ..addKey(CryptographicMaterial(
           keyId: 'sign:mldsa65:1',
           enrollmentId: 'enroll-2',
-          keyPartType: CryptographicMaterialRole.privateSigning,
-          keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
+          role: CryptographicMaterialRole.privateSigning,
+          algorithm: CryptographicMaterialAlgorithm.mlDsa65,
           bytes: AtBytes.fromString('UFJJVg=='),
           createdAt: DateTime.utc(2026, 6, 11),
         ));
@@ -135,7 +135,7 @@ void main() {
       final material = reread.getKey('enroll-2', 'sign:mldsa65:1',
           CryptographicMaterialRole.privateSigning);
       expect(material, isNotNull);
-      expect(material!.keyAlgorithmType, 'mldsa65');
+      expect(material!.algorithm, 'mldsa65');
       expect(material.bytes.toString(), 'UFJJVg==');
       expect(material.enrollmentId, 'enroll-2');
     });
@@ -146,8 +146,8 @@ void main() {
       final json = (AtKeys(atsign: '@alice'.toAtsign())
             ..addKey(CryptographicMaterial(
               keyId: 'sign:mldsa65:1',
-              keyPartType: CryptographicMaterialRole.privateSigning,
-              keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
+              role: CryptographicMaterialRole.privateSigning,
+              algorithm: CryptographicMaterialAlgorithm.mlDsa65,
               bytes: AtBytes.fromString('QQ=='),
               createdAt: DateTime.utc(2026, 6, 11),
             )))

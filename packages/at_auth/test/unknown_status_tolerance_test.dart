@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 /// A keyfile written by a newer client stays readable, and losslessly
 /// flushable, by an older one.
 ///
-/// `CryptographicMaterial.keyAlgorithmType`'s dartdoc has stated that rule for the
+/// `CryptographicMaterial.algorithm`'s dartdoc has stated that rule for the
 /// whole document since the typed keyfile existed. `status` was an `enum`
 /// parsed through a throwing `expectEnum`, so it was the one field that broke
 /// it: a keyfile carrying any status a build did not know was refused **in its
@@ -28,11 +28,11 @@ void main() {
             'keys': [
               {
                 'keyId': 'k1',
-                'keyParts': [
+                'material': [
                   {
-                    'keyPartType':
+                    'role':
                         CryptographicMaterialRole.privateAuthentication,
-                    'keyAlgorithmType': CryptographicMaterialAlgorithm.rsa2048,
+                    'algorithm': CryptographicMaterialAlgorithm.rsa2048,
                     'createdAt': '2026-08-14T00:00:00.000Z',
                     'status': status,
                     'bytes': 'dmFsdWU=',
@@ -60,11 +60,11 @@ void main() {
       // reads too, so "it parsed" above is not passing for some unrelated
       // reason.
       expect(
-          AtKeys.fromJson(documentWith(KeyPartStatus.retired))
+          AtKeys.fromJson(documentWith(CryptographicMaterialStatus.retired))
               .keys
               .single
               .status,
-          KeyPartStatus.retired);
+          CryptographicMaterialStatus.retired);
     });
 
     test('round-trips unmodified on flush', () {
@@ -75,7 +75,7 @@ void main() {
       final flushed = AtKeys.fromJson(documentWith(unknown)).toJson();
 
       final part = ((flushed['enrollments'] as List).single['keys'] as List)
-          .single['keyParts']
+          .single['material']
           .single;
       expect(part['status'], unknown);
       expect(part['bytes'], 'dmFsdWU=',
@@ -95,7 +95,7 @@ void main() {
       // an active material when there is one, so isNull above is the status
       // being skipped rather than the selector being broken.
       expect(
-          AtKeys.fromJson(documentWith(KeyPartStatus.active))
+          AtKeys.fromJson(documentWith(CryptographicMaterialStatus.active))
               .resolveAuthenticatingEnrollment(),
           'e1');
     });
@@ -113,13 +113,13 @@ void main() {
 
       // The contrast arm: a known status moves, so the refusal above is about
       // the unknown token rather than retireKey being broken outright.
-      final known = AtKeys.fromJson(documentWith(KeyPartStatus.active));
+      final known = AtKeys.fromJson(documentWith(CryptographicMaterialStatus.active));
       known.retireKey('e1', 'k1');
-      expect(known.keys.single.status, KeyPartStatus.retired);
+      expect(known.keys.single.status, CryptographicMaterialStatus.retired);
     });
 
     test('may not be retired TO, either', () {
-      final keys = AtKeys.fromJson(documentWith(KeyPartStatus.active));
+      final keys = AtKeys.fromJson(documentWith(CryptographicMaterialStatus.active));
       expect(() => keys.retireKey('e1', 'k1', to: unknown),
           throwsA(isA<ArgumentError>()),
           reason: 'moving a key INTO a status this build does not understand '
@@ -132,25 +132,25 @@ void main() {
       // Declaration index used to supply this for free, which also meant
       // reordering the enum silently redefined every transition check in the
       // package. It is a contract now, so it is pinned as one.
-      expect(KeyPartStatus.rankOf(KeyPartStatus.active), 0);
-      expect(KeyPartStatus.rankOf(KeyPartStatus.retired), 1);
-      expect(KeyPartStatus.rankOf(KeyPartStatus.dead), 2);
-      expect(KeyPartStatus.rankOf(unknown), isNull);
-      expect(KeyPartStatus.rankOf(''), isNull);
+      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.active), 0);
+      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.retired), 1);
+      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.dead), 2);
+      expect(CryptographicMaterialStatus.rankOf(unknown), isNull);
+      expect(CryptographicMaterialStatus.rankOf(''), isNull);
     });
 
     test('still refuses a backward move between known tokens', () {
       // The invariant the enum's index used to carry. If this passes while
       // the rank function is broken, the tolerance above was bought by
       // dropping the rule it was meant to preserve.
-      final keys = AtKeys.fromJson(documentWith(KeyPartStatus.dead));
-      expect(() => keys.retireKey('e1', 'k1', to: KeyPartStatus.retired),
+      final keys = AtKeys.fromJson(documentWith(CryptographicMaterialStatus.dead));
+      expect(() => keys.retireKey('e1', 'k1', to: CryptographicMaterialStatus.retired),
           throwsA(isA<ArgumentError>()));
     });
 
     test('refuses to reactivate, as before', () {
-      final keys = AtKeys.fromJson(documentWith(KeyPartStatus.retired));
-      expect(() => keys.retireKey('e1', 'k1', to: KeyPartStatus.active),
+      final keys = AtKeys.fromJson(documentWith(CryptographicMaterialStatus.retired));
+      expect(() => keys.retireKey('e1', 'k1', to: CryptographicMaterialStatus.active),
           throwsA(isA<ArgumentError>()));
     });
   });
@@ -172,14 +172,14 @@ void main() {
     // Unchanged behaviour, pinned here because the parse moved: a document
     // that omits the field predates status entirely and its material is in
     // use.
-    final document = documentWith(KeyPartStatus.active);
+    final document = documentWith(CryptographicMaterialStatus.active);
     ((document['enrollments'] as List).single['keys'] as List)
-        .single['keyParts']
+        .single['material']
         .single
         .remove('status');
 
     final keys = AtKeys.fromJson(document);
-    expect(keys.keys.single.status, KeyPartStatus.active);
+    expect(keys.keys.single.status, CryptographicMaterialStatus.active);
     expect(keys.resolveAuthenticatingEnrollment(), 'e1');
   });
 }

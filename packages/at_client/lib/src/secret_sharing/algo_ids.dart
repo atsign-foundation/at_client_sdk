@@ -192,7 +192,7 @@ class SecretSharingAlgos {
         _ => null,
       };
 
-  /// The `CryptographicMaterial.keyAlgorithmType` token a keyfile names [keyAlgo] by.
+  /// The `CryptographicMaterial.algorithm` token a keyfile names [keyAlgo] by.
   ///
   /// A keyfile has its own vocabulary — `xwing`, `mlkem1024` — deliberately
   /// shared with the pkam/enrollment `signingAlgo` literals rather than with
@@ -204,11 +204,11 @@ class SecretSharingAlgos {
         _ => null,
       };
 
-  /// The protocol id for a keyfile's `keyAlgorithmType` token, or null if this
+  /// The protocol id for a keyfile's `algorithm` token, or null if this
   /// build does not know that token.
   ///
   /// Null is how a key-package lookup tells a key it can use from one it
-  /// cannot: `keyAlgorithmType` is an open string by contract — a keyfile
+  /// cannot: `algorithm` is an open string by contract — a keyfile
   /// written by a newer client round-trips values this build has never seen —
   /// so an unknown token means "not mine", not "malformed".
   static String? keyAlgoForMaterial(String materialAlgo) =>

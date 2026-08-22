@@ -50,7 +50,7 @@ void main() {
             'on approval — a published encapsulation target whose private half '
             'was never kept leaves every sender sealing to a key that can '
             'never be opened');
-    expect(private!.keyAlgorithmType, CryptographicMaterialAlgorithm.xWing);
+    expect(private!.algorithm, CryptographicMaterialAlgorithm.xWing);
 
     // The public half is stored too, under the same keyId, so the pair can be
     // recovered together. Both are untagged at this point — the builder runs

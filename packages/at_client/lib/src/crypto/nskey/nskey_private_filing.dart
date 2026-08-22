@@ -268,14 +268,13 @@ class NskeyPrivateFiling {
       final material = keys.getAtSignKey(keyIdFor(namespace, nskeyKid),
           CryptographicMaterialRole.privateDecapsulation);
       if (material == null) return null;
-      final keyAlgo =
-          SecretSharingAlgos.keyAlgoForMaterial(material.keyAlgorithmType);
+      final keyAlgo = SecretSharingAlgos.keyAlgoForMaterial(material.algorithm);
       final kem = keyAlgo == null ? null : SecretSharingAlgos.kemFor(keyAlgo);
       if (kem == null) {
         // Filed by a newer client under a KEM this build cannot expand. The
         // namespace reads as one this client cannot open, which is the truth.
         _logger.info('The nskey seed for $namespace:$nskeyKid is a '
-            '"${material.keyAlgorithmType}" key this build cannot expand');
+            '"${material.algorithm}" key this build cannot expand');
         return null;
       }
       try {
@@ -288,7 +287,7 @@ class NskeyPrivateFiling {
         // caller above — the namespace simply reads as unopenable — and the
         // cause is a keyfile this client will never repair on its own.
         _logger.severe('The nskey material filed for $namespace:$nskeyKid '
-            'under "${material.keyAlgorithmType}" is not a valid seed for it, '
+            'under "${material.algorithm}" is not a valid seed for it, '
             'so this namespace cannot be opened: $e');
         return null;
       }
@@ -344,8 +343,7 @@ class NskeyPrivateFiling {
     // with no enrollment, and every enrollment holding the grant reads the
     // same entry.
     for (final material in keys.atSignKeys) {
-      if (material.keyPartType !=
-              CryptographicMaterialRole.privateDecapsulation ||
+      if (material.role != CryptographicMaterialRole.privateDecapsulation ||
           !material.keyId.startsWith(prefix)) {
         continue;
       }
@@ -376,8 +374,7 @@ class NskeyPrivateFiling {
     try {
       return {
         for (final material in keys.atSignKeys)
-          if (material.keyPartType ==
-                  CryptographicMaterialRole.privateDecapsulation &&
+          if (material.role == CryptographicMaterialRole.privateDecapsulation &&
               material.keyId.startsWith(prefix))
             material.keyId.substring(prefix.length):
                 NskeySeed(Uint8List.fromList(material.bytes.bytes))
@@ -449,8 +446,8 @@ class NskeyPrivateFiling {
         }
         keys.addKey(CryptographicMaterial(
           keyId: keyId,
-          keyPartType: CryptographicMaterialRole.privateDecapsulation,
-          keyAlgorithmType: materialAlgo,
+          role: CryptographicMaterialRole.privateDecapsulation,
+          algorithm: materialAlgo,
           bytes: AtBytes(seed.bytes),
           createdAt: createdAt ?? DateTime.now().toUtc(),
         ));

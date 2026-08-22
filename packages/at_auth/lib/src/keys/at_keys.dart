@@ -31,7 +31,7 @@ final class AtKeysEnrollment {
 }
 
 /// One enrollment's mutable slot in the document: its snapshot, and the
-/// materials it owns keyed by `keyId` then `keyPartType`.
+/// materials it owns keyed by `keyId` then `role`.
 class _EnrollmentSlot {
   _EnrollmentSlot(this.enrollmentId);
 
@@ -88,7 +88,7 @@ class AtKeys {
 
   final Map<String, _EnrollmentSlot> _enrollments = {};
 
-  // Keyed by keyId, then keyPartType (see CryptographicMaterialRole for the known
+  // Keyed by keyId, then role (see CryptographicMaterialRole for the known
   // tokens; unknown tokens are held too).
   final Map<String, Map<String, CryptographicMaterial>>
       _atSignMaterialsByKeyId = {};
@@ -160,13 +160,13 @@ class AtKeys {
     if (deviceName != null) slot.deviceName = deviceName;
   }
 
-  /// Looks up one of [enrollmentId]'s materials by `(keyId, keyPartType)` —
+  /// Looks up one of [enrollmentId]'s materials by `(keyId, role)` —
   /// [type] is a [CryptographicMaterialRole] token.
   CryptographicMaterial? getKey(
           String enrollmentId, String keyId, String type) =>
       _enrollments[enrollmentId]?.materialsByKeyId[keyId]?[type];
 
-  /// Looks up one of the atSign's own materials by `(keyId, keyPartType)`.
+  /// Looks up one of the atSign's own materials by `(keyId, role)`.
   CryptographicMaterial? getAtSignKey(String keyId, String type) =>
       _atSignMaterialsByKeyId[keyId]?[type];
 
@@ -213,7 +213,7 @@ class AtKeys {
   void _file(CryptographicMaterial material) {
     const AtKeysAssurance().validateAddKey(existing: keys, candidate: material);
     _containerFor(material.enrollmentId)
-        .putIfAbsent(material.keyId, () => {})[material.keyPartType] = material;
+        .putIfAbsent(material.keyId, () => {})[material.role] = material;
   }
 
   Map<String, Map<String, CryptographicMaterial>> _containerFor(
@@ -259,15 +259,15 @@ class AtKeys {
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicMaterialRole.privateAuthentication,
-        keyAlgorithmType: algorithm,
+        role: CryptographicMaterialRole.privateAuthentication,
+        algorithm: algorithm,
         bytes: AtBytes.fromString(privateKey),
         createdAt: now));
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicMaterialRole.publicAuthentication,
-        keyAlgorithmType: algorithm,
+        role: CryptographicMaterialRole.publicAuthentication,
+        algorithm: algorithm,
         bytes: AtBytes.fromString(publicKey),
         createdAt: now));
   }
@@ -303,15 +303,15 @@ class AtKeys {
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicMaterialRole.privateSigning,
-        keyAlgorithmType: algorithm,
+        role: CryptographicMaterialRole.privateSigning,
+        algorithm: algorithm,
         bytes: AtBytes.fromString(privateKey),
         createdAt: now));
     addKey(CryptographicMaterial(
         keyId: keyId,
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicMaterialRole.publicVerification,
-        keyAlgorithmType: algorithm,
+        role: CryptographicMaterialRole.publicVerification,
+        algorithm: algorithm,
         bytes: AtBytes.fromString(publicKey),
         createdAt: now));
   }
@@ -418,22 +418,22 @@ class AtKeys {
       final public = getKey(
           enrollmentId, keyId, CryptographicMaterialRole.publicVerification);
       if (private == null || public == null) continue;
-      if (private.status != KeyPartStatus.active ||
-          public.status != KeyPartStatus.active) {
+      if (private.status != CryptographicMaterialStatus.active ||
+          public.status != CryptographicMaterialStatus.active) {
         continue;
       }
       // Halves that disagree about their algorithm are not a keypair, and
       // nothing refuses the combination on the way in: the invariants are per
-      // `(keyPartType, keyAlgorithmType)`, so a keyId's two halves are never
+      // `(role, algorithm)`, so a keyId's two halves are never
       // compared with each other and a document can carry it. Taking the
       // algorithm from one half and the public bytes from the other would
       // sign under one algorithm while advertising the other's public key, so
       // every signature would fail verification with nothing naming the
       // keyfile as the cause.
-      if (private.keyAlgorithmType != public.keyAlgorithmType) continue;
+      if (private.algorithm != public.algorithm) continue;
 
       final algorithm = SigningAlgoType.values
-          .where((a) => a.name == private.keyAlgorithmType)
+          .where((a) => a.name == private.algorithm)
           .firstOrNull;
       if (algorithm == null) continue;
 
@@ -461,11 +461,11 @@ class AtKeys {
   /// entry when it does would retroactively unverify everything that key
   /// signed — the precise loss retention exists to prevent.
   ///
-  /// Selected on **not active and not [KeyPartStatus.dead]**, and the token
+  /// Selected on **not active and not [CryptographicMaterialStatus.dead]**, and the token
   /// itself is carried out rather than replaced. `dead` material was never
   /// adopted and has nothing to verify, so it stays out.
   ///
-  /// This read "selected on exactly [KeyPartStatus.retired]" until 2026-08-22,
+  /// This read "selected on exactly [CryptographicMaterialStatus.retired]" until 2026-08-22,
   /// skipping a status this build had never seen on the grounds that
   /// advertising such a key would state something about it this build does not
   /// know. That was right while the advertisement could only say `active` or
@@ -490,13 +490,13 @@ class AtKeys {
       final public = getKey(
           enrollmentId, keyId, CryptographicMaterialRole.publicVerification);
       if (public == null ||
-          public.status == KeyPartStatus.active ||
-          public.status == KeyPartStatus.dead) {
+          public.status == CryptographicMaterialStatus.active ||
+          public.status == CryptographicMaterialStatus.dead) {
         continue;
       }
 
       final algorithm = SigningAlgoType.values
-          .where((a) => a.name == public.keyAlgorithmType)
+          .where((a) => a.name == public.algorithm)
           .firstOrNull;
       if (algorithm == null) continue;
 
@@ -536,15 +536,15 @@ class AtKeys {
   /// Withdrawing a signing key must not withdraw anything else that happens to
   /// sign.
   List<String> retireSigningKeys(String enrollmentId, String algorithm,
-      {String to = KeyPartStatus.retired}) {
+      {String to = CryptographicMaterialStatus.retired}) {
     final Map<String, Map<String, CryptographicMaterial>> byKeyId =
         _enrollments[enrollmentId]?.materialsByKeyId ?? const {};
     final keyIds = [
       for (final entry in byKeyId.entries)
         if (isRoleKeyId(entry.key, 'sign') &&
             entry.value.values.any((material) =>
-                material.status == KeyPartStatus.active &&
-                material.keyAlgorithmType == algorithm))
+                material.status == CryptographicMaterialStatus.active &&
+                material.algorithm == algorithm))
           entry.key
     ];
     for (final keyId in keyIds) {
@@ -571,8 +571,8 @@ class AtKeys {
       addKey(CryptographicMaterial(
           keyId: material.keyId,
           enrollmentId: enrollmentId,
-          keyPartType: material.keyPartType,
-          keyAlgorithmType: material.keyAlgorithmType,
+          role: material.role,
+          algorithm: material.algorithm,
           bytes: material.bytes,
           operations: material.operations,
           createdAt: material.createdAt,
@@ -581,27 +581,27 @@ class AtKeys {
   }
 
   /// Marks every material of [enrollmentId]'s [keyId] as [to]
-  /// ([KeyPartStatus.retired] by default). Key material is never removed —
+  /// ([CryptographicMaterialStatus.retired] by default). Key material is never removed —
   /// retired/dead bytes are still needed to decrypt data they protected — so
   /// this is the delete operation. Status only moves forward (active →
   /// retired → dead): a same-status call is a no-op and a backward transition
-  /// throws, as does an unknown [keyId] or `to: KeyPartStatus.active`.
+  /// throws, as does an unknown [keyId] or `to: CryptographicMaterialStatus.active`.
   void retireKey(String enrollmentId, String keyId,
-          {String to = KeyPartStatus.retired}) =>
+          {String to = CryptographicMaterialStatus.retired}) =>
       _retire(_enrollments[enrollmentId]?.materialsByKeyId, keyId, to,
           'enrollment "$enrollmentId"');
 
   /// [retireKey] for the atSign's own material — the signing root, an nskey
   /// private.
-  void retireAtSignKey(String keyId, {String to = KeyPartStatus.retired}) =>
+  void retireAtSignKey(String keyId, {String to = CryptographicMaterialStatus.retired}) =>
       _retire(_atSignMaterialsByKeyId, keyId, to, 'the atSign');
 
   void _retire(Map<String, Map<String, CryptographicMaterial>>? container,
       String keyId, String to, String ownerLabel) {
-    if (to == KeyPartStatus.active) {
+    if (to == CryptographicMaterialStatus.active) {
       throw ArgumentError.value(to, 'to', 'retireKey cannot reactivate a key');
     }
-    final toRank = KeyPartStatus.rankOf(to);
+    final toRank = CryptographicMaterialStatus.rankOf(to);
     if (toRank == null) {
       throw ArgumentError.value(
           to, 'to', 'not a status this build knows how to move a key to');
@@ -612,7 +612,7 @@ class AtKeys {
           keyId, 'keyId', 'AtKeys holds no such keyId for $ownerLabel');
     }
     for (final material in byType.values) {
-      final fromRank = KeyPartStatus.rankOf(material.status);
+      final fromRank = CryptographicMaterialStatus.rankOf(material.status);
       // A status this build has never heard of is not behind or ahead of
       // anything — it is incomparable, and moving a key off one would be
       // guessing a direction. Refused rather than treated as position zero,
@@ -668,7 +668,7 @@ class AtKeys {
   /// replacing it — the predecessor is what verifies everything it signed.
   void replaceKey(String enrollmentId, String keyId,
       Iterable<CryptographicMaterial> replacements,
-      {String to = KeyPartStatus.retired}) {
+      {String to = CryptographicMaterialStatus.retired}) {
     final outgoing = keysForKeyId(enrollmentId, keyId).toList();
     if (outgoing.isEmpty) {
       throw ArgumentError.value(keyId, 'keyId',
@@ -689,14 +689,14 @@ class AtKeys {
       // but it must still be taken back out of wherever it landed.
       for (final material in filed) {
         final container = _containerFor(material.enrollmentId);
-        container[material.keyId]?.remove(material.keyPartType);
+        container[material.keyId]?.remove(material.role);
         if (container[material.keyId]?.isEmpty ?? false) {
           container.remove(material.keyId);
         }
       }
       final container = _containerFor(outgoing.first.enrollmentId);
       for (final material in outgoing) {
-        container[material.keyId]![material.keyPartType] = material;
+        container[material.keyId]![material.role] = material;
       }
       rethrow;
     }
@@ -713,7 +713,7 @@ class AtKeys {
   Iterable<String> get authenticatableEnrollmentIds => _enrollments.values
       .where((slot) => slot.materialsByKeyId.values.any((byType) =>
           byType[CryptographicMaterialRole.privateAuthentication]?.status ==
-          KeyPartStatus.active))
+          CryptographicMaterialStatus.active))
       .map((slot) => slot.enrollmentId);
 
   /// The one enrollment this keyfile authenticates as, for a caller that has
@@ -955,9 +955,9 @@ class AtKeys {
     }
     return materials.every((material) {
       final counterpart = material.enrollmentId == null
-          ? other.getAtSignKey(material.keyId, material.keyPartType)
+          ? other.getAtSignKey(material.keyId, material.role)
           : other.getKey(
-              material.enrollmentId!, material.keyId, material.keyPartType);
+              material.enrollmentId!, material.keyId, material.role);
       return counterpart == material;
     });
   }
@@ -1085,13 +1085,13 @@ class AtKeys {
     // here enumerates.
     final privateAuthentication = materials
         .where((m) =>
-            m.keyPartType == CryptographicMaterialRole.privateAuthentication &&
-            m.status == KeyPartStatus.active)
+            m.role == CryptographicMaterialRole.privateAuthentication &&
+            m.status == CryptographicMaterialStatus.active)
         .firstOrNull;
     final publicAuthentication = materials
         .where((m) =>
-            m.keyPartType == CryptographicMaterialRole.publicAuthentication &&
-            m.status == KeyPartStatus.active)
+            m.role == CryptographicMaterialRole.publicAuthentication &&
+            m.status == CryptographicMaterialStatus.active)
         .firstOrNull;
     if (privateAuthentication == null || publicAuthentication == null) {
       throw AtKeyNotFoundException(
@@ -1126,7 +1126,7 @@ class AtKeys {
     final material = _activeAuthenticationMaterial(enrollmentId);
     if (material == null) return null;
     return SigningAlgoType.values
-        .where((a) => a.name == material.keyAlgorithmType)
+        .where((a) => a.name == material.algorithm)
         .firstOrNull;
   }
 
@@ -1141,9 +1141,9 @@ class AtKeys {
   CryptographicMaterial? _activeAuthenticationMaterial(String enrollmentId) =>
       keysForEnrollment(enrollmentId)
           .where((m) =>
-              m.keyPartType ==
+              m.role ==
                   CryptographicMaterialRole.privateAuthentication &&
-              m.status == KeyPartStatus.active)
+              m.status == CryptographicMaterialStatus.active)
           .firstOrNull;
 
   /// The AtChops and the PKAM signing algorithm [enrollmentId] authenticates
@@ -1187,7 +1187,7 @@ class AtKeys {
       if (material != null) {
         throw AtKeyNotFoundException(
             'Enrollment $enrollmentId authenticates with '
-            '"${material.keyAlgorithmType}", which this build cannot sign '
+            '"${material.algorithm}", which this build cannot sign '
             'with. Its keypair is in this keyfile; the flat fields are a '
             'different enrollment\'s and are not a substitute for it.');
       }

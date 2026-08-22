@@ -30,8 +30,8 @@ void main() {
 
   CryptographicMaterial keyNamed(String keyId) => CryptographicMaterial(
         keyId: keyId,
-        keyPartType: CryptographicMaterialRole.privateDecapsulation,
-        keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+        role: CryptographicMaterialRole.privateDecapsulation,
+        algorithm: CryptographicMaterialAlgorithm.xWing,
         bytes: AtBytes.fromString('c2VlZA=='),
         createdAt: DateTime.utc(2026, 1, 1),
       );

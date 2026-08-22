@@ -231,11 +231,11 @@ void main() {
         final reread = await fileAtKeysIo.read(atsign);
         expect(
           reread.atSignKeysForKeyId('rotated').single.status,
-          KeyPartStatus.retired,
+          CryptographicMaterialStatus.retired,
         );
         expect(
           reread.atSignKeysForKeyId('kept').single.status,
-          KeyPartStatus.active,
+          CryptographicMaterialStatus.active,
         );
       } finally {
         await tempDir.delete(recursive: true);

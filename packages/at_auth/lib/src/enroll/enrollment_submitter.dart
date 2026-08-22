@@ -376,16 +376,16 @@ class EnrollmentSubmitter {
       //    rsa2048 would have it believe it holds a mode it does not.
       final alreadyRetrofitted = existing.keys
           .where((m) =>
-              m.keyPartType ==
+              m.role ==
                   CryptographicMaterialRole.privateAuthentication &&
-              m.status == KeyPartStatus.active &&
+              m.status == CryptographicMaterialStatus.active &&
               m.enrollmentId != null)
           .firstOrNull;
       if (alreadyRetrofitted != null &&
-          alreadyRetrofitted.keyAlgorithmType != materialAlgo) {
+          alreadyRetrofitted.algorithm != materialAlgo) {
         throw AtEnrollmentException('this keyfile already holds enrollment '
             '${alreadyRetrofitted.enrollmentId} '
-            '(${alreadyRetrofitted.keyAlgorithmType}); a keyfile is '
+            '(${alreadyRetrofitted.algorithm}); a keyfile is '
             'retrofitted once, so it cannot also take a $materialAlgo '
             'retrofit');
       }

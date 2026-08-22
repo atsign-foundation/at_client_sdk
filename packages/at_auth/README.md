@@ -171,7 +171,7 @@ three layers, outermost first:
        atSign rather than to any enrollment: the PQ signing root, an
        nskey private.
 
-     Both group materials by `keyId` with their `keyParts`. A key entry
+     Both group materials by `keyId` into a `material` array. A key entry
      carries no `enrollmentId` — its container states the owner once — so
      **a keyId is unique within its container, not across the document**:
      two enrollments may each hold `auth:mldsa65:1`, and identity is

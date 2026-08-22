@@ -1,5 +1,14 @@
 ## 3.15.0-rc1
 
+- **BREAKING** refactor: follows at_auth's keyfile rename.
+  `CryptographicMaterial.keyPartType` is now `.role`, `.keyAlgorithmType` is
+  now `.algorithm`, and `KeyPartStatus` is now `CryptographicMaterialStatus`.
+  Callers in the nskey, signing and secret-sharing paths move with them. **No
+  record this package writes changes shape**: those names were only ever Dart
+  named parameters here — at_client has zero `encodeAtKeysDocument` call sites
+  and never calls `toJson` on a material, and what actually reaches the wire is
+  `PackageKey`'s own `use`/`alg`/`pub` vocabulary.
+
 <!-- Was `## 3.14.1` until 2026-08-20. A patch heading carrying 229 entries and
 three **BREAKING** labels. Ruled a MINOR because semver keys on what a consumer
 can observe, and NOTHING PUBLISHED WAS REMOVED — verified against the published
@@ -24,7 +33,7 @@ hunting for a constructor argument that never existed in a release. -->
   is the sender-side question - whether to seal to this key - and it answers
   **no** for a token this build has never seen. at_auth's CHANGELOG has the
   full reasoning; nothing published has ever held the type.
-  - Two seams stop collapsing the keyfile's own open `KeyPartStatus` into one
+  - Two seams stop collapsing the keyfile's own open `CryptographicMaterialStatus` into one
     of the two values this build knows: the key package a client adopts from
     its keyfile at startup, and the advertisement `reconcileKeyPackage`
     republishes. Both now carry the keyfile's token across unchanged, so a
@@ -1090,7 +1099,7 @@ hunting for a constructor argument that never existed in a release. -->
 - feat: `keyPackageMaterials` reads every usable key package a keyfile holds
   for one enrollment, active first, and `bindKeyPackageToAtKeys` adopts the
   superseded ones as retired so a restart does not strand what is in flight.
-  The status comes from the keyfile's own `KeyPartStatus` rather than from
+  The status comes from the keyfile's own `CryptographicMaterialStatus` rather than from
   `createdAt`: `AtKeys.retireKey` is how a rotation records the transition and
   `AtKeysAssurance` already enforces at most one active `publicEncapsulation`
   material per enrollment and algorithm, so the file answers the question and

@@ -188,7 +188,7 @@ void main() {
     test('accepts map update when a key status moves forward', () {
       final existing = _documentMap(keys: [_symmetricMaterial()]);
       final candidate = _documentMap(
-        keys: [_symmetricMaterial().withStatus(KeyPartStatus.retired)],
+        keys: [_symmetricMaterial().withStatus(CryptographicMaterialStatus.retired)],
       );
 
       assurance.validateMapUpdate(existing: existing, candidate: candidate);
@@ -196,10 +196,10 @@ void main() {
 
     test('rejects map update when a key status moves backward', () {
       final existing = _documentMap(
-        keys: [_symmetricMaterial().withStatus(KeyPartStatus.dead)],
+        keys: [_symmetricMaterial().withStatus(CryptographicMaterialStatus.dead)],
       );
       final candidate = _documentMap(
-        keys: [_symmetricMaterial().withStatus(KeyPartStatus.retired)],
+        keys: [_symmetricMaterial().withStatus(CryptographicMaterialStatus.retired)],
       );
 
       expect(
@@ -341,8 +341,8 @@ void main() {
           CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
-            keyPartType: CryptographicMaterialRole.privateAuthentication,
-            keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
+            role: CryptographicMaterialRole.privateAuthentication,
+            algorithm: CryptographicMaterialAlgorithm.rsa2048,
             bytes: AtBytes.fromString('dmFsdWU='),
             createdAt: _createdAt,
           );
@@ -392,8 +392,8 @@ void main() {
             candidate: CryptographicMaterial(
               keyId: 'auth:mldsa65:1',
               enrollmentId: 'e1',
-              keyPartType: CryptographicMaterialRole.privateAuthentication,
-              keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
+              role: CryptographicMaterialRole.privateAuthentication,
+              algorithm: CryptographicMaterialAlgorithm.mlDsa65,
               bytes: AtBytes.fromString('dmFsdWU='),
               createdAt: _createdAt,
             ),
@@ -430,8 +430,8 @@ final _createdAt = DateTime.utc(2024, 1, 1);
 CryptographicMaterial _symmetricMaterial({String bytes = 'dmFsdWU='}) {
   return CryptographicMaterial(
     keyId: 'symmetric',
-    keyPartType: CryptographicMaterialRole.symmetricEncryption,
-    keyAlgorithmType: CryptographicMaterialAlgorithm.aes256,
+    role: CryptographicMaterialRole.symmetricEncryption,
+    algorithm: CryptographicMaterialAlgorithm.aes256,
     bytes: AtBytes.fromString(bytes),
     createdAt: _createdAt,
   );
@@ -441,15 +441,15 @@ List<CryptographicMaterial> _rsaPairMaterials() {
   return [
     CryptographicMaterial(
       keyId: 'pair',
-      keyPartType: CryptographicMaterialRole.publicEncryption,
-      keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
+      role: CryptographicMaterialRole.publicEncryption,
+      algorithm: CryptographicMaterialAlgorithm.rsa2048,
       bytes: AtBytes.fromString('cHVibGlj'),
       createdAt: _createdAt,
     ),
     CryptographicMaterial(
       keyId: 'pair',
-      keyPartType: CryptographicMaterialRole.privateDecryption,
-      keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
+      role: CryptographicMaterialRole.privateDecryption,
+      algorithm: CryptographicMaterialAlgorithm.rsa2048,
       bytes: AtBytes.fromString('cHJpdmF0ZQ=='),
       createdAt: _createdAt,
     ),
@@ -459,8 +459,8 @@ List<CryptographicMaterial> _rsaPairMaterials() {
 CryptographicMaterial _wrapperMaterial() {
   return CryptographicMaterial(
     keyId: 'wrapper',
-    keyPartType: CryptographicMaterialRole.symmetricEncryption,
-    keyAlgorithmType: CryptographicMaterialAlgorithm.aes256,
+    role: CryptographicMaterialRole.symmetricEncryption,
+    algorithm: CryptographicMaterialAlgorithm.aes256,
     bytes: AtBytes.fromString('d3JhcHBlcg=='),
     createdAt: _createdAt,
   );
@@ -474,8 +474,8 @@ CryptographicMaterial _enrollMaterial({
   return CryptographicMaterial(
     keyId: keyId,
     enrollmentId: enrollmentId,
-    keyPartType: CryptographicMaterialRole.privateDecryption,
-    keyAlgorithmType: CryptographicMaterialAlgorithm.rsa2048,
+    role: CryptographicMaterialRole.privateDecryption,
+    algorithm: CryptographicMaterialAlgorithm.rsa2048,
     operations: operations,
     bytes: AtBytes.fromString('c2VjcmV0'),
     createdAt: _createdAt,
@@ -533,12 +533,12 @@ File _fixtureFile() {
 Map<String, dynamic> _recordJson({String keyId = 'symmetric'}) {
   return {
     'keyId': keyId,
-    'keyParts': [
+    'material': [
       {
-        'keyPartType': CryptographicMaterialRole.symmetricEncryption,
-        'keyAlgorithmType': CryptographicMaterialAlgorithm.aes256,
+        'role': CryptographicMaterialRole.symmetricEncryption,
+        'algorithm': CryptographicMaterialAlgorithm.aes256,
         'createdAt': _createdAt.toIso8601String(),
-        'status': KeyPartStatus.active,
+        'status': CryptographicMaterialStatus.active,
         'bytes': 'dmFsdWU=',
       },
     ],

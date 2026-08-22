@@ -9,7 +9,7 @@ import 'package:at_auth/at_auth.dart'
         CryptographicMaterialRole,
         EnrollmentUpdateRequest,
         KeyEntryStatus,
-        KeyPartStatus,
+        CryptographicMaterialStatus,
         WrittenAtKeysIo;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
@@ -167,16 +167,16 @@ class KeyPackageMinting with ApkamSigning {
         keys.addKey(CryptographicMaterial(
           enrollmentId: enrolment,
           keyId: key.kpid,
-          keyPartType: CryptographicMaterialRole.publicEncapsulation,
-          keyAlgorithmType: key.materialAlgo,
+          role: CryptographicMaterialRole.publicEncapsulation,
+          algorithm: key.materialAlgo,
           bytes: AtBytes(key.publicKey),
           createdAt: key.createdAt,
         ));
         keys.addKey(CryptographicMaterial(
           enrollmentId: enrolment,
           keyId: key.kpid,
-          keyPartType: CryptographicMaterialRole.privateDecapsulation,
-          keyAlgorithmType: key.materialAlgo,
+          role: CryptographicMaterialRole.privateDecapsulation,
+          algorithm: key.materialAlgo,
           // The SEED, not the decapsulation key: they are the same bytes for
           // X-Wing and not for ML-KEM, whose decapsulation key is expanded and
           // which no seeded call reproduces from.
@@ -249,7 +249,7 @@ class KeyPackageMinting with ApkamSigning {
   /// at it.
   ///
   /// Material whose algorithm this build does not implement is skipped, and
-  /// [KeyPartStatus.dead] material is left out entirely — retirement is as
+  /// [CryptographicMaterialStatus.dead] material is left out entirely — retirement is as
   /// close to deletion as a keyfile gets, and a dead key is not something to
   /// go on advertising.
   ///
@@ -276,13 +276,11 @@ class KeyPackageMinting with ApkamSigning {
             ? material.enrollmentId == enrolment
             : material.enrollmentId == null;
         if (!owned) continue;
-        if (material.keyPartType !=
-            CryptographicMaterialRole.publicEncapsulation) {
+        if (material.role != CryptographicMaterialRole.publicEncapsulation) {
           continue;
         }
-        if (material.status == KeyPartStatus.dead) continue;
-        final alg =
-            SecretSharingAlgos.keyAlgoForMaterial(material.keyAlgorithmType);
+        if (material.status == CryptographicMaterialStatus.dead) continue;
+        final alg = SecretSharingAlgos.keyAlgoForMaterial(material.algorithm);
         if (alg == null) continue;
         entries.add(PackageKey.fromBytes(
           use: SecretSharingAlgos.useEnc,

@@ -110,7 +110,7 @@ void main() {
     expect(signing, isNotNull);
     expect(verification, isNotNull);
     expect(signing!.enrollmentId, 'new-123');
-    expect(signing.keyAlgorithmType, CryptographicMaterialAlgorithm.mlDsa65);
+    expect(signing.algorithm, CryptographicMaterialAlgorithm.mlDsa65);
     expect(base64Decode(signing.bytes.toString()).length, 4032,
         reason: 'the persisted private is the raw ML-DSA-65 secret key');
     expect(base64Decode(verification!.bytes.toString()).length, 1952);
@@ -159,7 +159,7 @@ void main() {
       // auth:rsa2048:1 — reading auth:mldsa65:1 here would find nothing.
       final signing = after.getKey('new-123', 'auth:rsa2048:1',
           CryptographicMaterialRole.privateAuthentication);
-      expect(signing!.keyAlgorithmType, CryptographicMaterialAlgorithm.rsa2048);
+      expect(signing!.algorithm, CryptographicMaterialAlgorithm.rsa2048);
       expect(signing.enrollmentId, 'new-123');
     });
 
@@ -314,8 +314,8 @@ void main() {
           expect(base64Decode(keys.apkamPublicKey.toString()).length, 1952);
           keys.addKey(CryptographicMaterial(
               keyId: 'kp-abc123',
-              keyPartType: CryptographicMaterialRole.privateDecapsulation,
-              keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+              role: CryptographicMaterialRole.privateDecapsulation,
+              algorithm: CryptographicMaterialAlgorithm.xWing,
               bytes: AtBytes(Uint8List.fromList([1, 2, 3])),
               createdAt: DateTime.now().toUtc()));
           return {'keyPackage': 'signed-package'};

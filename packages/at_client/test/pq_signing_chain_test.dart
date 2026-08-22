@@ -629,7 +629,7 @@ void main() {
       final keys = await io.read(atSign);
       final rootPrivates = keys.atSignKeys
           .where((m) =>
-              m.keyPartType == CryptographicMaterialRole.privateSigning &&
+              m.role == CryptographicMaterialRole.privateSigning &&
               AtKeys.isRoleKeyId(m.keyId, PqSigningRoot.keyIdRole))
           .toList();
       expect(rootPrivates, hasLength(2),
@@ -640,8 +640,8 @@ void main() {
       expect({
         for (final m in rootPrivates) m.status
       }, {
-        KeyPartStatus.active,
-        KeyPartStatus.retired
+        CryptographicMaterialStatus.active,
+        CryptographicMaterialStatus.retired
       }, reason: 'exactly one of them answers "what do I sign with"');
 
       // (6) SIGNING SELECTS THE SUCCESSOR, and stamps ITS kid — read off the

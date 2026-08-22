@@ -80,8 +80,8 @@ void main() {
 
   CryptographicMaterial material(String keyId) => CryptographicMaterial(
     keyId: keyId,
-    keyPartType: CryptographicMaterialRole.symmetricEncryption,
-    keyAlgorithmType: CryptographicMaterialAlgorithm.aes256,
+    role: CryptographicMaterialRole.symmetricEncryption,
+    algorithm: CryptographicMaterialAlgorithm.aes256,
     bytes: AtBytes.fromString(base64Encode(utf8.encode(keyId))),
     createdAt: DateTime.utc(2026, 1, 1),
   );
@@ -262,9 +262,10 @@ void main() {
 
     expect(entryCount(), 1, reason: 'replaced in place, not appended beside');
     expect(
-      (await legacyIo.read(
-        '@colinconstable',
-      )).getAtSignKey('nskey.wavi', CryptographicMaterialRole.symmetricEncryption),
+      (await legacyIo.read('@colinconstable')).getAtSignKey(
+        'nskey.wavi',
+        CryptographicMaterialRole.symmetricEncryption,
+      ),
       isNotNull,
       reason: 'and the flushed material is what reads back',
     );

@@ -2,7 +2,7 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_commons/at_commons.dart';
 
-/// Known values for [CryptographicMaterial.keyAlgorithmType] — the algorithm family
+/// Known values for [CryptographicMaterial.algorithm] — the algorithm family
 /// used by a key material, independent of its cryptographic role (see
 /// [CryptographicMaterialRole]).
 ///
@@ -60,7 +60,7 @@ abstract final class CryptographicMaterialAlgorithm {
   };
 }
 
-/// Known values for [CryptographicMaterial.keyPartType] — the mechanical role a key
+/// Known values for [CryptographicMaterial.role] — the mechanical role a key
 /// material plays, independent of the algorithm family (see
 /// [CryptographicMaterialAlgorithm]).
 ///
@@ -136,8 +136,8 @@ abstract final class CryptographicMaterialRole {
 ///
 /// **Do not change any existing value below.** They are persisted in `.atKeys`
 /// files already on disk.
-class KeyPartStatus {
-  const KeyPartStatus._();
+class CryptographicMaterialStatus {
+  const CryptographicMaterialStatus._();
 
   /// In use. The default when a document omits the field entirely.
   static const String active = 'active';
@@ -190,29 +190,29 @@ final class CryptographicMaterial {
 
   /// The material's cryptographic role — see [CryptographicMaterialRole] for the
   /// known tokens. Unknown values are preserved, never rejected.
-  final String keyPartType;
+  final String role;
 
   /// The material's algorithm family — see [CryptographicMaterialAlgorithm] for the known
   /// tokens. Unknown values are preserved, never rejected.
-  final String keyAlgorithmType;
+  final String algorithm;
 
   final AtBytes bytes;
   final List<String> operations;
   final DateTime createdAt;
 
-  /// Whether this material is in use — see [KeyPartStatus] for the known
+  /// Whether this material is in use — see [CryptographicMaterialStatus] for the known
   /// tokens. Unknown values are preserved, never rejected.
   final String status;
 
   const CryptographicMaterial({
     required this.keyId,
     this.enrollmentId,
-    required this.keyPartType,
-    required this.keyAlgorithmType,
+    required this.role,
+    required this.algorithm,
     required this.bytes,
     this.operations = const [],
     required this.createdAt,
-    this.status = KeyPartStatus.active,
+    this.status = CryptographicMaterialStatus.active,
   });
 
   factory CryptographicMaterial.fromJson(
@@ -224,21 +224,21 @@ final class CryptographicMaterial {
     final material = CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
-      keyPartType:
-          assurance.expectNonEmptyString(json['keyPartType'], 'keyPartType'),
-      keyAlgorithmType: assurance.expectNonEmptyString(
-          json['keyAlgorithmType'], 'keyAlgorithmType'),
+      role:
+          assurance.expectNonEmptyString(json['role'], 'role'),
+      algorithm: assurance.expectNonEmptyString(
+          json['algorithm'], 'algorithm'),
       bytes: assurance.expectBytes(json['bytes'], 'bytes'),
       operations:
           assurance.optionalStringList(json['operations'], 'operations'),
       createdAt: assurance.expectDateTime(json['createdAt'], 'createdAt'),
-      // Deliberately NOT validated against [KeyPartStatus.known]: a token this
+      // Deliberately NOT validated against [CryptographicMaterialStatus.known]: a token this
       // build has never seen is carried through and re-emitted by [toJson],
       // which is what keeps a keyfile written by a newer client readable and
       // losslessly flushable here. It still has no rank, so it is never
       // selected as active and no transition may move it.
       status: assurance.expectNonEmptyString(
-          json['status'] ?? KeyPartStatus.active, 'status'),
+          json['status'] ?? CryptographicMaterialStatus.active, 'status'),
     );
     return material;
   }
@@ -248,8 +248,8 @@ final class CryptographicMaterial {
     return CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
-      keyPartType: keyPartType,
-      keyAlgorithmType: keyAlgorithmType,
+      role: role,
+      algorithm: algorithm,
       bytes: bytes,
       operations: operations,
       createdAt: createdAt,
@@ -259,8 +259,8 @@ final class CryptographicMaterial {
 
   Map<String, dynamic> toJson() {
     return {
-      'keyPartType': keyPartType,
-      'keyAlgorithmType': keyAlgorithmType,
+      'role': role,
+      'algorithm': algorithm,
       if (operations.isNotEmpty) 'operations': operations,
       'createdAt': createdAt.toIso8601String(),
       // Verbatim, whatever it is. This is the half of the round-trip promise
@@ -276,8 +276,8 @@ final class CryptographicMaterial {
     if (other is! CryptographicMaterial) return false;
     return keyId == other.keyId &&
         enrollmentId == other.enrollmentId &&
-        keyPartType == other.keyPartType &&
-        keyAlgorithmType == other.keyAlgorithmType &&
+        role == other.role &&
+        algorithm == other.algorithm &&
         bytes.toString() == other.bytes.toString() &&
         _listEquals(operations, other.operations) &&
         createdAt == other.createdAt &&
@@ -288,8 +288,8 @@ final class CryptographicMaterial {
   int get hashCode => Object.hash(
         keyId,
         enrollmentId,
-        keyPartType,
-        keyAlgorithmType,
+        role,
+        algorithm,
         bytes.toString(),
         Object.hashAll(operations),
         createdAt,
@@ -298,7 +298,7 @@ final class CryptographicMaterial {
 }
 
 /// Parses one container's `keys` array into a flat list of [CryptographicMaterial],
-/// validating each entry's `keyParts` (no duplicate `keyPartType` within one
+/// validating each entry's `material` (no duplicate `role` within one
 /// `keyId`) and rejecting a `keyId` that repeats within this container.
 ///
 /// [enrollmentId] is the owner every material in the array is tagged with —
@@ -338,21 +338,21 @@ List<CryptographicMaterial> parseAtKeysDocument(
           'way predates the enrollments[]/atsignKeys[] shape and must be '
           'regenerated.');
     }
-    final keyPartsJson =
-        assurance.expectList(entryJson['keyParts'], '$entryPrefix.keyParts');
+    final materialJson =
+        assurance.expectList(entryJson['material'], '$entryPrefix.material');
 
-    final seenKeyPartTypes = <String>{};
-    for (final part in keyPartsJson.asMap().entries) {
+    final seenRoles = <String>{};
+    for (final part in materialJson.asMap().entries) {
       final partJson =
-          assurance.expectMap(part.value, '$fieldPrefix.keyParts[${part.key}]');
+          assurance.expectMap(part.value, '$fieldPrefix.material[${part.key}]');
       final material = CryptographicMaterial.fromJson(
         partJson,
         keyId: keyId,
         enrollmentId: enrollmentId,
       );
-      if (!seenKeyPartTypes.add(material.keyPartType)) {
+      if (!seenRoles.add(material.role)) {
         throw AtKeysValidationException(
-            'Duplicate keyPartType "${material.keyPartType}" for keyId "$keyId"');
+            'Duplicate role "${material.role}" for keyId "$keyId"');
       }
       materials.add(material);
     }
@@ -363,7 +363,7 @@ List<CryptographicMaterial> parseAtKeysDocument(
 /// Encodes one container's materials into its nested `keys` shape, grouping
 /// materials that share a `keyId` (e.g. the public+private halves of a
 /// keypair) and validating that every material in a group agrees on
-/// `enrollmentId` and doesn't repeat a `keyPartType`.
+/// `enrollmentId` and doesn't repeat a `role`.
 ///
 /// The owner is **not** emitted: the enclosing `enrollments[]` entry states it
 /// once, and `atsignKeys[]` states it by being where it is. The agreement
@@ -382,9 +382,9 @@ List<Map<String, dynamic>> encodeAtKeysDocument(
             'Material for keyId "${material.keyId}" does not match the enrollmentId of its group');
       }
       if (group
-          .any((existing) => existing.keyPartType == material.keyPartType)) {
+          .any((existing) => existing.role == material.role)) {
         throw AtKeysValidationException(
-            'Duplicate keyPartType "${material.keyPartType}" for keyId "${material.keyId}"');
+            'Duplicate role "${material.role}" for keyId "${material.keyId}"');
       }
     }
     group.add(material);
@@ -393,7 +393,7 @@ List<Map<String, dynamic>> encodeAtKeysDocument(
     final group = entry.value;
     return {
       'keyId': entry.key,
-      'keyParts': group.map((material) => material.toJson()).toList(),
+      'material': group.map((material) => material.toJson()).toList(),
     };
   }).toList();
 }

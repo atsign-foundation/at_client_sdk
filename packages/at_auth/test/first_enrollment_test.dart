@@ -134,8 +134,8 @@ void main() {
                 final handed = await keysIo.read(atSign);
                 handed.addKey(CryptographicMaterial(
                     keyId: 'kpid-1',
-                    keyPartType: CryptographicMaterialRole.privateDecapsulation,
-                    keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+                    role: CryptographicMaterialRole.privateDecapsulation,
+                    algorithm: CryptographicMaterialAlgorithm.xWing,
                     bytes: AtBytes.fromString(b64('the-seed')),
                     createdAt: DateTime.now().toUtc()));
                 return {'keyPackage': 'signed-envelope'};

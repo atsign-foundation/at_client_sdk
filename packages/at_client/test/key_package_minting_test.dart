@@ -11,7 +11,7 @@ import 'package:at_auth/at_auth.dart'
         EnrollmentUpdateRequest,
         InMemoryAtKeysIo,
         KeyEntryStatus,
-        KeyPartStatus;
+        CryptographicMaterialStatus;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/secret_sharing/key_package.dart'
@@ -63,7 +63,7 @@ void main() {
     final keys = await keysIo.read(atSign);
     // Both containers: production files an enrollment's first package
     // untagged, and anything this class mints is tagged.
-    return keys.keys.where((m) => m.keyPartType == part).toList();
+    return keys.keys.where((m) => m.role == part).toList();
   }
 
   Future<Set<String>> heldKpids() async =>
@@ -102,7 +102,8 @@ void main() {
   /// production reader saw no held key at all, mint a duplicate under the same
   /// algorithm, and advertised it beside the one already in the record.
   Future<String> fileHeldKey(String algorithm,
-      {bool tagged = false, String status = KeyPartStatus.active}) async {
+      {bool tagged = false,
+      String status = CryptographicMaterialStatus.active}) async {
     final kem = SecretSharingAlgos.kemFor(algorithm)!;
     final seed = kem.newSeed();
     final pair = await kem.keyPairFromSeed(seed);
@@ -112,8 +113,8 @@ void main() {
       keys.addKey(CryptographicMaterial(
         enrollmentId: tagged ? enrollmentId : null,
         keyId: kpid,
-        keyPartType: CryptographicMaterialRole.publicEncapsulation,
-        keyAlgorithmType: materialAlgo,
+        role: CryptographicMaterialRole.publicEncapsulation,
+        algorithm: materialAlgo,
         bytes: AtBytes(pair.publicKey),
         createdAt: DateTime.now().toUtc(),
         status: status,
@@ -121,8 +122,8 @@ void main() {
       keys.addKey(CryptographicMaterial(
         enrollmentId: tagged ? enrollmentId : null,
         keyId: kpid,
-        keyPartType: CryptographicMaterialRole.privateDecapsulation,
-        keyAlgorithmType: materialAlgo,
+        role: CryptographicMaterialRole.privateDecapsulation,
+        algorithm: materialAlgo,
         bytes: AtBytes(seed),
         createdAt: DateTime.now().toUtc(),
         status: status,
@@ -383,7 +384,7 @@ void main() {
       final privates = await encMaterials(
           part: CryptographicMaterialRole.privateDecapsulation);
       final retired = privates.firstWhere((m) => m.keyId == leaving);
-      expect(retired.status, KeyPartStatus.retired);
+      expect(retired.status, CryptographicMaterialStatus.retired);
       expect(retired.bytes.bytes, isNotEmpty,
           reason: 'retirement withdraws a key from service; it never removes '
               'the bytes, which are the only thing that opens what was '

@@ -200,8 +200,8 @@ void main() {
     final bytes = Uint8List.fromList(List<int>.generate(32, (i) => i));
     seeded.addKey(CryptographicMaterial(
       keyId: NskeyPrivateFiling.keyIdFor(namespace, kid),
-      keyPartType: CryptographicMaterialRole.privateDecapsulation,
-      keyAlgorithmType: CryptographicMaterialAlgorithm.xWing,
+      role: CryptographicMaterialRole.privateDecapsulation,
+      algorithm: CryptographicMaterialAlgorithm.xWing,
       bytes: AtBytes(bytes),
       createdAt: DateTime.now().toUtc(),
     ));

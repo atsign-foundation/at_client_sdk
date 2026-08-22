@@ -640,7 +640,7 @@ record:
   is not needed at this time** — nskey-private / CK-class storage routing is
   decided when S-3/SS-4 execute, and whatever store holds CK-class material
   must support eviction rather than inherit the flush contract.
-- **`keyPartType` / `keyAlgorithmType` are open String tokens, not enums.**
+- **`role` / `algorithm` are open String tokens, not enums.**
   Enums make every unknown value a whole-file parse failure, forcing lockstep
   reader upgrades and breaking flush's round-trip-what-you-don't-understand
   requirement. Known tokens live as static consts: `CryptographicMaterialAlgorithm`
@@ -652,7 +652,7 @@ record:
   encapsulation/decapsulation, key agreement). The classical/post-quantum/
   hybrid axis is a property of the algorithm token (X-Wing material is
   `xwing` + encapsulation/decapsulation), never a second role axis.
-  ~~`KeyPartStatus` stays an enum (a closed state machine the format owns).~~
+  ~~`CryptographicMaterialStatus` stays an enum (a closed state machine the format owns).~~
   **Reversed 2026-08-14 — see [97](#97-a-keyfile-status-a-build-has-never-seen-is-read-not-refused-2026-08-14).**
   It is an open `String` like the two above it. "A closed state machine the
   format owns" was true of the state machine and false of the *format*: the
@@ -690,7 +690,7 @@ Chronological, **oldest-first**. Each entry gives the one-line *why*.
 | **2026-07-03** | **PR #2030 review rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `AtPqc` supersedes the `PqcFfi` working name; `AtSignatureAlgorithm` recorded with a **staged** `AtSigningAlgorithm` deprecation (stays implemented through D1 — P-2 and the section-12 `wrapAndSign` path are typed against it; removal deferred past the D1 ladder); at_chops 3.4.0 stays a minor under a recorded one-time semver exemption for the barrel-split breaks; #2030/#2039 conformance-covered under P-2's coordinated slot; auto-resolve scoped to the `AtPqc` accessors (web-safe-barrel keygen is pure-Dart by construction). | The two-pass review of #2030 found the PR shipping designs the record didn't yet name (`AtPqc`, `AtSignatureAlgorithm`) and removals the ladder didn't authorize; these rulings plus the stacked review-fixes PR align code and record. |
 | **2026-07-06** | **Planning-day reconciliation rulings** (two): (1) **inter-server PQ authentication is IN D1 scope** as new project **IS-1** ([implementation-plan.md section 13](../implementation-plan.md)) — the atServer FROM/POL X-Wing+ML-DSA-65 handshake (PR #2683), off the D1 GA critical path, gated on publishing the at_chops PQ-API surface (`XWingCert`/`resolveXWing`/`resolveMlDsa65`). (2) **P-2's `mldsa65` verify branch folds into the existing unpublished at_chops 3.4.0** (bumped on trunk by #2030) before it publishes — not a fresh minor. | Planning-day reconciliation of #1889 vs the plan vs merged/open PRs across at_client_sdk + at_server surfaced a whole untracked inter-server workstream and an at_chops 3.4.0 slot already opened on trunk; these two rulings place both in the record. |
 | **2026-07-06** | **P-2 satisfied on trunk** — the `mldsa65` `_getVerificationAlgorithm` branch merged (issue #2050 / PR #2056), folded into the unpublished at_chops 3.4.x slot per the ruling above; #2039 (AES-GCM FFI) merged into the same slot. | The one missing ML-DSA verify branch is now in the tree; P-2's residual is the 3.4.x publish itself. |
-| **2026-07-17** | **PR #2047 / S-1 conformance rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `flush()` supersedes `append()`/`save()`; retire-never-remove (`retireKey`, forward-only status); the never-lose flush contract scoped to bootstrap stores (`LocalKeystoreAtKeysIo` not needed at this time; CK-class stores must support eviction for B5a); `keyPartType`/`keyAlgorithmType` as open String tokens with known-token consts (X-Wing = `xwing` + encapsulation/decapsulation); S-1 ships as at_auth **3.3.0** (3.2.0 consumed by the network-timeout release). | The S-1 implementation review found the built shape better than the recorded working names in three places and a version-slot collision; these rulings align the record with the code before at_auth 3.3.0 publishes. |
+| **2026-07-17** | **PR #2047 / S-1 conformance rulings** (five, → [section 6](#6-resolved--open-execution-decisions-af)): `flush()` supersedes `append()`/`save()`; retire-never-remove (`retireKey`, forward-only status); the never-lose flush contract scoped to bootstrap stores (`LocalKeystoreAtKeysIo` not needed at this time; CK-class stores must support eviction for B5a); `role`/`algorithm` as open String tokens with known-token consts (X-Wing = `xwing` + encapsulation/decapsulation); S-1 ships as at_auth **3.3.0** (3.2.0 consumed by the network-timeout release). | The S-1 implementation review found the built shape better than the recorded working names in three places and a version-slot collision; these rulings align the record with the code before at_auth 3.3.0 publishes. |
 | **2026-07-17** | **Release train published:** `at_commons 5.13.0`, `at_chops 3.4.0`, `at_client 3.13.0` then `3.14.0`, `at_auth 3.3.0-rc1`, `at_lookup 3.6.0`, `at_onboarding_cli 1.16.0`. Same day, **SS-0 merged** (#2037) and **S-2 completed** (#2076, `AtKeysIo` threaded through `CryptoContext`). | Closes P-2's 3.4.x publish residual and the at_chops prerequisite for both S-1 and IS-1; `at_client 3.14.0` now carries the SS-0 substrate as an experimental surface, moving the D1 GA version slot off 3.14.x. |
 | **2026-07-20** | **Planning-day reconciliation** (#1889 vs the doc set vs merged/open PRs and branches). Recorded: SS-0, SS-1b, S-1 and S-2 are **satisfied**; P-2 is fully closed by the 3.4.0 publish; `SS-1c` is the next actionable critical-path project. Issues cut for the previously-untracked substrate tail — SS-1c [#2084](https://github.com/atsign-foundation/at_client_sdk/issues/2084), SS-2 [#2085](https://github.com/atsign-foundation/at_client_sdk/issues/2085), SS-3 [#2086](https://github.com/atsign-foundation/at_client_sdk/issues/2086), SS-4 [#2087](https://github.com/atsign-foundation/at_client_sdk/issues/2087) — and **two merged-but-unpublished residuals recorded as open gates**: the at_auth rc1 → stable 3.3.0 promotion (blocking S-6 and SS-2), and S-2's `CryptoContext.keys` (#2076), which merged at 18:20Z on 2026-07-17 — after `at_client 3.14.0` published at 16:02Z — so it awaits the next at_client release. IS-1 (at_server #2683) restated as in progress and off the critical path. | #2008 had been closed on the SS-0 merge, leaving `SS-1c → SS-2 → SS-3 → SS-4` — the whole run-up to the D1 GA gate — with no tracking issue; and the 2026-07-17 release train had closed several publish gates the docs still carried as open. |
 | **2026-07-21** | **Client PKAM auth is a signature swap only (guardrail + the under-specified client piece named).** PKAM PQ-safety = sign the server-issued per-connection `from:` challenge with ML-DSA-65 instead of RSA (`PkamSigningAlgo` → ML-DSA in at_lookup, selected off the stored `signingAlgo`), verified record-authoritatively server-side. **No KEM, no certificate, no per-connection key lifecycle; the 1:1:1 single-key record stays the minimal form.** The one legitimate KEM in the enrollment path is the `apkamSymmetricKey` conveyance at enroll/approve (P-3) — key *transport*, not auth. The client-side signing swap was previously unnamed in the plan; it now has a home ([section 2.4](../design.md#24-the-atserver-enrollment-record--ml-dsa-apkam-auth)), exercised by RF-2b + ON-1. | Same principle as the IS-1 pare-back: PKAM is authentication, not key agreement — the per-connection challenge gives freshness and TLS secures the channel, so only the signature is Shor-vulnerable. Recorded to pre-empt the same over-build (a KEM/cert/keyring on client auth) that IS-1 had carried, and to close the plan gap the client swap left. |
@@ -5430,7 +5430,7 @@ immutably. The vocabularies and where each applies:
   `SigningAlgoType.mldsa65`. ML-DSA-65 now has ONE spelling on the wire, and
   `wire_literal_pins_test.dart` pins that rather than the split.
 - **Keyfile / pkam tokens** (compact): `xwing`, `mlkem1024`, `mldsa65`,
-  `rsa2048` — `CryptographicMaterial.keyAlgorithmType`, the signed-envelope
+  `rsa2048` — `CryptographicMaterial.algorithm`, the signed-envelope
   `signingAlgo` field, the tagged `_apsk` value, and root links
   (`PqSigningChain.rootLinkAlgo`).
 - **Dart identifiers**: `SigningAlgoType.mldsa65` (at_chops),
@@ -7921,7 +7921,7 @@ superseded kpid is not retired) is the same shape as ruling 9 below.
 | 1  | **The APKAM authentication key authenticates and nothing else.** An enrollment's signing keys are separate material from the start, with their own lifecycle |
 | 2  | **`AtKeys` gains `privateAuthentication` / `publicAuthentication`** as `CryptographicMaterialRole` tokens. Role is what that enum is for, and it is what `validateAddKey` and `validateKeyMaterials` group on, so the uniqueness rules come from machinery that already exists |
 | 3  | **keyIds are `apkam:<enrollmentId>:<n>` for authentication and `sign:<enrollmentId>:<algo>:<n>` for signing.** **A keyfile is retrofitted once**, so retrofit idempotency is no longer per algorithm: a request naming a *different* algorithm than the enrollment already held **throws**, because quietly returning an `mldsa65` enrollment to a caller that asked for `rsa2048` would have it believe it holds a mode it does not. A re-run naming the *same* algorithm still reuses — `selfRetrofit` documents itself as idempotent and recovers a failed signing-root step by running again, so that arm must not throw. *Added 2026-08-11 during implementation, on Gary's ruling that there is never a second retrofit; the code previously scoped idempotency per algorithm precisely to allow one.* The auth counter keeps retired generations distinguishable; algorithm leads the signing shape because that is what a verifier selects on. The generation-less `apkam:<enrollmentId>` needs no read compatibility — `fileApkamMaterial` is not on trunk, so no released build has ever written one |
-| 4  | **The assurance invariants count only `active` material, and uniqueness is per `(enrollment, role, algorithm)`.** At most one active `privateAuthentication` **file-wide** — not per algorithm, since one live enrollment per install is the model — and at most one active `privateSigning` per algorithm, which is what lets an enrollment hold the whole signing array at once. *Amended 2026-08-11 during implementation: this ruling first said one active material per `(enrollment, keyPartType)`, which contradicted ruling 16 — every signing key shares the `privateSigning` role, so that rule permitted exactly one signing algorithm. Caught by a test asserting several active signing keys are fine, not by review.* ⚠️ **This row ended "Today they are status-blind, so retiring a key does not free its slot — confirmed by probe" until 2026-08-18, and that clause was falsified 92 minutes after it was written**, by `c7e2ccef4` the same evening, which made both invariants status-aware. Retirement now *does* free the `(enrollment, role, algorithm)` slot and the document-wide live-enrollment slot; what stays status-blind is the duplicate-`(enrollment, keyId, part)` check, so a replacement must be filed under a **new** keyId. The probe was real and its result was true for ninety-two minutes. |
+| 4  | **The assurance invariants count only `active` material, and uniqueness is per `(enrollment, role, algorithm)`.** At most one active `privateAuthentication` **file-wide** — not per algorithm, since one live enrollment per install is the model — and at most one active `privateSigning` per algorithm, which is what lets an enrollment hold the whole signing array at once. *Amended 2026-08-11 during implementation: this ruling first said one active material per `(enrollment, role)`, which contradicted ruling 16 — every signing key shares the `privateSigning` role, so that rule permitted exactly one signing algorithm. Caught by a test asserting several active signing keys are fine, not by review.* ⚠️ **This row ended "Today they are status-blind, so retiring a key does not free its slot — confirmed by probe" until 2026-08-18, and that clause was falsified 92 minutes after it was written**, by `c7e2ccef4` the same evening, which made both invariants status-aware. Retirement now *does* free the `(enrollment, role, algorithm)` slot and the document-wide live-enrollment slot; what stays status-blind is the duplicate-`(enrollment, keyId, part)` check, so a replacement must be filed under a **new** keyId. The probe was real and its result was true for ninety-two minutes. |
 | 5  | **"Which enrollment do I authenticate as" is derived, never stored.** It is the enrollment id of the unique active `privateAuthentication` material. No `activeEnrollmentId` field is added: a pointer duplicating a fact already in the file is a second writer waiting to disagree with the first |
 | 6  | **`AtKeys.replaceKey(keyId, newMaterial)`** performs retire-and-add in one call. Leaving callers to sequence two mutations across a keyfile flush is how one generation goes missing. *⚠️ Signature updated by [99](#99-the-keyfile-groups-by-enrollment-and-the-atsigns-own-keys-move-out-2026-08-14) row A1: it is now `replaceKey(enrollmentId, keyId, replacements)`, because identity became `(enrollment, keyId)`. The ruling — one call, never two — is unchanged.* |
 | 7  | **All key material becomes typed.** The flat `apkamPublicKey`/`apkamPrivateKey` stay as a compatibility projection, read in exactly one place. `rsa2048` exists only as a retrofit's legacy APKAM keypair. *Amended 2026-08-13 during implementation: this ruling first said the flat fields become a **write-only** projection over the typed materials, "never read as the source of truth", and the projection cannot be materialised — two probes refused it. Filing a projected material makes `toJson` emit `version`/`atsign`/`keys`, because its guard is `keys.isEmpty` and both stores stamp `atsign` first (`file_io.dart:113`, `keychain_io_impl.dart:89`), which breaks the byte-identical legacy round-trip [section 91.4](#914-what-is-released-and-therefore-what-must-still-be-read) promises; and on a retrofitted keyfile the one-active-`privateAuthentication`-per-document rule in `assurance.dart` refuses the add outright. There is also nothing to project from on four shipping shapes — a keyfile written before the typed section existed, an `rsa2048` first onboard, an OTP enrollment, and an onboard handed its keys by the caller. So "never read" narrows to "read in one place": `AtKeys.authenticationFor` / `authenticationAlgorithmFor` is the single resolver every caller goes through, typed material winning wherever the keyfile holds it for that enrollment and the flat fields answering only where it holds none.* |
@@ -8575,7 +8575,7 @@ failure the ruling warns about for the plural holding, one layer out.
 wake-up subscription and the sync listener all cover every held address.
 
 **The keyfile already records the status, which ruling 9 did not know.**
-`CryptographicMaterial` carries a `KeyPartStatus` of `active`/`retired`/`dead`,
+`CryptographicMaterial` carries a `CryptographicMaterialStatus` of `active`/`retired`/`dead`,
 `AtKeys.retireKey` is how a rotation records the transition, and
 `AtKeysAssurance` enforces at most one **active** `publicEncapsulation` material
 per (enrollment, algorithm) — the same invariant `_activeEncKey` needs, already
@@ -8681,9 +8681,9 @@ as *staged*: filed, but not yet the one that authenticates. gkc ruled the
 **two-phase** shape, staged then promoted on the atServer's acceptance. That
 needs a new status value, and asking for one exposed why none could be added.
 
-**1. `KeyPartStatus` becomes an open `String`, and `CryptographicMaterial.status` with
-it.** `CryptographicMaterial`'s two neighbouring fields, `keyAlgorithmType` and
-`keyPartType`, are open Strings, and `keyAlgorithmType`'s dartdoc states the
+**1. `CryptographicMaterialStatus` becomes an open `String`, and `CryptographicMaterial.status` with
+it.** `CryptographicMaterial`'s two neighbouring fields, `algorithm` and
+`role`, are open Strings, and `algorithm`'s dartdoc states the
 rule for the whole document: *"a reader must accept — and round-trip unmodified
 on flush — values it does not recognise, so a keyfile written by a newer client
 stays readable and losslessly flushable by an older one."* `status` was an
@@ -8705,7 +8705,7 @@ read is only half the promise, and it is the dangerous half on its own.
 **2. The forward order becomes a stated ranking.** `retireKey` and the
 assurance rule both enforced "status only moves forward" with `status.index`,
 which an open String does not have — so this was never a mechanical type swap,
-and the audit is what caught it. `KeyPartStatus.rankOf` states the order
+and the audit is what caught it. `CryptographicMaterialStatus.rankOf` states the order
 instead. That is the better position regardless: reordering the enum's
 declarations used to silently redefine every transition check in the package.
 
@@ -8726,7 +8726,7 @@ tolerance and its ranking, nothing that uses them.
 
 The consumer sweep found this is source-breaking for nobody: no sibling repo
 under `~/dev/atsign` and no package in `~/.pub-cache` references
-`KeyPartStatus` outside at_auth itself. ⚠️ It is still a **published-surface
+`CryptographicMaterialStatus` outside at_auth itself. ⚠️ It is still a **published-surface
 break** — at_auth joins at_chops in owing a major-version decision
 ([92](#92-the-spike-takes-trunk-and-two-published-version-numbers-move-underneath-it-2026-08-11));
 the bump is not taken here.
@@ -9324,7 +9324,7 @@ a reader cannot tell that from "not yet known".
 non-empty. Measured: nothing in production sets it, the only writers being
 at_auth's own copy paths, so its absence from both target files is a missing
 producer rather than a removal. Dropping it would break the lossless-flush
-promise that `CryptographicMaterialAlgorithm`, `CryptographicMaterialRole` and `KeyPartStatus`
+promise that `CryptographicMaterialAlgorithm`, `CryptographicMaterialRole` and `CryptographicMaterialStatus`
 each state in their own dartdoc.
 
 ## 101. The signing root becomes an ordinary signing key, and rotatable (2026-08-15)

@@ -51,16 +51,16 @@ void main() {
       ..addKey(CryptographicMaterial(
         keyId: 'apkam:$enrollmentId:1',
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicMaterialRole.privateAuthentication,
-        keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
+        role: CryptographicMaterialRole.privateAuthentication,
+        algorithm: CryptographicMaterialAlgorithm.mlDsa65,
         bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 3))),
         createdAt: now,
       ))
       ..addKey(CryptographicMaterial(
         keyId: 'apkam:$enrollmentId:1',
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicMaterialRole.publicAuthentication,
-        keyAlgorithmType: CryptographicMaterialAlgorithm.mlDsa65,
+        role: CryptographicMaterialRole.publicAuthentication,
+        algorithm: CryptographicMaterialAlgorithm.mlDsa65,
         bytes: AtBytes(Uint8List.fromList(List<int>.filled(32, 4))),
         createdAt: now,
       ));

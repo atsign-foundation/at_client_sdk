@@ -157,7 +157,7 @@ class AtKeysAssurance {
   void validateKeyMaterials(List<CryptographicMaterial> materials) {
     final typesByEnrollment = <String, Set<String>>{};
     for (final material in materials) {
-      if (material.status != KeyPartStatus.active) {
+      if (material.status != CryptographicMaterialStatus.active) {
         continue;
       }
       final enrollmentId = material.enrollmentId;
@@ -165,11 +165,11 @@ class AtKeysAssurance {
         continue;
       }
       final types = typesByEnrollment.putIfAbsent(enrollmentId, () => {});
-      if (!types.add('${material.keyPartType}/${material.keyAlgorithmType}')) {
+      if (!types.add('${material.role}/${material.algorithm}')) {
         throw AtKeysEnrollmentException(
             'Enrollment "$enrollmentId" has more than one active '
-            '${material.keyPartType} key material for '
-            '${material.keyAlgorithmType}');
+            '${material.role} key material for '
+            '${material.algorithm}');
       }
     }
   }
@@ -180,8 +180,8 @@ class AtKeysAssurance {
       enrollmentId == null ? 'no enrollment id' : '"$enrollmentId"';
 
   /// All of `AtKeys.addKey`'s validation in one place. Rejects, in order:
-  /// a duplicate `(enrollmentId, keyId, keyPartType)`, and a second material
-  /// of the same `keyPartType` for one enrollment across keyIds (the
+  /// a duplicate `(enrollmentId, keyId, role)`, and a second material
+  /// of the same `role` for one enrollment across keyIds (the
   /// [validateKeyMaterials] invariant, held incrementally).
   ///
   /// ⚠️ **The duplicate check is per owner, not per keyId.** Identity is
@@ -201,22 +201,22 @@ class AtKeysAssurance {
     for (final material in existing) {
       if (material.keyId == candidate.keyId &&
           material.enrollmentId == candidate.enrollmentId) {
-        if (material.keyPartType == candidate.keyPartType) {
+        if (material.role == candidate.role) {
           throw ArgumentError.value(candidate.keyId, 'material',
-              'AtKeys already contains a ${candidate.keyPartType} material for this keyId');
+              'AtKeys already contains a ${candidate.role} material for this keyId');
         }
-      } else if (candidate.status == KeyPartStatus.active &&
-          material.status == KeyPartStatus.active &&
+      } else if (candidate.status == CryptographicMaterialStatus.active &&
+          material.status == CryptographicMaterialStatus.active &&
           candidate.enrollmentId != null &&
           material.enrollmentId == candidate.enrollmentId &&
-          material.keyPartType == candidate.keyPartType &&
-          material.keyAlgorithmType == candidate.keyAlgorithmType) {
+          material.role == candidate.role &&
+          material.algorithm == candidate.algorithm) {
         throw ArgumentError.value(
             candidate.enrollmentId,
             'material',
             'Enrollment "${candidate.enrollmentId}" already has an active '
-                '${candidate.keyPartType} key material for '
-                '${candidate.keyAlgorithmType}');
+                '${candidate.role} key material for '
+                '${candidate.algorithm}');
       }
     }
   }
@@ -240,14 +240,14 @@ class AtKeysAssurance {
     required Iterable<CryptographicMaterial> existing,
     required CryptographicMaterial candidate,
   }) {
-    if (candidate.status != KeyPartStatus.active ||
-        candidate.keyPartType !=
+    if (candidate.status != CryptographicMaterialStatus.active ||
+        candidate.role !=
             CryptographicMaterialRole.privateAuthentication) {
       return;
     }
     for (final material in existing) {
-      if (material.status != KeyPartStatus.active ||
-          material.keyPartType !=
+      if (material.status != CryptographicMaterialStatus.active ||
+          material.role !=
               CryptographicMaterialRole.privateAuthentication) {
         continue;
       }
@@ -356,7 +356,7 @@ class AtKeysAssurance {
     }
   }
 
-  /// Every existing `(enrollmentId, keyId, keyPartType)` must survive in the
+  /// Every existing `(enrollmentId, keyId, role)` must survive in the
   /// candidate with identical fields, except `status`, which may move forward
   /// (active → retired → dead) but never backward. New keyIds — and new parts
   /// on an existing keyId — are additions, not losses, so they pass.
@@ -372,16 +372,16 @@ class AtKeysAssurance {
   ) {
     final candidateByPart = {
       for (final material in candidate)
-        (material.enrollmentId, material.keyId, material.keyPartType): material,
+        (material.enrollmentId, material.keyId, material.role): material,
     };
 
     for (final material in existing) {
       final owner = material.enrollmentId ?? 'atSign';
-      final path = 'map.keys.$owner.${material.keyId}.${material.keyPartType}';
+      final path = 'map.keys.$owner.${material.keyId}.${material.role}';
       final counterpart = candidateByPart[(
         material.enrollmentId,
         material.keyId,
-        material.keyPartType
+        material.role
       )];
       if (counterpart == null) {
         throw AtKeysAssuranceException('$path is not preserved');
@@ -389,8 +389,8 @@ class AtKeysAssurance {
       if (material.withStatus(counterpart.status) != counterpart) {
         throw AtKeysAssuranceException('$path changed during AtKeys assurance');
       }
-      final before = KeyPartStatus.rankOf(material.status);
-      final after = KeyPartStatus.rankOf(counterpart.status);
+      final before = CryptographicMaterialStatus.rankOf(material.status);
+      final after = CryptographicMaterialStatus.rankOf(counterpart.status);
       if (before == null || after == null) {
         // At least one side carries a status this build does not know, so it
         // has no position in the forward order and "moved backward" is not a

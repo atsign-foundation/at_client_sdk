@@ -1,5 +1,24 @@
 ## 3.4.0-rc1
 
+- **BREAKING** refactor: the typed keyfile's field names lose the "key part"
+  vocabulary. At rest, `keyParts` becomes `material`, `keyPartType` becomes
+  `role` and `keyAlgorithmType` becomes `algorithm`. In the API,
+  `CryptographicMaterial.keyPartType` becomes `.role` and `.keyAlgorithmType`
+  becomes `.algorithm`, and `KeyPartStatus` becomes
+  `CryptographicMaterialStatus` — completing the family beside
+  `CryptographicMaterialRole` and `CryptographicMaterialAlgorithm`, and no
+  longer reading as a sibling of the unrelated `KeyEntryStatus`.
+  - **The token values are untouched.** `privateSigning`, `mldsa65` and
+    `active` are exactly what they were; only the names of the fields carrying
+    them move. The "do not change any existing value" contract on those three
+    classes is about the values, and it still holds.
+  - Safe despite at_auth 3.3.0 shipping the old field names, because no
+    keyfile in the world carries them. 3.3.0 never populates the typed array —
+    `addKey` has no call site outside `AtKeys` in its own lib — and a document
+    with a non-empty top-level `keys` array is already refused outright as one
+    that must be regenerated. The rename cannot orphan a document this build
+    would otherwise have read.
+
 - **BREAKING** refactor: `AtKeys.retiredSigningKeysFor` becomes
   `withdrawnSigningKeysFor`, selects on **not active and not `dead`** rather
   than on exactly `retired`, and returns the keyfile's status token alongside
@@ -16,7 +35,7 @@
   - `dead` material still stays out. It was never adopted and has nothing to
     verify.
 - **BREAKING** refactor: `KeyEntryStatus` is an open `String` vocabulary rather
-  than an `enum`, matching `KeyPartStatus` beside it. The field it types —
+  than an `enum`, matching `CryptographicMaterialStatus` beside it. The field it types —
   `ApskSigningKey.status`, and `PackageKey.status` in at_client — is now a
   `String`. No release holds a `KeyEntryStatus`: it appears in zero files of
   at_auth 3.3.0 and at_client 3.14.0 on pub.dev, and `ApskSigningKey` is not in
@@ -188,7 +207,7 @@
     wipes a withdrawn key's private material is doing the hygienic thing, and
     dropping the advertisement entry when it does would retroactively
     unverify everything that key signed.
-  - Selected on exactly `KeyPartStatus.retired`. `dead` material was never
+  - Selected on exactly `CryptographicMaterialStatus.retired`. `dead` material was never
     adopted and has nothing to verify; a status this build has never seen is
     skipped rather than guessed at.
 - feat: a keyfile holding more than one live enrollment is **read**, and only a
@@ -252,23 +271,23 @@
   - Nothing released has ever written a typed keyfile, so there is nothing at
     rest to migrate and `version` stays 1. Keyfiles this project's own live
     runs generated do carry the old shape and must be regenerated.
-- **BREAKING** fix: `KeyPartStatus` becomes a constants class and
+- **BREAKING** fix: `CryptographicMaterialStatus` becomes a constants class and
   `CryptographicMaterial.status` an open `String`, so a `.atKeys` document carrying a
   status this build does not recognise is **read and round-tripped unmodified**
   rather than refused. It was an `enum` parsed through a throwing
   `expectEnum`, which meant a keyfile written by a newer client was rejected in
   its entirety — not the entry, the whole document, and the document is the
   user's key material. Adding a status value was therefore a breaking at-rest
-  change forever, which is how this was found. `keyAlgorithmType` and
-  `keyPartType` beside it were already open Strings for exactly this reason;
+  change forever, which is how this was found. `algorithm` and
+  `role` beside it were already open Strings for exactly this reason;
   `status` was the one field that broke the promise their documentation makes
   for the whole document.
-  - Callers comparing `material.status == KeyPartStatus.active` need no
+  - Callers comparing `material.status == CryptographicMaterialStatus.active` need no
     change: the constant is a `String` and the comparison is source-identical.
-    What breaks is code relying on enum-ness — `KeyPartStatus.values`,
-    `status.name`, and `KeyPartStatus` as a type annotation (now `String`),
+    What breaks is code relying on enum-ness — `CryptographicMaterialStatus.values`,
+    `status.name`, and `CryptographicMaterialStatus` as a type annotation (now `String`),
     including the `to:` parameter of `retireKey` and `replaceKey`.
-  - `KeyPartStatus.rankOf` is new and states the forward order
+  - `CryptographicMaterialStatus.rankOf` is new and states the forward order
     (`active` → `retired` → `dead`) that declaration index used to supply
     implicitly. An unrecognised status has **no** rank: it is never selected as
     active, and a transition involving one is refused rather than assigned a
@@ -317,7 +336,7 @@
   build does not know, and a keyId whose two halves disagree about their
   algorithm are each skipped rather than refused — the rest of a keyfile
   written by a newer client is still usable. That last case is reachable:
-  the invariants are per `(keyPartType, keyAlgorithmType)`, so a keyId's two
+  the invariants are per `(role, algorithm)`, so a keyId's two
   halves are never compared with each other, and handing the pair out would
   sign under one algorithm while advertising the other's public key.
 - fix: `authenticationFor` refuses an enrollment whose typed authentication

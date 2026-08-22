@@ -129,8 +129,7 @@ Future<(String, Uint8List, String)> _keyPackageHalves(AtKeys keys) async {
         'enrollmentKeyPackageBuilder, which files both halves here. '
         'Supported: ${SecretSharingAlgos.keyAlgos}');
   }
-  final keyAlgo =
-      SecretSharingAlgos.keyAlgoForMaterial(private.keyAlgorithmType)!;
+  final keyAlgo = SecretSharingAlgos.keyAlgoForMaterial(private.algorithm)!;
   final pair = await SecretSharingAlgos.kemFor(keyAlgo)!
       .keyPairFromSeed(Uint8List.fromList(private.bytes.bytes));
   return (private.keyId, pair.secretKey, keyAlgo);

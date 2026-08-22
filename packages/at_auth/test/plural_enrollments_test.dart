@@ -15,10 +15,10 @@ import 'package:test/test.dart';
 /// not exist.
 void main() {
   Map<String, dynamic> authPart(String algorithm) => {
-        'keyPartType': CryptographicMaterialRole.privateAuthentication,
-        'keyAlgorithmType': algorithm,
+        'role': CryptographicMaterialRole.privateAuthentication,
+        'algorithm': algorithm,
         'createdAt': '2026-08-14T00:00:00.000Z',
-        'status': KeyPartStatus.active,
+        'status': CryptographicMaterialStatus.active,
         'bytes': 'dmFsdWU=',
       };
 
@@ -33,7 +33,7 @@ void main() {
             'keys': [
               {
                 'keyId': 'auth:rsa2048:1',
-                'keyParts': [authPart(CryptographicMaterialAlgorithm.rsa2048)],
+                'material': [authPart(CryptographicMaterialAlgorithm.rsa2048)],
               },
             ],
           },
@@ -42,7 +42,7 @@ void main() {
             'keys': [
               {
                 'keyId': 'auth:mldsa65:1',
-                'keyParts': [authPart(CryptographicMaterialAlgorithm.mlDsa65)],
+                'material': [authPart(CryptographicMaterialAlgorithm.mlDsa65)],
               },
             ],
           },
@@ -53,8 +53,8 @@ void main() {
       CryptographicMaterial(
         keyId: 'auth:$algorithm:1',
         enrollmentId: enrollmentId,
-        keyPartType: CryptographicMaterialRole.privateAuthentication,
-        keyAlgorithmType: algorithm,
+        role: CryptographicMaterialRole.privateAuthentication,
+        algorithm: algorithm,
         bytes: AtBytes.fromString('dmFsdWU='),
         createdAt: DateTime.utc(2026, 8, 14),
       );
@@ -127,7 +127,7 @@ void main() {
           keys
               .getKey('e2', 'auth:mldsa65:1',
                   CryptographicMaterialRole.privateAuthentication)!
-              .keyAlgorithmType,
+              .algorithm,
           CryptographicMaterialAlgorithm.mlDsa65);
       expect(keys.signingAlgorithmForEnrollment('e1'), SigningAlgoType.rsa2048);
       expect(keys.signingAlgorithmForEnrollment('e2'), SigningAlgoType.mldsa65);

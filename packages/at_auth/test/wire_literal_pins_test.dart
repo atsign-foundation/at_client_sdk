@@ -515,7 +515,7 @@ void main() {
           SigningAlgoType.ecc_secp256r1.name);
     });
 
-    test('CryptographicMaterialRole tokens and KeyPartStatus names', () {
+    test('CryptographicMaterialRole tokens and CryptographicMaterialStatus names', () {
       expect(CryptographicMaterialRole.known, {
         'symmetricEncryption',
         'symmetricAuthentication',
@@ -533,18 +533,18 @@ void main() {
       // The at-rest tokens, pinned individually as well as as a set. Asserting
       // only `known` would follow a renamed constant silently, which is the
       // failure a raw-literal pin exists to stop.
-      expect(KeyPartStatus.active, 'active');
-      expect(KeyPartStatus.retired, 'retired');
-      expect(KeyPartStatus.dead, 'dead');
-      expect(KeyPartStatus.known, {'active', 'retired', 'dead'});
+      expect(CryptographicMaterialStatus.active, 'active');
+      expect(CryptographicMaterialStatus.retired, 'retired');
+      expect(CryptographicMaterialStatus.dead, 'dead');
+      expect(CryptographicMaterialStatus.known, {'active', 'retired', 'dead'});
 
       // And the forward order, which stopped being declaration index when
       // status became an open String. It is a stated ranking now, so it is
       // pinned like any other contract.
-      expect(KeyPartStatus.rankOf('active'), 0);
-      expect(KeyPartStatus.rankOf('retired'), 1);
-      expect(KeyPartStatus.rankOf('dead'), 2);
-      expect(KeyPartStatus.rankOf('pending'), isNull,
+      expect(CryptographicMaterialStatus.rankOf('active'), 0);
+      expect(CryptographicMaterialStatus.rankOf('retired'), 1);
+      expect(CryptographicMaterialStatus.rankOf('dead'), 2);
+      expect(CryptographicMaterialStatus.rankOf('pending'), isNull,
           reason: 'a token this build has never seen has no position in the '
               'forward order, and must not acquire one by accident');
     });
@@ -579,7 +579,7 @@ void main() {
           atKeys
               .getKey('enroll-1', 'auth:mldsa65:1',
                   CryptographicMaterialRole.privateAuthentication)!
-              .toJson()['keyAlgorithmType'],
+              .toJson()['algorithm'],
           'mldsa65');
 
       // The generation is per (role, algorithm): an enrollment moving from one

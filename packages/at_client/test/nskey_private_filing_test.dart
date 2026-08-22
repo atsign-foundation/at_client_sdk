@@ -53,7 +53,7 @@ void main() {
         reason: 'this is the only copy that survives a restart — the transit '
             'store is in-memory by design');
     expect(material!.bytes.bytes, privateBytes);
-    expect(material.keyAlgorithmType, CryptographicMaterialAlgorithm.xWing);
+    expect(material.algorithm, CryptographicMaterialAlgorithm.xWing);
   });
 
   test('the same kid in two namespaces files as two keys', () async {

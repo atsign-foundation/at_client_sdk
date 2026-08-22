@@ -9,7 +9,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeysIo,
         CryptographicMaterial,
         CryptographicMaterialRole,
-        KeyPartStatus,
+        CryptographicMaterialStatus,
         WrittenAtKeysIo,
         apskAdvertisement,
         apskSigningKeys,
@@ -678,8 +678,8 @@ class PqSigningRoot {
         final createdAt = DateTime.now().toUtc();
         keys.addKey(CryptographicMaterial(
           keyId: slot,
-          keyPartType: CryptographicMaterialRole.privateSigning,
-          keyAlgorithmType: rootKeyAlgoToken,
+          role: CryptographicMaterialRole.privateSigning,
+          algorithm: rootKeyAlgoToken,
           bytes: AtBytes(private),
           createdAt: createdAt,
         ));
@@ -689,8 +689,8 @@ class PqSigningRoot {
         if (public != null) {
           keys.addKey(CryptographicMaterial(
             keyId: slot,
-            keyPartType: CryptographicMaterialRole.publicVerification,
-            keyAlgorithmType: rootKeyAlgoToken,
+            role: CryptographicMaterialRole.publicVerification,
+            algorithm: rootKeyAlgoToken,
             bytes: AtBytes(public),
             createdAt: createdAt,
           ));
@@ -1137,8 +1137,8 @@ class PqSigningRoot {
   /// be available without a round trip.
   Iterable<CryptographicMaterial> _activePrivates(AtKeys keys) =>
       keys.atSignKeys.where((m) =>
-          m.keyPartType == CryptographicMaterialRole.privateSigning &&
-          m.status == KeyPartStatus.active &&
+          m.role == CryptographicMaterialRole.privateSigning &&
+          m.status == CryptographicMaterialStatus.active &&
           _isRootSlot(m.keyId));
 
   /// The one active root private that the record says may sign — the active
@@ -1265,15 +1265,15 @@ class PqSigningRoot {
         final createdAt = DateTime.now().toUtc();
         keys.addKey(CryptographicMaterial(
           keyId: slot!,
-          keyPartType: CryptographicMaterialRole.privateSigning,
-          keyAlgorithmType: rootKeyAlgoToken,
+          role: CryptographicMaterialRole.privateSigning,
+          algorithm: rootKeyAlgoToken,
           bytes: AtBytes(pair.secretKey),
           createdAt: createdAt,
         ));
         keys.addKey(CryptographicMaterial(
           keyId: slot!,
-          keyPartType: CryptographicMaterialRole.publicVerification,
-          keyAlgorithmType: rootKeyAlgoToken,
+          role: CryptographicMaterialRole.publicVerification,
+          algorithm: rootKeyAlgoToken,
           bytes: AtBytes(pair.publicKey),
           createdAt: createdAt,
         ));
@@ -1293,7 +1293,7 @@ class PqSigningRoot {
     final io = keysIo;
     if (io is! WrittenAtKeysIo) return;
     await io.update(atSign.toAtsign(), (keys) {
-      keys.retireAtSignKey(slot, to: KeyPartStatus.dead);
+      keys.retireAtSignKey(slot, to: CryptographicMaterialStatus.dead);
       return true;
     });
   }

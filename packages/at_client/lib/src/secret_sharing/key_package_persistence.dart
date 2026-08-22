@@ -6,7 +6,7 @@ import 'package:at_auth/at_auth.dart'
         AtKeysIo,
         CryptographicMaterial,
         CryptographicMaterialRole,
-        KeyPartStatus;
+        CryptographicMaterialStatus;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/key_package.dart'
@@ -68,7 +68,7 @@ void bindKeyPackageToAtKeys(
 /// more about than that. Only [KeyEntryStatus.active] is offered for new
 /// traffic, so an unknown token is never the advertised address.
 ///
-/// The status is the keyfile's own [KeyPartStatus], not a guess from age.
+/// The status is the keyfile's own [CryptographicMaterialStatus], not a guess from age.
 /// `AtKeys.retireKey` is how a rotation records the transition, and
 /// `AtKeysAssurance` enforces at most one **active** `publicEncapsulation`
 /// material per (enrollment, algorithm) — so the file already answers which
@@ -93,8 +93,7 @@ Future<PersistedApkamKeys?> _load(
         encSeed: base64Encode(material.bytes.bytes),
         // Non-null by construction: keyPackageMaterials only returns material
         // whose algorithm token this build recognises.
-        keyAlgo:
-            SecretSharingAlgos.keyAlgoForMaterial(material.keyAlgorithmType)!,
+        keyAlgo: SecretSharingAlgos.keyAlgoForMaterial(material.algorithm)!,
         // The keyfile's own token, carried across rather than collapsed to
         // one of the two this build knows. Both vocabularies are open and they
         // agree on `active`/`retired`; a third value written by a newer client
@@ -137,7 +136,7 @@ CryptographicMaterial? keyPackageMaterial(AtKeys keys,
 /// at most one **active** `publicEncapsulation` material per (enrollment,
 /// algorithm). So the first entry is the live one rather than merely the newest.
 ///
-/// [KeyPartStatus.dead] material is left out entirely. Retirement is as close
+/// [CryptographicMaterialStatus.dead] material is left out entirely. Retirement is as close
 /// to deletion as a keyfile gets — status only ever moves forward, and dead is
 /// the end of that road — so a dead key is not something to advertise to peers
 /// or to keep answering on. Nothing in at_client marks one dead today; this
@@ -161,7 +160,7 @@ List<CryptographicMaterial> keyPackageMaterials(AtKeys keys,
   // mint a fresh key and answer at a kpid its enrollment never advertised, so
   // nothing addressed to it could ever arrive.
   bool isKeyEstablishment(CryptographicMaterial m) =>
-      SecretSharingAlgos.keyAlgoForMaterial(m.keyAlgorithmType) != null;
+      SecretSharingAlgos.keyAlgoForMaterial(m.algorithm) != null;
 
   // Paired by `(owner, keyId)`, not by keyId alone. A keyId is unique within
   // its enrollment and not across the document, so a keyId-only set would let
@@ -170,22 +169,22 @@ List<CryptographicMaterial> keyPackageMaterials(AtKeys keys,
   // own enrollment record never advertised.
   final publicIds = {
     for (final m in keys.keys)
-      if (m.keyPartType == CryptographicMaterialRole.publicEncapsulation &&
+      if (m.role == CryptographicMaterialRole.publicEncapsulation &&
           isKeyEstablishment(m))
         (m.enrollmentId, m.keyId)
   };
   final candidates = keys.keys
       .where((m) =>
-          m.keyPartType == CryptographicMaterialRole.privateDecapsulation &&
+          m.role == CryptographicMaterialRole.privateDecapsulation &&
           isKeyEstablishment(m) &&
-          m.status != KeyPartStatus.dead &&
+          m.status != CryptographicMaterialStatus.dead &&
           publicIds.contains((m.enrollmentId, m.keyId)) &&
           (m.enrollmentId == null || m.enrollmentId == enrollmentId))
       .toList()
     ..sort((a, b) {
-      if ((a.status == KeyPartStatus.active) !=
-          (b.status == KeyPartStatus.active)) {
-        return a.status == KeyPartStatus.active ? -1 : 1;
+      if ((a.status == CryptographicMaterialStatus.active) !=
+          (b.status == CryptographicMaterialStatus.active)) {
+        return a.status == CryptographicMaterialStatus.active ? -1 : 1;
       }
       return b.createdAt.compareTo(a.createdAt);
     });

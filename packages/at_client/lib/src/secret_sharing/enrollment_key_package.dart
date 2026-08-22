@@ -113,15 +113,15 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
     // private half back to the package a sender sealed to.
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicMaterialRole.publicEncapsulation,
-      keyAlgorithmType: materialAlgo,
+      role: CryptographicMaterialRole.publicEncapsulation,
+      algorithm: materialAlgo,
       bytes: AtBytes(pair.publicKey),
       createdAt: now,
     ));
     keys.addKey(CryptographicMaterial(
       keyId: kpid,
-      keyPartType: CryptographicMaterialRole.privateDecapsulation,
-      keyAlgorithmType: materialAlgo,
+      role: CryptographicMaterialRole.privateDecapsulation,
+      algorithm: materialAlgo,
       bytes: AtBytes(seed),
       createdAt: now,
     ));

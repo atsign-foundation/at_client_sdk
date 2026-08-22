@@ -10,7 +10,7 @@ import 'package:at_auth/at_auth.dart'
         InMemoryAtKeysIo,
         CryptographicMaterialAlgorithm,
         KeyEntryStatus,
-        KeyPartStatus;
+        CryptographicMaterialStatus;
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -349,7 +349,7 @@ void main() {
         CryptographicMaterialRole.publicVerification
       ]) {
         final material = keys.getKey(enrollmentId, 'sign:rsa2048:1', part);
-        expect(material?.status, KeyPartStatus.retired,
+        expect(material?.status, CryptographicMaterialStatus.retired,
             reason: 'both halves move: a keypair half-retired at rest is one '
                 'the next reader can read either way');
         expect(material?.bytes.toString(), isNotEmpty,

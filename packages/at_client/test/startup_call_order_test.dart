@@ -237,7 +237,7 @@ void main() {
     final keysAfter = await inner.read(atSign);
     final active = keysAfter
         .atSignKeysForKeyId(rootSlot1)
-        .where((m) => m.status == KeyPartStatus.active);
+        .where((m) => m.status == CryptographicMaterialStatus.active);
     expect(active, isEmpty,
         reason: 'an orphaned root private must be retired, or it blocks its '
             'own repair forever and gets offered to enrollments whose '

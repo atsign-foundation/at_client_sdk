@@ -11,17 +11,17 @@
   "atsignKeys": [
     {
       "keyId": "root:mldsa65:1",
-      "keyParts": [
+      "material": [
         {
-          "keyPartType": "privateSigning",
-          "keyAlgorithmType": "mldsa65",
+          "role": "privateSigning",
+          "algorithm": "mldsa65",
           "createdAt": "2026-08-14T11:35:13.904039Z",
           "status": "active",
           "bytes": "<5376 chars>"
         },
         {
-          "keyPartType": "publicVerification",
-          "keyAlgorithmType": "mldsa65",
+          "role": "publicVerification",
+          "algorithm": "mldsa65",
           "createdAt": "2026-08-14T11:35:13.904039Z",
           "status": "active",
           "bytes": "<2604 chars>"
@@ -40,17 +40,17 @@
       "keys": [
         {
           "keyId": "auth:mldsa65:1",
-          "keyParts": [
+          "material": [
             {
-              "keyPartType": "privateAuthentication",
-              "keyAlgorithmType": "mldsa65",
+              "role": "privateAuthentication",
+              "algorithm": "mldsa65",
               "createdAt": "2026-08-14T11:35:13.695060Z",
               "status": "active",
               "bytes": "<5376 chars>"
             },
             {
-              "keyPartType": "publicAuthentication",
-              "keyAlgorithmType": "mldsa65",
+              "role": "publicAuthentication",
+              "algorithm": "mldsa65",
               "createdAt": "2026-08-14T11:35:13.695060Z",
               "status": "active",
               "bytes": "<2604 chars>"
@@ -59,17 +59,17 @@
         },
         {
           "keyId": "sign:rsa2048:1",
-          "keyParts": [
+          "material": [
             {
-              "keyPartType": "privateSigning",
-              "keyAlgorithmType": "rsa2048",
+              "role": "privateSigning",
+              "algorithm": "rsa2048",
               "createdAt": "2026-08-14T11:35:16.923932Z",
               "status": "active",
               "bytes": "<1624 chars>"
             },
             {
-              "keyPartType": "publicVerification",
-              "keyAlgorithmType": "rsa2048",
+              "role": "publicVerification",
+              "algorithm": "rsa2048",
               "createdAt": "2026-08-14T11:35:16.923932Z",
               "status": "active",
               "bytes": "<392 chars>"
@@ -78,17 +78,17 @@
         },
         {
           "keyId": "cb84bc741ec5b268",
-          "keyParts": [
+          "material": [
             {
-              "keyPartType": "publicEncapsulation",
-              "keyAlgorithmType": "xwing",
+              "role": "publicEncapsulation",
+              "algorithm": "xwing",
               "createdAt": "2026-08-14T11:35:13.675610Z",
               "status": "active",
               "bytes": "<1624 chars>"
             },
             {
-              "keyPartType": "privateDecapsulation",
-              "keyAlgorithmType": "xwing",
+              "role": "privateDecapsulation",
+              "algorithm": "xwing",
               "createdAt": "2026-08-14T11:35:13.675610Z",
               "status": "active",
               "bytes": "2FBSDNJblbkTJMpRZbUPBzn5D1QifCqPazNLwc2+OGk="

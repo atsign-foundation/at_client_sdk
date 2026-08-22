@@ -26,7 +26,7 @@ void main() {
     test('SigningAlgoType member names, values and order', () {
       // The member NAME is the wire literal: `pkam:signingAlgo:<name>:...`,
       // the enroll-request JSON's "signingAlgo", the signed envelope's
-      // claim, and the keyfile's keyAlgorithmType all emit `.name`. No other
+      // claim, and the keyfile's algorithm all emit `.name`. No other
       // at_chops test asserts the string form, so an enum rename would pass
       // the entire suite while changing the PKAM verb.
       expect(SigningAlgoType.values.map((a) => a.name).toList(),
