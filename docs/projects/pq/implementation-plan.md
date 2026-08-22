@@ -2800,6 +2800,25 @@ examples - moved to the candidate floor with the rest, so they revert too.
 path override, so it resolves published at_auth and a candidate floor would
 strand it.
 
+**at_client stays a MINOR, ruled by gkc 2026-08-22** - `3.15.0-rc1`, and
+at_auth is the only major in this train. Its in-progress section carries
+several **BREAKING** labels, which is what keeps prompting the question:
+- `PackageKey.status`'s type change is accepted.
+- `apskEntries` is **not public API at all**. It is absent from
+  `packages/at_client/lib/at_client.dart`, and every importer reaches it
+  through `package:at_client/src/signing/apsk_composition.dart`, so no
+  consumer can observe its signature. Re-derive with
+  `git grep -n apskEntries -- packages/at_client/lib/at_client.dart`, which
+  returns nothing against a positive control of `apskEntries` in 4 other
+  at_client Dart files (`apkam_signing`, `apsk_composition`,
+  `signing_key_minting`, `apsk_formats_test`).
+- The four typed vocabularies are `extension type ... implements String`,
+  erased at runtime, so nothing published loses a member or changes shape.
+
+The same test the 3.14.1-to-3.15.0 ruling used applies: semver keys on what a
+consumer can observe, and nothing published was removed. That earlier ruling is
+recorded as an HTML comment at the top of `packages/at_client/CHANGELOG.md`.
+
 #### 14.49.3 Considered while building 14.49.1, and deliberately not done
 
 These are here to **stop** the next reader building them. Each looked like a
