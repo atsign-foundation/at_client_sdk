@@ -35,10 +35,19 @@ pointing at it and no detail. `## TODO` below is *what is owed*, unordered; this
 is *what to do first*. Re-read this section against `git log --oneline -10`
 before acting — it has led with finished work before.
 
-Last re-ranked **2026-08-21** against the tree at `2965330f1`, with the
-publish gate re-verified live that afternoon: gkc published **at_chops 3.6.0
-and at_commons 5.16.0** to pub.dev on 2026-08-21, so the train's first two
-positions are released.
+Last re-ranked **2026-08-22** against the tree at `8b08174b5`, entry by entry,
+with the publish gate and CI both re-derived live rather than carried forward.
+What that pass found, because a re-rank that reports only successes is one
+whose checks were too weak to fail: the CI paragraph below was reporting a
+**success on a superseded run while the newest was a failure**, the *Blocked*
+note said the train was unblocked when 14.49.2 had re-gated it on an
+unpublished candidate, and the list's own ordinals ran 1, 2, 3, 4, 3, 4, 5 —
+two entries numbered 3 and two numbered 4, so "item 3" meant different things
+in the source and on the rendered page. All three are corrected here.
+
+gkc published **at_chops 3.6.0 and at_commons 5.16.0** to pub.dev on
+2026-08-21, so the train's first two positions are released; **at_lookup
+3.7.0-rc1 is not**, and that is the live gate.
 
 ⚠️ **A second workstream is now open and is NOT in this table** — the knowledge
 base, agreed with gkc 2026-08-20. Its plan, format, rail design and ordered
@@ -64,7 +73,19 @@ that file instead; the list below is the PQ release work.
    mutation-proven tests, at_auth 335/335, at_client 1509/1509 and the
    functional pack 178/178. ⛔ `EnrollmentKeyExchangeMode` stays an enum — 14.49.1 says why,
    and that has not changed.
-3. **[RECOMMENDED] Carve at_auth** — train position 5, and it now carries the
+3. **Diagnose the red CI run** —
+   [14.50](#1450-the-newest-ci-run-on-this-branch-is-red). The newest run on
+   this branch is a **failure** and the paragraph below this list called it a
+   success until 2026-08-22. `end2end_test_14`, eight tests dead in `setUpAll`
+   on `pkam auth failed for @ce2e1 … error:AT0027:enrollment_id`. Start by
+   reading the **atServer's** log, not the client's — the section says why, and
+   says outright that its hypothesis is unrun. Unblocked, needs no permission,
+   and it is a red on the branch every carve is cut from.
+4. **[RECOMMENDED] Carve at_auth** — ⚠️ **buildable now, not mergeable now:**
+   at_auth floors `at_lookup: ^3.7.0-rc1` and pub.dev's at_lookup is 3.6.1, so
+   the PR can be raised and its CI will fail to resolve until **gkc publishes
+   at_lookup 3.7.0-rc1**. That publish is the one action that lifts it, and it
+   is gkc's. Train position 5, and it now carries the
    keyfile fix (an empty `keys[]` is read, not refused), the `KeyEntryStatus`
    change above, and the evidence for staying a minor: a keyfile CRAM-onboarded
    with published at_auth 3.3.0 loads, and published at_client 3.14.0 compiles
@@ -79,7 +100,7 @@ that file instead; the list below is the PQ release work.
    ⚠️ [14.44](#1444-residuals-from-the-at_chops-pr-review)'s first residual —
    the passphrase envelope persisting the salt and three costs but not
    `hashLength` — belongs in this carve, where that file is already open.
-4. ~~Carve at_lookup~~ **Done — merged as #2174** — train position 3, and **now
+5. ~~Carve at_lookup~~ **Done — merged as #2174** — train position 3, and **now
    unblocked for publish as well as carve**: its `at_commons: ^5.16.0` floor
    is satisfiable on pub.dev as of 2026-08-21, and 14.18's compile
    differential already established it needs nothing newer than the
@@ -91,7 +112,7 @@ that file instead; the list below is the PQ release work.
    returning **empty**. Then analyze and test the package *and its
    consumers*, dispatch CI, and raise with the org template. Needs
    commit/push permission.
-3. ~~Close out [14.43](#1443-the-functional-suites-convergence-race)'s
+6. ~~Close out [14.43](#1443-the-functional-suites-convergence-race)'s
    remainder~~ **Done 2026-08-21, all of it.** All four original shapes have
    diagnosed, mutation-proven fixes; the last open members closed today:
    `sync_multiple_client_test`'s one examined red is classified — shape C's
@@ -108,11 +129,11 @@ that file instead; the list below is the PQ release work.
    section has the evidence). What remains: watch the rate hold; 14.48's
    residue is under ruling 114; the pull-side sync question and the parked
    driver gap are in 14.43's TODO row.
-4. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
+7. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
    ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
    `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
    removal owed at 4.0.
-5. **Demote the finished `## TODO` rows to `## DONE`** — 14.41, 14.43,
+8. **Demote the finished `## TODO` rows to `## DONE`** — 14.41, 14.43,
    14.45, 14.48 and most of 14.39 are complete and still sit in the owed
    table; each wants its heading moved under `## DONE` and its body demoted
    to `detail/implementation-plan.md`, per this file's convention. The
@@ -123,21 +144,41 @@ that file instead; the list below is the PQ release work.
 
 **Blocked, and what lifts it:** ~~publishing anything past at_chops waits on
 at_chops 3.6.0 reaching pub.dev; at_lookup's publish additionally waits on
-at_commons 5.16.0~~ — **both published 2026-08-21, so nothing in the train is
-publish-blocked today.** Each package still waits on its own predecessor
-being released before it can declare a floor against it, which is what the
-order in [14.18](#1418-the-remaining-d1-initial-development-sequence) is for.
+at_commons 5.16.0~~ — both published 2026-08-21. ⚠️ **That did NOT leave the
+train unblocked, and this paragraph said it had until 2026-08-22.**
+[14.49.2](#14492-every-remaining-package-publishes-as-a-release-candidate)
+moved every remaining package to a candidate the same week, so the live gate is
+now **at_lookup `3.7.0-rc1`, which is not on pub.dev** (latest is 3.6.1;
+re-derive with
+`curl -s https://pub.dev/api/packages/at_lookup | python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`).
+at_auth floors `^3.7.0-rc1`, so its carve cannot resolve until gkc publishes
+that. Each package still waits on its own predecessor being released before it
+can declare a floor against it, which is what the order in
+[14.18](#1418-the-remaining-d1-initial-development-sequence) is for.
 The remaining external gate is the one 14.18 records for the LAST carves, not
 the next: the spike's test packs need a VE image that verifies ML-DSA PKAM,
 settled by moving CI to `dev_env`.
 
 ⚠️ **CI on this branch cannot catch up by itself.** Nothing fires on push
 here — the workflow is `workflow_dispatch` only on this branch — so the newest
-run is as new as the last manual dispatch and no newer. As of 2026-08-21 the
-newest run (`32468769474`) is on `2965330f1` — HEAD at the time — and
-concluded **success, 11/11 jobs**. That sentence goes stale the moment the
-branch moves: dispatch before treating the branch as green, and compare the
-two SHAs rather than reading a conclusion:
+run is as new as the last manual dispatch and no newer.
+
+⛔ **THE BRANCH IS NOT GREEN. Measured 2026-08-22 with the command below.** The
+newest run is **`32482877878` on `9a7260dc7` — FAILURE**, 10 of 11 jobs green
+and `end2end_test_14` red: eight e2e tests failed at `setUpAll` with
+`pkam auth failed for @ce2e1 ... error:AT0027:enrollment_id`, i.e. authentication
+against a shared @ce2e atSign, not anything the tests assert. Undiagnosed —
+[14.50](#1450-the-newest-ci-run-on-this-branch-is-red) has the row. `9a7260dc7`
+is an ancestor of HEAD and HEAD is six commits past it, so the run does not
+cover the current tip either way.
+
+⚠️ **This paragraph named the older, successful run `32468769474` on
+`2965330f1` and called it "the newest", concluding "success, 11/11 jobs".** It
+was already false on the day it was written — the red run was dispatched three
+hours later, on the same day. It is recorded here rather than deleted because
+of *how* it misled: it opened with a staleness warning, hedged, and supplied
+the re-derivation command, and all of that reads as diligence, so a reader
+trusts the number and skips the command. Run the command.
 
 ```bash
 gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike
@@ -160,7 +201,8 @@ to move anchors the acceptance rail parses.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. ✅ **at_commons PR #2168 is MERGED to trunk** (2026-08-20) and the spike's at_commons is now byte-identical to trunk. at_chops **PR #2169** is raised and green. Next: at_lookup, at_server_status, at_auth, at_client (stacked), at_client_flutter, at_onboarding_cli | ✅ **The at_commons/at_chops publish gate LIFTED 2026-08-21** — gkc published at_commons **5.16.0** and at_chops **3.6.0**, so at_lookup (which declares `at_commons: ^5.16.0` for `AtNetworkTimeouts.defaultResponseBudget`) is now free to carve **and** publish. ⚠️ This cell read "MERGED IS NOT PUBLISHED, and at_lookup is gated on the difference" until that afternoon; the distinction still matters for every later package. Re-derive, never quote: `curl -s https://pub.dev/api/packages/at_commons \| python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`. **What is gated now is at_client**, whose floors `at_lookup: ^3.7.0` and `at_auth: ^3.4.0` are both ahead of pub.dev (3.6.1 and 3.3.0) — that is the train order doing its job, not a new blocker |
+| [14.50](#1450-the-newest-ci-run-on-this-branch-is-red) | **The newest CI run on this branch is RED and the plan said it was green.** Run `32482877878` on `9a7260dc7`, 10/11 jobs, `end2end_test_14` failing: eight tests dead in `setUpAll` with `pkam auth failed for @ce2e1 … error:AT0027:enrollment_id`. Authentication against a shared @ce2e atSign, before anything is asserted. **Undiagnosed** — the section carries the shape it resembles and says outright that nothing has been run to confirm it | Nothing blocks the diagnosis, and it needs the **atServer's own log**, not the client's. It does not gate the at_auth carve, which builds its own branch off trunk — but `feedback_pr_author_owns_ci` says a red on the branch you work from is yours |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. ✅ **at_commons PR #2168 is MERGED to trunk** (2026-08-20) and the spike's at_commons is now byte-identical to trunk. at_chops **PR #2169** is raised and green. Next: at_lookup, at_server_status, at_auth, at_client (stacked), at_client_flutter, at_onboarding_cli | ✅ **The at_commons/at_chops publish gate LIFTED 2026-08-21** — gkc published at_commons **5.16.0** and at_chops **3.6.0**, so at_lookup (which declares `at_commons: ^5.16.0` for `AtNetworkTimeouts.defaultResponseBudget`) is now free to carve **and** publish. ⚠️ This cell read "MERGED IS NOT PUBLISHED, and at_lookup is gated on the difference" until that afternoon; the distinction still matters for every later package. Re-derive, never quote: `curl -s https://pub.dev/api/packages/at_commons \| python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`. **What is gated now is at_client**, whose floors `at_lookup: ^3.7.0` and `at_auth: ^3.4.0` are both ahead of pub.dev (3.6.1 and 3.3.0) — that is the train order doing its job, not a new blocker. ⚠️ **Owed at the real release, and it belongs to this row because it is the train's:** every constraint moved to an `-rc1` floor reverts to its stable form when these publish, or a stable release ships requiring a candidate. The measured prerelease rule and the reasoning are in [14.49.2](#14492-every-remaining-package-publishes-as-a-release-candidate); re-derive the sites rather than quoting them — `git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'` |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
@@ -2544,6 +2586,52 @@ call itself. Do not "fix" the product here.
 The rewrite retries on failure (bounded at five rounds) and throws if still
 not in sync.
 
+### 14.50 The newest CI run on this branch is red
+
+**Measured 2026-08-22**, and the section above it had been reporting the
+previous, successful run as "the newest" since 2026-08-21.
+
+```bash
+gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 3 \
+  --json databaseId,headSha,conclusion,createdAt \
+  --jq '.[] | [(.databaseId|tostring), .headSha[0:9], .conclusion, .createdAt] | @tsv'
+```
+
+Run `32482877878` on `9a7260dc7`: **10 of 11 jobs green, `end2end_test_14`
+red.** Eight of its twelve tests failed, all in `setUpAll`, all with the same
+cause:
+
+```
+Exception: Unable to authenticate | Cause: Exception: pkam auth failed for
+@ce2e1 - Exception: Failed connecting to @ce2e1.
+error:AT0027:enrollment_id: 121bc733-…
+```
+
+So the failure is **authentication against a shared @ce2e atSign**, before any
+test asserts anything. `notify_with_isolate_test.dart` also hit
+`PathNotFoundException: Deletion failed, path = 'test/hive/@ce2e1'`, which is a
+teardown of state that was never created — a consequence of the same setUpAll
+failing, not a second defect.
+
+⚠️ **This is a hypothesis, not a diagnosis: nothing has been run to confirm
+it.** The shape matches the class this tree already names — a live test whose
+server-side enrollment state is one-shot per `(appName, deviceName)` and
+therefore collides on a re-run — and `AT0027` naming an `enrollment_id` points
+the same way. What has NOT been established is whether the enrollment was
+denied, already approved, or expired, and whether the run before it left the
+state behind. Read the atServer's own log before believing any of it; a
+cross-process claim read from the client side is a claim about the client.
+
+Related but **not** established as the same thing:
+[14.42](#1442-why-enrollment-setup-takes-four-minutes) is also @ce2e-only and
+also about enrollment setup. Two @ce2e enrollment oddities are not one finding
+until something says so.
+
+**The full log is 15,197 lines and its tail reaches the runner's cleanup**, so
+it is not truncated — fetched with
+`gh api /repos/atsign-foundation/at_client_sdk/actions/jobs/96772989540/logs`,
+never `gh run view --log-failed`, which returns a truncated stream here.
+
 ### 14.49 `KeyEntryStatus` becomes a typed String, and the release train is all candidates
 
 **Two rulings by gkc, 2026-08-22.** Recorded together because both are cheap
@@ -2611,9 +2699,11 @@ will point at. An open String would trade a checked domain for stringly-typed
 branching and buy nothing. Revisit only if an atServer or a peer starts
 reporting it back.
 
-Scope, re-derived 2026-08-22 with `git grep -c KeyEntryStatus`: **126**
-references across the tree, not the 107 this said when it was written, and
-pinned by raw-literal wire tests in **both** packages' `wire_literal_pins_test.dart`.
+Scope: **132** references across the tree at `8b08174b5`, not the 107 this said
+when it was written and not the 126 measured mid-change — the tests added here
+moved it. Re-derive rather than quoting:
+`git grep -c KeyEntryStatus | awk -F: '{s+=$2} END {print s}'`. Pinned by
+raw-literal wire tests in **both** packages' `wire_literal_pins_test.dart`.
 
 **What landed.** `key_entry_status.dart` is a `class` of `static const String`
 constants with `known`, and three functions:
@@ -2696,6 +2786,49 @@ candidate. The sites: `at_lookup: ^3.7.0-rc1` in at_auth, at_client and
 at_server_status; `at_auth: ^3.4.0-rc1` in at_client, at_client_flutter,
 at_onboarding_cli and `tests/pq_matrix/current`. Re-derive with
 `git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'`.
+
+#### 14.49.3 Considered while building 14.49.1, and deliberately not done
+
+These are here to **stop** the next reader building them. Each looked like a
+defect during the adversarial review and is not one, or is a real question that
+was left open on purpose.
+
+- **`KeyEntryStatus.known` is not dead code — do not delete it.** Its only
+  consumer is a raw-literal wire pin, which is exactly the arrangement
+  `KeyPartStatus.known`, `KeyAlgorithmType.known` and `CryptographicKeyType.known`
+  already have beside it. The pin is the point: it makes re-spelling the
+  vocabulary an edit somebody has to review.
+- **`fromWire` stringifying a non-String value is deliberate.** It keeps a
+  malformed status out of both known tokens, so both predicates answer no —
+  the maximally restrictive reading — and it keeps what was actually written
+  visible in a log. `active` would be fail-open, `retired` is the flattening
+  this whole item removed, and a sentinel would put a token on the wire that no
+  writer ever meant.
+- **The empty string is not special-cased.** It is not `active`, so it is
+  unknown, so it is maximally restrictive. A fourth behaviour for a value
+  nothing writes is a branch nothing exercises.
+- **The two serializers compare `status != KeyEntryStatus.active` rather than
+  calling `offeredForNewOperations`, and they must not be unified.** A
+  serializer asks "do the bytes need this field"; the predicate asks "may this
+  key be used". Same answer today, and they diverge the moment a token is added
+  that is offered for new operations without being spelled `active`.
+- **OPEN, not rejected: a held KEM key whose status this build cannot read
+  still opens envelopes addressed to it.** `KeyPackageRegistration.encKeyFor`
+  does not consult status, which is right under the retained-key doctrine — a
+  holder opens what was already sealed to it — and the unknown-token rule as
+  built governs *choosing* a key, never opening one you hold. But an owner
+  writing `revoked` may well mean "stop opening too". Not built, because
+  refusing would strand envelopes on a guess about a token nobody writes yet.
+  Revisit when the first real third token is defined, and decide it there
+  rather than here.
+- **`PqSigningRoot._signingPrivate`'s `held.length <= 1` short circuit is left
+  alone.** It returns a lone private without consulting the record, which
+  reads alarmingly next to the new fail-closed filters. Its dartdoc gives the
+  reason — four production call sites take it as the cheap local check before a
+  round trip, one of them on the approval path — and names
+  `reconcileHeldPrivate` as the owner of the heal. That heal now makes the same
+  vouching judgement as the verifier, which is what covered the case that made
+  this worth looking at.
 
 ### 14.48 A `primary` client can sign with a key its own advertisement just withdrew
 
