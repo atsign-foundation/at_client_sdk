@@ -1,4 +1,4 @@
-## 1.1.2
+## 1.1.2-rc1
 
 - refactor: builds its lookup with `AtLookUp.withSecureSocket`, passing
   `authenticator: null` - every call it makes is `auth: false` and it holds no
