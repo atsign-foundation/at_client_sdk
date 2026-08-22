@@ -174,7 +174,7 @@ class EnrollmentSubmitter {
   /// The keyfile's spelling of [algorithm]. The material tokens equal the
   /// [SigningAlgoType] member names — both are the wire spelling — so a second
   /// spelling here would file material the reader skips.
-  static String _materialAlgorithmOf(SigningAlgoType algorithm) =>
+  static CryptographicMaterialAlgorithm _materialAlgorithmOf(SigningAlgoType algorithm) =>
       switch (algorithm) {
         SigningAlgoType.mldsa65 => CryptographicMaterialAlgorithm.mlDsa65,
         SigningAlgoType.rsa2048 => CryptographicMaterialAlgorithm.rsa2048,
@@ -345,7 +345,7 @@ class EnrollmentSubmitter {
 
     // The material tokens equal the SigningAlgoType member names (both are
     // the wire spelling), so the request's algo maps by name.
-    final String materialAlgo;
+    final CryptographicMaterialAlgorithm materialAlgo;
     switch (request.signingAlgo) {
       case SigningAlgoType.mldsa65:
         materialAlgo = CryptographicMaterialAlgorithm.mlDsa65;

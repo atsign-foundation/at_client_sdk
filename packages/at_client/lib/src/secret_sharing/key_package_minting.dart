@@ -5,6 +5,7 @@ import 'package:at_auth/at_auth.dart'
     show
         AtEnrollment,
         AtKeys,
+        CryptographicMaterialAlgorithm,
         CryptographicMaterial,
         CryptographicMaterialRole,
         EnrollmentUpdateRequest,
@@ -383,7 +384,7 @@ class _MintedEncKey {
 
   /// The keyfile's spelling of [alg] — what `keyPackageMaterials` reads back
   /// to recognise this as key-establishment material.
-  final String materialAlgo;
+  final CryptographicMaterialAlgorithm materialAlgo;
 
   final Uint8List seed;
   final Uint8List publicKey;

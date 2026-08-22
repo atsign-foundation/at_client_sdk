@@ -1,5 +1,33 @@
 ## 4.0.0-rc1
 
+- **BREAKING** refactor: the keyfile's four String vocabularies become
+  distinct types, in the shape `Atsign` uses — `extension type … implements
+  String`, erased at runtime, so **nothing changes on the wire or at rest**.
+  `CryptographicMaterialRole`, `CryptographicMaterialAlgorithm`,
+  `CryptographicMaterialStatus` and `KeyEntryStatus` are now types rather than
+  holders of `static const String`, and the fields carrying them —
+  `CryptographicMaterial.role`/`.algorithm`/`.status`, `ApskSigningKey.status`
+  — are typed to match, as are the parameters that take them.
+  - **They still accept anything.** `.of(...)` takes any token and performs no
+    membership check, because all four are open vocabularies: a keyfile
+    written by a newer client must stay readable and losslessly flushable.
+    The type separates the vocabularies from each other; it does not police
+    what is in them.
+  - What this catches: a role passed where an algorithm was wanted, a keyfile
+    status passed where an advertising status was wanted, or a bare String
+    passed for any of them. `CryptographicMaterialStatus` and `KeyEntryStatus`
+    share the spellings `active` and `retired` while meaning different things,
+    and were previously interchangeable.
+  - Four crossings that existed only in prose are now explicit calls:
+    `withdrawnSigningKeys` converts the keyfile's vocabulary to the
+    advertisement's once, at the boundary; `SecretSharingAlgos.materialAlgoFor`
+    and `keyAlgoForMaterial` are typed, so their dartdoc's claim to be "the
+    only places the two meet" is checked rather than asserted.
+  - **Two further vocabularies are deliberately still `String`**: the keyId
+    slot prefix (`auth`/`sign`/`root`, which `keyIdPrefix` and `isRoleKeyId`
+    take, and which is *not* a material role) and `keyAlgo`, the
+    secret-sharing protocol id.
+
 - **BREAKING** refactor: the typed keyfile's field names lose the "key part"
   vocabulary. At rest, `keyParts` becomes `material`, `keyPartType` becomes
   `role` and `keyAlgorithmType` becomes `algorithm`. In the API,

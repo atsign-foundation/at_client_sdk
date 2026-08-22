@@ -198,7 +198,8 @@ class SecretSharingAlgos {
   /// shared with the pkam/enrollment `signingAlgo` literals rather than with
   /// these protocol ids. This and [keyAlgoForMaterial] are the only places the
   /// two meet.
-  static String? materialAlgoFor(String keyAlgo) => switch (keyAlgo) {
+  static CryptographicMaterialAlgorithm? materialAlgoFor(String keyAlgo) =>
+      switch (keyAlgo) {
         xWing => CryptographicMaterialAlgorithm.xWing,
         mlKem1024 => CryptographicMaterialAlgorithm.mlKem1024,
         _ => null,
@@ -211,7 +212,8 @@ class SecretSharingAlgos {
   /// cannot: `algorithm` is an open string by contract — a keyfile
   /// written by a newer client round-trips values this build has never seen —
   /// so an unknown token means "not mine", not "malformed".
-  static String? keyAlgoForMaterial(String materialAlgo) =>
+  static String? keyAlgoForMaterial(
+          CryptographicMaterialAlgorithm materialAlgo) =>
       switch (materialAlgo) {
         CryptographicMaterialAlgorithm.xWing => xWing,
         CryptographicMaterialAlgorithm.mlKem1024 => mlKem1024,

@@ -308,7 +308,7 @@ void main() {
       final futureAlgo = createKeys()
         ..fileApkamMaterial(
             enrollmentId: 'future-algorithm',
-            algorithm: 'sphincs-plus-256s',
+            algorithm: CryptographicMaterialAlgorithm.of('sphincs-plus-256s'),
             publicKey: typedApkamPublicKey,
             privateKey: 'dHlwZWQtcHJpdmF0ZQ==');
 
@@ -523,8 +523,8 @@ void main() {
       // by a newer client survives a read-modify-flush by an older one.
       final futuristic = CryptographicMaterial(
         keyId: 'from-the-future',
-        role: 'somethingNotInventedYet',
-        algorithm: 'slhdsa128s',
+        role: CryptographicMaterialRole.of('somethingNotInventedYet'),
+        algorithm: CryptographicMaterialAlgorithm.of('slhdsa128s'),
         bytes: AtBytes.fromString('ZnV0dXJl'),
         createdAt: DateTime.utc(2024, 1, 1),
       );
@@ -535,7 +535,8 @@ void main() {
 
       final reparsed = AtKeys.fromJson(atKeys.toJson());
       expect(
-        reparsed.getAtSignKey('from-the-future', 'somethingNotInventedYet'),
+        reparsed.getAtSignKey(
+            'from-the-future', CryptographicMaterialRole.of('somethingNotInventedYet')),
         futuristic,
       );
       expect(reparsed, atKeys);
@@ -920,7 +921,7 @@ void main() {
     String b64(String label) => base64Encode(utf8.encode(label));
 
     CryptographicMaterial part(
-            String keyId, String type, String algo, String value,
+            String keyId, CryptographicMaterialRole type, CryptographicMaterialAlgorithm algo, String value,
             {String? enrollmentId, CryptographicMaterialStatus status = CryptographicMaterialStatus.active}) =>
         CryptographicMaterial(
             keyId: keyId,
@@ -932,7 +933,7 @@ void main() {
             status: status);
 
     /// A complete signing keypair for [enrollmentId], both halves.
-    List<CryptographicMaterial> signingPair(String enrollmentId, String algo,
+    List<CryptographicMaterial> signingPair(String enrollmentId, CryptographicMaterialAlgorithm algo,
             {int generation = 1,
             String value = 'a',
             CryptographicMaterialStatus status = CryptographicMaterialStatus.active}) =>
@@ -1011,7 +1012,8 @@ void main() {
           ...signingPair('E1', CryptographicMaterialAlgorithm.ed25519,
               value: 'old', status: CryptographicMaterialStatus.retired),
           // What a newer client's keyfile looks like from here.
-          ...signingPair('E1', 'pq-something-later', value: 'future'),
+          ...signingPair('E1', CryptographicMaterialAlgorithm.of('pq-something-later'),
+              value: 'future'),
           ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
               value: 'live'),
         ]);

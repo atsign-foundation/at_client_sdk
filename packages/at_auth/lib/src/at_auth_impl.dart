@@ -15,6 +15,7 @@ import 'package:at_auth/src/enroll/at_enrollment.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
+import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
@@ -546,7 +547,7 @@ class AtAuthImpl implements AtAuth {
     if (advertisedSigningKey != null) {
       atAuthKeys.fileSigningMaterial(
           enrollmentId: enrollmentIdFromServer,
-          algorithm: advertisedSigningKey.algorithm.name,
+          algorithm: CryptographicMaterialAlgorithm.of(advertisedSigningKey.algorithm.name),
           publicKey: advertisedSigningKey.publicKey,
           privateKey: advertisedSigningKey.privateKey);
     }
@@ -571,7 +572,7 @@ class AtAuthImpl implements AtAuth {
     if (signingAlgo != SigningAlgoType.rsa2048) {
       atAuthKeys.fileApkamMaterial(
           enrollmentId: enrollmentId,
-          algorithm: signingAlgo.name,
+          algorithm: CryptographicMaterialAlgorithm.of(signingAlgo.name),
           publicKey: mint.apkamPublicKey,
           privateKey: mint.apkamPrivateKey);
     }

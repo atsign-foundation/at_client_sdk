@@ -24,30 +24,37 @@ import 'package:at_commons/at_commons.dart';
 /// exactly. New algorithms get a new token appended; existing tokens are
 /// permanent once shipped. See
 /// `test/atkey_material_test.dart` for the tripwire test that pins these.
-abstract final class CryptographicMaterialAlgorithm {
-  static const String aes256 = 'aes256';
-  static const String rsa2048 = 'rsa2048';
-  static const String eccSecp256r1 = 'ecc_secp256r1';
-  static const String ed25519 = 'ed25519';
-  static const String x25519 = 'x25519';
-  static const String mlKem768 = 'mlkem768';
-  static const String mlDsa65 = 'mldsa65';
+extension type const CryptographicMaterialAlgorithm._(String value)
+    implements String {
+  /// An algorithm token read from a keyfile, whatever it says.
+  ///
+  /// Takes any token. The type separates an algorithm from the other
+  /// String vocabularies beside it; it is not a membership check, and
+  /// making it one would break the round-trip promise above.
+  const CryptographicMaterialAlgorithm.of(String value) : this._(value);
+  static const CryptographicMaterialAlgorithm aes256 = CryptographicMaterialAlgorithm._('aes256');
+  static const CryptographicMaterialAlgorithm rsa2048 = CryptographicMaterialAlgorithm._('rsa2048');
+  static const CryptographicMaterialAlgorithm eccSecp256r1 = CryptographicMaterialAlgorithm._('ecc_secp256r1');
+  static const CryptographicMaterialAlgorithm ed25519 = CryptographicMaterialAlgorithm._('ed25519');
+  static const CryptographicMaterialAlgorithm x25519 = CryptographicMaterialAlgorithm._('x25519');
+  static const CryptographicMaterialAlgorithm mlKem768 = CryptographicMaterialAlgorithm._('mlkem768');
+  static const CryptographicMaterialAlgorithm mlDsa65 = CryptographicMaterialAlgorithm._('mldsa65');
 
   /// X-Wing hybrid KEM (ML-KEM-768 + X25519) — one of the two KEMs an APKAM
   /// key package or nskey keypair may use. The atSign-level `pq_signing_root`
   /// is not on this list: it is ML-DSA-65, a signing key with nothing to
   /// encapsulate to.
-  static const String xWing = 'xwing';
+  static const CryptographicMaterialAlgorithm xWing = CryptographicMaterialAlgorithm._('xwing');
 
   /// Pure ML-KEM-1024 (FIPS 203) — the other, for deployments that need key
   /// establishment with no non-FIPS component and no hybrid combiner. Which of
   /// the two an atSign uses is its own configuration; a holder's key package
   /// and nskey advertisement say which they hold.
-  static const String mlKem1024 = 'mlkem1024';
+  static const CryptographicMaterialAlgorithm mlKem1024 = CryptographicMaterialAlgorithm._('mlkem1024');
 
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set.
-  static const Set<String> known = {
+  static const Set<CryptographicMaterialAlgorithm> known = {
     aes256,
     rsa2048,
     eccSecp256r1,
@@ -74,17 +81,23 @@ abstract final class CryptographicMaterialAlgorithm {
 /// [CryptographicMaterialAlgorithm]: these strings are already persisted on disk and on
 /// the wire, so renaming one orphans existing key material. See
 /// `test/atkey_material_test.dart` for the tripwire test that pins these.
-abstract final class CryptographicMaterialRole {
-  static const String symmetricEncryption = 'symmetricEncryption';
-  static const String symmetricAuthentication = 'symmetricAuthentication';
-  static const String publicEncryption = 'publicEncryption';
-  static const String privateDecryption = 'privateDecryption';
-  static const String publicVerification = 'publicVerification';
-  static const String privateSigning = 'privateSigning';
-  static const String publicEncapsulation = 'publicEncapsulation';
-  static const String privateDecapsulation = 'privateDecapsulation';
-  static const String publicKeyAgreement = 'publicKeyAgreement';
-  static const String privateKeyAgreement = 'privateKeyAgreement';
+extension type const CryptographicMaterialRole._(String value)
+    implements String {
+  /// A role token read from a keyfile, whatever it says.
+  ///
+  /// Takes any token, for the same reason as
+  /// [CryptographicMaterialAlgorithm.of].
+  const CryptographicMaterialRole.of(String value) : this._(value);
+  static const CryptographicMaterialRole symmetricEncryption = CryptographicMaterialRole._('symmetricEncryption');
+  static const CryptographicMaterialRole symmetricAuthentication = CryptographicMaterialRole._('symmetricAuthentication');
+  static const CryptographicMaterialRole publicEncryption = CryptographicMaterialRole._('publicEncryption');
+  static const CryptographicMaterialRole privateDecryption = CryptographicMaterialRole._('privateDecryption');
+  static const CryptographicMaterialRole publicVerification = CryptographicMaterialRole._('publicVerification');
+  static const CryptographicMaterialRole privateSigning = CryptographicMaterialRole._('privateSigning');
+  static const CryptographicMaterialRole publicEncapsulation = CryptographicMaterialRole._('publicEncapsulation');
+  static const CryptographicMaterialRole privateDecapsulation = CryptographicMaterialRole._('privateDecapsulation');
+  static const CryptographicMaterialRole publicKeyAgreement = CryptographicMaterialRole._('publicKeyAgreement');
+  static const CryptographicMaterialRole privateKeyAgreement = CryptographicMaterialRole._('privateKeyAgreement');
 
   /// The APKAM keypair an enrollment **authenticates** with, and nothing
   /// else — the key PKAM proves possession of.
@@ -98,12 +111,12 @@ abstract final class CryptographicMaterialRole {
   /// An enrollment holds at most one ACTIVE pair of these; several active
   /// signing keys are normal, because signature agility means holding one per
   /// algorithm.
-  static const String privateAuthentication = 'privateAuthentication';
-  static const String publicAuthentication = 'publicAuthentication';
+  static const CryptographicMaterialRole privateAuthentication = CryptographicMaterialRole._('privateAuthentication');
+  static const CryptographicMaterialRole publicAuthentication = CryptographicMaterialRole._('publicAuthentication');
 
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set.
-  static const Set<String> known = {
+  static const Set<CryptographicMaterialRole> known = {
     symmetricEncryption,
     symmetricAuthentication,
     publicEncryption,
@@ -205,11 +218,11 @@ final class CryptographicMaterial {
 
   /// The material's cryptographic role — see [CryptographicMaterialRole] for the
   /// known tokens. Unknown values are preserved, never rejected.
-  final String role;
+  final CryptographicMaterialRole role;
 
   /// The material's algorithm family — see [CryptographicMaterialAlgorithm] for the known
   /// tokens. Unknown values are preserved, never rejected.
-  final String algorithm;
+  final CryptographicMaterialAlgorithm algorithm;
 
   final AtBytes bytes;
   final List<String> operations;
@@ -239,10 +252,10 @@ final class CryptographicMaterial {
     final material = CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,
-      role:
-          assurance.expectNonEmptyString(json['role'], 'role'),
-      algorithm: assurance.expectNonEmptyString(
-          json['algorithm'], 'algorithm'),
+      role: CryptographicMaterialRole.of(
+          assurance.expectNonEmptyString(json['role'], 'role')),
+      algorithm: CryptographicMaterialAlgorithm.of(
+          assurance.expectNonEmptyString(json['algorithm'], 'algorithm')),
       bytes: assurance.expectBytes(json['bytes'], 'bytes'),
       operations:
           assurance.optionalStringList(json['operations'], 'operations'),

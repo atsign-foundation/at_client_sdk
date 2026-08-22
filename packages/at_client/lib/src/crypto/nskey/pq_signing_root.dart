@@ -6,6 +6,7 @@ import 'package:at_auth/at_auth.dart'
     show
         ApskSigningKey,
         AtKeys,
+        CryptographicMaterialAlgorithm,
         AtKeysIo,
         CryptographicMaterial,
         CryptographicMaterialRole,
@@ -97,7 +98,7 @@ class PqSigningRoot {
   /// that is not also ML-DSA-65. What *finds* a slot is [keyIdRole] alone —
   /// `AtKeys.isRoleKeyId` matches every algorithm, so a reader is never the
   /// thing that pins the atSign to one.
-  static String keyIdPrefixFor(String algorithm) =>
+  static String keyIdPrefixFor(CryptographicMaterialAlgorithm algorithm) =>
       AtKeys.keyIdPrefix(keyIdRole, algorithm);
 
   /// Reserved [Secret] name the private travels under.
@@ -134,7 +135,8 @@ class PqSigningRoot {
   /// today: an id composed from one and material filed under the other would
   /// stop matching the moment either moved, and nothing would go red on the
   /// way past.
-  static String get rootKeyAlgoToken => rootKeyAlgo.name;
+  static CryptographicMaterialAlgorithm get rootKeyAlgoToken =>
+      CryptographicMaterialAlgorithm.of(rootKeyAlgo.name);
 
   /// The algorithms this build can **check** a root signature under.
   ///
@@ -1208,7 +1210,7 @@ class PqSigningRoot {
   /// Generations count per algorithm, so an ML-DSA-65 root and a root of some
   /// later algorithm are each `:1` in their own line rather than competing for
   /// one counter.
-  String _freeSlot(AtKeys keys, String algorithm) =>
+  String _freeSlot(AtKeys keys, CryptographicMaterialAlgorithm algorithm) =>
       '${keyIdPrefixFor(algorithm)}'
       '${keys.nextAtSignGeneration(keyIdRole, algorithm)}';
 

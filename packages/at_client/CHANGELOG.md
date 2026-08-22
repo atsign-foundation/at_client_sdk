@@ -1,5 +1,13 @@
 ## 3.15.0-rc1
 
+- **BREAKING** refactor: follows at_auth's typed keyfile vocabularies.
+  `PackageKey.status`, `PersistedEncKey.status` and the `withdrawn` entries
+  `apskEntries` takes are now typed rather than `String`. No record this
+  package writes changes shape — the types are erased at runtime.
+  `ApkamSigning.withdrawnSigningKeys` is the one place the keyfile's status
+  vocabulary becomes the advertisement's, converted verbatim rather than
+  collapsed.
+
 - **BREAKING** refactor: follows at_auth's keyfile rename.
   `CryptographicMaterial.keyPartType` is now `.role`, `.keyAlgorithmType` is
   now `.algorithm`, and `KeyPartStatus` is now `CryptographicMaterialStatus`.

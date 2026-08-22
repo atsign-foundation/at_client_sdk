@@ -719,7 +719,8 @@ void main() {
     // `CryptographicMaterialAlgorithm.known` exists for warn-level tooling and explicitly
     // does not gate what may be filed, so a reader that recognised only known
     // tokens would be a second, undocumented gate.
-    const laterAlgo = 'some-later-signing-algo';
+    const laterAlgo =
+        CryptographicMaterialAlgorithm.of('some-later-signing-algo');
     final c = client();
     final io = await keysIo();
     final keys = await io.read(atSign);
@@ -758,7 +759,9 @@ void main() {
             PqSigningRoot.keyIdRole, PqSigningRoot.rootKeyAlgoToken),
         2);
     expect(
-        keys.nextAtSignGeneration(PqSigningRoot.keyIdRole, 'another-algo'), 1);
+        keys.nextAtSignGeneration(PqSigningRoot.keyIdRole,
+            CryptographicMaterialAlgorithm.of('another-algo')),
+        1);
   });
 
   group('a record advertising a successor beside a retired predecessor', () {

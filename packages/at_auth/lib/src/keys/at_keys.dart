@@ -163,11 +163,11 @@ class AtKeys {
   /// Looks up one of [enrollmentId]'s materials by `(keyId, role)` —
   /// [type] is a [CryptographicMaterialRole] token.
   CryptographicMaterial? getKey(
-          String enrollmentId, String keyId, String type) =>
+          String enrollmentId, String keyId, CryptographicMaterialRole type) =>
       _enrollments[enrollmentId]?.materialsByKeyId[keyId]?[type];
 
   /// Looks up one of the atSign's own materials by `(keyId, role)`.
-  CryptographicMaterial? getAtSignKey(String keyId, String type) =>
+  CryptographicMaterial? getAtSignKey(String keyId, CryptographicMaterialRole type) =>
       _atSignMaterialsByKeyId[keyId]?[type];
 
   /// Every material of [enrollmentId] sharing [keyId] — e.g. the
@@ -249,7 +249,7 @@ class AtKeys {
   /// signing keys are separate material with their own lifecycle.
   void fileApkamMaterial({
     required String enrollmentId,
-    required String algorithm,
+    required CryptographicMaterialAlgorithm algorithm,
     required String publicKey,
     required String privateKey,
   }) {
@@ -279,7 +279,7 @@ class AtKeys {
   /// cannot drift from what the file actually holds. An id whose suffix is
   /// not a number is ignored rather than rejected: a keyfile written by a
   /// build that spells generations differently must still be readable.
-  int nextAuthenticationGeneration(String enrollmentId, String algorithm) =>
+  int nextAuthenticationGeneration(String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
       _nextGeneration(
           _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
           keyIdPrefix('auth', algorithm));
@@ -293,7 +293,7 @@ class AtKeys {
   /// rotating a signing key within its algorithm.
   void fileSigningMaterial({
     required String enrollmentId,
-    required String algorithm,
+    required CryptographicMaterialAlgorithm algorithm,
     required String publicKey,
     required String privateKey,
   }) {
@@ -318,7 +318,7 @@ class AtKeys {
 
   /// The generation [fileSigningMaterial] will use next for [enrollmentId]'s
   /// [algorithm] — one past the highest already filed, or 1.
-  int nextSigningGeneration(String enrollmentId, String algorithm) =>
+  int nextSigningGeneration(String enrollmentId, CryptographicMaterialAlgorithm algorithm) =>
       _nextGeneration(
           _enrollments[enrollmentId]?.materialsByKeyId.keys ?? const [],
           keyIdPrefix('sign', algorithm));
@@ -330,7 +330,8 @@ class AtKeys {
   /// place and keeps its generation forever, so the next mint lands beside it
   /// rather than over it; `addKey` refuses a duplicate keyId, which is what
   /// makes that safe rather than merely tidy.
-  int nextAtSignGeneration(String role, String algorithm) => _nextGeneration(
+  int nextAtSignGeneration(String role, CryptographicMaterialAlgorithm algorithm) =>
+      _nextGeneration(
       _atSignMaterialsByKeyId.keys, keyIdPrefix(role, algorithm));
 
   /// The keyId prefix a [role]/[algorithm] pair is filed under —
@@ -344,7 +345,8 @@ class AtKeys {
   /// Roles in use: `auth` (an enrollment's APKAM keypair), `sign` (its own
   /// signing keypair) and `root` (the atSign's signing root, filed by
   /// at_client — atSign-scope material rather than an enrollment's).
-  static String keyIdPrefix(String role, String algorithm) =>
+  static String keyIdPrefix(
+          String role, CryptographicMaterialAlgorithm algorithm) =>
       '$role:$algorithm:';
 
   /// Whether [keyId] names a keypair of [role] — `<role>:<algo>:<generation>`
@@ -535,7 +537,7 @@ class AtKeys {
   /// which an enrollment can hold material for under more than one keyId.
   /// Withdrawing a signing key must not withdraw anything else that happens to
   /// sign.
-  List<String> retireSigningKeys(String enrollmentId, String algorithm,
+  List<String> retireSigningKeys(String enrollmentId, CryptographicMaterialAlgorithm algorithm,
       {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) {
     final Map<String, Map<String, CryptographicMaterial>> byKeyId =
         _enrollments[enrollmentId]?.materialsByKeyId ?? const {};

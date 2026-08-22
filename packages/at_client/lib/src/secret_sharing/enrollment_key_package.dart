@@ -2,7 +2,12 @@ import 'dart:convert' show base64Encode;
 import 'dart:typed_data' show Uint8List;
 
 import 'package:at_auth/at_auth.dart'
-    show AtKeys, AtKeysIo, CryptographicMaterial, CryptographicMaterialRole;
+    show
+        AtKeys,
+        AtKeysIo,
+        CryptographicMaterial,
+        CryptographicMaterialAlgorithm,
+        CryptographicMaterialRole;
 import 'package:at_chops/at_chops.dart' show AtKemAlgorithm, SigningAlgoType;
 import 'package:at_commons/at_commons.dart' show AtBytes;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
@@ -88,7 +93,7 @@ Future<Map<String, dynamic>?> Function(AtKeysIo) enrollmentKeyPackageBuilder(
     }
 
     final AtKemAlgorithm? kem = SecretSharingAlgos.kemFor(keyEstablishmentAlgo);
-    final String? materialAlgo =
+    final CryptographicMaterialAlgorithm? materialAlgo =
         SecretSharingAlgos.materialAlgoFor(keyEstablishmentAlgo);
     if (kem == null || materialAlgo == null) {
       throw StateError('enrollmentKeyPackageBuilder: no implementation for '

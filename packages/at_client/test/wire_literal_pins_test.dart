@@ -215,7 +215,9 @@ void main() {
       expect(PqSigningRoot.keyIdRole, 'root');
       expect(PqSigningRoot.keyIdPrefixFor(PqSigningRoot.rootKeyAlgoToken),
           'root:mldsa65:');
-      expect(PqSigningRoot.keyIdPrefixFor('some-later-algo'),
+      expect(
+          PqSigningRoot.keyIdPrefixFor(
+              CryptographicMaterialAlgorithm.of('some-later-algo')),
           'root:some-later-algo:');
     });
 
@@ -699,9 +701,18 @@ void main() {
       expect(SecretSharingAlgos.materialAlgoFor('x-wing'), 'xwing');
       expect(SecretSharingAlgos.materialAlgoFor('ml-kem-1024'), 'mlkem1024');
       expect(SecretSharingAlgos.materialAlgoFor('kyber-1024-v9'), isNull);
-      expect(SecretSharingAlgos.keyAlgoForMaterial('xwing'), 'x-wing');
-      expect(SecretSharingAlgos.keyAlgoForMaterial('mlkem1024'), 'ml-kem-1024');
-      expect(SecretSharingAlgos.keyAlgoForMaterial('rsa2048'), isNull);
+      expect(
+          SecretSharingAlgos.keyAlgoForMaterial(
+              CryptographicMaterialAlgorithm.of('xwing')),
+          'x-wing');
+      expect(
+          SecretSharingAlgos.keyAlgoForMaterial(
+              CryptographicMaterialAlgorithm.of('mlkem1024')),
+          'ml-kem-1024');
+      expect(
+          SecretSharingAlgos.keyAlgoForMaterial(
+              CryptographicMaterialAlgorithm.of('rsa2048')),
+          isNull);
     });
 
     test('ML-DSA-65 has ONE spelling on the wire: mldsa65', () {

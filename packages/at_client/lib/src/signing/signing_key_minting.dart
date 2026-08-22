@@ -382,9 +382,13 @@ class SigningKeyMinting with ApkamSigning {
   /// The keyfile's spelling of [algorithm]. It matches [SigningAlgoType]'s
   /// member name for both, and `AtKeys.signingKeysFor` reads it back by that
   /// name — a second spelling here would file material the reader skips.
-  String _materialAlgorithmOf(SigningAlgoType algorithm) => switch (algorithm) {
+  CryptographicMaterialAlgorithm _materialAlgorithmOf(
+          SigningAlgoType algorithm) =>
+      switch (algorithm) {
         SigningAlgoType.mldsa65 => CryptographicMaterialAlgorithm.mlDsa65,
         SigningAlgoType.rsa2048 => CryptographicMaterialAlgorithm.rsa2048,
-        _ => algorithm.name,
+        // The two vocabularies share their spellings by design, so an
+        // algorithm this switch has no arm for still files under its own name.
+        _ => CryptographicMaterialAlgorithm.of(algorithm.name),
       };
 }
