@@ -2,6 +2,11 @@
 
 ## 1.1.5-rc1
 
+- refactor: follows at_auth's barrel split — `file_picker.dart` and
+  `file_util.dart` take `FileAtKeysIo` from `package:at_auth/at_auth_io.dart`,
+  which is now their only at_auth import: it was all they used it for. No API
+  change here.
+
 - refactor: the enrollment service builds its lookup with
   `AtLookUp.withSecureSocket`, passing `authenticator: null` - submitting an
   enrolment request needs no authentication, and there is no credential here

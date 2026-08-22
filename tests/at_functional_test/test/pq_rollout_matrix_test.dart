@@ -11,13 +11,8 @@ import 'dart:io';
 // ignore_for_file: experimental_member_use
 
 import 'package:at_lookup/at_lookup_io.dart';
-import 'package:at_auth/at_auth.dart'
-    show
-        AtAuthSession,
-        AtEnrollment,
-        AtEnrollmentRequest,
-        EnrollmentRequestDecision,
-        FileAtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtAuthSession, AtEnrollment, AtEnrollmentRequest, EnrollmentRequestDecision;
+import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/at_client.dart' show AtClient;
 

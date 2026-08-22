@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 
 import 'package:meta/meta.dart';
 import 'package:at_auth/src/at_auth.dart';
@@ -7,6 +6,7 @@ import 'package:at_auth/src/auth/models/at_auth_requests.dart';
 import 'package:at_auth/src/auth/models/at_auth_responses.dart';
 import 'package:at_auth/src/auth/models/at_auth_session.dart';
 import 'package:at_auth/src/auth/at_authenticator.dart';
+import 'package:at_auth/src/auth/probe_default.dart';
 import 'package:at_auth/src/auth/cram_authenticator.dart';
 import 'package:at_auth/src/auth/onboarding_mint.dart';
 import 'package:at_auth/src/auth/pkam_authenticator.dart';
@@ -17,7 +17,6 @@ import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
-import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_server_status/at_server_status.dart';
@@ -55,7 +54,17 @@ class AtAuthImpl implements AtAuth {
   @visibleForTesting
   SecondaryAddressFinder? secondaryAddressFinder;
 
-  @visibleForTesting
+  /// How to test that the atServer is up before trying to use it, or null for
+  /// the platform's default.
+  ///
+  /// Called once per connection attempt, before the atServer is contacted in
+  /// earnest, so an atServer that is still starting is reported as such rather
+  /// than as a protocol failure. Throwing means not-up-yet and is retried;
+  /// returning means reachable.
+  ///
+  /// The default is `secureSocketProbe` under `dart:io` and [httpsProbe]
+  /// elsewhere, chosen by conditional import — see `probe_default.dart` for
+  /// why one implementation cannot serve both.
   Future<void> Function(String host, int port)? probeSocket;
 
   @override
@@ -296,8 +305,15 @@ class AtAuthImpl implements AtAuth {
     if (atOnboardingRequest.atKeys != null) {
       _atAuthKeys = atOnboardingRequest.atKeys!;
     } else {
-      //2a. if there is no specified implementation we're defaulting to FileAtKeysIo with a default file path
-      atOnboardingRequest.atKeysIo ??= FileAtKeysIo();
+      //2a. Onboarding mints key material and must persist it, so a store is
+      // required. There is no default: the core cannot assume a filesystem.
+      if (atOnboardingRequest.atKeysIo == null) {
+        throw AtAuthenticationException(
+            'onboarding needs somewhere to persist the key material it mints: '
+            'set AtOnboardingRequest.atKeysIo. On a platform with a '
+            'filesystem that is usually FileAtKeysIo() from '
+            'package:at_auth/at_auth_io.dart');
+      }
       if (atOnboardingRequest.atKeysIo is! WrittenAtKeysIo) {
         throw AtAuthenticationException(
             'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
@@ -430,8 +446,8 @@ class AtAuthImpl implements AtAuth {
 
     // Hand back the same explicit session as authenticate(), so a
     // freshly-onboarded atSign flows straight into the client. atKeysIo is
-    // guaranteed set here (defaulted to FileAtKeysIo above); the guard mirrors
-    // authenticate() for parity.
+    // guaranteed non-null here - onboarding refuses without one above; the
+    // guard mirrors authenticate() for parity.
     if (atOnboardingRequest.atKeysIo != null) {
       atOnboardingResponse.session = AtAuthSession(
         atSign: atOnboardingRequest.atSign,
@@ -580,12 +596,6 @@ class AtAuthImpl implements AtAuth {
         enrollmentId: enrollmentId);
   }
 
-  Future<void> _defaultProbeSocket(String host, int port) async {
-    final socket =
-        await SecureSocket.connect(host, port, timeout: Duration(seconds: 5));
-    socket.destroy();
-  }
-
   /// Validates the atSign server status depending on whether it's onboarding or authentication.
   ///
   /// For onboarding, it checks that the root server is found, the secondary server is running,
@@ -702,9 +712,13 @@ class AtAuthImpl implements AtAuth {
             .findSecondary(atRequest.atSign, timeout: remaining);
 
         remaining = AtNetworkTimeouts.cap(deadline.difference(DateTime.now()));
-        await (probeSocket ?? _defaultProbeSocket)(
-                secondaryAddress.host, secondaryAddress.port)
-            .timeout(remaining);
+        try {
+          await (probeSocket ?? defaultProbe)(
+                  secondaryAddress.host, secondaryAddress.port)
+              .timeout(remaining);
+        } catch (e) {
+          throw _ProbeFailed(e);
+        }
 
         _addProgress(
             'Connect',
@@ -714,13 +728,16 @@ class AtAuthImpl implements AtAuth {
         validated = true;
         break; // Exit loop if no exception occurs
       } catch (e) {
-        lastError = e;
-        if (e is SocketException) {
-          _logger.warning('Attempt #[$attempt] Probe socket failed: $e');
+        lastError = e is _ProbeFailed ? e.cause : e;
+        if (e is _ProbeFailed) {
+          // Expected while an atServer is still starting, so it is not an
+          // error until the retries run out.
+          _logger.warning('Attempt #[$attempt] Probe failed: ${e.cause}');
         } else {
-          _logger.severe('Attempt #[$attempt] failed: $e');
+          _logger.severe('Attempt #[$attempt] failed: $lastError');
         }
-        _addProgress('Connect', '#[$attempt] : $e', ProgressEventType.error);
+        _addProgress(
+            'Connect', '#[$attempt] : $lastError', ProgressEventType.error);
         // Don't sleep past the overall deadline before the next attempt.
         if (!DateTime.now().add(retryDelay).isBefore(deadline)) {
           break;
@@ -737,4 +754,14 @@ class AtAuthImpl implements AtAuth {
           '${lastError == null ? '' : ' : $lastError'}');
     }
   }
+}
+
+/// Wraps whatever [AtAuthImpl.probeSocket] threw, so the retry loop can tell an
+/// atServer that is not answering yet — expected while one starts — from a
+/// fault in the steps around the probe.
+class _ProbeFailed implements Exception {
+  _ProbeFailed(this.cause);
+  final Object cause;
+  @override
+  String toString() => '$cause';
 }

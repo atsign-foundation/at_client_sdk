@@ -1,5 +1,13 @@
 ## 1.17.0-rc1
 
+- refactor: follows at_auth's barrel split — `FileAtKeysIo` now comes from
+  `package:at_auth/at_auth_io.dart`. No API change here.
+- fix: `auth_cli` assigns `retrofitSerializer = fileRetrofitSerializer` at
+  startup, so a retrofit still takes a lock beside the keyfile. at_auth no
+  longer decides that for itself — only a caller knows its keys are on disk —
+  and without this two CLIs pointed at one keyfile could each read the
+  pre-retrofit state and write a different enrollment into it.
+
 - refactor: the five lookups this service built, which differed only in
   formatting, come from one `_newLookUp()` helper over
   `AtLookUp.withSecureSocket`. `close()` no longer casts to at_lookup's

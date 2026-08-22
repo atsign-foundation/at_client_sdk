@@ -487,7 +487,7 @@ holding CK-class material must support eviction (B5a), not inherit `flush`'s nev
 integration suite at every commit boundary (resource lifecycle). Does **not** gate the substrate.
 **coversD1:** D1-S S2/S3.
 
-### S-5 — at_auth 4.0.0: WASM barrel split · at_auth · L  *(parallel, off the GA critical path)*
+### S-5 — at_auth 4.0.0: WASM barrel split · at_auth · L  *(parallel, off the GA critical path)* — **DONE 2026-08-22.** `at_auth_io.dart` carved; nothing reachable from `at_auth.dart` imports `dart:io`, guarded by `packages/at_auth/test/wasm_barrel_test.dart`, which was red on the one export it names before that export went. Residual: **the publish**, and the transitive `dart:io`/`dart:ffi` reach through at_lookup/at_chops, which this deliberately does not gate on
 **Goal:** make the at_auth core WASM-safe (the one breaking major in the program).
 **Builds on:** S-3 (so the extended `AtKeys`/`AtKeysIo` + updatable stores bake on 3.3.0 before the breaking cut).
 **Deliverables → [design.md](../design.md)** (WASM barrel): move `FileAtKeysIo` + the `dart:io` socket probe
@@ -503,7 +503,7 @@ importing `at_auth_io.dart` compile + auth functional green (post-**S-6**).
 a different time from at_client 4.0 (R-2, the posture flip).**
 **coversD1:** D1-S S4.
 
-### S-6 — Consumer constraint bumps onto at_auth `^4.0.0` · at_client, at_onboarding_cli, at_client_flutter, **tests/at_functional_test, tests/at_end2end_test** · M
+### S-6 — Consumer constraint bumps onto at_auth `^4.0.0` · at_client, at_onboarding_cli, at_client_flutter, **tests/at_functional_test, tests/at_end2end_test** · M — **DONE 2026-08-22**, at the candidate floor `^4.0.0-rc1` rather than `^4.0.0` (see 14.49.2; it reverts when these publish). Consumers take `FileAtKeysIo` from `at_auth_io.dart`; `at_client` needed no change, and `packages/at_chat_flutter/example` is deliberately left at `^3.0.0` — it has no path override, so a candidate floor would strand it
 **Goal:** consumers adopt the breaking at_auth major.
 **Builds on:** S-5. Publish in dep order (at_chops → at_auth → at_client/onboarding/flutter → at_cli_commons).
 **Deliverables → [design.md](../design.md)** (WASM barrel consumer adoption): consumers adopt `at_auth ^4.0.0`,

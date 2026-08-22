@@ -8,6 +8,7 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 

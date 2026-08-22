@@ -1,5 +1,45 @@
 ## 4.0.0-rc1
 
+- **BREAKING** refactor: at_auth splits into two barrels so its core can be
+  compiled for WASM. `package:at_auth/at_auth.dart` no longer reaches
+  `dart:io`; everything needing a filesystem, a raw socket or the `dart:io`
+  HTTP stack moved to the new `package:at_auth/at_auth_io.dart`. `FileAtKeysIo`
+  does not leave at_auth — only the barrel exporting it changes — so a
+  `dart:io` consumer adds one import.
+  - **`AtOnboardingRequest.atKeysIo` no longer defaults to `FileAtKeysIo()`.**
+    Onboarding mints key material and must persist it, and the core cannot
+    assume there is a filesystem, so it now throws naming what to set. Nothing
+    shipping relied on the default: at_client sets it explicitly and
+    at_client_flutter falls back to `KeychainAtKeysIo`.
+  - `probeSocket` is a supported injection point rather than
+    `@visibleForTesting`, and its default is now chosen by conditional import:
+    `secureSocketProbe` under `dart:io`, `httpsProbe` elsewhere. Neither works
+    on both. An atServer serves HTTP only when the TLS handshake negotiates
+    `http/1.1` over ALPN — a browser does that as a matter of course, so
+    `httpsProbe`'s GET is answered and the reply proves the atServer is up, but
+    `package:http`'s VM client does **not**, so the same GET reaches the
+    atServer's own line protocol and cannot be read as HTTP. Measured against a
+    live atServer, which answers
+    `@error:AT0003 … invalid verb that does not match protocol spec` without
+    ALPN and `HTTP/1.1 404` with it.
+  - **The registrar's default client now validates certificates.** It was an
+    `HttpClient` whose `badCertificateCallback` returned true unconditionally,
+    so calls carrying the registrar API key accepted any certificate,
+    silently. The default is now a plain `package:http` client;
+    `RegistrarIoClient.create()` in the io barrel restores the bypass behind
+    `allowBadCertificates`, off by default and announced at `shout` whenever it
+    fires — the shape `at_onboarding_cli`'s `OnboardingUtil` already used.
+  - A retrofit's cross-process lock is now the `retrofitSerializer` hook. The
+    core no longer type-tests `FileAtKeysIo` to decide whether to lock; a
+    process whose keys are on disk assigns `fileRetrofitSerializer` from the io
+    barrel once at startup, and one whose store no other process can open
+    leaves it unset.
+  - `test/wasm_barrel_test.dart` walks at_auth's own sources from
+    `at_auth.dart` and fails if any reachable file imports `dart:io`. It stops
+    at the package boundary — at_auth still reaches `dart:io` transitively
+    through at_lookup and at_chops — so it proves at_auth has done its half,
+    not that the result compiles to WASM today.
+
 - **BREAKING** refactor: the keyfile's four String vocabularies become
   distinct types, in the shape `Atsign` uses — `extension type … implements
   String`, erased at runtime, so **nothing changes on the wire or at rest**.

@@ -4,6 +4,7 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
@@ -85,6 +86,13 @@ void deleteStorage() {
 
 Future<int> main(List<String> arguments) async {
   AtSignLogger.defaultLoggingHandler = AtSignLogger.stdErrLoggingHandler;
+  // A retrofit reads a keyfile, decides what to write from what it found, and
+  // writes it. Two of these CLIs pointed at one keyfile can each read the
+  // pre-retrofit state and each write a different enrollment into it, leaving
+  // no unique answer to which one the keyfile authenticates as. This takes a
+  // lock beside the keyfile for the whole sequence; at_auth cannot do it on
+  // its own behalf because only the caller knows the keys are on disk.
+  retrofitSerializer = fileRetrofitSerializer;
   try {
     return await wrappedMain(arguments);
   } on ArgumentError catch (e) {

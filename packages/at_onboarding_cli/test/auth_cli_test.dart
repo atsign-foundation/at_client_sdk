@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:args/args.dart' show ArgParserException;
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart' show PqPosture;
 import 'package:at_commons/at_commons.dart';

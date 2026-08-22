@@ -7,10 +7,9 @@ import 'package:at_auth/src/enroll/enrollment_progress.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
+import 'package:at_auth/src/enroll/retrofit_serializer.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
-import 'package:at_auth/src/keys/io/file_io.dart';
-import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:at_chops/at_chops.dart';
@@ -524,21 +523,20 @@ class EnrollmentSubmitter {
     });
   }
 
-  /// Serialises the whole self-enrollment per keyfile. The critical section
-  /// spans a network round trip, so it gets its own lock file and a
-  /// staleness threshold sized for one — not the keyfile lock's
-  /// milliseconds-scale settings (that lock still guards the flush inside).
-  /// A non-file [AtKeysIo] (tests, custom stores) runs unserialised: it is
-  /// process-local by construction.
+  /// Serialises the whole self-enrollment against anything else retrofitting
+  /// the same keys. The critical section spans a network round trip *and* the
+  /// decision taken from what the read returned, so it is wider than the lock
+  /// a store takes around its own flush.
+  ///
+  /// Whether two of these can race at all depends on where the keys live,
+  /// which only the store knows — so the process says how via
+  /// [retrofitSerializer]. Left unset the sequence runs directly, which is
+  /// right for a store no other process can open.
   Future<T> _serializedPerKeyfile<T>(
       AtKeysIo keysIo, String atSign, Future<T> Function() action) {
-    if (keysIo is FileAtKeysIo) {
-      return AtKeysFileLock('${keysIo.filePath!(atSign)}.retrofit',
-              timeout: const Duration(seconds: 30),
-              staleAfter: const Duration(minutes: 2))
-          .synchronized(action);
-    }
-    return action();
+    final serialize = retrofitSerializer;
+    if (serialize == null) return action();
+    return serialize<T>(keysIo, atSign, action);
   }
 
   Future<String> _getDefaultEncryptionPublicKey(

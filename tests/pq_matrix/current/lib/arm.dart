@@ -5,8 +5,8 @@
 // `connect.dart` carries, for the same reason.
 // ignore_for_file: deprecated_member_use
 
-import 'package:at_auth/at_auth.dart'
-    show AtAuth, AtAuthRequest, FileAtKeysIo;
+import 'package:at_auth/at_auth.dart' show AtAuth, AtAuthRequest;
+import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_commons/at_commons.dart' show AtRootDomain;
 import 'package:at_chops/at_chops.dart' show AtChops;
 import 'package:at_client/at_client.dart'
