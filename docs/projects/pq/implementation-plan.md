@@ -56,18 +56,28 @@ that file instead; the list below is the PQ release work.
    positions are now released, which lifts the gate on everything after
    them.** No workflow in this repo publishes to pub.dev (checked
    `.github/workflows/` 2026-08-20), so each publish stays gkc's step.
-2. **[RECOMMENDED] Make `KeyEntryStatus` a typed String wrapper** —
-   [14.49.1](#1491-keyentrystatus-becomes-a-typed-string-wrapper--ruled-not-yet-built)
-   has the ruling, the evidence and the shape wanted. Ruled by gkc 2026-08-22
-   and cheap only while at_auth is unpublished. Start at
-   `packages/at_auth/lib/src/enroll/key_entry_status.dart`; the seam that
-   proves it matters is `key_package_persistence.dart:86`. ⛔ Do NOT convert
-   `EnrollmentKeyExchangeMode` — 14.49.1 says why.
-3. **Carve at_auth** — train position 5, and it now carries the keyfile fix
-   (an empty `keys[]` is read, not refused) plus the evidence for staying a
-   minor: a keyfile CRAM-onboarded with published at_auth 3.3.0 loads, and
-   published at_client 3.14.0 compiles against this branch. Do the
-   `KeyEntryStatus` change first so it rides with the same carve.
+2. ~~Make `KeyEntryStatus` a typed String wrapper~~ **Done 2026-08-22** —
+   [14.49.1](#14491-keyentrystatus-becomes-a-typed-string-wrapper--done-2026-08-22)
+   records what landed as well as the ruling. Both collapsing seams fixed (the
+   section named one), the verify half wired at two call sites rather than
+   merely offered, seven mutation-proven tests, at_auth 333/333 and at_client
+   1503/1503. ⛔ `EnrollmentKeyExchangeMode` stays an enum — 14.49.1 says why,
+   and that has not changed.
+3. **[RECOMMENDED] Carve at_auth** — train position 5, and it now carries the
+   keyfile fix (an empty `keys[]` is read, not refused), the `KeyEntryStatus`
+   change above, and the evidence for staying a minor: a keyfile CRAM-onboarded
+   with published at_auth 3.3.0 loads, and published at_client 3.14.0 compiles
+   against this branch. Recipe is in
+   [14.18](#1418-the-remaining-d1-initial-development-sequence) — worktree off
+   `origin/trunk`, hyphenated branch name (`gkc-pq-d1-at-auth`), and the gate is
+   `git -C /tmp/carve-at_auth diff gkc-pq-d1-spike --stat -- packages/at_auth`
+   returning **empty**, run with a positive control that proves it
+   discriminates. ⚠️ at_auth's pubspec floors `at_lookup: ^3.7.0-rc1`, which is
+   **not on pub.dev yet** — gkc publishes at_lookup 3.7.0-rc1 first, or the
+   carve merges a package nobody can resolve. Needs commit/push permission.
+   ⚠️ [14.44](#1444-residuals-from-the-at_chops-pr-review)'s first residual —
+   the passphrase envelope persisting the salt and three costs but not
+   `hashLength` — belongs in this carve, where that file is already open.
 4. ~~Carve at_lookup~~ **Done — merged as #2174** — train position 3, and **now
    unblocked for publish as well as carve**: its `at_commons: ^5.16.0` floor
    is satisfiable on pub.dev as of 2026-08-21, and 14.18's compile
@@ -1118,7 +1128,7 @@ builds on it.
 |---|------|--------|
 | 3 | **DONE 2026-08-12 — one envelope shape, RFC 7515 general serialization**, `{payload, signatures:[{protected, signature}]}` with `{alg, kid, v}` in each `protected`. Deleted `signedEnvelopeVersion`, `jwsEnvelopeVersion`'s flattened form, `envelopeVersionOf`'s dispatch, the `wrapperFields` ternary in `ApkamSignedAdvertisedKeys.verify`, and `envelopeVersion` as a `PqPosture` axis. Also took `hashingAlgo` off `signEnvelope` — `alg` names the hash, so nothing unsigned selects a routine — and retired UC-C1.3, the rollout's envelope axis, which had nothing left to drive. The `.mjs` adjudicator moved `flattenedVerify` → `generalVerify`; vectors regenerated at `test/vectors/jws_envelope.json`. **Found en route:** `publishPendingLink`'s already-published check compared a top-level `['signature']` the envelope does not have, so `null == null` matched every time and a different link conveyed later was silently never published | [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) ruling 1, **superseding [91](detail/decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11) ruling 12**'s bespoke container |
 | 4 | **DONE 2026-08-13 — ruling 2 landed, so all of step 4 is complete and step 6 is unblocked.** Ruling 2 in three commits: `6462ae786` (the advertisement becomes `{v, createdAt, keys:[{use, alg, pub, kid}], suites}` with one `toPayload`/`fromPayload` codec replacing a map literal in `_mint` and a hand parser in `verify` 250 lines apart), `d28ef48a9` (a key that is not its algorithm's length is refused — a kid is the digest of whatever bytes are carried, so it matched a forged key as readily as a real one), `69449603e` (the reader skips entries it has no KEM for and picks the strongest it can use, which has to ship before any writer emits a second key). **Three things the ruling got wrong**, all corrected in `decisions.md` 94: `_apsk` entries never carried `status`; `status` and `KeyEntryStatus` are deferred **entirely to step 5** so no dead field ships (gkc, 2026-08-13); and at_auth cannot reach `PackageKey` because at_client depends on at_auth, so one vocabulary means one **wire spelling** across two Dart types. `createdAt` was added for symmetry with `KeyPackage`; `v` stays 1. Rails: at_client 1188/1188, functional 146/146. One key-entry vocabulary across all three advertising records — `{use, alg, pub, kid, status?}` inside `{v, keys:[…], suites}`. **Landed 2026-08-12:** ruling 3 (one kid function, at_auth's `publicKeyKid`, over the key's raw BYTES — `apskKid` hashed the base64 text and `nskeyKidOf` the material, and every kpid changes value); ruling 4 (`v`, `alg`, `suites` required, both `legacy*Suites` deleted); ruling 5 (one `SecretSharingAlgos.bestSuiteBetween`); **ruling 6** — `pq_envelope.dart`'s `pqSealToBase64`/`pqOpenFromBase64`, both taking `info` and `version` as **required** arguments and constructing neither, so there is nothing inside the shared code for the two substrates to converge onto. at_chops' `pqSeal`/`pqOpen` now require `info` too, which makes a shared binding a **compile error** rather than a convention — it was reachable before, because `info` was optional and `info ?? Uint8List(0)` made omission and empty the same binding. **Found en route:** the pairwise substrate had NO test that could fail on a converged binding — dropping the label from all three pairwise/enrollment call sites left the suite green at 1180/1180 — so the production-fed differential in `pairwise_secret_sharing_test.dart` was built first and proven by that same symmetric mutation, which now turns exactly one test red. **Still owed: ruling 2** — the nskey advertisement gains a `keys` list and adopts the shared spelling | [`decisions.md` 94](detail/decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — ⚠️ **before step 6**, or that parser becomes the third hand-rolled codec for one shape |
-| 5 | **DONE 2026-08-13 — the `retired` key path, in three commits.** `6a5eac838`: `PackageKey` gains `status`, a `KeyEntryStatus` of `active` or `retired`, and `bestKeyFor` on both a key package and an nskey advertisement passes a retired key over, so `kpid` is the *active* enc key's kid. Emitted only when retired — absent already reads as active — and an unrecognised value reads as retired, the one reading that cannot make a build use a key its owner withdrew. `f956b2146`: `PersistedApkamKeys` becomes `{encKeys: [PersistedEncKey]}` and `KeyPackageRegistration` expands, advertises and answers for every held key, with `encKeyFor(kid)` replacing `encSecretKey` and `heldKpids` listing every address. `f6fc3796e`: the sweep, the wake-up subscription and the sync listener cover every held address (`EnvelopeAddressing.regexForAny`/`sweepRegexForAny`), and `_consume` opens with the key the envelope names. **Three things ruling 9 got wrong or omitted**, all recorded in `decisions.md` 95: the sweep filter is a **fifth** consequence and the one that makes the other four reachable; the keyfile already records the status (`AtKeysMaterial.KeyPartStatus`, `AtKeys.retireKey`, and an `AtKeysAssurance` rule enforcing one active `publicEncapsulation` per enrollment and algorithm), so deriving it from `createdAt` was wrong; and `dead` material is not adopted at all. Rails: at_client 1210/1210, functional 146/146. **Nothing rotates yet** — the writer is step 16. ⚠️ app-facing: `PersistedApkamKeys` is what apps build in `loadApkamKeys`/`saveApkamKeys` | [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) rulings 6–9 — without the plural holding the field is decorative. The **name collision** was settled 2026-08-12 (gkc) and landed as ruled: the per-entry wire value is a Dart `KeyEntryStatus`, and `KeyPackageStatus` — the reader's verdict on a whole package (`present`/`absent`/`rejected`/`unsupported`) — keeps its name. Nothing renamed |
+| 5 | **DONE 2026-08-13 — the `retired` key path, in three commits.** `6a5eac838`: `PackageKey` gains `status`, a `KeyEntryStatus` of `active` or `retired`, and `bestKeyFor` on both a key package and an nskey advertisement passes a retired key over, so `kpid` is the *active* enc key's kid. Emitted only when retired — absent already reads as active — and an unrecognised value read as retired. ⚠️ **That last clause held only until 2026-08-22**, when `KeyEntryStatus` became an open String (14.49.1): an unrecognised value is now carried through verbatim and is neither offered for new operations nor trusted to verify old ones. The 2026-08-13 reading was right that it must not be *used*, and wrong that `retired` says so — a retired key still verifies what it signed. `f956b2146`: `PersistedApkamKeys` becomes `{encKeys: [PersistedEncKey]}` and `KeyPackageRegistration` expands, advertises and answers for every held key, with `encKeyFor(kid)` replacing `encSecretKey` and `heldKpids` listing every address. `f6fc3796e`: the sweep, the wake-up subscription and the sync listener cover every held address (`EnvelopeAddressing.regexForAny`/`sweepRegexForAny`), and `_consume` opens with the key the envelope names. **Three things ruling 9 got wrong or omitted**, all recorded in `decisions.md` 95: the sweep filter is a **fifth** consequence and the one that makes the other four reachable; the keyfile already records the status (`AtKeysMaterial.KeyPartStatus`, `AtKeys.retireKey`, and an `AtKeysAssurance` rule enforcing one active `publicEncapsulation` per enrollment and algorithm), so deriving it from `createdAt` was wrong; and `dead` material is not adopted at all. Rails: at_client 1210/1210, functional 146/146. **Nothing rotates yet** — the writer is step 16. ⚠️ app-facing: `PersistedApkamKeys` is what apps build in `loadApkamKeys`/`saveApkamKeys` | [`decisions.md` 95](detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) rulings 6–9 — without the plural holding the field is decorative. The **name collision** was settled 2026-08-12 (gkc) and landed as ruled: the per-entry wire value is a Dart `KeyEntryStatus`, and `KeyPackageStatus` — the reader's verdict on a whole package (`present`/`absent`/`rejected`/`unsupported`) — keeps its name. Nothing renamed |
 | 6 | **DONE — mostly with step 2a, completed 2026-08-13.** `parseApskValue` reads the array **and** the released bare string, refuses a structured value advertising nothing it understands rather than guessing, and skips entries whose `use` or `alg` it does not know; `apsk_formats_test.dart` covers all of that plus "the array form is unmistakable to a bare-RSA consumer". Finished on 2026-08-13 by giving `ApskSigningKey` a `status` and having `apskSigningKeys` read it — **keeping** a retired entry, because this list is what verifies stored envelopes and a retired key is precisely what signed the older ones. `KeyEntryStatus` moved from at_client to **at_auth** in the same change so all three advertising records name one type, narrowing [94](detail/decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)'s "one vocabulary cannot mean one Dart type" — that was true of a type living in at_client, and at_auth is the lower package. **Found by the re-verify:** `design.md` 9.3's JSON example omitted `kid`, which the reader requires, so the document the design showed is one every reader treats as empty and then refuses; corrected, and pinned. `advertised.first` and the singular `ParsedApsk` are steps 7–9's business, not a gap here | [`design.md` 9.3](design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
 | 7 | **DONE 2026-08-13.** `SigningAlgoType.strongestFirst` + `strongestOf` in at_chops — purely additive (two statics on the existing enum; no member added, moved or renamed, so it does not touch the unresolved 3.6.0-versus-major question). Deliberately **not** declaration order: members are declared in the order they were added and reordering them is a wire change, so preference is a second statement. `mldsa65` first, categorically — the only member Shor does not break — then RSA-4096, `ed25519`, `ecc_secp256r1`, RSA-2048 by classical security level. Total on purpose: a partial order leaves the choice undefined for exactly the pair nobody thought about. **The tripwire is completeness, not just the literals**: a new `SigningAlgoType` left out of the order turns `test/signing_strength_test.dart` red, which is what stops it becoming silently unrankable. Wired straight into `parseApskValue`, which took `advertised.first` — the order entries arrive in is the *signer's* choice, so an enrollment advertising ML-DSA-65 beside RSA-2048 was verified against whichever it listed first | [14.17](#1417-signature-agility--complete) |
 | 8 | **DONE 2026-08-13.** `requireAlg` is gone rather than rewritten: the algorithm is now *resolved* — from what the envelope's `signatures` and the signer's `_apsk` have in common, taking the strongest by `SigningAlgoType.strongestFirst` — and then its key is fetched, where before one advertised key was taken and the envelope was required to match it. Its refusal survives in a different form: no algorithm in common is refused naming both lists. `ParsedApsk` went plural (`keys`, `keyFor(algo)`; `signingAlgo`/`publicKey` survive as strongest-of getters), and the bare RSA form parses to a one-entry list so both published forms are one shape to the caller. The two JOSE `alg` switches — one on the sign side, one on the verify side — became one `_joseAlgFor`, since two would be two chances to disagree | ⚠️ an inversion, not an addition |
@@ -2538,11 +2548,13 @@ not in sync.
 **Two rulings by gkc, 2026-08-22.** Recorded together because both are cheap
 only while these packages are unpublished.
 
-#### 14.49.1 `KeyEntryStatus` becomes a typed String wrapper — RULED, NOT YET BUILT
+#### 14.49.1 `KeyEntryStatus` becomes a typed String wrapper — DONE 2026-08-22
 
-Give `KeyEntryStatus` the shape `KeyPartStatus` already has: a class of
-`static const String` constants, an open value, and an unknown token
-**preserved** rather than flattened.
+Ruled and built the same day. `KeyEntryStatus` now has the shape
+`KeyPartStatus` already had: a class of `static const String` constants, an open
+value, and an unknown token **preserved** rather than flattened. What landed is
+at the bottom of this section; the ruling and its evidence are kept because they
+are what the shape has to go on being right about.
 
 ⚠️ **The `KeyPartStatus` justification does NOT transfer, and stating it
 wrongly would send the next reader looking for a bug that is not there.**
@@ -2563,7 +2575,15 @@ What is actually wrong, measured 2026-08-22:
 - **A round trip rewrites a newer client's stronger statement.** The reader
   collapses any unknown to `retired` (`apsk_advertisement.dart:145`) and the
   writer emits `key.status.name` (`:59`), so a `revoked` read by this build
-  and written back becomes `retired`.
+  and written back becomes `retired`. ⚠️ **This bullet overstated the `_apsk`
+  case and was corrected while building, 2026-08-22.** No caller reads an
+  `_apsk` record and republishes its entries: every `_apsk` writer composes
+  from local key material (`apskEntries` from the keyfile, or a single freshly
+  minted key at `pq_signing_root.dart:497`). So for `_apsk` the loss is a
+  property of the reader/writer pair, not a live path — pinned as a format
+  rail, not sold as coverage. The **live** version of the same loss is the
+  seam in the bullet above, keyfile → record, and it is why that seam is the
+  one that matters.
 - **The collapse is fail-OPEN in the direction that matters.** Retirement
   withdraws the future and preserves the past — a retired signing key still
   verifies what it signed. A compromised key must not. Mapping an unknown
@@ -2590,9 +2610,42 @@ will point at. An open String would trade a checked domain for stringly-typed
 branching and buy nothing. Revisit only if an atServer or a peer starts
 reporting it back.
 
-Scope: `KeyEntryStatus` has **107** references across the tree and is pinned by
-raw-literal wire tests in `at_auth/test/wire_literal_pins_test.dart`. Re-derive
-that count rather than trusting it.
+Scope, re-derived 2026-08-22 with `git grep -c KeyEntryStatus`: **126**
+references across the tree, not the 107 this said when it was written, and
+pinned by raw-literal wire tests in **both** packages' `wire_literal_pins_test.dart`.
+
+**What landed.** `key_entry_status.dart` is a `class` of `static const String`
+constants with `known`, and three functions:
+
+- `fromWire(Object?)` — absent is `active`, anything else is the token itself.
+  A non-String is stringified rather than repaired, which keeps it out of both
+  known values and keeps what was written visible in a log.
+- `offersNewOperations(String)` — the sign/seal question. Only `active`.
+- `vouchesForPastOperations(String)` — the verify question. `active` and
+  `retired`, spelled out rather than as `known.contains`, because a token joins
+  `known` by being *understood* and the first one anyone adds is likely to be
+  one that must fail this.
+
+`ApskSigningKey` carries both as getters, `PackageKey`, `PersistedEncKey` and
+the mixin's held key carry the first. **Both** collapsing seams were fixed, not
+the one this section named: `key_package_persistence.dart` (adoption at
+startup) and `key_package_minting.dart`'s `advertisedKeysIn` (the republish),
+which each mapped the keyfile's own open `KeyPartStatus` onto one of two values.
+
+**The verify half is wired, not merely offered.** Two call sites drop an entry
+whose status they cannot read: `parseApskValue`, so `verifyEnvelope` refuses an
+advertisement of nothing verifiable rather than half-reading it, and
+`PqSigningChain._rootCandidates`. Filtering there rather than inside
+`apskSigningKeys` is deliberate — that reader also feeds the *writers*, which
+have to republish a token they do not understand rather than delete it.
+
+Seven tests, each mutation-proven by reverting its own fix and reading the
+failure message: the two seams, the two verify sites, an `_apsk` round trip
+that shows a `revoked` token read and written back unchanged, the predicate
+table, and a `PackageKey` round trip. `at_auth` 333/333, `at_client` 1503/1503,
+workspace analyze clean. The `at_client` pin that asserted
+`fromWire('verifyOnly') == retired` went red on its own and its rewrite is the
+review of the behaviour change.
 
 #### 14.49.2 Every remaining package publishes as a release candidate
 
