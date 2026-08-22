@@ -35,7 +35,7 @@ pointing at it and no detail. `## TODO` below is *what is owed*, unordered; this
 is *what to do first*. Re-read this section against `git log --oneline -10`
 before acting — it has led with finished work before.
 
-Last re-ranked **2026-08-22** against the tree at `8b08174b5`, entry by entry,
+Last re-ranked **2026-08-22** against the tree at `64480808d`, entry by entry,
 with the publish gate and CI both re-derived live rather than carried forward.
 What that pass found, because a re-rank that reports only successes is one
 whose checks were too weak to fail: the CI paragraph below was reporting a
@@ -73,23 +73,28 @@ that file instead; the list below is the PQ release work.
    mutation-proven tests, at_auth 335/335, at_client 1509/1509 and the
    functional pack 178/178. ⛔ `EnrollmentKeyExchangeMode` stays an enum — 14.49.1 says why,
    and that has not changed.
-3. **Diagnose the red CI run** —
-   [14.50](#1450-the-newest-ci-run-on-this-branch-is-red). The newest run on
-   this branch is a **failure** and the paragraph below this list called it a
-   success until 2026-08-22. `end2end_test_14`, eight tests dead in `setUpAll`
-   on `pkam auth failed for @ce2e1 … error:AT0027:enrollment_id`. Start by
-   reading the **atServer's** log, not the client's — the section says why, and
-   says outright that its hypothesis is unrun. Unblocked, needs no permission,
-   and it is a red on the branch every carve is cut from.
+3. ~~Diagnose the red CI run~~ **Done 2026-08-22, and it was never this
+   branch's code** — [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs). A concurrent CI run on `gkc-pq-d1-at-lookup`
+   tore down this run's enrollments: `enrollment_teardown.dart` revokes every
+   approved enrollment on the shared `@ce2e1`-`@ce2e4` atSigns with
+   `force: true`, not only its own. Diagnosed from the *other* run's log, as
+   the entry said it had to be. **The harness defect is still open** and is in
+   `## TODO`; CI is 24/24 green on `64480808d` but both green windows had no
+   other run in flight, so that is a rate, not a fix.
 4. **[RECOMMENDED] Carve at_auth** — ⚠️ **buildable now, not mergeable now:**
    at_auth floors `at_lookup: ^3.7.0-rc1` and pub.dev's at_lookup is 3.6.1, so
    the PR can be raised and its CI will fail to resolve until **gkc publishes
    at_lookup 3.7.0-rc1**. That publish is the one action that lifts it, and it
    is gkc's. Train position 5, and it now carries the
    keyfile fix (an empty `keys[]` is read, not refused), the `KeyEntryStatus`
-   change above, and the evidence for staying a minor: a keyfile CRAM-onboarded
-   with published at_auth 3.3.0 loads, and published at_client 3.14.0 compiles
-   against this branch. Recipe is in
+   change above, **and it is now a MAJOR — `4.0.0-rc1`, ruled by gkc
+   2026-08-22.** This entry said "the evidence for staying a minor" until then;
+   the keyfile's field names changed (`keyParts`/`keyPartType`/`keyAlgorithmType`
+   became `material`/`role`/`algorithm`), the four status/role/algorithm
+   vocabularies became types, the `AtKeysMaterial` alias went, and S-5 split the
+   package into a WASM-safe core plus `at_auth_io.dart`. The compatibility
+   evidence still holds and is still worth citing — a keyfile CRAM-onboarded
+   with published at_auth 3.3.0 loads — it just no longer argues for a minor. Recipe is in
    [14.18](#1418-the-remaining-d1-initial-development-sequence) — worktree off
    `origin/trunk`, hyphenated branch name (`gkc-pq-d1-at-auth`), and the gate is
    `git -C /tmp/carve-at_auth diff gkc-pq-d1-spike --stat -- packages/at_auth`
@@ -100,6 +105,38 @@ that file instead; the list below is the PQ release work.
    ⚠️ [14.44](#1444-residuals-from-the-at_chops-pr-review)'s first residual —
    the passphrase envelope persisting the salt and three costs but not
    `hashLength` — belongs in this carve, where that file is already open.
+4a. ~~The at_auth 4.0 major~~ **Done 2026-08-22, and this list carried no
+   trace of it until the wrap-up that day** — 14 commits, all pushed, CI 24/24
+   green on `64480808d`. Recorded here because a reader working top-down would
+   otherwise not learn that at_auth became a major at all. What landed: the
+   keyfile's field names (`keyParts`/`keyPartType`/`keyAlgorithmType` →
+   `material`/`role`/`algorithm`); `CryptographicMaterialRole`,
+   `...Algorithm`, `...Status` and `KeyEntryStatus` as `extension type`s over
+   String, erased at runtime so nothing moves at rest; the version to
+   `4.0.0-rc1` with 10 dependent constraint sites; the `AtKeysMaterial` alias
+   removed; and **S-5/S-6**, the WASM barrel split — `at_auth.dart` reaches no
+   `dart:io` in at_auth's own sources, guarded by
+   `packages/at_auth/test/wasm_barrel_test.dart`.
+
+4b. **Test the registrar's certificate validation** — the one behaviour change
+   from S-5 that nothing exercises. Open
+   `packages/at_auth/test/registrar_test.dart`, which today only injects a
+   `MockClient`. `RegistrarService`'s default used to accept **any** TLS
+   certificate on calls carrying the registrar API key and now validates; the
+   bypass is `RegistrarIoClient.allowBadCertificates`, off by default. Neither
+   arm has a test and CI cannot catch a regression — `RegistrarIoClient`
+   appears in zero CI job logs. Pin both arms against a self-signed local
+   server. Unblocked, needs no permission; needs commit permission to land.
+
+4c. **Stop the e2e teardown revoking other runs' enrollments** —
+   [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs). Open
+   `tests/at_end2end_test/test/enrollment_teardown.dart`: it revokes every
+   approved enrollment on the shared `@ce2e1`-`@ce2e4` atSigns with
+   `force: true`, so two overlapping CI runs tear each other down. Needs a
+   run-unique marker on the enrollment so a teardown can tell its own from
+   another's. Unblocked. ⚠️ It has passed twice since, but both windows had no
+   other run in flight, so a green says nothing here.
+
 5. ~~Carve at_lookup~~ **Done — merged as #2174** — train position 3, and **now
    unblocked for publish as well as carve**: its `at_commons: ^5.16.0` floor
    is satisfiable on pub.dev as of 2026-08-21, and 14.18's compile
@@ -163,14 +200,21 @@ settled by moving CI to `dev_env`.
 here — the workflow is `workflow_dispatch` only on this branch — so the newest
 run is as new as the last manual dispatch and no newer.
 
-⛔ **THE BRANCH IS NOT GREEN. Measured 2026-08-22 with the command below.** The
-newest run is **`32482877878` on `9a7260dc7` — FAILURE**, 10 of 11 jobs green
-and `end2end_test_14` red: eight e2e tests failed at `setUpAll` with
-`pkam auth failed for @ce2e1 ... error:AT0027:enrollment_id`, i.e. authentication
-against a shared @ce2e atSign, not anything the tests assert. Undiagnosed —
-[14.50](#1450-the-newest-ci-run-on-this-branch-is-red) has the row. `9a7260dc7`
-is an ancestor of HEAD and HEAD is six commits past it, so the run does not
-cover the current tip either way.
+✅ **THE BRANCH IS GREEN, at the current tip.** Measured 2026-08-22 with the
+command below: runs **`32588333812`** (at_client_sdk, 11/11) and
+**`32588342275`** (at_libraries, 13/13), both `success`, both on
+**`64480808d`**, which is HEAD. CI's own per-suite counts match the local ones —
+at_auth 342, at_client 1509, at_onboarding_cli 54, at_client_flutter 37,
+functional 178, e2e 37, `end2end_test_14` 37, pqe2e 17 — so the green is not a
+skipped suite.
+
+⚠️ **This paragraph read "THE BRANCH IS NOT GREEN" and named run `32482877878`
+on `9a7260dc7` as newest.** That run's failure is now diagnosed and was never
+this branch's code — [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) has it: a
+concurrent run tore down this run's enrollments. **The harness defect it found
+is still open**, and both green runs since had no other run in flight, so they
+say nothing about whether it recurs. The arithmetic here was also wrong: it
+said HEAD was "six commits past" `9a7260dc7`; it is **37**.
 
 ⚠️ **This paragraph named the older, successful run `32468769474` on
 `2965330f1` and called it "the newest", concluding "success, 11/11 jobs".** It
@@ -201,10 +245,12 @@ to move anchors the acceptance rail parses.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| [14.50](#1450-the-newest-ci-run-on-this-branch-is-red) | **The newest CI run on this branch is RED and the plan said it was green.** Run `32482877878` on `9a7260dc7`, 10/11 jobs, `end2end_test_14` failing: eight tests dead in `setUpAll` with `pkam auth failed for @ce2e1 … error:AT0027:enrollment_id`. Authentication against a shared @ce2e atSign, before anything is asserted. **Undiagnosed** — the section carries the shape it resembles and says outright that nothing has been run to confirm it | Nothing blocks the diagnosis, and it needs the **atServer's own log**, not the client's. It does not gate the at_auth carve, which builds its own branch off trunk — but `feedback_pr_author_owns_ci` says a red on the branch you work from is yours |
+| [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | **The e2e teardown revokes enrollments belonging to other runs.** `tests/at_end2end_test/test/enrollment_teardown.dart` revokes every approved enrollment on the shared `@ce2e1`-`@ce2e4` atSigns with `force: true`, not only the ones its own run created, so two overlapping CI runs tear down each other. **Diagnosed 2026-08-22** from the *other* run's log - the section carries the two timestamps 430 ms apart and the shared enrollment id. This row read *undiagnosed, and the newest CI run is red* until then. CI has since been 24/24 green twice, but both windows were free of other runs, so that is a rate and not a fix. Owed: a run-unique marker, so a teardown revokes only what its own run made | Nothing. Needs no permission and no publish, and it does not gate the at_auth carve |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. ✅ **at_commons PR #2168 is MERGED to trunk** (2026-08-20) and the spike's at_commons is now byte-identical to trunk. at_chops **PR #2169** is raised and green. Next: at_lookup, at_server_status, at_auth, at_client (stacked), at_client_flutter, at_onboarding_cli | ✅ **The at_commons/at_chops publish gate LIFTED 2026-08-21** — gkc published at_commons **5.16.0** and at_chops **3.6.0**, so at_lookup (which declares `at_commons: ^5.16.0` for `AtNetworkTimeouts.defaultResponseBudget`) is now free to carve **and** publish. ⚠️ This cell read "MERGED IS NOT PUBLISHED, and at_lookup is gated on the difference" until that afternoon; the distinction still matters for every later package. Re-derive, never quote: `curl -s https://pub.dev/api/packages/at_commons \| python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`. **What is gated now is at_client**, whose floors `at_lookup: ^3.7.0` and `at_auth: ^3.4.0` are both ahead of pub.dev (3.6.1 and 3.3.0) — that is the train order doing its job, not a new blocker. ⚠️ **Owed at the real release, and it belongs to this row because it is the train's:** every constraint moved to an `-rc1` floor reverts to its stable form when these publish, or a stable release ships requiring a candidate. The measured prerelease rule and the reasoning are in [14.49.2](#14492-every-remaining-package-publishes-as-a-release-candidate); re-derive the sites rather than quoting them — `git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'` |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | Step 20's rotation arm — enrollment then an `enroll:update` APKAM rotation mid-run | An at_auth release carrying the tolerant reader, then the staged status value. Needs its own CRAM atSign |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
+| S-5 residual | **The registrar's switch to validating TLS certificates is untested, here and in CI.** `RegistrarService`'s default client used to accept ANY certificate - `badCertificateCallback` returning true unconditionally, on calls carrying the registrar API key. It is now a plain `package:http` client that validates, with the bypass behind `RegistrarIoClient.allowBadCertificates`, off by default and shouted when used. **Neither arm has a test**, and CI cannot catch a regression: `RegistrarIoClient` appears in ZERO CI job logs (control: `RegistrarService` appears), and `RegistrarIoClient.create()` has **no in-tree caller at all** - it is a public opt-in for consumers, which is deliberate, so do not delete it as dead code. Owed: a test pinning both arms against a self-signed local server | Nothing |
+| S-5 residual | **Two String vocabularies are deliberately still untyped.** The keyId slot prefix (`auth`/`sign`/`root`, taken by `AtKeys.keyIdPrefix` and `isRoleKeyId`) is **not** a `CryptographicMaterialRole`; typing it as one was tried on 2026-08-22 and reverted when the compiler rejected every call site. `keyAlgo`, the secret-sharing protocol id, is a third vocabulary again. Recorded so the next reader does not re-derive that these are the same thing | Nothing; considered-and-left, not a task |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Three audit residuals — UC-A3.4's live self-direction was the fourth and is done | — |
 | [14.14](#1414-a-client-with-no-enrollment-id-is-treated-as-fully-privileged) | A client with no enrollment id is treated as fully privileged | Wants a ruling on whether an owner-keys client belongs in the enrollment trust model |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | A `mintLegacyMaterial:false` atSign cannot write a public record | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
@@ -2586,10 +2632,32 @@ call itself. Do not "fix" the product here.
 The rewrite retries on failure (bounded at five rounds) and throws if still
 not in sync.
 
-### 14.50 The newest CI run on this branch is red
+### 14.50 The e2e teardown revokes enrollments belonging to other runs
 
-**Measured 2026-08-22**, and the section above it had been reporting the
-previous, successful run as "the newest" since 2026-08-21.
+**DIAGNOSED 2026-08-22, and it is a harness defect, not a product one.** This
+section was titled "The newest CI run on this branch is red" until the cause
+was found; the run that prompted it is long superseded, and CI has since been
+**24/24 green twice** (`f82ca0a46`, `64480808d`).
+
+`tests/at_end2end_test/test/enrollment_teardown.dart` revokes **every**
+approved enrollment on the shared `@ce2e1`–`@ce2e4` atSigns with `force: true`,
+not only the ones its own run created. Two CI runs overlapping on those atSigns
+therefore tear down each other's work. Measured, from the *other* run's log
+rather than inferred from this one: run `32483465296` on branch
+`gkc-pq-d1-at-lookup` logged
+`Revoking the enrollment permission for id: 121bc733-…` at `12:51:23.182Z`, and
+run `32482877878` failed **430 ms later** with
+`error:AT0027: 121bc733-… is revoked` — an enrollment its own `setUpAll` had
+created at `12:44:40`. That run's teardown revoked eight: its own four and all
+four of the other's.
+
+⚠️ **Still open, and passing runs are not evidence it is fixed.** Both green
+runs since had no other run in flight (checked `gh run list` across each
+window), so the mechanism had no opportunity to fire. It is a rate, not a kind.
+The fix is for the teardown to revoke only what its own run created, which
+needs a run-unique marker on the enrollment.
+
+**The original evidence, kept because it is what a recurrence will look like:**
 
 ```bash
 gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 3 \
