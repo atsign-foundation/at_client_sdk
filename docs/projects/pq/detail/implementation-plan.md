@@ -2721,281 +2721,6 @@ deliverable list against the code is a different check from reading the plan,
 and it found things the plan's own owed-tables had lost.
 
 
-### 14.17 Signature agility — what is built, and what is owed
-
-The design landed 2026-08-11 as [`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11),
-[`design.md` 9](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
-and [`acceptance.md` 16](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix).
-This entry is the owed half; the rulings are the contract.
-
-**Built and verified.**
-
-| Piece | Where | Rails |
-|-------|-------|-------|
-| `EnrollParams.apsk`, `.apkamPublicKeySignature`, `EnrollOperationEnum.update` + grammar | **at_commons 5.14.0, published 2026-08-11**; [#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137) merged to trunk and merged into the spike | at_commons 512/512, analyze 0 |
-| `enroll:update` handler, PoP verification, and storing a client-composed `_apsk` verbatim | at_server `gkc-apsk-auto-publish` `ab38b884` | 919/919 unit, **210/210 functional** — ⚠️ two caveats below |
-| Auth/signing key types, generation keyIds, status-aware invariants, `replaceKey`, `activeEnrollmentId`, pure-legacy `toJson` | at_client_sdk `gkc-pq-d1-spike` | at_auth 241/241, analyze 0 |
-| The above **plus trunk**, after merge `95584f818` | at_client_sdk `gkc-pq-d1-spike` | at_chops 527/527, at_commons 512/512, at_auth 241/241, at_client 1186/1186, at_onboarding_cli 38/38, at_lookup + at_policy green; analyze **0 errors and 0 warnings** across seven packages |
-
-⚠️ **Two caveats on the at_server row, because "built" is doing less work there
-than it looks** (both re-verified against the source 2026-08-11):
-
-- **The capability is dormant.** *Nothing* in `at_client`, `at_auth` or
-  `at_onboarding_cli` assigns `EnrollParams.apsk` — grep for `.apsk =` returns
-  nothing. The atServer will store a client-composed array and no client
-  composes one, so today's clients still publish the legacy bare key through
-  `publishPublicSigningKey` (`apkam_signing.dart:38`). That is the intended
-  sequencing, not a defect, but it means **no end-to-end exercise exists** and
-  will not until owed item 3 lands.
-- **The 210/210 drove `enroll:update` with hand-built payloads**, not the output
-  of a real client. The rows prove the handler, the PoP check and the storage;
-  they prove nothing about a composer that does not exist yet.
-
-- ⚠️ Also measured with at_commons resolved through the `at_commons-apsk-1`
-  tag, so the number does **not** carry over the override swap in owed item 1.
-
-**Owed, in dependency order.**
-
-1. ~~**Drop at_server's at_commons override.**~~ **DONE 2026-08-11.** The
-   override is out of both `pubspec.yaml` and `pubspec_overrides.yaml`,
-   `pubspec.lock` resolves at_commons from hosted 5.14.0, the
-   `at_commons-apsk-1` tag is deleted local and origin (its commit `54ccffdd0`
-   is an ancestor of trunk, so nothing was orphaned), and
-   [at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744)
-   **MERGED 2026-08-11** — ⚠️ *this line read "is open for review" until the
-   2026-08-14 wrap-up; verified with `gh pr view 2744 --repo
-   atsign-foundation/at_server`.* ⚠️ **And the `5bc3618a` this paragraph named
-   as at_server's head is long superseded** — it is an ancestor of
-   `origin/trunk` now, i.e. landed. ⚠️ **Do not read a SHA here as "at_server's
-   head" at all:** `6a86fbcc`, cited elsewhere in this plan for the PoP
-   contract, is the tip of the local `gkc-add-apskLegacy-field` branch and is
-   *also* an ancestor of trunk; `origin/trunk` itself was at `fdb78568` on
-   2026-08-14 and moves independently of anything here. Re-derive with
-   `git -C ~/dev/atsign/repos/at_server rev-parse --short origin/trunk`; none
-   of this is visible from inside at_client_sdk, which is how both errors
-   survived.
-
-   **What this still leaves owed:** at_server's own **210/210** was measured at
-   `ab38b884`, several commits back and against a different at_commons source.
-   **That number is stale twice over and has to be re-earned before it is cited
-   again** — it is at_server's pack, not at_client_sdk's, so none of this
-   project's runs discharge it.
-2. ~~**Ruling 7's remaining half: flat → typed.**~~ **DONE 2026-08-13**, and
-   narrowed on evidence — see [14.18](#1418-the-remaining-d1-initial-development-sequence)
-   step 10 and the amendment in [`decisions.md` 91.3](decisions.md#913-the-rulings)
-   ruling 7. The projection cannot be **materialised**, so "nothing reads them"
-   became "one place reads them": `AtKeys.authenticationFor` /
-   `authenticationAlgorithmFor`. ⚠️ **The reader list above was wrong on two of
-   its four entries.** `file_io.dart` touches no `AtKeys` flat field at all —
-   its only `atKeys.*` uses are `atsign` and `toJson` — and `onboarding_mint.dart`
-   *writes* them at mint time, which is the projection working as intended
-   rather than a read to move. The two that did move are `AtKeys.toAtChops()`'s
-   callers in `at_auth_impl.dart` and, not on the list, `at_client_impl.dart`.
-3. ~~**The wire half, client side — none of it exists.**~~ ⚠️ **STOP — this
-   whole item is a 2026-08-11 SNAPSHOT and four of its five sub-bullets are now
-   FALSE.** Corrected 2026-08-13 after a context-free read of the handoff
-   reported that a reader sent here for the step-17 spec would conclude the
-   multi-signature writer and the strength order were still owed, and rebuild
-   them. **What actually landed** ([14.18](#1418-the-remaining-d1-initial-development-sequence)
-   is authoritative, not this list):
-
-   - the `_apsk` **array composer and reader** — steps 6 and 13;
-   - the **multi-signature envelope** — step 15. `signEnvelope` takes
-     `required List<ApkamSigningKeys> keys` and emits one entry per key;
-   - **`requireAlg` no longer exists in any source file** (step 8 replaced the
-     refusal with algorithm *resolution*; the only surviving mention is
-     `packages/at_client/CHANGELOG.md`). Any line below citing it, or citing
-     `envelope_signature.dart:577`, is describing deleted code;
-   - the **strength order** — step 7. `SigningAlgoType.strongestFirst` is at
-     `packages/at_chops/lib/src/algorithm/algo_type.dart:37`, with
-     `packages/at_chops/test/signing_strength_test.dart` as its tripwire, so
-     UC-G1.7 has had something to run against since 2026-08-13;
-   - the **`enroll:update` caller** — step 16.
-
-   ⚠️ **The line numbers below are also stale** — `ApkamSigningKeys` is no
-   longer at `envelope_signature.dart:197`, and `signingKeys` is at
-   `apkam_signing.dart:124` returning `Future<List<ApkamSigningKeys>>`, not at
-   `:56`. **Nothing is owed from this item any more** — the in-use signing set
-   landed 2026-08-13 as step 17, mint-on-demand as step 18, and row B3 moved
-   the mint ahead of the enrollment submission on 2026-08-14. (This line read
-   "only mint-on-demand is genuinely still owed" until that sweep.) The original text is kept below
-   because its *reasoning* about why each piece is an inversion rather than an
-   addition is still worth reading — but read it as history, and verify every
-   claim against the source before acting on it.
-
-   - **The `_apsk` array composer and reader.** Today `publishPublicSigningKey`
-     (`apkam_signing.dart:38`) `put`s a **single bare key**, and does so only
-     when the record is absent — a get-then-put-if-missing. Nothing composes
-     `{v:1, keys:[{use, alg, pub, status}]}` and nothing reads it. The
-     `use`/`alg`/`pub` vocabulary exists in the tree, but in `key_package.dart`
-     (the **KEM** package, a different record) and as `[{alg, pub}]` in
-     `pq_signing_root.dart` (the signing root, no `use`, no `status`). ⚠️ ~~**Open
-     question when the composer lands:** does `publishPublicSigningKey` retire,
-     or does it stay and become a second writer to a record the approval path
-     also writes? Its skip-if-present means an enrollment that already published
-     a bare string never rewrites it.~~ **ANSWERED by [14.18](#1418-the-remaining-d1-initial-development-sequence)
-     step 13 — it stays**, as the only writer for an `_apsk` no `enroll:request`
-     can carry (a client with no enrollment publishes under `primary`, which has
-     no enrollment record). And the skip-if-present is gone: it **republishes on
-     a change**, which was a real defect — a rotated key never reached the
-     atServer and every envelope signed with the new one verified against the
-     old.
-   - **The multi-signature envelope. This is an inversion, not an addition.**
-     `signEnvelope` emits exactly one `signature` and one `signingAlgo` from a
-     `switch` on a single `SigningAlgoType`, on both the v1 and JWS paths. The
-     verifier does not merely lack multi-signature support — it **actively
-     refuses** a mismatch, via `requireAlg` at `envelope_signature.dart:577`,
-     whose message reads *"the published `_apsk` is a `<algo>` key"*. The
-     singular is baked into the behaviour and the diagnostic, so this work
-     changes an existing refusal rather than extending a permissive path.
-   - ~~**The strength order** beside `SigningAlgoType` in at_chops, with its
-     raw-literal tripwire~~ — ✅ **BUILT 2026-08-13** as [14.18 step 7](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence):
-     `SigningAlgoType.strongestFirst` and `strongestOf` at
-     `packages/at_chops/lib/src/algorithm/algo_type.dart:37`, with
-     `packages/at_chops/test/signing_strength_test.dart` as the tripwire, and
-     [UC-G1.7](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix)
-     ("the verifier takes the strongest and does not fall back") reads PROVEN in
-     the catalogue. This bullet said "no ordering exists anywhere in at_chops or
-     at_client today" for 5 days after it shipped, which left the plan claiming
-     an at_chops obligation it did not have.
-   - ~~**The `enroll:update` caller** and its PoP signature~~ — ✅ **BUILT
-     2026-08-13** as [14.18 step 16](#1418-the-remaining-d1-initial-development-sequence):
-     `AtEnrollment.update`, `EnrollmentUpdateRequest`, `EnrollmentUpdater` and
-     `apkamPossessionSignature` (`AtSigningMode.pkam`, SHA-256 — ruling 14, and
-     `AtSigningMode.data` cannot work). ⚠️ A rotation is not persisted anywhere,
-     [14.19 item 11](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on).
-   - ~~**The in-use signing set** on `AtClientPreference`~~ — ✅ **BUILT
-     2026-08-13** as [14.18 step 17](#1418-the-remaining-d1-initial-development-sequence):
-     `dataSigningKeyAlgorithms`, defaulted from `PqPosture`. The deprecated
-     `signingAlgoType` stays where it is — it is the *authentication* key's
-     algorithm, a different thing.
-   - **Mint-on-demand** when the in-use set names an algorithm the enrollment
-     lacks.
-
-   ⚠️ **Neither side of rollout 1 exists yet.** The staging in
-   [`design.md` 9](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
-   has rollout 1 ship *reader* capability ungated, before any writer emits the
-   array — but the client has neither reader nor writer, so the first
-   deliverable here is the reader, not the composer, however tempting it is to
-   build the thing that produces output you can look at.
-
-   ⚠️ **The writer half is blocked on owed item 2, and the reader half is not.**
-   Found 2026-08-11 by reading the source, and it changes the order this entry
-   should be worked in:
-
-   - A **reader** needs the published `_apsk` array and the envelope, both
-     fetched over the wire. It touches no local key material, so nothing gates
-     it. Start here.
-   - A **writer** emitting multi-signature envelopes needs one signing keypair
-     **per algorithm**, and nothing can supply that today.
-     `ApkamSigningKeys` (`envelope_signature.dart:197`) holds exactly one pair
-     of `String`s; `signingKeys` (`apkam_signing.dart:56`) reads it out of
-     `atChops`, which carries only the APKAM *authentication* keypair; and
-     `AtKeys.toAtChopsForEnrollment` (`at_keys.dart:498`) builds that same
-     single authentication pair. **Nothing anywhere enumerates an enrollment's
-     signing keys per algorithm** — the accessor that would front the array
-     does not exist. Sourcing per-algorithm material
-     means sourcing from `AtKeys`, and `apkam_signing.dart`'s own dartdoc
-     records why that cannot land yet: *"it cannot land until every client has
-     an `AtKeysIo` — today it is nullable and most apps supply none, so reading
-     through it would break them."* `_atKeysIo` is indeed `AtKeysIo?`
-     (`at_client_impl.dart:80`) and honoured only on first construction.
-     ⚠️ **Amended 2026-08-13: that quoted dartdoc is now half wrong, and it is
-     still in the file.** The claim was measured — 0 of 22 repos on disk
-     supplied one — but the cause was one SDK line, and
-     [14.18](#1418-the-remaining-d1-initial-development-sequence) step 11 fixed
-     it, so an `at_onboarding_cli` client has a source now. What survives is
-     that an app building its own client still supplies none *and is entitled
-     to*: a source-less client is a deliberate, tested property protecting the
-     cicd atServers. So the accessor needs a defined answer for "no source"
-     rather than a precondition that there always is one. Rewriting the dartdoc
-     is part of step 12.
-
-     ✅ **Resolved 2026-08-13 by step 12.** `AtKeys.signingKeysFor` enumerates
-     an enrollment's signing keys per algorithm, and `ApkamSigning.signingKeys`
-     is a `Future<List<ApkamSigningKeys>>` sourced from the keyfile. The "no
-     source" answer is the APKAM authentication keypair, which is also the
-     answer while nothing files signing material — so the accessor is live
-     rather than waiting on a writer, and `now`-posture envelopes are
-     unchanged. The stale dartdoc is rewritten.
-
-   So **owed item 2 is not merely the largest remaining piece, it is the gate on
-   this one** — which is the argument for doing it before the composer, and the
-   reason a session that starts with "compose the array" will not finish it.
-4. **The rollout axis.** One `PqPosture` flag switching all three writer
-   behaviours together (mint signing keys, publish the array, emit
-   multi-signature envelopes). **The axis has no name yet** — see
-   [`design.md` 9.7](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
-5. **The rollout harness.** Two stage-parameterised executables plus the 3×3
-   matrix in [`acceptance.md` 16.5](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix),
-   with the failing cell asserted by its specific error.
-6. **`enroll:update` parity across atServer implementations** — needs
-   its own tracking issue so it cannot silently diverge.
-
-**Unverified, and not to be reported as verified.** Two at_client_sdk
-functional files were edited for the new keyId shape and have only been
-analyzed, never run — `tests/at_functional_test/test/pq_native_onboard_live_test.dart`
-and `tests/at_onboarding_cli_functional_tests/test/pq_native_onboard_test.dart`.
-They need at_client_sdk's own recycled VE.
-
-**The spike carries trunk as of 2026-08-11** (merge `95584f818`, trunk
-`2e98fdd9d`, 87 commits). What that merge settled, because a stale version
-number here would misroute a release:
-
-- **at_chops is 3.6.0 and at_commons is 5.15.0 on the spike.** trunk published
-  at_chops 3.5.0 and at_commons 5.14.0 the same day, and the spike had been
-  claiming both numbers for entirely different, unreleased content. Both sides
-  writing the same string meant `pubspec.yaml` auto-merged with no conflict at
-  all — the collision was silent, and the published CHANGELOG headings now hold
-  trunk's content with the spike's moved up a minor. at_client's floors follow.
-- **trunk's PQ length validation now lives where the spike's refactor put the
-  work.** trunk added checks to `MlKem768PureDartAlgo` and
-  `MlDsa65PureDartAlgo` bodies that the spike had already refactored away, so
-  taking either side alone silently dropped something. The ML-KEM checks moved
-  into `MlKemPureDart` against per-level size getters — 768's constants in a
-  base that also serves ML-KEM-1024 would reject every well-formed 1024 key —
-  and the ML-DSA checks into `signBytesSync`/`verifyBytesSync`, which the PKAM
-  dispatch and envelope signing reach directly and would otherwise bypass.
-- **Widening an enum broke a pin in a file no one had touched.** trunk's new
-  `at_auth/test/atkey_material_test.dart` pins both `known` sets exactly; the
-  spike had added `mlkem1024`, `privateAuthentication` and
-  `publicAuthentication`. Git merged that file cleanly and it went red only on
-  a test run.
-
-**Two red unit tests predated the merge and were fixed after it** (`b9f94ab05`,
-`e752d5529`), both stale tests rather than product defects, and both proven
-pre-existing by running the same files at the pre-merge head in a worktree.
-`signing_algo_resolution_test.dart` built its fixture from `privateSigning`,
-which predates the auth/signing split, so `signingAlgorithmForEnrollment`
-correctly found no authentication material and fell back to `rsa2048`.
-`at_onboarding_cli`'s `keyfile_literal_pins_test.dart` still expected
-`version`/`atsign`/`keys` from a keyset with no typed material — the guard for
-an at_auth change living one package away, which is why nothing went red where
-the change landed. Neither was covered by the previous entry's rails line,
-because that line reported at_onboarding_cli as *analyze* clean and at_client's
-unit suite had not been run.
-
-**A latent defect the tests chose not to find, 2026-08-11.** The `enroll:update`
-proof-of-possession check read `AtChopsImpl.verify(...).result` directly, but
-that is a `FutureOr<bool>` and published at_chops 3.5.0 verifies `mldsa65`
-**asynchronously** — so a rotation to an ML-DSA key died on
-`type 'Future<bool>' is not a subtype of type 'bool'`. Both the unit and the
-functional tests exercised `rsa2048`, which verifies synchronously, so the whole
-suite passed over it. Fixed by awaiting the result (at_server 3.16.0 CHANGELOG).
-**Still owed: an `mldsa65` arm on the rotation tests** — the algorithm the
-feature exists for is the one arm nothing covers, and picking `rsa2048` for a
-fixture is exactly the choice that makes a wrong answer invisible.
-
-**Three rulings were wrong until execution proved it,** each caught by a test
-rather than by review, and each amended in place with what it used to say:
-ruling 14's signing mode (`AtSigningMode.data` signs with the *encryption*
-keypair, so proof of possession was structurally impossible as specified),
-ruling 4's uniqueness (scoped per role it permitted exactly one signing
-algorithm, defeating the agility the work exists for), and ruling 3 (a second
-retrofit now throws, replacing a deliberate per-algorithm idempotency). Three
-of sixteen rulings is the argument for proving the whole sequence on the spike
-before chunking it into PRs.
-
 ### 14.18 The remaining D1 initial-development sequence
 
 Ruled 2026-08-11 by a walk through every open item
@@ -3024,7 +2749,7 @@ builds on it.
 | 4 | **DONE 2026-08-13 — ruling 2 landed, so all of step 4 is complete and step 6 is unblocked.** Ruling 2 in three commits: `6462ae786` (the advertisement becomes `{v, createdAt, keys:[{use, alg, pub, kid}], suites}` with one `toPayload`/`fromPayload` codec replacing a map literal in `_mint` and a hand parser in `verify` 250 lines apart), `d28ef48a9` (a key that is not its algorithm's length is refused — a kid is the digest of whatever bytes are carried, so it matched a forged key as readily as a real one), `69449603e` (the reader skips entries it has no KEM for and picks the strongest it can use, which has to ship before any writer emits a second key). **Three things the ruling got wrong**, all corrected in `decisions.md` 94: `_apsk` entries never carried `status`; `status` and `KeyEntryStatus` are deferred **entirely to step 5** so no dead field ships (gkc, 2026-08-13); and at_auth cannot reach `PackageKey` because at_client depends on at_auth, so one vocabulary means one **wire spelling** across two Dart types. `createdAt` was added for symmetry with `KeyPackage`; `v` stays 1. Rails: at_client 1188/1188, functional 146/146. One key-entry vocabulary across all three advertising records — `{use, alg, pub, kid, status?}` inside `{v, keys:[…], suites}`. **Landed 2026-08-12:** ruling 3 (one kid function, at_auth's `publicKeyKid`, over the key's raw BYTES — `apskKid` hashed the base64 text and `nskeyKidOf` the material, and every kpid changes value); ruling 4 (`v`, `alg`, `suites` required, both `legacy*Suites` deleted); ruling 5 (one `SecretSharingAlgos.bestSuiteBetween`); **ruling 6** — `pq_envelope.dart`'s `pqSealToBase64`/`pqOpenFromBase64`, both taking `info` and `version` as **required** arguments and constructing neither, so there is nothing inside the shared code for the two substrates to converge onto. at_chops' `pqSeal`/`pqOpen` now require `info` too, which makes a shared binding a **compile error** rather than a convention — it was reachable before, because `info` was optional and `info ?? Uint8List(0)` made omission and empty the same binding. **Found en route:** the pairwise substrate had NO test that could fail on a converged binding — dropping the label from all three pairwise/enrollment call sites left the suite green at 1180/1180 — so the production-fed differential in `pairwise_secret_sharing_test.dart` was built first and proven by that same symmetric mutation, which now turns exactly one test red. **Still owed: ruling 2** — the nskey advertisement gains a `keys` list and adopts the shared spelling | [`decisions.md` 94](decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11) — ⚠️ **before step 6**, or that parser becomes the third hand-rolled codec for one shape |
 | 5 | **DONE 2026-08-13 — the `retired` key path, in three commits.** `6a5eac838`: `PackageKey` gains `status`, a `KeyEntryStatus` of `active` or `retired`, and `bestKeyFor` on both a key package and an nskey advertisement passes a retired key over, so `kpid` is the *active* enc key's kid. Emitted only when retired — absent already reads as active — and an unrecognised value read as retired. ⚠️ **That last clause held only until 2026-08-22**, when `KeyEntryStatus` became an open String (14.49.1): an unrecognised value is now carried through verbatim and is neither offered for new operations nor trusted to verify old ones. The 2026-08-13 reading was right that it must not be *used*, and wrong that `retired` says so — a retired key still verifies what it signed. `f956b2146`: `PersistedApkamKeys` becomes `{encKeys: [PersistedEncKey]}` and `KeyPackageRegistration` expands, advertises and answers for every held key, with `encKeyFor(kid)` replacing `encSecretKey` and `heldKpids` listing every address. `f6fc3796e`: the sweep, the wake-up subscription and the sync listener cover every held address (`EnvelopeAddressing.regexForAny`/`sweepRegexForAny`), and `_consume` opens with the key the envelope names. **Three things ruling 9 got wrong or omitted**, all recorded in `decisions.md` 95: the sweep filter is a **fifth** consequence and the one that makes the other four reachable; the keyfile already records the status (`CryptographicMaterial.CryptographicMaterialStatus`, `AtKeys.retireKey`, and an `AtKeysAssurance` rule enforcing one active `publicEncapsulation` per enrollment and algorithm), so deriving it from `createdAt` was wrong; and `dead` material is not adopted at all. Rails: at_client 1210/1210, functional 146/146. **Nothing rotates yet** — the writer is step 16. ⚠️ app-facing: `PersistedApkamKeys` is what apps build in `loadApkamKeys`/`saveApkamKeys` | [`decisions.md` 95](decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12) rulings 6–9 — without the plural holding the field is decorative. The **name collision** was settled 2026-08-12 (gkc) and landed as ruled: the per-entry wire value is a Dart `KeyEntryStatus`, and `KeyPackageStatus` — the reader's verdict on a whole package (`present`/`absent`/`rejected`/`unsupported`) — keeps its name. Nothing renamed |
 | 6 | **DONE — mostly with step 2a, completed 2026-08-13.** `parseApskValue` reads the array **and** the released bare string, refuses a structured value advertising nothing it understands rather than guessing, and skips entries whose `use` or `alg` it does not know; `apsk_formats_test.dart` covers all of that plus "the array form is unmistakable to a bare-RSA consumer". Finished on 2026-08-13 by giving `ApskSigningKey` a `status` and having `apskSigningKeys` read it — **keeping** a retired entry, because this list is what verifies stored envelopes and a retired key is precisely what signed the older ones. `KeyEntryStatus` moved from at_client to **at_auth** in the same change so all three advertising records name one type, narrowing [94](decisions.md#94-three-records-advertise-keys-and-only-one-of-them-speaks-the-vocabulary-2026-08-11)'s "one vocabulary cannot mean one Dart type" — that was true of a type living in at_client, and at_auth is the lower package. **Found by the re-verify:** `design.md` 9.3's JSON example omitted `kid`, which the reader requires, so the document the design showed is one every reader treats as empty and then refuses; corrected, and pinned. `advertised.first` and the singular `ParsedApsk` are steps 7–9's business, not a gap here | [`design.md` 9.3](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
-| 7 | **DONE 2026-08-13.** `SigningAlgoType.strongestFirst` + `strongestOf` in at_chops — purely additive (two statics on the existing enum; no member added, moved or renamed, so it does not touch the unresolved 3.6.0-versus-major question). Deliberately **not** declaration order: members are declared in the order they were added and reordering them is a wire change, so preference is a second statement. `mldsa65` first, categorically — the only member Shor does not break — then RSA-4096, `ed25519`, `ecc_secp256r1`, RSA-2048 by classical security level. Total on purpose: a partial order leaves the choice undefined for exactly the pair nobody thought about. **The tripwire is completeness, not just the literals**: a new `SigningAlgoType` left out of the order turns `test/signing_strength_test.dart` red, which is what stops it becoming silently unrankable. Wired straight into `parseApskValue`, which took `advertised.first` — the order entries arrive in is the *signer's* choice, so an enrollment advertising ML-DSA-65 beside RSA-2048 was verified against whichever it listed first | [14.17](../implementation-plan.md#1417-signature-agility--complete) |
+| 7 | **DONE 2026-08-13.** `SigningAlgoType.strongestFirst` + `strongestOf` in at_chops — purely additive (two statics on the existing enum; no member added, moved or renamed, so it does not touch the unresolved 3.6.0-versus-major question). Deliberately **not** declaration order: members are declared in the order they were added and reordering them is a wire change, so preference is a second statement. `mldsa65` first, categorically — the only member Shor does not break — then RSA-4096, `ed25519`, `ecc_secp256r1`, RSA-2048 by classical security level. Total on purpose: a partial order leaves the choice undefined for exactly the pair nobody thought about. **The tripwire is completeness, not just the literals**: a new `SigningAlgoType` left out of the order turns `test/signing_strength_test.dart` red, which is what stops it becoming silently unrankable. Wired straight into `parseApskValue`, which took `advertised.first` — the order entries arrive in is the *signer's* choice, so an enrollment advertising ML-DSA-65 beside RSA-2048 was verified against whichever it listed first | [14.17](#1417-signature-agility--complete) |
 | 8 | **DONE 2026-08-13.** `requireAlg` is gone rather than rewritten: the algorithm is now *resolved* — from what the envelope's `signatures` and the signer's `_apsk` have in common, taking the strongest by `SigningAlgoType.strongestFirst` — and then its key is fetched, where before one advertised key was taken and the envelope was required to match it. Its refusal survives in a different form: no algorithm in common is refused naming both lists. `ParsedApsk` went plural (`keys`, `keyFor(algo)`; `signingAlgo`/`publicKey` survive as strongest-of getters), and the bare RSA form parses to a one-entry list so both published forms are one shape to the caller. The two JOSE `alg` switches — one on the sign side, one on the verify side — became one `_joseAlgFor`, since two would be two chances to disagree | ⚠️ an inversion, not an addition |
 | 9 | **DONE 2026-08-13, with step 8** — the two do not separate: resolving the strongest shared algorithm *is* walking the entries. `verifyEnvelope` selects its entry by algorithm rather than taking `signatures.first`, verifies only that one, and refuses on failure with no fallback. **Found en route and fixed:** `signerEnrollmentId` reads `signatures.first.kid` while the verified entry is now chosen by algorithm, so the two could be different entries — append a signature under a stronger algorithm carrying another kid and a caller acts on a signer whose signature was never checked. `SignedEnvelope.fromJson` now refuses an envelope whose entries name more than one signer, which is a structural claim about this shape rather than a verify-time check. UC-G1.7 is covered for the first time, four rows | [`design.md` 9.4](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split) |
 
@@ -6730,4 +6455,556 @@ was left open on purpose.
   `reconcileHeldPrivate` as the owner of the heal. That heal now makes the same
   vouching judgement as the verifier, which is what covered the case that made
   this worth looking at.
+
+### 14.17 Signature agility — complete
+
+✅ **COMPLETE 2026-08-18.** Steps 1–5 are done and step 6 is out of scope by
+gkc's ruling. The last piece to land was step 5's signed-envelope 3×3
+(UC-G1.15), which is what makes
+[`decisions.md` 108](decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
+a measurement rather than a ruling.
+
+⚠️ **This entry spent five days claiming steps 4 and 5 were owed after they had
+shipped**, because it was written 2026-08-11 and never re-read against the tree
+while [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) built the
+work. The individual strikes below say what each row used to claim. The reason
+nothing caught it is worth more than the corrections: the `UC-G1.x` rows this
+entry is accepted against are the one cluster of the catalogue no rail checks —
+`manifest.dart`'s regexes hard-code `UC-[ABC]`.
+
+The design landed 2026-08-11 as [`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11),
+[`design.md` 9](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
+and [`acceptance.md` 16](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix).
+This entry is the owed half; the rulings are the contract.
+
+**Owed, in dependency order.**
+
+1. ~~**Drop at_server's at_commons override.**~~ **DONE 2026-08-11.** The
+   override is out of both `pubspec.yaml` and `pubspec_overrides.yaml`,
+   `pubspec.lock` resolves at_commons from hosted 5.14.0, the
+   `at_commons-apsk-1` tag is deleted local and origin (its commit `54ccffdd0`
+   is an ancestor of trunk, so nothing was orphaned), and
+   [at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744)
+   **MERGED 2026-08-11** — ⚠️ *this line read "is open for review" until the
+   2026-08-14 wrap-up; verified with `gh pr view 2744 --repo
+   atsign-foundation/at_server`.* ⚠️ **And the `5bc3618a` this paragraph named
+   as at_server's head is long superseded** — it is an ancestor of
+   `origin/trunk` now, i.e. landed. ⚠️ **Do not read a SHA here as "at_server's
+   head" at all:** `6a86fbcc`, cited elsewhere in this plan for the PoP
+   contract, is the tip of the local `gkc-add-apskLegacy-field` branch and is
+   *also* an ancestor of trunk; `origin/trunk` itself was at `fdb78568` on
+   2026-08-14 and moves independently of anything here. Re-derive with
+   `git -C ~/dev/atsign/repos/at_server rev-parse --short origin/trunk`; none
+   of this is visible from inside at_client_sdk, which is how both errors
+   survived.
+
+   **What this still leaves owed:** at_server's own **210/210** was measured at
+   `ab38b884`, several commits back and against a different at_commons source.
+   **That number is stale twice over and has to be re-earned before it is cited
+   again** — it is at_server's pack, not at_client_sdk's, so none of this
+   project's runs discharge it.
+2. ~~**Ruling 7's remaining half: flat → typed.**~~ **DONE 2026-08-13**, and
+   narrowed on evidence — see [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+   step 10 and the amendment in [`decisions.md` 91.3](decisions.md#913-the-rulings)
+   ruling 7. The projection cannot be **materialised**, so "nothing reads them"
+   became "one place reads them": `AtKeys.authenticationFor` /
+   `authenticationAlgorithmFor`. ⚠️ **The reader list above was wrong on two of
+   its four entries.** `file_io.dart` touches no `AtKeys` flat field at all —
+   its only `atKeys.*` uses are `atsign` and `toJson` — and `onboarding_mint.dart`
+   *writes* them at mint time, which is the projection working as intended
+   rather than a read to move. The two that did move are `AtKeys.toAtChops()`'s
+   callers in `at_auth_impl.dart` and, not on the list, `at_client_impl.dart`.
+3. ~~**The wire half, client side — none of it exists.**~~ ⚠️ **STOP — this
+   whole item is a 2026-08-11 SNAPSHOT and four of its five sub-bullets are now
+   FALSE.** Corrected 2026-08-13 after a context-free read of the handoff
+   reported that a reader sent here for the step-17 spec would conclude the
+   multi-signature writer and the strength order were still owed, and rebuild
+   them. **What actually landed** ([14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+   is authoritative, not this list):
+
+   - the `_apsk` **array composer and reader** — steps 6 and 13;
+   - the **multi-signature envelope** — step 15. `signEnvelope` takes
+     `required List<ApkamSigningKeys> keys` and emits one entry per key;
+   - **`requireAlg` no longer exists in any source file** (step 8 replaced the
+     refusal with algorithm *resolution*; the only surviving mention is
+     `packages/at_client/CHANGELOG.md`). Any line below citing it, or citing
+     `envelope_signature.dart:577`, is describing deleted code;
+   - the **strength order** — step 7. `SigningAlgoType.strongestFirst` is at
+     `packages/at_chops/lib/src/algorithm/algo_type.dart:37`, with
+     `packages/at_chops/test/signing_strength_test.dart` as its tripwire, so
+     UC-G1.7 has had something to run against since 2026-08-13;
+   - the **`enroll:update` caller** — step 16.
+
+   ⚠️ **The line numbers below are also stale** — `ApkamSigningKeys` is no
+   longer at `envelope_signature.dart:197`, and `signingKeys` is at
+   `apkam_signing.dart:124` returning `Future<List<ApkamSigningKeys>>`, not at
+   `:56`. **Nothing is owed from this item any more** — the in-use signing set
+   landed 2026-08-13 as step 17, mint-on-demand as step 18, and row B3 moved
+   the mint ahead of the enrollment submission on 2026-08-14. (This line read
+   "only mint-on-demand is genuinely still owed" until that sweep.) The original text is kept below
+   because its *reasoning* about why each piece is an inversion rather than an
+   addition is still worth reading — but read it as history, and verify every
+   claim against the source before acting on it.
+
+   - **The `_apsk` array composer and reader.** Today `publishPublicSigningKey`
+     (`apkam_signing.dart:38`) `put`s a **single bare key**, and does so only
+     when the record is absent — a get-then-put-if-missing. Nothing composes
+     `{v:1, keys:[{use, alg, pub, status}]}` and nothing reads it. The
+     `use`/`alg`/`pub` vocabulary exists in the tree, but in `key_package.dart`
+     (the **KEM** package, a different record) and as `[{alg, pub}]` in
+     `pq_signing_root.dart` (the signing root, no `use`, no `status`). ⚠️ ~~**Open
+     question when the composer lands:** does `publishPublicSigningKey` retire,
+     or does it stay and become a second writer to a record the approval path
+     also writes? Its skip-if-present means an enrollment that already published
+     a bare string never rewrites it.~~ **ANSWERED by [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+     step 13 — it stays**, as the only writer for an `_apsk` no `enroll:request`
+     can carry (a client with no enrollment publishes under `primary`, which has
+     no enrollment record). And the skip-if-present is gone: it **republishes on
+     a change**, which was a real defect — a rotated key never reached the
+     atServer and every envelope signed with the new one verified against the
+     old.
+   - **The multi-signature envelope. This is an inversion, not an addition.**
+     `signEnvelope` emits exactly one `signature` and one `signingAlgo` from a
+     `switch` on a single `SigningAlgoType`, on both the v1 and JWS paths. The
+     verifier does not merely lack multi-signature support — it **actively
+     refuses** a mismatch, via `requireAlg` at `envelope_signature.dart:577`,
+     whose message reads *"the published `_apsk` is a `<algo>` key"*. The
+     singular is baked into the behaviour and the diagnostic, so this work
+     changes an existing refusal rather than extending a permissive path.
+   - ~~**The strength order** beside `SigningAlgoType` in at_chops, with its
+     raw-literal tripwire~~ — ✅ **BUILT 2026-08-13** as [14.18 step 7](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence):
+     `SigningAlgoType.strongestFirst` and `strongestOf` at
+     `packages/at_chops/lib/src/algorithm/algo_type.dart:37`, with
+     `packages/at_chops/test/signing_strength_test.dart` as the tripwire, and
+     [UC-G1.7](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix)
+     ("the verifier takes the strongest and does not fall back") reads PROVEN in
+     the catalogue. This bullet said "no ordering exists anywhere in at_chops or
+     at_client today" for 5 days after it shipped, which left the plan claiming
+     an at_chops obligation it did not have.
+   - ~~**The `enroll:update` caller** and its PoP signature~~ — ✅ **BUILT
+     2026-08-13** as [14.18 step 16](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence):
+     `AtEnrollment.update`, `EnrollmentUpdateRequest`, `EnrollmentUpdater` and
+     `apkamPossessionSignature` (`AtSigningMode.pkam`, SHA-256 — ruling 14, and
+     `AtSigningMode.data` cannot work). ⚠️ A rotation is not persisted anywhere,
+     [14.19 item 11](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on).
+   - ~~**The in-use signing set** on `AtClientPreference`~~ — ✅ **BUILT
+     2026-08-13** as [14.18 step 17](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence):
+     `dataSigningKeyAlgorithms`, defaulted from `PqPosture`. The deprecated
+     `signingAlgoType` stays where it is — it is the *authentication* key's
+     algorithm, a different thing.
+   - **Mint-on-demand** when the in-use set names an algorithm the enrollment
+     lacks.
+
+   ⚠️ **Neither side of rollout 1 exists yet.** The staging in
+   [`design.md` 9](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
+   has rollout 1 ship *reader* capability ungated, before any writer emits the
+   array — but the client has neither reader nor writer, so the first
+   deliverable here is the reader, not the composer, however tempting it is to
+   build the thing that produces output you can look at.
+
+   ⚠️ **The writer half is blocked on owed item 2, and the reader half is not.**
+   Found 2026-08-11 by reading the source, and it changes the order this entry
+   should be worked in:
+
+   - A **reader** needs the published `_apsk` array and the envelope, both
+     fetched over the wire. It touches no local key material, so nothing gates
+     it. Start here.
+   - A **writer** emitting multi-signature envelopes needs one signing keypair
+     **per algorithm**, and nothing can supply that today.
+     `ApkamSigningKeys` (`envelope_signature.dart:197`) holds exactly one pair
+     of `String`s; `signingKeys` (`apkam_signing.dart:56`) reads it out of
+     `atChops`, which carries only the APKAM *authentication* keypair; and
+     `AtKeys.toAtChopsForEnrollment` (`at_keys.dart:498`) builds that same
+     single authentication pair. **Nothing anywhere enumerates an enrollment's
+     signing keys per algorithm** — the accessor that would front the array
+     does not exist. Sourcing per-algorithm material
+     means sourcing from `AtKeys`, and `apkam_signing.dart`'s own dartdoc
+     records why that cannot land yet: *"it cannot land until every client has
+     an `AtKeysIo` — today it is nullable and most apps supply none, so reading
+     through it would break them."* `_atKeysIo` is indeed `AtKeysIo?`
+     (`at_client_impl.dart:80`) and honoured only on first construction.
+     ⚠️ **Amended 2026-08-13: that quoted dartdoc is now half wrong, and it is
+     still in the file.** The claim was measured — 0 of 22 repos on disk
+     supplied one — but the cause was one SDK line, and
+     [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) step 11 fixed
+     it, so an `at_onboarding_cli` client has a source now. What survives is
+     that an app building its own client still supplies none *and is entitled
+     to*: a source-less client is a deliberate, tested property protecting the
+     cicd atServers. So the accessor needs a defined answer for "no source"
+     rather than a precondition that there always is one. Rewriting the dartdoc
+     is part of step 12.
+
+     ✅ **Resolved 2026-08-13 by step 12.** `AtKeys.signingKeysFor` enumerates
+     an enrollment's signing keys per algorithm, and `ApkamSigning.signingKeys`
+     is a `Future<List<ApkamSigningKeys>>` sourced from the keyfile. The "no
+     source" answer is the APKAM authentication keypair, which is also the
+     answer while nothing files signing material — so the accessor is live
+     rather than waiting on a writer, and `now`-posture envelopes are
+     unchanged. The stale dartdoc is rewritten.
+
+   So **owed item 2 is not merely the largest remaining piece, it is the gate on
+   this one** — which is the argument for doing it before the composer, and the
+   reason a session that starts with "compose the array" will not finish it.
+4. ~~**The rollout axis.**~~ **DONE 2026-08-13** as
+   [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) step 19, and
+   built out further by rows B1 and B3 on 2026-08-14. ⚠️ **This item read "the
+   axis has no name yet" until 2026-08-18, and had been false for five days.**
+   The axes are `PqPosture.authenticationKeyAlgorithm` and
+   `PqPosture.dataSigningKeyAlgorithms`, each overridable on
+   `AtClientPreference`, and read in production by `self_retrofit.dart`,
+   `signing_key_minting.dart` and the `_apsk` composer. They were one enum,
+   `SigningRollout` (`now`/`rollout1`/`rollout2`), until
+   [ruling 113](decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)
+   split them. Its premise was wrong as well as its status: the stage does
+   **not** switch three flags. Only minting is a decision; the array form and
+   the second signature are consequences of how many keys the keyfile holds,
+   and the posture supplies one default,
+   `AtClientPreference.dataSigningKeyAlgorithms`.
+   [`design.md` 9.7](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
+   has said so since it was written, which is where this row should have been
+   checked against.
+5. **The rollout harness — the data path is built; the envelope grid is owed.**
+   ⚠️ **This item read as wholly owed, and named a 3×3, until 2026-08-18.**
+   Built as [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) steps
+   20–22: the two stage-parameterised executables are `tests/pq_matrix/`
+   (`scenario/`, `current/`, `published/`), driven by
+   `tests/at_functional_test/test/pq_rollout_matrix_test.dart` as a **4×4**
+   matrix over `published`/`legacy`/`pqReady`/`pqActive`. All sixteen cells pass,
+   and the "failing cell asserted by its specific error" this row asks for no
+   longer exists — both cells were measured out of existence on 2026-08-14 and
+   [`acceptance.md` 16.5](../acceptance.md#165-the-rollout-matrix) records what it
+   used to say.
+
+   ✅ **The signed-envelope grid closed it the same day.** It was the one piece
+   of this row genuinely owed — the 4×4 does not touch the envelope path at all
+   (`git grep 'wrapAndSign\|signEnvelope\|verifyEnvelope' -- tests/pq_matrix`
+   returned nothing, against `EnvelopeSigning` as a positive control), so the
+   sixteen green cells were not evidence about envelope verification. Built as
+   UC-G1.15: nine cells over `legacy`/`pqReady`/`pqActive`, each signing at the
+   sender's stage and verifying at the receiver's through a real `_apsk` fetch.
+   It is a 3×3 rather than a fourth row and column because a released client and
+   this tree cannot exchange an envelope in either direction under any stage.
+
+   **`pqActive → pqReady` passes**, which is what turns
+   [`decisions.md` 108](decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
+   from a ruling into a measurement: strongest signer, weakest verifier, and no
+   overlap needed because verification is ungated.
+
+   ⚠️ **The nine cells are not what proves the stages differ, and this is
+   measured rather than argued.** Mutating `pqActive` to resolve as `pqReady`
+   leaves **all nine passing** — a sender signing RSA-2048 verifies everywhere
+   too. What catches it is the algorithm assertion: `pqActive → pqActive` must
+   be exactly `['ML-DSA-65']`, `legacy → legacy` must not contain it. Both arms
+   in one
+   session: the mutation reddens naming `['RS256']`, the revert is green.
+   The envelope half lives in `current/lib/envelope_exchange.dart`, not the
+   shared scenario, because 3.14.0's `wrapAndSign` returns a `Map` where this
+   tree's returns a `SignedEnvelope` and 3.14.0 ships no `lib/src/signing/` —
+   a shared file would not compile on the published arm.
+6. ~~**`enroll:update` parity across atServer implementations.**~~
+   ⛔ **OUT OF SCOPE — gkc, 2026-08-18.** Do not re-raise it, and do not file a
+   tracking issue for it. Recorded here rather than deleted because it was
+   raised three times in one session, each time from re-reading this row as
+   owed.
+
+⚠️ **"Still owed: an `mldsa65` arm on the rotation tests" was struck 2026-08-18.**
+The sentence dated from 2026-08-11 and the arm has since been written:
+`packages/at_auth/test/enrollment_update_test.dart` carries both algorithms (15
+`rsa2048` mentions, 10 `mldsa65`), and `signing_key_minting_test.dart` covers
+the mint-and-retire path under `mldsa65`. The reasoning it recorded is still
+right — picking `rsa2048` for a fixture is the choice that makes a wrong answer
+invisible — which is why it is struck here rather than deleted.
+
+---
+
+#### 14.17's 2026-08-11 original, kept whole
+
+Until 2026-08-22 this section existed **twice** — here and in the live plan —
+and the two had diverged. The live copy was headed *"complete"*; this one
+*"what is built, and what is owed"*, and each carried roughly ninety lines the
+other did not. The merged text above takes the live copy as the successor,
+because it strikes each superseded claim in place and says what it used to
+claim.
+
+What follows is the original **in full, unedited**. It is dated evidence, not
+current state, and several of its statements are ones the text above
+explicitly reverses — most visibly items 4, 5 and 6 of its owed list, and its
+closing *"Still owed: an `mldsa65` arm on the rotation tests"*, which was
+struck on 2026-08-18. It is kept whole rather than excerpted because a first
+attempt at this merge hand-picked three blocks and silently dropped 56 lines
+of measured evidence, which is the failure this project keeps recording.
+
+
+The design landed 2026-08-11 as [`decisions.md` 91](decisions.md#91-signature-agility-the-apkam-auth-key-stops-being-the-enrollments-signing-key-2026-08-11),
+[`design.md` 9](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
+and [`acceptance.md` 16](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix).
+This entry is the owed half; the rulings are the contract.
+
+**Built and verified.**
+
+| Piece | Where | Rails |
+|-------|-------|-------|
+| `EnrollParams.apsk`, `.apkamPublicKeySignature`, `EnrollOperationEnum.update` + grammar | **at_commons 5.14.0, published 2026-08-11**; [#2137](https://github.com/atsign-foundation/at_client_sdk/pull/2137) merged to trunk and merged into the spike | at_commons 512/512, analyze 0 |
+| `enroll:update` handler, PoP verification, and storing a client-composed `_apsk` verbatim | at_server `gkc-apsk-auto-publish` `ab38b884` | 919/919 unit, **210/210 functional** — ⚠️ two caveats below |
+| Auth/signing key types, generation keyIds, status-aware invariants, `replaceKey`, `activeEnrollmentId`, pure-legacy `toJson` | at_client_sdk `gkc-pq-d1-spike` | at_auth 241/241, analyze 0 |
+| The above **plus trunk**, after merge `95584f818` | at_client_sdk `gkc-pq-d1-spike` | at_chops 527/527, at_commons 512/512, at_auth 241/241, at_client 1186/1186, at_onboarding_cli 38/38, at_lookup + at_policy green; analyze **0 errors and 0 warnings** across seven packages |
+
+⚠️ **Two caveats on the at_server row, because "built" is doing less work there
+than it looks** (both re-verified against the source 2026-08-11):
+
+- **The capability is dormant.** *Nothing* in `at_client`, `at_auth` or
+  `at_onboarding_cli` assigns `EnrollParams.apsk` — grep for `.apsk =` returns
+  nothing. The atServer will store a client-composed array and no client
+  composes one, so today's clients still publish the legacy bare key through
+  `publishPublicSigningKey` (`apkam_signing.dart:38`). That is the intended
+  sequencing, not a defect, but it means **no end-to-end exercise exists** and
+  will not until owed item 3 lands.
+- **The 210/210 drove `enroll:update` with hand-built payloads**, not the output
+  of a real client. The rows prove the handler, the PoP check and the storage;
+  they prove nothing about a composer that does not exist yet.
+
+- ⚠️ Also measured with at_commons resolved through the `at_commons-apsk-1`
+  tag, so the number does **not** carry over the override swap in owed item 1.
+
+**Owed, in dependency order.**
+
+1. ~~**Drop at_server's at_commons override.**~~ **DONE 2026-08-11.** The
+   override is out of both `pubspec.yaml` and `pubspec_overrides.yaml`,
+   `pubspec.lock` resolves at_commons from hosted 5.14.0, the
+   `at_commons-apsk-1` tag is deleted local and origin (its commit `54ccffdd0`
+   is an ancestor of trunk, so nothing was orphaned), and
+   [at_server#2744](https://github.com/atsign-foundation/at_server/pull/2744)
+   **MERGED 2026-08-11** — ⚠️ *this line read "is open for review" until the
+   2026-08-14 wrap-up; verified with `gh pr view 2744 --repo
+   atsign-foundation/at_server`.* ⚠️ **And the `5bc3618a` this paragraph named
+   as at_server's head is long superseded** — it is an ancestor of
+   `origin/trunk` now, i.e. landed. ⚠️ **Do not read a SHA here as "at_server's
+   head" at all:** `6a86fbcc`, cited elsewhere in this plan for the PoP
+   contract, is the tip of the local `gkc-add-apskLegacy-field` branch and is
+   *also* an ancestor of trunk; `origin/trunk` itself was at `fdb78568` on
+   2026-08-14 and moves independently of anything here. Re-derive with
+   `git -C ~/dev/atsign/repos/at_server rev-parse --short origin/trunk`; none
+   of this is visible from inside at_client_sdk, which is how both errors
+   survived.
+
+   **What this still leaves owed:** at_server's own **210/210** was measured at
+   `ab38b884`, several commits back and against a different at_commons source.
+   **That number is stale twice over and has to be re-earned before it is cited
+   again** — it is at_server's pack, not at_client_sdk's, so none of this
+   project's runs discharge it.
+2. ~~**Ruling 7's remaining half: flat → typed.**~~ **DONE 2026-08-13**, and
+   narrowed on evidence — see [14.18](#1418-the-remaining-d1-initial-development-sequence)
+   step 10 and the amendment in [`decisions.md` 91.3](decisions.md#913-the-rulings)
+   ruling 7. The projection cannot be **materialised**, so "nothing reads them"
+   became "one place reads them": `AtKeys.authenticationFor` /
+   `authenticationAlgorithmFor`. ⚠️ **The reader list above was wrong on two of
+   its four entries.** `file_io.dart` touches no `AtKeys` flat field at all —
+   its only `atKeys.*` uses are `atsign` and `toJson` — and `onboarding_mint.dart`
+   *writes* them at mint time, which is the projection working as intended
+   rather than a read to move. The two that did move are `AtKeys.toAtChops()`'s
+   callers in `at_auth_impl.dart` and, not on the list, `at_client_impl.dart`.
+3. ~~**The wire half, client side — none of it exists.**~~ ⚠️ **STOP — this
+   whole item is a 2026-08-11 SNAPSHOT and four of its five sub-bullets are now
+   FALSE.** Corrected 2026-08-13 after a context-free read of the handoff
+   reported that a reader sent here for the step-17 spec would conclude the
+   multi-signature writer and the strength order were still owed, and rebuild
+   them. **What actually landed** ([14.18](#1418-the-remaining-d1-initial-development-sequence)
+   is authoritative, not this list):
+
+   - the `_apsk` **array composer and reader** — steps 6 and 13;
+   - the **multi-signature envelope** — step 15. `signEnvelope` takes
+     `required List<ApkamSigningKeys> keys` and emits one entry per key;
+   - **`requireAlg` no longer exists in any source file** (step 8 replaced the
+     refusal with algorithm *resolution*; the only surviving mention is
+     `packages/at_client/CHANGELOG.md`). Any line below citing it, or citing
+     `envelope_signature.dart:577`, is describing deleted code;
+   - the **strength order** — step 7. `SigningAlgoType.strongestFirst` is at
+     `packages/at_chops/lib/src/algorithm/algo_type.dart:37`, with
+     `packages/at_chops/test/signing_strength_test.dart` as its tripwire, so
+     UC-G1.7 has had something to run against since 2026-08-13;
+   - the **`enroll:update` caller** — step 16.
+
+   ⚠️ **The line numbers below are also stale** — `ApkamSigningKeys` is no
+   longer at `envelope_signature.dart:197`, and `signingKeys` is at
+   `apkam_signing.dart:124` returning `Future<List<ApkamSigningKeys>>`, not at
+   `:56`. **Nothing is owed from this item any more** — the in-use signing set
+   landed 2026-08-13 as step 17, mint-on-demand as step 18, and row B3 moved
+   the mint ahead of the enrollment submission on 2026-08-14. (This line read
+   "only mint-on-demand is genuinely still owed" until that sweep.) The original text is kept below
+   because its *reasoning* about why each piece is an inversion rather than an
+   addition is still worth reading — but read it as history, and verify every
+   claim against the source before acting on it.
+
+   - **The `_apsk` array composer and reader.** Today `publishPublicSigningKey`
+     (`apkam_signing.dart:38`) `put`s a **single bare key**, and does so only
+     when the record is absent — a get-then-put-if-missing. Nothing composes
+     `{v:1, keys:[{use, alg, pub, status}]}` and nothing reads it. The
+     `use`/`alg`/`pub` vocabulary exists in the tree, but in `key_package.dart`
+     (the **KEM** package, a different record) and as `[{alg, pub}]` in
+     `pq_signing_root.dart` (the signing root, no `use`, no `status`). ⚠️ ~~**Open
+     question when the composer lands:** does `publishPublicSigningKey` retire,
+     or does it stay and become a second writer to a record the approval path
+     also writes? Its skip-if-present means an enrollment that already published
+     a bare string never rewrites it.~~ **ANSWERED by [14.18](#1418-the-remaining-d1-initial-development-sequence)
+     step 13 — it stays**, as the only writer for an `_apsk` no `enroll:request`
+     can carry (a client with no enrollment publishes under `primary`, which has
+     no enrollment record). And the skip-if-present is gone: it **republishes on
+     a change**, which was a real defect — a rotated key never reached the
+     atServer and every envelope signed with the new one verified against the
+     old.
+   - **The multi-signature envelope. This is an inversion, not an addition.**
+     `signEnvelope` emits exactly one `signature` and one `signingAlgo` from a
+     `switch` on a single `SigningAlgoType`, on both the v1 and JWS paths. The
+     verifier does not merely lack multi-signature support — it **actively
+     refuses** a mismatch, via `requireAlg` at `envelope_signature.dart:577`,
+     whose message reads *"the published `_apsk` is a `<algo>` key"*. The
+     singular is baked into the behaviour and the diagnostic, so this work
+     changes an existing refusal rather than extending a permissive path.
+   - ~~**The strength order** beside `SigningAlgoType` in at_chops, with its
+     raw-literal tripwire~~ — ✅ **BUILT 2026-08-13** as [14.18 step 7](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence):
+     `SigningAlgoType.strongestFirst` and `strongestOf` at
+     `packages/at_chops/lib/src/algorithm/algo_type.dart:37`, with
+     `packages/at_chops/test/signing_strength_test.dart` as the tripwire, and
+     [UC-G1.7](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix)
+     ("the verifier takes the strongest and does not fall back") reads PROVEN in
+     the catalogue. This bullet said "no ordering exists anywhere in at_chops or
+     at_client today" for 5 days after it shipped, which left the plan claiming
+     an at_chops obligation it did not have.
+   - ~~**The `enroll:update` caller** and its PoP signature~~ — ✅ **BUILT
+     2026-08-13** as [14.18 step 16](#1418-the-remaining-d1-initial-development-sequence):
+     `AtEnrollment.update`, `EnrollmentUpdateRequest`, `EnrollmentUpdater` and
+     `apkamPossessionSignature` (`AtSigningMode.pkam`, SHA-256 — ruling 14, and
+     `AtSigningMode.data` cannot work). ⚠️ A rotation is not persisted anywhere,
+     [14.19 item 11](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on).
+   - ~~**The in-use signing set** on `AtClientPreference`~~ — ✅ **BUILT
+     2026-08-13** as [14.18 step 17](#1418-the-remaining-d1-initial-development-sequence):
+     `dataSigningKeyAlgorithms`, defaulted from `PqPosture`. The deprecated
+     `signingAlgoType` stays where it is — it is the *authentication* key's
+     algorithm, a different thing.
+   - **Mint-on-demand** when the in-use set names an algorithm the enrollment
+     lacks.
+
+   ⚠️ **Neither side of rollout 1 exists yet.** The staging in
+   [`design.md` 9](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split)
+   has rollout 1 ship *reader* capability ungated, before any writer emits the
+   array — but the client has neither reader nor writer, so the first
+   deliverable here is the reader, not the composer, however tempting it is to
+   build the thing that produces output you can look at.
+
+   ⚠️ **The writer half is blocked on owed item 2, and the reader half is not.**
+   Found 2026-08-11 by reading the source, and it changes the order this entry
+   should be worked in:
+
+   - A **reader** needs the published `_apsk` array and the envelope, both
+     fetched over the wire. It touches no local key material, so nothing gates
+     it. Start here.
+   - A **writer** emitting multi-signature envelopes needs one signing keypair
+     **per algorithm**, and nothing can supply that today.
+     `ApkamSigningKeys` (`envelope_signature.dart:197`) holds exactly one pair
+     of `String`s; `signingKeys` (`apkam_signing.dart:56`) reads it out of
+     `atChops`, which carries only the APKAM *authentication* keypair; and
+     `AtKeys.toAtChopsForEnrollment` (`at_keys.dart:498`) builds that same
+     single authentication pair. **Nothing anywhere enumerates an enrollment's
+     signing keys per algorithm** — the accessor that would front the array
+     does not exist. Sourcing per-algorithm material
+     means sourcing from `AtKeys`, and `apkam_signing.dart`'s own dartdoc
+     records why that cannot land yet: *"it cannot land until every client has
+     an `AtKeysIo` — today it is nullable and most apps supply none, so reading
+     through it would break them."* `_atKeysIo` is indeed `AtKeysIo?`
+     (`at_client_impl.dart:80`) and honoured only on first construction.
+     ⚠️ **Amended 2026-08-13: that quoted dartdoc is now half wrong, and it is
+     still in the file.** The claim was measured — 0 of 22 repos on disk
+     supplied one — but the cause was one SDK line, and
+     [14.18](#1418-the-remaining-d1-initial-development-sequence) step 11 fixed
+     it, so an `at_onboarding_cli` client has a source now. What survives is
+     that an app building its own client still supplies none *and is entitled
+     to*: a source-less client is a deliberate, tested property protecting the
+     cicd atServers. So the accessor needs a defined answer for "no source"
+     rather than a precondition that there always is one. Rewriting the dartdoc
+     is part of step 12.
+
+     ✅ **Resolved 2026-08-13 by step 12.** `AtKeys.signingKeysFor` enumerates
+     an enrollment's signing keys per algorithm, and `ApkamSigning.signingKeys`
+     is a `Future<List<ApkamSigningKeys>>` sourced from the keyfile. The "no
+     source" answer is the APKAM authentication keypair, which is also the
+     answer while nothing files signing material — so the accessor is live
+     rather than waiting on a writer, and `now`-posture envelopes are
+     unchanged. The stale dartdoc is rewritten.
+
+   So **owed item 2 is not merely the largest remaining piece, it is the gate on
+   this one** — which is the argument for doing it before the composer, and the
+   reason a session that starts with "compose the array" will not finish it.
+4. **The rollout axis.** One `PqPosture` flag switching all three writer
+   behaviours together (mint signing keys, publish the array, emit
+   multi-signature envelopes). **The axis has no name yet** — see
+   [`design.md` 9.7](../design.md#9-subsystem-g--signature-agility-the-authsigning-key-split).
+5. **The rollout harness.** Two stage-parameterised executables plus the 3×3
+   matrix in [`acceptance.md` 16.5](../acceptance.md#16-g1--signature-agility-and-the-rollout-matrix),
+   with the failing cell asserted by its specific error.
+6. **`enroll:update` parity across atServer implementations** — needs
+   its own tracking issue so it cannot silently diverge.
+
+**Unverified, and not to be reported as verified.** Two at_client_sdk
+functional files were edited for the new keyId shape and have only been
+analyzed, never run — `tests/at_functional_test/test/pq_native_onboard_live_test.dart`
+and `tests/at_onboarding_cli_functional_tests/test/pq_native_onboard_test.dart`.
+They need at_client_sdk's own recycled VE.
+
+**The spike carries trunk as of 2026-08-11** (merge `95584f818`, trunk
+`2e98fdd9d`, 87 commits). What that merge settled, because a stale version
+number here would misroute a release:
+
+- **at_chops is 3.6.0 and at_commons is 5.15.0 on the spike.** trunk published
+  at_chops 3.5.0 and at_commons 5.14.0 the same day, and the spike had been
+  claiming both numbers for entirely different, unreleased content. Both sides
+  writing the same string meant `pubspec.yaml` auto-merged with no conflict at
+  all — the collision was silent, and the published CHANGELOG headings now hold
+  trunk's content with the spike's moved up a minor. at_client's floors follow.
+- **trunk's PQ length validation now lives where the spike's refactor put the
+  work.** trunk added checks to `MlKem768PureDartAlgo` and
+  `MlDsa65PureDartAlgo` bodies that the spike had already refactored away, so
+  taking either side alone silently dropped something. The ML-KEM checks moved
+  into `MlKemPureDart` against per-level size getters — 768's constants in a
+  base that also serves ML-KEM-1024 would reject every well-formed 1024 key —
+  and the ML-DSA checks into `signBytesSync`/`verifyBytesSync`, which the PKAM
+  dispatch and envelope signing reach directly and would otherwise bypass.
+- **Widening an enum broke a pin in a file no one had touched.** trunk's new
+  `at_auth/test/atkey_material_test.dart` pins both `known` sets exactly; the
+  spike had added `mlkem1024`, `privateAuthentication` and
+  `publicAuthentication`. Git merged that file cleanly and it went red only on
+  a test run.
+
+**Two red unit tests predated the merge and were fixed after it** (`b9f94ab05`,
+`e752d5529`), both stale tests rather than product defects, and both proven
+pre-existing by running the same files at the pre-merge head in a worktree.
+`signing_algo_resolution_test.dart` built its fixture from `privateSigning`,
+which predates the auth/signing split, so `signingAlgorithmForEnrollment`
+correctly found no authentication material and fell back to `rsa2048`.
+`at_onboarding_cli`'s `keyfile_literal_pins_test.dart` still expected
+`version`/`atsign`/`keys` from a keyset with no typed material — the guard for
+an at_auth change living one package away, which is why nothing went red where
+the change landed. Neither was covered by the previous entry's rails line,
+because that line reported at_onboarding_cli as *analyze* clean and at_client's
+unit suite had not been run.
+
+**A latent defect the tests chose not to find, 2026-08-11.** The `enroll:update`
+proof-of-possession check read `AtChopsImpl.verify(...).result` directly, but
+that is a `FutureOr<bool>` and published at_chops 3.5.0 verifies `mldsa65`
+**asynchronously** — so a rotation to an ML-DSA key died on
+`type 'Future<bool>' is not a subtype of type 'bool'`. Both the unit and the
+functional tests exercised `rsa2048`, which verifies synchronously, so the whole
+suite passed over it. Fixed by awaiting the result (at_server 3.16.0 CHANGELOG).
+**Still owed: an `mldsa65` arm on the rotation tests** — the algorithm the
+feature exists for is the one arm nothing covers, and picking `rsa2048` for a
+fixture is exactly the choice that makes a wrong answer invisible.
+
+**Three rulings were wrong until execution proved it,** each caught by a test
+rather than by review, and each amended in place with what it used to say:
+ruling 14's signing mode (`AtSigningMode.data` signs with the *encryption*
+keypair, so proof of possession was structurally impossible as specified),
+ruling 4's uniqueness (scoped per role it permitted exactly one signing
+algorithm, defeating the agility the work exists for), and ruling 3 (a second
+retrofit now throws, replacing a deliberate per-algorithm idempotency). Three
+of sixteen rulings is the argument for proving the whole sequence on the spike
+before chunking it into PRs.
 
