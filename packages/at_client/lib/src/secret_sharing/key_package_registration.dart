@@ -41,7 +41,7 @@ class PersistedEncKey {
   /// Defaults to [KeyEntryStatus.active], which is what every seed written
   /// before this field existed was — there was only ever one. An open token:
   /// ask [offeredForNewOperations] rather than comparing it.
-  final String status;
+  final KeyEntryStatus status;
 
   /// Whether this is the key the enrollment advertises and is addressed at —
   /// see [KeyEntryStatus.offersNewOperations]. A key that is not still opens
@@ -98,7 +98,7 @@ class _HeldEncKey {
   final Uint8List secretKey;
 
   final String keyAlgo;
-  final String status;
+  final KeyEntryStatus status;
 
   bool get offeredForNewOperations =>
       KeyEntryStatus.offersNewOperations(status);
@@ -352,7 +352,7 @@ mixin KeyPackageRegistration on ApkamSigning, EnvelopeSigning {
   /// seed; ML-KEM's is an expanded decapsulation key that nothing turns back
   /// into a public half.
   Future<_HeldEncKey> _heldFrom(
-      Uint8List seed, String algo, String status) async {
+      Uint8List seed, String algo, KeyEntryStatus status) async {
     final kp = await _kemFor(algo).keyPairFromSeed(seed);
     return _HeldEncKey(
       seed: seed,

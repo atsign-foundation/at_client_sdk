@@ -80,7 +80,7 @@ class ApskSigningKey {
   /// Ask [offeredForNewOperations] and [vouchesForPastOperations] rather than
   /// comparing the token: those are the two decisions the field exists for, and
   /// they answer correctly for a token this build has never heard of.
-  final String status;
+  final KeyEntryStatus status;
 
   /// Whether this key may be chosen to sign something **new** — see
   /// [KeyEntryStatus.offersNewOperations].
@@ -111,7 +111,7 @@ class ApskSigningKey {
   factory ApskSigningKey.forPublicKey({
     required SigningAlgoType alg,
     required String pub,
-    String status = KeyEntryStatus.active,
+    KeyEntryStatus status = KeyEntryStatus.active,
   }) =>
       ApskSigningKey(
           kid: publicKeyKidOfBase64(pub), alg: alg, pub: pub, status: status);

@@ -1,6 +1,7 @@
 import 'dart:convert' show jsonEncode;
 
-import 'package:at_auth/at_auth.dart' show ApskSigningKey, apskAdvertisement;
+import 'package:at_auth/at_auth.dart'
+    show ApskSigningKey, KeyEntryStatus, apskAdvertisement;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys;
@@ -49,7 +50,12 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 /// document a verifier has to choose between with nothing to choose on.
 List<ApskSigningKey> apskEntries({
   required List<ApkamSigningKeys> signing,
-  required List<({SigningAlgoType algorithm, String publicKey, String status})>
+  required List<
+          ({
+            SigningAlgoType algorithm,
+            String publicKey,
+            KeyEntryStatus status
+          })>
       withdrawn,
   required ApkamSigningKeys? authentication,
 }) {

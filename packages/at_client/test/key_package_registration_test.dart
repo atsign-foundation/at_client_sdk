@@ -345,7 +345,9 @@ void main() {
       final registrant = TestRegistrant(buildMockClient('enroll-a'))
         ..directory = FakeEnrollmentDirectory();
       registrant.loadApkamKeys = () async => PersistedApkamKeys(encKeys: [
-            PersistedEncKey(encSeed: base64Encode(seedA), status: 'revoked'),
+            PersistedEncKey(
+                encSeed: base64Encode(seedA),
+                status: KeyEntryStatus.of('revoked')),
           ]);
 
       await expectLater(

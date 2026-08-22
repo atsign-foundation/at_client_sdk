@@ -241,7 +241,11 @@ void main() {
             publicKey: base64Encode(utf8.encode('mldsa-public-half')),
             privateKey: 'priv')
       ], withdrawn: [
-        (algorithm: SigningAlgoType.rsa2048, publicKey: pub, status: 'revoked')
+        (
+          algorithm: SigningAlgoType.rsa2048,
+          publicKey: pub,
+          status: KeyEntryStatus.of('revoked')
+        )
       ], authentication: null);
 
       expect(entries.map((e) => e.status).toList(),
@@ -265,7 +269,11 @@ void main() {
             publicKey: base64Encode(utf8.encode('mldsa-public-half')),
             privateKey: 'priv')
       ], withdrawn: [
-        (algorithm: SigningAlgoType.rsa2048, publicKey: pub, status: 'revoked')
+        (
+          algorithm: SigningAlgoType.rsa2048,
+          publicKey: pub,
+          status: KeyEntryStatus.of('revoked')
+        )
       ], authentication: null));
 
       expect(apskSigningKeys(jsonDecode(value)).map((k) => k.alg).toList(),

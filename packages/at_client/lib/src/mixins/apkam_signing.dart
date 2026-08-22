@@ -1,6 +1,6 @@
 import 'dart:async' show Completer;
 
-import 'package:at_auth/at_auth.dart' show AtKeys;
+import 'package:at_auth/at_auth.dart' show AtKeys, KeyEntryStatus;
 import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/client/request_options.dart'
@@ -264,15 +264,31 @@ mixin ApkamSigning {
   /// Empty when the client has no key source, when the read fails, or when
   /// nothing has been withdrawn — which is every enrollment until a signing
   /// key leaves the in-use set.
-  Future<List<({SigningAlgoType algorithm, String publicKey, String status})>>
-      get withdrawnSigningKeys async {
+  Future<
+      List<
+          ({
+            SigningAlgoType algorithm,
+            String publicKey,
+            KeyEntryStatus status
+          })>> get withdrawnSigningKeys async {
     final io = atClient.atKeysIo;
     final atSign = atClient.getCurrentAtSign();
     if (io == null || atSign == null) return const [];
 
     try {
       final keys = await io.read(atSign);
-      return keys.withdrawnSigningKeysFor(enrollmentId);
+      // The one place the keyfile's status vocabulary becomes the
+      // advertisement's. Both are open and they agree on `active`/`retired`;
+      // the token is carried across verbatim rather than collapsed, so a
+      // value a newer client wrote still says what it said.
+      return [
+        for (final key in keys.withdrawnSigningKeysFor(enrollmentId))
+          (
+            algorithm: key.algorithm,
+            publicKey: key.publicKey,
+            status: KeyEntryStatus.of(key.status),
+          ),
+      ];
     } on Object catch (e) {
       // warning, not info: publishing without these entries retroactively
       // unverifies every envelope the retired keys signed, and a verification

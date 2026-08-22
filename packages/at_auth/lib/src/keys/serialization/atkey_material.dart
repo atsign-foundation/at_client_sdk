@@ -136,22 +136,36 @@ abstract final class CryptographicMaterialRole {
 ///
 /// **Do not change any existing value below.** They are persisted in `.atKeys`
 /// files already on disk.
-class CryptographicMaterialStatus {
-  const CryptographicMaterialStatus._();
+extension type const CryptographicMaterialStatus._(String value)
+    implements String {
+  /// A status token read from a keyfile, whatever it says.
+  ///
+  /// Deliberately accepts anything non-empty. The type distinguishes a
+  /// keyfile status from the other String vocabularies it would otherwise be
+  /// interchangeable with; it is not a membership check, and making it one
+  /// would break the round-trip promise above.
+  const CryptographicMaterialStatus.of(String value) : this._(value);
 
   /// In use. The default when a document omits the field entirely.
-  static const String active = 'active';
+  static const CryptographicMaterialStatus active =
+      CryptographicMaterialStatus._('active');
 
   /// Withdrawn from use, kept because it is what verifies or opens what it
   /// already produced.
-  static const String retired = 'retired';
+  static const CryptographicMaterialStatus retired =
+      CryptographicMaterialStatus._('retired');
 
   /// Not adopted at all.
-  static const String dead = 'dead';
+  static const CryptographicMaterialStatus dead =
+      CryptographicMaterialStatus._('dead');
 
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set.
-  static const Set<String> known = {active, retired, dead};
+  static const Set<CryptographicMaterialStatus> known = {
+    active,
+    retired,
+    dead
+  };
 
   /// Where [status] sits in the forward order, or null when this build has
   /// never heard of it.
@@ -167,7 +181,8 @@ class CryptographicMaterialStatus {
   /// after `retired`, so callers refuse a transition involving one rather
   /// than guessing a direction. Guessing "newest is furthest forward" would
   /// let a future value silently reactivate a key its owner withdrew.
-  static int? rankOf(String status) => switch (status) {
+  static int? rankOf(CryptographicMaterialStatus status) =>
+      switch (status) {
         active => 0,
         retired => 1,
         dead => 2,
@@ -202,7 +217,7 @@ final class CryptographicMaterial {
 
   /// Whether this material is in use — see [CryptographicMaterialStatus] for the known
   /// tokens. Unknown values are preserved, never rejected.
-  final String status;
+  final CryptographicMaterialStatus status;
 
   const CryptographicMaterial({
     required this.keyId,
@@ -237,14 +252,14 @@ final class CryptographicMaterial {
       // which is what keeps a keyfile written by a newer client readable and
       // losslessly flushable here. It still has no rank, so it is never
       // selected as active and no transition may move it.
-      status: assurance.expectNonEmptyString(
-          json['status'] ?? CryptographicMaterialStatus.active, 'status'),
+      status: CryptographicMaterialStatus.of(assurance.expectNonEmptyString(
+          json['status'] ?? CryptographicMaterialStatus.active, 'status')),
     );
     return material;
   }
 
   /// A copy of this material with only [status] replaced.
-  CryptographicMaterial withStatus(String status) {
+  CryptographicMaterial withStatus(CryptographicMaterialStatus status) {
     return CryptographicMaterial(
       keyId: keyId,
       enrollmentId: enrollmentId,

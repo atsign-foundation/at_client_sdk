@@ -810,7 +810,7 @@ void main() {
     CryptographicMaterial authKey(String keyId,
             {required String enrollmentId,
             String value = 'YXV0aA==',
-            String status = CryptographicMaterialStatus.active}) =>
+            CryptographicMaterialStatus status = CryptographicMaterialStatus.active}) =>
         CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
@@ -921,7 +921,7 @@ void main() {
 
     CryptographicMaterial part(
             String keyId, String type, String algo, String value,
-            {String? enrollmentId, String status = CryptographicMaterialStatus.active}) =>
+            {String? enrollmentId, CryptographicMaterialStatus status = CryptographicMaterialStatus.active}) =>
         CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
@@ -935,7 +935,7 @@ void main() {
     List<CryptographicMaterial> signingPair(String enrollmentId, String algo,
             {int generation = 1,
             String value = 'a',
-            String status = CryptographicMaterialStatus.active}) =>
+            CryptographicMaterialStatus status = CryptographicMaterialStatus.active}) =>
         [
           part('sign:$algo:$generation',
               CryptographicMaterialRole.privateSigning, algo, '$value-priv',
@@ -1187,7 +1187,8 @@ void main() {
         // keyfile's word travels out unchanged.
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
           ...signingPair('E1', CryptographicMaterialAlgorithm.rsa2048,
-              value: 'rsa', status: 'revoked'),
+              value: 'rsa',
+              status: CryptographicMaterialStatus.of('revoked')),
           ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
               value: 'mldsa'),
         ]);

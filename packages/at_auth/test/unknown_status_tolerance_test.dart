@@ -120,7 +120,9 @@ void main() {
 
     test('may not be retired TO, either', () {
       final keys = AtKeys.fromJson(documentWith(CryptographicMaterialStatus.active));
-      expect(() => keys.retireKey('e1', 'k1', to: unknown),
+      expect(
+          () => keys.retireKey('e1', 'k1',
+              to: CryptographicMaterialStatus.of(unknown)),
           throwsA(isA<ArgumentError>()),
           reason: 'moving a key INTO a status this build does not understand '
               'is the same guess in the other direction');
@@ -135,8 +137,8 @@ void main() {
       expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.active), 0);
       expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.retired), 1);
       expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.dead), 2);
-      expect(CryptographicMaterialStatus.rankOf(unknown), isNull);
-      expect(CryptographicMaterialStatus.rankOf(''), isNull);
+      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of(unknown)), isNull);
+      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('')), isNull);
     });
 
     test('still refuses a backward move between known tokens', () {

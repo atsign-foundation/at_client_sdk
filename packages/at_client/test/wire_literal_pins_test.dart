@@ -583,15 +583,24 @@ void main() {
       // never less. `retired` was permissive on the second of these, and a
       // revoked key that goes on verifying is unrecoverable.
       for (final unknown in ['verifyOnly', 'revoked', '7', '']) {
-        expect(KeyEntryStatus.offersNewOperations(unknown), isFalse,
+        expect(KeyEntryStatus.offersNewOperations(KeyEntryStatus.of(unknown)),
+            isFalse,
             reason: '"$unknown" must never be signed with or sealed to');
-        expect(KeyEntryStatus.vouchesForPastOperations(unknown), isFalse,
+        expect(
+            KeyEntryStatus.vouchesForPastOperations(KeyEntryStatus.of(unknown)),
+            isFalse,
             reason: '"$unknown" must not verify what it signed either');
       }
-      expect(KeyEntryStatus.offersNewOperations('active'), isTrue);
-      expect(KeyEntryStatus.offersNewOperations('retired'), isFalse);
-      expect(KeyEntryStatus.vouchesForPastOperations('active'), isTrue);
-      expect(KeyEntryStatus.vouchesForPastOperations('retired'), isTrue,
+      expect(KeyEntryStatus.offersNewOperations(KeyEntryStatus.of('active')),
+          isTrue);
+      expect(KeyEntryStatus.offersNewOperations(KeyEntryStatus.of('retired')),
+          isFalse);
+      expect(
+          KeyEntryStatus.vouchesForPastOperations(KeyEntryStatus.of('active')),
+          isTrue);
+      expect(
+          KeyEntryStatus.vouchesForPastOperations(KeyEntryStatus.of('retired')),
+          isTrue,
           reason: 'retirement withdraws the future and keeps the past - a '
               'retired key still verifies every envelope it signed');
     });

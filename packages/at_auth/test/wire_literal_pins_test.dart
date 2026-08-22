@@ -541,10 +541,10 @@ void main() {
       // And the forward order, which stopped being declaration index when
       // status became an open String. It is a stated ranking now, so it is
       // pinned like any other contract.
-      expect(CryptographicMaterialStatus.rankOf('active'), 0);
-      expect(CryptographicMaterialStatus.rankOf('retired'), 1);
-      expect(CryptographicMaterialStatus.rankOf('dead'), 2);
-      expect(CryptographicMaterialStatus.rankOf('pending'), isNull,
+      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('active')), 0);
+      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('retired')), 1);
+      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('dead')), 2);
+      expect(CryptographicMaterialStatus.rankOf(CryptographicMaterialStatus.of('pending')), isNull,
           reason: 'a token this build has never seen has no position in the '
               'forward order, and must not acquire one by accident');
     });

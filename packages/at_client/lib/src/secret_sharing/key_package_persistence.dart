@@ -100,7 +100,7 @@ Future<PersistedApkamKeys?> _load(
         // says something narrower about the key than either, and flattening it
         // to `retired` here would hand this client a key its own keyfile says
         // more about than that.
-        status: material.status,
+        status: KeyEntryStatus.of(material.status),
       ),
   ];
   final retained = entries.where((e) => !e.offeredForNewOperations).toList();

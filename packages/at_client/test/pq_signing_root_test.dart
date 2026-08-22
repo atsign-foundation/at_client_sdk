@@ -87,7 +87,7 @@ void main() {
       bool publishFails = false,
       String? enrollmentId = 'enrollment-1',
       Uint8List? publishedRoot,
-      List<({Uint8List key, String status})>? publishedRoots,
+      List<({Uint8List key, KeyEntryStatus status})>? publishedRoots,
       bool rootUnreadable = false}) {
     // One entry or several. `publishedRoots` is what a record mid-rotation
     // looks like — a successor active beside its retired predecessor — and
@@ -1135,7 +1135,7 @@ void main() {
       final disowned = await MlDsa65PureDartAlgo().generateKeyPair();
       final c = client(publishedRoots: [
         (key: successor.publicKey, status: KeyEntryStatus.active),
-        (key: disowned.publicKey, status: 'revoked'),
+        (key: disowned.publicKey, status: KeyEntryStatus.of('revoked')),
       ]);
       final io = await keysIo();
       final root = PqSigningRoot(c.client, keysIo: io);

@@ -103,7 +103,8 @@ void main() {
   /// algorithm, and advertised it beside the one already in the record.
   Future<String> fileHeldKey(String algorithm,
       {bool tagged = false,
-      String status = CryptographicMaterialStatus.active}) async {
+      CryptographicMaterialStatus status =
+          CryptographicMaterialStatus.active}) async {
     final kem = SecretSharingAlgos.kemFor(algorithm)!;
     final seed = kem.newSeed();
     final pair = await kem.keyPairFromSeed(seed);
@@ -345,8 +346,8 @@ void main() {
       // two values this build knows - so a newer build marking a key, say,
       // revoked would have had an older one republish it as merely retired,
       // in the owner's own record.
-      final unreadable =
-          await fileHeldKey(SecretSharingAlgos.xWing, status: 'revoked');
+      final unreadable = await fileHeldKey(SecretSharingAlgos.xWing,
+          status: CryptographicMaterialStatus.of('revoked'));
       final live = await fileHeldKey(SecretSharingAlgos.mlKem1024);
       configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
 

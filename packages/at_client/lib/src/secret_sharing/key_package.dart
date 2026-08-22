@@ -31,7 +31,7 @@ class PackageKey {
   /// Ask [offeredForNewOperations] rather than comparing the token: that is
   /// the decision this field exists for on the sender's side, and it answers
   /// correctly for a token this build has never heard of.
-  final String status;
+  final KeyEntryStatus status;
 
   PackageKey({
     required this.use,
@@ -51,7 +51,7 @@ class PackageKey {
     required String use,
     required String alg,
     required Uint8List pub,
-    String status = KeyEntryStatus.active,
+    KeyEntryStatus status = KeyEntryStatus.active,
   }) : this(use: use, alg: alg, pub: base64Encode(pub), status: status);
 
   /// The key material [pub] encodes.

@@ -47,21 +47,26 @@
 ///
 /// **Do not change any existing value below.** They are published on records
 /// that other clients and other at_client implementations already read.
-class KeyEntryStatus {
-  const KeyEntryStatus._();
+extension type const KeyEntryStatus._(String value) implements String {
+  /// A status token read from an advertising record, whatever it says.
+  ///
+  /// Accepts anything: the type separates an advertising status from the
+  /// keyfile's [CryptographicMaterialStatus], which shares two of its spellings
+  /// and means something different. It is not a membership check.
+  const KeyEntryStatus.of(String value) : this._(value);
 
   /// Offered for new operations. The default when a record omits the field,
   /// which is how every record that has never rotated spells it.
-  static const String active = 'active';
+  static const KeyEntryStatus active = KeyEntryStatus._('active');
 
   /// Withdrawn from new operations, kept because it is what verifies or opens
   /// what it already produced.
-  static const String retired = 'retired';
+  static const KeyEntryStatus retired = KeyEntryStatus._('retired');
 
   /// The tokens this version knows about. For warn-level tooling only —
   /// never reject a value for not being in this set, and never decide with it
   /// (see [vouchesForPastOperations]).
-  static const Set<String> known = {active, retired};
+  static const Set<KeyEntryStatus> known = {active, retired};
 
   /// Reads a wire `status`. Absent is [active]; anything else is the token
   /// itself, verbatim.
@@ -81,14 +86,15 @@ class KeyEntryStatus {
   /// and it is stringified rather than repaired. That keeps it out of both
   /// [active] and [retired] — which is the answer that uses the key for
   /// nothing — and keeps what was actually written visible in a log.
-  static String fromWire(Object? value) => value == null ? active : '$value';
+  static KeyEntryStatus fromWire(Object? value) =>
+      value == null ? active : KeyEntryStatus._('$value');
 
   /// Whether [status] may be chosen for something **new** — a signer picking a
   /// key to sign with, a sender picking a key to seal to.
   ///
   /// Only [active]. Every other token, known or not, is a statement that the
   /// owner has withdrawn the key from new use.
-  static bool offersNewOperations(String status) => status == active;
+  static bool offersNewOperations(KeyEntryStatus status) => status == active;
 
   /// Whether [status] still vouches for what the key already did — verifying a
   /// stored envelope or chain link that names it.
@@ -98,6 +104,6 @@ class KeyEntryStatus {
   /// today and the wrong one the moment a value like `revoked` is added: a
   /// token joins [known] by being understood, not by being trusted, and the
   /// first token anyone adds here is likely to be one that must fail this.
-  static bool vouchesForPastOperations(String status) =>
+  static bool vouchesForPastOperations(KeyEntryStatus status) =>
       status == active || status == retired;
 }

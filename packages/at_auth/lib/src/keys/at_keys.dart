@@ -479,10 +479,10 @@ class AtKeys {
   /// Same keyId shape and same unknown-algorithm skip as [signingKeysFor]; an
   /// enrollment's other `privateSigning` material is not a signing key of its
   /// own and is not advertised as one.
-  List<({SigningAlgoType algorithm, String publicKey, String status})>
+  List<({SigningAlgoType algorithm, String publicKey, CryptographicMaterialStatus status})>
       withdrawnSigningKeysFor(String enrollmentId) {
     final withdrawn =
-        <({SigningAlgoType algorithm, String publicKey, String status})>[];
+        <({SigningAlgoType algorithm, String publicKey, CryptographicMaterialStatus status})>[];
     for (final keyId in _enrollments[enrollmentId]?.materialsByKeyId.keys ??
         const <String>[]) {
       if (!isRoleKeyId(keyId, 'sign')) continue;
@@ -536,7 +536,7 @@ class AtKeys {
   /// Withdrawing a signing key must not withdraw anything else that happens to
   /// sign.
   List<String> retireSigningKeys(String enrollmentId, String algorithm,
-      {String to = CryptographicMaterialStatus.retired}) {
+      {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) {
     final Map<String, Map<String, CryptographicMaterial>> byKeyId =
         _enrollments[enrollmentId]?.materialsByKeyId ?? const {};
     final keyIds = [
@@ -587,17 +587,17 @@ class AtKeys {
   /// retired → dead): a same-status call is a no-op and a backward transition
   /// throws, as does an unknown [keyId] or `to: CryptographicMaterialStatus.active`.
   void retireKey(String enrollmentId, String keyId,
-          {String to = CryptographicMaterialStatus.retired}) =>
+          {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) =>
       _retire(_enrollments[enrollmentId]?.materialsByKeyId, keyId, to,
           'enrollment "$enrollmentId"');
 
   /// [retireKey] for the atSign's own material — the signing root, an nskey
   /// private.
-  void retireAtSignKey(String keyId, {String to = CryptographicMaterialStatus.retired}) =>
+  void retireAtSignKey(String keyId, {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) =>
       _retire(_atSignMaterialsByKeyId, keyId, to, 'the atSign');
 
   void _retire(Map<String, Map<String, CryptographicMaterial>>? container,
-      String keyId, String to, String ownerLabel) {
+      String keyId, CryptographicMaterialStatus to, String ownerLabel) {
     if (to == CryptographicMaterialStatus.active) {
       throw ArgumentError.value(to, 'to', 'retireKey cannot reactivate a key');
     }
@@ -668,7 +668,7 @@ class AtKeys {
   /// replacing it — the predecessor is what verifies everything it signed.
   void replaceKey(String enrollmentId, String keyId,
       Iterable<CryptographicMaterial> replacements,
-      {String to = CryptographicMaterialStatus.retired}) {
+      {CryptographicMaterialStatus to = CryptographicMaterialStatus.retired}) {
     final outgoing = keysForKeyId(enrollmentId, keyId).toList();
     if (outgoing.isEmpty) {
       throw ArgumentError.value(keyId, 'keyId',

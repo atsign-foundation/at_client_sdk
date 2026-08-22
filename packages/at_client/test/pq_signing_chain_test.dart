@@ -456,7 +456,7 @@ void main() {
     Future<void> publishRotatedRoot({
       required Uint8List active,
       required Uint8List retired,
-      String retiredStatus = KeyEntryStatus.retired,
+      KeyEntryStatus retiredStatus = KeyEntryStatus.retired,
     }) async {
       remoteData['public:${PqSigningRoot.recordName}$atSign'] =
           jsonEncode(apskAdvertisement(keys: [
@@ -520,7 +520,7 @@ void main() {
       await publishRotatedRoot(
           active: successor.publicKey,
           retired: predecessor.publicKey,
-          retiredStatus: 'revoked');
+          retiredStatus: KeyEntryStatus.of('revoked'));
       await conveyRoot(child, link!);
 
       expect(await PqSigningChain(childClient).publishPendingLink(), isFalse,
@@ -561,7 +561,7 @@ void main() {
       await publishRotatedRoot(
           active: successor.publicKey,
           retired: predecessor.publicKey,
-          retiredStatus: 'revoked');
+          retiredStatus: KeyEntryStatus.of('revoked'));
 
       final result =
           await PqSigningChain(childClient).verifyChain(child, 'child-1');

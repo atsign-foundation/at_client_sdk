@@ -292,7 +292,7 @@ class KeyPackageMinting with ApkamSigning {
           // client says something narrower about the key than either, and
           // rewriting it here would republish the record with that statement
           // weakened.
-          status: material.status,
+          status: KeyEntryStatus.of(material.status),
         ));
       }
       entries.sort((a, b) {

@@ -208,7 +208,8 @@ void main() {
   String fileKeyPackage(
       AtKeys keys, ({Uint8List publicKey, Uint8List secretKey}) pair,
       {required DateTime createdAt,
-      String status = CryptographicMaterialStatus.active}) {
+      CryptographicMaterialStatus status =
+          CryptographicMaterialStatus.active}) {
     final kpid = PackageKey.computeKid(base64Encode(pair.publicKey));
     for (final (part, bytes) in [
       (CryptographicMaterialRole.publicEncapsulation, pair.publicKey),
@@ -279,7 +280,7 @@ void main() {
     final unknownKpid = fileKeyPackage(
         keys, await XWingPureDartAlgo.instance.generateKeyPair(),
         createdAt: DateTime.now().toUtc().subtract(const Duration(days: 3)),
-        status: 'revoked');
+        status: CryptographicMaterialStatus.of('revoked'));
     final liveKpid = fileKeyPackage(
         keys, await XWingPureDartAlgo.instance.generateKeyPair(),
         createdAt: DateTime.now().toUtc());
