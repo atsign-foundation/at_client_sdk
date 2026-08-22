@@ -176,7 +176,7 @@ class KeyPartStatus {
 }
 
 @Deprecated('Use CryptographicMaterial instead. This will be removed in v4')
-typedef CryptographicMaterial = CryptographicMaterial;
+typedef AtKeysMaterial = CryptographicMaterial;
 
 /// One cryptographic key material — e.g. the public half of an encryption
 /// keypair. This is the object app code interacts with everywhere in
