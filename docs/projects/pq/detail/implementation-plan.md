@@ -2480,7 +2480,7 @@ package, `dart analyze lib test` from each package directory, counted with
 
 | package | findings |
 |---|---|
-| `at_client` | 340 |
+| `at_client` | 340 *(2026-08-13 snapshot; 396 as of 2026-08-23 — see the live plan's 14.11)* |
 | `at_onboarding_cli` | 183 |
 | `at_auth` | 110 |
 | `at_lookup` | 28 |
@@ -2726,11 +2726,11 @@ and it found things the plan's own owed-tables had lost.
 Ruled 2026-08-11 by a walk through every open item
 ([`decisions.md` 93](decisions.md#93-the-d1-remaining-work-sequence-and-the-rollout-axis-becomes-real-2026-08-11)).
 This is the **order**, not the inventory — each row points at the entry that
-holds the detail. **D1 initial development runs past step 34**: it ends when
-at_auth 4.0.0 is published, the staged status value is added and step 20's
-rotation arm is green (gkc, 2026-08-23). ⚠️ This said D1 "ends at step 34, when
-the stacked PRs are merged; publishing and R-2 follow it" until then — the
-at_auth publish moved inside D1 with the rotation arm. R-2 still follows.
+holds the detail — but it is **not** what defines D1's end. **D1 ends when
+every acceptance test passes and every rail is green, the posture matrix
+included** (gkc, 2026-08-23); this sequence is the work that gets there. ⚠️ This
+said D1 "ends at step 34, when the stacked PRs are merged", then briefly that it
+ended at the at_auth publish and the rotation arm. Both are superseded.
 
 **Stage 0 — scaffolding.**
 
@@ -2861,7 +2861,7 @@ rulings 2 and 3 are amended in place.
 | 27 | ✅ **DONE 2026-08-15** — domain separation on the signed envelope, per-use `typ` plus a root-link prefix ([`decisions.md` 103](decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15)) | [14.8](#148-domain-separation-on-the-signed-envelope) |
 | 28 | NoPorts' own copy of the envelope shape | [14.7](#147-noports-carries-its-own-copy-of-the-envelope-shape) |
 | 29 | **Three** audit residuals — perf ceiling on a real low-end device, SS-4 interrupted-mint resume, IS-1 record-name drift. ⚠️ This read **four**, including UC-A3.4's live self-direction, until 2026-08-18 — 14.16's own body has marked that ✅ DONE since 2026-08-17 | [14.16](#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
-| 30 | `deprecated_member_use` findings across the workspace (340 at_client, 183 at_onboarding_cli, 110 at_auth, 28 at_lookup) | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
+| 30 | `deprecated_member_use` findings across the workspace — *2026-08-13 snapshot: 340 at_client, 183 at_onboarding_cli, 110 at_auth, 28 at_lookup. Re-measured 2026-08-23: **396 / 205 / 153 / 0**, five buckets, only bucket B is D1 work* | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
 | 31 | Pre-PR rails checklist | [14.15](#1415-pre-pr-rails-checklist) |
 
 Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128),
@@ -2995,6 +2995,18 @@ its own. None blocks anything.
    passphrase envelope. Worth a ruling rather than a patch: extending the
    self-encryption to the typed section changes the at-rest format, and the
    passphrase envelope may be the answer instead.
+
+   ✅ **RULED 2026-08-23: no extension, and the passphrase envelope is the
+   at-rest control.** Measured while ruling it, and it inverts the item's
+   significance: the four legacy fields are encrypted with `selfEncryptionKey`,
+   which `file_io.dart` reads out of **the same document** (`:187`–`:194`) and
+   `at_keys.dart` writes into it in the clear (`:1014`). Anyone holding the file
+   holds the key, so legacy self-encryption is obfuscation rather than
+   protection — the typed section is not missing anything real. Extending it
+   would change the at-rest format and buy nothing. ⚠️ **The honest residual:
+   the passphrase envelope is optional**, so an unprotected keyfile exposes
+   legacy and typed material alike. That is the same for both halves and is the
+   thing worth strengthening if anything is.
 
 9. ~~**The one-live-enrollment invariant does not hold when the enrollment id
    is absent.**~~ **FIXED 2026-08-13.** "Have I seen one" is now tracked apart
@@ -3513,8 +3525,13 @@ its own. None blocks anything.
     skip code spans and prove a positive control before any absence or any
     count it reports is worth acting on.
 
-23. **A released `version: 1` keyfile holding an empty `keys` array is now
-    refused, and nobody has named a holder.** `AtKeys.fromJson` throws on
+23. ~~A released `version: 1` keyfile holding an empty `keys` array is now
+    refused, and nobody has named a holder.~~ ✅ **CLOSED 2026-08-23** —
+    `1242cb779`/`1242cb879` narrowed the refusal to a **non-empty** array; an
+    empty one is accepted and dropped, and an empty one is exactly what
+    at_auth 3.3.0 writes on any flush. The holder question is moot either way:
+    **no production keyfile or keychain entry holds any PQ key material**
+    (gkc, 2026-08-23). The original text follows. `AtKeys.fromJson` throws on
     `containsKey('keys')` since `cb3848b4d` (2026-08-14), empty array included,
     and the refusal is deliberate and well-reasoned — parsing one would leave
     the document reading as untyped and authenticate as the *legacy*
@@ -3648,8 +3665,13 @@ its own. None blocks anything.
     "rename or delete the live test and this goes red", which is true of the
     argument and false of the prose, so the doc currently over-claims.
 
-30. **⛔ THE PLAN CONTRADICTS ITSELF ABOUT THE atSERVER IMAGE GATE, and the two
-    halves point opposite ways.** The re-derivation block in the live plan says
+30. ~~⛔ THE PLAN CONTRADICTS ITSELF ABOUT THE atSERVER IMAGE GATE, and the two
+    halves point opposite ways.~~ ✅ **CLOSED 2026-08-23 by measurement, no
+    ruling needed.** Half B's premise — "CI uses vip" — is false: the workflow
+    sets `atsigncompany/virtualenv:dev_env` at both the functional and e2e
+    jobs, and `runLocal.sh` defaults to `at_virtual_env:local`. The gate half B
+    served is the one that move settled. Half A's ruling stands, because it
+    agrees with where CI actually went. The original text follows. The re-derivation block in the live plan says
     the gate "is gkc's call and is **NOT** to be checked against
     `atsigncompany/virtualenv:vip` (ruled 2026-08-13)". SS-2's entry in this
     file says the opposite — "**Before SS-2 opens a PR**, confirm vip has been
@@ -4518,13 +4540,27 @@ stale** — that is the failure mode every "current state" table in this project
 has had, so it is stated rather than hoped for. Re-derive before acting; do not
 cite this table as evidence.
 
-**D1 initial development ends when at_auth 4.0.0 is published, the staged
-status value is added and step 20's rotation arm is green** — ruled by gkc
-2026-08-23. ⚠️ **This read "ends at step 34 — the spike carved into stacked PRs
-and merged. Publishing and R-2 follow it and are not D1" until then.** The
-boundary moved because the rotation arm stays in D1 and its chain runs through
-the at_auth publish, so the publish is now inside D1 rather than after it. R-2
-still follows D1 and is still not part of it.
+**D1 ends when every acceptance test passes and every rail is green, the
+posture matrix included** — ruled by gkc 2026-08-23. What D1 requires is that
+the acceptance set is **complete, implemented and verified**. Everything else
+is a judgement call.
+
+⚠️ **This definition moved twice on 2026-08-23 and both earlier forms are
+wrong.** It read "ends at step 34 — the spike carved into stacked PRs and
+merged. Publishing and R-2 follow it and are not D1", and then briefly "ends
+when at_auth 4.0.0 is published, the staged status value is added and step 20's
+rotation arm is green". The carve, the publishes and the rotation arm are all
+still owed and still sequenced — they are simply not what *defines* the
+boundary. R-2 still follows D1.
+
+⛔ **"All acceptance tests pass" is true today and does not yet mean what this
+definition needs.** All 69 catalogue rows read `PROVEN` (68 live, UC-C1.3
+withdrawn) and all 68 live ones have a scenario — but the rail checks
+**structure only**: that a scenario exists, that ids resolve, that counts
+match. Nothing checks that a scenario proves what its row *claims*, and
+`proves:` prose is matched against nothing. The one known overclaim, three
+clauses of UC-A2.5/UC-A2.6, was found by hand. The clause-by-clause audit is a
+D1 gate and is in the live plan's [`## TODO`](../implementation-plan.md#todo).
 
 ### 15.1 Open work — re-derive before acting
 
