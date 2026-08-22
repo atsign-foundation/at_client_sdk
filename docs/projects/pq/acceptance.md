@@ -958,7 +958,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   Verified in both directions — green against the pin, red against a PQ-capable
   image, so it cannot rot into a no-op.
   Writing it found a defect: the abort was clean but left the enrollment
-  request it had just created `pending`, one per retry. at_auth 3.4.0 denies it
+  request it had just created `pending`, one per retry. at_auth 4.0.0-rc1 denies it
   on the way out; where it cannot (a scoped parent has no `__manage`) the
   refusal says so, and the second test asserts that limit rather than hiding
   it.

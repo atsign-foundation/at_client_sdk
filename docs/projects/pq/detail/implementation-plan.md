@@ -367,7 +367,7 @@ new config (there is no `CryptoRegistry`).
 `P-1`/`pqSeal` publish gate is **already satisfied** (at_chops 3.3.0, published 2026-06-23), leaving the SS-0
 baseline (PR #2037) as its prerequisite (see [section 10](#10-cross-cutting-publish-gates-critical-path-wavesparallelism-testing)).
 
-### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **SATISFIED and PUBLISHED — at_auth 3.3.0 is on pub.dev (re-verified 2026-08-08); no residual.** Consequence: **at_auth 3.4.0 is already open** in-tree and unpublished (opened 2026-08-03, `936241d8f`), so a further at_auth change folds into that heading rather than opening a new one
+### S-1 — at_auth: extend `AtKeys` in place (additive PQ methods, deprecate legacy) + `AtKeysIo` runtime persistence (API only); publish 3.3.0 · at_auth · M — **SATISFIED and PUBLISHED — at_auth 3.3.0 is on pub.dev (re-verified 2026-08-08); no residual.** Consequence: **at_auth's next version is already open** in-tree and unpublished (opened 2026-08-03, `936241d8f`), so a further at_auth change folds into that heading rather than opening a new one. ⚠️ That heading was **3.4.0-rc1 until 2026-08-22**, when the keyfile rename made it breaking and `96025e46c` renamed it **4.0.0-rc1** — a major
 **Goal:** extend the existing `AtKeys` in place so it holds every key (per-enrollment AND per-APKAM) via
 additive PQ-safe accessors while the legacy key fields deprecate; interface-first.
 **Builds on:** at_auth `AtKeys`. Additive only; gates nothing in Wave 2.
@@ -392,8 +392,8 @@ the validateAtServer network-timeout release**; S-1 ships as **3.3.0** (Open dec
 at_chops 3.4.x prerequisite (hashing-algo barrel exports) is satisfied — 3.4.0 published 2026-07-17.
 **Publish state:** S-1 landed via PR #2047 (+ #2080 tweaks). **`at_auth 3.3.0` is published stable on
 pub.dev** — the old rc1 → stable gate is **closed**, so S-6 (consumer bumps) and SS-2's at_auth work have
-the stable version they needed to pin against. **at_auth 3.4.0 is open in-tree and unpublished**
-(`936241d8f`, 2026-08-03) carrying `CryptographicMaterialAlgorithm.mlKem1024` and the `.atKeys` passphrase-salt fix, so
+the stable version they needed to pin against. **at_auth 4.0.0-rc1 is open in-tree and unpublished**
+(`936241d8f`, 2026-08-03; the heading read 3.4.0-rc1 until `96025e46c` on 2026-08-22 made it a major) carrying `CryptographicMaterialAlgorithm.mlKem1024` and the `.atKeys` passphrase-salt fix, so
 what ON-1 adds to at_auth — `mintLegacyMaterial` — folds under that heading.
 *(This paragraph asserted the rc1 gate for five days after the heading above was corrected, and a resume
 summary copied the body rather than the heading. A superseded claim gets deleted, not left standing beside
@@ -698,7 +698,7 @@ temporarily pointed away from it.
 *Superseded progress note:* two of the six steps were landed at the time of writing:
 the keys-sourced envelope signer (`signEnvelope` / `verifyEnvelope` take key material as an
 argument, both signing mixins moved onto it, all five D1 consumers migrated), and
-`AtEnrollmentRequest.metadataBuilder` in at_auth 3.4.0. Still to do: build and sign the key
+`AtEnrollmentRequest.metadataBuilder` in at_auth 4.0.0-rc1. Still to do: build and sign the key
 package inside the callback; the four-way key-package status on `NamespaceMember`;
 `Enrollment.metadata` plus conveyance in `EnrollmentServiceImpl.approve` with the Flutter and
 CLI paths routed through it; and the live functional test over the whole chain
@@ -1007,12 +1007,12 @@ taken now because nothing written under the old form exists outside the spike.
 | **A PQ-capable client cannot tell a legacy atServer from an old peer.** Against an atServer that drops `EnrollParams.metadata`, the key package vanishes silently and the approver reads absence — which [decisions.md 20](decisions.md#20-ss-2-how-the-key-package-reaches-an-enrollment-and-how-conveyance-fires-2026-08-03) ruling 2 treats as *ordinary*, because it also means "an older client". So conveyance no-ops fleet-wide with nothing saying why. UC-B0.1 requires aborting cleanly and logging the reason; `info` returns only a version string, with no feature list to check | **RF-SRV** / UC-B0.1 |
 | **Parity across every atServer implementation for the `mldsa65` verify branch.** At least one rejects `signingAlgo:mldsa65` while *parsing* the command, so a PQ client meets an invalid-syntax error rather than an authentication failure. It already stores `signingAlgo` but never reads it, and carries no ML-DSA support — a dependency decision, not an edit | **SS-3** |
 | **D1 GA critical path, re-derived 2026-08-05 after the three-scenario re-examination** ([decisions 36](decisions.md#36-the-rollout-is-the-apps-decision-capability-markers-built-examined-and-removed-2026-08-05)–[41](decisions.md#41-the-to-define-list-2026-08-05)). **R-1 is DELIVERED, shrunk to D1-D**: `disallowLegacyEncryption` landed 2026-08-05; the marker/negotiation half was built, proven at three layers, and removed the same day; C3 deferred unbuilt. **Newly ON the GA path:** **SH-1** (M, key-material self-heal — the conveyance hole meant an enrollment created after a mint was stranded; in progress 2026-08-05) and **RF-SRV** (L, server self-enroll — every scenario's "upgrade the enrollment", was mis-filed off-path). **Re-timed:** ON-1 mints/publishes legacy material by default (decisions 37); R-2 keeps the flag flip but loses phase-4 stop-existing to a later ecosystem-gated release; B-3 phase 3's client-side stop likewise. Remaining on the GA path: **SH-1**, **RF-SRV**, **B-2** (L), **ON-1** (M), **R-2** (M), **S-3** (L). The to-define list ([decisions 41](decisions.md#41-the-to-define-list-2026-08-05)) is the authoritative open-questions ledger — 12 items with owners; **all 12 ruled 2026-08-05** ([decisions 42](decisions.md#42-the-to-define-list-ruled-2026-08-05)), so the definitions now land in their owner projects as implementation | plan |
-| **D1 GA critical path, re-derived 2026-08-04 against pub.dev and the skip counts.** Complete: P-*, S-1/S-2, SS-1a/1b/1c, **SS-2**, **SS-3**, **SS-4** (bar key transparency, parked), **B-1** incl. all chunks. Remaining on the GA path: **R-1** (L, migration machinery + `disallowLegacyEncryption` + strict mode), **B-2** (L, nskey rotation + revocation), **ON-1** (M, PQ-native greenfield onboarding), **R-2** (M, the 4.0.0 flag flip), and **S-3** (L, updatable `.atKeys`/keychain). Off the GA path: the **RF-\*** retrofit trio. Referenced only: D2-1. Separate track: IS-1. Publish gates verified against pub.dev the same day — at_client 3.14.1/3.14.0, at_commons 5.14.0/5.13.0, at_chops 3.4.2/3.4.1, at_auth 3.4.0/3.3.0 (so the old at_auth `3.3.0-rc1`→stable gate is **closed**). ⚠️ **Re-verified 2026-08-11, and two of these moved:** in-tree/published is now at_chops **3.6.0**/3.5.0 and at_commons **5.15.0**/5.14.0 | plan |
+| **D1 GA critical path, re-derived 2026-08-04 against pub.dev and the skip counts.** Complete: P-*, S-1/S-2, SS-1a/1b/1c, **SS-2**, **SS-3**, **SS-4** (bar key transparency, parked), **B-1** incl. all chunks. Remaining on the GA path: **R-1** (L, migration machinery + `disallowLegacyEncryption` + strict mode), **B-2** (L, nskey rotation + revocation), **ON-1** (M, PQ-native greenfield onboarding), **R-2** (M, the 4.0.0 flag flip), and **S-3** (L, updatable `.atKeys`/keychain). Off the GA path: the **RF-\*** retrofit trio. Referenced only: D2-1. Separate track: IS-1. Publish gates verified against pub.dev the same day — at_client 3.14.1/3.14.0, at_commons 5.14.0/5.13.0, at_chops 3.4.2/3.4.1, at_auth 3.4.0/3.3.0 (so the old at_auth `3.3.0-rc1`→stable gate is **closed**). ⚠️ **Re-verified 2026-08-11, and two of these moved:** in-tree/published is now at_chops **3.6.0**/3.5.0 and at_commons **5.15.0**/5.14.0. ⚠️ **Re-verified again 2026-08-22, and the figures above are a 2026-08-04 SNAPSHOT — do not read any of them as current.** Published now: at_commons 5.16.0, at_chops 3.6.0, at_lookup 3.6.1, at_server_status 1.1.1, at_auth 3.3.0, at_client 3.14.0. In-tree now: at_lookup 3.7.0-rc1, at_server_status 1.1.2-rc1, at_auth **4.0.0-rc1**, at_client 3.15.0-rc1. The `at_auth 3.4.0` above is the version this heading carried until `96025e46c` renamed it for the major; **no at_auth 3.4.0 was ever published or ever will be** | plan |
 | **`at_auth` 3.4.0 is open and unpublished**, and at_client now depends on `AtEnrollmentRequest.metadataBuilder`. Same masking as the at_commons row below: workspace resolution hides it, so a green build says nothing | `at_auth` |
 | ~~`at_end2end_test` has not been run since at_auth's surface changed~~ — **run 2026-08-04, green at 41 with no skips**, the same count as 2026-08-03. So neither at_auth's added surface (`EnrollmentKeyExchangeMode`, `apkamSymmetricKeyResolver`, `approvedWithMintedKey`, the grown `AtEnrollmentResponse`/`EnrollmentRequestDecision`) nor the arrival-path work regressed it — the latter mattering because that commit added work to `AtClientImpl`'s init, which every e2e test drives. All four rails now verified together: `at_client` 825/39 skipped, functional 113, e2e 43, `at_client_flutter` analyze clean | `at_end2end_test` |
 | ~~`NskeyPrivateFiling.start` is an arrival hook nothing calls~~ — **fixed 2026-08-04, and it was three defects rather than one.** The prescription recorded here — give the nskey path `PqSigningRoot.filePendingPrivate`'s store-check treatment — would have produced a second method that looks right and files nothing, because the model it was told to copy had the same defect one layer down. `SecretStore` is an in-memory map whose only populator is `PairwiseSecretSharing.sweepOnce`, and **no production code in `at_client` ever called `sweepOnce` or `startListening`** — so at client start that store is empty and the root private was never filed either. One layer lower again: `KeyPackageRegistration.register()` mints a fresh X-Wing keypair per process (`loadApkamKeys` was wired only in tests), so the running client's `kpid` was never the one its enrollment advertised and a sweep would have scanned an address nobody writes to. `collectConveyedKeyMaterial` closes all three in order — bind the key package to `AtKeys`, sweep remote, then file — and `NskeyPrivateFiling.filePending` replaces `start`/`stop`. Live-covered in `conveyed_key_collection_test.dart`, with both defects reinstated as negative controls: disabling the binding fails the kpid assertion, disabling the sweep fails both tests | `at_client` |
 | ~~**The substrate's unit fixture cannot see routing** — one map backs local storage and the atServer, so a local-first write and a remote-first one are indistinguishable by results. Routing is asserted directly instead (`putOptions`, `scanRoutedRemote`). Closing it properly means modelling sync in the fixture~~ — ✅ **CLOSED 2026-08-16.** `buildRemoteBackedMockClient` takes an optional `localData`; supply it and the two stores diverge exactly as a device's do — a local-first write lands only locally until `syncToRemote`, and a local-first read of a key only the atServer holds **misses**. Divergence is opt-in because the nine callers that predate it assert routing directly and specify the default. Proven by mutation in `remote_backed_client_routing_test.dart`: making local reads fall through to remote turns the peer-write row red | `at_client` tests |
-| **`at_client` cannot publish until every floor it declares is on pub.dev.** ✅ **The at_commons/at_chops half CLOSED 2026-08-21**, when gkc published at_commons 5.16.0 and at_chops 3.6.0 — at_client's `^5.15.0` and `^3.6.0` are both satisfied. What still gates at_client is `at_lookup: ^3.7.0` and `at_auth: ^3.4.0`, against pub.dev's 3.6.1 and 3.3.0. ⚠️ **Restated 2026-08-11:** the floors this row used to name — `^5.14.0` and `^3.5.0` — became *published* numbers holding *other* content, because trunk released both while the spike claimed them. Checking pub.dev for 5.14.0/3.5.0 and finding them live is the trap this row now exists to prevent. Workspace resolution masks the gap exactly as the publish-ordering caution warns, so a green build says nothing | `at_commons` / `at_chops` |
+| **`at_client` cannot publish until every floor it declares is on pub.dev.** ✅ **The at_commons/at_chops half CLOSED 2026-08-21**, when gkc published at_commons 5.16.0 and at_chops 3.6.0 — at_client's `^5.15.0` and `^3.6.0` are both satisfied. What still gates at_client is `at_lookup: ^3.7.0-rc1` and `at_auth: ^4.0.0-rc1`, against pub.dev's 3.6.1 and 3.3.0. ⚠️ **This cell named `^3.7.0` and `^3.4.0` until 2026-08-22** — neither was what at_client's pubspec said: at_lookup carried the `-rc1` suffix from [14.49.2](implementation-plan.md#14492-every-remaining-package-publishes-as-a-release-candidate), and at_auth had gone major. Read the pubspec, never this sentence: `grep -E '^  at_(lookup|auth|chops|commons):' packages/at_client/pubspec.yaml`. ⚠️ **And a floor being satisfiable is not the same as it being right:** at_client's `at_commons: ^5.15.0` is satisfied by pub.dev and still **too low**, because `notify_request_transformer.dart:154` calls `metadata.copy()`, which first exists in **5.16.0**. The same defect was found and fixed in at_auth during its carve. ⚠️ **Restated 2026-08-11:** the floors this row used to name — `^5.14.0` and `^3.5.0` — became *published* numbers holding *other* content, because trunk released both while the spike claimed them. Checking pub.dev for 5.14.0/3.5.0 and finding them live is the trap this row now exists to prevent. Workspace resolution masks the gap exactly as the publish-ordering caution warns, so a green build says nothing | `at_commons` / `at_chops` |
 | ~~The secret-sharing substrate has no live coverage in either pack~~ — **opened, not closed.** `secret_sharing_delivery_test.dart` now drives it live: the envelope is on the atServer by the time `sendEnvelope` returns, and a client that has never synced fetches and decrypts it from there. Both fail against the pre-fix build and nothing else does, so they detect the defect rather than merely passing. ~~**Still owed:** everything beyond envelope delivery — `pushSecretToNamespaceMembers`, the `requestSecret`/`waitForSecret` pull flow, and anything needing two real enrollments, which waits on SS-2~~ — ✅ **closed 2026-08-18, and the SS-2 clause was never right.** The pull flow runs live in `nskey_park_and_redrive_live_test.dart` and `signing_root_pull_two_enrollments_test.dart`, and **eight** functional files drive two real enrollments (`apsk_server_side_test`, `enroll_update_live_test`, `nskey_park_and_redrive_live_test`, `nskey_rotation_live_test`, `nskey_self_heal_live_test`, `nskey_self_notify_live_test`, `pkam_record_authoritative_test`, `signing_root_pull_two_enrollments_test`). Two enrollments of one atSign need APKAM, not `__ssenv`; SS-2 gates the atServer's update-put auto-notify and nothing here | `at_functional_test` |
 | ~~**The substrate's unit fixture backs local storage and the atServer with one map**, so it cannot see a local-first-vs-remote-first defect on the read side at all — which is how the `__ssenv` wake-up ordering bug survived. Fixed for the write side by asserting the put's routing directly and for the sweep by asserting the scan's, but the blind spot itself remains: any future substrate read that depends on routing is untested unless someone remembers to assert the routing rather than the result. Closing it properly means modelling sync in the fixture, so local and remote diverge and a wrong route fails on its results. The live pack now covers the two paths that matter today~~ — ✅ **CLOSED 2026-08-16.** `buildRemoteBackedMockClient` takes an optional `localData`; supply it and the two stores diverge exactly as a device's do — a local-first write lands only locally until `syncToRemote`, and a local-first read of a key only the atServer holds **misses**. Divergence is opt-in because the nine callers that predate it assert routing directly and specify the default. Proven by mutation in `remote_backed_client_routing_test.dart`: making local reads fall through to remote turns the peer-write row red | `at_client` tests |
 | ~~Real nskey minting + per-APKAM conveyance~~ — **done.** `mintAndPublish` takes a remote-first immutable `_nskeylock`, files the private into `AtKeys` **before** publishing, and publishes nothing at all if it cannot. `NskeySeeding` mints at client init across a client's authorised namespaces and conveys every held generation, reading from `AtKeys` rather than the in-memory store. `InMemoryNskeyKeyRing` remains for tests only | **SS-4** |
@@ -1023,7 +1023,7 @@ taken now because nothing written under the old form exists outside the spike.
 | ~~The bench harness `acceptance.md` says lands with B-1~~ — **built 2026-08-04**, `packages/at_client/benchmark/crypto_bench.dart`. Reports three **separately-based** groups and refuses to combine them: *per record* (what every put/get pays once a CK exists — AES-256-GCM vs the legacy AES-256-CTR path), *per (owner, namespace) conveyance* (where PQ actually costs something — X-Wing `pqSeal`/`pqOpen` vs RSA-2048 wrap, paid **once** and then covering every record in scope), and *per authentication* (the ML-DSA-65 ↔ RSA-2048 signature swap). Mixing them is what would produce a headline "PQ is N% slower" from incomparable denominators. **The desktop baseline is now recorded** in [decisions 28](decisions.md#28-the-pq-performance-budget-measured-2026-08-04) — the harness had been run when it was built, but its numbers were never written down, so the acceptance row was asking for a budget that existed nowhere a reader could find it. Headline: at the 256 B size that dominates real traffic, GCM costs **3 µs** more than CTR; the ML-DSA sign a client pays per authentication is **2.7 ms**. **The ceiling is still NOT pinned:** `acceptance.md` requires one reference *low-end* device and the recorded run is a 16-core arm64 Mac, which is the opposite. Nothing here is a regression gate — one desktop run is a baseline, not a threshold | **B-1** |
 | ~~`at_chops` `pqOpen` lets an `ArgumentError` escape~~ — **fixed in at_chops 3.4.2** (unpublished): a wrong-length secret key or KEM ciphertext now arrives as `PqOpenException(malformedEnvelope)`. `NskeyProvider`'s client-side guard stays until at_client's floor rises past 3.4.1 | `at_chops` |
 | ~~The CK cache and the owner's own nskey privates are process memory only~~ — **half of this was wrong.** Content keys are a genuine cache: the read path re-fetches the `__ck` conveyance record and re-opens it, so a restart costs a round trip, not data. The nskey private is the real exposure, and [decisions.md 21](decisions.md#21-ss-3-where-key-material-lives-and-what-the-substrate-stops-storing-2026-08-03) ruling 1 files it into `AtKeys` on arrival. **Owed:** implement that filing, plus the current-`ckKid` pointer (ruling 2) so a restart stops minting a fresh CK per destination | **SS-3** / **SS-4** |
-| ~~`B-1e` does not work~~ — **found and fixed 2026-08-04** ([decisions.md 26](decisions.md#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04)). The two-client harness exposed it on its first run: the content-key conveyance was written local-first, so it reached the recipient's atServer only via sync — 31 seconds later in the captured reproduction — while the notification went out immediately over the monitor. The receive path raised `ContentKeyUnavailableException` correctly and the dispatch loop swallowed it at `finer`, dropping the notification silently with no retry. Both notify entry points now route the conveyance remote-first (the same rule as the `__ssenv` ordering fix), and the dispatch `catch` logs at `warning`. **UC-A4.4 is met**, live-covered in `tests/at_end2end_test/test/pq/nskey_notify_test.dart` (split out of `concurrent_notify_test.dart` 2026-08-08). ~~**UC-A3.4 is NOT** — corrected 2026-08-09: both live notify tests are alice→bob, so the SELF direction (alice1→alice2) is asserted against a mock only … owed rather than blocked (#2093)~~ — ✅ **UC-A3.4's self direction is live-proven** (`tests/at_functional_test/test/nskey_self_notify_live_test.dart`, "a self notification reaches a second enrollment and decrypts"). ~~Still open, recorded in 26.3: a notification whose transform throws is gone, with nothing re-delivering it when the missing piece lands~~ — ✅ **for the case that names, closed by the park and re-drive** ([14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it), [decisions 106.5](decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16)). ⚠️ The park is typed to `NskeyPrivateUnavailableException` alone (`notification_service_impl.dart:539`), so a transform that throws anything else is still gone with nothing re-delivering it |
+| ~~`B-1e` does not work~~ — **found and fixed 2026-08-04** ([decisions.md 26](decisions.md#26-uc-a44-a-conveyance-that-loses-the-race-to-its-own-announcement-2026-08-04)). The two-client harness exposed it on its first run: the content-key conveyance was written local-first, so it reached the recipient's atServer only via sync — 31 seconds later in the captured reproduction — while the notification went out immediately over the monitor. The receive path raised `ContentKeyUnavailableException` correctly and the dispatch loop swallowed it at `finer`, dropping the notification silently with no retry. Both notify entry points now route the conveyance remote-first (the same rule as the `__ssenv` ordering fix), and the dispatch `catch` logs at `warning`. **UC-A4.4 is met**, live-covered in `tests/at_end2end_test/test/pq/nskey_notify_test.dart` (split out of `concurrent_notify_test.dart` 2026-08-08). ~~**UC-A3.4 is NOT** — corrected 2026-08-09: both live notify tests are alice→bob, so the SELF direction (alice1→alice2) is asserted against a mock only … owed rather than blocked (#2093)~~ — ✅ **UC-A3.4's self direction is live-proven** (`tests/at_functional_test/test/nskey_self_notify_live_test.dart`, "a self notification reaches a second enrollment and decrypts"). ~~Still open, recorded in 26.3: a notification whose transform throws is gone, with nothing re-delivering it when the missing piece lands~~ — ✅ **for the case that names, closed by the park and re-drive** ([14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it), [decisions 106.5](decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16)). ⚠️ The park is typed to `NskeyPrivateUnavailableException` alone (`notification_service_impl.dart:539`), so a transform that throws anything else is still gone with nothing re-delivering it |
 | An enrollment authorised for one namespace must be unable to **decrypt** another's nskey data, not merely unable to fetch it. Not testable yet and deliberately not written: nskey privates are per-ring in-memory until the substrate conveys them, so a second enrollment cannot decapsulate anything at all — the crypto half of the assertion would pass vacuously while the test read as covering it | **SS-4** |
 | ~~The notify **receive** half has no live coverage~~ — **closed 2026-08-04.** It did need harness work rather than a test, and the lever was `AtClientManager`'s public constructor: one manager per atSign, each owning its own client, `notificationService` and `syncService`, with `AtClientImpl`'s cache keyed by atSign so two *different* atSigns never collide. `ConcurrentClients` (`lib/src/concurrent_clients.dart`) plus `concurrent_notify_test.dart` now show a monitor on bob receiving and **decrypting** what alice sent, live — the existing `notify_test.dart` had worked around the limitation by switching atSigns and polling `notifyList`, which reads the atServer's queue and exercises neither the monitor nor decryption. Negative control run: reinstating the singleton fails with `@alice stopped=true` from `open`'s own guard. **The constraint to respect:** while a `ConcurrentClients` is open, nothing may call `getInstance().setCurrentAtSign` for either atSign — the cached `AtClientImpl` would be handed a fresh `notificationService`, and the symptom is a subscription that never fires, which reads as a product defect | `at_end2end_test` |
 | ~~Rename the atSign-level key in code, delete the `root-pqpublickey` variant~~ — **done.** `NskeyRecipientKind` has one member; no Dart source says `pqpublickey`; the cold-start throw now states why there is no PQ target rather than promising a fallback | **B-1c** |
@@ -1655,7 +1655,7 @@ it, and a rail checks the value reaches a client rather than a parser.
 
 ### ON-1 — PQ-native greenfield onboarding + legacy-interop opt-out · at_client, at_client_flutter · M — **ACCEPTANCE COMPLETE 2026-08-08** ([decisions 52](decisions.md#52-on-1-a-greenfield-atsign-starts-where-a-retrofit-ends-2026-08-08))  *(critic gap — UC-A1.1; amended by decisions 37)*
 **Landed:** `pqNativeOnboard` (at_client) over `AtOnboardingRequest.signingAlgoType`
-+ `mintLegacyMaterial` + `metadataBuilder` and a PQ-native mint (at_auth 3.4.0).
++ `mintLegacyMaterial` + `metadataBuilder` and a PQ-native mint (at_auth 4.0.0-rc1).
 **UC-A1.1 is green live** — the ML-DSA APKAM re-authenticates on a fresh
 connection with no RSA APKAM in existence. Backlog
 [14.1](#141-the-signing-roots-keys-shape--deadline-the-first-root-we-keep) was
@@ -1750,7 +1750,7 @@ and the namespace-less case named there — a legacy recipient's `shared_key.*` 
 never reaches the refusal at all
 ([14.33](#1433-closed-the-shared_key-refusal-was-never-reachable)). The one
 genuine instance is a key-construction bug in `NotificationService.send()`
-([14.35](../implementation-plan.md#1435-notificationservicesend-throws-away-the-namespace-it-was-given)).
+([14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given)).
 
 ⚠️ **The "dead-code removal" bullet was wrong on both halves** and is dropped.
 (a) The two `package:encrypt` files are live production code, not leftovers:
@@ -2608,8 +2608,16 @@ enrollment record carries.
 
 ### 14.15 Pre-PR rails checklist
 
+✅ **NOTHING OWED, since 2026-08-10.** The single item is struck below. What
+remains is the external gate — the published atServer image verifying ML-DSA
+PKAM — and that is **step 32's blocker**, not a checklist entry. ⚠️ This section
+sat in the TODO table until 2026-08-18 because its opening read as a condition
+rather than a status, which also put the done marker outside the window the new
+TODO-row guard reads.
+
 No PR opens against this branch until the published atServer image verifies
-ML-DSA PKAM (owner's call, 2026-08-08). One thing must still be true by then:
+ML-DSA PKAM (owner's call, 2026-08-08). The one thing that had to be true by
+then:
 
 > ~~The functional pack's compose hardcodes a local image, so CI's
 > `docker compose pull` kills the job~~ — **done, verified 2026-08-10.** All
@@ -2627,6 +2635,7 @@ ML-DSA PKAM (owner's call, 2026-08-08). One thing must still be true by then:
    `AT0010-Exception: RangeError (length): Invalid value: Not in inclusive range 0..47: 48`
    from `AtLookupImpl.pkamAuthenticate` — that signature means the image, not
    the client.
+
 
 ### 14.16 Four residuals the issue-tree audit surfaced, 2026-08-09
 
@@ -2676,7 +2685,7 @@ place (the layer-3 AAD literal, and UC-A3.4 below).
    outruns its key — ⚠️ **which is no longer dropped**: 14.30 shipped the park
    and re-drive
    ([decisions 106.5](decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16),
-   [14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it)),
+   [14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it)),
    and this line said "still dropped" until 2026-08-18. It is held until the
    generation it needs is filed, bounded by `maxParked`/`parkTtl` with every
    eviction logged at `warning`.
@@ -3143,7 +3152,7 @@ parallel work for five days after it was finished. Issue states verified with
 | 34 | ← D1 initial development complete here |
 
 Then, as the release programme rather than development: publish at_chops 3.6.0
-→ at_commons **5.16.0** → at_auth 3.4.0 → at_client's GA minor, and finally
+→ at_commons **5.16.0** → at_auth **4.0.0-rc1** → at_client's GA minor, and finally
 **R-2**, the 4.0.0 posture flip. (⚠️ this said at_commons **5.15.0** until
 2026-08-13, a version already on pub.dev; the in-tree in-progress heading is
 5.16.0. Check pub.dev against every touched pubspec before acting on this
@@ -3464,7 +3473,7 @@ its own. None blocks anything.
 
     ⚠️ **And its resolution has since been superseded in the reader's favour.**
     Ruling 102 accepted the multi-writer window as documented-and-healing. On
-    2026-08-17 [14.32](../implementation-plan.md#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers)
+    2026-08-17 [14.32](#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers)
     re-opened that ruling deliberately, measured the window actually costing a
     clobber — four writes to `_apsk.primary` ending on bare RSA — and closed it
     in code by serialising the in-process writers
@@ -4193,7 +4202,7 @@ twice. Within each, the reader before the writer.
 | A1 | ✅ **DONE 2026-08-14.** `CryptographicMaterial`/`AtKeys` parse+encode moved to `enrollments[]` and `atsignKeys[]`; keyIds normalise to `<role>:<algo>:<gen>` and drop the embedded enrollment id; `status` stays explicit; `CryptographicMaterial` keeps `enrollmentId` in memory, populated from the container. The accessors split by scope per [`decisions.md` 100](decisions.md#100-the-seven-shapes-ruling-99-left-open-2026-08-14) ruling 2 — every one of the six production call sites outside at_auth was atSign-scope. `activeEnrollmentId` is gone, replaced by `enrollmentIds` / `authenticatableEnrollmentIds` / `resolveAuthenticatingEnrollment()`, which throws rather than picking when several qualify. **Two things the suites caught that reading did not:** the key-package pairing collected public halves document-wide, so under `(enrollment, keyId)` one enrollment's published address could vouch for another's private half; and an rsa2048 retrofit files under `auth:rsa2048:1`, which a blanket rename to `auth:mldsa65:1` got wrong. A `version: 1` document carrying a top-level `keys` is now refused **by name** — a judgement this row made, not a ruling: `keys` is no longer reserved, so parsing one would sweep its material into `metadata` and authenticate from the flat block as the legacy enrollment. Rails: at_auth **298/298**, at_client **1265** (2 skipped), acceptance **57** (2 skipped), at_onboarding_cli **39/39** | Everything else files material. This is the container |
 | A2 | ✅ **DONE 2026-08-14.** The single-active-authentication rule moved from `validateKeyMaterials` (read) to a new `AtKeysAssurance.refuseSecondLiveEnrollment` (write), which only `AtKeys.addKey` calls. **The rule had to be moved, not deleted, and the reason the reader inherited it is worth keeping:** `fromJson` built the document by calling `addKey` for every material, so read and write validation were literally the same code path. A private `AtKeys._parsed` now files through `_file` — the structural invariants without the write-only policy. The refusal also got stricter where it moved: it is owner-agnostic and algorithm-agnostic, so one enrollment holding `auth:rsa2048:1` and `auth:mldsa65:1` both active is refused, which the per-(role, algorithm) rule structurally cannot see. Pinned in `plural_enrollments_test.dart` — reads, round-trips both enrollments on flush, refuses to name one, serves a caller that names its own, and the write path still refuses. **Proven by mutation**: making `_parsed` file through `addKey` again turns exactly the four read-tolerance tests red and leaves the writer-refusal test green. Rails: at_auth **304/304**, at_client **1265** (2 skipped) | Reader-first. A reader that refuses a second entry makes plurality unenableable later — the `.single` lesson |
 | A3 | ✅ **DONE 2026-08-14.** Seven generated keyfiles carrying the old typed shape were deleted from `tests/at_functional_test/test/testData/` (`@colin`, `@jeremy`, `@xavier`, `rf2b-legacy`, `rf2b-t1`, `rf2b-t5`, `rf2d-posture`); all seven were untracked and regenerable. **The correction below held exactly**: the two tracked fixtures, `@alice🛠_key.atKeys` and `@bob🛠_key.atKeys`, are legacy-flat with no `version` at all and parse unchanged. ⚠️ **Corrected 2026-08-14:** an earlier draft of this row said the *tracked* fixtures are version-1 old-typed and become unreadable. They are not — and `build_test_atkeys.dart` files no typed material. Only keyfiles a *live retrofit* produced carry the old typed shape, and those are generated, not tracked. ⚠️ **All seven are back on disk, and that is the proof rather than a regression**: the functional run that followed regenerated them in the NEW shape (`version: 1`, `enrollments[1]`, no top-level `keys`), which is the container being written and read by production code against a real atServer |
-| B2 | ✅ **DONE 2026-08-14 — and it moved ahead of B1, see the note below this table.** `apskEntries` now advertises the active signers plus the enrollment's **retired signing keys**, and the APKAM authentication key only while it *is* the signer — never retained. A new `AtKeys.retiredSigningKeysFor` supplies the retired entries **public-only** (a retired key must never sign again) and does **not** require the private half to still be present, so a build that wipes withdrawn private material cannot silently withdraw the advertisement with it. Selected on exactly `CryptographicMaterialStatus.retired`: `dead` was never adopted, and an unknown status is skipped rather than guessed at. ⚠️ **The last of those was reversed on 2026-08-22** — the method is now `withdrawnSigningKeysFor`, selects on not-active-and-not-`dead`, and carries the keyfile's token out with each key; skipping an unknown status withdrew the key from a record that is rewritten whole, and the open `KeyEntryStatus` removed the reason for it ([14.49.1](../implementation-plan.md#14491-keyentrystatus-becomes-a-typed-string-wrapper--done-2026-08-22)). Reached through a new `ApkamSigning.retiredSigningKeys` (now `withdrawnSigningKeys`), which — unlike `heldSigningKeys` — is **not** filtered by `canSignEnvelopeWith`, since these entries exist for *other* parties to verify with and dropping one on a fact about the publisher would unverify its envelopes for every reader that could have handled them. `SigningKeyMinting._publish` re-reads them rather than assuming none, because that publish rewrites the whole record. **Proven by two symmetric mutations**: gutting `retiredSigningKeysFor` to empty reddens exactly the two retained-signing-key tests, and removing the dedup reddens exactly the third. Rails: at_auth **304/304**, at_client **1268** (2 skipped), acceptance **57** (2 skipped), functional **163/163** — the last one being the only thing that could say a live advertisement still reads | Must precede any writer that mints a signing key, or rollout 1 publishes an array |
+| B2 | ✅ **DONE 2026-08-14 — and it moved ahead of B1, see the note below this table.** `apskEntries` now advertises the active signers plus the enrollment's **retired signing keys**, and the APKAM authentication key only while it *is* the signer — never retained. A new `AtKeys.retiredSigningKeysFor` supplies the retired entries **public-only** (a retired key must never sign again) and does **not** require the private half to still be present, so a build that wipes withdrawn private material cannot silently withdraw the advertisement with it. Selected on exactly `CryptographicMaterialStatus.retired`: `dead` was never adopted, and an unknown status is skipped rather than guessed at. ⚠️ **The last of those was reversed on 2026-08-22** — the method is now `withdrawnSigningKeysFor`, selects on not-active-and-not-`dead`, and carries the keyfile's token out with each key; skipping an unknown status withdrew the key from a record that is rewritten whole, and the open `KeyEntryStatus` removed the reason for it ([14.49.1](#14491-keyentrystatus-becomes-a-typed-string-wrapper--done-2026-08-22)). Reached through a new `ApkamSigning.retiredSigningKeys` (now `withdrawnSigningKeys`), which — unlike `heldSigningKeys` — is **not** filtered by `canSignEnvelopeWith`, since these entries exist for *other* parties to verify with and dropping one on a fact about the publisher would unverify its envelopes for every reader that could have handled them. `SigningKeyMinting._publish` re-reads them rather than assuming none, because that publish rewrites the whole record. **Proven by two symmetric mutations**: gutting `retiredSigningKeysFor` to empty reddens exactly the two retained-signing-key tests, and removing the dedup reddens exactly the third. Rails: at_auth **304/304**, at_client **1268** (2 skipped), acceptance **57** (2 skipped), functional **163/163** — the last one being the only thing that could say a live advertisement still reads | Must precede any writer that mints a signing key, or rollout 1 publishes an array |
 | B1 | ✅ **DONE 2026-08-14, together with D2 — see below.** `SigningRollout` gained `defaultRetrofitAuthenticationAlgo` (`now` → `rsa2048`, `rollout1`/`rollout2` → `mldsa65`) and its in-use sets became `{}` / `{rsa2048}` / `{mldsa65}`. `retrofitSigningAlgo` is renamed `retrofitAuthenticationAlgo` **and is now a derived getter**, so both named constructors lost an argument — [98](decisions.md#98-rollout-1-moves-the-authentication-key-not-the-signing-key-2026-08-14) ruling 6, "two stored fields would be two controls over one position". **One defect this surfaced:** `selfRetrofit` read `preference.posture.retrofitSigningAlgo`, i.e. the *posture's* stage, so an app setting `signingRollout: rollout1` beside a migration posture would have retrofitted under `now`'s algorithm and said nothing. It now reads `preference.signingRollout`, which is the effective stage. Rails: at_client **1269** (2 skipped), functional **163/163** | 98's stages are defined here. Everything downstream reads them |
 | B3 | ✅ **DONE 2026-08-14, both halves.** `selfRetrofit` mints a fresh RSA-2048 signing keypair before submitting and hands it to both the request and the key-package builder; at_auth advertises it as `apskLegacy` (bare), files it under `sign:rsa2048:1`, and signs the key package with it per [98.3's amendment](decisions.md#983-where-the-signing-key-comes-from). The seam is an explicit `EnrollmentRequest.advertisedSigningKey`, supplied by the caller because holding a signing key is a rollout position and at_auth cannot see a preference; absent, every path behaves as before, which is what keeps `now` unmoved. `SigningRollout.mintsOwnSigningKey` derives from the in-use set being non-empty rather than being listed again. **The greenfield-onboard half followed the same shape**: `makeActivationPqNative` mints the rsa2048 signing keypair, sets it on `AtOnboardingRequest.advertisedSigningKey` **and** hands the same pair to the key-package builder; `AtAuthImpl` carries it into `FirstEnrollmentRequest` and files it after the atServer assigns an id. **Proven by six mutations in all, each reddening only its own tests**: in the retrofit half, ignoring the advertised key in `_apskFor`, dropping the filing, and signing the package with the APKAM key; in the onboard half, dropping the request field, which reddens all three onboard pins. Rails: at_auth **307**, at_client **1273** (2 skipped), functional **163/163** | ⚠️ **B3 is one commit, not two.** Splitting it publishes an ML-DSA array at enrollment creation — the breakage rollout 1 exists to prevent, landing on peers who cannot fix it |
 | B4 | ✅ **DONE 2026-08-14.** The role is recorded on `SigningKeyMinting` itself — what reaches it is an enrollment created before enrollment-time minting, or a client whose in-use set has changed since the last start — and the defect this row was carrying is fixed. **The defect, measured rather than read before it was fixed:** the heal path always published the **array**, because `_publish` sent `EnrollmentUpdateRequest(signingKeys: …)` with no branch and `EnrollmentUpdater` prefers `signingKeys` over `apskLegacy`. A rollout-1 client healing a pre-B3 enrollment therefore advertised a one-entry JSON array where [98.1](decisions.md#981-the-stages) requires the bare RSA string every deployed consumer base64-decodes — the breakage rollout 1 exists to prevent, arriving from the second writer while the first one obeyed the rule. The bare-versus-array rule now has **one** definition, `bareApskValueOf`, and the enrolled path uses it to choose which *field* carries the advertisement. Pinned in both directions: a mutation making everything bare reddens 7 rows, and the row for the bare form was written first and watched fail. ⚠️ **Whether the atServer honours `apskLegacy` on an `enroll:update` was a claim about the server, not the client** — it had only ever been sent on the enrolment request — so it is measured live in `tests/at_functional_test/test/apsk_server_side_test.dart`, "a healed enrollment advertises its signing key in the bare form", which drives the real writer and reads the record back with a control proving the enrollment held no signing key beforehand | Follows B3 |
@@ -5014,7 +5023,7 @@ nothing reads a project entry when a test goes green.
 
 ### 14.33 CLOSED: the `shared_key.*` refusal was never reachable
 
-Raised by [14.31](../implementation-plan.md#1431-a-refused-watermark-write-permanently-disables-the-monitor)
+Raised by [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor)
 as the remaining half of what 70.1 observed, and recorded in the TODO table as
 "the genuine remaining R-2 blocker". It was neither.
 
@@ -5045,10 +5054,10 @@ exactly two call sites (`crypto_runtime.dart:44` and
 `put_request_transformer.dart:73`), and neither is ever handed a `shared_key.*`
 key; the pin in `disallow_legacy_encryption_test.dart` hand-built one. It has
 been re-pointed at a key the SDK genuinely produces — see
-[14.35](../implementation-plan.md#1435-notificationservicesend-throws-away-the-namespace-it-was-given).
+[14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given).
 
 **What is genuinely refused** is `NotificationService.send()` with a
-single-segment namespace, which is [14.35](../implementation-plan.md#1435-notificationservicesend-throws-away-the-namespace-it-was-given)
+single-segment namespace, which is [14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given)
 — a key-construction bug in one method, not a gap in the scheme.
 
 **Consequence for R-2:** no client-side blocker remains. The gates that do stand
@@ -5062,3 +5071,1663 @@ atSign is.
 ⛔ **Do not re-open this on the grounds that `shared_key.*` is namespace-less.**
 It is; that is not the question. The question is whether anything routes it
 through the refusal, and nothing does.
+
+
+## 16. Demoted from the live plan, 2026-08-22
+
+These sections closed and were moved here whole, leaving a one-line row in
+the live plan's `## DONE` table. Nothing was summarised away: demotion
+follows completion, never length, and the reasoning behind a closed item is
+the part a later reader needs. Their anchors are unchanged, so a link that
+used to reach them in the live plan now reaches them here.
+
+### 14.30 A content notification can outrun the key that opens it
+
+Found 2026-08-16 writing UC-A3.4's self direction live
+([decisions 106](decisions.md#106-a-notification-that-outruns-its-key-is-dropped-not-parked-2026-08-16)).
+A notification whose decryption needs an nskey private the receiver has not yet
+**filed** is **dropped and never retried**, while the private is filed a
+fraction of a second later and the envelope stays on the atServer for
+`envelopeTtl`.
+
+**Cause, measured 2026-08-17.** The push is built and on time: approval conveys
+the private (`EnvelopeEnrollmentConveyance`), and the receiver reads and deletes
+both of its `__ssenv` envelopes. What is missing is the **wait** — `AtClientImpl`
+fires `unawaited(_pqBootstrap!.startup())`, and
+`PqClientBootstrap._collectConveyedKeys` (*"the only route by which a conveyed
+nskey private reaches the keyfile"*) is that startup's second step. A client is
+handed to its caller before its conveyed privates are filed. Drop at `12.703`
+with `no nskey private held`; the ring's read-miss self-heal fired at `12.819`,
+**116 ms too late**.
+
+✅ **RULED 2026-08-17 (gkc), and BUILT** — see
+[106.5](decisions.md#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17).
+Direction 2 was not taken on its own: awaiting `startupComplete` closes only the
+startup window, and a private conveyed while the client is already running still
+races.
+
+**What shipped.** `NskeyPrivateUnavailableException` carries
+`(owner, namespace, nskeyKid)` so the park has a key that is not a message
+string; `SignalsPrivateFiling` — implemented by `PublishedNskeyKeyRing`,
+emitting from `NskeyPrivateFiling` **after** the material is readable — is what
+releases it; `CryptoConfig` now carries the `keyRing` so the notification
+service can reach the signal without depending on which providers are
+registered. The park is bounded by `maxParked` and `parkTtl`, and every
+eviction logs at `warning` naming the notification, because a held message
+nothing re-drives is the same data loss with a longer fuse.
+
+Unit cover: `notification_park_test.dart` — five rows, including the two
+controls that keep it honest (a failure no filing can fix is dropped rather
+than parked, and a filing for a *different* generation releases nothing).
+Removing the park reddens three of them, each quoting its own reason.
+
+**Four vacuous live attempts preceded the proof below, and they are kept because
+each one is a trap worth not re-entering.** ⚠️ This paragraph used to end "Not
+proven live, and a live proof needs something that does not exist yet" — that
+was true when written and is now false; the whole chain is proven live, further
+down. What the attempts establish:
+
+1. **Minting the nskey *after* the enrollments** — intended to leave the
+   receiver without the private. It leaves the *sender* without a published
+   nskey too, so the send falls back to `legacy`, the receiver opens it
+   trivially, and the run is green with the park never entered.
+2. **Minting before, and not awaiting the receiver's `startupComplete`** — the
+   originally measured shape. Still green with `parkedTotal == 0`: the test's
+   own positive control (waiting for the monitor's stats notification to prove
+   the monitor is live) takes seconds, and the receiver's startup finishes
+   inside it. **The setup closes the very gap the test exists to open.**
+
+The window is ~116 ms and sits between an `unawaited` startup's second step and
+a notification, so no arrangement of ordinary test setup reliably lands inside
+it. ⚠️ **Both runs would have been recorded as live proof but for
+`NotificationServiceImpl.parkedTotal`**, a cumulative counter added precisely so
+that "it arrived" cannot be mistaken for "it was parked and released".
+
+3. **A `holdBeforeStore` seam on `NskeyPrivateFiling`**, so the window is held
+   open rather than raced. ⚠️ This entry used to end "reverted unexercised …
+   committing it would have added a test affordance to production crypto that no
+   test uses". It **was** reverted at the time, for that reason — and once the
+   `legacy` cause below was found it went back in and is now exercised by the
+   live row (`nskey_private_filing.dart`, used at the live test's hold). The
+   seam is in the tree; only the attempt that could not use it was discarded.
+4. **Reordering so the receiver enrols before the second namespace is minted
+   and the sender after** — on the hypothesis that `currentPublic` being
+   local-first hid the new namespace from the sender. Also still legacy.
+
+✅ **THE PARK IS PROVEN LIVE**, in
+`tests/at_functional_test/test/nskey_park_and_redrive_live_test.dart`. A real
+notification, sealed `at/nskey/XWING/AES/GCM` to a generation the receiver
+genuinely does not hold, is **held rather than dropped**:
+
+```
+Parked notification @alice🛠:parked….nskeyparkb…
+```
+
+The window is made deterministic by `NskeyPrivateFiling.holdBeforeStore`, a
+test-only hook: the race is ~116 ms wide and four earlier attempts to catch it
+by timing all passed while never entering the park.
+
+⛔ **What made those four vacuous, so nobody repeats them.** The era default is
+`readsNskeyWritesLegacy` — it reads the nskey path and **writes legacy** — so a
+`notify` that does not pass `cryptoProviderId: symmetricAesGcmCryptoProviderId`
+goes out legacy and the park is never reached. UC-A3.4's test passes it on one
+line. Four live runs were spent not reading that line; one grep would have
+answered it. The other dead ends: minting the nskey after the enrollments
+(starves the sender too), and installing the hold after the second namespace is
+minted (the receiver has already filed by then).
+
+**Two real defects fell out of the live work, both invisible to unit tests:**
+
+1. **The filing signal resolved the wrong config.** `_listenForFilings` read
+   `getPreferences().crypto.keyRing` — the *raw* preference. An app that names
+   no config gets the era default, whose ring the PQ bootstrap supplies, so the
+   read found null and the service silently subscribed to nothing. Now via
+   `CryptoConfig.forClient`, re-attempted at park time because the bootstrap
+   wires the ring asynchronously. Unit tests set `crypto` explicitly, which is
+   the one case where the raw read happens to work.
+2. **Every client held TWO `NskeyPrivateFiling` objects.**
+   `collectConveyedKeyMaterial` built its own unconditionally, so the object
+   that actually files conveyed privates was not the one the ring exposes.
+   Harmless while filing was write-only — both wrote the same keyfile — but the
+   moment a filing gained an observable event, the emitter was unreachable.
+   Measured: `hasListener=false` on the announcing object while three clients
+   had each subscribed successfully to a different one. The bootstrap now passes
+   `ring:` through and the sweep files through the ring's filing.
+
+✅ **THE WHOLE CHAIN IS PROVEN LIVE.** The run shows it end to end:
+
+```
+Parked notification @alice🛠:parked…
+handleRequest kind=request          (the holder sees and answers the ask)
+Filed the nskey private nskeyparkb…:__nskey.b195…
+re-driving 1 parked notification(s)
+```
+
+and the notification is delivered **decrypted**. Getting there took three more
+defects, none of which a unit test could reach:
+
+1. **`PairwiseSecretSharing.startListening()` had no production caller**, and
+   `_handleRequestPayload` — which answers another enrollment's request — is
+   reachable **only** from `sweepOnce`. So a client's only sweep was the one at
+   its own start, a request arriving later was seen by nobody, and **no
+   read-miss self-heal could complete for anyone**. `PqClientBootstrap` now
+   starts the listener and `stop()` tears it down.
+2. **A declined request returned silently.** A holder that refused logged
+   nothing, so "nobody answered" was indistinguishable from "everybody
+   declined". Now `warning`, naming both sides. Fixing the instrument first is
+   what made the next step findable.
+3. **The read-miss heal asked and never filed the answer.** This is the one that
+   mattered. `_askForMissingPrivate`'s dartdoc claimed *"the answer is filed by
+   the arrival path so a later read finds it"* — and **there is no such arrival
+   path mid-session**: nothing subscribes to `receivedSecrets` to file an nskey
+   private, and `NskeyPrivateFiling.filePending` says so itself (*"a private
+   that arrives after this runs is filed at the next start"*). Two dartdocs in
+   one subsystem contradicted each other and the ring's was wrong. The heal now
+   waits for the answer and files it, exactly as the startup path already did.
+
+⛔ **What made four earlier live attempts vacuous, so nobody repeats them.** The
+era default is `readsNskeyWritesLegacy` — it reads the nskey path and **writes
+legacy** — so a `notify` without
+`cryptoProviderId: symmetricAesGcmCryptoProviderId` goes out legacy and the park
+is never reached. UC-A3.4's test passes it on one line. Also dead: minting the
+nskey after the enrollments (starves the sender too), and installing the filing
+hold after the second namespace is minted (the receiver has already filed).
+
+The window is made deterministic by `NskeyPrivateFiling.holdBeforeStore`; it is
+~116 ms wide and every attempt to catch it by timing passed while never entering
+the park. `parkedTotal` is asserted so a run that wins the race cannot pass
+quietly.
+
+### 14.31 A refused watermark write permanently disables the monitor
+
+`Monitor.stayConnected` calls `getLastNotificationTime()` **before** issuing
+`monitor:`, and its first-call branch **writes** a seed record
+(`local:lastreceivednotification.<ns>@<atSign>`). Under
+`disallowLegacyEncryption` that put throws `LegacyEncryptionRefusedException`,
+the exception escapes to the connect handler, and the monitor closes and
+retries with backoff — **forever**. The client is silently deaf. The same
+refusal hits `lastreceivedservercommitid`, the sync watermark.
+
+That these writes are refused is **already known and owed to R-2** —
+`PqPosture.pqActive`'s own dartdoc names "the sync and notification
+watermarks" among them. What is new is the blast radius: one refused internal
+write does not fail one write, it takes the notification listener out
+altogether.
+
+**Measured** on `nskey_self_notify_live_test.dart` at `56f69577a`, three arms,
+same rig:
+
+| arm | `refusing to encrypt` | test |
+|-----|----------------------|------|
+| both enrollments `migration` | 0 | pass |
+| receiver `postQuantum` | 10 | pass |
+| both `postQuantum` | 18 | fail |
+
+⚠️ The receiver-only pass is timing luck — ten refusals happened in it too. It
+is not evidence that one PQ client is safe.
+
+⛔ **Not PKAM**, which is where three earlier guesses went. Every enrollment
+authenticates `rsa2048` under both postures, with no signing-algorithm
+resolution warnings: `signingAlgoOf` prefers the key-material resolution, and
+the posture moves the *signing* key, never the authentication key.
+
+✅ **DONE 2026-08-17.** It was six related defects, not one, and the diagnosis
+above named the symptom rather than the cause. Ruling
+[107](decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17)
+carries the measurements; what shipped:
+
+1. **A `local:` record no longer goes through the shared-data crypto path.**
+   `_putInternal` and `PutRequestTransformer` skip it on `atKey.isLocal`. Such a
+   record is never synced and the keystore encrypts it at rest, so value-level
+   encryption protected nothing — while every post-quantum provider declines a
+   local key, making *every* local write a legacy write by construction.
+2. **`disallowLegacyEncryption` exempts `isLocal`.** It was refusing a provider
+   **id**, not an exposure: for these keys "legacy" is `SelfKeyEncryption`,
+   AES-256-CTR under a key that never leaves the device. A *synced* self key
+   reaches the same class and is deliberately still refused.
+3. **The SDK's own watermark writes pass `shouldEncrypt = false`** — the third
+   layer, matching how the refusal is already checked at both selection and
+   encryption time.
+4. **`Monitor` no longer dies from it.** The watermark read has its own guard
+   rather than sitting inside the connect `try` alongside four other
+   operations, and a connect failure that is not a `SocketException` logs at
+   `warning`, not `info`.
+5. **The sync watermarks are guarded, and no longer mask.** The pull cursor is
+   written in a `finally`, where a throw *replaces* the in-flight exception —
+   so a failed cursor write was reported instead of whatever broke the sync.
+   Extracted as `persistPullCursor`, whose contract is that it never throws.
+6. **The notification watermark drops the payload and the metadata blob.** All
+   twelve fields were stored and one is read. Older records still read back
+   unchanged, so nothing migrates.
+
+**Rails at the fix:** at_client unit **1386 (2 skipped)**, `dart analyze lib
+test` exit 0 / 351 info, `dart analyze test` in `at_functional_test` exit 0 /
+193 info. Twelve new tests, each with its break-it mutation run and confirmed
+red *for its own stated reason*.
+
+⚠️ One of those mutations found a defect in the tests rather than the product:
+guarding `setAndGetSkipDeletesUntil` made a **stub-arity mismatch invisible** —
+`sync_service_test.dart` stubbed `put(any(), any())` while production had begun
+passing `putRequestOptions:`, so mocktail returned null, the write failed, the
+new guard swallowed it, and the test reported success while persisting nothing.
+It now verifies the call and its arguments.
+
+⚠️ **This section used to claim a second half was still owed** — "namespace-less
+keys that are not local, a legacy recipient's `shared_key.*` most obviously, are
+still refused under the posture". That was wrong: nothing routes a
+`shared_key.*` through the refusal, so it can never be refused. Closed as
+[14.33](#1433-closed-the-shared_key-refusal-was-never-reachable).
+The one namespace-less write that genuinely is refused is
+[14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given).
+
+### 14.32 A `primary` client's ML-DSA signing key is not visible to its verifiers
+
+An approver built `pqActive` (so `dataSigningKeyAlgorithms = {mldsa65}`)
+conveys correctly — both `__ssenv` envelopes are written — and the
+receiving enrollment refuses every one of them:
+
+```
+the envelope is signed under "ML-DSA-65" and the published _apsk advertises
+"rsa2048" — no algorithm in common, so there is no signature here this key
+can check
+```
+
+`waitForApproval` then times out at 30s with *"No conveyed apkamSymmetricKey
+arrived … the approver is running a client that does not convey"*, which names
+the wrong side: it conveys, and what it wrote cannot be verified.
+
+The approver is the atSign's own client, so it has **no enrollment id** and
+mints under the `primary` pseudo-enrollment. It does mint and does try to
+publish — `Minted mldsa65 signing key(s) for primary; publishing before
+filing`, then `publishPublicSigningKey: what is published is not what this
+client holds - republishing` — and `enroll:update` is sent **zero** times,
+correctly, because there is no enrollment record to update. Yet a verifier
+reading `public:_apsk.primary.a.__e@alice🛠` still saw `rsa2048` throughout the
+30s.
+
+⛔ **The transport question is ANSWERED, and the answer is no — do not
+re-derive it.** This entry used to say the one open question was "by what
+transport does the `primary` republish reach the atServer? A local-first put
+reaches it only when sync gets round to it … a race by construction." Read
+2026-08-17: **every leg of this path is remote-first.**
+
+| leg | where | routing |
+|-----|-------|---------|
+| the writer's pre-read | `apkam_signing.dart:56` | `useRemoteAtServer = true` |
+| the republish itself | `apkam_signing.dart:73` | `useRemoteAtServer = true` |
+| all five verifier reads | `pq_signing_chain.dart` 224, 272, 403, 465, 637 | `useRemoteAtServer = true` |
+
+So there is no value-and-pointer-on-different-transports race here, and no fix
+should be designed around one.
+
+**Also ruled out by reading, not by measurement:** signing and advertising
+cannot drift on this path. `EnvelopeSigning.wrapAndSign` resolves
+`await signingKeys` (`envelope_signing.dart:56`) and the advertisement is
+composed from the same getter, which is what `signingKeys`' own dartdoc claims
+("what signs and what is advertised are one rule and cannot drift apart").
+
+**The cause, measured 2026-08-17 — it is a CLOBBER, in order, both writes
+remote.** The arm was re-run with the approver built `postQuantum`, and the
+atServer's own log for `@alice🛠` was read rather than the client's account of
+it. The record starts absent (`AT0015 … does not exist in keystore`) and then
+takes **four** updates:
+
+| # | what the update wrote |
+|---|-----------------------|
+| 1 | a bare RSA public key (`MIIBIjANBgkqhkiG9w0B…`) |
+| 2 | a bare RSA public key |
+| 3 | **`{"v":1,"keys":[{…,"alg":"mldsa65",…}]}`** — the mint's republish |
+| 4 | **a bare RSA public key** — overwrites 3 |
+
+So the ML-DSA advertisement *is* published, and is then overwritten by a later
+writer with the RSA fallback. A remote read taken **after** both republishes
+returned the bare RSA key, which is what the verifier then refuses against for
+the whole 30s. Nothing here is a transport problem; the final state is simply
+the wrong value.
+
+**The mechanism, confirmed by instrumenting `publishPublicSigningKey` and
+re-running.** Every call logged what it held and what it was about to write:
+
+| # | caller | `heldSigningKeys` | `value` passed in? | writes |
+|---|--------|-------------------|--------------------|--------|
+| 1 | `AtClientSecretSharing` | `[]` | no | bare RSA |
+| 2 | `AtClientSecretSharing` | `[]` | no | bare RSA |
+| 3 | `SigningKeyMinting` | `[]` | **yes** | **`mldsa65` JSON** |
+| 4 | `AtClientEnvelopeSigner` | `[]` | no | bare RSA |
+
+**`heldSigningKeys` is empty at all four**, so the minted signing key never
+reaches the keyfile for `primary` at all. `signing_key_minting.dart:287` — the
+only call that passes `value:`, and guarded by `atLookUp?.enrollmentId == null`
+— advertises the minted key by handing the value in directly, which is what
+"publishing before filing" means. Every other caller composes from
+`publicSigningKeyValue`, reads an empty keyfile, falls back to the APKAM
+authentication key (RSA), and publishes that over the mint's advertisement.
+
+⛔ **STOP — this is [ruling 102](decisions.md#102-an-_apsk-fallback-value-never-replaces-a-real-advertisement-2026-08-15),
+already measured and already ACCEPTED.** `_publish`'s own dartdoc
+(`signing_key_minting.dart` ~252) describes this exact sequence — "a concurrent
+`publishPublicSigningKey` … sees no signing key, falls back to the APKAM
+**authentication** key, and overwrites: measured, a PQ-native enrollment's
+ML-DSA array replaced by a bare RSA string" — and records that **three guards
+against it were built and all three broke the live enrollment path.** It warns
+anyone tempted to try a fourth that "never drop an advertised key" cannot be
+stated over `public:_apsk.primary.a.__e`, which no single client owns.
+
+**So the record-level guard is a re-derivation. Do not build it without
+re-opening 102.**
+
+⚠️ **What is NOT yet established, and what an earlier version of this entry
+wrongly asserted.** It claimed "it is not a timing window … the keyfile is empty
+for the whole run". The evidence does not support that: `_file` **is** called,
+at `signing_key_minting.dart:167`, immediately after `_publish`, so the empty
+keyfile at all four calls is equally consistent with all four falling *inside*
+the publish-before-file window — which is exactly what 102 describes. The
+timeline is 20 ms wide:
+
+```
+07.117  Minted mldsa65 … publishing before filing
+07.119  SigningKeyMinting   held=[]  -> writes mldsa65 (value: override)
+07.155  … republishing
+07.175  AtClientEnvelopeSigner held=[]  -> writes bare RSA
+07.200  … republishing
+```
+
+**Ruling 102 has been re-opened on this evidence** — see
+[102.1](decisions.md#1021-the-race-is-measured-and-the-price-it-was-accepted-at-was-wrong-2026-08-17).
+Two of its sentences were false and are corrected there: the race **is**
+measured, and reaching it needs **no** application call racing `startup()` —
+the ordinary approver flow does it every run. More importantly the *price* was
+wrong: 102 accepted "one process lifetime of refused envelopes", where the
+measured cost is that **a `postQuantum` approver cannot approve an enrollment
+at all**.
+
+⛔ **That does not revive the three guards.** Guard 3's finding stands: the
+demotion rule cannot be stated over `primary`, a record no single client owns.
+
+✅ **The filing works, so this is 102's window and nothing else.** Logging
+`heldSigningKeys` immediately after `_file` returns gives `[mldsa65]`, with the
+mint's `io` and `atClient.atKeysIo` the same instance. The keyfile does hold the
+post-mint state; `AtClientEnvelopeSigner` simply read before the filing
+completed.
+
+✅ **DONE 2026-08-17 — fixed by serialising this process's `_apsk` writes**,
+ruled and built as [102.2](decisions.md#1022-the-in-process-window-is-closed-by-serialising-the-writers-2026-08-17).
+`serialiseApskWrite` chains every `_apsk` write one client makes, and the mint
+holds it across publish, file and retire together, so a writer arriving mid-mint
+composes after the filing and finds nothing to change. It states in-process-only
+and nothing more — a second client in another process is still 102's accepted
+window. Re-entrancy is handled by splitting `publishPublicSigningKey` (acquires)
+from `publishPublicSigningKeyLocked` (does not).
+
+**Proven live on the arm that had never passed:** updates to
+`_apsk.primary` go 4 → 2, the final value goes bare RSA → the `mldsa65` array,
+`no algorithm in common` goes 2 → 0, and the test goes fail → pass. Unit cover
+in `apsk_write_serialisation_test.dart`, whose ordering test reddens on the
+exact interleave when the lock is removed.
+
+⚠️ This is **not** [14.31](#1431-a-refused-watermark-write-permanently-disables-the-monitor).
+That one is a refused internal write killing the monitor; this one is an
+advertisement a verifier cannot see. Both surfaced from the same posture and
+they have nothing else in common.
+
+### 14.35 `NotificationService.send()` throws away the namespace it was given
+
+`send()` takes a namespace as a parameter, builds a key string from it, and then
+recovers the namespace by re-parsing that string
+(`notification_service_impl.dart:578`):
+
+```dart
+final String key = '$to:$namespace$atSign';
+final AtKey atKey = AtKey.fromString(key);
+atKey.metadata.namespaceAware = false;
+```
+
+`AtKey.fromString` splits at the last dot, so the round trip is lossy in two
+different ways. Measured, both arms, against a client under the postQuantum
+posture:
+
+```
+send(namespace:"wavi")       => THREW LegacyEncryptionRefusedException
+send(namespace:"buzz.wavi")  => selected at/symmetric/AES/GCM
+```
+
+A **single-segment** namespace parses to `namespace = null`, so every
+post-quantum provider declines it (`canHandle` is `!isLocal && namespace != null
+&& namespace.isNotEmpty`), the fallback is legacy, and the flag refuses it. A
+**dotted** namespace parses to `key = "buzz", namespace = "wavi"` — it seals,
+but to an nskey scoped to `wavi` rather than to the `buzz.wavi` the caller
+named.
+
+`send()` is the only write path that can reach this, because it is the only one
+that bypasses the namespace defaulting every other path applies before
+encrypting — `at_client_impl.dart:981` and `:1252`
+(`atKey.namespace ??= preference?.namespace`) and
+`notify_request_transformer.dart:122` (`ak.namespace ??= atClientPreference.namespace`).
+`send()` encrypts inline and hand-builds its own `notify:` command string, so it
+touches none of them. `AtRpc` sets `..namespace = baseNameSpace` explicitly and
+goes through `notify()`, so it is unaffected.
+
+**The fix, ruled by gkc 2026-08-17: the parameter is `<id>.<namespace>` and is
+poorly named — that is the root of it.** The id is the first segment and the
+namespace is the remainder, so `send()` splits at the **first** dot and sets
+both `AtKey` fields itself instead of letting `fromString` do it. `namespace` is
+deprecated in favour of `idAndNamespace`; a name with no interior dot, or with
+either half empty, throws `ArgumentError` at the call site.
+
+⚠️ **An earlier draft of this row recorded a one-line fix — "set
+`atKey.namespace = namespace`" — and that was WRONG.** It would have broken
+every `send()` that works today. The ciphertext binding is computed over
+`'${atKey.key}.${atKey.namespace}'`, deliberately split-invariant so writer and
+reader agree, and setting only the namespace changes the joined name. Measured:
+
+```
+                     sender          receiver (parses the wire)
+today                "buzz.wavi"     "buzz.wavi"        match
++ namespace only     "buzz.buzz.wavi"  "buzz.wavi"      MISMATCH — nothing decrypts
++ namespace, key=""  ".buzz.wavi"    "buzz.wavi"        MISMATCH
+first-dot split      "a.b.c"         "a.b.c"            match
+```
+
+The first-dot split holds for every case tried (`wavi`, `buzz.wavi`, `a.b.c`,
+`id.foo.bar.my_app`) precisely because the join is split-invariant: the sender
+cutting at the first dot and the receiver at the last produce the same name.
+The wire key is unchanged, so this is not a cross-version break; what changes is
+that the content key is conveyed at the level the caller named, and a receiver
+that has not yet got it parks and re-drives
+([14.30](#1430-a-content-notification-can-outrun-the-key-that-opens-it)).
+
+`send()` is public, documented and not deprecated, and two example programs use
+it (`example/bin/notifications.dart`, `example/bin/dockerstats_publish.dart`) —
+both with dotted namespaces, so both take the wrong-scope arm rather than the
+refusal.
+
+### 14.36 `send()`'s command is hand-rolled where a tested builder exists
+
+`send()` writes its own `notify:` command into a `StringBuffer` rather than
+using `NotifyVerbBuilder`, which is what every other notification path goes
+through. It is the duplication that let
+[14.35](#1435-notificationservicesend-throws-away-the-namespace-it-was-given)
+happen: the builder path resolves a namespace before encrypting, and `send()`
+never reached it.
+
+The swap is nearly free, but not free. Measured, same inputs:
+
+```
+hand-built today   notify:id:X:ttln:900000:isEncrypted:false:@bob:a.b.c@alice:payload
+NotifyVerbBuilder  notify:id:X:notifier:SYSTEM:ttln:900000:isEncrypted:false:@bob:a.b.c@alice:payload
+```
+
+Byte-identical **except** `:notifier:SYSTEM`, which `buildCommand` writes
+unconditionally. So this is a wire change, not a refactor, and it does not ride
+along with a behaviour fix — it gets its own commit and its own functional-pack
+run. The argument that it is safe (every `notify()` call already sends that
+token, so the atServer sees it constantly) is an argument, not evidence.
+
+⚠️ **`useAtKeyToString = true` is required.** With it false the builder writes
+`:${atKey.key}`, and since 14.35 the name is split across `key` and `namespace`,
+so the wire key would become `@bob:a@alice` — measured. `atKey.toString()`
+yields `@bob:a.b.c@alice` under either `namespaceAware` setting.
+
+**Built 2026-08-17.** The command is pinned as a raw literal rather than by
+`contains` fragments — a wire shape is frozen, and an intended change has to
+edit the pin, which is the review. A `contains` check would not have noticed
+`:notifier:SYSTEM` arriving.
+
+⚠️ **`send()` had NO live coverage at all, in either direction** — the pack's
+168 tests never called it, so the first pack run after this change proved only
+that nothing else regressed. `:notifier:SYSTEM` being safe rested on every
+`notify()` already sending it, which is an inference, not an exercise of this
+path. `atclient_notify_test.dart` now drives `send()` live: it asserts the
+stored notification's key is the *whole* name (the wire half, which a builder
+writing only `atKey.key` would truncate) and that the body arrives decrypted at
+the recipient.
+
+⚠️ **The architecture guard had to move with it, and the direction matters.**
+`architecture_guard_test.dart` required `notification_service_impl.dart` to
+mention `toAtProtocolFragment`, which the file no longer does — the builder
+calls it. Keeping that assertion would have forced the hand-rolled command back,
+so the guard now asserts the file does **not** contain `'notify:id:`. That is
+what the guard was always for: not the presence of a name, but the absence of a
+rival serializer. Verified against the previous commit, where the pattern
+appears once.
+
+### 14.40 at_client publishes as a minor, and the heading now says so
+
+✅ **RESOLVED 2026-08-20. The tree already moved and this body did not say so
+for two days.** `packages/at_client/pubspec.yaml` is `version: 3.15.0` and its
+`CHANGELOG.md` opens `## 3.15.0` — a minor, which is what a source-breaking
+entry needs. Verify rather than trusting this line:
+`grep -m1 '^version:' packages/at_client/pubspec.yaml && head -1 packages/at_client/CHANGELOG.md`
+
+What it was: raised 2026-08-18 by the `0x01` removal, which added a **BREAKING**
+entry under an in-progress `## 3.14.1` heading. A patch version carrying a
+source-breaking change was the conflict; the entry itself was correct and
+stayed. ⚠️ The heading above read "at_client's in-progress heading is a patch"
+until today, which a reader would take as the current state.
+
+⚠️ **The question got bigger on 2026-08-19, not smaller.** 14.39 added four more
+**BREAKING** entries under the same `## 3.14.1` heading — `PqPosture` replacing
+`ReleasePosture`, `SigningRollout` deleted, `disallowLegacyEncryption` losing
+its constructor argument, and `inUseSigningAlgorithms` renamed — plus a
+**BREAKING** `--posture` entry under at_onboarding_cli's in-progress `## 1.17.0`.
+So this is now two version questions, not one. The blast-radius argument is
+unchanged and still bounded: none of that surface is published (at_client 3.14.0
+on pub.dev carries no `ReleasePosture`, no `SigningRollout` and no
+`disallowLegacyEncryption`), so no released consumer breaks — it remains a
+numbering question.
+
+The break is real: `SecretSharingAlgos.xWingHpke` is gone, `suites` and
+`openableSuitesFor` no longer name it, and the `suites` list emitted on
+`enroll:request` narrows. What it costs is bounded by the same argument
+[decisions 109](decisions.md#109-at_chops-360-stays-a-minor-no-major-bump-for-this-release-2026-08-18)
+makes for at_chops — the substrate is `@experimental` and its only consumer is
+this repository — so this is a numbering question, not a blast-radius one.
+
+⛔ **Not acted on deliberately.** Version bumps are gkc's call and the standing
+rule is to fold entries under the in-progress heading rather than open a new
+one. Recorded here so the conflict is not discovered at publish time.
+
+### 14.41 What the first CI runs on the spike branch found
+
+CI had never run on `gkc-pq-d1-spike` and structurally could not: both
+workflows trigger only on `trunk`. Dispatched manually 2026-08-20 through
+`workflow_dispatch`, on both `at_client_sdk.yaml` and `at_libraries.yaml`.
+Everything below is from those runs plus the re-runs after each fix.
+
+**Three CI-only defects were found and fixed**, none of them in library code:
+
+| Fixed | What it was | How it is known to be fixed |
+|-------|-------------|------------------------------|
+| The VE image | Three jobs took the compose default `vip`; the post-quantum tests need a trunk-tracking atServer | `functional_tests` green on both channels against `dev_env` |
+| The format gate | 95 files did not satisfy `dart format . -o none --set-exit-if-changed` in at_client and at_client_flutter | `unit_at_client` and `unit_at_client_flutter` went red to green on both channels |
+| The e2e readiness step | `supervisorctl status` exits non-zero whenever ANY program is not RUNNING, and `pkamLoad` is deliberately `STOPPED`. As the last command of the step it failed a container that was in fact healthy | `legacy_server_tests` green for the first time; `pqe2e_tests` reaches its tests and runs 16 of 17 |
+
+⚠️ **The same readiness bug is still in `tests/at_end2end_test/runLocal.sh`**,
+where the loop cannot succeed either — so every local e2e run silently waits
+the full 60 seconds before doing anything. Harmless, and worth removing.
+
+**All four are fixed.** ⚠️ **"CI is green" is a claim about ONE workflow at ONE
+commit, so say which:** `at_client_sdk.yaml` run **32392240064**, 11 of 11, on
+`f24ee3ab6` — the head with `origin/trunk` merged in, covering at_commons #2168.
+`at_libraries.yaml` last went green on a **different** commit, and docs commits
+have landed since, so **no run covers the current head**. Re-derive before
+repeating the claim; the command is in the re-derivation block.
+wrong image. A convergence race remains, recorded below as a rate and owed in
+[14.43](#1443-the-functional-suites-convergence-race). This section said "three" until
+2026-08-20, when a fourth was found in `at_libraries`' matrix that had never
+been recorded here at all — and that fourth turned out to be the cheapest of
+the lot, a CI step running the wrong image.
+
+⚠️ **Only ONE of the four was a product defect.** Rows 2 and 4 were harness
+assumptions that had been holding by luck — an environment variable that
+happened to survive, a file order that happened to be favourable — and both
+failed deterministically the moment the luck changed. Row 1 was the real bug. None was the image, and none was a
+flake: gkc ruled out infrastructure on 2026-08-20.
+
+1. **`notify_test.dart` — FIXED 2026-08-20. A closed connection held the
+   request mutex for 30 seconds.** `end2end_tests` was 36 of 37.
+
+   Nothing to do with notifications, and nothing to do with the monitor. The
+   monitor start and the teardown 62 ms later — which this row used to lead
+   with — are ordinary atSign-switch behaviour and were a red herring; so is
+   the test's name, which promises listening it never does (it reads back with
+   `notifyList`). What actually happened, from the local log:
+
+   ```
+   12:44:59.882  @bob's PqClientBootstrap sends a verb, and waits for the reply
+   12:44:59.885  the test switches atSign, so AtClientImpl.stop() destroys
+                 @bob's socket 3 ms into that wait
+   12:45:00.468  the test switches back to @bob and calls notifyList
+   12:45:29.885  the test times out, 30 s after it started
+   12:45:29.886  the abandoned read gives up and releases the mutex, one
+                 millisecond too late
+   ```
+
+   `OutboundMessageListener.read` had no way to notice that its connection was
+   gone: it woke only on a queued response or a deadline, so it sat out the
+   full transient budget. `AtLookupImpl._process` holds `requestResponseMutex`
+   across that read, and `AtClientImpl.create` memoises one client per atSign —
+   so switching back to @bob handed the test the same AtLookupImpl, and its
+   first verb queued behind a response that could never arrive.
+
+   **Why it was a regression rather than a long-standing bug:** the defect is on
+   trunk too, but the transient budget there is the parameter default of
+   **10 s**, where this branch takes `AtNetworkTimeouts.effectiveDefault` —
+   **30 s**. Ten seconds fits inside `dart test`'s 30-second per-test timeout;
+   thirty does not. ⚠️ `AtNetworkTimeouts`' own dartdoc records that
+   `defaultResponseBudget`'s 90 s "preserves the long-standing default … so
+   adopting this changes no behaviour" — true of the whole-response budget, and
+   silent about the transient one, which tripled in the same change.
+
+   Fixed in at_lookup: every close routes through one place that fails the
+   pending read first, and the caller gets a `ConnectionInvalidException`
+   naming the closed connection instead of an `AtTimeoutException` pointing at
+   the atServer. Pinned by four arms in
+   `packages/at_lookup/test/socket_delivery_test.dart` — measured at **3003 ms
+   against a 3000 ms budget before, immediate after** — the fourth holding the
+   line that a response already parsed is still returned.
+
+   Re-run it rather than trusting this row:
+
+   ```bash
+   cd tests/at_end2end_test && ./runLocal.sh 26000 test/notify_test.dart
+   ```
+
+   Green twice locally on 2026-08-20, and the second run carries the proof that
+   the fix is what did it: `Connection closed with a request in flight` at
+   13:01:25.009403, 211 microseconds after `AtClientImpl (@bob) stop()`, where
+   the same request previously took 30.003 seconds. **`end2end_tests` is then
+   green in CI** on run 32369016084 — so this is confirmed against the @ce2e
+   atSigns too, not only the virtualenv.
+
+2. **`nskey_recipient_not_ready_test.dart` UC-A4.2 — FIXED 2026-08-20. The
+   control borrowed another file's side effect.** `pqe2e_tests` was 16 of 17,
+   red on `control: readiness must be able to say yes, or its "no" carries no
+   information` — the test correctly refusing to certify its own "no".
+
+   The control asked whether `@bob` was ready for the **shared** `e2e_test`
+   namespace. Nothing in that file made him ready: the e2e preferences set no
+   crypto config and no posture, so an e2e client is legacy by construction and
+   never mints an nskey on its own. It answered "yes" only when one of
+   `era_default_read`, `nskey_notify` or `nskey_cross_atsign` had already
+   minted @bob's `e2e_test` key.
+
+   ⚠️ **`dart test` does not order files alphabetically, and the order is not
+   stable between runs.** CI ran this file **first** of five; a later local run
+   of the same directory ordered them
+   `nskey_multi_enrollment, era_default_read, nskey_cross_atsign, nskey_notify,
+   nskey_recipient_not_ready`. So the row was deterministic in CI and invisible
+   in a directory run that happened to schedule it late — do not read a green
+   directory run as evidence about this class of defect.
+
+   Fixed by making the file establish every fact it asserts: it moves onto
+   `ConcurrentClients` (so @bob can be brought up without the singleton tearing
+   alice's client down) and @bob mints a **run-unique** warm namespace as the
+   control's yes-case. The control still exercises the same query; it no longer
+   adds a writer to the shared namespace.
+
+   Measured, file run ALONE, both arms in one session — which is the arm that
+   discriminates, since a directory run may schedule it late and pass either
+   way:
+
+   | arm | result |
+   |-----|--------|
+   | before the fix | control fails |
+   | after the fix  | passes |
+
+   Whole directory as CI invokes it (`test/pq -x legacy-server`): **17 of 17**.
+
+3. **`end2end_test_14` — the setup is FIXED; a second layer is now visible.**
+
+   **The setup step was SLOW, not stuck, and its budget was the framework
+   default.** Measured 2026-08-20: given five minutes, all four approvals pass
+   in **4:59**. Given thirty seconds they all time out. Two defects fixed:
+   the step ran with `dart run`, which exits 0 even when its tests fail — so it
+   went green with four timed-out approvals and the failure surfaced three
+   minutes later as eight missing-keyfile errors in a different step — and the
+   budget is now fifteen minutes, because 4:59 against 5:00 is a coin toss.
+
+   ⚠️ **Sync volume is NOT a sufficient cause, and this row said it was.**
+   `end2end_tests` runs the SAME four @ce2e atSigns (config23 lists the same
+   set config14 does, reordered) and the SAME suite, and it is green. The
+   differentiator is that `end2end_test_14` runs `enrollment_setup.dart` first.
+
+   **The second layer, and the strongest lead on it.** With the setup passing,
+   the suite reaches 34 tests instead of 12 and 18 fail, on
+   `PKAM Keypair required for signing`. `AtClientImpl` has exactly **one**
+   `_atKeysIo` field and it serves two jobs: the nskey private store handed to
+   `PqClientBootstrap` (`at_client_impl.dart:610`) **and** the authentication
+   key source in `_createAtChops` (`at_client_impl.dart:1651`), which prefers
+   it over the local secondary. This branch's `test_initializers.dart` points
+   that field at `<hiveStoragePath>/<atSign>.nskey.atKeys` and seeds it with an
+   **empty `AtKeys()`**. A client that is not handed an `atChops` therefore
+   authenticates from an empty keyfile.
+
+   ⭐ **ROOT-CAUSED 2026-08-20, and it is the client cache key.** The
+   `_atKeysIo` reading above was a wrong turn — the failing client's
+   `_atKeysIo` is **null**; it takes `_createAtChops`' local-secondary branch.
+   The actual chain, every link observed, and it **reproduces locally in about
+   three minutes** (`enrollment_setup.dart` then `notify_test.dart` against the
+   virtualenv, no @ce2e atSigns and no CI round trip):
+
+   1. `enrollment_setup.dart` enrols an app per atSign and writes an
+      **`enrollmentId` into the keyfile** — confirmed by reading
+      `atKeys/@alice🛠_key.atKeys` after a local run.
+   2. `testInitializer`'s apkam auth then passes that id, so the client is
+      filed under `(atSign, enrollmentId)`.
+   3. Tests like `notify_test.dart` call
+      `setCurrentAtSign(atSign, namespace, preference)` with **no** enrollment
+      id, which looks up `(atSign, null)`, **misses**, and builds a fresh client
+      with no `atChops` and no `atKeysIo`.
+   4. That client's `_createAtChops` falls through to the local secondary, which
+      holds no PKAM key, and every verb fails
+      **`PKAM Keypair required for signing`**.
+
+   **Why it is a spike regression, mechanically.** Trunk keys the cache on the
+   **atSign alone** (`atClientInstanceMap[currentAtSign]`); this branch keys it
+   on **`(atSign, enrollmentId)`** via `AtClientImpl.instanceKey`. On trunk the
+   bare call hits the very entry `testInitializer` created and gets the
+   credentialed client. That is also why only `end2end_test_14` fails: it is the
+   only job that runs `enrollment_setup` first, so the only one whose keyfile
+   carries an enrollment id at all.
+
+   ⚠️ **The change itself is right** — keying a client cache on the owner alone
+   hands a caller another principal's object, and the code says so. What is
+   unsettled is what `enrollmentId: null` should MEAN once an enrolled client
+   exists for that atSign: return it, refuse loudly, or build the
+   uncredentialed one it currently builds. **RULED by gkc 2026-08-20 and shipped in `0c79164fa`:** an
+   unnamed enrollment falls back to the atSign's client when there is exactly
+   ONE, and refuses naming the available ids when there are several. This
+   paragraph asked for a ruling that now exists; do not go and ask for it
+   again.
+   It is a standalone setup step (`dart run test/enrollment_setup.dart`), not a
+   test on `dart_test.yaml`'s allowlist, so its failure cascades: the 8 later
+   failures all read `provided keys file does not exist`, for the keyfile the
+   timed-out step never wrote. The throw is `OutboundMessageListener.read`'s
+   *transient* branch, meaning `_lastReceivedTime` never moved — no bytes at
+   all, not a partial response. ⚠️ **Row 1's fix does NOT close it — measured,
+   not assumed.** `end2end_test_14` is still red on run 32369016084, the first
+   CI run carrying the connection fix, so the shared fingerprint was a
+   coincidence of symptom and the cause is a different one. ⚠️ This row used to end "It cannot be
+   reproduced locally … so iterating on it costs a CI round trip", which was
+   never true of the script: the blocker was `AtCredentials.credentialsMap`
+   being a stub in every checkout, and the harness now seeds it from
+   `AtTestCredentials`.
+
+4. **`functional_tests_at_onboarding_cli` — a fourth red row, and it was never
+   recorded here.** The non-proxy leg of `at_libraries`' matrix runs 16 of 17;
+   the red is `pq_native_onboard_test.dart`'s "a CLI activation under the
+   pqReady posture is PQ-native", failing PKAM for `@denise` with a
+   **server-side** `AT0010-Exception: RangeError: Value not in range:
+   -2881644029407446706`. Red on run 32360105692 as well, so it predates the
+   connection fix. That test is new on this branch, so there is no trunk arm to
+   compare against.
+
+   **ROOT-CAUSED and fixed 2026-08-20: the job was running the published
+   image.** ⚠️ This row first said "It is NOT the image, the env is set at job
+   level and both matrix legs inherit it" — that was wrong, and wrong in an
+   instructive way. The variable *is* set on the job, and the step ran
+   `sudo docker compose up -d`; **`sudo` resets the environment**, so compose
+   never saw `VIRTUALENV_IMAGE` and fell back to the `atsigncompany/virtualenv:vip`
+   default in `docker-compose.yaml`. The published atServer cannot verify an
+   ML-DSA PKAM signature, and its symptom is exactly this `RangeError`.
+
+   It is the only container job in either workflow that used `sudo`; every one
+   in `at_client_sdk.yaml` runs plain `docker compose` and gets its image. The
+   fix drops the `sudo` and adds a step that inspects the **running**
+   container and fails loudly when it is not the image the job asked for —
+   because a wrong image otherwise presents as a client-side bug.
+
+   Measured, both arms in one session, one variable changed:
+
+   | image | result |
+   |-------|--------|
+   | `atsigncompany/virtualenv:dev_env` | 2 of 2 pass |
+   | `atsigncompany/virtualenv:vip`     | `Pkam auth failed … AT0010-Exception: RangeError` |
+
+   ⚠️ The earlier claim came from parsing the YAML and printing the resolved
+   image per job. That measures what the *job* declares, not what *compose*
+   receives — a validation of the wrong thing, and it read as thorough.
+
+⚠️ **A fifth row, on the BETA Dart channel only, and it is a rate rather than
+a kind.** `functional_tests (beta)` has failed **3 of 5** runs on 2026-08-20 —
+`sync_multiple_client_test.dart` once and `pq_rollout_matrix_test.dart`'s
+UC-G1.15 **twice, consecutively**. `functional_tests (stable)` is 0 of 5, and a
+local full pack on stable was 177/177. (Established 2026-08-21: this window's
+sync_multiple red is the SAME instance as the sixth row's below — the day's
+beta runs held exactly one — so these two rows share a numerator; and it is
+classified in [14.43](#1443-the-functional-suites-convergence-race).)
+
+⭐ **This is a RACE, not a channel defect** (gkc, 2026-08-20). The rates say
+so: **beta 3 red in 6, stable 1 red in 6**, and a race is what produces that
+shape — the beta SDK's different timing widens the window rather than
+introducing a bug. Reading it as "beta-only" was wrong twice over: stable has
+now hit it too, and the framing pointed the search at the Dart channel instead
+of at the window.
+
+**Where the search has got to, and what is NOT established.** The harness's
+`FunctionalTestSyncService.syncData()` waits on a LEVEL — it loops until
+`localCommitId == serverCommitId` and nothing is pending — rather than on
+*this test's writes having been pushed*. The only thing between a test's writes
+and that check is a blind `await Future.delayed(Duration(milliseconds: 100))`.
+In the local failure of 2026-08-20 it returned in **7 ms** reporting
+`pending push count: 0` with the ids already equal, immediately after the test
+had done three writes. ⚠️ **That is a characterisation, not a discriminator:**
+a PASSING run shows a first `syncData` completing just as fast with
+`pending push count: 0` too, so the pattern alone does not separate pass from
+fail. Do not report it as the cause without an arm that does.
+
+⛔ **Disproven, so nobody re-walks them.** The progress events are NOT dropped
+by attaching the listener late — `MySyncProgressListener.streamController` is a
+plain single-subscription `StreamController` and BUFFERS. And `syncData()`'s
+`syncOutcome.complete()` on `SyncStatus.failure` — which does treat a failed
+sync as done, and is a real defect worth fixing on its own — is NOT what fired
+here: `SyncStatus.failure` appears **zero** times in the failing log.
+
+Corroborating: **three of the four observed failures are notify/sync
+convergence** — `sync_multiple_client_test` ("keys synced from multiple clients
+converge"), `atclient_sync_conflict_test` ("notify updating of a key to
+sharedWith atSign"), and UC-G1.15's cross-stage envelope verification. One
+commit ran UC-G1.15 green on stable and red on beta in run 32381845256, which
+is what a timing window looks like rather than a code difference. ⚠️ This row
+first read "a different test each time", then "beta-only"; both were
+falsified.
+
+What the UC-G1.15 instance showed, recorded because it is the useful part:
+
+- The failing cell was `pqActive → pqReady`, on
+  `AtSigningVerificationException` — the receiver read `@alice`'s `_apsk`
+  holding **exactly one key**, `kid f10e7bd62684126f`, `alg mldsa65`, and could
+  not verify the envelope with it. So it is not a stale advertisement holding
+  the pre-PQ key; it is an advertisement holding a key that did not sign.
+- ⭐ **The same stage pair PASSES as its own test minutes earlier** (`✅
+  pqActive sender to pqReady receiver`, 14:24:16) and fails inside UC-G1.15's
+  nine-cell loop (14:25:53). Both go through the same `runCell`. **The variable
+  is back-to-back-ness**, not the pair — the standalone tests are separated by
+  framework overhead and the nine cells are not.
+- Every cell overwrites `@alice`'s single `_apsk` record, and sender and
+  receiver are separate processes. So a receiver can fetch an advertisement
+  that a neighbouring cell published, or fetch before its own sender's publish
+  has landed — the shape where a value and a pointer to it travel by different
+  transports and race.
+- ⚠️ The verifier's kid appears **once** in the whole 465k-line job log while
+  other kids appear 4–9 times. Suggestive, NOT decisive: kids are only logged
+  when a key package is, so that is a claim about the log.
+
+**Four hypotheses are disproven, recorded so nobody re-walks them:** the
+advertisement is NOT written local-first (`publishPublicSigningKey` passes
+`useRemoteAtServer = true`); it is NOT the documented mint/publish race, whose
+signature is an ML-DSA array replaced by a bare RSA string; there is NO mutex
+contention with sync, because `SyncServiceImpl.create(atClient)` builds its own
+`RemoteSecondary` and so its own connection; and the
+`does not verify against its _apsk` SEVEREs are not the differentiator — they
+appear **19 times in the PASSING stable log** against 17 in the failing beta
+one. That last one is worth its own look some day: every functional run on both
+channels logs 17–19 key-package verification failures and nothing fails.
+
+⚠️ **A sixth row, seen once and recorded as a rate rather than a kind.**
+`functional_tests (beta)` failed `sync_multiple_client_test.dart` ("keys synced
+from multiple clients converge to the same value") at 176 of 177 on the
+2026-08-20 16b00787c run, having passed on the 8295cea5b run an hour earlier.
+`functional_tests (stable)` passed both, and both channels passed again on run
+32369016084. So: **1 red in 3 beta runs, 0 in 3 stable runs** — not enough to
+call it anything. Do not describe it as a flake or as a regression without
+more runs. Classified 2026-08-21: this red carries shape C's signature on the
+diverged key itself, and it is the SAME instance the later "3 of 5" window
+counted — the day's beta runs held exactly one sync_multiple red. Evidence
+and discriminators in
+[14.43](#1443-the-functional-suites-convergence-race)'s shape C paragraphs.
+
+**Four mechanisms were read and disproven** for rows 1 and 3, recorded so
+nobody re-walks them: the monitor and verb sockets are *not* collapsed
+(`NotificationServiceImpl` builds a deliberate fresh `AtLookUp.withSecureSocket`
+and says why); `messageListener` cannot drift from `_connection` (both are
+rebuilt together inside `createConnection`); a non-notification lookup *does*
+notice a dead socket (`onSocketDone`/`onSocketError` call `closeConnection`
+unconditionally, and the `onDisconnect` seam is additive); and Monitor's
+`_notificationSubscription ??=` cannot hold a closed controller, because
+`_stop()` nulls both subscriptions.
+
+⚠️ **A measurement trap this cost an hour to.** Probing
+`atsigncompany/virtualenv:dev_env` from `docker images` reads whatever was
+cached locally, which can be months old — the copy on this machine was from
+3 July and lacked both `mldsa65` and #2755, which produced a confident and
+entirely wrong conclusion that the image ruling had been a mistake. **Pull
+before probing.** The freshly pulled image is the Aug 19 build and carries
+both. The contradiction that caught it was
+`self_enrollment_retrofit_live_test.dart` passing "ML-DSA PKAM succeeds" on an
+image just measured as lacking ML-DSA.
+
+### 14.43 The functional suite's convergence race
+
+**CI: beta 3 failures in 10 runs, stable 1 in 10** — measured 2026-08-20 by the
+command in the re-derivation block at the end of this file, not transcribed.
+Locally, **1 red in 5** packs the same day — both PRE-fix figures.
+**Post-fix, local, 2026-08-21 at `112e1f740` (code-identical to the shape-C
+fix commit): 0 family reds in 10 valid packs.** Eleven ran; one is excluded
+as an instrument artifact with the cause confirmed by gkc — the machine
+suspended mid-run (a single 46-minute wall-clock gap in the log,
+08:33:15→09:19:39), and the matrix cell's 3-minute timer fired on resume as
+"sender (pqReady) never reported" with empty stderr. Every pre-fix local
+loop had a family red inside 6 runs; this is the first loop with none. Ten
+runs bound a rate, not a kind. ⛔ **These three figures are the ONLY rates to
+quote for this row. Every other one written on this page came from a
+partial view and is superseded** — the page has carried six mutually
+incompatible versions, which is why the command exists.
+
+The observed failures — four in the functional pack, plus
+[14.34](../implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s,
+very probably the same thing — are all waits on update/notify/sync convergence:
+`atclient_sync_callback_test` (local pack 2026-08-20: "latest commit entry is
+updated when same key is updated and deleted", expected `-` got `*`),
+`atclient_sync_conflict_test`, `sync_multiple_client_test`, and
+`pq_rollout_matrix_test`'s UC-G1.15. ⚠️ Not a Dart-channel defect — beta is
+redder because its timing widens the window, and one commit ran UC-G1.15 green
+on stable and red on beta
+**Reproduces locally**: `cd tests/at_functional_test && ./runLocal.sh`.
+
+⛔ **Disproven hypotheses are listed and must not be re-walked** — they are listed in
+[14.41](#1441-what-the-first-ci-runs-on-the-spike-branch-found), and the two
+most attractive are that the progress events are dropped by attaching a
+listener late (they are not: the controller is single-subscription and buffers)
+and that `syncData()` completing on a failed sync is what fires (it is not:
+`SyncStatus.failure` appears zero times in the failing log).
+
+⛔ **Three more disproven, 2026-08-20, so nobody re-walks them.** The expiry hot
+loop of [14.45](#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop)
+is **not** the cause — the run carrying all three of its loops was green at
+177/177, so presence does not produce the failures (a *rate* effect is not
+excluded and would need the pack run N times either side of that fix).
+`SyncServiceWaitUntilCaughtUp.waitUntilCaughtUp` does **not** guard the null-id
+"server and local are in sync" event that `FunctionalTestSyncService` completes
+on — `sync_service.dart:90-95` deliberately completes on it too, so the two
+waiters do not differ there. And an awaited `put()` **has** reached the sync
+queue by the time it returns: `local_secondary.dart` awaits `_enqueueForSync`
+before `_update` returns, so "the writes were not queued yet" is not available
+as an explanation.
+
+✅ **Two failing runs captured, 2026-08-20 evening, on different instruments.**
+(This paragraph said "still no captured failing run" until that evening.)
+
+- **Local**: 4 packs at `cfd511663` — 3 green, 1 red. The red's full log (at
+  the pack's own log level) is `untracked/pq-1443-packs/run_4_20260820_223443.log`,
+  **on this machine only** — `untracked/` is gitignored. Failing test:
+  `atclient_sync_conflict_test.dart` "notify updating of a key to sharedWith
+  atSign - using await", asserting at line 76 that the pulled
+  `phone_0.wavi@alice🛠` keyInfo carries `conflictInfo` — it was **null**. The
+  surrounding log shows the sync pull completing `SyncStatus.success` and the
+  key arriving `remoteToLocal`; what did not happen is the conflict
+  computation populating `conflictInfo`.
+- **CI beta**: run `32418455392` on the same `cfd511663`,
+  `functional_tests (beta)`, `pq_rollout_matrix_test.dart` UC-G1.15, cell
+  `pqReady → pqActive`: `AtSigningVerificationException` — the envelope's
+  rsa2048 signature does not verify against **the one rsa2048 key the
+  published `_apsk` advertises**. Fetch with
+  `gh run view 32418455392 --log-failed`. The smell is a stale or overwritten
+  advertisement: whether the verifier read the signer's `_apsk` or a
+  later-published one is a race on record convergence between the matrix's
+  stage clients.
+
+Two different failure signatures in one family — do not assume one cause
+covers both.
+
+**Shape B is diagnosed at the family level, 2026-08-20, by a three-reader
+sweep over the CI log and the source.** The failing verification read
+`public:_apsk.primary.a.__e@alice🛠` and found one rsa2048 key that appears
+**exactly once in the whole 51,589-line job log — in the failure message
+itself** — and is NOT the demo PKAM key (which appears 31 times), so the
+advertised candidate was a **fresh matrix-minted signing key** and the
+"verifier saw the auth key" scenario is excluded. The mechanism family:
+all four matrix stages sign under enrollment `primary`, so every current-arm
+client publishes the **same** server record; the publish is
+**replace-wholesale** from the client's own keyfile ("anything it leaves out
+is withdrawn" — its own dartdoc); the mint decision reads only the local
+keyfile; and the only serialisation is in-process per-instance. The
+cross-client overwrite plurality is **documented, deliberately accepted
+product behaviour** (`signing_key_minting.dart` records three guards built
+and abandoned), so the defect is the TEST's construction: four "different
+apps" sharing one identity. **Ruled by gkc: each matrix row and column gets
+its own enrollment** — which is also the recorded deployment model, app =
+enrollment = unit. The exact interleaving that fired is unrecoverable from
+this artifact: the matrix children's logs are discarded on success.
+
+**The rebuild landed 2026-08-21, and the full matrix is green at +18.**
+What shipped, against the spec as refined by reading the code (two of the
+spec's four items were already true — the driver awaits sender exit, and the
+child's `exit(0)` means nothing lingers across cells):
+
+- **Per-stage enrollments**, one per stage per role: legacy gets a
+  legacy-mode (RSA APKAM) enrollment and the pq stages get pq-mode (ML-DSA)
+  ones — the same split the postures' own `authenticationKeyAlgorithm`
+  draws, so each stage's envelope-signing fallback is the algorithm the
+  stage means. Run-unique `(appName, deviceName)`; the approver relays the
+  wrapped symmetric key for legacy and registers its own key package first
+  (a pq approval refuses without one). `published` stays unenrolled — it has
+  no keyfile parameter and never writes an `_apsk`, so it cannot contend.
+- **Minting happens once, driver-side, at enrolment time** — cells copy a
+  keyfile that already holds the stage's signing key, so no cell ever
+  re-mints and the advertisement is one stable value per stage for the whole
+  file. Per-cell minting was tried first and failed UC-G1.14, which taught a
+  real product fact: **a re-mint on an enrollment leaves the bare form
+  permanently** — retired keys stay advertised, so the record becomes the
+  JSON array after the first re-mint, and a deployed reader can no longer
+  parse it. Stated for rollout: *pqReady is invisible to a deployed peer
+  until its enrollment rotates or re-mints its signing key; after that it is
+  fail-closed visible.* Ruled by gkc 2026-08-21: the catalogue says it —
+  UC-G1.14 is qualified in place.
+- **The child awaits the mint settled before signing** (bounded, loud) — a
+  guard now that cells start pre-minted, and the harness-side twin of the
+  race [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
+  recorded — since closed product-side by ruling 114 (the sign path awaits
+  the mint), which makes this guard redundant-but-harmless.
+- The receiver is handed the sender's enrollment id — an `_apsk` address is
+  `(atSign, enrollment)`, and a reader handed only the atSign would read a
+  record an enrolled sender never writes.
+
+The dump-on-failure the diagnosis called for landed 2026-08-21
+(`fce13ca52`): a FAILED cell's error carries the child's `during` and
+`stack` fields, and its stderr is dumped after the pipe drains — the child
+writes FAILED to stdout before its stack reaches stderr, so an undrained
+dump is usually empty. Parked, recorded here so it is not re-derived: a
+driver-side `expect` failure on a protocol-green cell still dumps nothing
+(the noise lists are `runCell` locals, discarded on return).
+
+**Shape C — the lost delete — diagnosed and fixed 2026-08-21, from a red
+the post-rebuild soak captured.** `atclient_sync_callback_test` ("latest
+commit entry is updated when same key is updated and deleted", expected `-`
+got `*`) — one of this section's ORIGINAL four observations. The red log
+(`untracked/pq-1443-packs/run_3_20260821_010609.log`, this machine only)
+shows firstkey pushed as `updateAll`, **no delete ever pushed**, and the
+pending count at 0 afterwards. The mechanism, confirmed in code: the sync
+queue keeps ONE entry per atKey and a second enqueue replaces it, while the
+push round's success path removed the entry **by key** — so a `delete()`
+landing between the round reading the entry and the server acking the push
+replaced the entry and was then discarded with nothing left to retry it.
+The same window loses a newer VALUE, invisibly. An awaited `delete()` that
+silently never syncs is data loss, not a flake. Fixed: queue entries carry
+a monotonic `seq`, the round removes only the exact version it pushed
+(`AtSyncQueue.removeIfUnchanged`), and a superseded entry pushes next
+round; the keystore-miss drop got the same version check (a delete needs no
+keystore value, so it must survive that drop too). Pinned three ways: queue-
+level race tests, a service-level differential whose batch stub performs the
+racing delete itself and then asserts the second batch carries `delete:` on
+the wire, and a mutation run — reverting to unconditional removal reddens
+the differential with the defect's own message.
+
+**`sync_multiple_client_test`'s one examined red carries shape C's own
+signature, 2026-08-21.** This paragraph said "plausible and NOT established"
+until the CI log was actually fetched (`gh api .../jobs/96404479619/logs` —
+`gh run view --log-failed` returns a TRUNCATED log for this job and greps as
+a false absence). The 16b00787c beta red's failure is
+`Value divergence for country_4-987522804: client1=null client2=3242750-…`,
+and the log shows, on that exact key, `updateAll` pushed → `delete` queued →
+`updateAll` re-queued → **`keystore miss … dropping queue entry`** (the
+pre-fix unconditional drop) at 11:22:20.557 — 1.5s before the assertion —
+with the healing pulls landing only after it. No `AtTimeoutException`, no
+"Have synced 5 times": the channels that would refute shape C are absent.
+Also settled: the day's beta runs held exactly ONE sync_multiple red, so the
+"1 in 3" and "3 of 5" rate rows counted the SAME instance in overlapping
+windows; the other two beta functional reds that day were both UC-G1.15
+(shape B), and the one stable functional red (run 32382811883) was
+`atclient_sync_conflict_test`'s conflictInfo case — shape A's test. One
+classified instance is not proof every past red was shape C, but no
+unattributed sync_multiple observation remains. Mechanism context, measured
+from local pack logs: this test is the pack's only manufacturer of the shape
+C window — every post-fix "re-enqueued mid-push" save and every
+"keystore miss" drop in any pack log falls inside its window, on its own
+keys — and a plain ack-path loss self-heals here (the pull re-applies the
+acked server value; `isInSync` is cursor-based), so only the narrower
+orderings redden it. Discriminators for any FUTURE red of this test, which
+at or after `e76b0038b` would be evidence of something shape C's fix does
+NOT cover: SEVERE `Value divergence` with one side null and no
+`Will push SyncQueueOp.delete` for that key afterwards points back at a
+queue drop (check for a `re-enqueued mid-push` line for the key); a red
+presenting as a timeout or "Have synced 5 times" was never shape C's
+signature at all.
+
+**Shape A is diagnosed, from the red log's own lines — a measurement, not a
+hypothesis.** `SyncServiceImpl.stop()` halts future triggers and cannot halt an
+in-flight run: `processSyncRequests` checks `isStopped` only at entry
+(`sync_service_impl.dart:272`) and never after resuming from an await, and its
+first await — `_isInSync()` → `_getServerCommitId(forceFresh: true)` — is a
+network round-trip. In the red run the harness's own `syncData` request entered
+processing and parked on that await; the test's `stop()` returned at
+`22:37:03.077489` ("Stopping sync service"); the test staged its five puts; and
+at `22:37:03.086665` the parked run resumed, read `pending push count: 5`, and
+ran a full `syncInternal` — five "Will push" lines follow — destroying the
+staged conflict before the measured sync ran. The three green logs show the
+same slice with the prior run fully finished before `stop()`, so no rogue run.
+The `start()` dartdoc documents the in-flight run surviving `stop()` "to set
+flags back on its own" — the survival is designed, but the survivor does
+*work*, not just unwinding. Same shape as the Monitor start/stop race this
+package already fixed with a done-completer.
+
+**Fixed, same day.** `processSyncRequests` re-checks `isStopped` after its
+opening await and answers the request "SyncService has been stopped";
+`_throwIfStopped()` guards each stage boundary and each push/pull round in
+`syncInternal`; and `stop()` awaits the in-flight run's unwinding via a
+done-completer, so "halts sync activity" is true when `await stop()` returns.
+Pinned by `test/sync_stop_race_test.dart` — a parkable stats fetch reproduces
+the exact park-resume shape; reverting either half of the fix reddens the
+tests with the right messages (run, not reasoned), and a control arm proves
+the parked run does work when *not* stopped, so the verifyNever cannot pass
+vacuously. A unit test for mid-sync `stop()` existed once and was retired
+(`sync_service_test.dart`'s own header records it) on the claim that
+`atclient_sync_conflict_test` covered it end-to-end — the covering test is the
+one that flaked, which is what "a test is the specification of the mechanism
+it guards" is about. Evidence at the fix commit: unit 1484/1484; one
+functional pack 177/177 with the rewritten harness taking 4 extra
+truth-checked sync rounds that the old harness would have skipped.
+**Post-fix packs at `7f24542eb`: 6 runs — 5 green, 1 red**, and the red is
+NOT shape A's test (`atclient_sync_conflict_test` was green in all 6) nor any
+previously recorded family member — it is the new member below. Six packs
+without a shape-A recurrence bound a rate, not a kind; the mutation-proven
+unit tests are what carry the fix's proof.
+
+**A sixth family member, captured 2026-08-20 in post-fix run 6**
+(`untracked/pq-1443-packs/run_6_20260820_235557.log`, this machine only):
+`nskey_rotation_live_test.dart` UC-A5.1(b) — the survivor's read of the
+rotated `__nskey` advertisement returned kid `e05da79630eb0db1` where the
+successor `ceccdd0bb19ba1ad` was expected, and the log's own rotation line
+names `e05da796…` as **the pre-rotation generation**, so the read served the
+superseded advertisement. The assertion reads
+`PublishedNskeyKeyRing.currentPublic` — while the test's own comment above
+it claims "the atServer's own copy" — and `currentPublic` never promises
+that: it serves this ring's `_ownCurrent` and `_remote` caches inside a
+15-minute `advertisementTtl`, and then a **LOCAL-first** get. **The recorded
+hypothesis here — that the survivor fetched generation 1 earlier inside the
+ttl and the cache served stale — is contradicted by the source, 2026-08-21:**
+`survivor.ring` is a fresh per-test instance whose first-ever use IS the
+assertion, so both per-instance caches were empty; the ttl is irrelevant to
+a first read. What fired is the fetch arm itself: for an own-atSign public
+key the get routes to a local llookup of the one Hive box every same-atSign
+client in the process shares, and the red log shows sync-pull writes of
+`public:__nskey.buzz` landing between the rotation's local generation-2 put
+and the failing read — an in-flight pull regressed the shared box to
+generation 1 while the atServer already held generation 2. The fix is still
+the TEST's (the product's caching and local-first sender read are deliberate
+and documented), but "a fresh ring" would NOT fix it — a fresh ring's
+`currentPublic` still reads local-first and inherits exactly the staleness
+that fired. The one genuinely cache-skipping read is
+`publishedAdvertisement` (remote-only, signature-verified — what the mint
+path uses for the same reason). Three sibling assertions share the shape:
+the same file's UC-A5.3 read (self-confirming — it answers from the cache
+the rotation itself just wrote), `nskey_published_ring_test.dart`'s
+post-rotate fresh-ring read, and `pq_signing_root_mint_lock_test.dart`'s.
+Discriminator for a second red: NOT "find the survivor's generation-1 fetch
+earlier in the log" (its local read logs nothing, and there was no earlier
+fetch) — look for `Pulling to local: UPDATE: public:__nskey.<ns>` between
+the rotation's publish and the assertion. Side observation for a product
+ruling: the regression this rides on is the sync pull applying an OLDER
+server entry over NEWER local state — the pull-side face of this family,
+which shape C's push-side versioning does not cover. The test-side fix
+landed 2026-08-21 (`ccf4987a4`): all four exposed assertions read through
+`publishedAdvertisement`, and one functional pack ran 177/177 with them.
+
+**The harness half, also visible in the red log:**
+`FunctionalTestSyncService.syncData` completed 610µs after starting — too fast
+for its own enqueue → network → verdict — so it completed on the **previous
+run's** progress event and stranded its own request, which is the one that went
+rogue. That widened the already-recorded harness defect below (completing on
+`SyncStatus.failure`): it completed on the first success-or-failure event
+regardless of *whose* event it was. **Both halves fixed with the product fix**:
+`syncData` now consumes events with `await for` and completes only when the
+service's own `isInSync()` answers true — an event is treated as "a run
+finished", never as "this call's work is done" — and a failure event means
+retry (bounded), never done. Whether shape B (UC-G1.15) reduces to any of this
+is **not established**.
+
+⚠️ **Start by reading [14.34](../implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart),
+which is very probably the same thing.** It records an unexplained intermittent
+in the same pack, timing out at `await firstNotification`, passing when its file
+runs alone — recorded 2026-08-17 and recurring 2026-08-19, well before the four
+below. That makes **five** files in one family, not four. ⚠️ Do NOT pool the
+rates: 14.34's observations (1 of 5 runs, then 1 of 2) were taken on tree states
+this branch has since moved past — 14.34 says so itself — and on a different
+file. Two figures from different instruments are not a comparison, however
+carefully each was taken. **Not asserted as identical**; nobody has shown one
+cause covers both.
+
+⭐ **The pattern to look for first: a test that passes only because of what
+ran before it.** Three independent instances on this branch now, two of them
+found by different people:
+
+1. **UC-A4.2's control** asked whether @bob was ready for the shared namespace
+   while nothing in its own file made him ready — green only when one of three
+   other files had minted first. Fixed `454bedbbd`.
+2. **`encryption_test.dart`'s monitor replay** — fixed on trunk by
+   `6b91035b4` and arriving here with the 2026-08-20 merge. Its commit message
+   is the clearest statement of the shape: "*without it this test only passes
+   when some other test file happened to start atSign_2's monitor first, which
+   is what made it flake*".
+3. The four convergence failures above — **unproven**, but this is where to
+   look before anything subtler.
+
+⚠️ Instance 2 rests on **deliberate** product behaviour, not a defect, and the
+distinction matters: `NotificationServiceImpl.getLastNotificationTime()`
+returns null on its FIRST call for a keystore and seeds the record — confirmed
+at `notification_service_impl.dart:439-444`, "*return null for THIS call to
+keep first-run semantics ('don't replay history I never saw')*" — and a monitor
+started with null asks the atServer for no replay. So a first-run subscriber
+correctly misses what preceded it, and a test wanting replay must burn that
+call itself. Do not "fix" the product here.
+
+**A separate defect found in the same place — now fixed with shape A's fix.**
+`FunctionalTestSyncService.syncData()` used to call `syncOutcome.complete()` on
+`SyncStatus.failure`, so a **failed** sync returned to its caller as success.
+The rewrite retries on failure (bounded at five rounds) and throws if still
+not in sync.
+
+### 14.45 An expired key the client cannot delete pins it in a hot loop
+
+⛔ **Pre-existing on `origin/trunk`, not introduced by this branch** —
+`_armExpiryTimer` has 5 hits and `deleteExpiredKeys` 2 there. Found 2026-08-20
+while running the pack for [14.43](#1443-the-functional-suites-convergence-race).
+
+**The loop, read from source.** `AtClientImpl._armExpiryTimer`
+(`at_client_impl.dart:769`) arms `Timer(Duration.zero, _onExpiryFire)` whenever
+the earliest expiry is already in the past — its own dartdoc says so.
+`_onExpiryFire` runs `LocalSecondary.deleteExpiredKeys`, whose per-key `catch`
+(`local_secondary.dart:585`) logs the failure at `warning` and moves on **without
+removing the key**. `_onExpiryFire`'s `finally` then re-arms. The earliest expiry
+is still in the past, so the timer is `Duration.zero` again. Nothing removes the
+key, nothing backs off, nothing gives up: the client spins for the remainder of
+its own lifetime, one `warning` line per turn of the event loop.
+
+**Measured, one local pack run — THREE keys, three loops, all `_nskeylock`:**
+
+| Key | Iterations |
+|---------------------------------------------------|-----------:|
+| `_nskeylock.cooldown1787252300302993.buzz@bob🛠`   | 186,994 |
+| `_nskeylock.ns1787252329248768.wavi@alice🛠`       | 19,965 |
+| `_nskeylock.rot1787252358178828.wavi@alice🛠`      | 18,762 |
+
+225,721 in total, **47.4% of the run's 394,523 log lines**. Each is refused with
+`Cannot perform delete … due to insufficient privilege`. Intervals tighten from
+1259 µs to about 120 µs. The first began during `nskey_rotation_live_test.dart`
+and ended only when that test file ended and the next one loaded — *not* by
+resolving.
+
+**This is designed-in, not incidental.** `MintLock` releases by ttl and by
+nothing else — `mint_lock.dart:80`, "**The winner does not release the lock; the
+ttl does**" — so every mint and every rotation creates a record whose only exit
+is expiry, and the client cannot delete it when it expires. Every lock is
+therefore a future hot loop, and the three above are one run's worth of
+ordinary minting.
+
+**Where it comes from, read in the dependency.** `nextExpiresAt()` reports the
+earliest expiry in the store **including ones already past**, on both backends
+of at_persistence_secondary_server 5.2.1 — Hive takes a bare minimum over every
+record with an `expiresAt`, SQLite runs
+`SELECT MIN(expires_at) … WHERE expires_at IS NOT NULL`. Its sibling
+`nextAvailableAt()` filters (`available_at > ?`; Hive comments *"Strictly after
+the cutoff: already-born keys are excluded"*). The asymmetry is fine on its own
+— a past expiry means "sweep now" — and at_client's `_armExpiryTimer` is what
+adds the assumption that the sweep will then clear it.
+
+✅ **FIXED — the spin, not the refusal.** `AtClientImpl._onExpiryFire` now reads
+`deleteExpiredKeys`'s return count and passes `afterFruitlessSweep: removed == 0`
+to `_armExpiryTimer`, which floors the delay at 30s instead of arming zero when
+the expiry is past and the sweep achieved nothing. The retry survives, so a
+refusal that turns out to be transient still heals and a later expiry is still
+collected. `AtClientImpl.expiryTimerDelay` is `@visibleForTesting` and its four
+branches are pinned in `test/at_client_expiry_timer_test.dart`; reverting the
+fix reddens the backoff test, quoting its own reason. ⚠️ **What that test does
+NOT cover** is the single line feeding it — a change that always passed `false`
+would leave the suite green and restore the spin. Observing it needs a built
+`AtClientImpl` with an injected `LocalSecondary`, which was judged not worth the
+scaffolding; the test file says so at the top.
+
+✅ **The refusal is FIXED too, and it was not about immutability.** Traced
+2026-08-20: the sweep's delete is refused by `isEnrollmentAuthorizedForOperation`
+in `LocalSecondary._delete` — a **namespace** check — before any keystore or
+server interaction. The lock key parses as `KeyType.selfKey` with namespace
+`buzz`/`wavi`, so it is not in the skip list (`reservedKey`, `cachedSharedKey`,
+`cachedPublicKey`, `localKey`). The sweep passes `localOnly: true` and so never
+builds a `delete:` command at all, which is the only place `force:` appears —
+and the client keystore has no immutability guard on remove (`immutable` occurs
+20 times in at_persistence_secondary_server 5.1.0, in metadata serialization and
+in `AtMetadataBuilder` preserving it across *updates*, never in a remove path;
+control: `expiresAt` occurs 68 times). Immutability is the atServer's
+enforcement, on the `delete` verb.
+
+`deleteExpiredKeys` now passes `isExpiry: true`, which skips that check.
+Reclaiming an expired record is storage internals, not an operation an
+enrollment performs, and the scoping is unaffected because an expiry deletion is
+local-only and never enqueued for sync. `test/expiry_sweep_authorization_test.dart`
+pins both arms — an enrollment-initiated delete outside its namespace is still
+refused, and the sweep reclaims the same record — and reverting the bypass
+reddens it.
+
+⛔ **Parked by gkc 2026-08-20: why the lock is in local storage at all.** It is
+created remote-only (`MintLock._take` → `getRemoteSecondary().executeVerb`, and
+`_isOwnLock` → `getRemoteSecondary().executeCommand`), and arrives locally by
+the sync pull — the never-synced rule covers `public:_`, not self keys, and
+`syncRegex` defaults to null so the pull is unfiltered. Two things stop a client
+suppressing it today: the client API has no working suppression control —
+`RemoteSecondary.executeVerb`'s `sync` parameter was inert and is now
+`@Deprecated` (14.46; `_take` no longer passes it) —
+and `:nc`/`noCommit` — which would stop the atServer logging the commit — exists
+in at_commons (published 5.15.0, syntax groups for `update`, `update:meta` and
+`delete`) but appears in **zero** files of at_server `origin/trunk`.
+
+⚠️ **Owed against `at_persistence_secondary_server` (5.1.0), not fixable here.**
+`HiveAtKeyValueStore.get()` does not filter expired records, and carries three
+comment lines describing the filter that was never written — *"load metadata for
+hive_key / compare availableAt with time.now() / return only between ttl and
+ttb"*. It throws `KeyNotFoundException` only when the value is **absent**. So
+expiry filtering lives in one caller: of **14** direct `keyStore.get`/`getMeta`
+reads in at_client's `lib`, only `LocalSecondary._llookup` applies
+`_isActiveKey`. Most of the rest are benign — the private-key getters have no
+ttl, and `prevMeta` wants the pre-write value deliberately — but the filter
+belongs in the store. ⛔ Do **not** "fix" `_llookup` to throw for an expired key:
+returning `'data:null'` is the documented contract, stated at
+`collections.dart:1366` as *"data:null (availableAt in future, or post-expiry)"*
+and tested for at 16 call sites across 5 files.
+
+⛔ **It is NOT what fires [14.43](#1443-the-functional-suites-convergence-race),
+and this is a measurement rather than a guess.** The run these figures come from
+was **fully green — 177/177, exit 0** — with all three loops running in it. So
+the loop's *presence* does not produce the convergence failures, and a future
+session should not adopt it as the cause on the strength of how alarming it
+looks. What one green run cannot exclude is a *rate* effect: more event-loop
+saturation widening an existing window. Settling that needs the pack's failure
+rate over N runs with and without a fix, which is expensive and should wait
+until the loop is fixed anyway.
+
+### 14.48 A `primary` client can sign with a key its own advertisement just withdrew
+
+Found 2026-08-20 while diagnosing [14.43](#1443-the-functional-suites-convergence-race)'s
+shape B; filed by gkc's ruling as a product row, distinct from the accepted
+overwrite plurality. That acceptance
+(`signing_key_minting.dart` — "three guards were built and all three broke the
+live enrollment path") is about two **clients** overwriting each other's
+`public:_apsk.primary.a.__e` record in turn. This row is about **one** client
+racing itself:
+
+- `PqClientBootstrap.startup()` is fire-and-forget
+  (`at_client_impl.dart:677-698` region), so minting runs concurrently with
+  whatever the app does next;
+- `SigningKeyMinting` **publishes before filing** — the advertisement carries
+  the fresh key before the keyfile does;
+- `ApkamSigning.signingKeys` reads the keyfile per call and **falls back to
+  the APKAM authentication keypair when it holds nothing**
+  (`apkam_signing.dart:171-195`);
+- the composition **withdraws** the authentication key on the first mint:
+  `apskEntries` (`apsk_composition.dart`) adds the auth key only while the
+  enrollment holds no signing key of its own — the same condition the
+  signing fallback keys on, by design, "so what signs and what is advertised
+  cannot disagree".
+
+Interleave those and a client signs an envelope with the auth fallback in the
+window where its own advertisement already names only the minted key — an
+envelope nothing can verify, thrown by the verifier as "does not verify
+against any of the 1 rsa2048 key(s) the published `_apsk` advertises". The
+mirror-image window (sign first, publish lands before a peer's fetch) fails
+the same way. Per-stage enrollments in the matrix test do not close this —
+it is one process, not two.
+
+**The prerequisite check is answered, 2026-08-21, and it narrows nothing:
+ENROLLED clients share the window.** This section used to say the withdrawal
+came from "the bare advertisement form holds exactly one key" and to ask
+"whether the JSON form's `authentication` entry already rescues enrolled
+clients". Checked at the source: no such entry exists — the wire form
+(`apsk_advertisement.dart`) emits only `v` and `keys`, `enroll:update` sends
+the entries verbatim, and the withdrawal lives in the shared composer, so
+the JSON/array form withdraws the auth key identically. (The bare form's
+single slot is a second, independent constraint on fix 3 below, not the
+withdrawal mechanism.) Two stale dartdocs — `apsk_advertisement.dart` and
+`envelope_signature.dart` — still describe auth-key *retention* that commit
+`4c4279be4` deliberately removed; they want correcting whichever way the
+decision goes.
+
+**Ruled by gkc, 2026-08-21: candidate 1 — the sign path awaits the mint.
+Built the same day; the mechanism and evidence are decisions.md 114.**
+`signingKeys` waits on a per-client barrier the bootstrap settles at its
+mint step (and on stop, failure and gated-off); the mint itself is the one
+exempt signer. Differential and mutation runs green, unit 1495/1495, one
+functional pack 177/177 with the barrier live. The other two candidates
+stay recorded below with the trade-offs that argued them down:
+
+1. **Sign awaits mint.** A mint-settled completer on `PqClientBootstrap`
+   (settled in a `finally` so gated-off/failed paths release it), awaited in
+   the sign path. Closes both windows for every in-process signer; costs an
+   early sign one round trip. It must NOT await `startupComplete` — the
+   bootstrap's own later steps sign, so that deadlocks. Real design cost:
+   `ApkamSigning` holds only the `AtClient` spec, which does not expose the
+   bootstrap — a spec addition breaks every `Mock implements AtClient` at
+   runtime, so it is a downcast or constructor injection.
+2. **`wrapAndSign` refuses until minting settles.** Same plumbing, throw
+   instead of await. No deadlock risk, no silent delay — but the race becomes
+   visible refusals, including for envelope-listener responses (the listener
+   starts one bootstrap step before minting), and every refused response
+   needs a retry story or it is a silent drop.
+3. **Composition keeps the auth key as a retired entry.** ~5 lines in
+   `apskEntries`, and the verifier already accepts it (retired entries are
+   kept and every candidate key is tried). Uniquely, it also rescues durable
+   envelopes signed with the auth fallback BEFORE the first mint — a superset
+   of the race, and the composer's own doc names revisiting exactly that
+   premise. But at the bare stage two entries force the JSON array onto a
+   record every deployed consumer base64-decodes as a bare RSA key — the
+   breakage rollout 1 exists to prevent, and the reason `4c4279be4` removed
+   retention. A scoped variant (retain only when the value is the array
+   anyway) is deploy-compatible but leaves the bare stage — where the window
+   was measured — open, so it can only accompany 1 or 2, not replace them.
+
+Open beneath the choice: whether any deployment already holds durable
+auth-fallback-signed envelopes from before a first mint (if so, the first
+mint unverifies them all regardless of the race, and only 3 helps); and the
+verifier's pubKeyCache asymmetry — a peer holding the pre-mint advertisement
+verifies window-signed envelopes for up to the cache expiry while a
+fresh-fetching peer refuses them.
+
+### 14.49 `KeyEntryStatus` becomes a typed String, and the release train is all candidates
+
+**Two rulings by gkc, 2026-08-22.** Recorded together because both are cheap
+only while these packages are unpublished.
+
+#### 14.49.1 `KeyEntryStatus` becomes a typed String wrapper — DONE 2026-08-22
+
+Ruled and built the same day. `KeyEntryStatus` now has the shape
+`CryptographicMaterialStatus` already had: a class of `static const String` constants, an open
+value, and an unknown token **preserved** rather than flattened. What landed is
+at the bottom of this section; the ruling and its evidence are kept because they
+are what the shape has to go on being right about.
+
+⚠️ **The `CryptographicMaterialStatus` justification does NOT transfer, and stating it
+wrongly would send the next reader looking for a bug that is not there.**
+That conversion was forced because the old reader *threw*: an unknown status
+refused the whole keyfile, so any new value was a permanent at-rest break.
+`KeyEntryStatus.fromWire` already tolerates unknowns without throwing
+(`key_entry_status.dart`: absent or `active` → active, **anything else →
+retired**). Its problem is not refusal but **lossy** tolerance.
+
+What is actually wrong, measured 2026-08-22:
+
+- **The open type feeds the closed one and the openness is discarded one hop
+  later.** `key_package_persistence.dart:86` maps
+  `material.status == CryptographicMaterialStatus.active ? KeyEntryStatus.active :
+  KeyEntryStatus.retired`. `CryptographicMaterialStatus` was made open precisely so an
+  unrecognised value round-trips unmodified; that value is collapsed to
+  `retired` at this seam.
+- **A round trip rewrites a newer client's stronger statement.** The reader
+  collapses any unknown to `retired` (`apsk_advertisement.dart:145`) and the
+  writer emits `key.status.name` (`:59`), so a `revoked` read by this build
+  and written back becomes `retired`. ⚠️ **This bullet overstated the `_apsk`
+  case and was corrected while building, 2026-08-22.** No caller reads an
+  `_apsk` record and republishes its entries: every `_apsk` writer composes
+  from local key material (`apskEntries` from the keyfile, or a single freshly
+  minted key at `pq_signing_root.dart:497`). So for `_apsk` the loss is a
+  property of the reader/writer pair, not a live path — pinned as a format
+  rail, not sold as coverage. The **live** version of the same loss is the
+  seam in the bullet above, keyfile → record, and it is why that seam is the
+  one that matters.
+- **The collapse is fail-OPEN in the direction that matters.** Retirement
+  withdraws the future and preserves the past — a retired signing key still
+  verifies what it signed. A compromised key must not. Mapping an unknown
+  `revoked` to `retired` therefore leaves an older build verifying forgeries.
+
+Extensions to expect, in rough order of likelihood: **`revoked`/`compromised`**
+(must restrict verification, which the binary cannot express), **`suspended`**
+(temporary, where `retired` is a one-way door), **`pending`/`provisional`**
+(advertised ahead of activation, never becoming usable for a build that
+predates the value).
+
+The shape wanted: keep the raw token; offer `bool get offeredForNewOperations`
+for the sign/seal decision and something honest for the verify decision, so an
+unknown status can be treated as **more** restrictive rather than silently as
+`retired`.
+
+⛔ **`EnrollmentKeyExchangeMode` stays an enum. Do not convert it.** It is
+never parsed from any wire or JSON value — every use site sets it locally (two
+named constructors fix it, `enrollment_submitter.dart` branches on it,
+at_client re-exports it for `PqPosture`). Nothing outside this process writes
+it, so there is no forward-compatibility problem; a third mode later is
+additive and the only thing it breaks is an exhaustive `switch` the compiler
+will point at. An open String would trade a checked domain for stringly-typed
+branching and buy nothing. Revisit only if an atServer or a peer starts
+reporting it back.
+
+Scope: **132** references across the tree at `8b08174b5`, not the 107 this said
+when it was written and not the 126 measured mid-change — the tests added here
+moved it. Re-derive rather than quoting:
+`git grep -c KeyEntryStatus | awk -F: '{s+=$2} END {print s}'`. Pinned by
+raw-literal wire tests in **both** packages' `wire_literal_pins_test.dart`.
+
+**What landed.** `key_entry_status.dart` is a `class` of `static const String`
+constants with `known`, and three functions:
+
+- `fromWire(Object?)` — absent is `active`, anything else is the token itself.
+  A non-String is stringified rather than repaired, which keeps it out of both
+  known values and keeps what was written visible in a log.
+- `offersNewOperations(String)` — the sign/seal question. Only `active`.
+- `vouchesForPastOperations(String)` — the verify question. `active` and
+  `retired`, spelled out rather than as `known.contains`, because a token joins
+  `known` by being *understood* and the first one anyone adds is likely to be
+  one that must fail this.
+
+`ApskSigningKey` carries both as getters, `PackageKey`, `PersistedEncKey` and
+the mixin's held key carry the first. **Both** collapsing seams were fixed, not
+the one this section named: `key_package_persistence.dart` (adoption at
+startup) and `key_package_minting.dart`'s `advertisedKeysIn` (the republish),
+which each mapped the keyfile's own open `CryptographicMaterialStatus` onto one of two values.
+
+**The verify half is wired, not merely offered.** Two call sites drop an entry
+whose status they cannot read: `parseApskValue`, so `verifyEnvelope` refuses an
+advertisement of nothing verifiable rather than half-reading it, and
+`PqSigningChain._rootCandidates`. Filtering there rather than inside
+`apskSigningKeys` is deliberate — that reader also feeds the *writers*, which
+have to republish a token they do not understand rather than delete it.
+
+**The third record followed, ruled by gkc the same day.** `_apsk` had the same
+seam in a worse form: `AtKeys.retiredSigningKeysFor` selected on *exactly*
+`CryptographicMaterialStatus.retired`, so a signing key carrying a token this build had never
+seen was in neither list and was **dropped from the advertisement entirely** —
+and because `_apsk` is rewritten whole on every publish, an omitted entry is a
+withdrawal. It erased the key that verifies what it signed along with whatever
+its owner last said about it.
+
+⚠️ **That skip was a written, reasoned decision, not an oversight** — its
+dartdoc said advertising such a key "would state something about it this build
+does not know". True while the advertisement could only say `active` or
+`retired`; the open token is precisely what removes the premise, because the
+entry can now carry the keyfile's own word. The method is
+`withdrawnSigningKeysFor`, selects on not-active-and-not-`dead`, and returns the
+token; `apskEntries`' `retired` parameter became `withdrawn` and writes it
+through. Keys a call is withdrawing *right now* are still stated as `retired` —
+that is the caller's own act, not a value it read. Free to do only because the
+whole signing-key family is unpublished: it appears in zero files of at_auth
+3.3.0.
+
+Eleven tests, each mutation-proven by reverting its own fix and reading the
+failure message: the two seams, the two verify sites, an `_apsk` round trip
+that shows a `revoked` token read and written back unchanged, the predicate
+table, a `PackageKey` round trip, the widened `_apsk` selector with `dead` as
+its control, the composer's write-through, and the deliberate asymmetry between
+the two readers — at_auth's keeps an unreadable entry because the writers
+republish what it returns, at_client's verifier drops it. `at_auth` 335/335, `at_client` 1509/1509, the
+functional pack 178/178, workspace analyze clean and the at_client format gate
+clean. The `at_client` pin that asserted
+`fromWire('verifyOnly') == retired` went red on its own and its rewrite is the
+review of the behaviour change.
+
+#### 14.49.2 Every remaining package publishes as a release candidate
+
+Ruled by gkc. at_lookup `3.7.0-rc1` and at_server_status `1.1.2-rc1` are
+merged; at_auth `4.0.0-rc1`, at_client `3.15.0-rc1`, at_client_flutter
+`1.1.5-rc1` and at_onboarding_cli `1.17.0-rc1` are on the spike awaiting their
+carves.
+
+**Why all of them, not just at_lookup:** a package that declares a candidate
+floor and publishes as STABLE resolves its consumers onto the candidate anyway,
+through a version bump they take without thinking.
+
+**The prerelease rule this rests on, measured rather than assumed:** a caret
+range does **not** admit a prerelease of its own lower bound (`^3.7.0` rejects
+`3.7.0-rc1`), but **does** admit one strictly above it (`^3.6.0` accepts
+`3.7.0-rc1`). That is why at_lookup's and at_auth's bumps forced constraint
+changes while the others needed none.
+
+⚠️ **OWED AT THE REAL RELEASE, and recorded here because a commit message is
+not a durable home for it:** every constraint moved to a `-rc1` floor reverts
+to its stable form when these publish, or a stable release ships requiring a
+candidate. The sites: `at_lookup: ^3.7.0-rc1` in at_auth, at_client and
+at_server_status; `at_auth: ^4.0.0-rc1` in at_client, at_client_flutter,
+at_onboarding_cli, `tests/pq_matrix/current`, both live test packages and
+three at_client_flutter examples. Re-derive with
+`git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'` -
+measured, `*` crosses `/` in a git pathspec so it reaches the nested ones.
+
+**at_auth is a MAJOR, ruled by gkc 2026-08-22** - `4.0.0-rc1`, not
+`3.4.0-rc1`, which is what this section said until that ruling. The typed
+keyfile's field names change (`keyParts`/`keyPartType`/`keyAlgorithmType`
+become `material`/`role`/`algorithm`) and `KeyPartStatus` becomes
+`CryptographicMaterialStatus`. The five constraint sites that floored at_auth
+at a stable `^3.0.0` - both live test packages and three at_client_flutter
+examples - moved to the candidate floor with the rest, so they revert too.
+`packages/at_chat_flutter/example` is deliberately left at `^3.0.0`: it has no
+path override, so it resolves published at_auth and a candidate floor would
+strand it.
+
+**at_client stays a MINOR, ruled by gkc 2026-08-22** - `3.15.0-rc1`, and
+at_auth is the only major in this train. Its in-progress section carries
+several **BREAKING** labels, which is what keeps prompting the question:
+- `PackageKey.status`'s type change is accepted.
+- `apskEntries` is **not public API at all**. It is absent from
+  `packages/at_client/lib/at_client.dart`, and every importer reaches it
+  through `package:at_client/src/signing/apsk_composition.dart`, so no
+  consumer can observe its signature. Re-derive with
+  `git grep -n apskEntries -- packages/at_client/lib/at_client.dart`, which
+  returns nothing against a positive control of `apskEntries` in 4 other
+  at_client Dart files (`apkam_signing`, `apsk_composition`,
+  `signing_key_minting`, `apsk_formats_test`).
+- The four typed vocabularies are `extension type ... implements String`,
+  erased at runtime, so nothing published loses a member or changes shape.
+
+The same test the 3.14.1-to-3.15.0 ruling used applies: semver keys on what a
+consumer can observe, and nothing published was removed. That earlier ruling is
+recorded as an HTML comment at the top of `packages/at_client/CHANGELOG.md`.
+
+#### 14.49.3 Considered while building 14.49.1, and deliberately not done
+
+These are here to **stop** the next reader building them. Each looked like a
+defect during the adversarial review and is not one, or is a real question that
+was left open on purpose.
+
+- **`KeyEntryStatus.known` is not dead code — do not delete it.** Its only
+  consumer is a raw-literal wire pin, which is exactly the arrangement
+  `CryptographicMaterialStatus.known`, `CryptographicMaterialAlgorithm.known` and `CryptographicMaterialRole.known`
+  already have beside it. The pin is the point: it makes re-spelling the
+  vocabulary an edit somebody has to review.
+- **`fromWire` stringifying a non-String value is deliberate.** It keeps a
+  malformed status out of both known tokens, so both predicates answer no —
+  the maximally restrictive reading — and it keeps what was actually written
+  visible in a log. `active` would be fail-open, `retired` is the flattening
+  this whole item removed, and a sentinel would put a token on the wire that no
+  writer ever meant.
+- **The empty string is not special-cased.** It is not `active`, so it is
+  unknown, so it is maximally restrictive. A fourth behaviour for a value
+  nothing writes is a branch nothing exercises.
+- **The two serializers compare `status != KeyEntryStatus.active` rather than
+  calling `offeredForNewOperations`, and they must not be unified.** A
+  serializer asks "do the bytes need this field"; the predicate asks "may this
+  key be used". Same answer today, and they diverge the moment a token is added
+  that is offered for new operations without being spelled `active`.
+- **OPEN, not rejected: a held KEM key whose status this build cannot read
+  still opens envelopes addressed to it.** `KeyPackageRegistration.encKeyFor`
+  does not consult status, which is right under the retained-key doctrine — a
+  holder opens what was already sealed to it — and the unknown-token rule as
+  built governs *choosing* a key, never opening one you hold. But an owner
+  writing `revoked` may well mean "stop opening too". Not built, because
+  refusing would strand envelopes on a guess about a token nobody writes yet.
+  Revisit when the first real third token is defined, and decide it there
+  rather than here.
+- **`PqSigningRoot._signingPrivate`'s `held.length <= 1` short circuit is left
+  alone.** It returns a lone private without consulting the record, which
+  reads alarmingly next to the new fail-closed filters. Its dartdoc gives the
+  reason — four production call sites take it as the cheap local check before a
+  round trip, one of them on the approval path — and names
+  `reconcileHeldPrivate` as the owner of the heal. That heal now makes the same
+  vouching judgement as the verifier, which is what covered the case that made
+  this worth looking at.
+

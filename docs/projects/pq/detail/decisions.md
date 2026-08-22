@@ -4850,7 +4850,13 @@ than a cost.
 That is also why the PQ mint is **opt-in at the at_auth layer**
 (`AtOnboardingRequest.signingAlgoType = mldsa65`) rather than the default: empty
 flat fields are a behaviour change no minor may impose on existing consumers,
-and at_auth 3.4.0 is a minor. The SDK's own onboarding path is what opts in, so
+and at_auth's open version was a minor when this was ruled. ⚠️ **That premise
+inverted on 2026-08-22**: the keyfile rename made the version breaking and
+`96025e46c` renamed the heading **4.0.0-rc1**, so a major now *may* impose it.
+The ruling stands anyway and the sentence is amended rather than deleted — the
+reason to keep the mint opt-in is no longer "a minor cannot", it is that the
+consumers have not moved, and nothing has re-argued it on the new footing.
+The SDK's own onboarding path is what opts in, so
 UC-A1.1's "a CRAM onboard is PQ-native" is true of the entry point applications
 actually use.
 
@@ -6524,7 +6530,7 @@ not by this change).
 PARAMETER (never a preference), the last of the five rollout axes to
 gain its flag. *Amended 2026-08-13: "the last" was true when written and is
 not now — the in-use signing set ([section 91.3](#913-the-rulings) ruling 16) became
-an axis later, taking the slot the deleted signed-envelope-version axis left.* `AtSelfEnrollmentRequest.signingAlgo` (at_auth 3.4.0,
+an axis later, taking the slot the deleted signed-envelope-version axis left.* `AtSelfEnrollmentRequest.signingAlgo` (at_auth 4.0.0-rc1,
 additive, default `mldsa65` — the mechanism keeps its old behaviour)
 selects what the self-enrollment mints: `rsa2048` is type-1, the
 rollout-window mode — a FRESH RSA keypair under a new enrollment id,
@@ -7048,7 +7054,7 @@ The store's v1 envelope decodes the CLI's current one (that is the
 documented no-`v` legacy path), but at_chops' `AtKeysCrypto` **cannot**
 decode a v1 envelope — the probe fails with `Invalid or corrupted pad
 block`. So a passphrase-protected keyfile written after this change needs
-at_auth 3.4.0 or newer to open, and `AtOnboardingPreference.hashingAlgoType`
+at_auth 4.0.0-rc1 or newer to open, and `AtOnboardingPreference.hashingAlgoType`
 becomes inert, v1 being argon2id-only. What is bought is the reason v1
 exists: v1 salts per file, where the legacy derivation used the passphrase
 itself as the salt, so two users who chose the same passphrase derived the
@@ -8176,8 +8182,8 @@ open unknown invited someone to go looking for a server bug that is not there.
 > the ledger leaves the ledger arguing against it.
 
 **6. D1 initial development ends when the PRs are carved and merged** — not at
-a green matrix, and not at R-2. Publishing (at_chops 3.6.0 → at_commons 5.15.0
-→ at_auth 3.4.0 → at_client) and the 4.0.0 posture flip are the release
+a green matrix, and not at R-2. Publishing (at_chops 3.6.0 → at_commons 5.16.0
+→ at_auth 4.0.0-rc1 → at_client) and the 4.0.0 posture flip are the release
 programme that follows it. **The spike branch still never merges**; everything
 in it reaches trunk as stacked PRs.
 
@@ -9557,7 +9563,7 @@ application call racing the unawaited `startup()`." Both halves are false.**
 It was measured on 2026-08-17 from the atServer's own log, and reaching it
 needed no application race at all — the ordinary approver flow does it on every
 run when the approver is built `postQuantum`
-([`implementation-plan.md` 14.32](../implementation-plan.md#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers)).
+([`implementation-plan.md` 14.32](implementation-plan.md#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers)).
 
 `public:_apsk.primary.a.__e@alice🛠` starts absent and takes four updates: bare
 RSA, bare RSA, **the `mldsa65` array**, **bare RSA again**. Instrumenting
@@ -10390,7 +10396,7 @@ candidate directions, neither ruled:
    notification and re-drive it when the filing point signals, rather than
    dropping it. The design for this was worked out in full on 2026-08-16 and
    deliberately not built; it is recorded in
-   [14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it).
+   [14.30](implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it).
 2. **Make the client's readiness observable** — a caller that must not miss
    early notifications can already `await pqBootstrap.startupComplete`, but
    nothing says so at the point a client is handed back, and no production
@@ -10832,7 +10838,7 @@ passphrase this client was not given returned exactly what a keyfile holding no
 such entry returns, and at `finer` the difference was invisible in every pack.
 
 **Why it stopped being cosmetic.** Before
-[14.30](../implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it)
+[14.30](implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it)
 the caller above dropped the notification; now it **parks** it, waiting for a
 filing signal. A genuine absence is a message that is merely early, and the
 park is exactly right for it. An unreadable keyfile produces the identical
@@ -11187,7 +11193,7 @@ verifier, it is writing the first one.
 ## 114. A signer waits for its own mint; the mint alone does not (2026-08-21)
 
 **Ruled by gkc, 2026-08-21**, closing the race
-[14.48](../implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
+[14.48](implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
 filed as a product row: the PQ startup mints an enrollment's signing keys
 concurrently with whatever the app does next, and the composition withdraws
 the authentication key from the published `_apsk` the moment the mint
