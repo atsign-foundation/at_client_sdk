@@ -15,6 +15,7 @@ rather than consuming `at_auth` directly.
 | PKAM authentication             | `AtAuth.authenticate(AtAuthRequest)`                   |
 | APKAM enrollment (request side) | `AtEnrollment.submit(...)`                             |
 | APKAM enrollment (approve side) | `AtEnrollment.approve(...)` / `AtEnrollment.deny(...)` |
+| APKAM enrollment (self side)    | `AtEnrollment.update(...)` — an approved enrollment amending its own record |
 | Free atSign registration        | `RegistrarService` (fetches CRAM key by email)         |
 
 See [`example/onboard.dart`](example/onboard.dart),
@@ -76,6 +77,30 @@ After Phase 2, the CRAM key is no longer usable (onboarding is
 single-shot). Use [`example/onboard.dart`](example/onboard.dart) to walk
 through it end-to-end.
 
+#### Post-quantum onboarding (opt-in)
+
+Set `AtOnboardingRequest.signingAlgoType` to `mldsa65` and step 2 mints an
+**ML-DSA-65** PKAM keypair instead of an RSA one. Two consequences are worth
+knowing before turning it on:
+
+- The APKAM is filed as **typed material** under the enrollment id, and the
+  `.atKeys` flat `apkamPublicKey`/`apkamPrivateKey` fields are left **empty**.
+  That is deliberate: `AtKeys.toAtChops()` reads only the flat fields, so a
+  tool that has not been taught about PQ enrollments fails outright instead of
+  signing an ML-DSA key with the RSA routine. `AtAuth.authenticate` resolves
+  such an enrollment on its own, via `signingAlgorithmForEnrollment` and
+  `toAtChopsForEnrollment`.
+- `AtOnboardingRequest.mintLegacyMaterial` governs the RSA encryption keypair,
+  the self-encryption key, and whether `public:publickey` is published. It is
+  an **opt-out**: leave it null and all three are still produced, because
+  whether this atSign will ever need to talk to a pre-quantum peer is decided
+  by the apps that adopt it rather than at activation. Set it false and a
+  pre-quantum peer cannot send to the atSign at all.
+
+`AtOnboardingRequest.metadataBuilder` attaches metadata to the first
+enrollment's record. It runs on the request that creates that record, whose
+metadata is never rewritten — so it is the only opportunity there will be.
+
 ### Phase 3 — Authenticate apps via APKAM (per-app scoped AtKeys)
 
 The master AtKeys are powerful — they can read anything on the atServer
@@ -135,30 +160,84 @@ three layers, outermost first:
    - **Legacy flat** (no `version` field): a flat JSON object of the
      fields above plus `selfEncryptionKey`, `apkamSymmetricKey`, and
      `enrollmentId`.
-   - **Typed-keys** (`"version": 1`): adds `atSign` and a `keys` array
-     of typed key materials (grouped by `keyId` with their `keyParts`),
-     while the legacy fields stay flat at the top level — a typed-keys
-     file's legacy portion is byte-identical to a legacy-only file, so
-     legacy readers can still use it.
+   - **Typed-keys** (`"version": 1`): adds `atsign` and two containers
+     of typed key materials, while the legacy fields stay flat at the
+     top level — a typed-keys file's legacy portion is byte-identical to
+     a legacy-only file, so legacy readers can still use it.
+     - `enrollments` — one entry per enrollment, carrying its
+       `enrollmentId`, an optional `namespaces`/`appName`/`deviceName`
+       snapshot of its enrollment record, and its own `keys` array.
+     - `atsignKeys` — a `keys` array for material belonging to the
+       atSign rather than to any enrollment: the PQ signing root, an
+       nskey private.
+
+     Both group materials by `keyId` into a `material` array. A key entry
+     carries no `enrollmentId` — its container states the owner once — so
+     **a keyId is unique within its container, not across the document**:
+     two enrollments may each hold `auth:mldsa65:1`, and identity is
+     `(enrollment, keyId)`.
+
+     Structured keyIds are `<role>:<algorithm>:<generation>`
+     (`auth:mldsa65:1`, `sign:rsa2048:1`, `root:mldsa65:1`), the
+     generation counted per role and algorithm. An entry addressed by a
+     kid — a key package's, whose id is a digest of the key itself —
+     keeps that kid.
+
+     ⚠️ A `"version": 1` document carrying a top-level `keys` array is an
+     older shape and is **refused**, naming itself, rather than read as a
+     legacy-only file. Nothing released ever wrote one.
 
 In memory, `AtKeys` always holds plaintext; all three layers are applied
 and peeled exclusively by `FileAtKeysIo`.
 
-Persistence has two verbs:
+Persistence has three verbs:
 
 - `write(atsign, atKeys)` — create-only initial persist (fresh onboard);
   throws if the file already exists.
-- `flush(atsign, atKeys)` — persist the current in-memory state (e.g.
-  after `AtKeys.addKey` or `AtKeys.retireKey`). If the file exists,
-  `flush` first validates that nothing it holds would be lost (key
-  material is never removed — a key's `status` may only move forward,
+- `update(atsign, mutate)` — **the one to reach for when adding key
+  material.** It reads, applies your mutation and persists as a single
+  operation, holding the keyfile lock across all three steps. The callback
+  returns whether anything changed, so finding the material already there
+  costs no write:
+
+  ```dart
+  await atKeysIo.update(atSign.toAtsign(), (keys) {
+    if (keys.getKey(enrollmentId, keyId,
+            CryptographicMaterialRole.privateDecapsulation) !=
+        null) {
+      return false; // already filed; nothing to write
+    }
+    keys.addKey(material);
+    return true;
+  });
+  ```
+
+  The lookup takes the enrollment because identity is `(enrollment, keyId)`.
+  For material the **atSign** owns rather than any one enrollment — the
+  signing root, an nskey private — the sibling is `getAtSignKey(keyId, type)`.
+  `addKey` is deliberately not split: a material states its own owner through
+  its `enrollmentId`, and a null one routes it to the atSign's container.
+
+- `flush(atsign, atKeys)` — persist the current in-memory state. If the
+  file exists, `flush` first validates that nothing it holds would be lost
+  (key material is never removed — a key's `status` may only move forward,
   `active` → `retired` → `dead`), then rewrites it; flushing a legacy
   file upgrades it in place to a typed-keys document. If the file does
   not exist, `flush` creates it.
 
-Both verbs write atomically (write-to-temp + rename), so a crash mid-write
-can never truncate the keyfile, and a `flush` over an existing file first
-preserves the previous state as `<file>.bak` alongside it.
+**Do not hand-roll `read` → mutate → `flush`.** Those three steps
+interleave: two callers running concurrently both read the same state, and
+the second's `flush` presents a candidate missing the first's addition.
+`flush` is right to refuse it — nothing may be lost — so what you get is a
+thrown assurance exception and one addition silently gone. Preventing that
+is what `update` is for, and the lock it takes serialises coroutines inside
+one process as well as separate processes. For the same reason `update`
+must never be nested, and `flush` must not be called from inside one: the
+lock is not reentrant.
+
+All three verbs write atomically (write-to-temp + rename), so a crash
+mid-write can never truncate the keyfile, and a rewrite over an existing
+file first preserves the previous state as `<file>.bak` alongside it.
 
 ## Where to go next
 

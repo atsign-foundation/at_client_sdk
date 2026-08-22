@@ -8,6 +8,7 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
 import 'package:at_auth/src/keys/serialization/assurance.dart';
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -181,8 +182,8 @@ void main() {
         // The .bak preserves the pre-flush state byte-for-byte.
         expect(await File('$tempPath.bak').readAsString(), existingText);
         final reread = await fileAtKeysIo.read(atsign);
-        expect(reread.keysForKeyId('appended'), isNotEmpty);
-        expect(reread.keysForKeyId('another'), isNotEmpty);
+        expect(reread.atSignKeysForKeyId('appended'), isNotEmpty);
+        expect(reread.atSignKeysForKeyId('another'), isNotEmpty);
       } finally {
         await tempDir.delete(recursive: true);
       }
@@ -200,7 +201,7 @@ void main() {
         );
 
         final readKeys = await fileAtKeysIo.read(atsign);
-        expect(readKeys.keysForKeyId('fresh'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('fresh'), isNotEmpty);
         expect(
           File(tempPath).parent.listSync().whereType<File>().toList(),
           hasLength(1),
@@ -225,17 +226,17 @@ void main() {
         );
 
         final keys = await fileAtKeysIo.read(atsign);
-        keys.retireKey('rotated');
+        keys.retireAtSignKey('rotated');
         await fileAtKeysIo.flush(atsign.toAtsign(), keys);
 
         final reread = await fileAtKeysIo.read(atsign);
         expect(
-          reread.keysForKeyId('rotated').single.status,
-          KeyPartStatus.retired,
+          reread.atSignKeysForKeyId('rotated').single.status,
+          CryptographicMaterialStatus.retired,
         );
         expect(
-          reread.keysForKeyId('kept').single.status,
-          KeyPartStatus.active,
+          reread.atSignKeysForKeyId('kept').single.status,
+          CryptographicMaterialStatus.active,
         );
       } finally {
         await tempDir.delete(recursive: true);
@@ -294,19 +295,22 @@ void main() {
         final readKeys = await io.read(atsign);
         expect(
             readKeys
-                .getKey('sym', CryptographicKeyType.symmetricEncryption)
+                .getAtSignKey(
+                    'sym', CryptographicMaterialRole.symmetricEncryption)
                 ?.bytes
                 .toString(),
             'c2VjcmV0');
         expect(
             readKeys
-                .getKey('pair', CryptographicKeyType.publicEncryption)
+                .getAtSignKey(
+                    'pair', CryptographicMaterialRole.publicEncryption)
                 ?.bytes
                 .toString(),
             'cHVibGlj');
         expect(
             readKeys
-                .getKey('pair', CryptographicKeyType.privateDecryption)
+                .getAtSignKey(
+                    'pair', CryptographicMaterialRole.privateDecryption)
                 ?.bytes
                 .toString(),
             'cHJpdmF0ZQ==');
@@ -345,8 +349,8 @@ void main() {
 
         // Both keys survive a decrypt-and-read of the rewritten file.
         final readKeys = await fileAtKeysIo.read(atsign);
-        expect(readKeys.keysForKeyId('existing'), isNotEmpty);
-        expect(readKeys.keysForKeyId('appended'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('existing'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('appended'), isNotEmpty);
       } finally {
         await tempDir.delete(recursive: true);
       }
@@ -379,7 +383,7 @@ void main() {
           // legacy keys intact plus the appended material.
           final readKeys = await fileAtKeysIo.read(atsign);
           expectLegacyAtKeys(readKeys, legacyKeys);
-          expect(readKeys.keysForKeyId('appended'), isNotEmpty);
+          expect(readKeys.atSignKeysForKeyId('appended'), isNotEmpty);
         } finally {
           await tempDir.delete(recursive: true);
         }
@@ -437,7 +441,7 @@ void main() {
 
         final readKeys = await io.read(atsign);
         expectLegacyAtKeys(readKeys, legacyAtKeys());
-        expect(readKeys.keysForKeyId('typed'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('typed'), isNotEmpty);
       } finally {
         await tempDir.delete(recursive: true);
       }
@@ -459,7 +463,7 @@ void main() {
         );
 
         final readKeys = await io.read(atsign);
-        expect(readKeys.keysForKeyId('only-typed'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('only-typed'), isNotEmpty);
         expect(readKeys.defaultSelfEncryptionKey, isNull);
       } finally {
         await tempDir.delete(recursive: true);

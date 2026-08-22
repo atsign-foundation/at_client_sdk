@@ -1,5 +1,6 @@
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_commons.dart' show AtRootDomain;
 import 'package:at_utils/at_progress.dart';
 

@@ -30,7 +30,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  at_auth: ^3.0.0
+  at_auth: ^4.0.0-rc1
   at_client_flutter:
     path: ../
   at_commons: ^5.8.0

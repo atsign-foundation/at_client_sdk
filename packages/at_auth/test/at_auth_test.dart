@@ -10,6 +10,7 @@ import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -95,6 +96,30 @@ void main() {
 
       expect(response.isSuccessful, true);
       expect(response.atAuthKeys!.enrollmentId, testEnrollmentId);
+    });
+
+    test('with no enrollment id supplied, the FLAT stored one is used',
+        () async {
+      // UC-G1.1's second clause. `AtKeys.resolveAuthenticatingEnrollment()`
+      // derives the enrollment from the unique active privateAuthentication
+      // material and is deliberately NOT applied here: authentication
+      // defaults to the flat, stored, deprecated `AtKeys.enrollmentId`.
+      //
+      // The fixture is what makes this discriminate. It is a pure legacy
+      // keyfile - flat fields and a stored enrollmentId, no typed material -
+      // so the resolver's answer is null while the stored id is real. A build
+      // that had quietly switched to the derivation would authenticate as
+      // null here rather than as the id below.
+      final atKeys = await fileAtKeysIo.read('@alice🛠'.toAtsign());
+
+      expect(atKeys.resolveAuthenticatingEnrollment(), isNull,
+          reason: 'the fixture holds no typed authentication material, so the '
+              'derivation has nothing to resolve — which is what makes the '
+              'assertion below about the STORED field specifically');
+      // ignore: deprecated_member_use_from_same_package
+      expect(atKeys.enrollmentId, testEnrollmentId,
+          reason: 'and the stored field is what a no-id request falls back '
+              'to, per AtAuthImpl.authenticate');
     });
 
     test(
@@ -268,6 +293,12 @@ void main() {
   });
   group('AtAuthImpl onboarding tests', () {
     setUp(() {
+      // Fresh mocks per test: without these the group only runs after the
+      // authentication group has initialized the shared `late` variables.
+      mockAtLookUp = MockAtLookUp();
+      mockPkamAuthenticator = MockPkamAuthenticator();
+      mockAtEnrollment = MockAtEnrollment();
+      fakeSecondaryAddressFinder = FakeSecondaryAddressFinder();
       mockAtServerStatus = MockAtServerStatus();
       when(() => mockAtServerStatus.get(any())).thenAnswer((_) => Future.value(
           AtStatus(
@@ -301,6 +332,35 @@ void main() {
       expect(
           () async => await atAuth.onboard(atOnboardingRequest, testCramSecret),
           throwsA(isA<AtAuthenticationException>()));
+    });
+
+    test('an enrollment refusal surfaces the underlying reason in the message',
+        () async {
+      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtLookUp.executeVerb(any()))
+          .thenAnswer((_) => Future.value('data:2'));
+      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
+      when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenThrow(
+          AtEnrollmentException('server refused: enrollment quota exceeded'));
+
+      final atOnboardingRequest = AtOnboardingRequest('@ferris🛠')
+        ..atKeysIo = fileAtKeysIo
+        ..appName = 'wavi'
+        ..deviceName = 'iphone';
+
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
+
+      // The person reading this exception is mid-failure; the wrapped
+      // message is the only clue they get about what the server said.
+      expect(
+          () => atAuth.onboard(atOnboardingRequest, testCramSecret),
+          throwsA(isA<AtAuthenticationException>().having(
+              (e) => e.toString(),
+              'message',
+              allOf(contains('enrollment quota exceeded'),
+                  isNot(contains('Closure'))))));
     });
 
     test('Test onboard with appName and deviceName set in onboarding request',
