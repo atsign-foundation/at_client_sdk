@@ -117,3 +117,12 @@ poetry.lock
 # packages/at_client/CLAUDE.md documents this directory as gitignored; this is the rule
 # that makes that true.
 /untracked/
+
+# gkc's own PQ working draft. It was committed by accident on 2026-08-22 — a
+# `git add` of the directory swept up a file that was untracked on purpose — and
+# untracked again in the same session. It stays on disk; only git stops seeing it.
+#
+# ⚠️ This line matches ONE path and nothing else, so a second draft dropped
+# beside it is not covered. New drafts belong in /untracked/ above, which is the
+# convention this file already carries for exactly this.
+/docs/projects/pq/post-quantum-cryptography.md
