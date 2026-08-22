@@ -4,7 +4,7 @@ import 'package:test/test.dart';
 /// A keyfile written by a newer client stays readable, and losslessly
 /// flushable, by an older one.
 ///
-/// `AtKeysMaterial.keyAlgorithmType`'s dartdoc has stated that rule for the
+/// `CryptographicMaterial.keyAlgorithmType`'s dartdoc has stated that rule for the
 /// whole document since the typed keyfile existed. `status` was an `enum`
 /// parsed through a throwing `expectEnum`, so it was the one field that broke
 /// it: a keyfile carrying any status a build did not know was refused **in its

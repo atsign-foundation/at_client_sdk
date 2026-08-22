@@ -900,7 +900,7 @@ void main() {
     test('a retired-only private is refused even by an empty keyfile',
         () async {
       // The gap the "not filed beside an active one" rule left: with nothing
-      // active to sit beside, `store`'s guard does not fire and `AtKeysMaterial`
+      // active to sit beside, `store`'s guard does not fire and `CryptographicMaterial`
       // defaults to active — so the predecessor became the keyfile's sole
       // ACTIVE private, and the single-private short circuit then hands it back
       // without ever reading the record. The client would sign root links with

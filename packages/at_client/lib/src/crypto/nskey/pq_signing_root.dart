@@ -811,7 +811,7 @@ class PqSigningRoot {
     // ⚠️ The empty case is the one that bit: `store`'s guard refuses a second
     // active, so "not filed beside an active one" was the whole rule only for
     // as long as something active was there to sit beside. With nothing held,
-    // the guard did not fire and `AtKeysMaterial` defaults to active — the
+    // the guard did not fire and `CryptographicMaterial` defaults to active — the
     // predecessor became this keyfile's sole ACTIVE private, and the
     // single-private short circuit in [_signingPrivate] then returned it
     // without reading the record. The client signed root links with a key the

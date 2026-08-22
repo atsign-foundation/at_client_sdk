@@ -192,7 +192,7 @@ class SecretSharingAlgos {
         _ => null,
       };
 
-  /// The `AtKeysMaterial.keyAlgorithmType` token a keyfile names [keyAlgo] by.
+  /// The `CryptographicMaterial.keyAlgorithmType` token a keyfile names [keyAlgo] by.
   ///
   /// A keyfile has its own vocabulary — `xwing`, `mlkem1024` — deliberately
   /// shared with the pkam/enrollment `signingAlgo` literals rather than with

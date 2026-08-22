@@ -42,7 +42,7 @@ export 'src/enroll/models/enrollment_request_decision.dart';
 /// request from the requesting app, for approval or denial.
 export 'src/exception/at_auth_exceptions.dart';
 export 'src/keys/at_keys.dart';
-// AtKeysMaterial is the API-level typed key material — the only type
+// CryptographicMaterial is the API-level typed key material — the only type
 // AtKeys's API deals in. It owns its own JSON (de)serialization; the
 // document-level `keys[]` grouping/validation lives in
 // parseAtKeysDocument/encodeAtKeysDocument, also exported here.

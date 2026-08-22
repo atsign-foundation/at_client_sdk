@@ -5430,7 +5430,7 @@ immutably. The vocabularies and where each applies:
   `SigningAlgoType.mldsa65`. ML-DSA-65 now has ONE spelling on the wire, and
   `wire_literal_pins_test.dart` pins that rather than the split.
 - **Keyfile / pkam tokens** (compact): `xwing`, `mlkem1024`, `mldsa65`,
-  `rsa2048` — `AtKeysMaterial.keyAlgorithmType`, the signed-envelope
+  `rsa2048` — `CryptographicMaterial.keyAlgorithmType`, the signed-envelope
   `signingAlgo` field, the tagged `_apsk` value, and root links
   (`PqSigningChain.rootLinkAlgo`).
 - **Dart identifiers**: `SigningAlgoType.mldsa65` (at_chops),
@@ -6827,7 +6827,7 @@ lives in `enrollment_submitter.dart` and `enrollment_approver.dart`.
 **Status:** accepted and landed. Two writer sites — the first enrollment of
 an onboard (`AtAuthImpl._fileFirstEnrollmentMaterial`) and the
 self-enrollment retrofit (`EnrollmentSubmitter`) — each hand-built the same
-`AtKeysMaterial` shapes: an APKAM keypair filed under `apkam:<enrollmentId>`
+`CryptographicMaterial` shapes: an APKAM keypair filed under `apkam:<enrollmentId>`
 with both halves sharing one timestamp, then every material the request's
 metadataBuilder minted re-tagged with the enrollment id the atServer just
 assigned. Two chances to disagree about an at-rest shape that no compiler
@@ -8575,7 +8575,7 @@ failure the ruling warns about for the plural holding, one layer out.
 wake-up subscription and the sync listener all cover every held address.
 
 **The keyfile already records the status, which ruling 9 did not know.**
-`AtKeysMaterial` carries a `KeyPartStatus` of `active`/`retired`/`dead`,
+`CryptographicMaterial` carries a `KeyPartStatus` of `active`/`retired`/`dead`,
 `AtKeys.retireKey` is how a rotation records the transition, and
 `AtKeysAssurance` enforces at most one **active** `publicEncapsulation` material
 per (enrollment, algorithm) — the same invariant `_activeEncKey` needs, already
@@ -8681,8 +8681,8 @@ as *staged*: filed, but not yet the one that authenticates. gkc ruled the
 **two-phase** shape, staged then promoted on the atServer's acceptance. That
 needs a new status value, and asking for one exposed why none could be added.
 
-**1. `KeyPartStatus` becomes an open `String`, and `AtKeysMaterial.status` with
-it.** `AtKeysMaterial`'s two neighbouring fields, `keyAlgorithmType` and
+**1. `KeyPartStatus` becomes an open `String`, and `CryptographicMaterial.status` with
+it.** `CryptographicMaterial`'s two neighbouring fields, `keyAlgorithmType` and
 `keyPartType`, are open Strings, and `keyAlgorithmType`'s dartdoc states the
 rule for the whole document: *"a reader must accept — and round-trip unmodified
 on flush — values it does not recognise, so a keyfile written by a newer client
@@ -9154,9 +9154,9 @@ omits it when active only so a never-rotated advertisement stays byte-identical
 to what the pre-split composer wrote. The parse still tolerates its absence, so
 the rule is "write it, tolerate its absence".
 
-**10. `AtKeysMaterial` keeps `enrollmentId` in memory and never serializes
+**10. `CryptographicMaterial` keeps `enrollmentId` in memory and never serializes
 it.** It already works this way and the question of removing it dissolved on
-inspection: `AtKeysMaterial.toJson()` emits neither `keyId` nor
+inspection: `CryptographicMaterial.toJson()` emits neither `keyId` nor
 `enrollmentId` — `encodeAtKeysDocument` hoists them to the entry level, and
 `fromJson` takes them as named parameters from the enclosing scope. So the
 field is already container-derived rather than stored, and the duplication that
