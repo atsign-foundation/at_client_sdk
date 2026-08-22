@@ -66,6 +66,18 @@
     being deliberately null on the legacy path. Retiring them is an API change
     in its own right, not a deletion.
 
+- fix: the passphrase envelope refuses an `ArgonHashParams` whose `hashLength`
+  is not the value `decode` will use. The envelope persists the salt and the
+  three costs and reads each of them back; `hashLength` is not among them, so
+  decode always derives at `ArgonHashParams`'s own default. Encoding at any
+  other length wrote a file that could not be opened, and — because the cipher
+  is unauthenticated — the failure arrived as
+  `AtDecryptionException('passphrase may be incorrect')`, naming the
+  passphrase rather than the parameter that actually differed. Refusing at
+  write time reports the real cause while it is still known. Persisting the
+  value instead was the alternative and is the worse one: it would add a field
+  nothing in this tree ever sets, so no test could exercise reading it back.
+
 - **BREAKING** refactor: the keyfile's four String vocabularies become
   distinct types, in the shape `Atsign` uses — `extension type … implements
   String`, erased at runtime, so **nothing changes on the wire or at rest**.

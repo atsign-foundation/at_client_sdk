@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:at_auth/src/keys/serialization/passphrase_envelope.dart';
-import 'package:at_chops/at_chops.dart' show HashingAlgoType;
+import 'package:at_chops/at_chops.dart' show ArgonHashParams, HashingAlgoType;
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -141,6 +141,44 @@ void main() {
       expect(
         () => codec.encode(doc, 'right', hashingAlgoType: HashingAlgoType.md5),
         throwsA(isA<AtException>()),
+      );
+    });
+
+    test('a hashLength the envelope cannot record is refused at write time',
+        () {
+      // The envelope carries the salt and the three costs and nothing else,
+      // so decode derives at ArgonHashParams's own default whatever was used
+      // to write. Encoding at another length would produce a file that fails
+      // to open as `passphrase may be incorrect`, naming the wrong cause.
+      final varied = ArgonHashParams.owaspMinimum()..hashLength = 64;
+
+      expect(
+        () => codec.encode(doc, 'right', hashParams: varied),
+        throwsA(
+          isA<AtException>().having((e) => e.message, 'message',
+              allOf(contains('hashLength'), contains('64'))),
+        ),
+        reason: 'the refusal has to name the parameter that differed, since '
+            'the failure it prevents blames the passphrase instead',
+      );
+    });
+
+    test('the default hashLength encodes and round-trips', () async {
+      // The control arm for the refusal above: a params object that varies
+      // nothing else must still be accepted, or the guard is refusing every
+      // caller rather than the one it is for.
+      final standard = ArgonHashParams.owaspMinimum();
+      expect(standard.hashLength, ArgonHashParams().hashLength,
+          reason: 'owaspMinimum raises the costs, not the key length - if it '
+              'ever varies hashLength this control stops being one');
+
+      final envelope = jsonDecode(
+          await codec.encode(doc, 'right', hashParams: standard)) as Map;
+
+      expect(
+        await codec.decode(envelope.cast<String, dynamic>(),
+            passPhrase: 'right'),
+        jsonDecode(doc),
       );
     });
   });
