@@ -1704,10 +1704,22 @@ Guessing one is how a workflow breaks, so CI publishes the inputs and the
 combined page is rendered on demand until somebody picks that pin. The
 `upload-artifact` pin used here is the one `scorecards.yml` already carries.
 
-⚠️ **The CI half is offline-validated only.** The YAML parses and each job
-declares what it should — checked by reading the parsed structure rather than
-the diff, since a diff shows what was written and not what the runner receives.
-Nothing has run it.
+✅ **The CI half has now run** — dispatch `32643853854`, where the three e2e and
+functional jobs went green and uploaded their reports. Two things that only a
+real run could show:
+
+- **The `unit_at_client` report is absent when that job fails early.** It died
+  at the format gate, before the test step, so there was no file to upload;
+  `if: always()` ran the upload and it warned rather than failing the job,
+  which is the intended behaviour. A missing report means "that suite did not
+  get as far as running", and the ledger renders its rows NOT-EXERCISED, which
+  is true.
+- **A matrixed job uploads once per leg**, so `unit_at_client` and
+  `functional_tests` — both on `dart-channel: [stable, beta]` — collided on one
+  artifact name. Harmless for storage and ambiguous for anything that later
+  downloads by name, so both now carry `${{ matrix.dart-channel }}`. Offline
+  validation could not have found this: the YAML was correct, and the duplicate
+  only exists at run time.
 
 The verdicts are about the runs supplied, not about the code. **PROVEN** means
 a cited test ran and passed; **NOT-EXERCISED** means no supplied report covers
