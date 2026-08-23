@@ -148,7 +148,16 @@ echo "*** Running e2e tests (${TEST_PATHS[*]})"
 # Let the test run fail through to cleanup (so a flake doesn't leave the
 # container up), then propagate its exit code.
 set +e
-dart test --concurrency=1 -r expanded "${TEST_PATHS[@]}"
+# Opt-in machine-readable report for the acceptance ledger. Unset, the run is
+# byte-for-byte what it always was; set, the runner ALSO writes a JSON stream
+# that `packages/at_client/tool/acceptance_ledger.dart` joins against the
+# catalogue's citations to say which rows a run actually exercised.
+REPORT_ARG=""
+if [[ -n "${ACCEPTANCE_REPORT:-}" ]]; then
+  REPORT_ARG="--file-reporter json:${ACCEPTANCE_REPORT}"
+  echo "*** Writing acceptance report to ${ACCEPTANCE_REPORT}"
+fi
+dart test --concurrency=1 -r expanded ${REPORT_ARG} "${TEST_PATHS[@]}"
 TEST_EXIT=$?
 set -e
 

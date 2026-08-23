@@ -126,3 +126,10 @@ poetry.lock
 # beside it is not covered. New drafts belong in /untracked/ above, which is the
 # convention this file already carries for exactly this.
 /docs/projects/pq/post-quantum-cryptography.md
+
+# Acceptance-ledger inputs, written by `--file-reporter json:` and by
+# `ACCEPTANCE_LEDGER=`. Per-run artefacts: CI uploads them, and rendering the
+# ledger from them is a local step. A committed one would be stale the moment
+# any suite ran again.
+acceptance-report.json
+citations.jsonl

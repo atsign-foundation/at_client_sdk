@@ -70,7 +70,16 @@ echo "*** Running tests"
 # Let the run fail through to cleanup, then propagate its code - otherwise
 # set -e aborts before teardown on the very failure this exists to catch.
 set +e
-dart test --concurrency=1 -r expanded
+# Opt-in machine-readable report for the acceptance ledger. Unset, the run is
+# byte-for-byte what it always was; set, the runner ALSO writes a JSON stream
+# that `packages/at_client/tool/acceptance_ledger.dart` joins against the
+# catalogue's citations to say which rows a run actually exercised.
+REPORT_ARG=""
+if [[ -n "${ACCEPTANCE_REPORT:-}" ]]; then
+  REPORT_ARG="--file-reporter json:${ACCEPTANCE_REPORT}"
+  echo "*** Writing acceptance report to ${ACCEPTANCE_REPORT}"
+fi
+dart test --concurrency=1 -r expanded ${REPORT_ARG}
 TEST_EXIT=$?
 set -e
 

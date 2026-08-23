@@ -1672,12 +1672,95 @@ ordinary home.
 38 rows will never sit in a matrix and still have to be visible, so the
 definitive place is a generated page rather than a directory.
 
-Each live test declares the clauses it proves. Each pack writes a results file
-as it runs. One reporter merges them and renders this catalogue with every row
-marked proven-by-what in that run. A row no pack exercised reports
-`not-exercised-in-this-run` rather than green — a state the current design
-cannot express at all, because a citation is satisfied whether or not anything
-ran.
+✅ **The row-level ledger is built** (2026-08-23) and needs no change to any of
+the 194 live tests. Three pieces:
+
+- `provenIn` records each citation it makes — the use-case id, the cited file
+  and test name — when `ACCEPTANCE_LEDGER=<path>` is set. Unset, it is inert
+  and the suite behaves exactly as before. Recorded at run time rather than
+  parsed out of the source, because a regex over `provenIn(` has to cope with
+  the path sitting on the next line, which is the formatting most of them use.
+- Every runner emits the runner's own JSON stream, opt-in:
+  `ACCEPTANCE_REPORT=<path> ./runLocal.sh`, wired into all three of
+  `at_functional_test`, `at_end2end_test` and
+  `at_onboarding_cli_functional_tests`. A run without it is byte-for-byte what
+  it was. The unit suites need no wiring — `dart test --file-reporter json:…`
+  in `packages/at_client` and `packages/at_auth` covers the 67 citations that
+  point at them.
+- `packages/at_client/tool/acceptance_ledger.dart` joins the two and renders
+  every catalogue row with a verdict.
+
+**In CI**, four jobs now emit a report and upload it —
+`unit_at_client` (which also records the citations), `functional_tests`,
+`pqe2e_tests` and `legacy_server_tests`. Each upload is `if: always()`
+deliberately: a suite that *failed* is exactly when knowing which rows lost
+their proof matters most.
+
+⛔ **The rendering step is NOT wired, and that is a decision rather than an
+omission.** Combining the four artefacts in a later job needs
+`actions/download-artifact`, which this repo has never used — every action here
+is SHA-pinned, and there is no trusted pin for it in this repo or in at_server.
+Guessing one is how a workflow breaks, so CI publishes the inputs and the
+combined page is rendered on demand until somebody picks that pin. The
+`upload-artifact` pin used here is the one `scorecards.yml` already carries.
+
+⚠️ **The CI half is offline-validated only.** The YAML parses and each job
+declares what it should — checked by reading the parsed structure rather than
+the diff, since a diff shows what was written and not what the runner receives.
+Nothing has run it.
+
+The verdicts are about the runs supplied, not about the code. **PROVEN** means
+a cited test ran and passed; **NOT-EXERCISED** means no supplied report covers
+it, which is the state the old design could not express at all, since a
+citation is satisfied whether or not anything ran; **NO-LIVE-CITATION** means
+the row proves itself in-process.
+
+Measured 2026-08-23 over all four report sources — the functional pack
+(182/182), the e2e pack (54/54), at_client (1509/1509) and at_auth (342/342) —
+with all 135 citations recorded:
+
+**62 PROVEN · 1 NOT-EXERCISED · 6 NO-LIVE-CITATION** over 69 rows, and **6 of
+6** cross-cutting invariants PROVEN.
+
+The 6 are the 5 rows that prove themselves against mocks plus withdrawn
+UC-C1.3. **The 1 is UC-B0.1**, and it is the result worth trusting the tool
+over: nobody told the ledger about that row's special case, and it found it
+anyway. UC-B0.1 needs a pinned pre-PQ atServer and runs in its own
+`legacy_server_tests` job under the `legacy-server` tag, which a local e2e run
+excludes — so "not exercised by these runs" is the correct and complete answer,
+and it matches the residue [this section already
+records](#the-build-order-and-what-it-leaves).
+
+⚠️ **The first version of this scored 28 and the figure looked entirely
+plausible.** The runner reports a grouped test as `"<group> <name>"` while a
+citation names the test's own name, so a `startsWith` match silently missed
+every grouped test — most of both unit suites. It was caught only by asking why
+a file in a report that *had* been supplied was still reading NOT-EXERCISED.
+**Re-derive this table rather than quoting it**, and treat a low PROVEN count as
+a question about the matcher before it is a question about coverage.
+
+`packages/at_client/test/acceptance_ledger_test.dart` now pins that join, in
+both directions, because a defect in it does not look like a defect — it looks
+like a coverage report. Too strict under-reports and reads as missing coverage;
+too loose reports rows as proven by tests that never mention them, which is
+worse, since nothing downstream questions a green. Mutation-proven both ways:
+restoring `startsWith` reddens the grouped-test case, and an always-true matcher
+reddens the two over-matching cases.
+
+**The cross-cutting invariants get their own table**, so all 135 citations are
+accounted for and none is dropped. [Section
+13](#13-cross-cutting-acceptance-applies-to-all-flows)'s rows apply to every
+flow and are deliberately unnumbered, so they are keyed by their own wording
+rather than forced into the use-case table or given invented ids — a reader
+asking "is this row proven" and one asking "does this invariant still hold" are
+asking different questions. On the same run: **2 PROVEN · 4 NOT-EXERCISED**.
+Only 6 of the 10 appear, because the other 4 assert in-process and cite nothing
+live.
+
+**Still owed: the clause level.** Today a row is proven or not. Turning
+"UC-A2.5 has 3 unproven clauses" into a computed fact needs each live test to
+declare the clauses it establishes, which is the part that does touch the
+tests.
 
 **Clause-level rather than row-level** is what makes it worth building. It turns
 "UC-A2.5 has 3 unproven clauses" from a footnote somebody found by reading into

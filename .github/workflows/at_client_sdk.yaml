@@ -49,7 +49,25 @@ jobs:
       # Run unit tests
       - name: Run at_client unit tests, with code coverage measurement
         working-directory: packages/at_client
-        run: dart test --concurrency=1 --coverage="coverage"
+        run: dart test --concurrency=1 --coverage="coverage" --file-reporter json:acceptance-report.json
+        env:
+          # Makes provenIn record every citation it makes, so the ledger has both
+          # halves: which rows cite which tests, and which of those tests ran.
+          ACCEPTANCE_LEDGER: citations.jsonl
+
+      # Feeds `packages/at_client/tool/acceptance_ledger.dart`, which joins these
+      # against the catalogue's citations to say which acceptance rows a run
+      # actually exercised. `if: always()` on purpose: a suite that FAILED is
+      # exactly when knowing which rows lost their proof matters most.
+      - name: Upload unit-at-client acceptance report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-report-unit-at-client
+          path: |
+            packages/at_client/acceptance-report.json
+            packages/at_client/citations.jsonl
+          if-no-files-found: warn
 
       - name: Convert at_client coverage to LCOV format
         working-directory: packages/at_client
@@ -154,7 +172,19 @@ jobs:
       # Run functional tests
       - name: Run functional tests
         working-directory: tests/at_functional_test
-        run: dart test --concurrency=1 --coverage="coverage"
+        run: dart test --concurrency=1 --coverage="coverage" --file-reporter json:acceptance-report.json
+
+      # Feeds `packages/at_client/tool/acceptance_ledger.dart`, which joins these
+      # against the catalogue's citations to say which acceptance rows a run
+      # actually exercised. `if: always()` on purpose: a suite that FAILED is
+      # exactly when knowing which rows lost their proof matters most.
+      - name: Upload functional acceptance report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-report-functional
+          path: tests/at_functional_test/acceptance-report.json
+          if-no-files-found: warn
 
       - name: Convert coverage to LCOV format
         working-directory: tests/at_functional_test
@@ -453,7 +483,19 @@ jobs:
       # runs it.
       - name: Run post-quantum end-to-end tests
         working-directory: tests/at_end2end_test
-        run: dart test --concurrency=1 test/pq -x legacy-server
+        run: dart test --concurrency=1 test/pq -x legacy-server --file-reporter json:acceptance-report.json
+
+      # Feeds `packages/at_client/tool/acceptance_ledger.dart`, which joins these
+      # against the catalogue's citations to say which acceptance rows a run
+      # actually exercised. `if: always()` on purpose: a suite that FAILED is
+      # exactly when knowing which rows lost their proof matters most.
+      - name: Upload pqe2e acceptance report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-report-pqe2e
+          path: tests/at_end2end_test/acceptance-report.json
+          if-no-files-found: warn
 
       - name: Stop docker containers
         if: ${{ !cancelled() }}
@@ -590,7 +632,19 @@ jobs:
       # what confines a bare `dart test` to the non-PQ files.
       - name: Run the legacy-atServer refusal row
         working-directory: tests/at_end2end_test
-        run: dart test --concurrency=1 test/pq -t legacy-server
+        run: dart test --concurrency=1 test/pq -t legacy-server --file-reporter json:acceptance-report.json
+
+      # Feeds `packages/at_client/tool/acceptance_ledger.dart`, which joins these
+      # against the catalogue's citations to say which acceptance rows a run
+      # actually exercised. `if: always()` on purpose: a suite that FAILED is
+      # exactly when knowing which rows lost their proof matters most.
+      - name: Upload legacy-server acceptance report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-report-legacy-server
+          path: tests/at_end2end_test/acceptance-report.json
+          if-no-files-found: warn
 
       - name: Stop docker containers
         if: ${{ !cancelled() }}
