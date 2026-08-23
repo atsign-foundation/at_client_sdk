@@ -1500,39 +1500,286 @@ These invariants are testable against **every** UC above:
 
 ## 14. Test harness & impl/verify mapping
 
-Every UC cluster runs against one or more of four test layers:
+How this catalogue gets proven, and where each row's proof lives. Ruled
+2026-08-23 as
+[decision 115](detail/decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23).
 
-| Layer                              | Covers                                                                                   |
+gkc's framing, which is what the design answers: *"we have literally hundreds of
+functional and end to end tests which cover the acceptance tests together. But
+there is no definitive place where it is easy to see the entirety of the pq
+project's acceptance tests being proven. The posture matrix test is the logical
+place to build test out."* So the problem is legibility rather than coverage.
+
+### The test layers, and the four live packs
+
+| Layer | Covers |
 |------------------------------------|------------------------------------------------------------------------------------------|
-| **at_chops vectors**               | KEM / seal / ML-DSA primitives (X-Wing encap/decap, pqSeal/pqOpen, `mldsa65` verify). Baseline already on trunk — see below. |
-| **at_client `dart test`**          | data-path providers (`at/nskey`, `at/symmetric/AES/GCM`), CK cache, round-trip equality. Run with `--concurrency=1`. |
-| **`tests/at_functional_test` runLocal.sh** | same-atSign self keys, enroll / `listns` round-trip, `__ssenv` delivery; `docker compose down` before each run; cap runs at 180000 ms. |
-| **`tests/at_end2end_test`**        | cross-atSign shares/notifications, retrofit, the capability→active transition.           |
+| **at_chops vectors** | KEM / seal / ML-DSA primitives (X-Wing encap/decap, pqSeal/pqOpen, `mldsa65` verify). |
+| **at_client `dart test`** | data-path providers (`at/nskey`, `at/symmetric/AES/GCM`), CK cache, round-trip equality. Run with `--concurrency=1`. |
+| **`tests/at_functional_test`** | same-atSign self keys, enroll / `listns` round-trip, `__ssenv` delivery, and the rollout matrix. `docker compose down` before each run; cap runs at 180000 ms. |
+| **`tests/at_end2end_test`** | cross-atSign shares and notifications, retrofit, the capability→active transition. |
+| **`tests/at_onboarding_cli_functional_tests`** | CRAM activation through the CLI, and the only place a client is built from a `PqPosture` in two arms. |
+| **`tests/at_onboarding_cli_functional_tests_proxy`** | the CLI against a proxied atServer. |
 
-**Baseline (already shipped, not pending work).** The primitive layer is published:
-**#1930** (M0 crypto seam) and **#1993 / at_chops 3.3.0** (`pqSeal`/`pqOpen`), with
-**PR #2035** (design fixes) merged. at_chops-vector coverage exercises this shipped base.
-As of the **2026-07-17 release train** the baseline also includes **at_chops 3.4.0**
-(ML-DSA-65 verify dispatch, AES-GCM FFI), **at_commons 5.13.0**, **at_client 3.14.0**
-(carrying the SS-0 substrate, PR #2037) and **at_auth 3.3.0-rc1** (extended `AtKeys` +
-`AtKeysIo.flush()`), so SS-0 / SS-1b / S-1 / S-2 acceptance is against shipped code.
+**Baseline (already shipped, not pending work).** The primitive layer is
+published: **#1930** (M0 crypto seam) and **#1993 / at_chops 3.3.0**
+(`pqSeal`/`pqOpen`), with **PR #2035** (design fixes) merged. at_chops-vector
+coverage exercises this shipped base. As of the **2026-07-17 release train** the
+baseline also includes **at_chops 3.4.0** (ML-DSA-65 verify dispatch, AES-GCM
+FFI), **at_commons 5.13.0**, **at_client 3.14.0** (carrying the SS-0 substrate,
+PR #2037) and **at_auth 3.3.0-rc1** (extended `AtKeys` + `AtKeysIo.flush()`), so
+SS-0 / SS-1b / S-1 / S-2 acceptance is against shipped code.
 
-**PQ-capable test image (harness gap).** Both `tests/at_functional_test` and
-`tests/at_end2end_test` pin `atsigncompany/virtualenv:vip`, which refreshes only via
-certs-on-trunk or a canary→prod promotion. The `enroll:listns` verb itself **has now
-landed in at_server** (#2685, merged 2026-07-07, with functional coverage in #2698), so
-the blocker is no longer "no server implements it" — it is **whether the pinned `:vip`
-tag carries a build new enough**. Verify that before relying on any live `listns`
-assertion from this repo's harnesses; a green local run against `at_virtual_env:local`
-does not imply CI parity.
+⚠️ **The live corpus is 4 packs, and every earlier measurement here counted 2.**
+No `provenIn` citation reaches either CLI pack, which is why the CLI pack's
+two-arm posture differential — the best live evidence for UC-C1.6 and a second
+live proof of UC-A1.1 — is invisible from this catalogue. Counted 2026-08-23,
+the strict matcher gives **194** live `test()` declarations across all 4 and a
+multi-line-aware one **247**; the gap is entirely declarations whose name sits
+on the next line, since an any-position same-line matcher also returns 194.
 
-The underlying gap is unchanged: no work package delivers an image-override path. Close
-it with a documented way to build a virtualenv image from an at_server branch, an
-image-override env var (e.g. `VE_IMAGE`) honoured by **both** `runLocal.sh` harnesses,
-and a stated policy for when CI switches its pinned tag. Until that exists, **SS-1c's
-client-driven live round-trip must sequence after a `:vip` refresh that carries the
-verb** — the client layer and at_chops vectors can land earlier, but the live assertion
-cannot be trusted against an unverified `:vip`.
+```bash
+grep -rhoE "^[[:space:]]*test\([[:space:]]*'" tests/ --include='*.dart' | wc -l   # 194
+perl -0777 -ne 'while (/(?<![A-Za-z0-9_])test\(\s*[\x27"]/gs){$n++} END{print "$n\n"}' \
+  $(find tests -name '*.dart')                                                    # 247
+```
+
+⚠️ **The image-override gap this section used to describe is closed.** It read
+that both packs pin `atsigncompany/virtualenv:vip`, that "no work package
+delivers an image-override path", and asked for "an image-override env var
+(e.g. `VE_IMAGE`) honoured by **both** `runLocal.sh` harnesses". That env var
+exists and is called `VIRTUALENV_IMAGE`: both harnesses read it and default to
+the locally built `at_virtual_env:local`, and CI runs against
+`atsigncompany/virtualenv:dev_env` rather than `:vip`. The advice that a green
+local run does not imply CI parity still holds — check which image produced a
+result before citing it.
+
+### Where the catalogue actually stands
+
+Coverage was never the gap. Of the 68 live use cases, 59 have live proof of some
+kind and 9 have none:
+
+| Verdict | Rows | Means |
+|-----------------|-----:|--------------------------------------------------|
+| LIVE_DIRECT | 12 | a live test's assertions establish the row |
+| LIVE_PARTIAL | 43 | some clauses established, others not |
+| LIVE_INCIDENTAL | 4 | the mechanism runs, nothing asserts the row |
+| NO_LIVE_PROOF | 9 | nothing live exercises it |
+
+What is missing is the ability to address that proof. There are 135
+`provenIn(...)` citations, splitting **68 into a live pack** and **67 at
+in-package unit tests**, so half of this catalogue's PROVEN rows rest on mocks
+while the status table's `68 PROVEN · 0 BLOCKED` does not distinguish the two.
+
+```bash
+perl -0777 -ne 'while (/provenIn\(\s*'"'"'([^'"'"']+)'"'"'/gs) { print "$1\n" }' \
+  packages/at_client/test/acceptance/*_test.dart | sort | uniq -c
+```
+
+⚠️ **Use that command rather than a single-line-anchored one.** `provenIn(` is
+routinely formatted with its path on the next line, so a same-line matcher
+reports 62 citations over 18 files — wrong, and it does not look wrong.
+
+A citation also cannot be told from prose: `proven_elsewhere.dart:40` is
+`expect(source.contains("'$testName"), isTrue)`, a bare substring anywhere in
+the file, so a comment, a `group(` name or a line of doc text satisfies one.
+Nothing has rotted through this yet — all 68 live citations currently
+prefix-match a real test.
+
+### Why a posture grid is the wrong default
+
+`PqPosture` declares 9 axes and only 6 vary across the 3 stages.
+`mintLegacyMaterial`, `sealsToKeyAlgorithms` and `keyEstablishmentAlgorithms`
+are byte-identical at legacy, pqReady and pqActive, and the last one's dartdoc
+calls it a deployment decision rather than a stage decision. Any row whose
+clauses turn on those three is posture-invariant by construction.
+
+A3 is the clearest case. The live proof in `nskey_data_path_live_test.dart`
+builds its client from a bare `AtClientPreference` — therefore
+`PqPosture.legacy` — and then sets `..crypto = CryptoConfig.nskey(...)`. Every
+clause it asserts is already proven at the legacy stage and is identical at the
+other two. What the posture decides is not what the data path guarantees, but
+whether an app that configures nothing enters it. 3 of the 5 A3 rows do not vary
+at all; the 2 that do are [UC-A3.2](#42-uc-a32--a-client-mints-and-publishes-the-nskey-for-each-namespace-it-is-authorised-for),
+because `seedNamespaceKeys` is false at legacy so whether the mint fires is a
+stage decision, and [UC-A3.3](#43-uc-a33--self-write-with-no-namespace-key-has-no-pq-fallback),
+whose legacy escape hatch pqActive closes.
+
+Sorting all 68 by the shape that could prove them:
+
+| Kind | Rows | Shape that proves it | Arm |
+|-----------------------|-----:|------------------------------------|--------|
+| Axis rows | 6 | one client at a known stage | 1 |
+| Consequence rows | 15 | one client at a known stage | 1 |
+| Cross-stage rows | 3 | a sender × receiver cell | 2 |
+| Transition rows | 3 | a client that moves stage | 3 |
+| Stage-invariant | 38 | wherever they are proven now | ledger |
+| Vacuous at legacy | 3 | a stage-aware Given, or excluded | — |
+
+The existing 4×4 serves the 3 cross-stage rows and cannot express a transition.
+Its own dartdoc says why: *"Minting happens ONCE, at enrolment time, never in
+the cells"* (`pq_rollout_matrix_test.dart:94`), because a per-cell re-mint churns
+the advertisement into a shape [UC-G1.14](#uc-g114--pqready-is-invisible-to-a-deployed-peer)'s
+released reader cannot take. Growing the grid to carry the catalogue would run
+38 rows as 16 identical copies of one assertion, and 3 more would pass vacuously
+at legacy where their Given is unsatisfiable.
+
+There is also an axis that is not the client's posture at all:
+[UC-B0.1](#uc-b01--a-pq-capable-client-cannot-pq-upgrade-against-a-legacy-atserver)
+varies by atServer version, and survives today as a tagged special case against
+a pinned `virtualenv:vip-p3.15.0` in its own CI job.
+
+### The four arms
+
+**Arm 1, the stage arm.** 3 cells, one client per `PqPosture`, asserting the 21
+axis and consequence rows. `TestUtils.getPreference(atSign, posture:)` already
+takes a posture, so this is the cheapest arm to build, and it closes the highest
+value empty row as a by-product: `disallowLegacyEncryption` has no setter and no
+constructor argument, so a posture is the only way to reach it, and it has **0**
+hits under `tests/` against a live refusal at `at_client_impl.dart:753`.
+[UC-C1.2](#152-uc-c12--the-refusal-axis-the-posture-disallows-legacy-writes)
+has never executed.
+
+**Arm 2, the pair grid.** The existing 4×4 stays as it is, serving the 3 rows
+that need two stages at once. The `published` column must stay an out-of-process
+arm, since a released at_client and this tree cannot live in one process.
+⚠️ The cells are **not** posture-faithful today —
+`tests/pq_matrix/current/lib/arm.dart` takes only two axes from the posture, so
+every cell runs at `PqPosture.legacy` on the era-default, seeding and
+write-default axes. A pqActive cell that inherited `disallowLegacyEncryption`
+would refuse writes to any unseeded peer and fail for a reason that is not the
+thing under test.
+
+**Arm 3, the transition arm.** A cell is a state, and this catalogue is full of
+edges: the retrofit trio, the retirement pair, the capability flip, rotation and
+revocation, heal-from-a-holder, and the rollout ladder rows UC-G1.7 to UC-G1.9.
+This arm asserts the invariant *across* the change rather than at either end,
+which no cell can do.
+
+**Arm 4, the server-version arm.** Client posture crossed with atServer version,
+built as ephemeral environments at named `at_server` refs. This retires the
+`legacy-server` tag and the pinned image as special cases, and gives UC-B0.1 an
+ordinary home.
+
+### The generated ledger
+
+38 rows will never sit in a matrix and still have to be visible, so the
+definitive place is a generated page rather than a directory.
+
+Each live test declares the clauses it proves. Each pack writes a results file
+as it runs. One reporter merges them and renders this catalogue with every row
+marked proven-by-what in that run. A row no pack exercised reports
+`not-exercised-in-this-run` rather than green — a state the current design
+cannot express at all, because a citation is satisfied whether or not anything
+ran.
+
+**Clause-level rather than row-level** is what makes it worth building. It turns
+"UC-A2.5 has 3 unproven clauses" from a footnote somebody found by reading into
+a computed fact, and it is the mechanism that closes those clauses structurally.
+`tests/at_end2end_test/test/suite_manifest_test.dart` is the precedent for the
+in-pack half: a rail that runs in the package owning the evidence, so a rename
+reddens the pack that caused it.
+
+### The two environments: VE and EE
+
+gkc ruled 2026-08-23 that the suite is not constrained to the virtual
+environment. That changes what arm 3 can be, because arm 3 is blocked on the VE
+for a structural reason rather than an effort one: a transition has to re-mint,
+`(appName, deviceName)` is one-shot server state, and CRAM activation is one-shot
+per atSign per virtualenv. That is what the atSign ledger in
+`tests/at_functional_test/config/config.yaml` records, and why the matrix forbids
+re-minting in cells.
+
+The ephemeral environment removes the constraint rather than working around it.
+Read from `at_server` at `origin/trunk`:
+
+- `tools/build_ephemeral_environment/ee_base/Dockerfile` does `COPY . .` and
+  compiles `packages/at_secondary_server/bin/main.dart`, so an EE built at ref X
+  **is** an atServer at ref X. That is arm 4, from any ref.
+- The atSign list is a mounted file (`/tmp/setup/atsigns`), defaulting to 26
+  phonetic-alphabet atSigns, so each arm gets atSigns named for their role and
+  freshly CRAM-activatable rather than drawn from a shared one-shot pool.
+- `runee.sh <name> <base-port>` runs several EEs side by side, each claiming a
+  100-port range bound to 127.0.0.1.
+
+The harness already fits. The EE serves the same `vip.ve.atsign.zone`
+certificates as the VE, so the root domain does not change and the 42 files
+carrying that literal are untouched. `TestUtils.rootServerPort` reads
+`VIRTUALENV_BASE_PORT`, and its comment — *"a base-port virtualenv puts the root
+server at the base port itself"* — describes the EE's `EPHEMERAL_BASE_PORT`
+contract exactly. Pointing an arm at an EE is 2 environment variables.
+
+⛔ **Build every EE from a named ref; never pull `ephemeral:latest`.**
+`atsigncompany/ephemeral` is rebuilt **monthly** (newest tag 2026-08-15) while
+the VE publishes per commit, so `:latest` walks straight back into "the
+published image cannot verify ML-DSA PKAM". The VE stays as it is for the
+existing functional pack.
+
+### Prerequisites for the build
+
+Each verified against the tree rather than assumed.
+
+**The functional pack has no test-selection machinery.**
+`tests/at_functional_test/dart_test.yaml` does not exist and no file in that
+pack carries `@Tags(['pq'])` — 0 hits, against 9 in the e2e pack as a control.
+The pack meant to host the matrix has no tag and no allowlist, so
+`dart test --tags pq` selects nothing there.
+
+**A posture-faithful pqActive cell cannot notify yet.**
+`nskey_self_notify_live_test.dart:289` records that building enrollments with
+`PqPosture.pqActive` broke the monitor: the receiver got nothing, not even
+`statsNotification`, and the sender never reached `listening`, because the
+monitor authenticates on its own socket and a posture that moves the signing
+algorithm takes that connection with it.
+
+⚠️ **Unmeasured hypothesis: this and the unexplained intermittent in
+`self_enrollment_retrofit_live_test.dart` are the same problem.** That
+intermittent's 2026-08-19 evidence is a notification that *was* delivered, to
+exactly one monitor, on a monitor whose PKAM went out as `signingAlgo:rsa2048`
+while the test awaited the retrofitted ML-DSA one — so its narrowed question is
+which monitor the atServer considered a subscriber. Both are a monitor's own
+authenticated socket disagreeing with the client's signing algorithm, and
+neither has been run against the other. Settling it needs the atServer's own
+log, which has no near-side representation: copy it out with
+`docker cp test-virtualenv-1:/apps/logs <dir>` **before** the teardown, since
+`runLocal.sh` ends in `docker compose down`.
+
+**`manifest.dart` cannot be imported by the packs.** It lives under
+`packages/at_client/test/`, which no other package can reach, so the in-pack
+rails need it moved to `lib/` first.
+
+**`provenIn`'s matcher needs to require a `test(` token**, and that cannot be a
+naive substring check: 53 declarations put `test(` and the name on separate
+lines, so a naive tightening would falsely redden about a fifth of the
+citations.
+
+### The build order, and what it leaves
+
+Not ruled — this is the measured recommendation, and the decision is gkc's. Arm
+1 and the ledger first, both on the VE, since neither needs a new environment,
+arm 1 executes UC-C1.2 for the first time, and the ledger is what turns the
+other 38 rows from a claim into a report. Arms 3 and 4 follow once the monitor
+breakage is diagnosed, rather than beside it, since both introduce a new
+environment and a new failure surface at the same moment.
+
+Four residues this catalogue states rather than hides:
+
+- **UC-B0.1** belongs to the `legacy_server_tests` job and cannot be a cell
+  until arm 4 exists.
+- **UC-B2.2** needs the grace-0 secondary that only
+  `tests/at_end2end_test/runLocal.sh` provisions, so the functional pack cannot
+  host it.
+- **UC-C1.4**'s Given is unprovable live by an existing ruling.
+- **The 3 vacuous-at-legacy rows** — UC-A4.3, UC-B5.4 and UC-B1.3 — have an
+  invariant Then and a Given that legacy cannot satisfy, since
+  `seedNamespaceKeys: false` means there is no nskey to convey. A legacy cell
+  would pass while measuring nothing, which is the failure a matrix is worst at
+  showing.
+
+One thing remains open: the transition arm re-mints, and the matrix's recorded
+constraint against re-minting was written for a shared-atSign world. A fresh
+per-arm atSign is what makes the two compatible, and that reasoning has not yet
+been proven by a run.
 
 **UC → project coverage** (cross-ref only — the authoritative sequence / dependency
 graph / effort lives in `implementation-plan.md`; this is the one place acceptance.md
@@ -1553,6 +1800,7 @@ right" pass rather than numbered projects.
 
 - **Cross-ref:** `implementation-plan.md` (full plan, dependency graph, waves,
   effort, critical path); `design.md` (harness mechanics).
+
 
 # Part C — The rollout, driven by flags
 

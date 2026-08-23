@@ -11246,3 +11246,150 @@ rescues those — the composer's own doc names that premise as the one to
 revisit), and the verifier's public-key cache asymmetry: a peer holding the
 pre-mint advertisement verifies window-signed envelopes until its cache
 expires, while a fresh-fetching peer refuses them.
+
+## 115. The acceptance suite is 4 arms and a ledger, not one grid (2026-08-23)
+
+**Ruled by gkc, 2026-08-23.** Two things were ruled and the second changed the
+design: the acceptance set needs one definitive place where it can be seen
+being proven, with the posture matrix as the logical place to build that out;
+and the suite is **not constrained to the virtual environment** — the ephemeral
+environment is available as well.
+
+**The brief, in gkc's words:** *"we have literally hundreds of functional and
+end to end tests which cover the acceptance tests together. But there is no
+definitive place where it is easy to see the entirety of the pq project's
+acceptance tests being proven. The posture matrix test is the logical place to
+build test out."* So the problem is legibility rather than coverage, and the
+design below follows from measuring which rows a matrix can actually carry.
+
+**gkc's opening instinct was cells plus some of the transitions between cells,
+offered for correction.** The axis is right and the transitions are the half
+nobody has built. The scope is wrong in both directions, which is what made
+this look harder than it is.
+
+### Coverage is not the gap
+
+All 68 live use cases were mapped against the packs — one agent per family,
+each followed by an adversarial verifier, then a completeness critic — and
+every figure below was re-derived by hand afterwards, because two of the
+agents' headline numbers were wrong in opposite directions.
+
+| Verdict | Rows |
+|-----------------|-----:|
+| LIVE_DIRECT | 12 |
+| LIVE_PARTIAL | 43 |
+| LIVE_INCIDENTAL | 4 |
+| NO_LIVE_PROOF | 9 |
+
+59 of 68 rows have live proof of some kind. What is missing is the ability to
+address it. There are 135 `provenIn(...)` citations; **68 point into a live
+pack and 67 at in-package unit tests**, so half the catalogue's PROVEN rows
+rest on mocks and the status table's `68 PROVEN · 0 BLOCKED` does not
+distinguish the two.
+
+```bash
+perl -0777 -ne 'while (/provenIn\(\s*'"'"'([^'"'"']+)'"'"'/gs) { print "$1\n" }' \
+  packages/at_client/test/acceptance/*_test.dart | sort | uniq -c
+```
+
+⚠️ **A single-line-anchored version of that command gives 62 over 18 files and
+is wrong**, because `provenIn(` is routinely formatted with its path on the
+next line. That broken figure was reported once during this work before being
+caught.
+
+`provenIn` is also weaker than it reads: `proven_elsewhere.dart:40` is
+`expect(source.contains("'$testName"), isTrue)`, a bare substring anywhere in
+the file, so a comment, a `group(` name or a line of doc prose satisfies a
+citation. Nothing has rotted through this yet — all 68 live citations currently
+prefix-match a real test — but the rail cannot tell a test from prose.
+
+### A grid is the right shape for 3 rows
+
+`PqPosture` declares 9 axes and only 6 vary across the 3 stages
+(`packages/at_client/lib/src/preference/pq_posture.dart`).
+`mintLegacyMaterial`, `sealsToKeyAlgorithms` and `keyEstablishmentAlgorithms`
+are byte-identical at legacy, pqReady and pqActive, and the last one's dartdoc
+calls it a deployment decision rather than a stage decision. Every row whose
+clauses turn on those three is posture-invariant by construction.
+
+gkc's suspicion about A3 holds and is sharper than he put it. The live proof in
+`nskey_data_path_live_test.dart` builds its client from a bare
+`AtClientPreference` — therefore `PqPosture.legacy` — and then sets
+`..crypto = CryptoConfig.nskey(...)`. Every clause it asserts is already proven
+at the legacy stage and is identical at the other two. What the posture decides
+is not what the data path guarantees, but whether an app that configures
+nothing enters it. 3 of the 5 A3 rows do not vary; the 2 that do are UC-A3.2
+(whether the mint fires at all) and UC-A3.3 (whose escape hatch pqActive
+closes).
+
+Sorting all 68 by the shape that could prove them:
+
+| Kind | Rows | Shape that proves it |
+|-----------------------|-----:|--------------------------------------|
+| Axis rows | 6 | one client at a known stage |
+| Consequence rows | 15 | one client at a known stage |
+| Cross-stage rows | 3 | a sender × receiver **cell** |
+| Transition rows | 3 | a client that **moves** stage |
+| Stage-invariant | 38 | wherever they are proven now |
+| Vacuous at legacy | 3 | a stage-aware Given, or excluded |
+
+The existing 4×4 serves the 3 cross-stage rows. It cannot express a transition,
+and its own dartdoc says why: *"Minting happens ONCE, at enrolment time, never
+in the cells"* (`pq_rollout_matrix_test.dart:94`), because a per-cell re-mint
+churns the advertisement into a shape UC-G1.14's released reader cannot take.
+Meanwhile 21 rows need one client at one known stage — 3 cells, not 16 — and 38
+rows would become 16 identical copies of a single assertion.
+
+A third axis neither party named: **UC-B0.1 varies by atServer version, not by
+client posture**, and survives today as a tagged special case against a pinned
+`virtualenv:vip-p3.15.0` in its own CI job. It can never be a cell.
+
+### The design, in one line each
+
+The specification lives in
+[`acceptance.md` section 14](../acceptance.md#14-test-harness--implverify-mapping),
+which carries the arms, the environments, the prerequisites and the build order.
+One home, because a design copied into two files goes stale in the one nobody
+has open — and it belongs beside the catalogue it exists to prove.
+
+- **Arm 1, the stage arm** — 3 cells, one client per `PqPosture`, for the 21
+  axis and consequence rows. The cheapest arm, and it executes UC-C1.2 for the
+  first time.
+- **Arm 2, the pair grid** — the existing 4x4, unchanged, for the 3 rows that
+  need two stages at once.
+- **Arm 3, the transition arm** — the edges: retrofit, retirement, the
+  capability flip, rotation, revocation, the rollout ladder.
+- **Arm 4, the server-version arm** — client posture crossed with atServer
+  version, retiring the pinned-image special case.
+- **The ledger** — each live test declares the clauses it proves, each pack
+  writes a results file, one reporter renders the catalogue from what actually
+  ran. Clause-level, so an overclaim becomes a computed fact rather than
+  something found by reading.
+
+**Why the EE is what makes arm 3 possible.** A transition has to re-mint;
+`(appName, deviceName)` is one-shot server state and CRAM activation is one-shot
+per atSign per virtualenv, which is why the matrix forbids re-minting in cells.
+The ephemeral environment mounts its own atSign list, so an arm gets fresh
+CRAM-activatable atSigns rather than drawing from a shared pool, and its
+Dockerfile compiles `at_secondary_server` from the repo, so an EE built at a ref
+is an atServer at that ref. The harness already fits: same certificates, and
+`TestUtils.rootServerPort` already reads a base port whose comment describes the
+EE's contract.
+
+⛔ **Build every EE from a named ref; never pull `ephemeral:latest`**, which is
+rebuilt monthly against a VE that publishes per commit.
+
+**4 prerequisites**, each verified and each written up in the specification: the
+functional pack has no `dart_test.yaml` and no `pq` tag; `PqPosture.pqActive`
+currently breaks the monitor; `manifest.dart` sits where no pack can import it;
+and `provenIn`'s matcher cannot tell a test from a comment.
+
+⚠️ **Unmeasured hypothesis worth carrying**: the pqActive monitor breakage and
+[14.34](../implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)
+may be one problem — both are a monitor's own authenticated socket disagreeing
+with the client's signing algorithm. If they are, G3 and arm 1's blocker close
+together.
+
+**The build order is not ruled.** The measured recommendation is arm 1 and the
+ledger first, both on the VE, with arms 3 and 4 following once the monitor
+breakage is diagnosed.
