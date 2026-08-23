@@ -29,11 +29,26 @@ final _pqSymbols = RegExp(r'PqPosture|nskey|Nskey|pqSeal|pqOpen|'
     r'SigningAlgoType|keyPackage|KeyPackage|__ssenv|_apsk|'
     r'AtClientSecretSharing|signingRoot|SigningRoot|mldsa|enroll:');
 
-final _tag = RegExp(r"@Tags\(\s*\[[^\]]*'pq'");
-
 bool _drivesPq(String source) => _pqSymbols.hasMatch(source);
 
-bool _isTagged(String source) => _tag.hasMatch(source);
+/// Whether `@Tags(['pq'])` will actually be *applied* by the runner.
+///
+/// ⚠️ **Presence is not enough, and the difference is invisible.** A file-level
+/// annotation only reaches the library when it sits **before** the `library;`
+/// directive. Put it after, and it legally attaches to the next import
+/// instead: `dart analyze` stays clean, the string is right there in the file,
+/// and `--tags pq` silently does not select it. Measured 2026-08-23 — moving
+/// one tag below `library;` turned that file's selection into "No tests match
+/// the requested tag selectors" with nothing else going red.
+///
+/// So this checks placement, not presence: the tag line must exist, a
+/// `library;` line must exist, and the tag must come first.
+bool _isTagged(String source) {
+  final lines = source.split('\n');
+  final tag = lines.indexWhere((l) => RegExp(r"^@Tags\(\s*\[[^\]]*'pq'").hasMatch(l));
+  final lib = lines.indexWhere((l) => l.trim() == 'library;');
+  return tag >= 0 && lib >= 0 && tag < lib;
+}
 
 void main() {
   final dir = Directory('test');
@@ -66,6 +81,20 @@ void main() {
     expect(_drivesPq(negative.readAsStringSync()), isFalse,
         reason: 'atclient_put_test.dart drives no PQ mechanism, so a matcher '
             'that flags it would tag the whole pack and mean nothing');
+  });
+
+  test('the placement check rejects a tag the runner would ignore', () {
+    // The exact shape that fooled a presence-only check: the annotation is
+    // present, spelled correctly, and attaches to the import rather than the
+    // library. If this ever passes, _isTagged has gone back to grepping.
+    const misplaced = "// a comment\nlibrary;\n@Tags(['pq'])\nimport 'x.dart';";
+    const correct = "// a comment\n@Tags(['pq'])\nlibrary;\nimport 'x.dart';";
+    expect(_isTagged(misplaced), isFalse,
+        reason: 'a tag below `library;` attaches to the import and never '
+            'reaches the library, so --tags pq does not select the file');
+    expect(_isTagged(correct), isTrue,
+        reason: 'the canonical placement must still count, or this guard '
+            'would demand every file be retagged');
   });
 
   test('every file driving a PQ mechanism carries the pq tag', () {
