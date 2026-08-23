@@ -72,7 +72,31 @@ jobs:
 
       - name: run tests
         working-directory: packages/${{ matrix.package }}
-        run: dart test --concurrency=1 --exclude-tags ffi
+        run: dart test --concurrency=1 --exclude-tags ffi --file-reporter json:acceptance-report.json
+
+      # Feeds `packages/at_client/tool/acceptance_ledger.dart`, which joins these
+      # against the catalogue's citations to say which acceptance rows a run
+      # actually exercised. `if: always()` on purpose: a suite that FAILED is
+      # exactly when knowing which rows lost their proof matters most.
+      #
+      # Emitted for EVERY package in the matrix rather than only the cited one.
+      # Today only at_auth is cited from here (12 citations); conditioning on
+      # that would mean a citation added to at_commons or at_chops later is
+      # silently uncovered, and an uncovered row reads as missing coverage
+      # rather than as missing wiring — the failure this whole ledger exists to
+      # remove.
+      #
+      # ⚠️ The artifact name carries `matrix.package`, without which the eight
+      # legs overwrite one another. That collision already happened once in
+      # at_client_sdk.yaml across its stable/beta legs and cost a whole
+      # dispatch to find.
+      - name: Upload ${{ matrix.package }} acceptance report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: acceptance-report-lib-${{ matrix.package }}
+          path: packages/${{ matrix.package }}/acceptance-report.json
+          if-no-files-found: warn
 
   build_and_test_ffi:
     runs-on: ubuntu-latest

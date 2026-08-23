@@ -78,17 +78,37 @@ Map<String, String> jobsOf(String workflow) {
   return jobs;
 }
 
+/// [block] with whole-line comments removed.
+///
+/// ⚠️ **Every predicate below must run on this, not on the raw block.** A
+/// workflow step is routinely preceded by a comment explaining it, and that
+/// comment names the very strings the predicates look for — so a guard reading
+/// the raw text is satisfied by prose *about* the wiring while the wiring
+/// itself is gone. Measured: removing `if: ${{ always() }}` from an upload step
+/// left this rail green, because the comment three lines above it said
+/// "`if: always()` on purpose".
+///
+/// Trailing comments are kept, because the SHA-pinned `uses:` lines carry their
+/// version that way and dropping the line would lose the directive with it.
+String codeOnly(String block) =>
+    block.split('\n').where((l) => !l.trimLeft().startsWith('#')).join('\n');
+
 /// Whether [block] asks its runner for the machine-readable stream the ledger
 /// joins against.
-bool emitsReport(String block) => block.contains('--file-reporter json:');
+bool emitsReport(String block) =>
+    codeOnly(block).contains('--file-reporter json:');
 
 /// Whether [block] uploads what it emitted, unconditionally.
 ///
 /// `if: always()` is part of the contract rather than a nicety: a suite that
 /// **failed** is when knowing which rows lost their proof matters most, and an
 /// upload skipped on failure loses exactly that run.
+///
+/// Matched as the directive `if: ${{ always() }}` rather than the bare token,
+/// so prose quoting it cannot stand in for it.
 bool uploadsReport(String block) =>
-    block.contains('acceptance-report-') && block.contains('always()');
+    codeOnly(block).contains('acceptance-report-') &&
+    codeOnly(block).contains(r'if: ${{ always() }}');
 
 void main() {
   late String workflow;
@@ -104,6 +124,17 @@ void main() {
         'it needs a pinned pre-PQ atServer',
   };
 
+  late Map<String, String> libJobs;
+
+  /// Reads one workflow and splits it into jobs, refusing an absent file.
+  Map<String, String> load(String name) {
+    final file = File('${repoRoot().path}/.github/workflows/$name');
+    expect(file.existsSync(), isTrue,
+        reason: '$name is one of this rail\'s inputs; without it the '
+            'assertions below would all pass against an empty string');
+    return jobsOf(file.readAsStringSync());
+  }
+
   setUpAll(() {
     final file =
         File('${repoRoot().path}/.github/workflows/at_client_sdk.yaml');
@@ -112,6 +143,13 @@ void main() {
             'assertions below would all pass against an empty string');
     workflow = file.readAsStringSync();
     jobs = jobsOf(workflow);
+    // ⚠️ The ledger's inputs are split across TWO workflows, and this rail
+    // knew only about the first until 2026-08-23. `at_auth`'s unit suite runs
+    // in at_libraries.yaml and nothing there emitted a report, so the 12
+    // citations pointing at it could never be covered by CI artefacts — a
+    // CI-rendered ledger reported those rows NOT-EXERCISED for ever, which
+    // reads as missing coverage rather than as missing wiring.
+    libJobs = load('at_libraries.yaml');
   });
 
   group('the job matcher', () {
@@ -161,6 +199,27 @@ void main() {
       expect(uploadsReport(wired), isTrue);
       expect(uploadsReport(unwired), isFalse);
     });
+
+    test('prose about the wiring does not stand in for the wiring', () {
+      // The exact shape that fooled this rail: a step whose wiring has been
+      // removed, preceded by the comment that explains why it was there. Every
+      // token the predicates look for is present — in the comment.
+      const commentedOut = '''
+      # Feeds the acceptance ledger. `if: always()` on purpose, and the run
+      # below passes `--file-reporter json:acceptance-report.json`.
+      - name: Upload acceptance-report-lib-something
+        uses: actions/upload-artifact@abc # v7.0.1
+''';
+      expect(emitsReport(commentedOut), isFalse,
+          reason: 'a comment mentioning the flag is not the flag. This '
+              'returned true until 2026-08-23');
+      expect(uploadsReport(commentedOut), isFalse,
+          reason: 'and a comment saying "`if: always()` on purpose" is not an '
+              '`if:`. That is what made an upload lose always() with this '
+              'rail still green — the same weakness the catalogue records in '
+              'provenIn, where a substring anywhere in the file satisfies a '
+              'citation');
+    });
   });
 
   group('every job that feeds the ledger still does', () {
@@ -203,6 +262,62 @@ void main() {
             reason: '${e.key} writes a report and does not upload it, so the '
                 'work is done and thrown away. Either upload it or stop '
                 'emitting it');
+      }
+    });
+  });
+
+  group('at_libraries.yaml feeds the ledger too', () {
+    // The other half of the inputs. at_client's 55 citations are covered by
+    // at_client_sdk.yaml's unit_at_client; at_auth's 12 are only reachable
+    // from here, because at_auth's suite runs in this workflow and nowhere
+    // else (`grep -c at_auth .github/workflows/at_client_sdk.yaml` → 0).
+    test('the matcher sees this workflow\'s jobs', () {
+      expect(libJobs.keys, contains('build_and_test'),
+          reason: 'positive control: the matrix job that runs at_auth');
+      expect(libJobs.keys, isNot(contains('workflow_dispatch')),
+          reason: 'negative control: this file has an `on:` block too, and '
+              'its 2-space keys must not be read as jobs');
+    });
+
+    test('build_and_test emits and uploads a report', () {
+      final block = libJobs['build_and_test'];
+      expect(block, isNotNull,
+          reason: 'this job runs at_auth\'s unit suite, which holds the only '
+              'citations no other job can cover');
+      expect(emitsReport(block!), isTrue,
+          reason: 'without `--file-reporter json:` at_auth writes no report, '
+              'and every row citing it reads NOT-EXERCISED in a '
+              'CI-rendered ledger no matter how green the job is');
+      expect(uploadsReport(block), isTrue,
+          reason: 'and an emitted report nobody uploads is work done and '
+              'thrown away');
+    });
+
+    test('its artifact name is per-leg, or eight legs overwrite each other',
+        () {
+      final block = libJobs['build_and_test']!;
+      // The job is a matrix over 8 packages sharing one upload step, so the
+      // artifact name MUST vary with the leg. A fixed name is not a cosmetic
+      // problem: seven of the eight reports are silently replaced, and the
+      // ledger then reports rows as unexercised because their package's
+      // report lost a race. The identical collision already happened once in
+      // at_client_sdk.yaml across its stable/beta legs.
+      expect(block, contains(r'acceptance-report-lib-${{ matrix.package }}'),
+          reason: 'the upload name must carry matrix.package. A constant name '
+              'across a matrix means the last leg to finish is the only one '
+              'whose report survives');
+      expect(block, contains(r'path: packages/${{ matrix.package }}/'),
+          reason: 'and it must upload the leg\'s OWN file, or every leg '
+              'uploads whichever package happened to be checked out');
+    });
+
+    test('no job in this workflow emits without uploading', () {
+      final emitted = libJobs.entries.where((e) => emitsReport(e.value));
+      expect(emitted, isNotEmpty,
+          reason: 'if nothing here emits, this group is checking nothing');
+      for (final e in emitted) {
+        expect(uploadsReport(e.value), isTrue,
+            reason: '${e.key} writes a report and does not upload it');
       }
     });
   });

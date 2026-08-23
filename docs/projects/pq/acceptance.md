@@ -1766,12 +1766,26 @@ the 194 live tests. Three pieces:
 - `packages/at_client/tool/acceptance_ledger.dart` joins the two and renders
   every catalogue row with a verdict.
 
-**In CI**, four jobs emit a report and upload it — `unit_at_client` (which also
-records the citations), `functional_tests`, `pqe2e_tests` and
-`legacy_server_tests` — each `if: always()`, since a suite that *failed* is
-when knowing which rows lost their proof matters most. ✅ Exercised by dispatch
-`32643853854`, which found two things offline validation could not
+**In CI**, five jobs across **two** workflows emit a report and upload it, each
+`if: ${{ always() }}`, since a suite that *failed* is when knowing which rows
+lost their proof matters most. In `at_client_sdk.yaml`: `unit_at_client` (which
+also records the citations), `functional_tests`, `pqe2e_tests` and
+`legacy_server_tests`. In `at_libraries.yaml`: `build_and_test`, the matrix that
+runs **at_auth**. ✅ Exercised by dispatch `32643853854`, which found two things
+offline validation could not
 ([what](detail/acceptance.md#what-the-first-ci-run-showed-that-offline-validation-could-not)).
+
+⚠️ **The second workflow was added 2026-08-23, and its absence was invisible.**
+This paragraph said "four jobs", all in one workflow — but at_auth's suite runs
+only in `at_libraries.yaml` (`grep -c at_auth .github/workflows/at_client_sdk.yaml`
+→ 0), which emitted nothing. So the **12** citations pointing at at_auth could
+never be covered by CI artefacts, and a ledger rendered from a green CI run
+reported those rows `NOT-EXERCISED` permanently — indistinguishable from rows
+nothing tests. Found by rendering the ledger from a real run's artefacts rather
+than from a local one; the local driver had been masking it by running at_auth
+itself. The matrix emits for **all eight** of its packages rather than only
+at_auth, so a citation added to a sibling later is covered without anyone
+remembering to widen a condition.
 
 ⛔ **The rendering step is NOT wired in CI, and that is a decision.** Combining
 the artefacts needs `actions/download-artifact`, which this repo has never
@@ -1786,10 +1800,18 @@ usage comment inside the tool, so on demand meant reassembling four commands by
 hand and every published ledger figure came from a scratch directory.
 
 **And the emitting is guarded**, by
-`packages/at_client/test/acceptance_ledger_wiring_test.dart`: each of the four
-jobs still carries its reporter flag, `unit_at_client` still sets
-`ACCEPTANCE_LEDGER`, every emitter still uploads with `always()`, and each
-runner still gates the reporter on `ACCEPTANCE_REPORT`. That last one is the
+`packages/at_client/test/acceptance_ledger_wiring_test.dart`, across **both**
+workflows: each emitting job still carries its reporter flag, `unit_at_client`
+still sets `ACCEPTANCE_LEDGER`, every emitter still uploads with
+`if: ${{ always() }}`, at_libraries' matrix upload still names
+`matrix.package` so its eight legs cannot overwrite one another, and each
+runner still gates the reporter on `ACCEPTANCE_REPORT`.
+⚠️ **The rail's predicates read the workflow with comments stripped**, which is
+not a detail: an upload step is preceded by a comment explaining it, that
+comment names the very strings the predicates look for, and removing
+`if: ${{ always() }}` left the rail green because the prose above it said
+"`if: always()` on purpose". That is this section's own `provenIn` weakness — a
+mention satisfying a check — reproduced one layer up, and twice in one day. That last one is the
 point of the rail rather than a detail — every upload uses
 `if-no-files-found: warn`, so a job that stops emitting stays green and the
 ledger simply reports fewer rows as exercised, which reads as missing coverage
