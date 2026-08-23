@@ -11384,11 +11384,59 @@ functional pack has no `dart_test.yaml` and no `pq` tag; `PqPosture.pqActive`
 currently breaks the monitor; `manifest.dart` sits where no pack can import it;
 and `provenIn`'s matcher cannot tell a test from a comment.
 
-⚠️ **Unmeasured hypothesis worth carrying**: the pqActive monitor breakage and
-[14.34](../implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)
-may be one problem — both are a monitor's own authenticated socket disagreeing
-with the client's signing algorithm. If they are, G3 and arm 1's blocker close
-together.
+⛔ **This ruling carried a hypothesis that is now DISPROVEN, 2026-08-23.** It
+read: *"the pqActive monitor breakage and 14.34 may be one problem — both are a
+monitor's own authenticated socket disagreeing with the client's signing
+algorithm. If they are, G3 and arm 1's blocker close together."* They are not
+one problem. `NotificationServiceImpl` has built its Monitor with
+`signingAlgoType: signingAlgoOf(atClient)` since **2026-08-10** (`faf400821`),
+which is before **both** observations — checked against the tree as it stood on
+2026-08-17 and on 2026-08-19, and the line is there on each. So the monitor was
+never authenticating RSA for want of anything setting its algorithm.
+
+That also re-reads
+[14.34](../implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
+evidence rather than leaving it as a defect: `signingAlgoOf` resolves from key
+material, and that run had two clients — the legacy owner and the retrofitted
+one. A monitor whose PKAM went out as `signingAlgo:rsa2048` was the **legacy**
+client's, correctly RSA. The line is not a plumbing fault, and 14.34's own
+narrowed question — which monitor the atServer considered a subscriber — stands
+unchanged.
+
+**A narrower candidate was then raised and also disproven, the same day.** The
+only thing that populates the resolved algorithm is
+`_resolveSigningAlgoFromKeyMaterial` (`at_client_impl.dart:1582`), whose
+early-return path logs nothing while `signingAlgoOf` falls back to
+`preference.signingAlgoType` (default `rsa2048`) — so it looked like a silent
+way for a PQ client to authenticate RSA. A two-arm probe showed the fallback
+firing on the **control** arm only, which is correct by design: a legacy
+enrollment holds no typed authentication material, so a null resolution is what
+`signingAlgorithmForEnrollment` should return.
+
+⛔ **And the prerequisite is not what it says: the monitor failure is real but
+NOT posture-dependent.** Measured with equal-length interleaved arms across 2
+fresh virtualenvs — **pqActive 16 of 18** monitors received, **control 18 of
+20**. The arms genuinely differed (every pqActive client resolved `mldsa65`,
+every control client resolved null and fell back to `rsa2048`), and the
+atServer's log carries `signingAlgo:mldsa65` authentications, so ML-DSA PKAM
+connections were made and accepted. Both arms fail at the same rate, so a
+pqActive cell is no worse off than a legacy one. The silent cases carry
+`Monitor|Failed to start notifications: … The connection went away before a
+response arrived` (`AT0014`) — monitor-readiness flakiness of 14.34's family,
+not an algorithm problem. Read the residual rate as the rig's: both runs aborted
+on `AT0014`, and the probe builds 20 clients for one atSign in one process.
+
+⚠️ **Two earlier figures from that rig were wrong, in opposite directions, and
+both are worth carrying.** A single run said the problem did not reproduce at
+all — a false negative from one sample. A 3-run version then reported **6 of 30**
+pqActive monitors silent, which read as a posture defect and was the rig
+exhausting the atServer's `inbound_max_limit`: it held every client open, the
+far-side log said `Wrote stats to 12 monitor connections`, and the failures were
+deterministically the 9th and 10th arm of every run rather than intermittent. It
+also compared 3 control arms against 10 pqActive arms, so the control never
+reached the region where the failure lived. Releasing each listener and making
+the arms equal and interleaved removed it, and the fixed rig's far-side control
+reads `Wrote stats to 1 monitor connection`.
 
 **The build order is not ruled.** The measured recommendation is arm 1 and the
 ledger first, both on the VE, with arms 3 and 4 following once the monitor

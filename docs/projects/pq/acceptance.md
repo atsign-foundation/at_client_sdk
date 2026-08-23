@@ -1725,24 +1725,76 @@ pack carries `@Tags(['pq'])` — 0 hits, against 9 in the e2e pack as a control.
 The pack meant to host the matrix has no tag and no allowlist, so
 `dart test --tags pq` selects nothing there.
 
-**A posture-faithful pqActive cell cannot notify yet.**
-`nskey_self_notify_live_test.dart:289` records that building enrollments with
-`PqPosture.pqActive` broke the monitor: the receiver got nothing, not even
-`statsNotification`, and the sender never reached `listening`, because the
-monitor authenticates on its own socket and a posture that moves the signing
-algorithm takes that connection with it.
+**~~A posture-faithful pqActive cell cannot notify yet.~~ Measured 2026-08-23:
+the monitor failure is real but is NOT posture-dependent.** A throwaway probe
+ran the two postures as equal-length interleaved arms across 2 fresh
+virtualenvs, waiting 45s on each client for any notification:
 
-⚠️ **Unmeasured hypothesis: this and the unexplained intermittent in
-`self_enrollment_retrofit_live_test.dart` are the same problem.** That
-intermittent's 2026-08-19 evidence is a notification that *was* delivered, to
-exactly one monitor, on a monitor whose PKAM went out as `signingAlgo:rsa2048`
-while the test awaited the retrofitted ML-DSA one — so its narrowed question is
-which monitor the atServer considered a subscriber. Both are a monitor's own
-authenticated socket disagreeing with the client's signing algorithm, and
-neither has been run against the other. Settling it needs the atServer's own
-log, which has no near-side representation: copy it out with
-`docker cp test-virtualenv-1:/apps/logs <dir>` **before** the teardown, since
-`runLocal.sh` ends in `docker compose down`.
+| Arm | Monitor received | Silent |
+|-------------------------|-----------------:|-------:|
+| `PqPosture.pqActive` | 16 of 18 | 2 |
+| default (control) | 18 of 20 | 2 |
+
+The arms genuinely differed in the thing varied — every pqActive client resolved
+`SigningAlgoType.mldsa65`, every control client resolved null and fell back to
+`rsa2048` — and the atServer's own log carries `signingAlgo:mldsa65`
+authentications alongside `rsa2048` ones, so ML-DSA PKAM connections were made
+and accepted. Both arms fail at the same rate, so **posture is not what
+distinguishes them**, and a pqActive cell is no worse off than a legacy one.
+
+The silent cases carry a signature worth keeping:
+`Monitor|Failed to start notifications: Exception: The connection went away
+before a response arrived` (`AT0014`). That is monitor-readiness flakiness of
+the same family as
+[14.34](implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart),
+not an algorithm problem.
+
+⚠️ **Read the residual rate as the rig's, not the product's.** Both runs aborted
+on `AT0014` before finishing, which is why the denominators are 18 and 20 rather
+than 20 and 20; and the probe builds 20 clients for one atSign in a single
+process, which is not a shape production has. It also tested monitor
+*readiness*, not end-to-end delivery. What the measurement supports is the
+comparison between the arms, not the absolute number.
+
+⛔ **An earlier version of this probe reported 6 of 30 pqActive monitors silent,
+and that figure was entirely the rig's.** It held every client open, so the last
+arms of each run hit the atServer's `inbound_max_limit` — the far-side log said
+`Wrote stats to 12 monitor connections` — and it ran 3 control arms against 10
+pqActive arms, so the control never reached the iterations where the failure
+appeared. Releasing each listener and making the arms equal and interleaved
+removed it; the fixed rig's far-side control reads
+`Wrote stats to 1 monitor connection`.
+
+⛔ **This paragraph carried a hypothesis that is now DISPROVEN, 2026-08-23.** It
+said this and the unexplained intermittent in
+`self_enrollment_retrofit_live_test.dart` were probably the same problem, "a
+monitor's own authenticated socket disagreeing with the client's signing
+algorithm". They are not. `NotificationServiceImpl` has built its Monitor with
+`signingAlgoType: signingAlgoOf(atClient)` since **2026-08-10**, before both
+observations — checked against the tree as it stood on 2026-08-17 and
+2026-08-19. And that intermittent's `signingAlgo:rsa2048` monitor was the
+**legacy** client's of the two live at the time, correctly RSA, so it is not a
+plumbing fault either; its own narrowed question — which monitor the atServer
+considered a subscriber — stands unchanged.
+
+**A second candidate was raised and also disproven.** `signingAlgoOf` falls back
+to `preference.signingAlgoType` (default `rsa2048`) whenever
+`_resolveSigningAlgoFromKeyMaterial` (`at_client_impl.dart:1582`) records null,
+and that path throws nothing and logs nothing — so it looked like a silent way
+for a PQ client to authenticate RSA. The probe showed the fallback firing on the
+**control** arm only, which is correct by design: a legacy enrollment holds no
+typed authentication material, so a null resolution is what
+`signingAlgorithmForEnrollment` should return. It is the documented legacy
+fallback working, not a defect.
+
+⚠️ **The probe's own output labelled that control-arm null "this is the
+defect".** That label was the rig's, written before the run, and it was wrong —
+worth recording because a rig that prints a verdict will have that verdict
+quoted back as a finding.
+
+Settling anything here needs the atServer's own log, which has no near-side
+representation: copy it out with `docker cp test-virtualenv-1:/apps/logs <dir>`
+**before** the teardown, since `runLocal.sh` ends in `docker compose down`.
 
 **`manifest.dart` cannot be imported by the packs.** It lives under
 `packages/at_client/test/`, which no other package can reach, so the in-pack
