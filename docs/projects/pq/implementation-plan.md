@@ -270,9 +270,14 @@ hundreds of functional and e2e tests cover the acceptance set between them, and
 there is no definitive place to see the whole of it being proven; the posture
 matrix is the logical place to build that out. **The gap is now established and
 the design is ruled** — the first two of this entry's three owed steps are
-discharged, and what remains is the build. **Of that build, the ledger, its
-local driver, its wiring rail and arm 1 have all landed (2026-08-23); arms 2–4
-and the ledger's clause level have not.** ⚠️ The entry stays `[RECOMMENDED]`
+discharged, and what remains is the build. **Of that build, four pieces have
+landed (2026-08-23) and are named here so they can be grepped rather than
+re-derived:** the ledger (`packages/at_client/tool/acceptance_ledger.dart`),
+its local driver (**`tools/acceptance_ledger.sh`**, `--with-live` for the live
+packs), its wiring rail
+(**`packages/at_client/test/acceptance_ledger_wiring_test.dart`**) and **arm 1**
+(**`tests/at_functional_test/test/pq_stage_arm_test.dart`**). **Arms 2–4 and
+the ledger's clause level have not.** ⚠️ The entry stays `[RECOMMENDED]`
 because arms 3 and 4 are the largest thing left in D1, not because nothing has
 been done — read the ✅ markers below before starting anything here.
 
