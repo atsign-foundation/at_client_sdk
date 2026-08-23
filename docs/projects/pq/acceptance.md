@@ -1530,6 +1530,12 @@ FFI), **at_commons 5.13.0**, **at_client 3.14.0** (carrying the SS-0 substrate,
 PR #2037) and **at_auth 3.3.0-rc1** (extended `AtKeys` + `AtKeysIo.flush()`), so
 SS-0 / SS-1b / S-1 / S-2 acceptance is against shipped code.
 
+⚠️ **`tests/` holds 7 Dart packages, of which 4 are live test packs.** The
+other 3 are `tests/pq_matrix/{current,published,scenario}` — the child processes
+the pair grid spawns, which is why the `published` column can hold a released
+at_client this tree cannot. Count them with `find tests -name pubspec.yaml`, not
+`tests/*/`: a depth-2 glob returns 4 and reads as the whole answer.
+
 ⚠️ **The live corpus is 4 packs, and every earlier measurement here counted 2.**
 No `provenIn` citation reaches either CLI pack, which is why the CLI pack's
 two-arm posture differential — the best live evidence for UC-C1.6 and a second
