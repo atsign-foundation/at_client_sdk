@@ -11381,7 +11381,8 @@ rebuilt monthly against a VE that publishes per commit.
 
 **4 prerequisites**, each verified and each written up in the specification: the
 functional pack has no `dart_test.yaml` and no `pq` tag; `PqPosture.pqActive`
-currently breaks the monitor; `manifest.dart` sits where no pack can import it;
+was thought to break the monitor and does not — measured, and the failure is
+not posture-dependent; `manifest.dart` sits where no pack can import it;
 and `provenIn`'s matcher cannot tell a test from a comment.
 
 ⛔ **This ruling carried a hypothesis that is now DISPROVEN, 2026-08-23.** It
