@@ -11617,3 +11617,274 @@ place with what it used to say.
    can see which namespaces failed — `outcomes` lists only the successes today,
    so a caller counting them cannot tell a refusal from a namespace that had
    nothing to rotate.
+
+⚠️ **Items 9-21 were promoted from the plan's `## TODO` sections on
+2026-08-23**, when the plan was cut to what is still owed. Items 0-8 came
+from plan item 14.19.1 earlier the same day.
+
+9. A live re-point of a running `AtClient` onto a new enrollment id cannot
+   be built without a listener-state relay in `NotificationServiceImpl`.
+   `NotificationServiceImpl.currentListenerStateStream` returns
+   `monitor.currentStateStream` — the monitor object's own controller — so
+   replacing the monitor leaves every subscriber alive at the swap holding a
+   stream nothing writes to again, and noports' `sshnpd` holds exactly such
+   a subscription for the life of the daemon. The relay was built and then
+   reverted, because sequencing the retrofit inside `AtClientImpl._init`
+   removed every monitor replacement from the tree and left the relay
+   guarding something that can no longer happen. Anyone reintroducing a live
+   re-point must reintroduce the relay first.
+
+10. Two objects hold a `RemoteSecondary` that a live re-point would have to
+   update, and sequencing sidesteps rather than removes them:
+   `EncryptionService.remoteSecondary` is a mutable field assigned once at
+   init (`packages/at_client/lib/src/service/encryption_service.dart:15`),
+   and `SyncServiceImpl` constructs and holds `final RemoteSecondary
+   _remoteSecondary` from the enrollment id at create time
+   (`sync_service_impl.dart:37`, built at `:173`). Everything else reaches
+   the remote through `atClient.getRemoteSecondary()` at call time and is
+   re-point-safe already. Rebuilding the sync service instead of re-pointing
+   it is contraindicated: two `SyncService` instances against one Hive queue
+   lost writes and surfaced as `bypasscache_test` timing out in CI, an
+   incident recorded in `at_client_manager.dart`.
+
+11. at_chops' `AtSigningInput.signingAlgoType` is deliberately excluded from
+   the authentication-key/data-key rename that swept at_client and
+   at_onboarding_cli. It is unambiguous in context, and renaming it would
+   open an at_chops version question that ruling 109 avoided. A reader who
+   finds the rename apparently half-finished in at_chops should not finish
+   it. Re-derive the radius rather than quoting one: `git grep -lP
+   'signingAlgoType' -- packages tests` (45 files, 135 lines on 2026-08-23;
+   the plan's "165 hits across 48 files" was a 2026-08-19 snapshot).
+
+12. Live coverage with two real enrollments does NOT depend on SS-2 /
+   `__ssenv`. The "waits on SS-2" clause once carried on the live-coverage
+   row was wrong:
+   `tests/at_functional_test/test/nskey_self_notify_live_test.dart`,
+   `nskey_park_and_redrive_live_test.dart` and
+   `signing_root_pull_two_enrollments_test.dart` all drive two real
+   enrollments today, and `__ssenv` exists in no atServer implementation.
+
+13. `EnrollmentRecordPrivilegeResolver.isFullyPrivileged()` returning
+   **true** for a null enrollment id is deliberate and is not to be
+   re-opened (gkc, 2026-08-20). A client authenticating with the atSign's
+   own keys holds full privilege by construction rather than by grant, which
+   the resolver's own dartdoc argues. `ApkamSigning.enrollmentId`
+   correspondingly keeps substituting `'primary'`, so such a client
+   publishes `public:_apsk.primary.a.__e@<atSign>` under a name no
+   enrollment record carries, and `apkam_signing.dart` logs a warning when
+   it happens. The accepted cost, which is the part no source file records:
+   a verifier walking an owner-key signature through the approval chain
+   dead-ends, and surfaces that as a verification error rather than as this
+   decision.
+
+14. `EnrollmentRecordPrivilegeResolver.isFullyPrivileged()` returning **true
+   unconditionally when `enrollmentId == null`**
+   (`packages/at_client/lib/src/service/enrollment_privilege_resolver.dart:33`)
+   is deliberate and must not be "fixed". A client with no enrollment id is
+   authenticating with the atSign's own keys, which is full privilege by
+   construction rather than by grant — the resolver's own dartdoc says so at
+   `:17`. Raised as an open question on 2026-08-11 and closed 2026-08-23
+   without a code change. (The item cited
+   `AtClientImpl._resolveFullPrivilege()` until 2026-08-18; that name was
+   moved verbatim on 2026-08-10 in `289bbe453` and exists in no source
+   file.)
+
+15. `ApkamSigning.enrollmentId` substituting the sentinel `'primary'` when
+   there is none (`packages/at_client/lib/src/mixins/apkam_signing.dart:68`;
+   also `mint_lock.dart:134`) is deliberate, not a placeholder. A legacy
+   PKAM client holding an `AtKeysIo` therefore publishes
+   `public:_apsk.primary.a.__e@<atSign>` and signs approval-chain links as
+   `"primary"` — a name no enrollment record carries — because
+   `publishPublicSigningKey` is the only writer for an `_apsk` that no
+   `enroll:request` can carry. ⚠️ Do not guard on `sharing.enrollmentId ==
+   null`: the sentinel makes it never null and the guard dead
+   (`pq_signing_root.dart:910` records exactly that).
+
+16. There is no "migrate off the deprecated member" sweep available for the
+   PKAM signing path (bucket A, 530 findings). `PkamSigningAlgo`,
+   `PkamMlDsa65SigningAlgo`, `AtChopsImpl`, `AtChopsKeys`, `AtSigningInput`,
+   `AtSigningMode` and `AtPkamKeyPair` are all deprecated *classes*.
+   Non-deprecated key material does exist — `RsaSignatureAlgo`, and
+   `MlDsa65PureDartAlgo.signBytesSync`/`verifyBytes` with explicit keys — so
+   what is missing is not a replacement but the **dispatcher**: nothing
+   non-deprecated selects an algorithm from a `SigningAlgoType` the way
+   `AtChopsImpl.sign` does in pkam mode, and a caller wanting both
+   algorithms writes the two-way branch itself. That is a missing
+   convenience, not a behaviour risk.
+
+17. at_server keeps `rsa2048` and `ecc_secp256r1` on the AtChops
+   compatibility API **deliberately**, because `RsaSignatureAlgo` refuses
+   any modulus that is not exactly 2048 bits while `PkamSigningAlgo` does
+   not — that is a change to what verifies on the authentication path, which
+   is not a refactor's to make. This imposes NO constraint on at_client_sdk:
+   at_client_sdk signs rather than verifies, PKAM authenticates today under
+   both `rsa2048` and `mldsa65`, and nothing in this tree is at risk. The
+   plan previously worded this as though the atServer imposed a modulus
+   check on our authentication path; it does not.
+
+18. Clearing the deprecation debt is not all-or-nothing, and adding `//
+   ignore:` comments now was rejected (gkc, 2026-08-23). The findings group
+   into five buckets: **A** AtChops compatibility API, 530, no replacement;
+   **B** credential ladder, 71, replacement exists — the only D1 work; **C**
+   legacy flat keyfile fields, 118, retained until the ecosystem is PQ
+   (decisions 37); **D** at_auth response family, 27, scheduled for v5;
+   **E** singletons, 8, case by case. The decision for A and C was to record
+   the buckets and change no code — no ignores yet.
+
+19. "GitHub already serializes the e2e jobs, so two runs cannot overlap on
+   the shared @ce2e atSigns" is false. There is no top-level `concurrency:`
+   key in any workflow under `.github/workflows/` (verified 2026-08-23: the
+   only `concurrency` matches are `dart test --concurrency=1`, against a
+   control of 9 files containing `jobs:`), so `needs:` serializes the e2e
+   jobs *within* a run and not across runs — and the incident that produced
+   this finding was cross-run.
+
+20. The `sync:` arguments still passed at in-package call sites inside
+   at_client are left in place DELIBERATELY, not by oversight. They raise no
+   warning (`deprecated_member_use` is silent within the declaring package),
+   they suppress nothing, and the 4.0 removal makes the compiler enumerate
+   every one of them. Hand-cleaning the test stubs now would churn roughly
+   fifteen files for nothing the 4.0 build will not force anyway.
+
+21. `docs/projects/pq/post-quantum-cryptography.md` is Gary's private working
+   draft and is deliberately untracked and gitignored (by `220537523`). Do
+   not read it for review, do not register it with the docs rail, do not
+   commit it and do not delete it. The plan carried the opposite instruction
+   — "either finish and track it or delete it" — until 2026-08-23; that
+   instruction was wrong. Verify rather than trusting this: `git
+   check-ignore -q docs/projects/pq/post-quantum-cryptography.md && echo
+   ignored`.
+
+## 117. Measurements that closed a question (2026-08-23)
+
+**Promoted out of the plan on 2026-08-23**, when it was cut to what is still
+owed. Each entry is a number that SHUT an investigation. None appears in any
+commit: a measurement is not a code change, so `git log` cannot hold it, and
+losing one means the question reopens and somebody spends the time again.
+
+⛔ **A measurement is about the runs it was taken over, not about the
+world.** Where an entry gives a rate, it gives the numerator, the
+denominator and the window; read it as that and re-measure before extending
+it.
+
+1. The `self_enrollment_retrofit_live_test.dart` monitor intermittent is
+   **not posture- or signature-dependent**, and does not need a retrofit to
+   occur. A throwaway probe on 2026-08-23 enrolled clients in a loop and
+   waited 45 s on each for any notification: **2 of 20** default-posture
+   clients and **2 of 18** `PqPosture.pqActive` clients received nothing,
+   each carrying `Monitor|Failed to start notifications: Exception: The
+   connection went away before a response arrived` (`AT0014`). The arms
+   genuinely differed (`mldsa65` against a null resolution falling back to
+   `rsa2048`), so a retrofitted client's monitor is no more fragile than a
+   legacy one's. ⚠️ Read the rate as the **rig's**, not the product's: 20
+   clients for one atSign in one process is not a shape production has, and
+   both runs aborted on `AT0014` before finishing. What the numbers support
+   is the comparison between the arms, not the absolute figure.
+
+   Why no commit holds it: The probe was a throwaway rig built for a
+   different purpose and never committed; the two rates exist only in this
+   section's prose.
+
+2. ⛔ An earlier version of that same multi-client probe reported **6 of 30**
+   and that figure was entirely its own — it held every client open until it
+   hit the atServer's `inbound_max_limit`, which the far-side log states
+   outright as `Wrote stats to 12 monitor connections`. Do not quote 6 of 30
+   as a product rate. The reusable fact: the atServer caps concurrent
+   monitor connections, and any multi-client live rig must stay under that
+   ceiling or it measures its own exhaustion rather than the product.
+
+   Why no commit holds it: The rig was never committed, and the ceiling was
+   read from the container's own log (`docker cp
+   test-virtualenv-1:/apps/logs`), which `runLocal.sh` destroys on teardown.
+   Neither the retraction nor the ceiling appears in any commit.
+
+3. A residual recorded inside a project entry falsifies quietly, because the
+   work that closes it is filed elsewhere. Measured 2026-08-18: of six
+   residuals written down on 2026-08-16 inside project entries, three had
+   already shipped two days later with nothing having struck them. Residuals
+   belong in the TODO table, not inside a project entry.
+
+   Why no commit holds it: It is a ratio measured over documents, not code —
+   no commit closed those three residuals *as residuals*, which is the whole
+   point of the finding. It is the reason section 14.29 was created as a
+   TODO row at all, and deleting it removes the justification for the
+   practice.
+
+4. Extending at-rest self-encryption to a keyfile's typed key material buys
+   nothing and is not owed (ruled 2026-08-23). The four legacy fields
+   `file_io.dart` encrypts are encrypted with `selfEncryptionKey`, which
+   `file_io.dart` reads out of the same document (`:187`–`:194`) and
+   `at_keys.dart` writes into it in the clear (`:1014`) — so anyone holding
+   the file holds the key, and legacy self-encryption is obfuscation rather
+   than protection. The typed section is not missing anything real, and
+   extending it would change the at-rest format for no gain. The residual
+   worth strengthening, if anything is, is that the passphrase envelope is
+   optional, which exposes legacy and typed material alike.
+
+   Why no commit holds it: The proposal was rejected, so nothing was built
+   and no commit contains it. It currently lives only in item 8's body in
+   detail/implementation-plan.md, and item 8 is about to be struck.
+
+5. Measured 2026-08-23 and re-derived the same day: 754
+   `deprecated_member_use` findings across the workspace — at_client 396,
+   at_onboarding_cli 205, at_auth 153, at_lookup 0, at_chops and at_commons
+   0. Every finding is severity `info` and every package exits **0**, so the
+   deprecation debt blocks no carve and no publish. at_lookup went from 28
+   to zero with the `AtLookUp.withSecureSocket` work.
+
+   Why no commit holds it: A count of analyzer findings appears in no
+   commit, and it is the number that closed the question of whether this
+   debt gates the D1 release train.
+
+6. The ~4-minute @ce2e enrollment setup does not reproduce on demo atSigns,
+   so the cost is a property of the @ce2e side and not of
+   `enrollment_setup.dart`. A local `runLocal.sh` run regenerates
+   `config/config.yaml` from `at_demo_data` (`runLocal.sh:28`) and drives
+   demo atSigns, against which the same four enrollments finish in about
+   **one second** — four orders of magnitude apart from the 3:56 and 4:59
+   measured in CI's `end2end_test_14`. Running it locally reproduces the
+   symptom's absence. (The ~3-minute local reproduction an earlier draft
+   claimed belonged to a different and already-fixed defect, 14.41 row 3's
+   cache key.)
+
+   Why no commit holds it: A local run that measured one second produced no
+   artefact and no commit; the figure exists only as the reason nobody
+   should attempt a local reproduction.
+
+7. A sync backlog is not the explanation for the ~4-minute @ce2e enrollment
+   setup. The four atSigns' commit logs do reach 836,853 entries and a fresh
+   runner replays from `-1` — both measured — but the `end2end_tests` job
+   runs **the same four atSigns** (config23 names the same set config14
+   does, reordered) and **the same suite** in about three minutes. The
+   enrollment step is what differs between the two jobs, so the backlog
+   cannot be the whole answer.
+
+   Why no commit holds it: A disproven hypothesis leaves no commit. Without
+   it the next reader measures the commit-log depth, finds 836,853, and
+   concludes the investigation.
+
+8. The e2e enrollment teardown was proven to fire across runs, not merely
+   capable of it, on 2026-08-22 from the *other* run's log: run
+   `32483465296` (branch `gkc-pq-d1-at-lookup`) logged `Revoking the
+   enrollment permission for id: 121bc733-…` at 12:51:23.182Z, and run
+   `32482877878` failed 430 ms later with `error:AT0027: 121bc733-… is
+   revoked` on an enrollment its own `setUpAll` had created at 12:44:40.
+   That teardown revoked eight enrollments: its own four and all four of the
+   other run's.
+
+   Why no commit holds it: Nothing was built or changed, so no commit
+   contains it. It is the evidence that turned an undiagnosed red CI run
+   into a diagnosis, and without it the next reader sees only
+   unfiltered-looking teardown code and can dismiss the defect as
+   theoretical — especially since CI has been green repeatedly since.
+
+9. mocktail stubs written as `sync: any(named: 'sync')` still bind when the
+   caller omits the argument entirely — proven by removing the argument from
+   the production callers and observing that the nskey/pq unit tests, which
+   assert on what the stub recorded, stayed green. So dropping `sync:` from
+   a caller does not silently unbind its stub.
+
+   Why no commit holds it: The evidence is a green test run on a tree where
+   the argument had already been removed; nothing in the diff or the tests
+   records the question that run answered. Inherited from the section rather
+   than re-run by me.

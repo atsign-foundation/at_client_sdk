@@ -174,6 +174,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [114] | A signer waits for its own mint; the mint alone does not                                    | 2026-08-21 | LIVE                      |
 | [115] | The acceptance suite is 4 arms and a ledger, not one grid                                   | 2026-08-23 | AMENDED 2026-08-23        |
 | [116] | Proposals rejected on evidence                                                              | 2026-08-23 | LIVE                      |
+| [117] | Measurements that closed a question                                                         | 2026-08-23 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -292,3 +293,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [114]: detail/decisions.md#114-a-signer-waits-for-its-own-mint-the-mint-alone-does-not-2026-08-21
 [115]: detail/decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23
 [116]: detail/decisions.md#116-proposals-rejected-on-evidence-2026-08-23
+[117]: detail/decisions.md#117-measurements-that-closed-a-question-2026-08-23
