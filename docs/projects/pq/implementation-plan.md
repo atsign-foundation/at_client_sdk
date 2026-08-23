@@ -79,188 +79,35 @@ has to be re-asked rather than re-cited from here.
 
 ⛔ **This is the one ranked list, and it lives here.** Memory holds a single line
 pointing at it and no detail. `## TODO` below is *what is owed*, unordered; this
-is *what to do first*. Re-read this section against `git log --oneline -10`
-before acting — it has led with finished work before.
+is *what to do first*.
 
-Re-ranked **2026-08-23**, after gkc walked every open item and ruled each one
-in or out of D1. ⛔ **The definition of D1 changed in that pass and this list is
-ordered by it**: D1 ends when every acceptance test passes and every rail is
-green, the posture matrix included, with the acceptance set complete,
-implemented and verified. Everything else is a judgement call. ⚠️ **The
-D1 gates are `G2`–`G7` and begin at "THE D1 GATES, in order" further
-down; the numbered entries 1–8 above them are struck history, and `G1` is
-below the gates under **POST-D1 CLEAN-UP** — it was a gate until 2026-08-23
-and keeps its letter so the citations to these letters do not all shift.** This sentence
-said "entries 1–5 below", which points at the wrong list — a file that has
-already been bitten once by duplicate ordinals.
+⛔ **This document records only what is still owed** (gkc, 2026-08-23). What has
+been done is in the codebase and in `git log`; it is not repeated here. The one
+exception is a claim somebody would otherwise re-derive — a rejected proposal, a
+measurement that closed a question — and those live in
+[`decisions.md`](decisions.md), because a rejection is a decision and no commit
+can contain a thing that was never built.
 
-The pass before it, **2026-08-22 evening**, struck entry 4 when the at_auth
-carve landed as [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179),
-and recorded two claims that entry had been making which turned out false the
-moment the carve was actually run.
+**D1 ends when every acceptance test passes and every rail is green, the posture
+matrix included**, with the acceptance set complete, implemented and verified
+(gkc, 2026-08-23). Everything else is a judgement call.
 
-The pass before it, **2026-08-22** against the tree at `64480808d`, went entry
-by entry with the publish gate and CI both re-derived live rather than carried
-forward. What that pass found, because a re-rank that reports only successes is one
-whose checks were too weak to fail: the CI paragraph below was reporting a
-**success on a superseded run while the newest was a failure**, the *Blocked*
-note said the train was unblocked when 14.49.2 had re-gated it on an
-unpublished candidate, and the list's own ordinals ran 1, 2, 3, 4, 3, 4, 5 —
-two entries numbered 3 and two numbered 4, so "item 3" meant different things
-in the source and on the rendered page. All three are corrected here.
+⚠️ **The D1 gates are `G2`–`G7`.** `G1` sits below them under **POST-D1
+CLEAN-UP** — it was a gate until 2026-08-23 and keeps its letter, because prose
+above and below cites these letters and renumbering would silently repoint every
+one of them.
 
-gkc published **at_chops 3.6.0 and at_commons 5.16.0** to pub.dev on
-2026-08-21, so the train's first two positions are released; **at_lookup
-3.7.0-rc1 is not**, and that is the live gate.
+**The release train's live gate**: gkc published at_chops 3.6.0 and at_commons
+5.16.0 on 2026-08-21, so the first two positions are released. **at_lookup
+3.7.0-rc1 is not on pub.dev**, and nothing after it can publish until it is.
+Re-derive rather than trusting this line:
+`curl -s https://pub.dev/api/packages/at_lookup | python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`.
 
-⚠️ **A second workstream is now open and is NOT in this table** — the knowledge
+⚠️ **A second workstream is open and is NOT in this table** — the knowledge
 base, agreed with gkc 2026-08-20. Its plan, format, rail design and ordered
 method are in [`docs/knowledge/README.md`](../../knowledge/README.md), which is
 a scaffold with no nuggets written yet. If that is what you are here for, open
 that file instead; the list below is the PQ release work.
-
-1. ~~Publish at_chops 3.6.0 to pub.dev~~ **Done by gkc 2026-08-21, and
-   at_commons 5.16.0 with it.** Verified live the same day:
-   `curl -s https://pub.dev/api/packages/<pkg> | jq -r .latest.version`
-   returns **at_chops 3.6.0** and **at_commons 5.16.0**, both published
-   2026-08-21. #2169 merged 2026-08-20 as `c4c581834` (approved by Xlin123,
-   CI 47/47, adversarial re-review clean — its one finding, an unrecorded
-   promise, is delivered in ruling 110's addendum). **The train's first two
-   positions are now released, which lifts the gate on everything after
-   them.** No workflow in this repo publishes to pub.dev (checked
-   `.github/workflows/` 2026-08-20), so each publish stays gkc's step.
-2. ~~Make `KeyEntryStatus` a typed String wrapper~~ **Done 2026-08-22** —
-   [14.49.1](detail/implementation-plan.md#14491-keyentrystatus-becomes-a-typed-string-wrapper--done-2026-08-22)
-   records what landed as well as the ruling. Both collapsing seams fixed (the
-   section named one), the verify half wired at two call sites rather than
-   merely offered, the `_apsk` selector widened with it, eleven
-   mutation-proven tests, at_auth 335/335, at_client 1509/1509 and the
-   functional pack 178/178. ⛔ `EnrollmentKeyExchangeMode` stays an enum — 14.49.1 says why,
-   and that has not changed.
-3. ~~Diagnose the red CI run~~ **Done 2026-08-22, and it was never this
-   branch's code** — [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs). A concurrent CI run on `gkc-pq-d1-at-lookup`
-   tore down this run's enrollments: `enrollment_teardown.dart` revokes every
-   approved enrollment on the shared `@ce2e1`-`@ce2e4` atSigns with
-   `force: true`, not only its own. Diagnosed from the *other* run's log, as
-   the entry said it had to be. **The harness defect is still open** and is in
-   `## TODO`; CI is 24/24 green on `64480808d` but both green windows had no
-   other run in flight, so that is a rate, not a fix.
-4. ~~Carve at_auth~~ **Done 2026-08-22 — [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)
-   is open against trunk, CI green.** 89 files, +11130/−1008: 70 in at_auth
-   and 19 outside it totalling **29 lines** — eight pubspecs flooring at_auth
-   at `4.0.0-rc1` and eleven files importing `at_auth_io.dart`. Those had to
-   ride the same commit: `tests/at_functional_test` alone pinning
-   `at_auth: ^3.0.0` makes the workspace fail to resolve, so every job dies at
-   `dart pub get`.
-   - ⛔ **Two claims this entry made are DISPROVEN, so nobody re-derives
-     them.** It said "buildable now, **not mergeable** now … the PR can be
-     raised and its CI will fail to resolve until gkc publishes at_lookup
-     3.7.0-rc1". False: at_lookup 3.7.0-rc1 is **on trunk**, and a Dart pub
-     workspace resolves its siblings by path, not from pub.dev. `dart pub get`
-     returned 0 and CI ran **47/47 green**. The publish gate is on *publishing
-     at_auth to pub.dev*, which still waits on at_lookup — it was never a gate
-     on raising or merging the PR. And the entry's gate recipe — the carved
-     tree "byte-identical to the spike over that package" — is **not** what
-     this carve satisfies; see the amended recipe in
-     [14.18](#1418-the-remaining-d1-initial-development-sequence).
-   - What the carve corrected beyond a copy, each measured: at_auth's floors
-     `at_commons: ^5.15.0` and `at_chops: ^3.4.2` were **too low** — it uses
-     `EnrollVerbBuilder.apkamPublicKeySignature` (first in at_commons 5.16.0)
-     and `SigningAlgoType.strongestFirst` (first in at_chops 3.6.0), and
-     `at_chops 3.4.2` was never published at all. They compiled only because
-     the workspace resolves by path. Raised to `^5.16.0` and `^3.6.0`.
-   - The "remove in v4" deprecations are settled, since this **is** v4. Ten
-     annotation sites promised it; three members are removed
-     (`AtOnboardingRequest.atKeys`, `AtAuthRequest.encryptedKeysMap`, the
-     ignored `atSign` on `AtKeysIo.generateKeyPairs`) and the rest say
-     **v5** — `AuthResponse` and its two subclasses and
-     `AtAuthRequest.atAuthKeys` are the return types of `onboard`/
-     `authenticate` and how a caller supplies enrollment-derived keys, with
-     201 references outside at_auth, so retiring them is an API change of its
-     own and is in `## TODO`.
-   - ⭐ `AtOnboardingRequest.atKeys` **never worked**: `onboard()` overwrote
-     whatever a caller set with the result of reading `atKeysIo` before
-     anything read it, then threw "already onboarded" if that read returned
-     keys — so the branch consuming it was unreachable. The analyzer confirmed
-     it independently once the field was gone.
-   - [14.44](#1444-residuals-from-the-at_chops-pr-review)'s first residual
-     landed here as its second commit, taking that section's preferred option:
-     `encode` refuses an `ArgonHashParams` whose `hashLength` is not the value
-     `decode` will use. Two tests, mutation-proven separately.
-   - Rails: at_auth 344/344, at_client 651 (+39 skipped), at_onboarding_cli
-     33/33, at_client_flutter 17/17, both format gates clean, every other
-     workspace package analyze exit 0, and **five live functional packs, four
-     green**. ⚠️ The one red is `atclient_sync_conflict_test`'s `conflictInfo`
-     case — [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)'s shape A,
-     whose fix (`_throwIfStopped`, the `stop()` done-completer,
-     `sync_stop_race_test.dart`) is on this branch and **not on trunk**, so
-     the carve necessarily runs the unfixed sync service. Re-derive rather
-     than believe: `git grep -c _throwIfStopped origin/trunk -- packages/at_client/lib/src/service/sync_service_impl.dart`.
-4a. ~~The at_auth 4.0 major~~ **Done 2026-08-22, and this list carried no
-   trace of it until the wrap-up that day** — 14 commits, all pushed, CI 24/24
-   green on `64480808d`. Recorded here because a reader working top-down would
-   otherwise not learn that at_auth became a major at all. What landed: the
-   keyfile's field names (`keyParts`/`keyPartType`/`keyAlgorithmType` →
-   `material`/`role`/`algorithm`); `CryptographicMaterialRole`,
-   `...Algorithm`, `...Status` and `KeyEntryStatus` as `extension type`s over
-   String, erased at runtime so nothing moves at rest; the version to
-   `4.0.0-rc1` with 10 dependent constraint sites; the `AtKeysMaterial` alias
-   removed; and **S-5/S-6**, the WASM barrel split — `at_auth.dart` reaches no
-   `dart:io` in at_auth's own sources, guarded by
-   `packages/at_auth/test/wasm_barrel_test.dart`.
-
-4b. ~~Test the registrar's certificate validation~~ **Now POST-D1 CLEAN-UP
-   (gkc, 2026-08-23), as `G1` below the gates.** ⚠️ This entry read "Promoted
-   to a D1 gate 2026-08-23" earlier the same day; it was demoted again, so
-   the harness shape and the one missing import are there for whoever picks it
-   up after D1. Do not work this entry.
-
-4c. ~~Stop the e2e teardown revoking other runs' enrollments~~ ⛔ **NOT a D1
-   gate, ruled 2026-08-23** — gkc: e2e runs isolate locally and are serialized
-   by structure on GitHub. Recorded alongside that, because it is the part a
-   future reader will re-derive: there is no top-level `concurrency:` key in any
-   workflow, so `needs:` serializes the e2e jobs *within* a run and not across
-   runs, and the incident that produced [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs)
-   was cross-run. The row stays in `## TODO` as unblocked hygiene.
-
-5. ~~Carve at_lookup~~ **Done — merged as #2174** — train position 3, and **now
-   unblocked for publish as well as carve**: its `at_commons: ^5.16.0` floor
-   is satisfiable on pub.dev as of 2026-08-21, and 14.18's compile
-   differential already established it needs nothing newer than the
-   at_chops it was tested against. ⚠️ **The carve recipe that used to sit here
-   has been removed: this entry is DONE, and ten lines of imperative
-   instructions under a struck heading read as work to do.** The recipe lives
-   in [14.18](#1418-the-remaining-d1-initial-development-sequence), amended
-   there with what the at_auth carve taught — byte-identical to the spike is a
-   default rather than a rule, and a MAJOR cannot be carved package-only.
-6. ~~Close out [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)'s
-   remainder~~ **Done 2026-08-21, all of it.** All four original shapes have
-   diagnosed, mutation-proven fixes; the last open members closed today:
-   `sync_multiple_client_test`'s one examined red is classified — shape C's
-   own signature on the diverged key (the section has the discriminators
-   for any future red) — and the rotated-advertisement member was a
-   test-side stale read, fixed in `ccf4987a4` (`publishedAdvertisement` at
-   four assertions across three files). The matrix driver dumps child
-   output on cell failure (`fce13ca52`).
-   [14.48](detail/implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)'s
-   ruling landed as decisions.md 114 — sign awaits mint, built and proven
-   (`09f9a974c`). UC-G1.14 is qualified in place. The pack-rate soak
-   measured **0 family reds in 10 valid packs at `112e1f740`** (an eleventh
-   run excluded, gkc-confirmed machine suspend; the rate paragraph in the
-   section has the evidence). What remains: watch the rate hold; 14.48's
-   residue is under ruling 114; the pull-side sync question and the parked
-   driver gap are in 14.43's TODO row.
-7. ~~Decide `executeVerb`'s inert `sync` parameter~~ **Done 2026-08-20**
-   ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
-   `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
-   removal owed at 4.0.
-8. ~~Demote the finished `## TODO` rows to `## DONE`~~ **Done 2026-08-22.**
-   Twelve closed sections moved into `detail/implementation-plan.md`, each
-   leaving a `## DONE` row; the live plan went 3,545 → ~1,700 lines and all
-   45 inbound pointers were repointed. 14.17's two diverged copies were merged
-   at the same time, the original kept whole.
-
----
 
 **THE D1 GATES, in order. Everything above this line is history.**
 
@@ -1638,81 +1485,6 @@ the reason is the point of the row.
 | S-6   | Consumer constraint bumps onto at_auth ^4.0.0        | **DONE 2026-08-22** — at the `-rc1` floor |
 | R-2   | at_client 4.0.0 posture defaults                     | After D1, and now after 14.39. **The default `PqPosture` becomes `pqActive`** ([ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)) — one value, replacing the two coupled edits it used to be. Still a pure default-flip carrying no code of its own. Issue #2016 |
 | D2-1  | Carve `at/pqmls` + D1-E shape fixes                  | D2, out of D1 |
-
----
-
-## DONE
-
-One row each; the detail is in
-[`detail/implementation-plan.md`](detail/implementation-plan.md). The third
-column reports what the plan **records**, which is not always what was
-measured — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none).
-
-⚠️ **So not every row here says "done", and the heading names this section's
-place in the TODO / DONE / PARKED triad rather than every row's state.** Six
-project rows record *no status* or a partial one and point at 14.25; **IS-1
-records an OPEN PR** (`at_server#2683`, verified against GitHub 2026-08-18).
-That is deliberate and the column header says so — but do not read a row's
-presence here as delivery. What is actually left for D1 is
-[14.18](#1418-the-remaining-d1-initial-development-sequence)'s steps, not the
-absence of a row from this table.
-
-| Item   | What it delivered                                       | State as the plan records it                                                                                         |
-|--------|---------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
-| [14.49](detail/implementation-plan.md#1449-keyentrystatus-becomes-a-typed-string-and-the-release-train-is-all-candidates) | `KeyEntryStatus` becomes an open String, and every remaining package publishes as a release candidate | ✅ **DONE 2026-08-22.** Both halves shipped: [14.49.1](detail/implementation-plan.md#14491-keyentrystatus-becomes-a-typed-string-wrapper--done-2026-08-22) made the status an open token a reader carries through verbatim instead of flattening to `retired`, with both collapsing seams fixed, the verify half wired at two call sites and the `_apsk` selector widened; [14.49.2](detail/implementation-plan.md#14492-every-remaining-package-publishes-as-a-release-candidate) ruled the rest of the train onto `-rc1` floors. ⚠️ This section sat in **no table at all** until 2026-08-22 — not TODO, not DONE, not PARKED — so every command that counts work by row was blind to 230 lines of it |
-| [14.41](detail/implementation-plan.md#1441-what-the-first-ci-runs-on-the-spike-branch-found) | The first CI runs on the spike branch, and the four red rows they found | ✅ **DONE** — CI fully green, run 32392240064, 11 of 11, on `f24ee3ab6` (the head with `origin/trunk` merged in, so it covers at_commons #2168 and the 15 commits trunk brought). Only **one** of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What the section surfaced beyond those has its own rows: the convergence race ([14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race), also closed) plus [14.42](#1442-why-enrollment-setup-takes-four-minutes) and [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake), both still open |
-| [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race) | The functional suite's convergence race — four shapes, each diagnosed and fixed | ✅ **DONE 2026-08-21.** All four shapes have diagnosed, mutation-proven fixes; the last members were classified (`sync_multiple`'s red carries shape C's signature) or fixed (the rotated-advertisement stale read, `ccf4987a4`); the driver dumps child output on failure (`fce13ca52`). Rate at `112e1f740`: 0 family reds in 10 valid packs. ⚠️ **Fixed on this branch, NOT on trunk** — shape A's `_throwIfStopped` and the `stop()` done-completer arrive with the at_client PR, so any carve off trunk still meets it; measured on the at_auth carve 2026-08-22, 1 red in 5 packs. The open residue has its own TODO row |
-| [14.48](detail/implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew) | A `primary` client could sign with a key its own advertisement had just withdrawn | ✅ **DONE 2026-08-21 by [ruling 114](detail/decisions.md#114-a-signer-waits-for-its-own-mint-the-mint-alone-does-not-2026-08-21)** — the sign path awaits the mint (`09f9a974c`), differential- and mutation-proven, pack green. The cause was four things at once: fire-and-forget startup minting, publish-before-file, the sign path's auth-key fallback, and the shared composer withdrawing the auth key on the first mint. The residue the ruling named — the durable pre-mint-envelope question and the verifier's pre-mint cache asymmetry — was **closed 2026-08-23**: each needs PQ material to exist in production and none does, per the standing premise at the top of this file |
-| [14.45](detail/implementation-plan.md#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | An expired key the client could not delete pinned it in a hot loop | ✅ **DONE.** The spin is fixed — a sweep that removes nothing now backs off 30s instead of re-arming at zero; it was **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines, and pre-existing on trunk. The refusal is fixed with it: a namespace check rather than immutability, and the sweep now bypasses it. ⛔ **NOT the cause of [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was green, 177/177; a rate effect is not excluded, presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20). The cross-repo residue has its own TODO row |
-| [14.40](detail/implementation-plan.md#1440-at_client-publishes-as-a-minor-and-the-heading-now-says-so) | ✅ **DONE — RULED 2026-08-20: at_client publishes as `3.15.0`, a MINOR.** Heading and pubspec both moved; the three `**BREAKING**` labels were rewritten because nothing published was removed — verified against the published 3.14.0 archive, where `disallowLegacyEncryption`, `keyEstablishmentAlgorithms`, `PqPosture` and `ReleasePosture` appear in **zero** files against a control of `AtClientPreference` in 20 | — |
-| 14.38  | `at_activate` can administer a PQ-native atSign             | DONE 2026-08-19, live-green (CLI functional pack 17/17 against a locally built `at_virtual_env:local`). All three agreed changes landed, and two of them had been recorded as done when they were not: the `_initAtClient` overwrite survived a change to *which* preference field it read, and the file-stream site was named as methods that do not exist. The row also claimed `--posture` reached every command — it reached every *parser* while twelve commands ignored the value. Detail: [14.38](detail/implementation-plan.md#1438-activate_cli-cannot-administer-a-pq-native-atsign) |
-| 14.37  | `pqSeal` version `0x01` removed outright, and the last homegrown key schedule with it | DONE 2026-08-18 — **one commit, not the two this row prescribed.** gkc reframed it from *retire safely* to *is there any value in `0x01` over `0x02`* — there is none: same KEM, so no diversity; self-generated vectors against the working group's; and its only distinctive feature, AES-256-GCM, is immaterial on a 32-byte content key. `_SealVersion.custom` had no other user, so `atPQv1-base` left the tree entirely. ⚠️ The two-commit plan's first step was also **mis-specified** — it named `SecretSharingAlgos.suites`, which neither seal site reads. Ruling [110](detail/decisions.md#110-the-0x01-seal-version-is-retired-stop-emitting-before-removing-2026-08-18) amended in place. Detail: [14.37](detail/implementation-plan.md#1437-the-0x01-seal-version-removed-outright) |
-| 14.15  | Pre-PR rails checklist                                  | DONE 2026-08-10 — the compose-image item is struck in the body and nothing needs reverting before a PR. It stayed in TODO until 2026-08-18 because the section opened with a condition instead of a status. The external gate it names is step 32's blocker |
-| 14.17  | Signature agility, and the G1 cluster joins the catalogue | DONE 2026-08-18 — steps 1–5 done, step 6 out of scope by gkc's ruling; the last piece was the signed-envelope 3×3. ⚠️ **This row sat in TODO reading "the owed half" for the rest of that day**, while the section's own body said COMPLETE — the shape the plan's own re-derivation warning names, where a body says closed and the heading nothing keys on says open. A cold read caught it. The section heading moved with this row. Body: [14.17](detail/implementation-plan.md#1417-signature-agility--complete) |
-| 14.36  | `send()` composes its command with `NotifyVerbBuilder`, and finally has live coverage | DONE 2026-08-17 — the hand-rolled `notify:` string is gone; `useAtKeyToString = true` is required, since the name is split across `key` and `namespace`. One wire delta, `:notifier:SYSTEM`. **`send()` had no live test at all before this**, so the wire delta was landed with one added rather than on the inference that `notify()` already sends the token. The architecture guard moved with it: requiring `toAtProtocolFragment` in this file would now force the hand-rolled command back, so it asserts the absence of one instead. Body: [14.36](detail/implementation-plan.md#1436-sends-command-is-hand-rolled-where-a-tested-builder-exists) |
-| 14.35  | `send()` splits its name at the first dot, and says what the parameter is | DONE 2026-08-17 — gkc ruled the parameter is `<id>.<namespace>` and poorly named; `namespace` deprecated for `idAndNamespace`, a dot-free name now throws at the call site. Unit **1401 (2)**, analyze exit 0. The one-line fix this row first proposed was measured WRONG — it would have changed the ciphertext binding. Body: [14.35](detail/implementation-plan.md#1435-notificationservicesend-throws-away-the-namespace-it-was-given) |
-| 14.33  | Closed as mis-stated: the refusal it named is unreachable | CLOSED 2026-08-17 — `shared_key.*` is written by a raw `UpdateVerbBuilder` at a `Secondary`, downstream of a refusal that fires before `provider.encrypt`, so it can never reach it. No client-side blocker remains for R-2. The real gap it was standing in front of is [14.35](detail/implementation-plan.md#1435-notificationservicesend-throws-away-the-namespace-it-was-given). Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17) amended in place. Detail: [14.33](detail/implementation-plan.md#1433-closed-the-shared_key-refusal-was-never-reachable) |
-| 14.30  | A notification that outruns its key is parked and re-driven | DONE 2026-08-17 — ruling [106.5](detail/decisions.md#1065-ruled-park-and-re-drive-not-readiness-at-the-hand-back-2026-08-17); proven live end to end (parked → asked → answered → filed → re-driven → decrypted). Three further defects fixed on the way, all invisible to unit tests. Body: [14.30](detail/implementation-plan.md#1430-a-content-notification-can-outrun-the-key-that-opens-it) |
-| 14.32  | An in-process `_apsk` write no longer clobbers a just-minted advertisement | DONE 2026-08-17 — ruling [102.2](detail/decisions.md#1022-the-in-process-window-is-closed-by-serialising-the-writers-2026-08-17); proven live, `_apsk.primary` ends on the mldsa65 array where it ended on bare RSA. Body: [14.32](detail/implementation-plan.md#1432-a-primary-clients-ml-dsa-signing-key-is-not-visible-to-its-verifiers) |
-| 14.31  | A `local:` record is not encrypted, and the legacy refusal exempts it | DONE 2026-08-17 — six related defects, not one; the listener no longer dies from a refused watermark. Ruling [107](detail/decisions.md#107-a-local-record-is-not-encrypted-and-the-legacy-refusal-exempts-it-2026-08-17). Body: [14.31](detail/implementation-plan.md#1431-a-refused-watermark-write-permanently-disables-the-monitor) |
-| 14.25  | Nine project entries reconciled against the tree | DONE 2026-08-16 — burn-down right about 4, headings stale for SS-1c and SS-4, real residuals in SS-2/B-1/S-3 (now [14.29](#1429-the-residuals-1425-surfaced)). ⚠️ Re-read 2026-08-18: **B-1's are gone** and S-3 is down to two, so what this row surfaced was two-thirds transient. Detail: [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
-| 14.28  | Live PQ proofs that no use case names | DONE 2026-08-16 — 9 uncited PQ live files ruled on: 5 became UC-B5.8–B5.12, 4 were already covered. Detail: [14.28](detail/implementation-plan.md#1428-live-pq-proofs-that-no-use-case-names) |
-| 14.27  | The ledger's append-only rot, corrected | DONE 2026-08-16 — 11 rulings amended in the body and LIVE in the index, both citation debts discharged, and a test now asserts each. Detail: [14.27](detail/implementation-plan.md#1427-the-ledgers-remaining-append-only-rot) |
-| 14.24  | The nskey mint elects a winner; the lock became an election token with a cooldown | DONE 2026-08-16 — seven rows, proven live at functional **166/166 `EXIT=0`**. Detail: [14.24](detail/implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) |
-| P-1    | at_chops stateless core + HPKE                          | SATISFIED — at_chops 3.3.0 published 2026-06-23                                                                      |
-| P-2    | `mldsa65` wired into the verification branch            | SATISFIED — published 2026-07-17                                                                                     |
-| P-3    | `public:pqpublickey` + X-Wing-preferred enrollment wrap | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
-| S-1    | at_auth `AtKeys`/`AtKeysIo` extended in place           | SATISFIED — at_auth 3.3.0 published                                                                                  |
-| S-2    | `CryptoContext.keys` additive field                     | SATISFIED on trunk 2026-07-17; residual is the at_client publish                                                     |
-| S-3    | Updatable `.atKeys` / keychain via injected `AtKeysIo`  | States PARTLY LANDED — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                 |
-| SS-0   | WP-SS substrate baseline                                | SATISFIED — merged 2026-07-17                                                                                        |
-| SS-1a  | at_commons enroll grammar + flattened `listns`          | SATISFIED — at_commons 5.12.0 published 2026-07-04                                                                   |
-| SS-1b  | atServer stores/returns `EnrollParams.metadata`         | SATISFIED — merged 2026-07-07                                                                                        |
-| SS-1c  | Client wired to the live verbs + flattened parser       | States live drive owed — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)               |
-| SS-2   | Substrate wired into AtClient + server wake-up          | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
-| SS-3   | Substrate hardening + `signingAlgo` verify              | LANDED — at_server#2739 merged 2026-08-10                                                                            |
-| SS-4   | nskey minting + signing-root lifecycle                  | States ABOUT HALF LANDED — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)             |
-| B-1    | The nskey data path — providers + cold start            | No status stated; the D1 centrepiece — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none) |
-| RF-1   | `requestSecret(name)` confirm                           | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
-| RF-SRV | atServer authenticated self-retrofit enroll             | No status stated — see [14.25](detail/implementation-plan.md#1425-three-projects-state-partial-completion-and-six-state-none)                     |
-| RF-2b  | PQ ML-DSA APKAM mint + self-retrofit                    | LANDED 2026-08-05 (decisions 43)                                                                                     |
-| RF-2c  | Retrofit orchestration + full e2e                       | LANDED 2026-08-05 (decisions 44)                                                                                     |
-| R-1    | `disallowLegacyEncryption`                              | DELIVERED 2026-08-05; scope shrunk by decisions 36                                                                   |
-| SH-1   | Key-material self-heal                                  | LANDED 2026-08-05                                                                                                    |
-| B-2    | nskey rotation + revocation                             | LANDED 2026-08-06                                                                                                    |
-| KE-1   | Selectable KEM + negotiated construction                | LANDED 2026-08-07                                                                                                    |
-| ON-1   | PQ-native greenfield onboarding + opt-out               | ACCEPTANCE COMPLETE 2026-08-08 (decisions 52)                                                                        |
-| IS-1   | Inter-server FROM/POL signature swap RSA → ML-DSA-65    | ⏳ **PR [#2683](https://github.com/atsign-foundation/at_server/pull/2683) is OPEN** — verified against GitHub 2026-08-18, not merged. This cell said only `PR #2683`, which reads as delivery and asserted no state at all |
-| 14.2   | A version on the two signed payloads                    | DONE — `3c2eddbe6`                                                                                                   |
-| 14.3   | JWS for the signed envelope, one shape, no flag         | DONE 2026-08-09 (decisions 60)                                                                                       |
-| 14.4   | A `suites` list on the key package                      | DONE — `1688ed69d`, corrected `c9f8580da`                                                                            |
-| 14.5   | Write-side envelope version selector in at_chops        | DONE — `1688ed69d`                                                                                                   |
-| 14.6   | `metadata.keyPackage` stops being a one-way door        | DONE 2026-08-13 — the verb reaches `metadata` and `EnrollmentUpdateRequest.metadata` merges per-key, so the remedy for an unparseable key package is no longer delete-and-re-enrol. ⚠️ A **consumer** is still owed — nothing re-advertises a key package — and that is **KE-2**'s scope in PARKED, not this row's. This cell said only "Client caller landed" until 2026-08-18, which asserted no status at all |
-| 14.8   | Domain separation on the signed envelope                | DONE 2026-08-15 (decisions 103)                                                                                      |
-| 14.9   | A revoked enrollment could still authenticate           | ROOT-CAUSED 2026-08-12; fixed in at_server `16dd457f`                                                                |
-| 14.10  | UC-B0.1 needed a legacy atServer image                  | RESOLVED 2026-08-08 via the `vip-p3.15.0` pin                                                                        |
-| 14.20  | Building rulings 98 and 99                              | DONE — every row built; owes nothing                                                                                 |
-| 14.22  | Making the signing root rotatable                       | DONE 2026-08-15 — all seven rows                                                                                     |
 
 ---
 

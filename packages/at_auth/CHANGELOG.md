@@ -102,6 +102,14 @@
     that verifies what it signed and whatever its owner last said about it.
   - `dead` material still stays out. It was never adopted and has nothing to
     verify.
+- **BREAKING** refactor: `AtOnboardingRequest.atKeys` is removed, having been
+  one of the "remove in v4" deprecations. It never did anything: `onboard()`
+  overwrote whatever a caller set with the result of reading `atKeysIo` before
+  anything read it, and then threw "already onboarded" if that read returned
+  keys — so the branch consuming the field was unreachable, and the analyzer
+  confirmed it independently once the field was gone. A caller that set it was
+  not getting the behaviour it looks like it asks for, which is why removing it
+  cannot break anyone. Supply key material through `atKeysIo` instead.
 - **BREAKING** refactor: `KeyEntryStatus` is an open `String` vocabulary rather
   than an `enum`, matching `CryptographicMaterialStatus` beside it. The field it types —
   `ApskSigningKey.status`, and `PackageKey.status` in at_client — is now a
