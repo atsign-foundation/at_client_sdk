@@ -75,12 +75,18 @@ pointing at it and no detail. `## TODO` below is *what is owed*, unordered; this
 is *what to do first*. Re-read this section against `git log --oneline -10`
 before acting — it has led with finished work before.
 
-Re-ranked again **2026-08-22 evening**, after the at_auth carve landed as
-[PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179): entry
-4 is struck, **4b is the new head**, and two claims entry 4 had been making
-about the carve turned out to be false the moment the carve was actually run —
-both are recorded there rather than deleted, since they are the kind a reader
-would otherwise re-derive.
+Re-ranked **2026-08-23**, after gkc walked every open item and ruled each one
+in or out of D1. ⛔ **The definition of D1 changed in that pass and this list is
+ordered by it**: D1 ends when every acceptance test passes and every rail is
+green, the posture matrix included, with the acceptance set complete,
+implemented and verified. Everything else is a judgement call. Entries 1–5
+below are the D1 gates that ruling produced; 6 and 7 are the train and the work
+that rides it.
+
+The pass before it, **2026-08-22 evening**, struck entry 4 when the at_auth
+carve landed as [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179),
+and recorded two claims that entry had been making which turned out false the
+moment the carve was actually run.
 
 The pass before it, **2026-08-22** against the tree at `64480808d`, went entry
 by entry with the publish gate and CI both re-derived live rather than carried
@@ -192,39 +198,17 @@ that file instead; the list below is the PQ release work.
    `dart:io` in at_auth's own sources, guarded by
    `packages/at_auth/test/wasm_barrel_test.dart`.
 
-4b. **[RECOMMENDED] Test the registrar's certificate validation** — the one
-   behaviour change from S-5 that still exercises nothing, and now the only
-   uncovered one, since 14.44's `hashLength` guard shipped with its own two
-   mutation-proven tests. Open
-   `packages/at_auth/test/registrar_test.dart`, which today only injects a
-   `MockClient`. `RegistrarService`'s default used to accept **any** TLS
-   certificate on calls carrying the registrar API key and now validates; the
-   bypass is `RegistrarIoClient.allowBadCertificates`, off by default. Neither
-   arm has a test and CI cannot catch a regression — `RegistrarIoClient`
-   appears in zero CI job logs. Pin both arms against a self-signed local
-   server. ⭐ **Do it as a third commit on [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)
-   while that is open and unmerged** — it is at_auth's own test tree, it is
-   the security-relevant half of the change the PR makes, and the alternative
-   is a follow-up PR against an at_auth whose rc has already gone out. Once
-   #2179 merges this becomes its own PR. Needs commit/push permission.
-   ⚠️ **Started and parked 2026-08-22, one import short of a working probe** —
-   the harness shape is settled and is written out in this item's `## TODO`
-   row, including the third arm that stops a refusal being indistinguishable
-   from a server that never started, and why the certificate must be minted in
-   `setUpAll` rather than committed. What stopped it was one missing import:
-   the probe pulled in `at_auth_io.dart` and `src/registrar/registrar_service.dart`
-   but not `package:at_auth/at_auth.dart`, which is what exports
-   `RegistrarApiEndpoint` (via `src/registrar/registrar.dart`). Add that import
-   and the probe runs.
+4b. ~~Test the registrar's certificate validation~~ **Promoted to a D1 gate
+   2026-08-23 — it is now **G1** below, which carries the harness shape and the
+   one missing import. Do not work this entry.**
 
-4c. **Stop the e2e teardown revoking other runs' enrollments** —
-   [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs). Open
-   `tests/at_end2end_test/test/enrollment_teardown.dart`: it revokes every
-   approved enrollment on the shared `@ce2e1`-`@ce2e4` atSigns with
-   `force: true`, so two overlapping CI runs tear each other down. Needs a
-   run-unique marker on the enrollment so a teardown can tell its own from
-   another's. Unblocked. ⚠️ It has passed twice since, but both windows had no
-   other run in flight, so a green says nothing here.
+4c. ~~Stop the e2e teardown revoking other runs' enrollments~~ ⛔ **NOT a D1
+   gate, ruled 2026-08-23** — gkc: e2e runs isolate locally and are serialized
+   by structure on GitHub. Recorded alongside that, because it is the part a
+   future reader will re-derive: there is no top-level `concurrency:` key in any
+   workflow, so `needs:` serializes the e2e jobs *within* a run and not across
+   runs, and the incident that produced [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs)
+   was cross-run. The row stays in `## TODO` as unblocked hygiene.
 
 5. ~~Carve at_lookup~~ **Done — merged as #2174** — train position 3, and **now
    unblocked for publish as well as carve**: its `at_commons: ^5.16.0` floor
@@ -259,14 +243,68 @@ that file instead; the list below is the PQ release work.
    ([14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries)):
    `@Deprecated` for 3.x on all six declarations (at_client and at_lookup),
    removal owed at 4.0.
-8. **Demote the finished `## TODO` rows to `## DONE`** — 14.41, 14.43,
-   14.45, 14.48 and most of 14.39 are complete and still sit in the owed
-   table; each wants its heading moved under `## DONE` and its body demoted
-   to `detail/implementation-plan.md`, per this file's convention. The
-   acceptance rail parses these anchors, so run
-   `dart test test/acceptance --concurrency=1` in `packages/at_client`
-   after the LAST move. Unblocked, needs no permission beyond the commit,
-   and is the precondition for this list staying trustworthy.
+8. ~~Demote the finished `## TODO` rows to `## DONE`~~ **Done 2026-08-22.**
+   Twelve closed sections moved into `detail/implementation-plan.md`, each
+   leaving a `## DONE` row; the live plan went 3,545 → ~1,700 lines and all
+   45 inbound pointers were repointed. 14.17's two diverged copies were merged
+   at the same time, the original kept whole.
+
+---
+
+**THE D1 GATES, in order. Everything above this line is history.**
+
+**G1. [RECOMMENDED] Test the registrar's certificate validation, on
+[PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) while
+it is still open.** The last S-5 behaviour change that exercises nothing, and
+the only one with a security consequence: the default client used to accept any
+TLS certificate on calls carrying the registrar API key. Neither arm has a test
+and CI is blind — `RegistrarIoClient` appears in zero job logs. The harness is
+settled and written up in its `## TODO` row: mint a self-signed cert in
+`setUpAll` with `openssl` (**do not commit a PEM** — push protection blocks
+private keys), serve it with `HttpServer.bindSecure`, point `RegistrarService`
+at `localhost:<port>`, and run three arms — default refuses, io client with the
+flag off refuses, io client with the flag on succeeds. The third is the
+positive control without which a refusal is indistinguishable from a server
+that never started. ⚠️ A probe got one import short on 2026-08-23: it needs
+`import 'package:at_auth/at_auth.dart';`, which is what exports
+`RegistrarApiEndpoint`.
+
+**G2. Establish the acceptance matrix-coverage gap, then decide the target.**
+The gate that D1's own definition rests on, and the largest. gkc's framing:
+hundreds of functional and e2e tests cover the acceptance set between them, and
+there is no definitive place to see the whole of it being proven; the posture
+matrix is the logical place to build that out. Measured 2026-08-23: 224 live
+`test()` calls across 65 files, only **29 of the 69** use-case ids nameable
+anywhere in that live suite, and the matrix itself is 3 `test()` calls proving
+2 use cases. Owed in order — find where each of the 68 is actually exercised,
+decide which are genuinely posture-dependent, then decide the target. Its
+`## TODO` row carries the full measurement and the re-derivation command.
+
+**G3. Diagnose [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart).**
+A live-pack failure at once in five, unexplained. A gate only because D1 now
+ends when every rail is green, and at that rate "green" is a rate rather than a
+state.
+
+**G4. Migrate 14.11's bucket B** — the 71 credential-ladder uses
+(`enrollmentId` 59, `signingAlgoType` 12) onto the `AtAuthenticator` seam that
+at_lookup 3.7.0 already ships. 24 sites in `lib/`, 47 in tests, across
+at_client, at_onboarding_cli and at_auth. The only one of the five
+`deprecated_member_use` buckets with a replacement that exists today.
+
+**G5. Close 14.19 item 36** — three clauses of UC-A2.5/UC-A2.6 that the
+catalogue asserts and no live row proves. It is the one known instance of the
+overclaim G2 exists to find, and it was found by hand.
+
+**G6. The train.** Merge #2179 → **gkc publishes at_lookup 3.7.0-rc1** → **gkc
+publishes at_auth 4.0.0-rc1** → carve at_client → at_client_flutter →
+at_onboarding_cli. ⚠️ **Before carving at_client, raise its `at_commons` floor**:
+it declares `^5.15.0` and `notify_request_transformer.dart:154` calls
+`metadata.copy()`, which first exists in **5.16.0**. The identical defect was
+found and fixed in at_auth during its carve.
+
+**G7. Step 20's rotation arm** — publish at_auth, add the `pending` status
+value, build the arm against its own dedicated CRAM atSign. ⛔ There is **no**
+fleet-adoption wait: see the standing premise above.
 
 **Blocked, and what lifts it:** ~~publishing anything past at_chops waits on
 at_chops 3.6.0 reaching pub.dev; at_lookup's publish additionally waits on
@@ -292,7 +330,11 @@ run is as new as the last manual dispatch and no newer.
 ✅ **THE BRANCH IS GREEN, at the current tip.** Measured 2026-08-22 with the
 command below: runs **`32588333812`** (at_client_sdk, 11/11) and
 **`32588342275`** (at_libraries, 13/13), both `success`, both on
-**`64480808d`**, which is HEAD. CI's own per-suite counts match the local ones —
+**`64480808d`** — which was HEAD when this was written and is now the newest
+commit that **touches code**. Re-derived 2026-08-23: HEAD is 7 commits past it
+and `git diff --name-only 64480808d..HEAD` is entirely under `docs/`, so this
+green still covers every line of code on the branch. Re-run the check below
+rather than extending that reasoning to the next commit. CI's own per-suite counts match the local ones —
 at_auth 342, at_client 1509, at_onboarding_cli 54, at_client_flutter 37,
 functional 178, e2e 37, `end2end_test_14` 37, pqe2e 17 — so the green is not a
 skipped suite.
@@ -320,13 +362,13 @@ gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 1 \
 git log --oneline -1
 ```
 
-⚠️ **Five `## TODO` rows below are finished and still sit in the owed table** —
-**14.41** (all four red CI rows fixed; its remainder moved to 14.42 and 14.43,
-which have their own rows), **14.43** and **14.48** (both closed 2026-08-21;
-their cells say so), **14.45** (both halves fixed; only an out-of-repo
-residual remains) and most of **14.39**. Demoting them is the finished-row
-item in THE NEXT MOVE above — not done in a wrap-up, which is the wrong place
-to move anchors the acceptance rail parses.
+✅ **The five finished `## TODO` rows were demoted on 2026-08-22.** This
+paragraph read "Five `## TODO` rows below are finished and still sit in the
+owed table" and named 14.41, 14.43, 14.48, 14.45 and most of 14.39. All five
+now have `## DONE` rows and their bodies live in
+[`detail/implementation-plan.md`](detail/implementation-plan.md); the genuinely
+open residue each left behind was split into its own row rather than being
+carried inside a closed one.
 
 ---
 
@@ -336,12 +378,11 @@ to move anchors the acceptance rail parses.
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | **acceptance audit** | ⛔ **D1 GATE — establish the gap precisely, then decide the target** (gkc, 2026-08-23). **The rationale, in gkc's words:** *"we have literally hundreds of functional and end to end tests which cover the acceptance tests together. But there is no definitive place where it is easy to see the entirety of the pq project's acceptance tests being proven. The posture matrix test is the logical place to build test out."* So the problem is **legibility, not coverage**. Measured 2026-08-23: **224** live `test()` calls across 65 files (165 functional, 59 e2e), and only **29 of the 69** use-case ids are nameable anywhere in that live suite — the other 40 are very likely covered and cannot be seen to be. The posture matrix, the intended home, is **3** `test()` calls proving **2** use cases (UC-G1.14, UC-G1.15). ⚠️ **A citation count is not a coverage count** — an earlier pass here reported "27 of 68 have no live proof" when what it had measured was 27 with no live proof *cited from their acceptance scenario*. Do not restate it as coverage. For the record, the citation picture: of 68 scenarios, 2 cite the matrix, 39 cite some live test, 22 cite unit tests only, and 5 cite nothing and are themselves mock tests (UC-A3.1, UC-A3.4, UC-B3.1, UC-B3.2, UC-B5.2; UC-A3.1 runs against `MockAtClient()`). ⚠️ **And nothing checks the claims.** `catalogue_test.dart`'s five tests are all structural; none asks whether a scenario proves what its row asserts, and the `proves:` prose is matched against nothing ([14.19 item 29](detail/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)). The one known overclaim, item 36's three clauses of UC-A2.5/UC-A2.6, was found by hand. **Owed, in this order:** (1) for each of the 68, find where it is *actually* exercised live — searching the packs, not just reading citations; (2) decide which are genuinely **posture-dependent**, since several of A3's self-data cases may not vary by posture at all; (3) decide the target and build the matrix out to be the one place the catalogue can be seen being proven. **Re-derive**: `grep -rho 'UC-[ABCG][0-9]*\.[0-9]*[a-z]*' tests/at_functional_test/test tests/at_end2end_test/test | sort -u | wc -l` against the 69 in `acceptance.md` | Nothing |
 | [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race) residue | ⛔ **NOT D1, and NOT PQ (gkc, 2026-08-23)** — recorded here only because this project has no other checked-in owed-work list. The behaviour is in `sync_service_impl.dart`, i.e. at_client's general sync, and no use case asserts sync ordering. The test-side fix landed in `ccf4987a4`. **A sync pull applies an OLDER server entry over NEWER local state** — the pull-side face of the versioning shape C fixed on the push side. Recorded when 14.43 closed and not designed since. Also open from that section: a driver-side `expect` failure on a protocol-green cell still dumps nothing | Nothing. The section carries the discriminators for any future red of the family |
-| [14.48](detail/implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew) residue | ✅ **BOTH CLOSED 2026-08-23.** [Ruling 114](detail/decisions.md#114-a-signer-waits-for-its-own-mint-the-mint-alone-does-not-2026-08-21) left open the durable pre-mint-envelope question and the verifier's pre-mint cache asymmetry. Each needs PQ material to exist in production — durable auth-fallback-signed envelopes from before a first mint, and a peer holding a pre-mint `_apsk` — and **none does**, per the standing premise above. Void until a holder is named | Nothing |
 | [14.45](detail/implementation-plan.md#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) residue | ⚠️ **In another repo: `at_persistence_secondary_server`.** Its keystore `get()` does not filter expired records, which is what let an expired key be read back and re-swept. Named here because this is where the work that found it lives; it does not land here | Separately owned. Not a D1 gate |
-| [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | **The e2e teardown revokes enrollments belonging to other runs.** `tests/at_end2end_test/test/enrollment_teardown.dart` revokes every approved enrollment on the shared `@ce2e1`-`@ce2e4` atSigns with `force: true`, not only the ones its own run created, so two overlapping CI runs tear down each other. **Diagnosed 2026-08-22** from the *other* run's log - the section carries the two timestamps 430 ms apart and the shared enrollment id. This row read *undiagnosed, and the newest CI run is red* until then. CI has since been green three times — 24/24 twice and 47/47 on [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) — but every one of those windows was free of another run, so that is a rate and not a fix. Owed: a run-unique marker, so a teardown revokes only what its own run made | Nothing. Needs no permission and no publish, and it does not gate the at_auth carve |
-| [14.18](#1418-the-remaining-d1-initial-development-sequence) | Steps 32–34: the per-package release train. **Five of eight positions are through.** at_commons #2168, at_chops #2169, at_lookup #2174 and at_server_status #2177/#2178 are all **merged to trunk**; at_auth is [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179), **open with CI 47/47 green**. Remaining to carve: **at_client, at_client_flutter, at_onboarding_cli**. Re-derive the whole picture rather than reading this cell — for each package compare `pubspec.yaml` on trunk, on this branch, and `curl -s https://pub.dev/api/packages/<pkg> \| python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`. Measured 2026-08-22: pub.dev has at_commons 5.16.0, at_chops 3.6.0, at_lookup **3.6.1**, at_server_status **1.1.1**, at_auth **3.3.0**, at_client **3.14.0** | ⚠️ **Merged is not published, and only the publishes still gate anything.** at_lookup 3.7.0-rc1 and at_server_status 1.1.2-rc1 are on trunk and **not on pub.dev**, so every later package can carve and merge but none can publish until gkc publishes those. ⛔ **This cell used to say the at_auth PR's CI would fail to resolve until at_lookup published. That was wrong** — a pub workspace resolves siblings by path, so #2179 resolved and went green with at_lookup unpublished; the gate is on publishing, never on carving or merging. ⚠️ **at_client's `at_commons: ^5.15.0` floor is too low and will ship broken** — `notify_request_transformer.dart:154` calls `metadata.copy()`, which first exists in at_commons **5.16.0**. The same defect was found and fixed in at_auth during its carve; check every floor against first-use before carving at_client. ⚠️ **Owed at the real release, and it belongs to this row because it is the train's:** every constraint moved to an `-rc1` floor reverts to its stable form when these publish, or a stable release ships requiring a candidate. The rule is in [14.49.2](detail/implementation-plan.md#14492-every-remaining-package-publishes-as-a-release-candidate); re-derive the sites — `git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'` |
+| [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | ⛔ **NOT a D1 gate (gkc, 2026-08-23)** — e2e runs isolate locally and are serialized by structure on GitHub. ⚠️ Recorded because a reader will re-derive it: there is no top-level `concurrency:` key in any workflow, so `needs:` serializes the e2e jobs *within* a run and not across runs, and the incident that produced this row was cross-run. Stays as unblocked hygiene. **The e2e teardown revokes enrollments belonging to other runs.** `tests/at_end2end_test/test/enrollment_teardown.dart` revokes every approved enrollment on the shared `@ce2e1`-`@ce2e4` atSigns with `force: true`, not only the ones its own run created, so two overlapping CI runs tear down each other. **Diagnosed 2026-08-22** from the *other* run's log - the section carries the two timestamps 430 ms apart and the shared enrollment id. This row read *undiagnosed, and the newest CI run is red* until then. CI has since been green three times — 24/24 twice and 47/47 on [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) — but every one of those windows was free of another run, so that is a rate and not a fix. Owed: a run-unique marker, so a teardown revokes only what its own run made | Nothing. Needs no permission and no publish, and it does not gate the at_auth carve |
+| [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ **THIS IS D1's CRITICAL PATH** — D1 ends when the acceptance set passes and every rail is green, and the remaining carves and publishes are what gets there. Steps 32–34: the per-package release train. **Five of eight positions are through.** at_commons #2168, at_chops #2169, at_lookup #2174 and at_server_status #2177/#2178 are all **merged to trunk**; at_auth is [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179), **open with CI 47/47 green**. Remaining to carve: **at_client, at_client_flutter, at_onboarding_cli**. Re-derive the whole picture rather than reading this cell — for each package compare `pubspec.yaml` on trunk, on this branch, and `curl -s https://pub.dev/api/packages/<pkg> \| python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`. Measured 2026-08-22: pub.dev has at_commons 5.16.0, at_chops 3.6.0, at_lookup **3.6.1**, at_server_status **1.1.1**, at_auth **3.3.0**, at_client **3.14.0** | ⚠️ **Merged is not published, and only the publishes still gate anything.** at_lookup 3.7.0-rc1 and at_server_status 1.1.2-rc1 are on trunk and **not on pub.dev**, so every later package can carve and merge but none can publish until gkc publishes those. ⛔ **This cell used to say the at_auth PR's CI would fail to resolve until at_lookup published. That was wrong** — a pub workspace resolves siblings by path, so #2179 resolved and went green with at_lookup unpublished; the gate is on publishing, never on carving or merging. ⚠️ **at_client's `at_commons: ^5.15.0` floor is too low and will ship broken** — `notify_request_transformer.dart:154` calls `metadata.copy()`, which first exists in at_commons **5.16.0**. The same defect was found and fixed in at_auth during its carve; check every floor against first-use before carving at_client. ⚠️ **Owed at the real release, and it belongs to this row because it is the train's:** every constraint moved to an `-rc1` floor reverts to its stable form when these publish, or a stable release ships requiring a candidate. The rule is in [14.49.2](detail/implementation-plan.md#14492-every-remaining-package-publishes-as-a-release-candidate); re-derive the sites — `git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'` |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | **Step 20's rotation arm — STAYS IN D1** (gkc, 2026-08-23), which is why D1 now ends past the carve. Chain: publish at_auth 4.0.0 → add the `pending` value → build the arm | The publish, and a dedicated CRAM atSign. ⛔ **The "wait for the fleet" gate is CLOSED** — the two keyfile formats are disjoint for every file that exists (3.3.0 dispatches on `version` and never reaches its `keys` parse without one; a 4.0.0 typed document emits `version: 1` and no `keys`), and the one reachable conflict needs a 4.0.0 typed write into a keyfile a 3.3.0 app also opens, which cannot have happened: **no production `.atKeys` or keychain entry holds any PQ key material** (gkc, 2026-08-23) |
-| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
+| [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | ⛔ **TRIAGED 2026-08-23: only item 36 is a D1 gate**, and it is the one known case of the catalogue asserting clauses no live row proves. Of the rest, three are not work at all (20, 21, 26 — each says so in its own text) and two belong elsewhere (14 is not PQ, 35 lands in `atGettingStarted`), leaving six that are open and not D1: 2, 4, 10, 28, 29, 34. Items 8, 23 and 30 were settled the same day. The headline count below overstates the work, which is why it keeps being re-argued — **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
 | S-5 residual | ⛔ **D1 GATE, and it lands on [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) while that is open** (gkc, 2026-08-23). **The registrar's switch to validating TLS certificates is untested, here and in CI.** `RegistrarService`'s default client used to accept ANY certificate - `badCertificateCallback` returning true unconditionally, on calls carrying the registrar API key. It is now a plain `package:http` client that validates, with the bypass behind `RegistrarIoClient.allowBadCertificates`, off by default and shouted when used. **Neither arm has a test**, and CI cannot catch a regression: `RegistrarIoClient` appears in ZERO CI job logs (control: `RegistrarService` appears), and `RegistrarIoClient.create()` has **no in-tree caller at all** - it is a public opt-in for consumers, which is deliberate, so do not delete it as dead code. Owed: a test pinning both arms against a self-signed local server. ⚠️ **Attempted and parked 2026-08-22**, so the next reader does not start cold: the shape works — mint a cert at test time with `openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=localhost`, serve it with `HttpServer.bindSecure`, and point `RegistrarService` at `localhost:<port>`, which `Uri.https` accepts as an authority. Three arms, and the third is the positive control that proves the server is up: the default client refuses, `RegistrarIoClient.create()` with the flag off refuses, and with it on succeeds — without that third arm a refusal is indistinguishable from a server that never started, because `package:http` wraps connection-refused in the same `ClientException`. ⛔ **Do not commit a PEM fixture** — GitHub push protection can block a private key; mint it in `setUpAll`. | Nothing |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | ⛔ **STEP 29 LEAVES D1 — all four dispositioned 2026-08-23.** ① perf ceiling on real low-end hardware → post-D1 cleanup (#2153). ② UC-A3.4 → done 2026-08-17. ③ SS-4 resume → **ruled NO RESUME** (the election makes republishing a filed pair a regression) and **re-filed as orphan growth**: `store()` calls `addKey`, nothing in `crypto/nskey/` retires a filed private, so every abandoned mint — crash or the designed lease-expiry abandon — permanently adds key material to the user's `.atKeys`. ④ IS-1 drift → not D1; at_server #2683 is open, untouched since 2026-08-06, and already ruled to be pared back | Only ③'s orphan-growth half is owed here, and it is a decision before it is code |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | ⛔ **NOT D1 (gkc, 2026-08-23) — it gates the post-R-2 stop-release.** A `mintLegacyMaterial:false` atSign cannot write a public record. Out of D1 because both moves it needs are B-3 phase 1, which is parked, and nothing about it blocks the carve; the live assertion in `pq_legacy_interop_live_test.dart` keeps it pinned and the flag must still not be recommended | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
@@ -351,10 +392,15 @@ to move anchors the acceptance rail parses.
 | [14.44](#1444-residuals-from-the-at_chops-pr-review) | Residuals from the at_chops PR review. ✅ **The first is DONE 2026-08-22**, in the at_auth carve as this row said it should be — `encode` refuses an `ArgonHashParams` whose `hashLength` is not the value `decode` will use, which was the section's own preferred option over persisting it. **Two remain:** `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths — ⛔ **both remaining residuals are POST-D1 (gkc, 2026-08-23)**, and the severity is worth recording: it is **correct for X-Wing**, whose four inputs are all 32 bytes, and **latent and silent** otherwise, because `setRange(0, 32, …)` takes the first 32 bytes of a longer input without error and yields a well-formed but wrong digest; and at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence whose durable record is ruling 110's addendum | Nothing. Both remaining ones go whenever at_chops is next open |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | **STAYS IN D1, with the bucket-B migration** (gkc, 2026-08-23). Re-measured 2026-08-23: **754** findings — at_client 396, at_onboarding_cli 205, at_auth 153, at_lookup **0** (the section's 345/183/110/28 table is stale). Five buckets, and only **B** has a replacement that exists today: 71 credential-ladder uses (`enrollmentId` 59, `signingAlgoType` 12) moving onto the `AtAuthenticator` seam at_lookup 3.7.0 ships — **24 sites in `lib/`, 47 in tests**. A (AtChops compatibility API, 530) and C (legacy flat keyfile fields, 118) are transient and get **no ignores yet**; D (27) is at v5 | Nothing. Every package exits 0, so none of this blocks a carve |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | ⛔ **D1 GATE (gkc, 2026-08-23).** `self_enrollment_retrofit_live_test.dart` failed **once in five** pack runs. D1 now ends when every rail is green, and an unexplained live failure at that rate makes "green" a rate rather than a state — so it has to be understood before D1 closes | Unexplained. Not a flake and not fixed — a rate, not a kind |
-| [14.29](#1429-the-residuals-1425-surfaced) | SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
+| [14.29](#1429-the-residuals-1425-surfaced) | ⛔ **NOT D1 (2026-08-23)** — the section's own text says none of these blocks D1's remaining sequence, and SS-2's `__ssenv` half is explicitly *deferred, not owed*: the 2026-08-03 ruling took DEP4 off SS-2 and what is left is a pure optimisation. SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green and **live-green** — functional 174/174 (after one 173/174 whose single failure was [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)), e2e pq 54/54, and the `legacy-server` arm 2/2 against the pinned `atsigncompany/virtualenv:vip-p3.15.0`. **Owed: public-data signature verification** (undesigned) — ⛔ **POST-D1, and deliberately NOT in the acceptance catalogue (gkc, 2026-08-23)**: `dataSignature` appears zero times in `acceptance.md`, against 28 mentions of "signature" as a control, so nothing asserts it. ⚠️ Worth stating plainly since it reads as an omission otherwise: `pqActive` already **signs** public data and nothing anywhere verifies it — not at_client, not the atServer — so we emit a signature no one checks, knowingly | Nothing |
 
 ### 14.39 `PqPosture` and the rollout it drives
+
+⛔ **The one thing still owed here — public-data signature verification — is
+POST-D1 and deliberately NOT in the acceptance catalogue** (gkc, 2026-08-23).
+`dataSignature` appears zero times in `acceptance.md`. Everything else in this
+section shipped 2026-08-19.
 
 Design settled with gkc on 2026-08-18 and recorded as
 [ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18),
@@ -537,6 +583,10 @@ lookup on another atSign. Both forms are read, and the legacy form permanently,
 because every public record a released at_client signed sits on a live atSign.
 
 ### 14.34 An unexplained intermittent in `self_enrollment_retrofit_live_test.dart`
+
+⛔ **D1 GATE (gkc, 2026-08-23).** D1 now ends when every rail is green, and an
+unexplained live-pack failure at **once in five** makes "green" a rate rather
+than a state. It has to be understood before D1 closes.
 
 One full-pack run on 2026-08-17 came back **166/167**: the test timed out after
 40 s at `await firstNotification`. **Five pack runs were made that day and only
@@ -1079,6 +1129,11 @@ place with what it used to say.
 
 ### 14.14 A client with no enrollment id is treated as fully privileged
 
+✅ **CLOSED 2026-08-23, and moved to `## PARKED`.** Both halves were already
+ruled and nobody had closed the row: the privilege by this resolver's own
+dartdoc, the `primary` identity by [14.18](#1418-the-remaining-d1-initial-development-sequence)
+step 13. Kept so the question is not re-derived. The original text follows.
+
 `EnrollmentRecordPrivilegeResolver.isFullyPrivileged()`
 (`service/enrollment_privilege_resolver.dart`) returns **true unconditionally
 when `enrollmentId == null`**, ⚠️ **and its own dartdoc now argues the case this
@@ -1100,6 +1155,11 @@ enrollment record carries.
 
 
 ### 14.12 A `mintLegacyMaterial:false` atSign cannot write a public record
+
+⛔ **NOT D1 (gkc, 2026-08-23) — this gates the post-R-2 stop-release.** Both
+moves it needs are B-3 phase 1, which is parked, and nothing about it blocks
+the carve. The live assertion in `pq_legacy_interop_live_test.dart` keeps it
+pinned, and the flag must still not be recommended to anyone.
 
 Found 2026-08-08 by UC-B4.2's opt-out arm, the first thing ever to activate an
 atSign that way and then use it. The opt-out works exactly as designed at
@@ -1132,6 +1192,11 @@ gets a red test naming the row that was waiting for it.
 
 
 ### 14.11 `deprecated_member_use` findings across the workspace
+
+**STAYS IN D1, with the bucket-B migration only** (gkc, 2026-08-23). Of the
+754 findings measured 2026-08-23, bucket B — 71 credential-ladder uses with a
+replacement that already exists — is D1 work; A and C are transient and get no
+ignores yet, and D waits for v5. The five buckets are tabled below.
 
 Everything else `dart analyze` reported is cleared (`3e3ac1075`); at_chops and
 at_commons are clean outright. What remains is live use of
@@ -1228,6 +1293,11 @@ So the 6 workspace constraints do **not** have to widen together, and at_lookup
 does **not** need 3.6.2 opened.
 
 ### 14.42 Why enrollment setup takes four minutes
+
+⛔ **NOT a D1 gate (gkc, 2026-08-23), but owed to gkc personally** — he asked
+for the cause on 2026-08-20, so this is not plan-generated hygiene and is not
+to be quietly demoted. What it still lacks is how to obtain `config14.yaml` and
+the `@ce2e` keyfiles locally; until that is written down the only route is CI.
 
 `enrollment_setup.dart` submits and approves one enrollment for each of the
 four @ce2e atSigns. Measured 2026-08-20 in `end2end_test_14`: **3:56** on one
@@ -1329,6 +1399,11 @@ never `gh run view --log-failed`, which returns a truncated stream here.
 
 ### 14.47 The at_client unit tree has a cross-file isolation flake
 
+⛔ **NOT a D1 gate (gkc, 2026-08-23) — hygiene.** It is green alone and green
+in the full suite, and reddens only in one hand-constructed non-alphabetical
+ordering that nothing actually runs, so no rail as invoked is at risk. The
+reproduction recipe below is the part worth keeping.
+
 Found 2026-08-20 while regression-testing 14.46's edits. Running
 `dart test --concurrency=1 test/pq_signing_root_test.dart
 test/nskey_minting_test.dart test/nskey_rotation_test.dart
@@ -1352,6 +1427,11 @@ any suspect change, and read `local_secondary_sync_queue_test.dart`'s setup
 for what makes its store per-test fresh — the leak says sometimes it isn't.
 
 ### 14.46 `executeVerb`'s `sync` parameter is inert, on both secondaries
+
+⛔ **NOT D1 (gkc, 2026-08-23)** — the removal rides at_client/at_lookup **4.0**,
+and nothing in the acceptance set asserts the parameter: its one appearance in
+the catalogue is prose about a mock. Phase 1 already shipped, so the API is
+honest today.
 
 Found 2026-08-20 while tracing why a `_nskeylock` record reaches local storage.
 `MintLock._take` passes `sync: false` and the surrounding dartdoc reasons about
@@ -1426,6 +1506,11 @@ recorded, and stayed green).
   `git check-ignore -q docs/projects/pq/post-quantum-cryptography.md && echo ignored`.
 
 ### 14.44 Residuals from the at_chops PR review
+
+⛔ **Both remaining residuals are POST-D1 (gkc, 2026-08-23)** — they ride the
+next at_chops touch. The first residual, the passphrase envelope's `hashLength`,
+landed 2026-08-22 in the at_auth carve and is recorded at the end of this
+section.
 
 The first two were raised by Xlin123 on [PR #2169](https://github.com/atsign-foundation/at_client_sdk/pull/2169)
 (2026-08-20) and answered there; neither belongs in that PR — the first is an
@@ -1542,7 +1627,7 @@ absence of a row from this table.
 | [14.49](detail/implementation-plan.md#1449-keyentrystatus-becomes-a-typed-string-and-the-release-train-is-all-candidates) | `KeyEntryStatus` becomes an open String, and every remaining package publishes as a release candidate | ✅ **DONE 2026-08-22.** Both halves shipped: [14.49.1](detail/implementation-plan.md#14491-keyentrystatus-becomes-a-typed-string-wrapper--done-2026-08-22) made the status an open token a reader carries through verbatim instead of flattening to `retired`, with both collapsing seams fixed, the verify half wired at two call sites and the `_apsk` selector widened; [14.49.2](detail/implementation-plan.md#14492-every-remaining-package-publishes-as-a-release-candidate) ruled the rest of the train onto `-rc1` floors. ⚠️ This section sat in **no table at all** until 2026-08-22 — not TODO, not DONE, not PARKED — so every command that counts work by row was blind to 230 lines of it |
 | [14.41](detail/implementation-plan.md#1441-what-the-first-ci-runs-on-the-spike-branch-found) | The first CI runs on the spike branch, and the four red rows they found | ✅ **DONE** — CI fully green, run 32392240064, 11 of 11, on `f24ee3ab6` (the head with `origin/trunk` merged in, so it covers at_commons #2168 and the 15 commits trunk brought). Only **one** of the four was a product defect; two were harness assumptions holding by luck and one was a CI step running the wrong image. What the section surfaced beyond those has its own rows: the convergence race ([14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race), also closed) plus [14.42](#1442-why-enrollment-setup-takes-four-minutes) and [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake), both still open |
 | [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race) | The functional suite's convergence race — four shapes, each diagnosed and fixed | ✅ **DONE 2026-08-21.** All four shapes have diagnosed, mutation-proven fixes; the last members were classified (`sync_multiple`'s red carries shape C's signature) or fixed (the rotated-advertisement stale read, `ccf4987a4`); the driver dumps child output on failure (`fce13ca52`). Rate at `112e1f740`: 0 family reds in 10 valid packs. ⚠️ **Fixed on this branch, NOT on trunk** — shape A's `_throwIfStopped` and the `stop()` done-completer arrive with the at_client PR, so any carve off trunk still meets it; measured on the at_auth carve 2026-08-22, 1 red in 5 packs. The open residue has its own TODO row |
-| [14.48](detail/implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew) | A `primary` client could sign with a key its own advertisement had just withdrawn | ✅ **DONE 2026-08-21 by [ruling 114](detail/decisions.md#114-a-signer-waits-for-its-own-mint-the-mint-alone-does-not-2026-08-21)** — the sign path awaits the mint (`09f9a974c`), differential- and mutation-proven, pack green. The cause was four things at once: fire-and-forget startup minting, publish-before-file, the sign path's auth-key fallback, and the shared composer withdrawing the auth key on the first mint. The residue the ruling names has its own TODO row |
+| [14.48](detail/implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew) | A `primary` client could sign with a key its own advertisement had just withdrawn | ✅ **DONE 2026-08-21 by [ruling 114](detail/decisions.md#114-a-signer-waits-for-its-own-mint-the-mint-alone-does-not-2026-08-21)** — the sign path awaits the mint (`09f9a974c`), differential- and mutation-proven, pack green. The cause was four things at once: fire-and-forget startup minting, publish-before-file, the sign path's auth-key fallback, and the shared composer withdrawing the auth key on the first mint. The residue the ruling named — the durable pre-mint-envelope question and the verifier's pre-mint cache asymmetry — was **closed 2026-08-23**: each needs PQ material to exist in production and none does, per the standing premise at the top of this file |
 | [14.45](detail/implementation-plan.md#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) | An expired key the client could not delete pinned it in a hot loop | ✅ **DONE.** The spin is fixed — a sweep that removes nothing now backs off 30s instead of re-arming at zero; it was **225,721 failed sweeps across three `_nskeylock` records** in one local pack, **47.4%** of its log lines, and pre-existing on trunk. The refusal is fixed with it: a namespace check rather than immutability, and the sweep now bypasses it. ⛔ **NOT the cause of [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)** — the run carrying all three loops was green, 177/177; a rate effect is not excluded, presence is. ⛔ Why the lock is synced to local storage at all is **parked** (gkc, 2026-08-20). The cross-repo residue has its own TODO row |
 | [14.40](detail/implementation-plan.md#1440-at_client-publishes-as-a-minor-and-the-heading-now-says-so) | ✅ **DONE — RULED 2026-08-20: at_client publishes as `3.15.0`, a MINOR.** Heading and pubspec both moved; the three `**BREAKING**` labels were rewritten because nothing published was removed — verified against the published 3.14.0 archive, where `disallowLegacyEncryption`, `keyEstablishmentAlgorithms`, `PqPosture` and `ReleasePosture` appear in **zero** files against a control of `AtClientPreference` in 20 | — |
 | 14.38  | `at_activate` can administer a PQ-native atSign             | DONE 2026-08-19, live-green (CLI functional pack 17/17 against a locally built `at_virtual_env:local`). All three agreed changes landed, and two of them had been recorded as done when they were not: the `_initAtClient` overwrite survived a change to *which* preference field it read, and the file-stream site was named as methods that do not exist. The row also claimed `--posture` reached every command — it reached every *parser* while twelve commands ignored the value. Detail: [14.38](detail/implementation-plan.md#1438-activate_cli-cannot-administer-a-pq-native-atsign) |

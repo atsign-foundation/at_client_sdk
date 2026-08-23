@@ -2305,6 +2305,13 @@ caller that re-advertises a package, not a shape-freezing deadline.
 
 ### 14.7 NoPorts carries its own copy of the envelope shape
 
+⛔ **NOT D1 (gkc, 2026-08-23), and moved to `## PARKED`.** This section's own
+text says a migration here does not break NoPorts. Its obligation is
+conditional and has not fired: naming NoPorts as a second migration is owed
+when **RFC 7515 becomes a consumer-facing claim**, and measured 2026-08-22 that
+string appears in `design.md` and `detail/decisions.md` and in no file under
+`packages/`.
+
 `sshnoports/packages/dart/noports_core/lib/src/common/validation_utils.dart`
 produces the same `{payload, signature, hashingAlgo, signingAlgo}` shape with
 the same re-encoding behaviour. It does not import at_client's functions — it
@@ -2639,6 +2646,12 @@ then:
 
 ### 14.16 Four residuals the issue-tree audit surfaced, 2026-08-09
 
+⛔ **STEP 29 LEAVES D1 — all four residuals dispositioned 2026-08-23.** ① the
+perf ceiling goes to a post-D1 cleanup (#2153); ② UC-A3.4 landed 2026-08-17;
+③ the SS-4 resume question is RULED — no resume — and re-filed as orphan
+growth; ④ the IS-1 drift is not D1, on a separate track in at_server. Each is
+recorded against its own item below.
+
 Updating the #1889 tree to the current state meant auditing every open issue's
 own deliverables against the code rather than against the plan. Four things were
 owed that no ledger recorded — and two plan claims were wrong, now corrected in
@@ -2887,6 +2900,20 @@ Then, as the release programme rather than development: publish at_chops 3.6.0
 ladder — a same-value version bump merges silently.)
 
 ### 14.19 Small items, raised 2026-08-12 and not yet acted on
+
+⛔ **TRIAGED 2026-08-23 by gkc. The headline count overstates the work, which
+is why it keeps being re-argued.** Of the 15 items the counter now reports as
+open: **three are not work at all** — 20, 21 and 26, each of which says so in
+its own text ("deliberately left", "accepted … recorded so it is not
+rediscovered", "that is deliberate") — and **two belong elsewhere**: 14 is not
+PQ (16 `atProtocol` spellings outside this doc set) and 35 lands in
+`atGettingStarted`. That leaves **seven genuinely open**: 2, 4, 10, 28, 29, 34
+and **36**.
+
+⛔ **Item 36 is a D1 GATE**; the other six are not. D1 now ends when the
+acceptance set is complete, implemented and verified, and item 36 is the one
+known case of the catalogue asserting clauses no live row proves. Items 8, 23
+and 30 were settled the same day and carry their rulings in place.
 
 Each is real, verified at the time of writing, and too small to be a step of
 its own. None blocks anything.
@@ -3786,8 +3813,8 @@ its own. None blocks anything.
     about a **published package's** API needs a search whose scope is wider
     than the repo that publishes it.
 
-36. **Three clauses of UC-A2.5/UC-A2.6 are asserted by the catalogue and NOT
-    proven by the live rows that cite them.** Recorded 2026-08-19 when both
+36. ⛔ **D1 GATE (gkc, 2026-08-23). Three clauses of UC-A2.5/UC-A2.6 are
+    asserted by the catalogue and NOT proven by the live rows that cite them.** Recorded 2026-08-19 when both
     rows went `PROVEN`, because the alternative — marking them proven and
     saying nothing — is the overclaim the catalogue exists to prevent. The
     scenarios in `packages/at_client/test/acceptance/a2_enrollment_test.dart`
