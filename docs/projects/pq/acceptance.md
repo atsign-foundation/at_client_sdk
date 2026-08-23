@@ -1618,6 +1618,10 @@ Sorting all 68 by the shape that could prove them:
 | Stage-invariant | 38 | wherever they are proven now | ledger |
 | Vacuous at legacy | 3 | a stage-aware Given, or excluded | — |
 
+⚠️ **The consequence and transition counts disagree with the arm-3 paragraph
+below, and 4 rows are assigned to both arms.** Read [which rows arm 1
+owes](#which-rows-arm-1-owes) before building against any figure in this table.
+
 The existing 4×4 serves the 3 cross-stage rows and cannot express a transition.
 Its own dartdoc says why: *"Minting happens ONCE, at enrolment time, never in
 the cells"* (`pq_rollout_matrix_test.dart:94`), because a per-cell re-mint churns
@@ -1633,14 +1637,28 @@ a pinned `virtualenv:vip-p3.15.0` in its own CI job.
 
 ### The four arms
 
-**Arm 1, the stage arm.** 3 cells, one client per `PqPosture`, asserting the 21
-axis and consequence rows. `TestUtils.getPreference(atSign, posture:)` already
-takes a posture, so this is the cheapest arm to build, and it closes the highest
-value empty row as a by-product: `disallowLegacyEncryption` has no setter and no
-constructor argument, so a posture is the only way to reach it, and it has **0**
-hits under `tests/` against a live refusal at `at_client_impl.dart:753`.
+**Arm 1, the stage arm.** 3 cells, one client per `PqPosture`, asserting the
+axis and consequence rows it owns — [which ones, and why the count is
+contested](#which-rows-arm-1-owes).
+`TestUtils.getPreference(atSign, posture:)` already takes a posture, so this is
+the cheapest arm to build, and it closes the highest value empty row as a
+by-product: `disallowLegacyEncryption` has no setter and no constructor
+argument, so a posture is the only way to reach it, and it has **0** hits under
+`tests/` against a live refusal in `CryptoRuntime.refuseLegacyIfDisallowed`
+(`crypto_runtime.dart:156`), reached once at provider selection and again at
+encryption time so the guarantee does not rest on which call path a write took.
 [UC-C1.2](#152-uc-c12--the-refusal-axis-the-posture-disallows-legacy-writes)
 has never executed.
+
+⚠️ **This paragraph cited the refusal as `at_client_impl.dart:753`, and that
+line throws nothing.** It is `_announceLegacyEncryptionPosture`, which logs the
+posture at every client creation — and it has never been anything else, which
+`git log -L750,760:packages/at_client/lib/src/client/at_client_impl.dart` shows
+by returning the commit that added the flag. The nearest refusal in that file is
+`mayFallBackToLegacy` (`:1806`), the predicate that rethrows a cold start rather
+than routing it legacy. Recorded rather than silently repaired because of how it
+read: a precise-looking `file:line` beside a measured `0`, so the figure carries
+the citation's credibility and nobody opens the line.
 
 **Arm 2, the pair grid.** The existing 4×4 stays as it is, serving the 3 rows
 that need two stages at once. The `published` column must stay an out-of-process
@@ -1662,6 +1680,64 @@ which no cell can do.
 built as ephemeral environments at named `at_server` refs. This retires the
 `legacy-server` tag and the pinned image as special cases, and gives UC-B0.1 an
 ordinary home.
+
+### Which rows arm 1 owes
+
+⛔ **The table above and the arm-3 paragraph disagree, and this section is what
+a builder should work from until the disagreement is ruled.** The table says
+**3** transition rows. The arm-3 paragraph names the retrofit trio (UC-B1.1,
+UC-B1.2, UC-B1.3), the retirement pair (UC-B2.1, UC-B2.2), the capability flip
+(UC-B4.4), rotation and revocation (UC-A5.1, UC-A5.3), heal-from-a-holder
+(UC-B5.11) and UC-G1.7 to UC-G1.9 — **12**. Four of those twelve — UC-B1.1,
+UC-B1.2, UC-B4.4 and UC-A5.3 — are also inside the 15 consequence rows the
+table assigns to arm 1, so the same section hands them to arm 1 and arm 3 at
+once. The count of 21 is the sum of two cells one of those rows is double-counted
+in, which is why it cannot simply be trusted and edited down.
+
+**Neither reading is ruled here.** They differ in what arm 1 *is*: under the
+count, an arm-1 cell has to drive a retrofit, so the arm stops being three
+static clients; under the prose, a retrofit is a move and belongs to arm 3.
+That is gkc's call, and the two readings are stated rather than resolved so the
+choice is visible.
+
+**What arm 1 builds against in the meantime: the 14 rows both readings agree
+on.** A row here is an arm-1 row whichever way the disagreement goes, so a test
+written against it cannot be invalidated by the ruling:
+
+⚠️ **The ids below are backticked deliberately.** `docs_structure_test.dart:345`
+reads any line shaped `| UC-… | … | word |` as a row of the use-case **status**
+table, so a plain-id table here is counted as 14 more use cases and the
+catalogue's own summary sentence goes red against a total it never claimed.
+That is the rail working; the fix is to not look like the thing it parses.
+
+| Row | Kind | Live proof before arm 1 |
+|------------|-------------|-------------------------|
+| `UC-C1.1` | axis | partial |
+| `UC-C1.2` | axis | **none — has never executed** |
+| `UC-C1.4` | axis | partial |
+| `UC-C1.5` | axis | direct |
+| `UC-C1.6` | axis | partial |
+| `UC-C1.7` | axis | partial |
+| `UC-A1.1` | consequence | partial |
+| `UC-A2.1` | consequence | partial |
+| `UC-A3.2` | consequence | partial |
+| `UC-A3.3` | consequence | partial |
+| `UC-B3.1` | consequence | partial |
+| `UC-B3.2` | consequence | partial |
+| `UC-B4.1` | consequence | partial |
+| `UC-G1.9a` | consequence | partial |
+
+**Contested, and excluded from arm 1 until ruled** — UC-A5.2, UC-A5.3, UC-B1.1,
+UC-B1.2, UC-B4.4, UC-G1.2 and UC-G1.5 (the table calls them arm 1; a second
+reading calls them transition or stage-invariant), and UC-A4.2 and UC-B4.3 (the
+reverse — the table calls them cross-stage or invariant, a second reading calls
+them arm 1).
+
+⚠️ **The membership above was derived twice, independently, and is the first
+time it has been written down at all** — the counts were published without it,
+and the per-row list lived only in the working notes of the session that
+produced ruling 115. Two derivations agreeing is weak evidence, so treat a row
+in the agreed set as *safe to build against*, not as *settled*.
 
 ### The generated ledger
 
@@ -1693,10 +1769,27 @@ when knowing which rows lost their proof matters most. ✅ Exercised by dispatch
 `32643853854`, which found two things offline validation could not
 ([what](detail/acceptance.md#what-the-first-ci-run-showed-that-offline-validation-could-not)).
 
-⛔ **The rendering step is NOT wired, and that is a decision.** Combining the
-artefacts needs `actions/download-artifact`, which this repo has never used —
-every action here is SHA-pinned and there is no trusted pin for it here or in
-at_server. So CI publishes the inputs and the page is rendered on demand.
+⛔ **The rendering step is NOT wired in CI, and that is a decision.** Combining
+the artefacts needs `actions/download-artifact`, which this repo has never
+used — every action here is SHA-pinned and there is no trusted pin for it here
+or in at_server. So CI publishes the inputs, and rendering is a local step.
+
+**Locally that step is one command**: `tools/acceptance_ledger.sh` runs the
+unit sources and renders, or `--with-live` runs the three live packs as well.
+⚠️ This section said "the page is rendered on demand" while **nothing in the
+tree invoked the renderer** — the only `dart run … acceptance_ledger` was the
+usage comment inside the tool, so on demand meant reassembling four commands by
+hand and every published ledger figure came from a scratch directory.
+
+**And the emitting is guarded**, by
+`packages/at_client/test/acceptance_ledger_wiring_test.dart`: each of the four
+jobs still carries its reporter flag, `unit_at_client` still sets
+`ACCEPTANCE_LEDGER`, every emitter still uploads with `always()`, and each
+runner still gates the reporter on `ACCEPTANCE_REPORT`. That last one is the
+point of the rail rather than a detail — every upload uses
+`if-no-files-found: warn`, so a job that stops emitting stays green and the
+ledger simply reports fewer rows as exercised, which reads as missing coverage
+rather than as missing wiring.
 
 The verdicts are about the runs supplied, not about the code. **PROVEN** means
 a cited test ran and passed; **NOT-EXERCISED** means no supplied report covers
@@ -1829,9 +1922,15 @@ is true
 
 **What remains, in order:**
 
-1. **Arm 1**, the 3-cell stage arm, on the VE. Still first, and now the only
-   part of the original recommendation left standing. It executes UC-C1.2 for
-   the first time.
+1. ~~**Arm 1**, the 3-cell stage arm, on the VE.~~ ✅ **BUILT 2026-08-23** —
+   `tests/at_functional_test/test/pq_stage_arm_test.dart`, three enrollments of
+   one atSign at one posture each. **UC-C1.2 executed for the first time**, and
+   the ledger now names that file in the proof for UC-C1.1 and UC-C1.2. Full
+   pack 186/186. ⚠️ It covers the rows both derivations agree on, not the
+   contested 21 — see [which rows arm 1 owes](#which-rows-arm-1-owes) — and it
+   does **not** measure UC-C1.4: `enrolAndAuthenticate` builds pq-mode
+   enrollments only, so all three cells hold `keyExchangeMode` constant and
+   that axis is a constant here rather than a variable.
 2. **Arms 3 and 4**, which need the EE built from a named `at_server` ref.
    Nothing blocks them but the work itself — in particular *not* the monitor.
 3. **The clause level** of the ledger, which touches the live tests and wants

@@ -10,10 +10,19 @@
 ///   and the only way to add a guard without inflating it was to not add one.
 /// - **Which use cases the catalogue defines.** The rule was every
 ///   `UC-…`-shaped string anywhere in `acceptance.md`, so a cross-reference
-///   inside another row's prose counted as a catalogue entry. Today the
-///   defined set and the mentioned set happen to be the same 43, which is luck
-///   rather than construction: one typo'd cross-reference invents a use case
-///   that can never have a scenario, and the guard would demand one forever.
+///   inside another row's prose counted as a catalogue entry. The defined set
+///   and the mentioned set are still identical, which is luck rather than
+///   construction: one typo'd cross-reference invents a use case that can never
+///   have a scenario, and the guard would demand one forever.
+///
+///   ⚠️ This said "the same 43" until 2026-08-23, when the count was 69 — a
+///   figure with no way to go red, since nothing reads it. Re-derive rather
+///   than quoting one here, which is why no number replaces it:
+///
+///   ```bash
+///   git grep -cP '^#{2,4} +(?:[\d.]+ +)?UC-[ABCG]\d+\.\d+[a-z]? +— ' \
+///     -- docs/projects/pq/acceptance.md
+///   ```
 ///
 /// Both are declarations here now, and [undeclaredTestFiles] is what fails
 /// when a file appears in this directory without being classified either way.

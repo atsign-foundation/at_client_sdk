@@ -11340,6 +11340,19 @@ churns the advertisement into a shape UC-G1.14's released reader cannot take.
 Meanwhile 21 rows need one client at one known stage — 3 cells, not 16 — and 38
 rows would become 16 identical copies of a single assertion.
 
+⚠️ **AMENDED 2026-08-23: the 21 is contested, and this ruling contradicts
+itself on it.** The table above says 3 transition rows; the arm-3 bullet below
+names retrofit, retirement, the capability flip, rotation, revocation and the
+ladder, which is 12 rows once expanded against the catalogue — and 4 of them
+(UC-B1.1, UC-B1.2, UC-B4.4, UC-A5.3) are inside the 15 consequence rows the
+table hands to arm 1. So 21 double-counts. The two readings and the 14 rows
+they agree on are in
+[`acceptance.md` section 14](../acceptance.md#which-rows-arm-1-owes); the choice
+between them is gkc's and is not made here. The per-row membership behind these
+counts was never written into the ruling, which is why the contradiction
+survived being read several times: two totals in one section look consistent
+until somebody expands the prose into ids.
+
 A third axis neither party named: **UC-B0.1 varies by atServer version, not by
 client posture**, and survives today as a tagged special case against a pinned
 `virtualenv:vip-p3.15.0` in its own CI job. It can never be a cell.
@@ -11352,9 +11365,14 @@ which carries the arms, the environments, the prerequisites and the build order.
 One home, because a design copied into two files goes stale in the one nobody
 has open — and it belongs beside the catalogue it exists to prove.
 
-- **Arm 1, the stage arm** — 3 cells, one client per `PqPosture`, for the 21
-  axis and consequence rows. The cheapest arm, and it executes UC-C1.2 for the
-  first time.
+- **Arm 1, the stage arm** — 3 cells, one client per `PqPosture`, for the axis
+  and consequence rows ([which ones, and why the count of 21 is
+  contested](../acceptance.md#which-rows-arm-1-owes)). ✅ **BUILT 2026-08-23**
+  as `tests/at_functional_test/test/pq_stage_arm_test.dart`, and it executed
+  UC-C1.2 for the first time. It is 3 *enrollments* rather than 3 clients:
+  `refuseChangedRolloutAxes` refuses a second client on one cache key under
+  different rollout axes, so each posture needs its own `(atSign,
+  enrollmentId)`.
 - **Arm 2, the pair grid** — the existing 4x4, unchanged, for the 3 rows that
   need two stages at once.
 - **Arm 3, the transition arm** — the edges: retrofit, retirement, the
