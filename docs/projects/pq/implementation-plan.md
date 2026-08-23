@@ -87,8 +87,10 @@ in or out of D1. ⛔ **The definition of D1 changed in that pass and this list i
 ordered by it**: D1 ends when every acceptance test passes and every rail is
 green, the posture matrix included, with the acceptance set complete,
 implemented and verified. Everything else is a judgement call. ⚠️ **The
-gates are lettered `G1`–`G7` and begin at "THE D1 GATES, in order" further
-down; the numbered entries 1–8 above them are struck history.** This sentence
+D1 gates are `G2`–`G7` and begin at "THE D1 GATES, in order" further
+down; the numbered entries 1–8 above them are struck history, and `G1` is
+below the gates under **POST-D1 CLEAN-UP** — it was a gate until 2026-08-23
+and keeps its letter so the citations to these letters do not all shift.** This sentence
 said "entries 1–5 below", which points at the wrong list — a file that has
 already been bitten once by duplicate ordinals.
 
@@ -207,9 +209,11 @@ that file instead; the list below is the PQ release work.
    `dart:io` in at_auth's own sources, guarded by
    `packages/at_auth/test/wasm_barrel_test.dart`.
 
-4b. ~~Test the registrar's certificate validation~~ **Promoted to a D1 gate
-   2026-08-23 — it is now **G1** below, which carries the harness shape and the
-   one missing import. Do not work this entry.**
+4b. ~~Test the registrar's certificate validation~~ **Now POST-D1 CLEAN-UP
+   (gkc, 2026-08-23), as `G1` below the gates.** ⚠️ This entry read "Promoted
+   to a D1 gate 2026-08-23" earlier the same day; it was demoted again, so
+   the harness shape and the one missing import are there for whoever picks it
+   up after D1. Do not work this entry.
 
 4c. ~~Stop the e2e teardown revoking other runs' enrollments~~ ⛔ **NOT a D1
    gate, ruled 2026-08-23** — gkc: e2e runs isolate locally and are serialized
@@ -260,23 +264,7 @@ that file instead; the list below is the PQ release work.
 
 **THE D1 GATES, in order. Everything above this line is history.**
 
-**G1. [RECOMMENDED] Test the registrar's certificate validation, on
-[PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) while
-it is still open.** The last S-5 behaviour change that exercises nothing, and
-the only one with a security consequence: the default client used to accept any
-TLS certificate on calls carrying the registrar API key. Neither arm has a test
-and CI is blind — `RegistrarIoClient` appears in zero job logs. The harness is
-settled and written up in its `## TODO` row: mint a self-signed cert in
-`setUpAll` with `openssl` (**do not commit a PEM** — push protection blocks
-private keys), serve it with `HttpServer.bindSecure`, point `RegistrarService`
-at `localhost:<port>`, and run three arms — default refuses, io client with the
-flag off refuses, io client with the flag on succeeds. The third is the
-positive control without which a refusal is indistinguishable from a server
-that never started. ⚠️ A probe got one import short on 2026-08-23: it needs
-`import 'package:at_auth/at_auth.dart';`, which is what exports
-`RegistrarApiEndpoint`.
-
-**G2. Build the acceptance suite out per [ruling 115](detail/decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23).**
+**G2. [RECOMMENDED] Build the acceptance suite out per [ruling 115](detail/decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23).**
 The gate that D1's own definition rests on, and the largest. gkc's framing:
 hundreds of functional and e2e tests cover the acceptance set between them, and
 there is no definitive place to see the whole of it being proven; the posture
@@ -370,6 +358,31 @@ found and fixed in at_auth during its carve.
 value, build the arm against its own dedicated CRAM atSign. ⛔ There is **no**
 fleet-adoption wait: see the standing premise above.
 
+---
+
+**POST-D1 CLEAN-UP. Not gates, and not to be worked before D1 closes.**
+
+⛔ **G1 was a D1 gate until 2026-08-23 and is now post-D1 clean-up** (gkc).
+It keeps its letter rather than being renumbered, because prose above and
+below cites these letters and a shift would silently repoint every one of
+them. So the D1 gates are **G2–G7**, and G1 sits here.
+
+**G1. Test the registrar's certificate validation, on
+[PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) while
+it is still open.** The last S-5 behaviour change that exercises nothing, and
+the only one with a security consequence: the default client used to accept any
+TLS certificate on calls carrying the registrar API key. Neither arm has a test
+and CI is blind — `RegistrarIoClient` appears in zero job logs. The harness is
+settled and written up in its `## TODO` row: mint a self-signed cert in
+`setUpAll` with `openssl` (**do not commit a PEM** — push protection blocks
+private keys), serve it with `HttpServer.bindSecure`, point `RegistrarService`
+at `localhost:<port>`, and run three arms — default refuses, io client with the
+flag off refuses, io client with the flag on succeeds. The third is the
+positive control without which a refusal is indistinguishable from a server
+that never started. ⚠️ A probe got one import short on 2026-08-23: it needs
+`import 'package:at_auth/at_auth.dart';`, which is what exports
+`RegistrarApiEndpoint`.
+
 **Blocked, and what lifts it:** ~~publishing anything past at_chops waits on
 at_chops 3.6.0 reaching pub.dev; at_lookup's publish additionally waits on
 at_commons 5.16.0~~ — both published 2026-08-21. ⚠️ **That did NOT leave the
@@ -451,7 +464,7 @@ carried inside a closed one.
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | ⛔ **THIS IS D1's CRITICAL PATH** — D1 ends when the acceptance set passes and every rail is green, and the remaining carves and publishes are what gets there. Steps 32–34: the per-package release train. **Five of eight positions are through.** at_commons #2168, at_chops #2169, at_lookup #2174 and at_server_status #2177/#2178 are all **merged to trunk**; at_auth is [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179), **open with CI 47/47 green**. Remaining to carve: **at_client, at_client_flutter, at_onboarding_cli**. Re-derive the whole picture rather than reading this cell — for each package compare `pubspec.yaml` on trunk, on this branch, and `curl -s https://pub.dev/api/packages/<pkg> \| python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`. Measured 2026-08-22: pub.dev has at_commons 5.16.0, at_chops 3.6.0, at_lookup **3.6.1**, at_server_status **1.1.1**, at_auth **3.3.0**, at_client **3.14.0** | ⚠️ **Merged is not published, and only the publishes still gate anything.** at_lookup 3.7.0-rc1 and at_server_status 1.1.2-rc1 are on trunk and **not on pub.dev**, so every later package can carve and merge but none can publish until gkc publishes those. ⛔ **This cell used to say the at_auth PR's CI would fail to resolve until at_lookup published. That was wrong** — a pub workspace resolves siblings by path, so #2179 resolved and went green with at_lookup unpublished; the gate is on publishing, never on carving or merging. ⚠️ **at_client's `at_commons: ^5.15.0` floor is too low and will ship broken** — `notify_request_transformer.dart:154` calls `metadata.copy()`, which first exists in at_commons **5.16.0**. The same defect was found and fixed in at_auth during its carve; check every floor against first-use before carving at_client. ⚠️ **Owed at the real release, and it belongs to this row because it is the train's:** every constraint moved to an `-rc1` floor reverts to its stable form when these publish, or a stable release ships requiring a candidate. The rule is in [14.49.2](detail/implementation-plan.md#14492-every-remaining-package-publishes-as-a-release-candidate); re-derive the sites — `git grep -n 'rc1' -- 'packages/*/pubspec.yaml' 'tests/*/pubspec.yaml'` |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) | **Step 20's rotation arm — STAYS IN D1** (gkc, 2026-08-23), which is why D1 now ends past the carve. Chain: publish at_auth 4.0.0 → add the `pending` value → build the arm | The publish, and a dedicated CRAM atSign. ⛔ **The "wait for the fleet" gate is CLOSED** — the two keyfile formats are disjoint for every file that exists (3.3.0 dispatches on `version` and never reaches its `keys` parse without one; a 4.0.0 typed document emits `version: 1` and no `keys`), and the one reachable conflict needs a 4.0.0 typed write into a keyfile a 3.3.0 app also opens, which cannot have happened: **no production `.atKeys` or keychain entry holds any PQ key material** (gkc, 2026-08-23) |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | ⛔ **TRIAGED 2026-08-23: only item 36 is a D1 gate**, and it is the one known case of the catalogue asserting clauses no live row proves. Of the rest, three are not work at all (20, 21, 26 — each says so in its own text) and two belong elsewhere (14 is not PQ, 35 lands in `atGettingStarted`), leaving six that are open and not D1: 2, 4, 10, 28, 29, 34. Items 8, 23 and 30 were settled the same day. The headline count below overstates the work, which is why it keeps being re-argued — **17** open small items of 36 — the items are in `detail/`, none of them blocking. Re-derive rather than quoting: this row said 17 while the count was 10, then 15 while the count was 18, and the comment beside the command said 17 for two days after the row was fixed | Item 8 is the only one waiting on a ruling. Items 20 and 21 are examined-and-left, not work. Item 35 lands in `atGettingStarted`, not here |
-| S-5 residual | ⛔ **D1 GATE, and it lands on [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) while that is open** (gkc, 2026-08-23). **The registrar's switch to validating TLS certificates is untested, here and in CI.** `RegistrarService`'s default client used to accept ANY certificate - `badCertificateCallback` returning true unconditionally, on calls carrying the registrar API key. It is now a plain `package:http` client that validates, with the bypass behind `RegistrarIoClient.allowBadCertificates`, off by default and shouted when used. **Neither arm has a test**, and CI cannot catch a regression: `RegistrarIoClient` appears in ZERO CI job logs (control: `RegistrarService` appears), and `RegistrarIoClient.create()` has **no in-tree caller at all** - it is a public opt-in for consumers, which is deliberate, so do not delete it as dead code. Owed: a test pinning both arms against a self-signed local server. ⚠️ **Attempted and parked 2026-08-22**, so the next reader does not start cold: the shape works — mint a cert at test time with `openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=localhost`, serve it with `HttpServer.bindSecure`, and point `RegistrarService` at `localhost:<port>`, which `Uri.https` accepts as an authority. Three arms, and the third is the positive control that proves the server is up: the default client refuses, `RegistrarIoClient.create()` with the flag off refuses, and with it on succeeds — without that third arm a refusal is indistinguishable from a server that never started, because `package:http` wraps connection-refused in the same `ClientException`. ⛔ **Do not commit a PEM fixture** — GitHub push protection can block a private key; mint it in `setUpAll`. | Nothing |
+| S-5 residual | ⛔ **POST-D1 CLEAN-UP, not a D1 gate** (gkc, 2026-08-23). ⚠️ **This row read "D1 GATE, and it lands on [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) while that is open" earlier the same day**, and the PR-#2179 window no longer constrains it — after D1 that PR will be long merged, so the test goes wherever `RegistrarService` then lives. It is `G1` in [THE NEXT MOVE](#the-next-move), below the gates rather than at the top of them. Everything below is the harness, kept intact for whoever picks it up. **The registrar's switch to validating TLS certificates is untested, here and in CI.** `RegistrarService`'s default client used to accept ANY certificate - `badCertificateCallback` returning true unconditionally, on calls carrying the registrar API key. It is now a plain `package:http` client that validates, with the bypass behind `RegistrarIoClient.allowBadCertificates`, off by default and shouted when used. **Neither arm has a test**, and CI cannot catch a regression: `RegistrarIoClient` appears in ZERO CI job logs (control: `RegistrarService` appears), and `RegistrarIoClient.create()` has **no in-tree caller at all** - it is a public opt-in for consumers, which is deliberate, so do not delete it as dead code. Owed: a test pinning both arms against a self-signed local server. ⚠️ **Attempted and parked 2026-08-22**, so the next reader does not start cold: the shape works — mint a cert at test time with `openssl req -x509 -newkey rsa:2048 -nodes -subj /CN=localhost`, serve it with `HttpServer.bindSecure`, and point `RegistrarService` at `localhost:<port>`, which `Uri.https` accepts as an authority. Three arms, and the third is the positive control that proves the server is up: the default client refuses, `RegistrarIoClient.create()` with the flag off refuses, and with it on succeeds — without that third arm a refusal is indistinguishable from a server that never started, because `package:http` wraps connection-refused in the same `ClientException`. ⛔ **Do not commit a PEM fixture** — GitHub push protection can block a private key; mint it in `setUpAll`. | Nothing |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | ⛔ **STEP 29 LEAVES D1 — all four dispositioned 2026-08-23.** ① perf ceiling on real low-end hardware → post-D1 cleanup (#2153). ② UC-A3.4 → done 2026-08-17. ③ SS-4 resume → **ruled NO RESUME** (the election makes republishing a filed pair a regression) and **re-filed as orphan growth**: `store()` calls `addKey`, nothing in `crypto/nskey/` retires a filed private, so every abandoned mint — crash or the designed lease-expiry abandon — permanently adds key material to the user's `.atKeys`. ④ IS-1 drift → not D1; at_server #2683 is open, untouched since 2026-08-06, and already ruled to be pared back | Only ③'s orphan-growth half is owed here, and it is a decision before it is code |
 | [14.12](#1412-a-mintlegacymaterialfalse-atsign-cannot-write-a-public-record) | ⛔ **NOT D1 (gkc, 2026-08-23) — it gates the post-R-2 stop-release.** A `mintLegacyMaterial:false` atSign cannot write a public record. Out of D1 because both moves it needs are B-3 phase 1, which is parked, and nothing about it blocks the carve; the live assertion in `pq_legacy_interop_live_test.dart` keeps it pinned and the flag must still not be recommended | Two moves its body names, neither scheduled: public-record signing onto the ML-DSA signing root, and self data off `selfEncryptionKey` onto the nskey path (B-3 phase 1). ⚠️ This cell read "Gates the stop-release" until 2026-08-18 — which is what 14.12 *blocks*, so anyone scanning this column for what is ready to start misread the row as ready |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | **Why `enrollment_setup.dart` takes ~4 minutes.** Measured at 3:56 and 4:59 against the @ce2e atSigns; 30 seconds is nowhere near enough and the budget is now 15 minutes, which hides rather than explains it. gkc asked for the cause, 2026-08-20 — **not a D1 gate (2026-08-23), but owed to him rather than plan-generated hygiene, so do not quietly demote it.** ⚠️ **What this row still lacks is the thing that would let anyone start:** how to obtain `config14.yaml` and the `@ce2e` keyfiles locally. Until that is written down, the only route is a CI round trip. ⚠️ My sync-backlog reading is NOT established — `end2end_tests` runs the same four atSigns and the same suite in ~3 minutes | ⛔ **@ce2e-only — it does NOT reproduce locally, and this cell said it did.** `runLocal.sh` regenerates `config/config.yaml` from at_demo_data, and against demo atSigns the same four enrollments take about ONE SECOND — a local run reproduces the symptom's ABSENCE. The ~3-minute local repro belonged to a DIFFERENT and already-fixed defect (14.41 row 3's cache key). Reaching this one needs `config14.yaml` and the @ce2e keyfiles, i.e. a CI round trip, and nothing here records how to get those locally |
