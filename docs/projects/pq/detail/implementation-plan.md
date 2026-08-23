@@ -3836,91 +3836,12 @@ its own. None blocks anything.
 
 #### 14.19.1 Things that LOOK like defects and are not
 
-Recorded because each was proposed as a fix and **rejected on evidence**.
-Without this note the next reader re-derives the proposal, "fixes" it, and ships
-a false claim — one of them was already drafted into a CHANGELOG line before an
-adversarial pass killed it. Items 1–3 came from ruling 6; the rest were raised
-later, so do not read this list as scoped to one ruling. **Add to it rather
-than re-litigating an entry**, and if an entry is genuinely wrong, amend it in
-place with what it used to say.
-
-0. **Do NOT add a "refuse a document carrying a top-level `atSignKeys` by
-   name" guard.** Proposed 2026-08-15 while renaming that field to
-   `atsignKeys`, on the precedent of A1's refusal of a stale top-level `keys`
-   (which is a real guard and stays). ⚠️ **The two cases are not alike, and
-   the difference is who holds the stale document.** A1's `keys` guard protects
-   against a shape *this tree itself wrote and shipped through several of its
-   own commits*, so a stale file could plausibly be sitting on a machine that
-   matters. `atSignKeys` existed only between A1 and this rename, was never
-   released — zero matches across all ten at_auth versions in the pub cache,
-   with `class AtKeys` as the positive control — and the only files carrying it
-   are ones our own functional runs generate and regenerate. gkc ruled it out
-   the same day. A guard here would be code no reachable file can trigger,
-   which reads as a supported migration path that does not exist.
-1. **A corrupt-base64 pairwise envelope is NOT misclassified as transient.**
-   It is tempting to read `sweepOnce`'s broad `catch` arm as the "retry
-   forever" path and the `received == null` arm as the "deterministic skip"
-   path, and to claim routing the decode through `pqOpenFromBase64` changes the
-   outcome. It does not: both arms run the same two statements — release the
-   claim, log a warning — and neither deletes, so the envelope waits for ttl
-   expiry either way. Only the log line and the classification differ. Do not
-   describe this as a behaviour or at-rest change.
-2. **An `on PqSealException` arm at the nskey seal site would be dead code.**
-   `pqSeal` throws it in exactly one place, the unsupported-version refusal,
-   and `NskeyProvider.encrypt`'s own version guard makes that unreachable — the
-   version always comes from `sealVersionFor`. The wrong-length-key case that
-   arm looks like it catches arrives from `encapsulate`, which at_chops now
-   maps itself.
-3. **Do NOT tighten `_openIfSymmetricKey`'s `catch (e)` to a typed catch.**
-   `enrollment_symmetric_key.dart` documents "every rejection is a skip rather
-   than a throw", its caller's poll loop has no `try` at all, and a throw there
-   fails the whole enrollment — recoverable only by re-requesting, since the
-   conveyed `apkamSymmetricKey` is written once. The breadth is the contract.
-   [Section 47.6](decisions.md#476-two-defects-in-the-enrollment-path-both-from-the-same-shape)
-   records the two defects that breadth was introduced to fix.
-4. **A suite-versus-key-algorithm guard in `_consume` would change no
-   outcome.** Once a client can hold keys under more than one KEM
-   ([14.18](#1418-the-remaining-d1-initial-development-sequence) step 5), an
-   envelope can name an ML-KEM suite and an X-Wing key, and it looks like
-   something to refuse before the open. It is not: at_chops maps the
-   wrong-length secret key to a `PqOpenException`, which the open already
-   catches and skips, and its message names the mismatch outright
-   ("ML-KEM-1024 secret key must be 3168 bytes: 32"). The guard was written,
-   removing it turned nothing red, and it comes out — a check that changes no
-   outcome and reads like a security check it is not. What *does* matter is
-   pinned instead: the envelope is skipped rather than crashing the sweep, so
-   the good envelopes behind it in the batch still arrive.
-5. **Do NOT add `atKeysIo ??= KeychainAtKeysIo()` to at_client_flutter's
-   `AuthService.authenticate()`.** `onboard()` has exactly that line
-   (`auth_service.dart:40`) and `authenticate()` does not, which reads as an
-   oversight and is not. `AtAuthRequest`'s constructor already refuses a
-   request carrying neither `atKeysIo` nor `atAuthKeys`
-   (`at_auth_requests.dart:119`), so on the authenticate path the `??=` could
-   only ever fire when the caller supplied **`atAuthKeys`** — an app that
-   loaded its own key material and is telling you so. Defaulting a keychain
-   source there points the client at a store that may hold another atSign's
-   keys, or none. The asymmetry is correct: onboarding *mints* keys and needs
-   somewhere to write them, while authenticating does not. Proposed and
-   rejected 2026-08-13 while wiring [14.18](#1418-the-remaining-d1-initial-development-sequence)
-   step 11; the same reasoning is now a comment above the method, because the
-   invitation is in the file rather than in this document.
-6. **Do NOT add `update` to at_client's `EnrollmentService`.** The invitation is
-   strong and will recur: `AtEnrollment.update` landed with no at_client-side
-   entry point, `EnrollmentServiceImpl` already wraps an `AtEnrollment`, and it
-   already forwards `approve`/`deny`/`revoke` — so exposing `update` beside them
-   looks like finishing the job. It is not. That facade is the **approver** side:
-   every verb on it needs a connection holding `__manage` and acts on *somebody
-   else's* enrollment. `enroll:update` is the opposite — no privilege at all, and
-   only ever on the enrollment the connection *is*, with the atServer refusing an
-   owner connection rather than waving it through. Putting both behind one
-   interface makes the two authorities look interchangeable to every caller and
-   every reviewer, which is the distinction the whole self-only security argument
-   rests on. Note also that the facade does **not** mirror `AtEnrollment` today —
-   it carries no `submit`, no `list`, no otp verbs — so "it forwards the others"
-   was never the rule. Proposed and rejected 2026-08-13 while landing
-   [14.18](#1418-the-remaining-d1-initial-development-sequence) step 16. When
-   steps 17–18 need to reach `update` from at_client, give it a seam of its own
-   on the signing path rather than widening this one.
+⛔ **Moved to [ruling 116](../decisions.md) on 2026-08-23. Do not restore this
+copy.** It had diverged from the live plan's copy of the same section — this one
+carried items 0-6, the live one 0-8, and they differed by 68 lines. The two
+entries missing here were the most recent, including one whose own text says it
+"will look obvious again". That divergence is why the list now has a single
+home.
 
 ### 14.20 Building rulings 98 and 99 — the sequence
 

@@ -8495,7 +8495,7 @@ matrix in [`acceptance.md` 16.5](../acceptance.md#165-the-rollout-matrix) is
 corrected accordingly — it becomes a data-path matrix, with the envelope
 exchange a `now`/`rollout1`/`rollout2` question.
 
-The lesson is the one [section 14.19.1](../implementation-plan.md#14191-things-that-look-like-defects-and-are-not)
+The lesson is the one [section 14.19.1](#116-proposals-rejected-on-evidence-2026-08-23)
 keeps relearning from the other side: this claim was checked by grepping the
 released tree for `lib/src/signing/`, which is where *this* tree keeps the
 code. The released build kept it somewhere else. A search for the directory
@@ -8613,7 +8613,7 @@ nothing red. at_chops maps the wrong-length secret key to a `PqOpenException`
 that the open already catches and skips, and the message names the mismatch
 ("ML-KEM-1024 secret key must be 3168 bytes: 32"). A check that changes no
 outcome and reads like a security check it is not. Belongs beside
-[14.19.1](../implementation-plan.md#14191-things-that-look-like-defects-and-are-not).
+[14.19.1](#116-proposals-rejected-on-evidence-2026-08-23).
 
 ## 96. The programme pair gets a home outside the workspace (2026-08-14)
 
@@ -11481,3 +11481,139 @@ reads `Wrote stats to 1 monitor connection`.
 **The build order is not ruled.** The measured recommendation is arm 1 and the
 ledger first, both on the VE, with arms 3 and 4 following once the monitor
 breakage is diagnosed.
+
+## 116. Proposals rejected on evidence (2026-08-23)
+
+**Promoted from plan item 14.19.1 on 2026-08-23**, because a rejection is a
+decision and the plan is being reduced to what is still owed. Nothing here is
+recoverable from the codebase or from `git log`: a proposal that was rejected
+was never built, so no commit contains it.
+
+⚠️ **It existed in TWO copies that had diverged** — the live plan's carried
+items 0-8, `detail/implementation-plan.md`'s carried 0-6, and the two differed
+by 68 lines. The stale copy was missing exactly the two most recent entries,
+including one that says of itself that it "will look obvious again". This is
+the merged, live set; do not restore the other.
+
+⛔ **Add to this list rather than re-litigating an entry.** If an entry is
+genuinely wrong, amend it in place with what it used to say.
+
+Recorded because each was proposed as a fix and **rejected on evidence**.
+Without this note the next reader re-derives the proposal, "fixes" it, and ships
+a false claim — one of them was already drafted into a CHANGELOG line before an
+adversarial pass killed it. Items 1–3 came from ruling 6; the rest were raised
+later, so do not read this list as scoped to one ruling. **Add to it rather
+than re-litigating an entry**, and if an entry is genuinely wrong, amend it in
+place with what it used to say.
+
+0. **Do NOT add a "refuse a document carrying a top-level `atSignKeys` by
+   name" guard.** Proposed 2026-08-15 while renaming that field to
+   `atsignKeys`, on the precedent of A1's refusal of a stale top-level `keys`
+   (which is a real guard and stays). ⚠️ **The two cases are not alike, and
+   the difference is who holds the stale document.** A1's `keys` guard protects
+   against a shape *this tree itself wrote and shipped through several of its
+   own commits*, so a stale file could plausibly be sitting on a machine that
+   matters. `atSignKeys` existed only between A1 and this rename, was never
+   released — zero matches across all ten at_auth versions in the pub cache,
+   with `class AtKeys` as the positive control — and the only files carrying it
+   are ones our own functional runs generate and regenerate. gkc ruled it out
+   the same day. A guard here would be code no reachable file can trigger,
+   which reads as a supported migration path that does not exist.
+1. **A corrupt-base64 pairwise envelope is NOT misclassified as transient.**
+   It is tempting to read `sweepOnce`'s broad `catch` arm as the "retry
+   forever" path and the `received == null` arm as the "deterministic skip"
+   path, and to claim routing the decode through `pqOpenFromBase64` changes the
+   outcome. It does not: both arms run the same two statements — release the
+   claim, log a warning — and neither deletes, so the envelope waits for ttl
+   expiry either way. Only the log line and the classification differ. Do not
+   describe this as a behaviour or at-rest change.
+2. **An `on PqSealException` arm at the nskey seal site would be dead code.**
+   `pqSeal` throws it in exactly one place, the unsupported-version refusal,
+   and `NskeyProvider.encrypt`'s own version guard makes that unreachable — the
+   version always comes from `sealVersionFor`. The wrong-length-key case that
+   arm looks like it catches arrives from `encapsulate`, which at_chops now
+   maps itself.
+3. **Do NOT tighten `_openIfSymmetricKey`'s `catch (e)` to a typed catch.**
+   `enrollment_symmetric_key.dart` documents "every rejection is a skip rather
+   than a throw", its caller's poll loop has no `try` at all, and a throw there
+   fails the whole enrollment — recoverable only by re-requesting, since the
+   conveyed `apkamSymmetricKey` is written once. The breadth is the contract.
+   [Section 47.6](#476-two-defects-in-the-enrollment-path-both-from-the-same-shape)
+   records the two defects that breadth was introduced to fix.
+4. **A suite-versus-key-algorithm guard in `_consume` would change no
+   outcome.** Once a client can hold keys under more than one KEM
+   ([14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) step 5), an
+   envelope can name an ML-KEM suite and an X-Wing key, and it looks like
+   something to refuse before the open. It is not: at_chops maps the
+   wrong-length secret key to a `PqOpenException`, which the open already
+   catches and skips, and its message names the mismatch outright
+   ("ML-KEM-1024 secret key must be 3168 bytes: 32"). The guard was written,
+   removing it turned nothing red, and it comes out — a check that changes no
+   outcome and reads like a security check it is not. What *does* matter is
+   pinned instead: the envelope is skipped rather than crashing the sweep, so
+   the good envelopes behind it in the batch still arrive.
+5. **Do NOT add `atKeysIo ??= KeychainAtKeysIo()` to at_client_flutter's
+   `AuthService.authenticate()`.** `onboard()` has exactly that line
+   (`auth_service.dart:40`) and `authenticate()` does not, which reads as an
+   oversight and is not. `AtAuthRequest`'s constructor already refuses a
+   request carrying neither `atKeysIo` nor `atAuthKeys`
+   (`at_auth_requests.dart:119`), so on the authenticate path the `??=` could
+   only ever fire when the caller supplied **`atAuthKeys`** — an app that
+   loaded its own key material and is telling you so. Defaulting a keychain
+   source there points the client at a store that may hold another atSign's
+   keys, or none. The asymmetry is correct: onboarding *mints* keys and needs
+   somewhere to write them, while authenticating does not. Proposed and
+   rejected 2026-08-13 while wiring [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence)
+   step 11; the same reasoning is now a comment above the method, because the
+   invitation is in the file rather than in this document.
+6. **Do NOT add `update` to at_client's `EnrollmentService`.** The invitation is
+   strong and will recur: `AtEnrollment.update` landed with no at_client-side
+   entry point, `EnrollmentServiceImpl` already wraps an `AtEnrollment`, and it
+   already forwards `approve`/`deny`/`revoke` — so exposing `update` beside them
+   looks like finishing the job. It is not. That facade is the **approver** side:
+   every verb on it needs a connection holding `__manage` and acts on *somebody
+   else's* enrollment. `enroll:update` is the opposite — no privilege at all, and
+   only ever on the enrollment the connection *is*, with the atServer refusing an
+   owner connection rather than waving it through. Putting both behind one
+   interface makes the two authorities look interchangeable to every caller and
+   every reviewer, which is the distinction the whole self-only security argument
+   rests on. Note also that the facade does **not** mirror `AtEnrollment` today —
+   it carries no `submit`, no `list`, no otp verbs — so "it forwards the others"
+   was never the rule. Proposed and rejected 2026-08-13 while landing
+   [14.18](../implementation-plan.md#1418-the-remaining-d1-initial-development-sequence) step 16. When
+   steps 17–18 need to reach `update` from at_client, give it a seam of its own
+   on the signing path rather than widening this one.
+
+7. **Do NOT make the mint lock release itself while its lease is unspent.**
+   Proposed 2026-08-16 — by me, and *recommended* — when the first live run of
+   [14.24](implementation-plan.md#1424-the-nskey-mint-elects-a-winner--decisions-105) showed a
+   rotation refused for the two minutes after a mint. The argument was that it
+   is sound by construction: `MintLease.expiresAt` is stamped *before* the take
+   goes out, so "unspent by my clock" implies the atServer has not expired it
+   either, so the lock cannot be a successor's — closing the stolen-release
+   window properly while keeping rotation responsive.
+   **gkc rejected it.** Step 6 of the election protocol
+   ([decisions 105.2](#1052-the-protocol-gkc-specified)) is
+   that the winner does not delete the lock, and it binds rotation as well as
+   the mint election. The cooldown is the design, not a cost to engineer away.
+   ⚠️ **It will look like an obvious improvement again**, because the refusal
+   is visible in a test failure and the change is six lines. What is not
+   visible from the code is that a lock nobody deletes has **no**
+   stolen-release window to close, and adding a delete back reintroduces the
+   whole class — which is what
+   [14.19](../implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18
+   was, and it took two sessions to kill. If this is re-opened, the thing to
+   change is the *protocol*, in a ruling — not `MintLock`. See
+   [decisions 105.6](#1056-built-the-cooldown-binds-rotation-too).
+
+8. **`revokeEnrollmentAndRotate` does NOT retry a rotation the cooldown
+   refused, and that was decided rather than overlooked.** It revokes first, so
+   a refusal leaves the enrollment cut off from the atServer while still
+   holding the live generation. Retrying in-process would mean sleeping for the
+   ttl inside a call that already did the destructive half, and swallowing the
+   partial state rather than surfacing it. It instead catches per namespace,
+   logs `severe` naming the cooldown as the likely cause, and carries on to the
+   other namespaces. If this is revisited, the question is whether the CALLER
+   can see which namespaces failed — `outcomes` lists only the successes today,
+   so a caller counting them cannot tell a refusal from a namespace that had
+   nothing to rotate.
