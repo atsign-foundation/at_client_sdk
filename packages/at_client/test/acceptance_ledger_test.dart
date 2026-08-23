@@ -19,7 +19,8 @@ import 'package:test/test.dart';
 import '../tool/acceptance_ledger.dart';
 
 /// A citation to `f`, naming `t` — the shape `provenIn` records.
-Citation _cite(String f, String t) => Citation('UC-X1.1', 'tests/pack/$f', t, 'why');
+Citation _cite(String f, String t) =>
+    Citation('UC-X1.1', 'tests/pack/$f', t, 'why');
 
 void main() {
   group('namesMatch', () {
@@ -40,8 +41,10 @@ void main() {
       // provenIn matches the START of a test name by design, so a citation is
       // routinely shorter than the test it names.
       expect(
-          namesMatch('the readiness query says yes once the destination has '
-              'published a key', 'says yes once the destination has published'),
+          namesMatch(
+              'the readiness query says yes once the destination has '
+                  'published a key',
+              'says yes once the destination has published'),
           isTrue);
     });
 
@@ -49,7 +52,8 @@ void main() {
       // The other direction, and the dangerous one: a matcher loose enough to
       // pair any citation with any test would report the catalogue fully proven
       // by a run that proved none of it.
-      expect(namesMatch('the legacy escape hatch is shut by default',
+      expect(
+          namesMatch('the legacy escape hatch is shut by default',
               'says yes once the destination has published a key'),
           isFalse);
     });
@@ -63,7 +67,8 @@ void main() {
     ];
 
     test('PROVEN when the cited test ran and passed', () {
-      expect(verdictFor(_cite('cited_test.dart', 'the cited test name'), passed),
+      expect(
+          verdictFor(_cite('cited_test.dart', 'the cited test name'), passed),
           'PROVEN');
     });
 
@@ -72,7 +77,8 @@ void main() {
         RanTest('A group of things the cited test name', 'cited_test.dart',
             'failure'),
       ];
-      expect(verdictFor(_cite('cited_test.dart', 'the cited test name'), failed),
+      expect(
+          verdictFor(_cite('cited_test.dart', 'the cited test name'), failed),
           'FAILED');
     });
 
@@ -80,8 +86,7 @@ void main() {
       // The state a citation alone can never express, and the reason this tool
       // exists. It must not be reported as a failure: nothing is broken, the
       // run simply did not include that pack.
-      expect(
-          verdictFor(_cite('never_reported_test.dart', 'whatever'), passed),
+      expect(verdictFor(_cite('never_reported_test.dart', 'whatever'), passed),
           'NOT-EXERCISED');
     });
 
@@ -90,8 +95,8 @@ void main() {
       // row PROVEN here — because *something* in the file passed — is the
       // over-matching failure, and it would be invisible.
       expect(
-          verdictFor(_cite('cited_test.dart', 'a name nothing here carries'),
-              passed),
+          verdictFor(
+              _cite('cited_test.dart', 'a name nothing here carries'), passed),
           'NOT-EXERCISED');
     });
 

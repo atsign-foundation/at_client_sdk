@@ -72,9 +72,10 @@ List<Citation> readCitations(File f) {
     // unnumbered. They are keyed by their own name and reported in their own
     // table — dropping them would hide 14 of 135 citations, and inventing ids
     // for them would put a number in the catalogue that nothing else uses.
-    final id = _ucInName.firstMatch(scenario)?.group(0) ?? invariantKey(scenario);
-    out.add(Citation(
-        id, m['path'] as String, m['testName'] as String, m['proves'] as String));
+    final id =
+        _ucInName.firstMatch(scenario)?.group(0) ?? invariantKey(scenario);
+    out.add(Citation(id, m['path'] as String, m['testName'] as String,
+        m['proves'] as String));
   }
   return out;
 }
@@ -115,7 +116,8 @@ List<RanTest> readReport(File f) {
 /// cannot disagree with it about which rows exist.
 Map<String, String> readCatalogue(File f) {
   final rows = <String, String>{};
-  final re = RegExp(r'^\|\s*(UC-[A-Z][0-9]+\.[0-9]+[a-z]*)\s*\|\s*([^|]+?)\s*\|',
+  final re = RegExp(
+      r'^\|\s*(UC-[A-Z][0-9]+\.[0-9]+[a-z]*)\s*\|\s*([^|]+?)\s*\|',
       multiLine: true);
   for (final m in re.allMatches(f.readAsStringSync())) {
     rows[m.group(1)!] = m.group(2)!;
@@ -166,8 +168,8 @@ void main(List<String> args) {
 
   final citations = readCitations(File(citationsPath));
   final ran = [for (final p in reportPaths) ...readReport(File(p))];
-  final catalogue = readCatalogue(File(
-      '${Directory.current.path}/../../docs/projects/pq/acceptance.md'));
+  final catalogue = readCatalogue(
+      File('${Directory.current.path}/../../docs/projects/pq/acceptance.md'));
 
   final byUseCase = <String, List<Citation>>{};
   for (final c in citations) {
@@ -189,7 +191,8 @@ void main(List<String> args) {
     ..writeln('- **NO-LIVE-CITATION** — the row proves itself in-process, so '
         'there is nothing here to exercise.')
     ..writeln()
-    ..writeln('Reports read: ${reportPaths.isEmpty ? "none" : reportPaths.join(", ")}')
+    ..writeln(
+        'Reports read: ${reportPaths.isEmpty ? "none" : reportPaths.join(", ")}')
     ..writeln('Tests reported: ${ran.length}   Citations: ${citations.length}')
     ..writeln()
     ..writeln('| Use case | Verdict | Where |')
@@ -251,7 +254,8 @@ void main(List<String> args) {
     ..writeln()
     ..writeln('## Totals')
     ..writeln();
-  for (final e in (tally.entries.toList()..sort((a, b) => a.key.compareTo(b.key)))) {
+  for (final e in (tally.entries.toList()
+    ..sort((a, b) => a.key.compareTo(b.key)))) {
     b.writeln('- ${e.key}: ${e.value}');
   }
   b.writeln('- rows in catalogue: ${catalogue.length}');
