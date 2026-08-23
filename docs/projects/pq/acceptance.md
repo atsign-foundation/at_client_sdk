@@ -1551,10 +1551,14 @@ perl -0777 -ne 'while (/(?<![A-Za-z0-9_])test\(\s*[\x27"]/gs){$n++} END{print "$
   $(find tests -name '*.dart')                                                    # 247
 ```
 
-Both `runLocal.sh` harnesses take an image override, `VIRTUALENV_IMAGE`,
-defaulting to the locally built `at_virtual_env:local`; CI runs against
-`atsigncompany/virtualenv:dev_env`. ⚠️ **A green local run does not imply CI
-parity** — check which image produced a result before citing it.
+All **three** `runLocal.sh` harnesses take an image override,
+`VIRTUALENV_IMAGE`, each defaulting to the locally built `at_virtual_env:local`;
+CI runs against `atsigncompany/virtualenv:dev_env`. ⚠️ **A green local run does
+not imply CI parity** — check which image produced a result before citing it.
+⚠️ This said "Both", and `find tests -name runLocal.sh` returns three: the CLI
+pack has had one since 2026-08-19, and it defaulted to the published `vip`
+until 2026-08-23, which cannot verify ML-DSA PKAM — so a bare run there failed
+the one test in the corpus that activates a post-quantum atSign.
 
 ### Where the catalogue actually stands
 
