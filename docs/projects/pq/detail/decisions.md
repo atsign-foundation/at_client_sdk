@@ -11379,11 +11379,13 @@ EE's contract.
 ⛔ **Build every EE from a named ref; never pull `ephemeral:latest`**, which is
 rebuilt monthly against a VE that publishes per commit.
 
-**4 prerequisites**, each verified and each written up in the specification: the
-functional pack has no `dart_test.yaml` and no `pq` tag; `PqPosture.pqActive`
-was thought to break the monitor and does not — measured, and the failure is
-not posture-dependent; `manifest.dart` sits where no pack can import it;
-and `provenIn`'s matcher cannot tell a test from a comment.
+**4 prerequisites**, each verified and each written up in the specification.
+**Two are already discharged**: the functional pack had no `dart_test.yaml` and
+no `pq` tag and now declares the tag with 29 of its 49 test files carrying it, guarded by
+`test/pq_tag_test.dart`; and `PqPosture.pqActive` was thought to break the
+monitor and does not — measured, and the failure is not posture-dependent.
+**Two remain**: `manifest.dart` sits where no pack can import it, and
+`provenIn`'s matcher cannot tell a test from a comment.
 
 ⛔ **This ruling carried a hypothesis that is now DISPROVEN, 2026-08-23.** It
 read: *"the pqActive monitor breakage and 14.34 may be one problem — both are a

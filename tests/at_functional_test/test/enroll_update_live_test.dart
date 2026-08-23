@@ -1,6 +1,9 @@
 // The enrollment fixture is @experimental; driving it is the point here.
 // ignore_for_file: experimental_member_use
 
+@Tags(['pq'])
+library;
+
 import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';

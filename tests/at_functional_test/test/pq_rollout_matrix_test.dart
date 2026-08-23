@@ -1,5 +1,6 @@
 // Sixteen cells, each two client startups against a live atServer.
 @Timeout(Duration(minutes: 30))
+@Tags(['pq'])
 library;
 
 import 'dart:async' show Completer, StreamSubscription, TimeoutException;

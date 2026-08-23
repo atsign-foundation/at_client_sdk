@@ -3,6 +3,9 @@
 // of this file, so the annotation has nothing to tell us here.
 // ignore_for_file: experimental_member_use
 
+@Tags(['pq'])
+library;
+
 import 'dart:convert' show base64Decode, jsonDecode;
 
 import 'package:at_client/at_client.dart';

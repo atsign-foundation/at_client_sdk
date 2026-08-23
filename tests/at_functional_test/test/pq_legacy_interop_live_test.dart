@@ -1,6 +1,7 @@
 // Three CRAM activations and six cross-atSign round trips; the 30s default is
 // not enough for the group, and setUpAll runs under it too.
 @Timeout(Duration(minutes: 5))
+@Tags(['pq'])
 library;
 
 // The substrate is deliberately marked @experimental and will be reshaped as

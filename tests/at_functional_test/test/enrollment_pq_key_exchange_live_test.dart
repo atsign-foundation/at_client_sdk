@@ -3,6 +3,9 @@
 // of this file.
 // ignore_for_file: experimental_member_use
 
+@Tags(['pq'])
+library;
+
 import 'dart:convert' show base64Decode;
 
 import 'package:at_auth/at_auth.dart';

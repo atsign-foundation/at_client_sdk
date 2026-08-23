@@ -1,6 +1,9 @@
 // The key-package surface is @experimental; driving it is the point here.
 // ignore_for_file: experimental_member_use
 
+@Tags(['pq'])
+library;
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart'
     show AtChopsImpl, AtChopsKeys, AtEncryptionKeyPair, AtPkamKeyPair;

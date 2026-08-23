@@ -1725,11 +1725,27 @@ existing functional pack.
 
 Each verified against the tree rather than assumed.
 
-**The functional pack has no test-selection machinery.**
-`tests/at_functional_test/dart_test.yaml` does not exist and no file in that
-pack carries `@Tags(['pq'])` — 0 hits, against 9 in the e2e pack as a control.
-The pack meant to host the matrix has no tag and no allowlist, so
-`dart test --tags pq` selects nothing there.
+✅ **~~The functional pack has no test-selection machinery.~~ Built 2026-08-23.**
+It read: "`tests/at_functional_test/dart_test.yaml` does not exist and no file
+in that pack carries `@Tags(['pq'])` — 0 hits, against 9 in the e2e pack as a
+control." That pack now declares the `pq` tag and **29** of its 49 test files
+carry it, chosen by the mechanisms they drive rather than by their names — two
+of the most important (`copied_keyfile_test`, `crypto_era_default_test`) have
+no `pq` in their filename at all.
+
+⛔ **It has no `paths:` allowlist, deliberately**, which is the difference from
+`tests/at_end2end_test`. That pack allowlists because its atSigns are
+long-lived and real, and it pays for that with the risk that an unlisted test
+silently never runs. This pack's virtualenv is created and thrown away per run,
+so an allowlist would carry the same risk with none of the benefit. A bare run
+still executes every file.
+
+`test/pq_tag_test.dart` is the rail that keeps the set honest: it re-derives
+which files should carry the tag and fails naming any that do not, so a new PQ
+test cannot quietly sit outside the set the stage and matrix arms select on. It
+is mutation-proven — removing one tag reddens it with that filename — and it
+carries both controls, a real PQ file and a real non-PQ one, so a broken
+matcher is distinguishable from a clean pack.
 
 **~~A posture-faithful pqActive cell cannot notify yet.~~ Measured 2026-08-23:
 the monitor failure is real but is NOT posture-dependent.** A throwaway probe

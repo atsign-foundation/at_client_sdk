@@ -2,6 +2,9 @@
 // them from another package is the point of this file.
 // ignore_for_file: experimental_member_use
 
+@Tags(['pq'])
+library;
+
 import 'dart:convert';
 import 'dart:typed_data';
 

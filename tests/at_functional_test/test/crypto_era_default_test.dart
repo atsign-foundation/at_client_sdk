@@ -2,6 +2,9 @@
 // the point of this file.
 // ignore_for_file: experimental_member_use
 
+@Tags(['pq'])
+library;
+
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_functional_test/src/config_util.dart';

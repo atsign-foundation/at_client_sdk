@@ -1,0 +1,21 @@
+# Tag declarations for the functional pack.
+#
+# ⛔ **No `paths:` allowlist here, deliberately, and that is the difference
+# from `tests/at_end2end_test`.** That pack allowlists because its atSigns
+# (@ce2e1..@ce2e4) are long-lived and real, so a test nobody listed must not be
+# able to reach them; the cost it accepts is that an unlisted test silently
+# never runs, which is why `suite_manifest_test.dart` exists there to catch it.
+#
+# This pack runs against a virtualenv container that is created and thrown away
+# per run, so there is nothing to protect and nothing to gain from an
+# allowlist — only that same silent-omission risk with no upside. A bare
+# `dart test` here runs every file under `test/`, which is what CI does.
+#
+# Declaring a tag does not filter anything: it stops the runner warning about
+# an unrecognised tag, and it makes `--tags pq` / `-x pq` mean something.
+tags:
+  # Every file exercising a post-quantum mechanism. `pq_tag_test.dart` is the
+  # rail that keeps this set honest — it re-derives which files should carry
+  # the tag and fails when one does not, so a new PQ test cannot quietly sit
+  # outside the set the matrix work selects on.
+  pq:
