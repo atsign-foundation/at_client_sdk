@@ -44,6 +44,30 @@ import 'test_utils.dart';
 /// the enrollment's mode and the client's posture are separate things here.
 /// Reading a result below as evidence about key exchange would be reading a
 /// constant as a variable.
+///
+/// ⚠️ **Each pq cell runs under a DIFFERENT enrollment id from the one it was
+/// enrolled as, and both ids are real.** [enrolAndAuthenticate] hands back the
+/// id the atServer assigned to the OTP enrollment it submitted; two of the
+/// three clients then leave that enrollment behind before their constructor
+/// returns.
+///
+/// The OTP path has no algorithm to ask with. `AtEnrollmentRequest` carries no
+/// `signingAlgo` field, and the APKAM keypair that
+/// `EnrollmentSubmitter._handleAtEnrollmentRequest` submits comes from
+/// `AtChopsUtil.generateAtPkamKeyPair`, which takes a key size and nothing
+/// else and is RSA-2048 always — so an enrollment minted this way
+/// authenticates with RSA whichever posture ends up holding it. A pqReady or
+/// pqActive preference therefore arrives at
+/// `AtClientImpl._settleEnrollmentIdentity` holding rsa2048 and wanting
+/// mldsa65, `AtClientImpl.retrofitIsDue` says a retrofit is due, and the
+/// client self-enrols and comes up on a NEW enrollment id — all of it inside
+/// `AtClientImpl.create`.
+///
+/// So: `AtClient.enrollmentId` is the id a client is authenticated as,
+/// [EnrolledClient.enrollmentId] is the id it was enrolled as, and for the two
+/// pq cells they are different strings. Anything asserting what a client IS
+/// has to read the first. Reading the second compares ids that no client is
+/// running under, which passes just as happily and measures nothing.
 void main() {
   // All three cells share one atSign on purpose: they are compared against
   // each other, so anything that differs between them other than the posture
@@ -129,9 +153,46 @@ void main() {
         {true, false},
         reason: 'the refusal flag must take both values across the three '
             'cells, or the differential below has only one arm');
-    expect(cells.values.map((c) => c.enrollmentId).toSet(), hasLength(3),
+
+    // Read off the CLIENT rather than off the EnrolledClient. The cache key is
+    // the id the client is authenticated as *now*, and for two of these cells
+    // that is not the id their enrolment returned — see the note above [main].
+    final runningIds = {
+      for (final stage in stages.keys) stage: clientAt(stage).enrollmentId
+    };
+    for (final entry in runningIds.entries) {
+      expect(entry.value, isNotNull,
+          reason: '${entry.key}: a client with no enrollment id is not '
+              'authenticated as an enrollment at all, and a set of nulls '
+              'collapses the distinctness check below into one element');
+    }
+    expect(runningIds.values.toSet(), hasLength(3),
         reason: 'three distinct enrollment ids, or two cells share a client '
             'cache key and one of them is not the stage it claims');
+
+    // And the retrofit itself, which nothing else in this file would notice.
+    // A posture wanting a key the OTP path cannot mint must have MOVED its
+    // client off the enrollment it was handed; the posture wanting exactly
+    // what that path mints must have stayed. Both arms, because a changed id
+    // on its own would also be produced by handing a cell the wrong client.
+    for (final entry in stages.entries) {
+      final enrolledAs = cells[entry.key]!.enrollmentId;
+      if (entry.value.authenticationKeyAlgorithm == SigningAlgoType.rsa2048) {
+        expect(runningIds[entry.key], enrolledAs,
+            reason: '${entry.key}: this posture wants the rsa2048 key the OTP '
+                'enrollment already minted, so no retrofit is due and the '
+                'client must still be running as the enrolled id $enrolledAs');
+      } else {
+        expect(runningIds[entry.key], isNot(enrolledAs),
+            reason: '${entry.key}: this posture wants '
+                '${entry.value.authenticationKeyAlgorithm.name} while the OTP '
+                'enrollment minted rsa2048, so the client must have '
+                'retrofitted itself off the enrolled id $enrolledAs during '
+                'construction. Still running as it means the retrofit never '
+                'fired and this cell is a legacy client wearing a pq '
+                'preference');
+      }
+    }
   });
 
   test('UC-C1.1 · the era default follows the stage on a live client',
