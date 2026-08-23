@@ -1823,21 +1823,39 @@ it, which is the state the old design could not express at all, since a
 citation is satisfied whether or not anything ran; **NO-LIVE-CITATION** means
 the row proves itself in-process.
 
-Measured 2026-08-23 over all four report sources — the functional pack
-(182/182), the e2e pack (54/54), at_client (1519/1519) and at_auth (342/342) —
-with all 135 citations recorded:
+Measured 2026-08-23 **from a real CI run's artefacts** — both workflows, five
+emitting jobs: `unit_at_client` (1532/1532, which also recorded the 139
+citations), `functional_tests` (186/186), `pqe2e_tests` (17/17),
+`legacy_server_tests` (2/2) and at_libraries' `build_and_test` for at_auth
+(342/342):
 
-**62 PROVEN · 1 NOT-EXERCISED · 6 NO-LIVE-CITATION** over 69 rows, and **6 of
+**63 PROVEN · 0 NOT-EXERCISED · 6 NO-LIVE-CITATION** over 69 rows, and **6 of
 6** cross-cutting invariants PROVEN.
 
+⚠️ **Read that against the earlier figure rather than replacing it in your
+head.** This said "**62 PROVEN · 1 NOT-EXERCISED**", measured over four sources
+run **locally**. Both are correct about the runs they were given, and neither
+is a coverage statement: the local set could not reach UC-B0.1, which needs
+CI's pinned pre-PQ atServer, and the CI set could not reach at_auth's 12
+citations until `build_and_test` began emitting. Only the two together reach
+every row that cites anything live, which is the point of the verdicts being
+about runs rather than about code.
+
+⚠️ **The two runs are one commit apart** (`at_client_sdk` on `f7661ab26`,
+`at_libraries` on `4e176f91b`), and the join is still sound because the later
+commit changed no `provenIn` call — `git show 4e176f91b -- packages/at_client/test/acceptance/ | grep -c provenIn`
+→ 0. Check that before joining artefacts from different runs; a citation added
+between them would silently go unmatched.
+
 The 6 are the 5 rows that prove themselves against mocks plus withdrawn
-UC-C1.3. **The 1 is UC-B0.1**, and it is the result worth trusting the tool
-over: nobody told the ledger about that row's special case, and it found it
-anyway. UC-B0.1 needs a pinned pre-PQ atServer and runs in its own
-`legacy_server_tests` job under the `legacy-server` tag, which a local e2e run
-excludes — so "not exercised by these runs" is the correct and complete answer,
-and it matches the residue [this section already
-records](#the-build-order-and-what-it-leaves).
+UC-C1.3. **UC-B0.1 is PROVEN here and was the `1 NOT-EXERCISED` in the local
+figure**, which is the result worth trusting the tool over: nobody told the
+ledger about that row's special case, and it reported the gap anyway. It needs
+a pinned pre-PQ atServer and runs in its own `legacy_server_tests` job under
+the `legacy-server` tag — which a local e2e run excludes and CI runs, so each
+figure is right about the runs it was handed. That is the residue [this section
+already records](#the-build-order-and-what-it-leaves), now closed by rendering
+from CI rather than by changing any test.
 
 ⚠️ **Re-derive this table rather than quoting it, and treat a low PROVEN count
 as a question about the matcher before it is a question about coverage.** The

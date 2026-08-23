@@ -11382,8 +11382,12 @@ has open — and it belongs beside the catalogue it exists to prove.
 - **The ledger** — each pack writes a results file, one reporter renders the
   catalogue from what actually ran, so a row no run exercised says so instead
   of staying green. ✅ **The row level is BUILT, 2026-08-23**, and reads
-  **62 PROVEN · 1 NOT-EXERCISED · 6 NO-LIVE-CITATION** across 69 rows over all
-  four report sources. ⚠️ **The clause level is not** — this bullet was written
+  **63 PROVEN · 0 NOT-EXERCISED · 6 NO-LIVE-CITATION** across 69 rows, measured
+  from a real CI run's artefacts over both workflows (2026-08-23). ⚠️ It read
+  "62 PROVEN · 1 NOT-EXERCISED … over all four report sources", measured
+  locally; the differing row is UC-B0.1, which only CI exercises. Re-derive
+  with `tools/acceptance_ledger.sh`, and see
+  [acceptance.md section 14](../acceptance.md#the-generated-ledger). ⚠️ **The clause level is not** — this bullet was written
   as "each live test declares the clauses it proves … clause-level, so an
   overclaim becomes a computed fact", and that half still wants each live test
   to declare its clauses. Row level needed no change to any of the 194 live
