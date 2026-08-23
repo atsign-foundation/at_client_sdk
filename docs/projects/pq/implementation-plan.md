@@ -36,6 +36,13 @@ rotation arm is green". The carve, the publishes and the rotation arm are all
 still owed and still sequenced — they are simply not what *defines* the
 boundary. R-2 still follows D1.
 
+⚠️ **Read that together with G6 and G7 below, which say the train and the
+rotation arm are D1 work, because the two are easy to read as contradicting.**
+They are not: the acceptance criterion is what *ends* D1, and the carves,
+publishes and rotation arm are work that has to happen before it can be met.
+"In D1" means "owed before D1 closes"; it does not mean "defines when D1
+closes". Nothing outside the acceptance set can move the boundary.
+
 ⛔ **"All acceptance tests pass" is true today and does not yet mean what this
 definition needs.** All 69 catalogue rows read `PROVEN` (68 live, UC-C1.3
 withdrawn) and all 68 live ones have a scenario — but the rail checks
@@ -79,9 +86,11 @@ Re-ranked **2026-08-23**, after gkc walked every open item and ruled each one
 in or out of D1. ⛔ **The definition of D1 changed in that pass and this list is
 ordered by it**: D1 ends when every acceptance test passes and every rail is
 green, the posture matrix included, with the acceptance set complete,
-implemented and verified. Everything else is a judgement call. Entries 1–5
-below are the D1 gates that ruling produced; 6 and 7 are the train and the work
-that rides it.
+implemented and verified. Everything else is a judgement call. ⚠️ **The
+gates are lettered `G1`–`G7` and begin at "THE D1 GATES, in order" further
+down; the numbered entries 1–8 above them are struck history.** This sentence
+said "entries 1–5 below", which points at the wrong list — a file that has
+already been bitten once by duplicate ordinals.
 
 The pass before it, **2026-08-22 evening**, struck entry 4 when the at_auth
 carve landed as [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179),
@@ -214,14 +223,12 @@ that file instead; the list below is the PQ release work.
    unblocked for publish as well as carve**: its `at_commons: ^5.16.0` floor
    is satisfiable on pub.dev as of 2026-08-21, and 14.18's compile
    differential already established it needs nothing newer than the
-   at_chops it was tested against. Recipe is in
-   [14.18](#1418-the-remaining-d1-initial-development-sequence) — worktree
-   off `origin/trunk`, hyphenated branch name (`gkc-pq-d1-at-lookup`), and
-   the gate is
-   `git -C /tmp/carve-at_lookup diff gkc-pq-d1-spike --stat -- packages/at_lookup`
-   returning **empty**. Then analyze and test the package *and its
-   consumers*, dispatch CI, and raise with the org template. Needs
-   commit/push permission.
+   at_chops it was tested against. ⚠️ **The carve recipe that used to sit here
+   has been removed: this entry is DONE, and ten lines of imperative
+   instructions under a struck heading read as work to do.** The recipe lives
+   in [14.18](#1418-the-remaining-d1-initial-development-sequence), amended
+   there with what the at_auth carve taught — byte-identical to the spike is a
+   default rather than a rule, and a MAJOR cannot be carved package-only.
 6. ~~Close out [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)'s
    remainder~~ **Done 2026-08-21, all of it.** All four original shapes have
    diagnosed, mutation-proven fixes; the last open members closed today:
@@ -288,7 +295,8 @@ state.
 
 **G4. Migrate 14.11's bucket B** — the 71 credential-ladder uses
 (`enrollmentId` 59, `signingAlgoType` 12) onto the `AtAuthenticator` seam that
-at_lookup 3.7.0 already ships. 24 sites in `lib/`, 47 in tests, across
+at_lookup 3.7.0-rc1 ships **on trunk** — pub.dev is still 3.6.1, and in this
+file that distinction is the whole gate. 24 sites in `lib/`, 47 in tests, across
 at_client, at_onboarding_cli and at_auth. The only one of the five
 `deprecated_member_use` buckets with a replacement that exists today.
 
@@ -316,8 +324,11 @@ moved every remaining package to a candidate the same week, so the live gate is
 now **at_lookup `3.7.0-rc1`, which is not on pub.dev** (latest is 3.6.1;
 re-derive with
 `curl -s https://pub.dev/api/packages/at_lookup | python3 -c "import sys,json;print(json.load(sys.stdin)['latest']['version'])"`).
-at_auth floors `^3.7.0-rc1`, so its carve cannot resolve until gkc publishes
-that. Each package still waits on its own predecessor being released before it
+⛔ **at_auth floors `^3.7.0-rc1`, and that does NOT block its carve — this
+sentence said it did until 2026-08-23.** A pub workspace resolves its siblings
+by path, so [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179)
+resolved and went 47/47 green with at_lookup unpublished. What the publish gates
+is **publishing at_auth**, never carving or merging it. Each package still waits on its own predecessor being released before it
 can declare a floor against it, which is what the order in
 [14.18](#1418-the-remaining-d1-initial-development-sequence) is for.
 The remaining external gate is the one 14.18 records for the LAST carves, not
@@ -332,7 +343,7 @@ run is as new as the last manual dispatch and no newer.
 command below: runs **`32588333812`** (at_client_sdk, 11/11) and
 **`32588342275`** (at_libraries, 13/13), both `success`, both on
 **`64480808d`** — which was HEAD when this was written and is now the newest
-commit that **touches code**. Re-derived 2026-08-23: HEAD is 7 commits past it
+commit that **touches code**. Re-derived 2026-08-23: HEAD is 8 commits past it
 and `git diff --name-only 64480808d..HEAD` is entirely under `docs/`, so this
 green still covers every line of code on the branch. Re-run the check below
 rather than extending that reasoning to the next commit. CI's own per-suite counts match the local ones —
@@ -377,6 +388,7 @@ carried inside a closed one.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
+| at_auth README | ⛔ **NOT a D1 gate, but it should ride [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) with G1** — `packages/at_auth/README.md` describes `FileAtKeysIo` at `:144` and `:191` and **never mentions `at_auth_io.dart`**. The barrel split is the single most consumer-visible change in 4.0.0 — a `dart:io` consumer has to add one import — and the CHANGELOG says so at length while the README says nothing. No code miscompiles from it (the README shows no import statements at all), which is why it is not a gate. Found by the wrap-up docs sweep 2026-08-23 | Nothing. One or two sentences where `FileAtKeysIo` is first named |
 | **acceptance audit** | ⛔ **D1 GATE — establish the gap precisely, then decide the target** (gkc, 2026-08-23). **The rationale, in gkc's words:** *"we have literally hundreds of functional and end to end tests which cover the acceptance tests together. But there is no definitive place where it is easy to see the entirety of the pq project's acceptance tests being proven. The posture matrix test is the logical place to build test out."* So the problem is **legibility, not coverage**. Measured 2026-08-23: **180** live test declarations across 65 files, and only **29 of the 69** use-case ids are nameable anywhere in that live suite. ⚠️ **The count depends entirely on the matcher, so use this one** — `grep -rhoE "^[[:space:]]*test\([[:space:]]*'" tests/at_functional_test/test tests/at_end2end_test/test --include='*.dart' | wc -l`. A looser `grep -o 'test('` gives 225 and an indentation-anchored one 224; this row said 224 until the three were compared — the other 40 are very likely covered and cannot be seen to be. The posture matrix, the intended home, is **3** `test()` calls proving **2** use cases (UC-G1.14, UC-G1.15). ⚠️ **A citation count is not a coverage count** — an earlier pass here reported "27 of 68 have no live proof" when what it had measured was 27 with no live proof *cited from their acceptance scenario*. Do not restate it as coverage. For the record, the citation picture: of 68 scenarios, 2 cite the matrix, 39 cite some live test, 22 cite unit tests only, and 5 cite nothing and are themselves mock tests (UC-A3.1, UC-A3.4, UC-B3.1, UC-B3.2, UC-B5.2; UC-A3.1 runs against `MockAtClient()`). ⚠️ **And nothing checks the claims.** `catalogue_test.dart`'s five tests are all structural; none asks whether a scenario proves what its row asserts, and the `proves:` prose is matched against nothing ([14.19 item 29](detail/implementation-plan.md#1419-small-items-raised-2026-08-12-and-not-yet-acted-on)). The one known overclaim, item 36's three clauses of UC-A2.5/UC-A2.6, was found by hand. **Owed, in this order:** (1) for each of the 68, find where it is *actually* exercised live — searching the packs, not just reading citations; (2) decide which are genuinely **posture-dependent**, since several of A3's self-data cases may not vary by posture at all; (3) decide the target and build the matrix out to be the one place the catalogue can be seen being proven. **Re-derive**: `grep -rho 'UC-[ABCG][0-9]*\.[0-9]*[a-z]*' tests/at_functional_test/test tests/at_end2end_test/test | sort -u | wc -l` against the 69 in `acceptance.md` | Nothing |
 | [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race) residue | ⛔ **NOT D1, and NOT PQ (gkc, 2026-08-23)** — recorded here only because this project has no other checked-in owed-work list. The behaviour is in `sync_service_impl.dart`, i.e. at_client's general sync, and no use case asserts sync ordering. The test-side fix landed in `ccf4987a4`. **A sync pull applies an OLDER server entry over NEWER local state** — the pull-side face of the versioning shape C fixed on the push side. Recorded when 14.43 closed and not designed since. Also open from that section: a driver-side `expect` failure on a protocol-green cell still dumps nothing | Nothing. The section carries the discriminators for any future red of the family |
 | [14.45](detail/implementation-plan.md#1445-an-expired-key-the-client-cannot-delete-pins-it-in-a-hot-loop) residue | ⚠️ **In another repo: `at_persistence_secondary_server`.** Its keystore `get()` does not filter expired records, which is what let an expired key be read back and re-swept. Named here because this is where the work that found it lives; it does not land here | Separately owned. Not a D1 gate |
@@ -391,7 +403,7 @@ carried inside a closed one.
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | **NOT a D1 gate (gkc, 2026-08-23) — hygiene.** It is green alone and green in the full suite, and reddens only in one hand-constructed non-alphabetical ordering that nothing actually runs, so no rail as invoked is at risk. Keep the reproduction recipe. **A unit-tree isolation flake**: `local_secondary_sync_queue_test.dart` failed 1-in-4 when run after the nskey/pq files in one non-alphabetical invocation — a same-file test's queue entry leaked into a later test, so the per-test store isn't always fresh. Green alone, green in the full suite | Reproduce at rate (~10 runs of the four-file order), then read the file's setUp for what makes the store per-test fresh |
 | [14.46](#1446-executeverbs-sync-parameter-is-inert-on-both-secondaries) | **`executeVerb`'s `sync` parameter does nothing** — declared, never read, on at_client's both secondaries AND at_lookup. **Decided and phase 1 shipped 2026-08-20**: `@Deprecated` on all six declarations for 3.x, removal in 4.0; every cross-package and every prose-reasoned call site cleaned. ⛔ **NOT D1 (gkc, 2026-08-23)** — the removal rides at_client/at_lookup **4.0**, and nothing in the acceptance set asserts the parameter (its one catalogue mention is prose about a mock). Still in the section: a stale at_server comment #2169 will falsify, which lands in a sibling repo | **Removal at 4.0** — delete the parameter from all six declarations and let the compiler enumerate the ~76 remaining same-package sites |
 | [14.44](#1444-residuals-from-the-at_chops-pr-review) | Residuals from the at_chops PR review. ✅ **The first is DONE 2026-08-22**, in the at_auth carve as this row said it should be — `encode` refuses an `ArgonHashParams` whose `hashLength` is not the value `decode` will use, which was the section's own preferred option over persisting it. **Two remain:** `XWingCore.combine` writes at hardcoded 32-byte offsets while sizing its buffer from actual lengths — ⛔ **both remaining residuals are POST-D1 (gkc, 2026-08-23)**, and the severity is worth recording: it is **correct for X-Wing**, whose four inputs are all 32 bytes, and **latent and silent** otherwise, because `setRange(0, 32, …)` takes the first 32 bytes of a longer input without error and yields a well-formed but wrong digest; and at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence whose durable record is ruling 110's addendum | Nothing. Both remaining ones go whenever at_chops is next open |
-| [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | **STAYS IN D1, with the bucket-B migration** (gkc, 2026-08-23). Re-measured 2026-08-23: **754** findings — at_client 396, at_onboarding_cli 205, at_auth 153, at_lookup **0** (the section's 345/183/110/28 table is stale). Five buckets, and only **B** has a replacement that exists today: 71 credential-ladder uses (`enrollmentId` 59, `signingAlgoType` 12) moving onto the `AtAuthenticator` seam at_lookup 3.7.0 ships — **24 sites in `lib/`, 47 in tests**. A (AtChops compatibility API, 530) and C (legacy flat keyfile fields, 118) are transient and get **no ignores yet**; D (27) is at v5 | Nothing. Every package exits 0, so none of this blocks a carve |
+| [14.11](#1411-deprecated_member_use-findings-across-the-workspace) | **STAYS IN D1, with the bucket-B migration** (gkc, 2026-08-23). Re-measured 2026-08-23: **754** findings — at_client 396, at_onboarding_cli 205, at_auth 153, at_lookup **0** (the section's table now carries both columns — the 2026-08-18 figures and these, so it needs no further update). Five buckets, and only **B** has a replacement that exists today: 71 credential-ladder uses (`enrollmentId` 59, `signingAlgoType` 12) moving onto the `AtAuthenticator` seam at_lookup 3.7.0 ships — **24 sites in `lib/`, 47 in tests**. A (AtChops compatibility API, 530) and C (legacy flat keyfile fields, 118) are transient and get **no ignores yet**; D (27) is at v5 | Nothing. Every package exits 0, so none of this blocks a carve |
 | [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart) | ⛔ **D1 GATE (gkc, 2026-08-23).** `self_enrollment_retrofit_live_test.dart` failed **once in five** pack runs. D1 now ends when every rail is green, and an unexplained live failure at that rate makes "green" a rate rather than a state — so it has to be understood before D1 closes | Unexplained. Not a flake and not fixed — a rate, not a kind |
 | [14.29](#1429-the-residuals-1425-surfaced) | ⛔ **NOT D1 (2026-08-23)** — the section's own text says none of these blocks D1's remaining sequence, and SS-2's `__ssenv` half is explicitly *deferred, not owed*: the 2026-08-03 ruling took DEP4 off SS-2 and what is left is a pure optimisation. SS-2's `__ssenv` and two small S-3 items — none blocking. Re-read 2026-08-18: B-1's residuals had shipped and S-3's migration test existed, so this row said **three B-1 residuals, three small S-3 items** against an actual none and two | — |
 | [14.39](#1439-pqposture-and-the-rollout-it-drives) | `PqPosture` — **mostly DONE 2026-08-19**: the rename, the 3 postures, the posture-only refusal flag, the sender-side algorithm list and the CLI's `--posture` all shipped, live-green. **Client-driven retrofit at start is BUILT 2026-08-19**, sequenced into `_init` rather than re-pointing a live client; unit-green and **live-green** — functional 174/174 (after one 173/174 whose single failure was [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)), e2e pq 54/54, and the `legacy-server` arm 2/2 against the pinned `atsigncompany/virtualenv:vip-p3.15.0`. **Owed: public-data signature verification** (undesigned) — ⛔ **POST-D1, and deliberately NOT in the acceptance catalogue (gkc, 2026-08-23)**: `dataSignature` appears zero times in `acceptance.md`, against 28 mentions of "signature" as a control, so nothing asserts it. ⚠️ Worth stating plainly since it reads as an omission otherwise: `pqActive` already **signs** public data and nothing anywhere verifies it — not at_client, not the atServer — so we emit a signature no one checks, knowingly | Nothing |
@@ -939,7 +951,7 @@ rulings 2 and 3 are amended in place.
 | 27 | ✅ **DONE 2026-08-15** — domain separation on the signed envelope, per-use `typ` plus a root-link prefix ([`decisions.md` 103](detail/decisions.md#103-an-envelope-says-what-it-is-for-and-a-verifier-says-what-it-wants-2026-08-15)) | [14.8](detail/implementation-plan.md#148-domain-separation-on-the-signed-envelope) |
 | 28 | ✅ **DONE AS NOTED 2026-08-20 — the naming WAS the deliverable.** 14.7 establishes that a migration here does not break NoPorts: it imports none of at_client's functions, signs with the encryption keypair and fetches `getRemotePK` rather than `_apsk`. There is nothing to build. It becomes a separately-owned second migration only if the envelope pitch becomes RFC 7515, and that conditional is what this row records. | [14.7](detail/implementation-plan.md#147-noports-carries-its-own-copy-of-the-envelope-shape) |
 | 29 | **Three** audit residuals — perf ceiling on a real low-end device, SS-4 interrupted-mint resume, IS-1 record-name drift. ⚠️ This read **four**, including UC-A3.4's live self-direction, until 2026-08-18 — 14.16's own body has marked that ✅ DONE since 2026-08-17 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) |
-| 30 | `deprecated_member_use` across the workspace. ⚠️ **RE-DERIVED 2026-08-20 at `26644e779`: 780, not the 666 this row used to record** — at_client **396**, at_onboarding_cli **205**, at_auth **153**, at_lookup **26**, at_chops 0, at_commons 0 (`dart analyze lib test` per package, `grep -c deprecated_member_use`). ⛔ **RULED 2026-08-20: all 780 are in D1's bar.** ⚠️ **76 of them are this project's own**, added deliberately by the at_lookup consolidation's six credential deprecations and the `AtLookupImpl` constructor deprecation; the other 704 are the at_chops compatibility shim, `AtSigningInput` and `apkamPublicKey`. Clearing the 76 means moving at_client's eight readers of `atLookUp.enrollmentId` and the `atChops` readers off those members — the work filed as **BLOCKS THE MAJOR** in `docs/projects/at-lookup-consolidation/plan.md` section 6. That is non-breaking: the members stay, their callers leave. | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
+| 30 | `deprecated_member_use` across the workspace. ⚠️ **RE-DERIVED 2026-08-20 at `26644e779`: 780, not the 666 this row used to record** — at_client **396**, at_onboarding_cli **205**, at_auth **153**, at_lookup **26**, at_chops 0, at_commons 0 (`dart analyze lib test` per package, `grep -c deprecated_member_use`). ⛔ **THAT RULING IS SUPERSEDED. It read "RULED 2026-08-20: all 780 are in D1's bar" until 2026-08-23**, when gkc ruled the opposite: the findings are triaged into five buckets and **only bucket B — the 71 credential-ladder uses — is D1 work**; A and C are transient and get no ignores yet, D waits for v5. Re-measured the same day: **754**, with at_lookup at **0**, not 26. ⚠️ **76 of them are this project's own**, added deliberately by the at_lookup consolidation's six credential deprecations and the `AtLookupImpl` constructor deprecation; the other 704 are the at_chops compatibility shim, `AtSigningInput` and `apkamPublicKey`. Clearing the 76 means moving at_client's eight readers of `atLookUp.enrollmentId` and the `atChops` readers off those members — the work filed as **BLOCKS THE MAJOR** in `docs/projects/at-lookup-consolidation/plan.md` section 6. That is non-breaking: the members stay, their callers leave. | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) |
 | 31 | ✅ **DONE — nothing owed since 2026-08-10.** The one item (the functional pack's compose hardcoding a local image) is struck in the body; the external gate it names is step 32's blocker, not a checklist entry. This row carried no state until 2026-08-18, which in this table reads as open | [14.15](detail/implementation-plan.md#1415-pre-pr-rails-checklist) |
 
 Also in D1, runnable in parallel: **S-3**'s completion, **B-3** ([#2128](https://github.com/atsign-foundation/at_client_sdk/issues/2128),
