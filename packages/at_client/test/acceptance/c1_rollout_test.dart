@@ -27,6 +27,16 @@ void main() {
     provenIn('packages/at_client/test/at_client_impl_test.dart',
         'the legacy posture keeps writes legacy in the adopted era set',
         proves: 'the 3.x arm: same provider set, writes stay legacy');
+    provenIn('tests/at_functional_test/test/pq_stage_arm_test.dart',
+        'UC-C1.1 · the era default follows the stage on a live client',
+        proves: 'all three stages side by side on real clients: the middle '
+            'stage still writes legacy, which is what makes it a stage of its '
+            'own rather than a name for the last one');
+    provenIn('tests/at_functional_test/test/pq_stage_arm_test.dart',
+        'each stage reaches its own constructed client',
+        proves: 'the Given the arm rests on — that the posture survives '
+            'enrolment and construction, so the rows above are about the '
+            'stage rather than about a default');
   });
 
   test('UC-C1.2 · the refusal axis: the posture disallows legacy writes', () {
@@ -47,6 +57,19 @@ void main() {
     provenIn('packages/at_client/test/disallow_legacy_encryption_test.dart',
         'a client configured to write legacy',
         proves: 'what the flag does once set: the legacy write is refused');
+    // The four above are unit arms against a mock, which never runs
+    // AtClientImpl's initialisation — so a posture that reached the constant
+    // and never reached a client would satisfy all of them. These two are the
+    // first live proof this row has had.
+    provenIn('tests/at_functional_test/test/pq_stage_arm_test.dart',
+        'UC-C1.2 · pqActive refuses a legacy write that the earlier stages take',
+        proves: 'the refusal on a real constructed client, with the two '
+            'earlier stages taking the identical write as controls — so the '
+            'refusal is caused by the stage and not by the key');
+    provenIn('tests/at_functional_test/test/pq_stage_arm_test.dart',
+        'UC-C1.2 · the refusal fires through a real put, not only at selection',
+        proves: 'the guarantee holds through the put pipeline, not merely at '
+            'provider selection');
   });
 
   test('UC-C1.4 · the key-exchange axis: the posture names pq enrollment', () {
