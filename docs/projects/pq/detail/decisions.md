@@ -11361,10 +11361,15 @@ has open — and it belongs beside the catalogue it exists to prove.
   capability flip, rotation, revocation, the rollout ladder.
 - **Arm 4, the server-version arm** — client posture crossed with atServer
   version, retiring the pinned-image special case.
-- **The ledger** — each live test declares the clauses it proves, each pack
-  writes a results file, one reporter renders the catalogue from what actually
-  ran. Clause-level, so an overclaim becomes a computed fact rather than
-  something found by reading.
+- **The ledger** — each pack writes a results file, one reporter renders the
+  catalogue from what actually ran, so a row no run exercised says so instead
+  of staying green. ✅ **The row level is BUILT, 2026-08-23**, and reads
+  **62 PROVEN · 1 NOT-EXERCISED · 6 NO-LIVE-CITATION** across 69 rows over all
+  four report sources. ⚠️ **The clause level is not** — this bullet was written
+  as "each live test declares the clauses it proves … clause-level, so an
+  overclaim becomes a computed fact", and that half still wants each live test
+  to declare its clauses. Row level needed no change to any of the 194 live
+  tests; clause level does, which is the whole difference in cost.
 
 **Why the EE is what makes arm 3 possible.** A transition has to re-mint;
 `(appName, deviceName)` is one-shot server state and CRAM activation is one-shot
@@ -11386,6 +11391,16 @@ no `pq` tag and now declares the tag with 29 of its 49 test files carrying it, g
 monitor and does not — measured, and the failure is not posture-dependent.
 **Two remain**: `manifest.dart` sits where no pack can import it, and
 `provenIn`'s matcher cannot tell a test from a comment.
+
+⚠️ **`manifest.dart`'s move was listed here as a ledger prerequisite and is
+not one.** The ledger was built on 2026-08-23 without it: the runner's own
+`--file-reporter json:` output, joined to the citations `provenIn` records,
+turned out to be sufficient, so nothing moved into at_client's shipped surface
+and none of the 194 live tests changed. The move still blocks the *in-pack
+rails* — each pack asserting its own citations — which is a different thing
+wanting the same file. **A prerequisite is owed to a purpose, not to a
+project**, and this one lost the purpose it was written for while keeping
+another.
 
 ⛔ **This ruling carried a hypothesis that is now DISPROVEN, 2026-08-23.** It
 read: *"the pqActive monitor breakage and 14.34 may be one problem — both are a

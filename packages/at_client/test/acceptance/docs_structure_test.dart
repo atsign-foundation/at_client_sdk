@@ -97,6 +97,7 @@ void main() {
     // gets deleted rather than obeyed.
     for (final file in [
       ..._liveFiles,
+      'detail/acceptance.md',
       'detail/decisions.md',
       'detail/implementation-plan.md',
     ]) {
@@ -606,6 +607,7 @@ void main() {
       final offences = <String>[];
       for (final file in [
         ..._liveFiles,
+        'detail/acceptance.md',
         'detail/decisions.md',
         'detail/implementation-plan.md'
       ]) {

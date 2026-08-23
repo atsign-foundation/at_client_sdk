@@ -112,6 +112,25 @@ List<RanTest> readReport(File f) {
   return out;
 }
 
+/// Finds the catalogue by walking up from the working directory.
+///
+/// It used to be `'${Directory.current.path}/../../docs/…'`, which works from
+/// `packages/at_client` and throws a stack trace anywhere else — including the
+/// repo root, which is the obvious place to try. A tool that runs from exactly
+/// one directory and fails with a stack trace rather than a sentence is a tool
+/// people stop using.
+File? findCatalogue() {
+  var dir = Directory.current.absolute;
+  for (var i = 0; i < 8; i++) {
+    final f = File('${dir.path}/docs/projects/pq/acceptance.md');
+    if (f.existsSync()) return f;
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  return null;
+}
+
 /// The catalogue's own row set, read from the status table so the ledger
 /// cannot disagree with it about which rows exist.
 Map<String, String> readCatalogue(File f) {
@@ -168,8 +187,14 @@ void main(List<String> args) {
 
   final citations = readCitations(File(citationsPath));
   final ran = [for (final p in reportPaths) ...readReport(File(p))];
-  final catalogue = readCatalogue(
-      File('${Directory.current.path}/../../docs/projects/pq/acceptance.md'));
+  final catalogueFile = findCatalogue();
+  if (catalogueFile == null) {
+    stderr.writeln('cannot find docs/projects/pq/acceptance.md from '
+        '${Directory.current.path} or any parent — run this from inside the '
+        'repository');
+    exit(2);
+  }
+  final catalogue = readCatalogue(catalogueFile);
 
   final byUseCase = <String, List<Citation>>{};
   for (final c in citations) {

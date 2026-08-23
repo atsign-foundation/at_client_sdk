@@ -1536,13 +1536,14 @@ the pair grid spawns, which is why the `published` column can hold a released
 at_client this tree cannot. Count them with `find tests -name pubspec.yaml`, not
 `tests/*/`: a depth-2 glob returns 4 and reads as the whole answer.
 
-⚠️ **The live corpus is 4 packs, and every earlier measurement here counted 2.**
 No `provenIn` citation reaches either CLI pack, which is why the CLI pack's
 two-arm posture differential — the best live evidence for UC-C1.6 and a second
 live proof of UC-A1.1 — is invisible from this catalogue. Counted 2026-08-23,
 the strict matcher gives **194** live `test()` declarations across all 4 and a
 multi-line-aware one **247**; the gap is entirely declarations whose name sits
 on the next line, since an any-position same-line matcher also returns 194.
+⚠️ **Earlier figures here were scoped to 2 packs**
+([why that matters](detail/acceptance.md#the-corpus-was-measured-over-2-packs-when-there-are-4)).
 
 ```bash
 grep -rhoE "^[[:space:]]*test\([[:space:]]*'" tests/ --include='*.dart' | wc -l   # 194
@@ -1550,15 +1551,10 @@ perl -0777 -ne 'while (/(?<![A-Za-z0-9_])test\(\s*[\x27"]/gs){$n++} END{print "$
   $(find tests -name '*.dart')                                                    # 247
 ```
 
-⚠️ **The image-override gap this section used to describe is closed.** It read
-that both packs pin `atsigncompany/virtualenv:vip`, that "no work package
-delivers an image-override path", and asked for "an image-override env var
-(e.g. `VE_IMAGE`) honoured by **both** `runLocal.sh` harnesses". That env var
-exists and is called `VIRTUALENV_IMAGE`: both harnesses read it and default to
-the locally built `at_virtual_env:local`, and CI runs against
-`atsigncompany/virtualenv:dev_env` rather than `:vip`. The advice that a green
-local run does not imply CI parity still holds — check which image produced a
-result before citing it.
+Both `runLocal.sh` harnesses take an image override, `VIRTUALENV_IMAGE`,
+defaulting to the locally built `at_virtual_env:local`; CI runs against
+`atsigncompany/virtualenv:dev_env`. ⚠️ **A green local run does not imply CI
+parity** — check which image produced a result before citing it.
 
 ### Where the catalogue actually stands
 
@@ -1690,36 +1686,17 @@ the 194 live tests. Three pieces:
 - `packages/at_client/tool/acceptance_ledger.dart` joins the two and renders
   every catalogue row with a verdict.
 
-**In CI**, four jobs now emit a report and upload it —
-`unit_at_client` (which also records the citations), `functional_tests`,
-`pqe2e_tests` and `legacy_server_tests`. Each upload is `if: always()`
-deliberately: a suite that *failed* is exactly when knowing which rows lost
-their proof matters most.
+**In CI**, four jobs emit a report and upload it — `unit_at_client` (which also
+records the citations), `functional_tests`, `pqe2e_tests` and
+`legacy_server_tests` — each `if: always()`, since a suite that *failed* is
+when knowing which rows lost their proof matters most. ✅ Exercised by dispatch
+`32643853854`, which found two things offline validation could not
+([what](detail/acceptance.md#what-the-first-ci-run-showed-that-offline-validation-could-not)).
 
-⛔ **The rendering step is NOT wired, and that is a decision rather than an
-omission.** Combining the four artefacts in a later job needs
-`actions/download-artifact`, which this repo has never used — every action here
-is SHA-pinned, and there is no trusted pin for it in this repo or in at_server.
-Guessing one is how a workflow breaks, so CI publishes the inputs and the
-combined page is rendered on demand until somebody picks that pin. The
-`upload-artifact` pin used here is the one `scorecards.yml` already carries.
-
-✅ **The CI half has now run** — dispatch `32643853854`, where the three e2e and
-functional jobs went green and uploaded their reports. Two things that only a
-real run could show:
-
-- **The `unit_at_client` report is absent when that job fails early.** It died
-  at the format gate, before the test step, so there was no file to upload;
-  `if: always()` ran the upload and it warned rather than failing the job,
-  which is the intended behaviour. A missing report means "that suite did not
-  get as far as running", and the ledger renders its rows NOT-EXERCISED, which
-  is true.
-- **A matrixed job uploads once per leg**, so `unit_at_client` and
-  `functional_tests` — both on `dart-channel: [stable, beta]` — collided on one
-  artifact name. Harmless for storage and ambiguous for anything that later
-  downloads by name, so both now carry `${{ matrix.dart-channel }}`. Offline
-  validation could not have found this: the YAML was correct, and the duplicate
-  only exists at run time.
+⛔ **The rendering step is NOT wired, and that is a decision.** Combining the
+artefacts needs `actions/download-artifact`, which this repo has never used —
+every action here is SHA-pinned and there is no trusted pin for it here or in
+at_server. So CI publishes the inputs and the page is rendered on demand.
 
 The verdicts are about the runs supplied, not about the code. **PROVEN** means
 a cited test ran and passed; **NOT-EXERCISED** means no supplied report covers
@@ -1728,7 +1705,7 @@ citation is satisfied whether or not anything ran; **NO-LIVE-CITATION** means
 the row proves itself in-process.
 
 Measured 2026-08-23 over all four report sources — the functional pack
-(182/182), the e2e pack (54/54), at_client (1509/1509) and at_auth (342/342) —
+(182/182), the e2e pack (54/54), at_client (1519/1519) and at_auth (342/342) —
 with all 135 citations recorded:
 
 **62 PROVEN · 1 NOT-EXERCISED · 6 NO-LIVE-CITATION** over 69 rows, and **6 of
@@ -1743,21 +1720,13 @@ excludes — so "not exercised by these runs" is the correct and complete answer
 and it matches the residue [this section already
 records](#the-build-order-and-what-it-leaves).
 
-⚠️ **The first version of this scored 28 and the figure looked entirely
-plausible.** The runner reports a grouped test as `"<group> <name>"` while a
-citation names the test's own name, so a `startsWith` match silently missed
-every grouped test — most of both unit suites. It was caught only by asking why
-a file in a report that *had* been supplied was still reading NOT-EXERCISED.
-**Re-derive this table rather than quoting it**, and treat a low PROVEN count as
-a question about the matcher before it is a question about coverage.
-
-`packages/at_client/test/acceptance_ledger_test.dart` now pins that join, in
-both directions, because a defect in it does not look like a defect — it looks
-like a coverage report. Too strict under-reports and reads as missing coverage;
-too loose reports rows as proven by tests that never mention them, which is
-worse, since nothing downstream questions a green. Mutation-proven both ways:
-restoring `startsWith` reddens the grouped-test case, and an always-true matcher
-reddens the two over-matching cases.
+⚠️ **Re-derive this table rather than quoting it, and treat a low PROVEN count
+as a question about the matcher before it is a question about coverage.** The
+first version scored 28 rather than 62 and looked entirely plausible
+([how](detail/acceptance.md#the-ledgers-first-version-scored-28-instead-of-62)).
+`packages/at_client/test/acceptance_ledger_test.dart` pins that join in both
+directions, mutation-proven, because a defect in it does not look like a defect
+— it looks like a coverage report.
 
 **The cross-cutting invariants get their own table**, so all 135 citations are
 accounted for and none is dropped. [Section
@@ -1765,21 +1734,21 @@ accounted for and none is dropped. [Section
 flow and are deliberately unnumbered, so they are keyed by their own wording
 rather than forced into the use-case table or given invented ids — a reader
 asking "is this row proven" and one asking "does this invariant still hold" are
-asking different questions. On the same run: **2 PROVEN · 4 NOT-EXERCISED**.
-Only 6 of the 10 appear, because the other 4 assert in-process and cite nothing
-live.
+asking different questions. Only 6 of the 10 appear, because the other 4
+assert in-process and cite nothing live; over all four report sources all
+**6 of 6** are PROVEN. ⚠️ This line read "2 PROVEN · 4 NOT-EXERCISED **on the
+same run**" while the headline above it said 6 of 6 — two figures from
+different runs, sitting four paragraphs apart and contradicting each other.
 
 **Still owed: the clause level.** Today a row is proven or not. Turning
-"UC-A2.5 has 3 unproven clauses" into a computed fact needs each live test to
-declare the clauses it establishes, which is the part that does touch the
-tests.
-
-**Clause-level rather than row-level** is what makes it worth building. It turns
 "UC-A2.5 has 3 unproven clauses" from a footnote somebody found by reading into
-a computed fact, and it is the mechanism that closes those clauses structurally.
+a computed fact needs each live test to declare the clauses it establishes —
+the half that does touch the tests, and the mechanism that closes those clauses
+structurally rather than by hand.
 `tests/at_end2end_test/test/suite_manifest_test.dart` is the precedent for the
 in-pack half: a rail that runs in the package owning the evidence, so a rename
-reddens the pack that caused it.
+reddens the pack that caused it. That half is what wants `manifest.dart` moved
+to `lib/`; the row-level ledger did not.
 
 ### The two environments: VE and EE
 
@@ -1818,118 +1787,61 @@ existing functional pack.
 
 ### Prerequisites for the build
 
-Each verified against the tree rather than assumed.
+Four were named, each verified against the tree rather than assumed. **Two are
+discharged:**
 
-✅ **~~The functional pack has no test-selection machinery.~~ Built 2026-08-23.**
-It read: "`tests/at_functional_test/dart_test.yaml` does not exist and no file
-in that pack carries `@Tags(['pq'])` — 0 hits, against 9 in the e2e pack as a
-control." That pack now declares the `pq` tag and **29** of its 49 test files
-carry it, chosen by the mechanisms they drive rather than by their names — two
-of the most important (`copied_keyfile_test`, `crypto_era_default_test`) have
-no `pq` in their filename at all.
+- ✅ **Test selection**, built 2026-08-23. The functional pack declares the `pq`
+  tag and **29** of its 49 test files carry it, chosen by the mechanisms they
+  drive rather than their names — `copied_keyfile_test` and
+  `crypto_era_default_test` have no `pq` in their filenames and both needed it.
+  ⛔ No `paths:` allowlist, deliberately, and `test/pq_tag_test.dart` keeps the
+  set honest instead
+  ([why](detail/acceptance.md#why-the-functional-pack-has-no-paths-allowlist)).
+- ✅ **The pqActive monitor**, measured 2026-08-23. The failure is real but is
+  **not posture-dependent** — pqActive **16 of 18** monitors received against a
+  control's **18 of 20**, both arms failing alike with `AT0014` "the connection
+  went away", which is monitor-readiness flakiness of
+  [14.34](implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
+  family rather than an algorithm problem. A pqActive cell is no worse off than
+  a legacy one. ⚠️ The rate is the rig's, and two earlier figures were wrong
+  before this one
+  ([the sequence](detail/acceptance.md#the-pqactive-monitor-blocker-and-two-wrong-figures-before-the-right-one)).
 
-⛔ **It has no `paths:` allowlist, deliberately**, which is the difference from
-`tests/at_end2end_test`. That pack allowlists because its atSigns are
-long-lived and real, and it pays for that with the risk that an unlisted test
-silently never runs. This pack's virtualenv is created and thrown away per run,
-so an allowlist would carry the same risk with none of the benefit. A bare run
-still executes every file.
+**Two remain:**
 
-`test/pq_tag_test.dart` is the rail that keeps the set honest: it re-derives
-which files should carry the tag and fails naming any that do not, so a new PQ
-test cannot quietly sit outside the set the stage and matrix arms select on. It
-is mutation-proven — removing one tag reddens it with that filename — and it
-carries both controls, a real PQ file and a real non-PQ one, so a broken
-matcher is distinguishable from a clean pack.
-
-**~~A posture-faithful pqActive cell cannot notify yet.~~ Measured 2026-08-23:
-the monitor failure is real but is NOT posture-dependent.** A throwaway probe
-ran the two postures as equal-length interleaved arms across 2 fresh
-virtualenvs, waiting 45s on each client for any notification:
-
-| Arm | Monitor received | Silent |
-|-------------------------|-----------------:|-------:|
-| `PqPosture.pqActive` | 16 of 18 | 2 |
-| default (control) | 18 of 20 | 2 |
-
-The arms genuinely differed in the thing varied — every pqActive client resolved
-`SigningAlgoType.mldsa65`, every control client resolved null and fell back to
-`rsa2048` — and the atServer's own log carries `signingAlgo:mldsa65`
-authentications alongside `rsa2048` ones, so ML-DSA PKAM connections were made
-and accepted. Both arms fail at the same rate, so **posture is not what
-distinguishes them**, and a pqActive cell is no worse off than a legacy one.
-
-The silent cases carry a signature worth keeping:
-`Monitor|Failed to start notifications: Exception: The connection went away
-before a response arrived` (`AT0014`). That is monitor-readiness flakiness of
-the same family as
-[14.34](implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart),
-not an algorithm problem.
-
-⚠️ **Read the residual rate as the rig's, not the product's.** Both runs aborted
-on `AT0014` before finishing, which is why the denominators are 18 and 20 rather
-than 20 and 20; and the probe builds 20 clients for one atSign in a single
-process, which is not a shape production has. It also tested monitor
-*readiness*, not end-to-end delivery. What the measurement supports is the
-comparison between the arms, not the absolute number.
-
-⛔ **An earlier version of this probe reported 6 of 30 pqActive monitors silent,
-and that figure was entirely the rig's.** It held every client open, so the last
-arms of each run hit the atServer's `inbound_max_limit` — the far-side log said
-`Wrote stats to 12 monitor connections` — and it ran 3 control arms against 10
-pqActive arms, so the control never reached the iterations where the failure
-appeared. Releasing each listener and making the arms equal and interleaved
-removed it; the fixed rig's far-side control reads
-`Wrote stats to 1 monitor connection`.
-
-⛔ **This paragraph carried a hypothesis that is now DISPROVEN, 2026-08-23.** It
-said this and the unexplained intermittent in
-`self_enrollment_retrofit_live_test.dart` were probably the same problem, "a
-monitor's own authenticated socket disagreeing with the client's signing
-algorithm". They are not. `NotificationServiceImpl` has built its Monitor with
-`signingAlgoType: signingAlgoOf(atClient)` since **2026-08-10**, before both
-observations — checked against the tree as it stood on 2026-08-17 and
-2026-08-19. And that intermittent's `signingAlgo:rsa2048` monitor was the
-**legacy** client's of the two live at the time, correctly RSA, so it is not a
-plumbing fault either; its own narrowed question — which monitor the atServer
-considered a subscriber — stands unchanged.
-
-**A second candidate was raised and also disproven.** `signingAlgoOf` falls back
-to `preference.signingAlgoType` (default `rsa2048`) whenever
-`_resolveSigningAlgoFromKeyMaterial` (`at_client_impl.dart:1582`) records null,
-and that path throws nothing and logs nothing — so it looked like a silent way
-for a PQ client to authenticate RSA. The probe showed the fallback firing on the
-**control** arm only, which is correct by design: a legacy enrollment holds no
-typed authentication material, so a null resolution is what
-`signingAlgorithmForEnrollment` should return. It is the documented legacy
-fallback working, not a defect.
-
-⚠️ **The probe's own output labelled that control-arm null "this is the
-defect".** That label was the rig's, written before the run, and it was wrong —
-worth recording because a rig that prints a verdict will have that verdict
-quoted back as a finding.
-
-Settling anything here needs the atServer's own log, which has no near-side
-representation: copy it out with `docker cp test-virtualenv-1:/apps/logs <dir>`
-**before** the teardown, since `runLocal.sh` ends in `docker compose down`.
-
-**`manifest.dart` cannot be imported by the packs.** It lives under
-`packages/at_client/test/`, which no other package can reach, so the in-pack
-rails need it moved to `lib/` first.
-
-**`provenIn`'s matcher needs to require a `test(` token**, and that cannot be a
-naive substring check: 53 declarations put `test(` and the name on separate
-lines, so a naive tightening would falsely redden about a fifth of the
-citations.
+- **`manifest.dart` cannot be imported by the packs.** It lives under
+  `packages/at_client/test/`, which no other package can reach, so the in-pack
+  rails need it moved to `lib/` first. ⛔ It was *not* a prerequisite for the
+  ledger, which both this section and ruling 115 once said it was.
+- **`provenIn`'s matcher needs to require a `test(` token**, and that cannot be
+  a naive substring check: 53 declarations put `test(` and the name on separate
+  lines, so a naive tightening would falsely redden about a fifth of the
+  citations.
 
 ### The build order, and what it leaves
 
-Not ruled — this is the measured recommendation, and the decision is gkc's. Arm
-1 and the ledger first, both on the VE, since neither needs a new environment,
-arm 1 executes UC-C1.2 for the first time, and the ledger is what turns the
-other 38 rows from a claim into a report. Arms 3 and 4 follow once the monitor
-breakage is diagnosed, rather than beside it, since both introduce a new
-environment and a new failure surface at the same moment.
+Not ruled — this is the measured recommendation, and the decision is gkc's.
+
+⛔ **This paragraph's two original orderings are both dead** — they gated on the
+ledger being unbuilt and on the monitor breakage being undiagnosed, and neither
+is true
+([how it survived](detail/acceptance.md#the-build-order-outlived-both-its-reasons)).
+
+**What remains, in order:**
+
+1. **Arm 1**, the 3-cell stage arm, on the VE. Still first, and now the only
+   part of the original recommendation left standing. It executes UC-C1.2 for
+   the first time.
+2. **Arms 3 and 4**, which need the EE built from a named `at_server` ref.
+   Nothing blocks them but the work itself — in particular *not* the monitor.
+3. **The clause level** of the ledger, which touches the live tests and wants
+   `manifest.dart` moved to `lib/`.
+4. **The CI combining job**, once somebody picks an `actions/download-artifact`
+   pin. CI uploads the inputs today; only the rendering is manual.
+
+⚠️ **This ordering is a claim with a short shelf life, like the one it
+replaced.** Check each entry against the tree before working it, rather than
+against this list.
 
 Four residues this catalogue states rather than hides:
 
