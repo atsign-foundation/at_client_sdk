@@ -81,6 +81,18 @@ class EnrolledClient {
 /// run in this one process, so waiting first would deadlock — nothing else is
 /// scheduled to approve.
 ///
+/// [signingAlgo] is the algorithm the enrollment's APKAM **authentication**
+/// keypair is minted under, and it is a different axis from the pq key
+/// EXCHANGE this helper always uses: how the symmetric key travels and which
+/// algorithm authenticates the connection are separate questions.
+///
+/// It defaults to `rsa2048` because that is what every caller of this helper
+/// was handed before the parameter existed, and several of them assert against
+/// it — including the advance ladder, whose first rung needs an RSA enrollment
+/// to have something to advance FROM. A test wanting an enrollment that is
+/// post-quantum from birth, and therefore does NOT retrofit itself on first
+/// client construction, passes `mldsa65`.
+///
 /// [namespaces] overrides the grants requested, which defaults to `rw` on
 /// [namespace] alone. Pass `{'*': 'rw', '__manage': 'rw', …}` for a fully
 /// privileged enrollment — the class entitled to hold the signing root, and
@@ -95,6 +107,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
   String? deviceName,
   Map<String, String>? namespaces,
   AtKeysIo? atKeysIo,
+  SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
 }) async {
   final otp = (await approver.getOTP()).response;
 
@@ -114,7 +127,11 @@ Future<EnrolledClient> enrolAndAuthenticate({
   );
 
   Map<String, dynamic>? built;
-  final build = enrollmentKeyPackageBuilder(atSign);
+  // The key package is signed by the APKAM keypair this enrolment is about to
+  // submit, so the builder has to be told which algorithm that is. It has
+  // always taken one; nothing passed it here because until the request could
+  // carry an algorithm, the answer could only ever be rsa2048.
+  final build = enrollmentKeyPackageBuilder(atSign, signingAlgo: signingAlgo);
 
   final response = await AtEnrollment.create().submit(
     AtEnrollmentRequest.pq(
@@ -128,6 +145,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
       // is the thing this branch exists to remove.
       metadataBuilder: (keysIo) async => built = await build(keysIo),
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
+      signingAlgo: signingAlgo,
     ),
     AtLookUp.withSecureSocket(
       atSign: atSign,

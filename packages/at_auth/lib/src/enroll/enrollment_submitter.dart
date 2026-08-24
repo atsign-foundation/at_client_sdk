@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:at_auth/src/auth/onboarding_mint.dart' show mintApkamKeyPair;
 import 'package:at_auth/src/enroll/apsk_advertisement.dart';
 import 'package:at_auth/src/enroll/enrollment_approver.dart';
 import 'package:at_auth/src/enroll/enrollment_progress.dart';
@@ -210,8 +211,14 @@ class EnrollmentSubmitter {
   /// Handles the subsequent enrollment requests.
   Future<AtEnrollmentResponse> _handleAtEnrollmentRequest(
       AtEnrollmentRequest atEnrollmentRequest, AtLookUp atLookUp) async {
-    // Generate required keys
-    AtPkamKeyPair apkamKeyPair = AtChopsUtil.generateAtPkamKeyPair();
+    // Generate required keys, under the algorithm the CALLER named. This used
+    // to be `AtChopsUtil.generateAtPkamKeyPair()` — RSA-2048 with no argument
+    // — so an app enrolling over OTP could not ask for anything else. On an
+    // atSign whose deployment had moved to post-quantum, every install then
+    // created an RSA-authenticating enrollment that the client retrofitted
+    // away on its first start, leaving a discarded enrollment behind and an
+    // RSA credential live for the atServer's grace window.
+    final apkam = await mintApkamKeyPair(atEnrollmentRequest.signingAlgo);
 
     //Fetch required keys from atServer
     String defaultEncryptionPublicKey = await _getDefaultEncryptionPublicKey(
@@ -223,10 +230,16 @@ class EnrollmentSubmitter {
     // be handed the APKAM keypair it must sign with. Only enrollmentId is
     // missing at this point, and only the atServer can supply it — it assigns
     // one in its response below.
+    // The flat fields carry the keypair whatever the algorithm, because the
+    // metadata builder signs with it and reads it from there, and there is no
+    // enrollment id to file typed material under until the atServer answers.
+    // For rsa2048 that is also where it stays. For anything else it is
+    // scaffolding, re-filed as typed material and cleared below — leaving it
+    // would make the keyfile answer the "which enrollment do I authenticate
+    // as" question two different ways.
     AtKeys atAuthKeys = AtKeys()
-      ..apkamPrivateKey =
-          AtBytes.fromString(apkamKeyPair.atPrivateKey.privateKey)
-      ..apkamPublicKey = AtBytes.fromString(apkamKeyPair.atPublicKey.publicKey)
+      ..apkamPrivateKey = AtBytes.fromString(apkam.privateKey)
+      ..apkamPublicKey = AtBytes.fromString(apkam.publicKey)
       ..defaultEncryptionPublicKey =
           AtBytes.fromString(defaultEncryptionPublicKey);
 
@@ -275,19 +288,22 @@ class EnrollmentSubmitter {
       ..appName = atEnrollmentRequest.appName
       ..deviceName = atEnrollmentRequest.deviceName
       ..encryptedAPKAMSymmetricKey = encryptedAPKAMSymmetricKey
-      ..apkamPublicKey = apkamKeyPair.atPublicKey.publicKey
+      ..apkamPublicKey = apkam.publicKey
+      ..signingAlgo = atEnrollmentRequest.signingAlgo.name
       ..otp = atEnrollmentRequest.otp
       ..namespaces = atEnrollmentRequest.namespaces
       ..apkamKeysExpiryDuration = atEnrollmentRequest.apkamKeysExpiryDuration
       ..metadata = metadata;
     // Without an `_apsk` the atServer publishes nothing, and the approver has
     // no key to verify the advertised key package against — so it seals no
-    // secrets to an enrollment that is otherwise perfectly good. This path
-    // mints an RSA keypair, so that is the algorithm it advertises.
+    // secrets to an enrollment that is otherwise perfectly good. It advertises
+    // the algorithm actually minted; this said `rsa2048` unconditionally,
+    // which was true only because nothing else could be minted here.
     final advertised = _apskFor(
-        apkamPublicKey: apkamKeyPair.atPublicKey.publicKey,
-        signingAlgo: SigningAlgoType.rsa2048,
-        metadata: metadata);
+        apkamPublicKey: apkam.publicKey,
+        signingAlgo: atEnrollmentRequest.signingAlgo,
+        metadata: metadata,
+        advertisedSigningKey: atEnrollmentRequest.advertisedSigningKey);
     enrollVerbBuilder
       ..apsk = advertised.apsk
       ..apskLegacy = advertised.apskLegacy;
@@ -299,6 +315,26 @@ class EnrollmentSubmitter {
     var enrollStatus = getEnrollStatusFromString(enrollJson['status']);
 
     atAuthKeys.enrollmentId = enrollmentIdFromServer;
+
+    // Now that the enrollment has a name, a non-rsa2048 APKAM is ALSO filed as
+    // typed material under it — which is what tells a later reader the
+    // algorithm, since the flat fields carry bytes and no algorithm at all.
+    //
+    // The flat copy stays, and that is deliberate. Flat and typed naming
+    // DIFFERENT enrollments is the state worth avoiding — a retrofitted
+    // keyfile, where the flat fields are the enrollment that was left behind —
+    // and this is not that: one enrollment, and `enrollmentId` above names it,
+    // so every reader resolves to the same keypair whichever way it looks.
+    // Clearing them instead breaks the approval handshake, which needs the
+    // symmetric key and the keypair from one `toAtChops`.
+    if (atEnrollmentRequest.signingAlgo != SigningAlgoType.rsa2048) {
+      atAuthKeys.fileApkamMaterial(
+          enrollmentId: enrollmentIdFromServer,
+          algorithm: CryptographicMaterialAlgorithm.of(
+              atEnrollmentRequest.signingAlgo.name),
+          publicKey: apkam.publicKey,
+          privateKey: apkam.privateKey);
+    }
 
     return AtEnrollmentResponse(enrollmentIdFromServer, enrollStatus,
         atSign: atEnrollmentRequest.atSign,

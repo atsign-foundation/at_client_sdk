@@ -75,6 +75,10 @@ void main() {
           return built;
         },
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
+        // pq is the key exchange; the enrollment still authenticates with an
+        // RSA-2048 APKAM keypair. This test is about a copied keyfile being
+        // the same enrollment, not about which algorithm signs.
+        signingAlgo: SigningAlgoType.rsa2048,
       ),
       AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
     );

@@ -85,6 +85,9 @@ void main() {
           return built;
         },
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
+        // pq is the key exchange; the enrollment still authenticates with an
+        // RSA-2048 APKAM keypair. The gate under test is the namespace one.
+        signingAlgo: SigningAlgoType.rsa2048,
       ),
       AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
     );

@@ -148,6 +148,29 @@ class AtEnrollmentRequest extends EnrollmentRequest {
   final FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)?
       apkamSymmetricKeyResolver;
 
+  /// The algorithm this enrollment's APKAM **authentication** keypair is
+  /// minted under, and the value that rides `EnrollParams.signingAlgo`.
+  ///
+  /// **Required, with no default, on purpose.** It used to be absent
+  /// entirely: an app enrolling over OTP always got RSA-2048 and had no way to
+  /// ask otherwise, so on an atSign whose deployment had moved to
+  /// post-quantum, every install still created an RSA-authenticating
+  /// enrollment which the client then retrofitted away — leaving a discarded
+  /// enrollment behind, and an RSA credential valid for the atServer's grace
+  /// window. Giving it a default would have let a caller inherit an algorithm
+  /// it never chose, which is the state that produced the defect.
+  ///
+  /// ⚠️ **The name says "signing" and means *authentication*.** The wire field
+  /// has been called `signingAlgo` since before an enrollment had signing keys
+  /// of its own, and renaming it is a multi-repo seam against a released
+  /// atServer that reads an absent field as `rsa2048`. The name stays out
+  /// there; nothing on this side repeats the mistake.
+  ///
+  /// Independent of [keyExchangeMode]: how the symmetric key travels and which
+  /// algorithm authenticates the connection are separate questions, and both
+  /// constructors take this for that reason.
+  final SigningAlgoType signingAlgo;
+
   /// How this request conveys the enrollment's symmetric key.
   ///
   /// Not a parameter — the constructor decides it, because the mode and the
@@ -180,6 +203,8 @@ class AtEnrollmentRequest extends EnrollmentRequest {
     this.encryptedAPKAMSymmetricKey,
     this.apkamKeysExpiryDuration,
     this.metadataBuilder,
+    required this.signingAlgo,
+    super.advertisedSigningKey,
   })  : keyExchangeMode = EnrollmentKeyExchangeMode.legacy,
         apkamSymmetricKeyResolver = null,
         super(
@@ -219,6 +244,8 @@ class AtEnrollmentRequest extends EnrollmentRequest {
     required FutureOr<String> Function(AtKeys keys, AtLookUp atLookUp)
         this.apkamSymmetricKeyResolver,
     this.apkamKeysExpiryDuration,
+    required this.signingAlgo,
+    super.advertisedSigningKey,
   })  : keyExchangeMode = EnrollmentKeyExchangeMode.pq,
         encryptedAPKAMSymmetricKey = null,
         super(

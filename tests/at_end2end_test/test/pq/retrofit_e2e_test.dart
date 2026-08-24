@@ -91,7 +91,8 @@ void main() {
             appName: 'rf-$label',
             deviceName: 'rf-$label-$runId',
             namespaces: namespaces,
-            otp: otp),
+            otp: otp,
+            signingAlgo: SigningAlgoType.rsa2048),
         AtLookupImpl(atSign, ConfigUtil.getYaml()['root_server']['url'],
             ConfigUtil.getYaml()['root_server']['port'] ?? 64));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())

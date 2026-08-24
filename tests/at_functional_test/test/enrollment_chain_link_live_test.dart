@@ -200,6 +200,10 @@ void main() {
         // no enrollee running to have produced one.
         metadataBuilder: (keysIo) async => built = await build(keysIo),
         apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
+        // pq is the key exchange; the enrollment still authenticates with
+        // an RSA-2048 APKAM keypair. What is under test is the privilege
+        // gate on the chain link, not the signing algorithm.
+        signingAlgo: SigningAlgoType.rsa2048,
       ),
       AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort),
     );
@@ -257,6 +261,8 @@ void main() {
       otp: otp,
       metadataBuilder: (keysIo) async => built = await build(keysIo),
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
+      // As above: pq key exchange, RSA-2048 APKAM authentication.
+      signingAlgo: SigningAlgoType.rsa2048,
     );
 
     final response = await AtEnrollment.create().submit(

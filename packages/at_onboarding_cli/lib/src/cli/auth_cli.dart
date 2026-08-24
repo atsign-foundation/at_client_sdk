@@ -538,6 +538,18 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     apkamKeysExpiryDuration: parseDuration(apkamKeysExpiry),
     maxRetries: int.parse(argResults[AuthCliArgs.argNameMaxRetries]),
     retryInterval: AtOnboardingService.defaultApkamRetryInterval,
+    // `--posture` is on the shared parser, so `enroll` has always accepted it
+    // — and until now it reached the client's preference and nothing else, so
+    // `enroll --posture pqActive` still minted an RSA-2048 APKAM key and the
+    // client retrofitted it away on its first start. The posture's own
+    // `authenticationKeyAlgorithm` is what the stage means by "which key
+    // authenticates", so that is what the enrolment is submitted under.
+    //
+    // Falls back to rsa2048 rather than to any posture's value when `--posture`
+    // is absent: "the caller named no posture" is not "the caller asked for
+    // the default one", a distinction `postureIn` exists to keep.
+    signingAlgo: AuthCliArgs.postureIn(argResults)?.authenticationKeyAlgorithm ??
+        SigningAlgoType.rsa2048,
   );
 
   return true;

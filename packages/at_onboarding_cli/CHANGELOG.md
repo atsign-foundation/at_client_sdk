@@ -1,5 +1,18 @@
 ## 1.17.0-rc1
 
+- fix: `at_activate enroll --posture pqActive` now enrols under the posture's
+  authentication algorithm. `--posture` is on the shared arg parser, so
+  `enroll` has always accepted it — and it reached the client's preference and
+  nothing else, so the enrolment still minted RSA-2048 and the client
+  retrofitted it away on its first start.
+  - `enroll` and `sendEnrollRequest` take a `signingAlgo`, defaulted **once**
+    to `rsa2048` at that boundary because an app calling them knows its appName
+    and namespaces, not the atSign's rollout position — and rsa2048 is what the
+    path minted before the parameter existed, so an app that says nothing
+    enrols exactly as it did.
+  - `enroll` forwards it to `sendEnrollRequest`, which it did not, so the
+    parameter would have existed and done nothing.
+
 - refactor: follows at_auth's barrel split — `FileAtKeysIo` now comes from
   `package:at_auth/at_auth_io.dart`. No API change here.
 - fix: `auth_cli` assigns `retrofitSerializer = fileRetrofitSerializer` at

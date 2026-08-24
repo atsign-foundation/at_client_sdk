@@ -56,7 +56,8 @@ void main() {
             appName: 'rf2b-legacy',
             deviceName: 'rf2b-${Uuid().v4().hashCode}',
             namespaces: {namespace: 'rw'},
-            otp: otp),
+            otp: otp,
+            signingAlgo: SigningAlgoType.rsa2048),
         AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort));
     final record = (await atClient.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);

@@ -61,7 +61,8 @@ void main() {
             appName: 'rt-$label',
             deviceName: 'rt-$label-$runId',
             namespaces: {namespace: 'rw'},
-            otp: otp),
+            otp: otp,
+            signingAlgo: SigningAlgoType.rsa2048),
         AtLookupImpl(atSign, rootDomain().rootDomain, rootDomain().rootPort));
     final record = (await owner.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);

@@ -59,6 +59,7 @@ void main() {
       namespaces: {namespace: 'rw'},
       otp: otp,
       metadataBuilder: (keysIo) async => built = await build(keysIo),
+      signingAlgo: SigningAlgoType.rsa2048,
     );
 
     final response = await AtEnrollment.create().submit(

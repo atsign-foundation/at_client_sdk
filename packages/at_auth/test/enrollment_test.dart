@@ -93,7 +93,8 @@ void main() {
         appName: 'wavi',
         deviceName: 'pixel',
         otp: 'A123FE',
-        namespaces: {'wavi': 'rw'});
+        namespaces: {'wavi': 'rw'},
+        signingAlgo: SigningAlgoType.rsa2048);
 
     AtEnrollmentResponse atEnrollmentResponse =
         await atEnrollmentServiceImpl.submit(enrollmentRequest, mockAtLookUp);
@@ -286,6 +287,7 @@ void main() {
         deviceName: 'pixel',
         otp: 'A123FE',
         namespaces: {'wavi': 'rw'},
+        signingAlgo: SigningAlgoType.rsa2048,
       );
 
       expect(request.session, same(session));
@@ -300,6 +302,7 @@ void main() {
           deviceName: 'pixel',
           otp: 'A123FE',
           namespaces: {'wavi': 'rw'},
+          signingAlgo: SigningAlgoType.rsa2048,
         ),
         throwsA(isA<ArgumentError>()),
       );
@@ -342,6 +345,7 @@ void main() {
           namespaces: {'wavi': 'rw'},
           otp: 'A123FE',
           metadataBuilder: builder,
+          signingAlgo: SigningAlgoType.rsa2048,
         );
 
     AtEnrollmentRequest pqRequestWith(
@@ -357,6 +361,7 @@ void main() {
           // here because pq mode requires one, and the conveyance it stands
           // for is covered separately.
           apkamSymmetricKeyResolver: _unusedResolver,
+          signingAlgo: SigningAlgoType.rsa2048,
         );
 
     test(

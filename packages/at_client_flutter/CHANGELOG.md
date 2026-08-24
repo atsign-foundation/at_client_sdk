@@ -2,6 +2,13 @@
 
 ## 1.1.5-rc1
 
+- refactor: the APKAM activation dialog names `signingAlgo: rsa2048` on the
+  enrolment it submits, which `AtEnrollmentRequest` now requires. The dialog
+  has no rollout position to read one from — it knows the atSign, the app and
+  the namespaces — and rsa2048 is what this path minted before the parameter
+  existed, so behaviour is unchanged. An app that has a position builds the
+  request itself.
+
 - refactor: follows at_auth's barrel split — `file_picker.dart` and
   `file_util.dart` take `FileAtKeysIo` from `package:at_auth/at_auth_io.dart`,
   which is now their only at_auth import: it was all they used it for. No API

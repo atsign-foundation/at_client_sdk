@@ -125,6 +125,10 @@ Future<EnrolledClient> enrolAndAuthenticate({
       // is the thing this branch exists to remove.
       metadataBuilder: (keysIo) async => built = await build(keysIo),
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
+      // pq is the key EXCHANGE. The APKAM authentication keypair stays
+      // RSA-2048, which is what every caller of this helper has been handed
+      // all along.
+      signingAlgo: SigningAlgoType.rsa2048,
     ),
     AtLookUp.withSecureSocket(
       atSign: atSign,

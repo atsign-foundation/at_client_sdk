@@ -72,6 +72,10 @@ void main() {
         return built;
       },
       apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
+      // UC-A2.1 is about the key EXCHANGE — that nothing RSA-wrapped rides
+      // the request. Which algorithm authenticates the connection is the
+      // other axis, and this row asserts nothing about it.
+      signingAlgo: SigningAlgoType.rsa2048,
     );
 
     final response = await AtEnrollment.create().submit(
