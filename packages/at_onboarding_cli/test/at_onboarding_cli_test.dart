@@ -104,7 +104,11 @@ void main() {
           appName: 'appName',
           deviceName: 'deviceName',
           otp: 'otp',
-          namespaces: {}));
+          namespaces: {},
+          // A mocktail fallback value: never submitted, only matched against.
+          // rsa2048 because it is what this path minted before the parameter
+          // existed, so nothing about what these tests exercise changes.
+          signingAlgo: SigningAlgoType.rsa2048));
     });
 
     test('validate enrollment details being stored to LocalSecondary',

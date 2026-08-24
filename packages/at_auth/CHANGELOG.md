@@ -1,5 +1,29 @@
 ## 4.0.0-rc1
 
+- **BREAKING** fix: an app enrolling over OTP can ask which algorithm its
+  APKAM authentication keypair is minted under. `AtEnrollmentRequest` had no
+  `signingAlgo` at all, and the submitter minted RSA-2048 unconditionally — so
+  on an atSign whose deployment had moved to post-quantum, every install
+  created an RSA-authenticating enrollment which the client retrofitted away on
+  its first start: a discarded enrollment per install, and an RSA credential
+  live for the atServer's grace window. Both constructors now **require**
+  `signingAlgo`, with no default, so every call site states what it means
+  rather than inheriting an algorithm it never chose.
+  - Both constructors also forward `advertisedSigningKey`, which the base class
+    has always declared and neither passed on.
+  - `mintApkamKeyPair` is factored out of `mintOnboardingKeys` and shared, so
+    onboarding and app enrolment cannot drift about what an algorithm mints.
+  - A non-rsa2048 enrolment additionally files its keypair as **typed**
+    material under the enrollment id once the atServer names it. That is what
+    tells a later reader the algorithm: the flat fields carry bytes and no
+    algorithm. The flat copy stays — one enrollment, named by the keyfile's own
+    `enrollmentId`, so both resolve to the same key. Flat and typed naming
+    *different* enrollments is a retrofitted keyfile, which this is not.
+  - The approval handshake now sets `signingAlgoType` from that typed material.
+    Without it PKAM signed whatever the flat fields held under at_lookup's
+    default of rsa2048, failing inside at_chops on a key length that named
+    neither the enrollment nor the mismatch.
+
 - **BREAKING** refactor: at_auth splits into two barrels so its core can be
   compiled for WASM. `package:at_auth/at_auth.dart` no longer reaches
   `dart:io`; everything needing a filesystem, a raw socket or the `dart:io`

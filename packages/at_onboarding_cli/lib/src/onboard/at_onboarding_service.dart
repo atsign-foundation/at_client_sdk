@@ -72,13 +72,32 @@ abstract class AtOnboardingService implements ProgressPublisher {
     Duration retryInterval = defaultApkamRetryInterval,
     int maxRetries = defaultMaxApkamRetries,
     Duration? apkamKeysExpiryDuration,
+    /// The algorithm this enrollment's APKAM authentication keypair is minted
+    /// under.
+    ///
+    /// **Defaulted here, and only here.** `AtEnrollmentRequest` requires it
+    /// with no default, so that every caller states what it means rather than
+    /// inheriting an algorithm it never chose. This is the boundary where a
+    /// caller genuinely has none to state: an app calling `enroll` knows its
+    /// appName and its namespaces, not the atSign's rollout position. RSA-2048
+    /// is safe as that default because it is what this path minted
+    /// unconditionally before the parameter existed, so an app that says
+    /// nothing enrolls exactly as it always did.
+    ///
+    /// A deployment that HAS a position says so: pass
+    /// `PqPosture.authenticationKeyAlgorithm`.
+    SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   });
 
   /// Sends enrollment request. Application code may subsequently call
   /// [awaitApproval].
   Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
-      {Duration? apkamKeysExpiryDuration});
+      {Duration? apkamKeysExpiryDuration,
+      /// See [enroll]'s `signingAlgo`: this is the same value on the
+      /// send-then-await-separately path, defaulted the same way and for the
+      /// same reason.
+      SigningAlgoType signingAlgo = SigningAlgoType.rsa2048});
 
   /// Attempts PKAM auth until successful (i.e. request was approved).
   /// If the request was denied, or times out, then an exception is thrown.

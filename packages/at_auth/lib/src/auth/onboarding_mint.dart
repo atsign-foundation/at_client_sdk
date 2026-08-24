@@ -55,36 +55,57 @@ Future<OnboardingMint> mintOnboardingKeys({
           AtChopsUtil.generateSymmetricKey(EncryptionKeyType.aes256).key);
   }
 
+  final apkam = await mintApkamKeyPair(signingAlgo);
+  if (signingAlgo == SigningAlgoType.rsa2048) {
+    // The legacy shape: the flat fields are where every published reader
+    // looks, so an rsa2048 activation fills them here and the caller files
+    // no typed signing material at all.
+    keys
+      ..apkamPublicKey = AtBytes.fromString(apkam.publicKey)
+      ..apkamPrivateKey = AtBytes.fromString(apkam.privateKey);
+  }
+  return (
+    keys: keys,
+    apkamPublicKey: apkam.publicKey,
+    apkamPrivateKey: apkam.privateKey,
+  );
+}
+
+/// Mints an APKAM **authentication** keypair under [signingAlgo], base64 of
+/// the raw key in both halves.
+///
+/// Shared by onboarding and by app enrolment so the two cannot drift: an
+/// algorithm one of them can mint and the other cannot is a state where the
+/// same posture produces different key material depending on which door an
+/// atSign came through.
+///
+/// Files nothing and decides nothing about where the halves are stored. That
+/// is the caller's, because it differs: rsa2048 belongs in the flat fields
+/// every published reader looks at, and anything else belongs in typed
+/// material under an enrollment id — which for an app enrolment is not known
+/// until the atServer answers.
+Future<({String publicKey, String privateKey})> mintApkamKeyPair(
+    SigningAlgoType signingAlgo) async {
   switch (signingAlgo) {
     case SigningAlgoType.mldsa65:
       final apkam = await MlDsa65KeyPair.generate();
       return (
-        keys: keys,
-        apkamPublicKey: apkam.atPublicKey.publicKey,
-        apkamPrivateKey: apkam.atPrivateKey.privateKey,
+        publicKey: apkam.atPublicKey.publicKey,
+        privateKey: apkam.atPrivateKey.privateKey,
       );
     case SigningAlgoType.rsa2048:
       final apkam = AtChopsUtil.generateAtPkamKeyPair();
-      final publicKey = apkam.atPublicKey.publicKey.toString();
-      final privateKey = apkam.atPrivateKey.privateKey.toString();
-      // The legacy shape: the flat fields are where every published reader
-      // looks, so an rsa2048 activation fills them here and the caller files
-      // no typed signing material at all.
-      keys
-        ..apkamPublicKey = AtBytes.fromString(publicKey)
-        ..apkamPrivateKey = AtBytes.fromString(privateKey);
       return (
-        keys: keys,
-        apkamPublicKey: publicKey,
-        apkamPrivateKey: privateKey,
+        publicKey: apkam.atPublicKey.publicKey.toString(),
+        privateKey: apkam.atPrivateKey.privateKey.toString(),
       );
     default:
       throw ArgumentError.value(
           signingAlgo,
           'signingAlgo',
-          'onboarding can mint an rsa2048 or an mldsa65 APKAM; '
-              '${signingAlgo.name} has no mint path, and defaulting to one of '
-              'the others would activate an atSign under an algorithm the '
-              'caller did not ask for');
+          'an APKAM authentication keypair can be minted as rsa2048 or '
+              'mldsa65; ${signingAlgo.name} has no mint path, and defaulting '
+              'to one of the others would enrol under an algorithm the caller '
+              'did not ask for');
   }
 }

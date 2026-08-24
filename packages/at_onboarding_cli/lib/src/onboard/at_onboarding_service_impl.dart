@@ -231,6 +231,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     File? atKeysFile,
     Duration? apkamKeysExpiryDuration,
     bool allowOverwrite = false,
+    SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
   }) async {
     // Fails early if the filePath already exists (or) isn't writable
     if (atKeysFile != null) {
@@ -251,6 +252,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         otp,
         namespaces,
         apkamKeysExpiryDuration: apkamKeysExpiryDuration,
+        signingAlgo: signingAlgo,
       );
       logger.finer('EnrollmentResponse from server: $enrollmentResponse');
       await enrollCheckpoint.save(
@@ -319,7 +321,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   @override
   Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
-      {Duration? apkamKeysExpiryDuration}) async {
+      {Duration? apkamKeysExpiryDuration,
+      SigningAlgoType signingAlgo = SigningAlgoType.rsa2048}) async {
     if (appName == null || deviceName == null) {
       throw AtEnrollmentException(
           'appName and deviceName are mandatory for enrollment');
@@ -336,7 +339,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         appName: appName,
         deviceName: deviceName,
         namespaces: namespaces,
-        otp: otp);
+        otp: otp,
+        signingAlgo: signingAlgo);
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 

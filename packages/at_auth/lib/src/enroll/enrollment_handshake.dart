@@ -68,10 +68,28 @@ class EnrollmentHandshake {
     // demands the encryption private key this enrollment is here to fetch. Its
     // APKAM keypair is all PKAM authentication needs, so build the chops from
     // that directly and fill the symmetric key in once it arrives.
-    AtChops atChops = enrollmentResponse.atAuthKeys!.apkamSymmetricKey != null
-        ? enrollmentResponse.atAuthKeys!.toAtChops()
-        : _apkamChopsAwaitingSymmetricKey(enrollmentResponse.atAuthKeys!);
+    final AtKeys handshakeKeys = enrollmentResponse.atAuthKeys!;
+    final String? handshakeEnrollmentId = enrollmentResponse.enrollmentId;
+
+    // The algorithm this enrollment authenticates with, read from its typed
+    // material. The flat fields carry the keypair's BYTES and no algorithm, so
+    // without this PKAM would sign whatever they hold under at_lookup's
+    // default of rsa2048.
+    final SigningAlgoType? handshakeAlgorithm =
+        handshakeKeys.authenticationAlgorithmFor(handshakeEnrollmentId);
+
+    AtChops atChops = handshakeKeys.apkamSymmetricKey != null
+        ? handshakeKeys.toAtChops()
+        : _apkamChopsAwaitingSymmetricKey(handshakeKeys);
     atLookup.atChops = atChops;
+
+    // And the algorithm, or PKAM signs this enrollment's challenge with
+    // at_lookup's default — rsa2048 — whatever the keypair actually is. That
+    // fails inside at_chops on a key length, naming neither the enrollment nor
+    // the mismatch.
+    if (handshakeAlgorithm != null) {
+      atLookup.signingAlgoType = handshakeAlgorithm;
+    }
     // The chops is injected rather than resolved: this enrollment's keys are
     // deliberately not a complete keyfile yet - the symmetric key is the thing
     // the handshake is here to fetch - so asking the keystore to build a

@@ -59,7 +59,8 @@ void main() {
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: otp,
-          namespaces: {TestConstants.namespace: 'rw', '__config': 'rw'});
+          namespaces: {TestConstants.namespace: 'rw', '__config': 'rw'},
+          signingAlgo: SigningAlgoType.rsa2048);
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
