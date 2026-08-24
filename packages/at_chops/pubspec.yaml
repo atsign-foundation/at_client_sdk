@@ -1,6 +1,6 @@
 name: at_chops
 description: Package for at_protocol cryptographic and hashing operations
-version: 3.6.0
+version: 3.6.1
 repository: https://github.com/atsign-foundation/at_client_sdk/tree/trunk/packages/at_chops
 homepage: https://atsign.com
 documentation: https://docs.atsign.com/
@@ -27,6 +27,7 @@ dependencies:
   pqcrypto: ^0.3.0
 
 dev_dependencies:
+  wasm_shakedown: ^1.0.0 # tools/wasm_shakedown — test/wasm/ dep-tree shakedown
   lints: ^6.0.0
   test: ^1.25.0
   collection: ^1.19.1

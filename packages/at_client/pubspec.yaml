@@ -39,6 +39,7 @@ dependencies:
   mutex: ^3.1.0
 
 dev_dependencies:
+  wasm_shakedown: ^1.0.0 # tools/wasm_shakedown — test/wasm/ dep-tree shakedown
   collection: ^1.16.0
   lints: ^6.0.0
   test: ^1.25.0

@@ -150,6 +150,72 @@ jobs:
           dart test --concurrency=1 --tags ffi
           dart test --concurrency=1 test/at_pqc_test.dart
 
+  # Two gates over at_chops, because neither covers the other.
+  #
+  # 1. The dependency-tree walk (test/wasm/dep_tree_test.dart) catches `dart:io`.
+  #    A compile cannot: `dart compile wasm` ACCEPTS `dart:io` and ships a stub
+  #    that throws `Unsupported operation` on first use, so a browser-hostile
+  #    import compiles clean and fails in the browser instead (measured on Dart
+  #    3.12). `dart compile js` accepts `dart:html` and `dart:js` on top. No Dart
+  #    web compiler gates `dart:io`. The walk is one-way: a source outside the
+  #    baseline fails, a source that gets fixed just stops being reported.
+  #
+  # 2. The compile probe (test/wasm/compile_probe.dart) catches the libraries
+  #    dart2wasm rejects outright — dart:ffi, dart:html, dart:js, dart:mirrors —
+  #    and is the measurable for whether at_chops compiles to wasm at all.
+  #
+  # at_chops only, deliberately. It is the one core package already web-safe, so
+  # it is the only one where a gate holds a line rather than recording a backlog.
+  # The other four get theirs as each is ported.
+  #
+  # There is deliberately no `dart test -p node -c dart2wasm` step. Executing the
+  # suites under WasmGC is what would turn "compiles" into "runs", but on this
+  # runner every suite fails to load before any test body executes: the generated
+  # CJS bootstrap calls `instantiate` from the ESM `.mjs` init file and gets
+  # `undefined`. The same command runs fine on Dart 3.12 + Node 24 locally, and
+  # neither version is pinned here — Dart comes from `dart-channel: stable` and
+  # Node from the runner image. An allowed-to-fail step that fails every time
+  # cannot be told apart from one reporting real failures, so it waits for a
+  # pinned pair where a failure means something.
+  wasm_ratchet:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./actions/setup-flutter-and-dart
+
+      # The walk's own tests run in the same job as the gate they underwrite: a
+      # green ratchet means nothing if the walk that produced it is broken.
+      - name: Install dependencies in wasm_shakedown
+        working-directory: tools/wasm_shakedown
+        run: dart pub get
+
+      - name: Analyze wasm_shakedown
+        working-directory: tools/wasm_shakedown
+        run: dart analyze
+
+      - name: Test wasm_shakedown
+        working-directory: tools/wasm_shakedown
+        run: dart test --concurrency=1
+
+      - name: Install dependencies in at_chops
+        working-directory: packages/at_chops
+        run: dart pub get
+
+      # Resolves package: URIs through .dart_tool/package_config.json, so the walk
+      # crosses package boundaries into the siblings and third-party packages too —
+      # not just at_chops' own sources.
+      - name: Dependency-tree ratchet in at_chops
+        working-directory: packages/at_chops
+        run: dart test --concurrency=1 test/wasm/dep_tree_test.dart
+
+      # A hard gate, not allowed-to-fail: at_chops compiles today. Tree-shaking
+      # means this proves the front end accepts the graph, not that the code is
+      # correct under WasmGC.
+      - name: Compile at_chops to wasm
+        working-directory: packages/at_chops
+        run: dart compile wasm test/wasm/compile_probe.dart -o "$RUNNER_TEMP/at_chops.wasm"
+
   functional_tests_at_onboarding_cli:
     runs-on: ubuntu-latest
     strategy:
