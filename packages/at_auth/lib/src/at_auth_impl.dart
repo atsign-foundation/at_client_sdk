@@ -126,8 +126,6 @@ class AtAuthImpl implements AtAuth {
   /// The AtAuthRequest may optionally contain:
   /// - atAuthRequest.enrollmentId - The enrollmentId to use for authentication.
   ///   If not provided, the enrollmentId in the AtAuthKeys will be used.
-  /// - atAuthRequest.encryptedKeysMap - Provide the contents of atKeys file which
-  ///    contains keys in encrypted format (LEGACY)
   ///
   /// returns an `AtAuthResponse` indicating success or failure of authentication
   Future<AtAuthResponse> authenticate(AtAuthRequest atAuthRequest) async {
@@ -265,8 +263,9 @@ class AtAuthImpl implements AtAuth {
     );
 
     //If the user is providing atKeysIo, they might be onboarding again or with a specific key implementation.
+    AtKeys? existingKeys;
     try {
-      atOnboardingRequest.atKeys = await atOnboardingRequest.atKeysIo?.read(
+      existingKeys = await atOnboardingRequest.atKeysIo?.read(
         atOnboardingRequest.atSign,
       );
     } catch (e) {
@@ -275,7 +274,7 @@ class AtAuthImpl implements AtAuth {
       ); //swallow the error, we just want to know if keys exist or not
     }
 
-    if (atOnboardingRequest.atKeys != null) {
+    if (existingKeys != null) {
       throw AtAuthenticationException(
         'atSign: ${atOnboardingRequest.atSign} is already onboarded. Cannot perform onboarding again.',
       );
@@ -300,32 +299,29 @@ class AtAuthImpl implements AtAuth {
         ' and try again (or) contact support@atsign.com',
       );
     }
-    //2. generate key pairs
-    OnboardingMint? mint;
-    if (atOnboardingRequest.atKeys != null) {
-      _atAuthKeys = atOnboardingRequest.atKeys!;
-    } else {
-      //2a. Onboarding mints key material and must persist it, so a store is
-      // required. There is no default: the core cannot assume a filesystem.
-      if (atOnboardingRequest.atKeysIo == null) {
-        throw AtAuthenticationException(
-            'onboarding needs somewhere to persist the key material it mints: '
-            'set AtOnboardingRequest.atKeysIo. On a platform with a '
-            'filesystem that is usually FileAtKeysIo() from '
-            'package:at_auth/at_auth_io.dart');
-      }
-      if (atOnboardingRequest.atKeysIo is! WrittenAtKeysIo) {
-        throw AtAuthenticationException(
-            'AtKeysIo implementation does not support key pair generation, please provide AtKeys in AtOnboardingRequest');
-      }
-      mint = await mintOnboardingKeys(
-          signingAlgo: atOnboardingRequest.signingAlgoType,
-          // Null resolves to the release default, not to false: legacy
-          // material is retained until the ecosystem is PQ, not until this
-          // atSign is.
-          mintLegacyMaterial: atOnboardingRequest.mintLegacyMaterial ?? true);
-      _atAuthKeys = mint.keys;
+    //2. generate key pairs. Onboarding mints key material and must persist
+    // it, so a writable store is required. There is no default: the core
+    // cannot assume a filesystem.
+    if (atOnboardingRequest.atKeysIo == null) {
+      throw AtAuthenticationException(
+          'onboarding needs somewhere to persist the key material it mints: '
+          'set AtOnboardingRequest.atKeysIo. On a platform with a '
+          'filesystem that is usually FileAtKeysIo() from '
+          'package:at_auth/at_auth_io.dart');
     }
+    if (atOnboardingRequest.atKeysIo is! WrittenAtKeysIo) {
+      throw AtAuthenticationException(
+          'onboarding mints key material and must write it, but the AtKeysIo '
+          'supplied for ${atOnboardingRequest.atSign} is read-only: set '
+          'AtOnboardingRequest.atKeysIo to a WrittenAtKeysIo');
+    }
+    final OnboardingMint mint = await mintOnboardingKeys(
+        signingAlgo: atOnboardingRequest.signingAlgoType,
+        // Null resolves to the release default, not to false: legacy
+        // material is retained until the ecosystem is PQ, not until this
+        // atSign is.
+        mintLegacyMaterial: atOnboardingRequest.mintLegacyMaterial ?? true);
+    _atAuthKeys = mint.keys;
 
     // A PQ-native activation authenticates with the keypair just minted, which
     // is not in the flat fields toAtChops() reads — and the enrollment it will
@@ -333,8 +329,7 @@ class AtAuthImpl implements AtAuth {
     // nothing to resolve either. Build the chops from the minted halves
     // directly, and name the algorithm: at_lookup defaults to rsa2048 and
     // would otherwise sign an ML-DSA key with the RSA routine.
-    if (mint != null &&
-        atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
+    if (atOnboardingRequest.signingAlgoType != SigningAlgoType.rsa2048) {
       atChops ??= AtChopsImpl(AtChopsKeys.create(
           null, AtPkamKeyPair.create(mint.apkamPublicKey, mint.apkamPrivateKey))
         ..selfEncryptionKey = _atAuthKeys.defaultSelfEncryptionKey == null

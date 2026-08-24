@@ -10,8 +10,7 @@ import 'package:test/test.dart';
 /// it: a keyfile carrying any status a build did not know was refused **in its
 /// entirety**, and the document is the user's key material. That made adding a
 /// status value a breaking at-rest change forever — which is how it was
-/// discovered, costing a rollout design that could not ship (see
-/// `docs/projects/pq/implementation-plan.md` 14.19 item 11).
+/// discovered, costing a rollout design that could not ship.
 ///
 /// `pending` is used throughout as the unknown token because it is the value
 /// this change exists to make shippable. Nothing here knows what it means, and

@@ -94,6 +94,24 @@ class AtKeysPassphraseEnvelopeCodec {
     // have to agree, and the salt is generated here.
     params.salt = salt;
 
+    // The envelope persists the salt and the three costs, and `decode` reads
+    // each of them back; `hashLength` is not among them, so decode always
+    // derives at whatever ArgonHashParams itself defaults to. Writing a file
+    // under a different length would therefore produce one that cannot be
+    // opened, reported as an incorrect passphrase rather than as the
+    // parameter that actually differed — so refuse it here, where the reason
+    // is still known. Persisting it instead would add a field nothing in this
+    // tree ever varies, and a stored parameter no caller sets is a format
+    // that cannot be exercised.
+    final lengthDecodeWillUse = ArgonHashParams().hashLength;
+    if (params.hashLength != lengthDecodeWillUse) {
+      throw AtException(
+          'a version $currentVersion envelope does not persist hashLength, so '
+          'it is always read back at $lengthDecodeWillUse bytes; encoding at '
+          '${params.hashLength} would write a file that fails to open and '
+          'blames the passphrase');
+    }
+
     final aes = await _encryptorForPassphrase(passPhrase, hashingAlgoType,
         hashParams: params);
     final iv = InitialisationVector.random(16);

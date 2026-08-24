@@ -187,9 +187,6 @@ mixin KeyIOMixin on AtKeysIo {
       'legacy helpers for serialization, if we need to retain this turn it into a static helper')
   AtKeys generateKeyPairs({
     PkamAuthMode authMode = PkamAuthMode.keysFile,
-    @Deprecated(
-        'ignored; kept so existing atSign: call sites compile — remove in v4')
-    String? atSign,
   }) {
     var atKeysFile = AtKeys();
     // generate user encryption keypair

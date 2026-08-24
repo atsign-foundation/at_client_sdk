@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:pinput/pinput.dart';

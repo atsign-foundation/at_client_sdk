@@ -33,8 +33,9 @@
   - **`AtOnboardingRequest.atKeysIo` no longer defaults to `FileAtKeysIo()`.**
     Onboarding mints key material and must persist it, and the core cannot
     assume there is a filesystem, so it now throws naming what to set. Nothing
-    shipping relied on the default: at_client sets it explicitly and
-    at_client_flutter falls back to `KeychainAtKeysIo`.
+    shipping relied on the default: every onboarding caller already sets it —
+    `at_onboarding_cli` passes a `FileAtKeysIo`, and `at_client_flutter`'s
+    `AuthService.onboard` falls back to `KeychainAtKeysIo`.
   - `probeSocket` is a supported injection point rather than
     `@visibleForTesting`, and its default is now chosen by conditional import:
     `secureSocketProbe` under `dart:io`, `httpsProbe` elsewhere. Neither works
@@ -63,6 +64,43 @@
     at the package boundary — at_auth still reaches `dart:io` transitively
     through at_lookup and at_chops — so it proves at_auth has done its half,
     not that the result compiles to WASM today.
+
+- **BREAKING** removal: three members deprecated with "remove in v4" are gone,
+  now that this is v4. Nothing outside at_auth referenced any of them.
+  - `AtOnboardingRequest.atKeys` — and it never worked. `onboard()` overwrote
+    whatever the caller set with the result of reading `atKeysIo`, before
+    anything read it, and then threw "already onboarded" if that read returned
+    keys. So the caller's value could not take effect, and the branch that
+    consumed it was unreachable. Onboarding mints its own material; a caller
+    holding keys already is a caller that has onboarded.
+  - `AtAuthRequest.encryptedKeysMap` — declared, documented, and read by
+    nothing.
+  - `AtKeysIo.generateKeyPairs`'s `atSign` parameter, which the method
+    ignored. `generateKeyPairs` itself stays deprecated: it has no caller
+    either, but it is not one of the members that promised v4.
+  - Everything else that said "remove in v4" now says **"remove in v5"**. It
+    is not being removed here, and a v4 that ships a v4 removal notice is
+    making a promise the release itself breaks. That covers `AuthResponse` and
+    its two subclasses with their `atAuthKeys`/`atLookUp`/`atChops` fields,
+    `AtAuthRequest.atAuthKeys`, and two `//todo` notes of the same shape. They
+    are the return types of `onboard` and `authenticate` and the way a caller
+    supplies enrollment-derived keys — 201 references across at_client_flutter,
+    at_onboarding_cli and both live test packages rest on them, and
+    `AtAuthSession` cannot stand in as it is, carrying no success flag and
+    being deliberately null on the legacy path. Retiring them is an API change
+    in its own right, not a deletion.
+
+- fix: the passphrase envelope refuses an `ArgonHashParams` whose `hashLength`
+  is not the value `decode` will use. The envelope persists the salt and the
+  three costs and reads each of them back; `hashLength` is not among them, so
+  decode always derives at `ArgonHashParams`'s own default. Encoding at any
+  other length wrote a file that could not be opened, and — because the cipher
+  is unauthenticated — the failure arrived as
+  `AtDecryptionException('passphrase may be incorrect')`, naming the
+  passphrase rather than the parameter that actually differed. Refusing at
+  write time reports the real cause while it is still known. Persisting the
+  value instead was the alternative and is the worse one: it would add a field
+  nothing in this tree ever sets, so no test could exercise reading it back.
 
 - **BREAKING** refactor: the keyfile's four String vocabularies become
   distinct types, in the shape `Atsign` uses — `extension type … implements
@@ -126,14 +164,6 @@
     that verifies what it signed and whatever its owner last said about it.
   - `dead` material still stays out. It was never adopted and has nothing to
     verify.
-- **BREAKING** refactor: `AtOnboardingRequest.atKeys` is removed, having been
-  one of the "remove in v4" deprecations. It never did anything: `onboard()`
-  overwrote whatever a caller set with the result of reading `atKeysIo` before
-  anything read it, and then threw "already onboarded" if that read returned
-  keys — so the branch consuming the field was unreachable, and the analyzer
-  confirmed it independently once the field was gone. A caller that set it was
-  not getting the behaviour it looks like it asks for, which is why removing it
-  cannot break anyone. Supply key material through `atKeysIo` instead.
 - **BREAKING** refactor: `KeyEntryStatus` is an open `String` vocabulary rather
   than an `enum`, matching `CryptographicMaterialStatus` beside it. The field it types —
   `ApskSigningKey.status`, and `PackageKey.status` in at_client — is now a
@@ -766,6 +796,14 @@
   enrollment over it would be the worse outcome. Internally the `AtKeys` object
   is now assembled before the request is sent rather than after, since
   everything but the `enrollmentId` is already known at that point.
+- deps: `at_commons: ^5.16.0`, `at_chops: ^3.6.0`, `at_lookup: ^3.7.0-rc1`.
+  The first two floors are raised to the versions that first carry what this
+  release uses — `EnrollVerbBuilder.apkamPublicKeySignature`, which
+  `enroll:update` sends the proof of possession in, and
+  `SigningAlgoType.strongestFirst`, which orders the signatures on an
+  envelope. Both compiled locally at the old floors only because a workspace
+  resolves its siblings by path; a consumer resolving `at_commons 5.15.0` or
+  `at_chops 3.5.0` would not have compiled.
 
 ## 3.3.0
 - feat: add `AtAuthSession` (exported) — the explicit auth→client hand-off artifact: the confirmed subset of an auth request that client creation actually needs (`atSign`, `rootDomain`, `namespace`, `atKeysIo`, `enrollmentId`), promoted to its own type so "request" no longer doubles as "session". Keys cross the boundary as an `AtKeysIo` *source*, not as live crypto state: the client derives its own `AtKeys` via `atKeysIo.read(atSign)` rather than adopting auth's `AtChops`/`AtLookUp`. The session also carries auth's already-authenticated `atLookUp` so a caller can *opt in* to reusing that connection (`AtClientManager.fromAuthSession(session, reuse: true)`) and skip a second PKAM handshake; the default hand-off rebuilds a fresh connection.

@@ -48,22 +48,18 @@ class AtOnboardingRequest extends AuthRequest {
   /// [appName] is the name of the app
   /// [deviceName] is the name of the device
   /// [atKeysIo] controls how AtKeys are loaded and saved (e.g. file system, keychain, secure element)
-  /// [atKeys] are the keys for authentication of an atSign
 
   AtOnboardingRequest(
     super.atSign, {
     super.rootDomain,
     super.retryOptions,
     this.atKeysIo,
-    this.atKeys,
   });
 
   // Default root domain and port
   String appName = "firstApp";
   String deviceName = "firstDevice";
   AtKeysIo? atKeysIo;
-  @Deprecated('remove in v4')
-  AtKeys? atKeys;
 
   /// Whether to mint the legacy RSA encryption keypair, the
   /// `selfEncryptionKey` and the `apkamSymmetricKey`, and publish
@@ -145,12 +141,8 @@ class AtAuthRequest extends AuthRequest {
   String? enrollmentId;
 
   /// The keys for authentication of an atSign.
-  @Deprecated('remove in v4')
+  @Deprecated('remove in v5')
   AtKeys? atAuthKeys;
-
-  /// The contents of .atKeys file which contains the encrypted atKeys.
-  @Deprecated('remove in v4')
-  Map<String, dynamic>? encryptedKeysMap;
 }
 
 class RetryOptions {
