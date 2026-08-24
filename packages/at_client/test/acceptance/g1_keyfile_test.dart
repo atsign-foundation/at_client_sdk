@@ -29,13 +29,15 @@ void main() {
         'the authenticating enrollment is null with no typed auth material',
         proves: 'the resolver answers null rather than guessing when a file '
             'holds nothing typed — the arm the no-id default is measured '
-            'against');
+            'against',
+        clauses: ['with none it returns null']);
     provenIn('packages/at_auth/test/at_auth_test.dart',
         'with no enrollment id supplied, the FLAT stored one is used',
         proves: 'the second clause, and the one the row got backwards: the '
             'resolver is not what authentication falls back to. The fixture '
             'is legacy-only, so the resolver returns null while the stored id '
-            'is real — which is what makes the assertion discriminate');
+            'is real — which is what makes the assertion discriminate',
+        clauses: ['authentication does **not** apply it']);
   });
 
   test(

@@ -19,8 +19,8 @@ import 'package:test/test.dart';
 import '../tool/acceptance_ledger.dart';
 
 /// A citation to `f`, naming `t` — the shape `provenIn` records.
-Citation _cite(String f, String t) =>
-    Citation('UC-X1.1', 'tests/pack/$f', t, 'why');
+Citation _cite(String f, String t, {List<int> clauses = const []}) =>
+    Citation('UC-X1.1', 'tests/pack/$f', t, 'why', clauses);
 
 void main() {
   group('namesMatch', () {
@@ -116,6 +116,37 @@ void main() {
 
     test('leaves a scenario carrying no group prefix alone', () {
       expect(invariantKey('reads are universal'), 'INV: reads are universal');
+    });
+  });
+
+  group('clause pinning', () {
+    final passed = [
+      RanTest('the cited test name', 'cited_test.dart', 'success')
+    ];
+    final failed = [RanTest('the cited test name', 'cited_test.dart', 'error')];
+
+    test('a citation carries the clauses it pins', () {
+      expect(
+          _cite('cited_test.dart', 'the cited test name', clauses: [1, 4])
+              .clauses,
+          [1, 4]);
+    });
+
+    test('an unpinned citation claims no clause, not every clause', () {
+      // The default has to be "claims nothing at the clause level". Reading an
+      // empty list as "the whole row" would report every clause of every
+      // legacy citation as proven the day pinning was introduced, which is the
+      // one outcome that would make the new column worthless.
+      expect(_cite('cited_test.dart', 'the cited test name').clauses, isEmpty);
+    });
+
+    test('a pinned clause is only proven if its citation is', () {
+      // The ledger counts a clause proven when a PROVEN citation pins it. A
+      // citation that ran and failed pins the same clause and must not.
+      final c = _cite('cited_test.dart', 'the cited test name', clauses: [2]);
+      expect(verdictFor(c, passed), 'PROVEN');
+      expect(verdictFor(c, failed), 'FAILED');
+      expect(verdictFor(c, const []), 'NOT-EXERCISED');
     });
   });
 }

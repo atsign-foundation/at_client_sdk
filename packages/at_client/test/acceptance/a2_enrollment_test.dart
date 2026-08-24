@@ -117,6 +117,34 @@ void main() {
             'recoverability), "a loaded key keeps its own algorithm whatever '
             'the preference says" (the frozen kpid), and "an unimplemented '
             'algorithm fails rather than minting something else".',
+        clauses: ['1568-byte ML-KEM-1024'],
+      );
+      // The three siblings the paragraph above names. They were described and
+      // not cited, so the row's clauses 4, 5 and 6 read as unproven while the
+      // tests that prove them sat in the same group.
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'the persisted seed re-derives an ML-KEM package',
+        proves: 'restart recoverability — the 64-byte seed is what is filed, '
+            'and re-deriving from it reproduces the same kpid, so an address '
+            'peers already hold survives a restart',
+        clauses: ['re-derives the same kpid'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'a loaded key keeps its own algorithm whatever the preference says',
+        proves: 'the frozen kpid: a preference change does not re-mint an '
+            'existing package, because the address is derived from the key '
+            'and re-minting would silently strand everything sealed to it',
+        clauses: ['an existing key keeps its own algorithm'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'an unimplemented algorithm fails rather than minting something else',
+        proves: 'the failing-closed arm — the mint throws rather than quietly '
+            'substituting the algorithm this build does have, which is the '
+            'one outcome an app could not detect',
+        clauses: ['an unimplemented algorithm fails the mint'],
       );
       provenIn(
         'packages/at_client/test/key_package_registration_test.dart',
@@ -127,6 +155,7 @@ void main() {
             'constructions built on the other. "a package advertising no key '
             'claims no suite" and "an unrecognised key algorithm contributes '
             'no suite" hold the failing-closed direction.',
+        clauses: ['`keys[].alg = ml-kem-1024`'],
       );
     });
 
@@ -168,6 +197,10 @@ void main() {
             'both. A DIFFERENTIAL — the control arm is a client whose list '
             'matches what it was created with, which must leave the record '
             'alone, and it is what shows both arms started from one key.',
+        clauses: [
+          '`keys[]` has two entries',
+          'still verifies against E4',
+        ],
       );
       provenIn(
         'tests/at_functional_test/test/key_package_amendment_live_test.dart',
@@ -177,6 +210,7 @@ void main() {
             'sibling field a later build added. Driven by two enroll:updates '
             'rather than through the client, because the client sends one '
             'named key either way and could not tell a merge from a replace.',
+        clauses: ['an unnamed metadata key survives'],
       );
 
       // ⛔ NOT proven, and deliberately not claimed: the pre-existing envelope
@@ -210,6 +244,10 @@ void main() {
             'authorization lookup rather than an identity test. No mock can '
             'stand in — a fake that accepts everything makes the interlock '
             'and its absence identical.',
+        clauses: [
+          'both are refused',
+          'the arms must differ',
+        ],
       );
 
       // ⛔ NOT proven, and deliberately not claimed: the state gate — the same

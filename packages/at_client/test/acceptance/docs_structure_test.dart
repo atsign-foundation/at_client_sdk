@@ -590,6 +590,44 @@ void main() {
     });
   });
 
+  group('the catalogue states clauses the ledger can count', () {
+    // The clause level of the ledger reads THEN clauses out of the catalogue.
+    // Nothing else does, so if the prose moves to a form the parser does not
+    // recognise, every row silently reports 0/0 — a ledger that has stopped
+    // measuring, rendering as one with nothing left to prove. That is the
+    // failure this group exists to make loud.
+    test('every live row states at least one THEN clause', () {
+      final clauses = catalogueClauses();
+      final silent = <String>[];
+      for (final uc in catalogueUseCases()) {
+        if (uc.isWithdrawn) continue;
+        if ((clauses[uc.id] ?? const []).isEmpty) silent.add(uc.id);
+      }
+      expect(silent, isEmpty,
+          reason: 'these rows state no THEN clause the parser can see. Either '
+              'the row lost its THEN, or it is written in a form '
+              '`catalogueClauses` does not recognise — the catalogue uses '
+              'both `- **Then:**` bullets and the G1 cluster\'s indented '
+              '*Then* / *And*:\n${silent.join(', ')}');
+    });
+
+    test('a withdrawn row states none, and that is not a gap', () {
+      final clauses = catalogueClauses();
+      final withdrawn =
+          catalogueUseCases().where((u) => u.isWithdrawn).toList();
+      expect(withdrawn, isNotEmpty,
+          reason: 'this assertion measures nothing without a withdrawn row to '
+              'measure. If the catalogue has none, delete it rather than '
+              'letting it pass empty');
+      for (final uc in withdrawn) {
+        expect(clauses[uc.id], isEmpty,
+            reason: '${uc.id} is withdrawn, so it owes no clauses. A parser '
+                'finding some here is reading the prose that explains the '
+                'withdrawal as though it were a requirement');
+      }
+    });
+  });
+
   group('every PQ test in the tree is nameable from the doc set', () {
     // A test no doc names is work the next reader rebuilds. Arm 3 of the
     // acceptance suite shipped as

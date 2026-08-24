@@ -133,3 +133,7 @@ poetry.lock
 # any suite ran again.
 acceptance-report.json
 citations.jsonl
+
+# Rendered by tools/acceptance_ledger.sh from a run's own reports — a
+# measurement of one set of runs, never a committed artefact.
+acceptance-ledger.md

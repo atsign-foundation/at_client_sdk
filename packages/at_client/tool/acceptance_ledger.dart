@@ -27,14 +27,23 @@ library;
 import 'dart:convert';
 import 'dart:io';
 
+import '../test/acceptance/manifest.dart' show Clause, catalogueClauses;
+
 /// One `provenIn` call, as recorded while the acceptance suite ran.
 class Citation {
-  Citation(this.useCase, this.path, this.testName, this.proves);
+  Citation(this.useCase, this.path, this.testName, this.proves, this.clauses);
 
   final String useCase;
   final String path;
   final String testName;
   final String proves;
+
+  /// Which of the row's THEN clauses this citation claims, by index from 1.
+  ///
+  /// Empty means the citation claims the row as a whole, which is how every
+  /// citation read before clause pinning existed — so an empty list is
+  /// "unpinned", never "claims nothing".
+  final List<int> clauses;
 
   String get file => path.split('/').last;
 }
@@ -74,8 +83,12 @@ List<Citation> readCitations(File f) {
     // for them would put a number in the catalogue that nothing else uses.
     final id =
         _ucInName.firstMatch(scenario)?.group(0) ?? invariantKey(scenario);
-    out.add(Citation(id, m['path'] as String, m['testName'] as String,
-        m['proves'] as String));
+    out.add(Citation(
+        id,
+        m['path'] as String,
+        m['testName'] as String,
+        m['proves'] as String,
+        [...?(m['clauses'] as List<dynamic>?)?.map((e) => e as int)]));
   }
   return out;
 }
@@ -215,20 +228,42 @@ void main(List<String> args) {
         'is a statement about the runs, not about the code.')
     ..writeln('- **NO-LIVE-CITATION** — the row proves itself in-process, so '
         'there is nothing here to exercise.')
+    ..writeln('- **Clauses** — how many of the row\'s THEN clauses a PROVEN '
+        'citation pins, out of how many the catalogue states. A row can read '
+        'PROVEN with most of its clauses unpinned; that is the gap this '
+        'column exists to show.')
     ..writeln()
     ..writeln(
         'Reports read: ${reportPaths.isEmpty ? "none" : reportPaths.join(", ")}')
     ..writeln('Tests reported: ${ran.length}   Citations: ${citations.length}')
     ..writeln()
-    ..writeln('| Use case | Verdict | Where |')
-    ..writeln('|---|---|---|');
+    ..writeln('| Use case | Verdict | Clauses | Where |')
+    ..writeln('|---|---|---|---|');
 
+  // The catalogue's own THEN clauses, so a row's parts can be counted rather
+  // than taken on the word of its verdict.
+  final clausesByRow = catalogueClauses();
+
+  /// Which clause indexes of [id] a PROVEN citation pins.
+  Set<int> provenClauses(String id, List<Citation> cites) => {
+        for (final c in cites)
+          if (verdictFor(c, ran) == 'PROVEN') ...c.clauses,
+      };
+
+  final clauseGaps = <String, ({int total, Set<int> proven})>{};
   final tally = <String, int>{};
   for (final id in catalogue.keys) {
     final cites = byUseCase[id] ?? const <Citation>[];
+    // Counted before the early return, or a row with no live citation would
+    // drop its clauses out of the denominator entirely — the totals read 120
+    // against a catalogue of 129, and the missing 9 were exactly these rows.
+    final rowClauses = clausesByRow[id]?.length ?? 0;
     if (cites.isEmpty) {
       tally['NO-LIVE-CITATION'] = (tally['NO-LIVE-CITATION'] ?? 0) + 1;
-      b.writeln('| $id | NO-LIVE-CITATION | — |');
+      if (rowClauses > 0) {
+        clauseGaps[id] = (total: rowClauses, proven: const <int>{});
+      }
+      b.writeln('| $id | NO-LIVE-CITATION | 0/$rowClauses | — |');
       continue;
     }
     final verdicts = [for (final c in cites) verdictFor(c, ran)];
@@ -241,7 +276,43 @@ void main(List<String> args) {
             : 'PROVEN';
     tally[v] = (tally[v] ?? 0) + 1;
     final where = cites.map((c) => '`${c.file}`').toSet().join(', ');
-    b.writeln('| $id | $v | $where |');
+    final proven = provenClauses(id, cites);
+    if (rowClauses > 0) {
+      clauseGaps[id] = (total: rowClauses, proven: proven);
+    }
+    b.writeln('| $id | $v | ${proven.length}/$rowClauses | $where |');
+  }
+
+  // Every row whose clauses are not all pinned by a proven citation. This is
+  // the half of the ledger that touches what a test ASSERTS rather than
+  // whether it ran: UC-A2.5 states six separate things, and citing one live
+  // test for the row said nothing about the other five.
+  final gaps = clauseGaps.entries
+      .where((e) => e.value.proven.length < e.value.total)
+      .toList();
+  if (gaps.isNotEmpty) {
+    b
+      ..writeln()
+      ..writeln('## Clauses not covered by a proven citation')
+      ..writeln()
+      ..writeln('A citation pins clauses with `clauses:` in the scenario. An '
+          'unpinned clause is one no citation claims — a gap in the *claims*, '
+          'which may or may not be a gap in the tests. A pinned clause whose '
+          'citation did not run is not counted as proven here, for the same '
+          'reason NOT-EXERCISED is not PROVEN above.')
+      ..writeln();
+    for (final e in gaps) {
+      final all = clausesByRow[e.key]!;
+      b
+        ..writeln('**${e.key}** — ${e.value.proven.length} of '
+            '${e.value.total} clauses proven')
+        ..writeln();
+      for (final c in all) {
+        final mark = e.value.proven.contains(c.index) ? 'x' : ' ';
+        b.writeln('- [$mark] ${_oneLine(c)}');
+      }
+      b.writeln();
+    }
   }
 
   // The cross-cutting invariants: section 13's rows, which apply to every flow
@@ -284,6 +355,14 @@ void main(List<String> args) {
     b.writeln('- ${e.key}: ${e.value}');
   }
   b.writeln('- rows in catalogue: ${catalogue.length}');
+  final clauseTotal = clauseGaps.values.fold<int>(0, (a, e) => a + e.total);
+  final clauseProven =
+      clauseGaps.values.fold<int>(0, (a, e) => a + e.proven.length);
+  b
+    ..writeln('- clauses in catalogue: $clauseTotal')
+    ..writeln('- clauses pinned by a proven citation: $clauseProven')
+    ..writeln('- clauses with no proven citation: '
+        '${clauseTotal - clauseProven}');
 
   if (outPath == null) {
     stdout.write(b);
@@ -292,4 +371,12 @@ void main(List<String> args) {
     stdout.writeln('wrote $outPath — ${catalogue.length} rows, '
         '${citations.length} citations, ${ran.length} tests reported');
   }
+}
+
+/// One clause, short enough for a checklist line and long enough to identify.
+String _oneLine(Clause c) {
+  final t = c.text.replaceAll('\n', ' ');
+  return t.length <= 110
+      ? '${c.index}. $t'
+      : '${c.index}. ${t.substring(0, 108)}…';
 }

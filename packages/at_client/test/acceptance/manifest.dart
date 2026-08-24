@@ -263,3 +263,136 @@ List<String> undeclaredTestFiles() => testFilesOnDisk()
 List<String> missingDeclaredFiles() => [...scenarioFiles, ...guardFiles]
     .where((f) => !testFilesOnDisk().contains(f))
     .toList();
+
+/// One THEN clause of a catalogue row — the unit a scenario can claim.
+///
+/// A row's verdict has always been all-or-nothing: cite one live test and the
+/// whole row reads as proven, however many separate things its THEN states.
+/// UC-A2.5 states six, and the one known overclaim in this catalogue — three
+/// clauses of UC-A2.5/UC-A2.6 that no test reached — was found by hand,
+/// because nothing could compute it.
+class Clause {
+  const Clause(this.useCase, this.index, this.text);
+
+  /// The row this clause belongs to.
+  final String useCase;
+
+  /// Position within the row, from 1, in catalogue order.
+  ///
+  /// For reporting only. A citation names a clause by a distinctive fragment
+  /// of its text, never by this number, so inserting a clause does not
+  /// silently re-point every citation after it.
+  final int index;
+
+  /// The clause as written, collapsed to one line.
+  final String text;
+
+  @override
+  String toString() => '$useCase clause $index: $text';
+}
+
+/// The two forms a THEN takes in this catalogue.
+///
+/// Most rows write `- **Then:**` bullets. The `UC-G1.x` cluster writes an
+/// indented `*Then*` / `*And*` italic instead, and it is 16 of the 69 rows —
+/// a parser that knows only the bullet form reports them as having no clauses
+/// at all, which reads as "nothing to prove" rather than "I cannot see them".
+final _thenBullet = RegExp(r'^- \*\*Then');
+final _thenItalic = RegExp(r'^\s*\*(?:Then|And)\*');
+final _subBullet = RegExp(r'^  - ');
+final _anyBullet = RegExp(r'^- \*\*');
+final _anyHeading = RegExp(r'^#{2,4} ');
+
+String _collapse(String s) => s.trim().replaceAll(RegExp(r'\s+'), ' ');
+
+/// Every THEN clause the catalogue states, in catalogue order, keyed by row.
+///
+/// A `**Then:**` bullet carrying sub-bullets contributes its sub-bullets and
+/// not itself: the bullet is then a heading for them, and counting both would
+/// double every multi-clause row. A `**Then:**` with no sub-bullets is one
+/// clause, whatever its prose asserts — the document's own structure is the
+/// authority here, not a reading of the sentence.
+///
+/// A withdrawn row yields none, which is correct rather than a gap.
+Map<String, List<Clause>> catalogueClauses() {
+  final lines = catalogueFile().readAsStringSync().split('\n');
+  final defs = <int, UseCase>{};
+  for (var i = 0; i < lines.length; i++) {
+    final m = _definition.firstMatch(lines[i]);
+    if (m != null) defs[i] = UseCase(m[1]!, m[2]!.trim());
+  }
+  final starts = defs.keys.toList()..sort();
+  final out = <String, List<Clause>>{};
+  for (var n = 0; n < starts.length; n++) {
+    final useCase = defs[starts[n]]!;
+    final end = n + 1 < starts.length ? starts[n + 1] : lines.length;
+    final body = lines.sublist(starts[n], end);
+    final texts = <String>[];
+    var j = 0;
+    while (j < body.length) {
+      if (_thenBullet.hasMatch(body[j])) {
+        var k = j + 1;
+        final subs = <String>[];
+        while (k < body.length &&
+            !_anyBullet.hasMatch(body[k]) &&
+            !_anyHeading.hasMatch(body[k])) {
+          if (_subBullet.hasMatch(body[k])) {
+            final buffer = StringBuffer(body[k]);
+            var c = k + 1;
+            while (c < body.length &&
+                !_subBullet.hasMatch(body[c]) &&
+                !_anyBullet.hasMatch(body[c]) &&
+                !_anyHeading.hasMatch(body[c]) &&
+                body[c].trim().isNotEmpty) {
+              buffer.write(' ${body[c]}');
+              c++;
+            }
+            subs.add(_collapse(buffer.toString().substring(4)));
+          }
+          k++;
+        }
+        if (subs.isEmpty) {
+          final buffer = StringBuffer(body[j]);
+          var c = j + 1;
+          while (c < body.length &&
+              !_anyBullet.hasMatch(body[c]) &&
+              !_anyHeading.hasMatch(body[c]) &&
+              body[c].trim().isNotEmpty) {
+            buffer.write(' ${body[c]}');
+            c++;
+          }
+          texts.add(_collapse(buffer.toString().substring(2)));
+        } else {
+          texts.addAll(subs);
+        }
+        j = k;
+        continue;
+      }
+      if (_thenItalic.hasMatch(body[j])) {
+        final buffer = StringBuffer(body[j]);
+        var c = j + 1;
+        while (c < body.length &&
+            !_thenItalic.hasMatch(body[c]) &&
+            !_anyBullet.hasMatch(body[c]) &&
+            !_anyHeading.hasMatch(body[c]) &&
+            body[c].trim().isNotEmpty) {
+          buffer.write(' ${body[c]}');
+          c++;
+        }
+        texts.add(_collapse(buffer.toString()));
+        j = c;
+        continue;
+      }
+      j++;
+    }
+    out[useCase.id] = [
+      for (var i = 0; i < texts.length; i++)
+        Clause(useCase.id, i + 1, texts[i]),
+    ];
+  }
+  return out;
+}
+
+/// The clauses of one row, or an empty list if the catalogue has no such row.
+List<Clause> clausesOf(String useCase) =>
+    catalogueClauses()[useCase] ?? const [];

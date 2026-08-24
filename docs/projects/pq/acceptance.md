@@ -1982,15 +1982,28 @@ assert in-process and cite nothing live; over all four report sources all
 same run**" while the headline above it said 6 of 6 — two figures from
 different runs, sitting four paragraphs apart and contradicting each other.
 
-**Still owed: the clause level.** Today a row is proven or not. Turning
-"UC-A2.5 has 3 unproven clauses" from a footnote somebody found by reading into
-a computed fact needs each live test to declare the clauses it establishes —
-the half that does touch the tests, and the mechanism that closes those clauses
-structurally rather than by hand.
-`tests/at_end2end_test/test/suite_manifest_test.dart` is the precedent for the
-in-pack half: a rail that runs in the package owning the evidence, so a rename
-reddens the pack that caused it. That half is what wants `manifest.dart` moved
-to `lib/`; the row-level ledger did not.
+✅ **The clause level is BUILT (2026-08-24).** ⚠️ **This read "Still owed: the
+clause level".** A citation now pins which of its row's THEN clauses it claims,
+with `clauses:` on `provenIn`, and the ledger renders a per-row checklist and a
+catalogue total. "UC-A2.5 has 3 unproven clauses" is computed rather than found
+by reading. Measured on the first render: **129 clauses across the 68 live
+rows**, and UC-A2.4 reads **5 of 6** with the `pqSeal ver 0x03` clause the one
+nothing reaches.
+
+A pin is a distinctive fragment of the clause, never its index, so inserting a
+clause does not re-point the pins after it — and editing a clause's wording
+*does* break its pin, which is the point: the edit is then reviewed against the
+test that proves it. A fragment matching nothing and a fragment matching two
+clauses are both errors, because a pin that resolves to nothing claims nothing
+while reading as coverage.
+
+⛔ **It did NOT need `manifest.dart` moved to `lib/`**, which this paragraph
+gave as its prerequisite. `tool/acceptance_ledger.dart` imports
+`../test/acceptance/manifest.dart` directly, so the parser has one home and
+the tool, `provenIn` and the docs rail all read the same one. The move is still
+wanted by the *in-pack rails* idea — a rail running in the package that owns
+the evidence, for which `tests/at_end2end_test/test/suite_manifest_test.dart`
+is the precedent — and that is a different thing.
 
 ### The two environments: VE and EE
 
@@ -2087,10 +2100,13 @@ is true
    does **not** measure UC-C1.4: `enrolAndAuthenticate` builds pq-mode
    enrollments only, so all three cells hold `keyExchangeMode` constant and
    that axis is a constant here rather than a variable.
-2. **Arms 3 and 4**, which need the EE built from a named `at_server` ref.
-   Nothing blocks them but the work itself — in particular *not* the monitor.
-3. **The clause level** of the ledger, which touches the live tests and wants
-   `manifest.dart` moved to `lib/`.
+2. ✅ **Arm 3 is BUILT** (`pq_advance_ladder_test.dart`) and **arm 4 is
+   cancelled**. ⚠️ This read "Arms 3 and 4, which need the EE built from a
+   named `at_server` ref"; neither needed the EE, and 24 retrofits across five
+   live runs on one virtualenv are why.
+3. ✅ **The clause level is BUILT** — `clauses:` on `provenIn`, rendered by
+   `tool/acceptance_ledger.dart`. ⚠️ This said it "wants `manifest.dart` moved
+   to `lib/`"; it did not, and nothing was moved.
 4. **The CI combining job**, once somebody picks an `actions/download-artifact`
    pin. CI uploads the inputs today; only the rendering is manual.
 

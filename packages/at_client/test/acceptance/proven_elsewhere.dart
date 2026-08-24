@@ -47,8 +47,22 @@ const _ledgerEnv = 'ACCEPTANCE_LEDGER';
 /// [path] is repo-relative. [testName] must match the start of a `test('…')`
 /// name in that file. [proves] states what in that test establishes this row —
 /// prose for a human, not matched against anything.
-void provenIn(String path, String testName, {required String proves}) {
-  _record(path, testName, proves);
+/// [clauses] pins which of the row's THEN clauses this citation claims.
+///
+/// Each entry is a distinctive fragment of one clause, and it must resolve to
+/// exactly one — no match and more than one are both errors, because a pin
+/// that resolves to nothing silently claims nothing while reading as coverage.
+/// Fragments rather than indexes: inserting a clause must not re-point every
+/// citation after it, and editing a clause's wording SHOULD break the pin, so
+/// that the edit is reviewed against the test that proves it.
+///
+/// Omit it and the row keeps its old all-or-nothing verdict, which is why
+/// leaving it off is not a failure — the ledger reports the row as having
+/// unpinned clauses rather than pretending they are covered.
+void provenIn(String path, String testName,
+    {required String proves, List<String> clauses = const []}) {
+  final pinned = _resolveClauses(clauses);
+  _record(path, testName, proves, pinned);
 
   final file = File('${repoRoot().path}/$path');
   expect(file.existsSync(), isTrue,
@@ -68,7 +82,7 @@ void provenIn(String path, String testName, {required String proves}) {
 /// The scenario's own name carries the use-case id (`UC-A3.1 · …`), so the
 /// ledger needs no separate row parameter and cannot disagree with the suite
 /// about which row a citation belongs to.
-void _record(String path, String testName, String proves) {
+void _record(String path, String testName, String proves, List<int> clauses) {
   final out = Platform.environment[_ledgerEnv];
   if (out == null || out.isEmpty) return;
   final scenario = Invoker.current?.liveTest.test.name;
@@ -79,6 +93,50 @@ void _record(String path, String testName, String proves) {
             'path': path,
             'testName': testName,
             'proves': proves,
+            'clauses': clauses,
           })}\n',
       mode: FileMode.append);
+}
+
+/// The id of the row whose scenario is calling, or null for a cross-cutting
+/// invariant — section 13's rows are deliberately unnumbered.
+String? _callingUseCase() {
+  final scenario = Invoker.current?.liveTest.test.name;
+  if (scenario == null) return null;
+  return RegExp(ucIdPattern).firstMatch(scenario)?.group(0);
+}
+
+/// Turns each pinned fragment into the clause index it names, asserting on the
+/// way that it names exactly one.
+List<int> _resolveClauses(List<String> pins) {
+  if (pins.isEmpty) return const [];
+
+  final useCase = _callingUseCase();
+  expect(useCase, isNotNull,
+      reason: 'clauses: can only be used from a scenario whose name carries a '
+          'use-case id. A cross-cutting invariant has no catalogue row, so '
+          'there are no clauses to pin');
+
+  final available = clausesOf(useCase!);
+  expect(available, isNotEmpty,
+      reason: 'this citation pins clauses of $useCase and the catalogue states '
+          'none for it. Either the row lost its THEN, or the parser in '
+          'manifest.dart no longer recognises the form it is written in — '
+          'check the row before deleting the pins');
+
+  final resolved = <int>[];
+  for (final pin in pins) {
+    final hits = available.where((c) => c.text.contains(pin)).toList();
+    expect(hits.length, 1,
+        reason: hits.isEmpty
+            ? 'no clause of $useCase contains "$pin". A pin that matches '
+                'nothing claims nothing while reading as coverage. The '
+                'clauses the catalogue states are:\n'
+                '${available.map((c) => '  ${c.index}. ${c.text}').join('\n')}'
+            : 'the fragment "$pin" matches ${hits.length} clauses of $useCase '
+                '(${hits.map((c) => c.index).join(', ')}) — lengthen it until '
+                'it names one');
+    resolved.add(hits.single.index);
+  }
+  return resolved;
 }
