@@ -143,7 +143,20 @@ void main() {
         return 'ODD ${got.substring(0, got.length > 60 ? 60 : got.length)}';
       } catch (e) {
         final flat = '$e'.replaceAll('\n', ' ');
-        return 'REFUSED ${flat.substring(0, flat.length > 60 ? 60 : flat.length)}';
+        // Bucket by which failure it is, because the mix between them is the
+        // finding rather than the total. ⚠️ Match the MESSAGE, not the `ATnnnn`
+        // code: the codes are what the atServer puts on the wire, and
+        // at_client has already translated them into text by the time a caller
+        // sees the exception. A regex for `AT\d{4}` here matches nothing and
+        // buckets every refusal as "other" — measured, 100 of them.
+        final code = flat.contains('Invalid syntax')
+            ? 'AT0003-invalid-syntax'
+            : flat.contains('Timeout waiting for response')
+                ? 'AT0023-timeout'
+                : flat.contains('Internal server exception')
+                    ? 'AT0011-internal'
+                    : 'other';
+        return 'REFUSED-$code ${flat.substring(0, flat.length > 60 ? 60 : flat.length)}';
       }
     }
 
