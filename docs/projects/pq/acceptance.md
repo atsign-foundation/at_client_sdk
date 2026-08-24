@@ -1628,7 +1628,8 @@ owes](#which-rows-arm-1-owes) before building against any figure in this table.
 
 The existing 4×4 serves the 3 cross-stage rows and cannot express a transition.
 Its own dartdoc says why: *"Minting happens ONCE, at enrolment time, never in
-the cells"* (`pq_rollout_matrix_test.dart:94`), because a per-cell re-mint churns
+the cells"* (the rollout matrix's own dartdoc, deleted 2026-08-24 with the
+matrix), because a per-cell re-mint churns
 the advertisement into a shape [UC-G1.14](#uc-g114--pqready-is-invisible-to-a-deployed-peer)'s
 released reader cannot take. Growing the grid to carry the catalogue would run
 38 rows as 16 identical copies of one assertion, and 3 more would pass vacuously
@@ -2651,8 +2652,10 @@ what is gone is the claim that this matrix demonstrates it.
   legacy` must
   not contain it. Measured 2026-08-18, both arms in one session: the mutation
   reddens on that assertion naming `['RS256']`, and the revert is green.
-  Proven in `tests/at_functional_test/test/pq_rollout_matrix_test.dart`, test
-  `UC-G1.15`.
+  Proven in `tests/at_functional_test/test/pq_posture_grid_test.dart`, test
+  `UC-G1.15`. ⚠️ It was in `pq_rollout_matrix_test.dart` until 2026-08-24;
+  that file and the two-process programme pair it drove are deleted, and the
+  envelope grid runs in one process in the posture grid instead.
 
 #### UC-G1.14 — pqReady is invisible to a deployed peer
   *Given* a sender at rollout 1 — an ML-DSA-65 authentication key and a freshly

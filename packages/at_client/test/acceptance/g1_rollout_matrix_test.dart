@@ -18,7 +18,7 @@ void main() {
     // THEN  it reads a String that base64-decodes as an RSA public key,
     //       exactly as for a `now` sender — the released reader cannot tell
     //       the two stages apart.
-    provenIn('tests/at_functional_test/test/pq_rollout_matrix_test.dart',
+    provenIn('tests/at_functional_test/test/pq_released_peer_test.dart',
         'UC-G1.14 · pqReady is invisible to a deployed peer',
         proves: 'the released reader\'s own verdict, with two positive '
             'controls: rollout 1 must publish a DIFFERENT key from now, and '
@@ -33,8 +33,8 @@ void main() {
     //       the sender's _apsk and verifies it with its own build.
     // THEN  all nine cells verify. rollout2 → rollout1 is the cell it exists
     //       for: an ML-DSA-65 signature read by a client that signs RSA-2048.
-    provenIn('tests/at_functional_test/test/pq_rollout_matrix_test.dart',
-        'UC-G1.15 · every rollout stage verifies every other stage',
+    provenIn('tests/at_functional_test/test/pq_posture_grid_test.dart',
+        'UC-G1.15 · every posture verifies every other posture',
         proves: 'nine live cells, and the assertion that makes them mean '
             'something: rollout2 must emit exactly [ML-DSA-65] and now must '
             'not. Measured 2026-08-18 — mutating rollout2 to resolve as '

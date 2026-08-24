@@ -1,117 +1,61 @@
-# The rollout matrix's programme pair
+# The released peer
 
-Two stage-parameterised executables and a shared exchange, compiled twice: once
-against this tree's at_client and once against the last **released** one. The
-driver that runs them is a test in the functional pack —
-`tests/at_functional_test/test/pq_rollout_matrix_test.dart` — so `runLocal.sh`
-stays the one entry point and the matrix recycles the virtualenv like every
-other live row.
+One package and one program: at_client **3.14.0**, resolved from pub.dev, asked
+what it makes of an enrollment's `_apsk`.
 
-Specified by [`acceptance.md` 16](../../docs/projects/pq/acceptance.md#16-g1--signature-agility-and-the-rollout-matrix);
-the layout is ruled in [`decisions.md` 96](../../docs/projects/pq/detail/decisions.md#96-the-programme-pair-gets-a-home-outside-the-workspace-2026-08-14).
+That is the whole of what survives here, and it survives for one reason — no
+single process can hold two versions of one package, and the only authority on
+what a *deployed* peer can parse is a deployed peer. The test that drives it is
+`tests/at_functional_test/test/pq_released_peer_test.dart`, so `runLocal.sh`
+stays the one entry point.
 
-## Why three packages
+⚠️ **This was a 4×4 rollout matrix, and it is not one any more.** It ran every
+cell as two spawned processes talking over a `##PQM##` line protocol, because
+the `published` column had to be a different build from the other three. The
+posture grid replaced it — `tests/at_functional_test/test/pq_posture_grid_test.dart`
+— and runs in **one process**, which it can precisely because it no longer has
+a released arm among its cells. Deleted with the matrix: the whole exchange
+(puts, gets, a notification), both stage-parameterised programme arms, the line
+protocol, and the driver that spawned them.
 
-| Package | Resolves at_client | Serves stages |
-|---------|--------------------|---------------|
-| `scenario/` | whichever arm consumes it | — (library) |
-| `current/`  | `../../../packages/at_client` by path | `legacy`, `pqReady`, `pqActive` |
-| `published/`| hosted **3.14.0**, lockfile committed | `published` |
+## Why two packages for one program
 
-**None of the three is a workspace member.** `packages/at_client` is in the
-root `pubspec.yaml` `workspace:` list, so anything inside the workspace
-resolves at_client by path — and the control arm has to run what pub.dev
-ships. Nesting a standalone package here is established rather than novel:
-`packages/at_client/example` is one already.
+| Package | Resolves at_client | Holds |
+|-------------|--------------------------|--------------------------------------|
+| `scenario/` | whatever consumes it | the reader, and the demo-key connect |
+| `published/`| hosted **3.14.0**, locked | the entrypoint and its preference |
+
+**Neither is a workspace member.** `packages/at_client` is in the root
+`workspace:` list, so anything inside the workspace resolves at_client by path
+— and this arm has to run what pub.dev ships.
 
 `published/pubspec.lock` is committed, against a repo-wide `pubspec.lock`
-ignore that it is exempted from by name. A control that re-resolves its
-transitive set is not a control: a changed result could be a finding or a
-different at_commons, with no way to tell which.
+ignore it is exempted from by name. A control that re-resolves its transitive
+set is not a control: a changed result could be a finding or a different
+at_commons, with no way to tell which.
 
-## What is shared, and what is not
-
-`scenario/` holds the exchange — the puts, the read-backs, the notification,
-the record naming, the line protocol. It compiles against the API surface
-**both** at_clients have, and its dependency floor is the released version, so
-it cannot reach for anything 3.14.0 lacks.
-
-Exactly two things are arm-specific, and both are arguments the shared code
-takes rather than code it contains:
-
-1. **The preference.** `current/` maps the stage name to a `PqPosture` and
-   takes its two key axes.
-   `published/` cannot: 3.14.0 has no such type, which is precisely what makes
-   it a measurement of the released build rather than a simulation of one.
-2. **The attach.** `current/` supplies an `AtKeysIo`; 3.14.0's
-   `setCurrentAtSign` has no parameter for one. This looks cosmetic and is not
-   — `SigningKeyMinting` is inert for a client with no key source, so a
-   `pqActive` arm attached without one would mint nothing, publish nothing, and
-   pass every cell while measuring an inert client.
-
-That boundary is the point. Two hand-written programs differ for two possible
-reasons — at_client changed, or the programs did — and a matrix cannot tell
-those apart. One scenario removes the second reason.
-
-## What the matrix covers, and what it does not
-
-The 4×4 is over the **data path**: a real notification, multiple puts and gets.
-All sixteen cells pass.
-
-The **signed-envelope** exchange is a `legacy`/`pqReady`/`pqActive` 3×3, built
-2026-08-18 and riding the nine cells where both halves are this tree. It is a
-3×3 rather than a fourth row and column because a released client and this tree
-cannot exchange an envelope in either direction, under any stage — measured,
-both errors pinned, and accepted rather than fixed. [`acceptance.md` 16.5](../../docs/projects/pq/acceptance.md#165-the-rollout-matrix)
-has the reasoning and
-[`decisions.md` 95](../../docs/projects/pq/detail/decisions.md#95-the-envelope-keeps-one-shape-and-a-retained-key-says-so-2026-08-12)
-rulings 2 and 3 have the amendment that finding forced.
-
-It lives in `current/lib/envelope_exchange.dart` rather than in `scenario/`,
-and that is forced rather than tidy: 3.14.0's `wrapAndSign` returns a
-`Map<String, Object?>` where this tree's returns a `SignedEnvelope`, and 3.14.0
-ships no `lib/src/signing/` at all, so a file in the shared package that signed
-an envelope would fail to compile on the published arm and take the whole
-matrix down rather than the rows it applies to. The shared package carries only
-the `ExchangeStep` hook that says *when* an arm's own step runs — before the
-sender's notification, after the receiver's reads — because that ordering is a
-property of the sequence, not of either arm.
-
-⚠️ **The grid's nine cells are not what proves the stages differ.** Mutating
-`pqActive` to resolve as `pqReady` leaves all nine passing, because a sender
-signing RSA-2048 verifies everywhere too. The algorithm assertion is the one
-that discriminates, and a change here that drops it would leave a grid that
-passes for an inert harness.
+The reader lives in `scenario/` rather than in `published/` so that it compiles
+against **both** at_clients. Its mixin members are declared identically in
+3.14.0 and in this tree, which is what makes a divergence attributable to
+at_client rather than to two hand-written programs.
 
 ## Running it by hand
 
-The driver does this for you; by hand, the receiver goes first, because
-notification streams are broadcast and do not replay.
-
-A current-arm client authenticates **as its stage's enrollment** and refuses
-to start without one: it needs `--enrollment-id` and an enrolled keyfile at
-`<storage>/<atSign>.atKeys`. The driver's `setUpAll` creates both (one
-enrollment per stage per role, minted once); by hand, the practical route is
-to run the driver once and reuse a keyfile it left under
-`test/hive/pqmatrix/baseline/<stage>-<role>/`. The published arm has neither
-parameter — an unenrolled 3.14.0 client is `primary` by construction — so a
-published-arm process is the one you can spawn with nothing but demo keys:
-
 ```bash
 cd tests/pq_matrix/published && dart pub get
-cd ../current && dart pub get
 
-# receiver, then sender, against a running virtualenv
-dart run current/bin/receiver.dart \
-  --stage pqActive --atsign '@bob🛠' --peer '@alice🛠' \
-  --run-id abc123 --storage /tmp/pqm/bob \
-  --enrollment-id <bob-pqActive-enrollment-id>
-
-dart run published/bin/sender.dart \
-  --stage published --atsign '@alice🛠' --peer '@bob🛠' \
-  --run-id abc123 --storage /tmp/pqm/alice
+dart run bin/read_apsk.dart \
+  --atsign '@alice🛠' --peer '@alice🛠' \
+  --peer-enrollment-id <the enrollment whose _apsk you want read> \
+  --namespace wavi --root-domain vip.ve.atsign.zone --root-port 64 \
+  --storage /tmp/relpeer --run-id byhand
 ```
 
-Both write one JSON object per line to stdout, each prefixed `##PQM##`. The
-sentinel is there because at_client logs to stdout too, and "the logger is
-turned down" is a claim about levels rather than about the stream.
+It writes one JSON object to stdout prefixed `##APSK##`. The sentinel is there
+because at_client logs to stdout too, and "the logger is turned down" is a
+claim about levels rather than about the stream.
+
+It reports and decides nothing. The verdict — that a `pqReady` advertisement is
+indistinguishable from a `legacy` one to a deployed peer, and that a `pqActive`
+one is not — is asserted by the test that spawns it, because a probe that
+judges its own output has an invisible failure mode.

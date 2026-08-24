@@ -692,8 +692,8 @@ void main() {
             'delivery above was measured by a listener that was never live');
   });
 
-  test('every posture verifies every other posture\'s signed envelope, and '
-      'the algorithms are what the stage names', () async {
+  test('UC-G1.15 · every posture verifies every other posture\'s signed '
+      'envelope, and the algorithms are what the stage names', () async {
     // The claim: the rollout ladder SWAPS signing algorithms rather than
     // overlapping them, so a pqActive sender emits an ML-DSA-65 signature
     // alone and a pqReady receiver — which signs RSA-2048 — must still verify
