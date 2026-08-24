@@ -7,13 +7,23 @@
 library;
 
 import 'dart:async' show Completer;
+import 'dart:convert' show jsonDecode;
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart' show AtKeys, InMemoryAtKeysIo;
 import 'package:at_client/at_client.dart';
 // ignore: implementation_imports
+import 'package:at_client/src/mixins/apkam_signing.dart' show ApkamSigning;
+// ignore: implementation_imports
+import 'package:at_client/src/mixins/envelope_signing.dart'
+    show EnvelopeSigning;
+// ignore: implementation_imports
 import 'package:at_client/src/service/notification_service_impl.dart'
     show NotificationServiceImpl;
+// ignore: implementation_imports
+import 'package:at_client/src/signing/envelope_signature.dart'
+    show SignedEnvelope;
+import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
@@ -48,6 +58,28 @@ import 'test_utils.dart';
 /// `getInstance().setCurrentAtSign` calls `previousAtClient?.stop()`
 /// (`at_client_manager.dart:165`), so the singleton route would stop each
 /// client as the next one came up.
+/// The smallest thing that can hold [EnvelopeSigning].
+///
+/// Signing and verifying share one class because they share one `_apsk`
+/// address: a verifier resolving the record differently from the signer would
+/// be testing two spellings rather than one exchange.
+class _GridEnvelopeSigner with ApkamSigning, EnvelopeSigning {
+  _GridEnvelopeSigner(this.atClient);
+
+  @override
+  final AtClient atClient;
+
+  @override
+  final AtSignLogger logger = AtSignLogger('pqGridEnvelope');
+
+  /// Null: a cached public key would let one cell verify against a key a
+  /// previous cell published, which is exactly the confusion a grid over
+  /// postures exists to expose.
+  @override
+  final ({Duration cacheExpiry, bool resetOnLookup})? publicKeyCacheSettings =
+      null;
+}
+
 void main() {
   final atSigns = <String>[
     ConfigUtil.getYaml()['atSign']['firstAtSign'] as String,
@@ -658,5 +690,108 @@ void main() {
     expect(seen, isNotEmpty,
         reason: 'the monitor recorded no notification at all, so every '
             'delivery above was measured by a listener that was never live');
+  });
+
+  test('every posture verifies every other posture\'s signed envelope, and '
+      'the algorithms are what the stage names', () async {
+    // The claim: the rollout ladder SWAPS signing algorithms rather than
+    // overlapping them, so a pqActive sender emits an ML-DSA-65 signature
+    // alone and a pqReady receiver — which signs RSA-2048 — must still verify
+    // it. That is a claim about an ungated verifier, and this is what settles
+    // it. Verification fetches the signer's `_apsk` from the atServer, so the
+    // sender's advertisement, the receiver's reader and the algorithm both
+    // ends agree on are all exercised.
+    //
+    // ⚠️ The nine cells are NOT what proves the stages differ. Mutating
+    // pqActive to resolve as pqReady leaves all nine passing, because a sender
+    // signing RSA-2048 verifies everywhere too. The algorithm pins at the end
+    // are the only thing that discriminates, and a change dropping them would
+    // leave a grid that passes for an inert harness.
+    const senders = ['s-legacy', 's-pqReady', 's-pqActive'];
+    const receivers = ['r-legacy', 'r-pqReady', 'r-pqActive'];
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    // Nullable elements deliberately: `alg` is String? and a null would mean
+    // an envelope whose header names no algorithm at all. Filtering it out
+    // here would turn that finding into a shorter list.
+    final emitted = <String, List<String?>>{};
+
+    for (final senderName in senders) {
+      final client = cells[senderName]!.client;
+      final signer = _GridEnvelopeSigner(client);
+
+      // The startup mint is fire-and-forget, and the sign path falls back to
+      // the APKAM authentication key while the keyfile holds no signing key —
+      // so signing before the mint has FILED produces an envelope carrying a
+      // key the freshly published advertisement just withdrew, and the cell
+      // fails on a race rather than on anything the stage means. Bounded and
+      // loud: a mint that never settles is a finding, not a wait.
+      final wanted = client.getPreferences()!.dataSigningKeyAlgorithms;
+      if (wanted.isNotEmpty) {
+        final deadline = DateTime.now().add(const Duration(seconds: 60));
+        while (true) {
+          final held =
+              (await signer.heldSigningKeys).map((k) => k.algorithm).toSet();
+          if (held.containsAll(wanted)) break;
+          if (DateTime.now().isAfter(deadline)) {
+            throw StateError(
+                '$senderName: the startup mint never settled — the stage '
+                'names $wanted and the keyfile holds $held after 60s. '
+                'Signing now would fall back to the authentication key and '
+                'measure a race, not the stage');
+          }
+          await Future<void>.delayed(const Duration(milliseconds: 200));
+        }
+      }
+
+      final envelopeJson = await signer.wrapAndSignAndJsonEncode(
+          {'runId': '$stamp', 'from': senderName});
+      final key = AtKey()
+        ..key = 'env$stamp${slug(senderName)}'
+        ..namespace = nsReady
+        ..sharedWith = receiver
+        ..sharedBy = sender;
+      expect(
+          await client.put(key, envelopeJson,
+              putRequestOptions: PutRequestOptions()..useRemoteAtServer = true),
+          isTrue,
+          reason: '$senderName could not leave its envelope for $receiver');
+
+      // Parsed back from the JSON that was actually written, so what is
+      // recorded is what the peer will read rather than what this process
+      // meant to send.
+      final parsed = SignedEnvelope.fromJson(jsonDecode(envelopeJson) as Map);
+      emitted[senderName] = [for (final sig in parsed.signatures) sig.alg];
+      stdout.writeln('##GRID## envelope $senderName emitted '
+          '${emitted[senderName]}');
+
+      for (final receiverName in receivers) {
+        final verifier = _GridEnvelopeSigner(cells[receiverName]!.client);
+        final raw = (await cells[receiverName]!.client.get(key,
+                getRequestOptions: GetRequestOptions()
+                  ..useRemoteAtServer = true))
+            .value as String;
+        final envelope = SignedEnvelope.fromJson(jsonDecode(raw) as Map);
+        await verifier.verifyEnvelopeSignature(envelope, signerAtSign: sender);
+        stdout.writeln('##GRID## envelope $senderName -> $receiverName: '
+            'verified ${[for (final sig in envelope.signatures) sig.alg]}');
+      }
+    }
+
+    // The pins. Without these the nine cells above pass for a harness where no
+    // stage does anything.
+    expect(emitted['s-pqActive'], ['ML-DSA-65'],
+        reason: 'a pqActive enrollment mints an ML-DSA-65 signing key and '
+            'signs with it alone. A second, weaker signature would only ever '
+            'be the one a verifier passes over');
+    expect(emitted['s-legacy'], isNot(contains('ML-DSA-65')),
+        reason: 'a legacy enrollment files no signing key of its own and '
+            'signs with its APKAM authentication key, which is RSA. If this '
+            'carries ML-DSA-65 the stages are not distinct and every cell '
+            'above verified for the wrong reason');
+    for (final entry in emitted.entries) {
+      expect(entry.value, hasLength(1),
+          reason: '${entry.key}: no posture names two signing algorithms, so '
+              'no envelope may carry two signatures');
+    }
   });
 }
