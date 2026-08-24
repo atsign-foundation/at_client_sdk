@@ -27,9 +27,11 @@ class WireRecord {
 /// The other fixture, `buildRemoteBackedMockClient`, stubs `AtClient.get`
 /// outright. That is right for code which merely *calls* get, and it made
 /// `GetResponseTransformer` unreachable from every unit test: 1543 of them run
-/// without the response path ever executing. A wrong-value read measured
-/// against a live atServer in 2026-08 could not be pinned by any unit test for
-/// exactly that reason.
+/// without the response path ever executing, so when a wrong-value read was
+/// measured against a live atServer in 2026-08 there was no unit test that
+/// could even exercise the layer under suspicion. (The cause turned out to lie
+/// below at_client, in how an atServer relays concurrent cross-atSign lookups;
+/// the coverage gap stands regardless.)
 ///
 /// So the two are not alternatives. Use the mock when the client is a
 /// collaborator; use this when the read path itself is what is under test.

@@ -118,44 +118,86 @@ that file instead; the list below is the PQ release work.
 
 **THE D1 GATES, in order. Everything above this line is history.**
 
-**G0. [RECOMMENDED] A conveyance payload is landing at VALUE record addresses.**
-A `get` returns a 44-character content key where the record's payload should
-be, **with no exception raised** — an app receives a plausible-looking value
-that is the correct decryption of the wrong record. This is the sharpest thing
-open in the project: it is silent, it corrupts reads, and it is now
-reproducible in about seven minutes.
+**G0. [RECOMMENDED] An atServer answers concurrent cross-atSign lookups with
+each other's records.** Two `lookup:` requests for different records of the
+same peer atSign, in flight at the same moment on one atServer, can each come
+back carrying the other's record — **with no exception raised**, so an app
+receives a well-formed record that is not the one it asked for. Nothing is
+stored wrongly; the record at rest is correct at both ends.
 
-**Start here, and start by RUNNING it rather than reading:**
+⚠️ **This entry read "A conveyance payload is landing at VALUE record
+addresses" until 2026-08-24, and that was wrong.** The write was never at
+fault. `llookup:all:` on the sender's own atServer and `lookup:all:` from the
+receiver both return the correct 6668-byte value for the very record whose read
+had just handed back a 44-character content key. What the earlier entry read as
+a misplaced payload was one read being answered with another read's response.
+
+**It is not a PQ defect.** PQ made it visible: an nskey read issues a *second*
+cross-atSign lookup, for the `<ckKid>.__ck` conveyance, from inside the first
+one's decrypt — so a single `get` puts two relayed lookups in flight where a
+legacy read has one. (Why legacy never surfaced it is untested; I have not
+measured a legacy arm.)
+
+**Start by RUNNING the standalone probe, which has no PQ in it at all:**
 
 ```bash
-docker rm -f test-virtualenv-1
-cd tests/at_functional_test          # recycle the VE first, always
+docker rm -f test-virtualenv-1        # recycle the VE first, always
+cd tests/at_functional_test
 VIRTUALENV_IMAGE=at_virtual_env:local ./runLocal.sh   # or bring the VE up alone
-dart test test/pq_conveyance_at_value_address_test.dart --concurrency=1
+dart test test/concurrent_relayed_lookup_test.dart --concurrency=1 --run-skipped
 ```
 
-The harness is `@Skip`ped (it would make the pack red at ~1 cycle in 5) and its
-header carries the captured evidence, the trigger, the controls and the full
-ruled-out list. **Read that header before forming a hypothesis** — five
-plausible ones are already dead, each with a measurement rather than an
-argument, and the row in [`## TODO`](#todo) records them.
+Four sockets on `@bob🛠`, four different records of `@alice🛠`, asked together.
+Measured 2026-08-24 against `at_virtual_env:local`, `@alice🛠` under write load:
 
-**What is known**: the read is faithful — the key asked for is the key
-returned — and what sits at that address is a 1564-byte X-Wing sealed envelope
-stamped `at/nskey/XWING/AES/GCM`, where a healthy record is 6204 bytes of
-`at/symmetric/AES/GCM`. The trigger is **several content keys alive for one
-`(nskeyOwner, namespace)` scope**.
+| in flight at once | requests | answered correctly | answered with another record | refused or timed out |
+| ----------------- | -------- | ------------------ | ---------------------------- | -------------------- |
+| 1 (control)       | 120      | 120                | 0                            | 0                    |
+| 4                 | 480      | 41                 | 35                           | 404                  |
 
-**What is owed**: find how a conveyance write reaches a value address. Two
-shapes remain — `CkManager` writing to the value key, or a value put routing to
-`NskeyProvider.encrypt`. Instrument the put path to log, per write, the at-key
-string and the provider that encrypted it. ⚠️ `CryptoConfig.nskey` sets
-`defaultProviderId = symmetricAesGcmCryptoProviderId`, so the era default is
-not the cause.
+The refusals name the same event from the other side: 250 `AT0011-Internal
+server exception : Connection failed to @alice🛠`, 18 `AT0023-Timeout waiting
+for response`, and 16 `AT0003-Invalid syntax` in reply to a `lookup:all:` the
+control arm sends cleanly 120 times.
+
+**The mechanism, read in at_server at `a0deee69` — the revision
+`at_virtual_env:local` was built from — and unchanged on its trunk at
+`a37e3e3b`:**
+
+- `AtCacheManager` holds one `DummyInboundConnection` and passes it to
+  `OutboundClientManager.getClient(otherAtSign, thatConnection)` on every
+  relayed lookup (`packages/at_secondary_server/lib/src/caching/cache_manager.dart`).
+- `OutboundClientPool.get` matches a pooled client with
+  `client.inboundConnection.equals(...)`, and `DummyInboundConnection.equals`
+  returns true for **any** other `DummyInboundConnection` — so every relayed
+  lookup to a given atSign, from every client connection, gets the same
+  `OutboundClient` and therefore the same socket. The atServer's own log shows
+  it: three `retrieved outbound client to @alice🛠 ... from pool` inside 140 µs.
+- `OutboundClient.lookUp` writes its request and reads whatever the listener
+  queues next, with **no mutex** across the pair. The client half of the same
+  conversation does hold one — `AtLookupImpl._process` keeps
+  `requestResponseMutex` across `_sendCommand` + `messageListener.read`.
+- `getClient` is not atomic either: two concurrent misses each create and add a
+  client, so the pool can hold duplicates for one key (observed, 6 ms apart).
+
+**What is owed** is a decision and then a fix, both in at_server: whether to
+lock `OutboundClient` per request/response pair, or to stop sharing one
+outbound client between unrelated relays by keying the pool on the *asking*
+inbound connection as every non-cache relay already does. The two differ in
+what they cost — a lock serialises every relayed lookup to a peer atSign; the
+pool-key change spends a connection per client. Then rebuild
+`at_virtual_env:local` and re-run both probes.
+
+⚠️ **Also owed, and separate**: at_lookup's
+`OutboundMessageListener.read` handles `AT0014 "Unexpected response found"` by
+popping one entry off `_queue` and clearing `_buffer` **without draining the
+queue or closing the connection**, unlike both timeout paths beside it. A stale
+queued response is then handed to the next command, offsetting every read after
+it. It did not fire in any of these runs; it is a hazard on its own merits.
 
 ⚠️ **This displaces G6 as the recommendation.** The train is release
-sequencing and will keep; a silent wrong-value read in the substrate is what
-the PQ work exists to get right, and the evidence is hot now.
+sequencing and will keep; a cross-atSign read that silently returns the wrong
+record is the sharpest thing open anywhere in the tree.
 
 **G2. ✅ DISCHARGED 2026-08-24 — build the acceptance suite out per [ruling 115](detail/decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23).** Arms 1–3, the ledger and its clause level are all built; arm 4 is cancelled. Nothing here is startable — the entry is kept because it carries the design and the measurements, and because a reader who deletes it re-derives ruling 115 from scratch.
 The gate that D1's own definition rests on, and the largest. gkc's framing:
@@ -492,7 +534,7 @@ carried inside a closed one.
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | **at_chops 3.6.1 — [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181)** | ⛔ **Carved and OPEN, and it is NOT in the train's ordering above** — it was cut on 2026-08-24 from trunk, not from the spike, because at_chops 3.6.0 is already published and had no in-progress CHANGELOG heading to fold into. Message-only change: `PkamMlDsa65SigningAlgo.sign` reported a bare `ML-DSA-65 secret key must be 4032 bytes: N`, which names neither the credential nor the likeliest cause. A PKAM key of ~1.2 kB is an RSA-2048 private key, which a caller holds by naming one enrollment's algorithm while carrying another's credentials. Owed: merge, then gkc publishes 3.6.1. ⚠️ **Nothing depends on it** — no floor in this tree requires 3.6.1, so it can land whenever; but it is a second at_chops publish the train's ordering does not mention | Nothing. It is independent of at_auth and of the spike |
-| arm 2's UC-G1.15 read returns a content key | ⛔ **DIAGNOSED 2026-08-24 — a conveyance payload sits at a VALUE record's address.** Reproduce in ~7 minutes with `tests/at_functional_test/test/pq_conveyance_at_value_address_test.dart` (`@Skip`ped; run it by hand on a **freshly recycled** virtualenv), which fails roughly **1 cycle in 5**.<br><br>**The evidence, captured at the moment of the read rather than afterwards:**<br>`asked=@bob:rate28.<ns>@alice` → `got=@bob:rate28.<ns>@alice`, `len=1564`, `providerId: at/nskey/XWING/AES/GCM`, `recipientKind: nskey` — against a healthy `len=6204` / `at/symmetric/AES/GCM`. The key asked for **is** the key returned, so the read is faithful: `get` sees the conveyance provider on the record, routes to `NskeyProvider.decrypt`, and that returns the content key it exists to return. **The 44-character value an app sees is the correct decryption of the wrong record.** The AEAD failures and `_apsk` signature failures in the same runs are downstream of the same thing.<br><br>**The trigger is several content keys alive for one `(nskeyOwner, namespace)` scope.** A CK is scoped that way, so a fresh namespace per cycle guarantees exactly one — 200 such cycles never failed. One namespace with three senders, each cutting its own CK, fails at ~1 in 5.<br><br>⛔ **Ruled out with evidence — do not re-derive any of these:** the read path (a `CONVEYANCE-FOR-VALUE` probe inside `GetResponseTransformer` never fired while failures reproduced); transport and connection state (200 clean cycles under concurrency; no timeouts, no socket errors, **no AT0014** in any failing run, grep proven against `AT0027`); the shared `AtKey` object between put and get (150 cycles with it, clean); metadata aliasing via `ckConveyanceKey`; `CryptoRuntime._stampEncrypted` colliding with a read (0 shared metadata objects over 15 runs); and concurrent nskey seeding (serialising provisioning did **not** help — non-ok 74%, 88%, 98%, 82%).<br><br>⚠️ **A latent defect found on the way, unrelated to this symptom but worth fixing:** `OutboundMessageListener.read`'s `AT0014 'Unexpected response found'` path pops one entry off `_queue`, clears `_buffer`, and throws — **without draining the queue or closing the connection**, unlike both timeout paths which do `_buffer.clear()` + `closeConnection()`. A stale queued response is then returned to the next command, offsetting every subsequent read. It did not fire in these runs; it is a hazard on its own merits (gkc spotted it, 2026-08-24).<br><br>**What is owed:** find how a conveyance write reaches a value address. The two shapes left are `CkManager` writing to the value key, or a value put routing to `NskeyProvider.encrypt`. Instrument the put path to log, per write, the at-key string and the provider that encrypted it. ⚠️ Note `CryptoConfig.nskey` sets `defaultProviderId = symmetricAesGcmCryptoProviderId`, so the era default is **not** the cause | Nothing. `cd tests/at_functional_test && VIRTUALENV_IMAGE=at_virtual_env:local ./runLocal.sh` for the pack; the harness above for the defect |
+| arm 2's UC-G1.15 read returns a content key | ⛔ **DIAGNOSED 2026-08-24, and it is an atServer defect with nothing PQ about it** — see **G0** in [`## THE NEXT MOVE`](#the-next-move), which carries the measurements, the mechanism and what is owed.<br><br>⚠️ **This row read “a conveyance payload sits at a VALUE record’s address” and it was wrong.** Nothing is stored wrongly: `llookup:all:` on the sender’s atServer and `lookup:all:` from the receiver both return the correct 6668-byte record for the very read that had just handed back a 44-character content key. Two cross-atSign lookups in flight at once are answered with each other’s responses, because every relayed lookup on an atServer shares one outbound connection and `OutboundClient.lookUp` holds no lock across send-and-read.<br><br>**Two harnesses reproduce it.** `tests/at_functional_test/test/concurrent_relayed_lookup_test.dart` is the minimal one — no PQ, no encryption, four sockets, four records — and scores 41 ok out of 480 at width 4 against 120 out of 120 at width 1. `tests/at_functional_test/test/pq_conveyance_at_value_address_test.dart` is the PQ symptom it was found through, at roughly 1 cycle in 5. Both are `@Skip`ped; run them by hand on a **freshly recycled** virtualenv.<br><br>⛔ **Ruled out with evidence — do not re-derive any of these:** at_client’s read path (the key asked for is the key returned, and a `CONVEYANCE-FOR-VALUE` probe inside `GetResponseTransformer` never fired); the shared `AtKey` object between put and get (150 cycles, clean); metadata aliasing via `ckConveyanceKey`; `CryptoRuntime._stampEncrypted` colliding with a read (0 shared metadata objects over 15 runs); concurrent nskey seeding (serialising provisioning did **not** help); and the write itself, settled by the raw lookups above | Nothing here. The fix is in at_server; `cd tests/at_functional_test && VIRTUALENV_IMAGE=at_virtual_env:local ./runLocal.sh` for the pack |
 | spike CI result unseen | ⚠️ Both workflows were dispatched against `gkc-pq-d1-spike` on 2026-08-24 (`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike`, same for `at_libraries.yaml`) and **the result was never read** — the session ended first. It is the first CI over arms 1–3, the deleted rollout matrix, the released-peer test and the enrolment fix; everything before that was local only. ⚠️ **A red there may be the IMAGE, not the code**: CI's functional job uses `atsigncompany/virtualenv:dev_env` while every local run used `at_virtual_env:local`, and they differ in whether they can verify an ML-DSA PKAM signature — which is exactly what arm 2's pqActive cells, arm 3's rungs and `pq_native_app_enrollment_test.dart` rest on. Check the image before the code | Nothing. `gh run list --branch gkc-pq-d1-spike --limit 4` |
 | ~~app enrollments cannot be PQ-native~~ **FIXED 2026-08-24** | ✅ **DONE — do not rebuild it.** `AtEnrollmentRequest` now **requires** `signingAlgo` on both constructors (no default, so the compiler enumerated all 22 call sites across 6 packages), and also forwards `advertisedSigningKey`, which the base class declared and neither constructor passed on. `mintApkamKeyPair` is shared with onboarding so the two cannot drift. A non-rsa2048 enrolment files typed material under the enrollment id once the atServer names it — the flat copy STAYS, because one enrollment named by the keyfile's own `enrollmentId` resolves the same either way, and clearing it breaks the approval handshake, which needs the keypair and the symmetric key from one `toAtChops`. ⚠️ **Three things the API change alone did not fix, each found by a failing run rather than by reading:** `enroll` did not forward `signingAlgo` to `sendEnrollRequest`, so the parameter would have existed and done nothing; `enrollmentKeyPackageBuilder` was never told the algorithm, though it has always taken one; and the approval handshake never set `signingAlgoType`, so an ML-DSA enrolment PKAM'd under at_lookup's rsa2048 default. **Proven at two layers**: `tests/at_functional_test/test/pq_native_app_enrollment_test.dart` (an mldsa65 enrolment keeps its id, an rsa2048 one still retrofits — the control) and `tests/at_onboarding_cli_functional_tests/test/pq_native_enroll_test.dart` against a real VE, where the assertion that matters is that the enrolment **authenticates**: PKAM is record-authoritative, so a client holding ML-DSA material can only authenticate if the atServer's record says ML-DSA. ⛔ **What is NOT covered, and is separate**: every other atServer implementation would record an ML-DSA enrollment and then never authenticate it. That gap is pre-existing, independent of this fix, and lives on an unmerged branch | Nothing. `--posture` now reaches the enrolment in `at_activate enroll`, defaulted once at the `enroll`/`sendEnrollRequest` boundary where a caller has no rollout position to read |
 | doc-set reduction, phases 3–5 | ⛔ **RULED BY gkc 2026-08-23, AFTER D1 — do not start it while D1 is open.** The end state is five files: `roadmap.md` (stale, needs a pass), `design.md`, `acceptance.md`, `decisions.md` (seriously shrunk) and this plan, which from now records **only what is still owed**. Phases 1 and 2 landed 2026-08-23 — the rejections and measurements became [rulings 116 and 117](decisions.md), and this plan went 1,878 → 1,075 lines. **What remains, and phase 3 MUST precede phase 4:** (3) trim the **117** ruling bodies in `detail/decisions.md` and inline them into `decisions.md` — they average **98 lines each**, and only **4 of 116** rulings are dead, so this is an editorial pass over live content rather than a purge of obsolete ones; (4) delete `detail/` and repoint or remove the **250** links into it (113 from this file, 63 acceptance, 62 design, 9 roadmap, 2 decisions, 1 seal-spec), rewriting `docs_structure_test.dart`, which enforces index↔body correspondence both ways and names `detail` 28 times — the rail changes in the SAME commit or CI goes red; (5) substitute explanations for the code that cites `detail/` paths, which is a standing rule violation as well as a broken link: ⚠️ **this item shrank on 2026-08-24** — it named `pq_rollout_matrix_test.dart` and a dartdoc in `tests/pq_matrix/current/lib/envelope_exchange.dart`, and both files are now deleted along with the rollout matrix. The README was rewritten in the same change and cites `detail/` no longer, so **item (5) is discharged**. Measured 2026-08-24: only two code files still name `detail/`, and neither is item (5)'s — `cross_cutting_test.dart` reads `detail/decisions.md` as a build input and this row already exempts it, and `docs_structure_test.dart` is the rail item (4) rewrites. Re-derive before acting: `git grep --untracked -n 'detail/' -- tests packages | grep -v '\.md:'`. `cross_cutting_test.dart` reads `detail/decisions.md` as a build input and is fine. ⚠️ **Phase 3 is where this goes wrong silently** — a ruling trimmed too far reads complete, and 112 of 116 rulings are still in force. Re-derive the size: `for f in docs/projects/pq/*.md docs/projects/pq/detail/*.md; do echo "$(grep -c '' $f) $f"; done` | Nothing but D1 closing. `detail/` is **19,141 lines against 7,231 live**, so this is most of the reduction |

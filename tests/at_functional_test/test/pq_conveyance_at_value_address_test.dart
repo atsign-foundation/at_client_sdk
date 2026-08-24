@@ -13,34 +13,51 @@
 //
 // ## What it shows
 //
-// A conveyance payload sits at a VALUE record's address. Captured at the
-// moment of the read rather than afterwards, 2026-08-24:
+// A `get` returns another record's content, with no exception raised. Captured
+// at the moment of the read, 2026-08-24:
 //
 //   asked=@bob:rate28.<ns>@alice   got=@bob:rate28.<ns>@alice
 //   len=1564  providerId: at/nskey/XWING/AES/GCM, recipientKind: nskey
 //   healthy:  len=6204  providerId: at/symmetric/AES/GCM
 //
-// The key asked for is the key returned, so the read is faithful. What sits at
-// that address is a 1564-byte X-Wing sealed envelope carrying a content key,
-// stamped with the CONVEYANCE provider — so `get` routes to
-// `NskeyProvider.decrypt`, which returns the content key it is designed to
-// return. The 44-character value an app sees is the correct decryption of the
-// wrong record.
+// The 44-character value the app sees is the correct decryption of a CK
+// conveyance record — routed to `NskeyProvider.decrypt` because that is the
+// provider the *returned* record cites.
 //
-// ## The condition
+// ⛔ **This header read "a conveyance payload sits at a VALUE record's
+// address", and that was wrong.** Nothing is stored wrongly. `llookup:all:` on
+// the sender's own atServer and `lookup:all:` from the receiver both return the
+// correct 6668-byte record for the very cycle whose read had just failed. What
+// comes back is another *read's* response, not another record's *address*.
+//
+// ## Why it happens, and why it is not a PQ defect
+//
+// Two cross-atSign `lookup:` requests in flight at once on one atServer are
+// answered with each other's responses: every relayed lookup shares one
+// outbound connection, and `OutboundClient.lookUp` holds no lock across its
+// send and its read. `concurrent_relayed_lookup_test.dart` beside this file
+// reproduces that with no PQ, no encryption and no content keys in it at all,
+// and is the harness to work from.
+//
+// PQ is what made it visible rather than what causes it: resolving a content
+// key issues a SECOND cross-atSign lookup, for the `<ckKid>.__ck` conveyance,
+// from inside the first read's own decrypt — so one `get` puts two relayed
+// lookups in flight.
+//
+// ## The condition this file adds
 //
 // Several content keys alive for one `(nskeyOwner, namespace)` scope. A CK is
 // scoped that way, so a fresh namespace per cycle guarantees exactly one — and
-// 200 cycles built that way never failed. This file uses ONE namespace with
-// three senders, each cutting its own CK.
+// the conveyance is then cached after the first read, so the second lookup
+// stops happening and 200 such cycles never failed. This file uses ONE
+// namespace with three senders, each cutting its own CK, so a read must resolve
+// a conveyance it has not seen and the two lookups overlap.
 //
 // ## Ruled out, with evidence — do not re-derive
 //
-// - **the read path**: the key requested is the key returned, and a
+// - **the write**: the record is correct at rest, read raw from both ends
+// - **at_client's read path**: the key requested is the key returned, and a
 //   CONVEYANCE-FOR-VALUE probe inside `GetResponseTransformer` never fired
-// - **transport**: 200 cycles of concurrent reads, three enrollments, a live
-//   monitor and interleaved `_apsk` lookups, all clean; no timeouts, no socket
-//   errors, and no AT0014 in any failing run
 // - **the shared AtKey object** between the put and the get: 150 cycles with
 //   it, clean
 // - **concurrent nskey seeding**: serialising provisioning did not help

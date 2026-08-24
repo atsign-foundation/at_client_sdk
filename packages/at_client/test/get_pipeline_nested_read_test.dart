@@ -17,9 +17,14 @@ import 'test_utils/pipeline_backed_client.dart';
 /// Every other unit test reaches `AtClient.get` through a fixture that stubs
 /// it, so `GetResponseTransformer` — where a response becomes an [AtValue],
 /// picks a crypto provider from the record's own `appMetadata`, and decrypts —
-/// has never run under test. That blind spot is why a wrong-value read
-/// measured against a live atServer in 2026-08 could not be pinned by any of
-/// the 1543 unit tests: the layer it points at was unreachable.
+/// has never run under test.
+///
+/// It was written while a wrong-value read measured against a live atServer in
+/// 2026-08 was unexplained and this layer was the obvious suspect. It was not
+/// the cause — that read turned out to be an atServer answering two concurrent
+/// cross-atSign lookups with each other's responses, below at_client
+/// entirely — but the coverage gap is real on its own account, and this is the
+/// only test that closes it.
 ///
 /// The case here is the one that failed live: a value whose content key is not
 /// cached, so decrypting it makes a **nested** `get` for the `<ckKid>.__ck`
