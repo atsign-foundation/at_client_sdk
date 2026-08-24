@@ -11373,12 +11373,35 @@ has open — and it belongs beside the catalogue it exists to prove.
   `refuseChangedRolloutAxes` refuses a second client on one cache key under
   different rollout axes, so each posture needs its own `(atSign,
   enrollmentId)`.
-- **Arm 2, the pair grid** — the existing 4x4, unchanged, for the 3 rows that
-  need two stages at once.
-- **Arm 3, the transition arm** — the edges: retrofit, retirement, the
-  capability flip, rotation, revocation, the rollout ladder.
-- **Arm 4, the server-version arm** — client posture crossed with atServer
-  version, retiring the pinned-image special case.
+- **Arm 2, the posture grid** — ⚠️ **AMENDED 2026-08-24.** This bullet read
+  "the pair grid — the existing 4x4, **unchanged**, for the 3 rows that need two
+  stages at once", and both halves are now wrong. The 4x4 is **replaced**, not
+  kept: its sixteen cells were never posture-faithful (two of nine axes reached
+  them, so all sixteen encrypted legacy), and its two-process architecture
+  existed solely to host at_client 3.14.0, which is no longer a cell. The
+  replacement is a single in-process grid over sender posture × receiver
+  posture, exercising self and cross-atSign puts, gets and notifications with
+  per-cell expected outcomes, and carrying the signed-envelope exchange the
+  released arm used to host. The "3 rows" half was never written down as a
+  membership and cannot be checked — see the amendment on the kind table above.
+- **Arm 3, the advance ladder** — ⚠️ **AMENDED 2026-08-24.** This read "the
+  transition arm — the edges: retrofit, retirement, the capability flip,
+  rotation, revocation, the rollout ladder", which is a list of rows rather
+  than a mechanism. What it is: legacy → pqReady → pqActive on one enrollment,
+  asserting the `.atKeys` shape at each rung and re-reading data written before
+  each advance. Kept SEPARATE from the grid by gkc's ruling, because re-running
+  the grid after an advance adds no posture pair a static grid does not already
+  have. Neither rung is a call: legacy → pqReady fires by itself inside
+  `AtClientImpl._settleEnrollmentIdentity` when a posture wants a stronger
+  authentication algorithm than the key material holds, and pqReady → pqActive
+  keeps the enrollment but needs the client cache evicted, because the axis it
+  moves is final on the preference.
+- ⛔ **Arm 4 is CANCELLED** (gkc, 2026-08-24). It read "the server-version arm —
+  client posture crossed with atServer version, retiring the pinned-image
+  special case". The atServer-version axis is out of scope: gkc will ensure the
+  hosted fleet runs the version a release requires, and atServers hosted
+  elsewhere are not this project's concern. UC-B0.1 keeps its pinned-image
+  special case and the `legacy-server` tag stays.
 - **The ledger** — each pack writes a results file, one reporter renders the
   catalogue from what actually ran, so a row no run exercised says so instead
   of staying green. ✅ **The row level is BUILT, 2026-08-23**, and reads
@@ -11393,15 +11416,27 @@ has open — and it belongs beside the catalogue it exists to prove.
   to declare its clauses. Row level needed no change to any of the 194 live
   tests; clause level does, which is the whole difference in cost.
 
-**Why the EE is what makes arm 3 possible.** A transition has to re-mint;
-`(appName, deviceName)` is one-shot server state and CRAM activation is one-shot
-per atSign per virtualenv, which is why the matrix forbids re-minting in cells.
-The ephemeral environment mounts its own atSign list, so an arm gets fresh
-CRAM-activatable atSigns rather than drawing from a shared pool, and its
-Dockerfile compiles `at_secondary_server` from the repo, so an EE built at a ref
-is an atServer at that ref. The harness already fits: same certificates, and
-`TestUtils.rootServerPort` already reads a base port whose comment describes the
-EE's contract.
+⚠️ **AMENDED 2026-08-24: arm 3 does NOT need the EE, and this paragraph was
+the reason it was thought to.** It read *"Why the EE is what makes arm 3
+possible. A transition has to re-mint; `(appName, deviceName)` is one-shot
+server state and CRAM activation is one-shot per atSign per virtualenv, which
+is why the matrix forbids re-minting in cells."* The premise is a claim about
+the matrix's *cell* re-minting, and an advance is not that: it is a
+self-enrollment, whose collision behaviour was never tested against it.
+Measured 2026-08-24 against **one** virtualenv, never restarted: five live
+runs — a provisioning probe three times (4, 4 and 12 retrofits) and arm 1 twice
+(2 each) — produced **24 retrofits with no collision**, so a self-enrollment
+runs in the VE like any other live row. What that does *not* cover is a second
+retrofit of the **same** enrollment, which the keyfile refuses outright; the
+ladder needs only one, because pqReady → pqActive changes no enrollment. The EE's remaining justification was
+arm 4, which is cancelled.
+
+What the EE still is, for whenever something wants it: it mounts its own atSign
+list, so an arm gets fresh CRAM-activatable atSigns rather than drawing from a
+shared pool, and its Dockerfile compiles `at_secondary_server` from the repo, so
+an EE built at a ref is an atServer at that ref. The harness already fits: same
+certificates, and `TestUtils.rootServerPort` already reads a base port whose
+comment describes the EE's contract.
 
 ⛔ **Build every EE from a named ref; never pull `ephemeral:latest`**, which is
 rebuilt monthly against a VE that publishes per commit.

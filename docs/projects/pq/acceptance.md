@@ -1639,7 +1639,7 @@ There is also an axis that is not the client's posture at all:
 varies by atServer version, and survives today as a tagged special case against
 a pinned `virtualenv:vip-p3.15.0` in its own CI job.
 
-### The four arms
+### The arms
 
 **Arm 1, the stage arm.** 3 cells, one client per `PqPosture`, asserting the
 axis and consequence rows it owns — [which ones, and why the count is
@@ -1664,26 +1664,113 @@ than routing it legacy. Recorded rather than silently repaired because of how it
 read: a precise-looking `file:line` beside a measured `0`, so the figure carries
 the citation's credibility and nobody opens the line.
 
-**Arm 2, the pair grid.** The existing 4×4 stays as it is, serving the 3 rows
-that need two stages at once. The `published` column must stay an out-of-process
-arm, since a released at_client and this tree cannot live in one process.
-⚠️ The cells are **not** posture-faithful today —
-`tests/pq_matrix/current/lib/arm.dart` takes only two axes from the posture, so
-every cell runs at `PqPosture.legacy` on the era-default, seeding and
-write-default axes. A pqActive cell that inherited `disallowLegacyEncryption`
-would refuse writes to any unseeded peer and fail for a reason that is not the
-thing under test.
+**Arm 2, the posture grid.** Sender posture × receiver posture, in **one
+process** in `tests/at_functional_test`, exercising self and cross-atSign puts,
+gets, and notification send and receive. Cells carry **per-cell expected
+outcomes**: some pairs must refuse, and a cell that succeeds where it should
+refuse is the finding. It also carries the signed-envelope exchange that
+[UC-G1.15](#uc-g115--every-rollout-stage-verifies-every-other-stages-envelope)
+needs, algorithm pins included — without those pins all nine envelope cells
+pass for an inert harness.
 
-**Arm 3, the transition arm.** A cell is a state, and this catalogue is full of
-edges: the retrofit trio, the retirement pair, the capability flip, rotation and
-revocation, heal-from-a-holder, and the rollout ladder rows UC-G1.7 to UC-G1.9.
-This arm asserts the invariant *across* the change rather than at either end,
-which no cell can do.
+This replaces the 4×4, and the `published` column goes with it. The
+two-process architecture existed for exactly one reason, which
+`tests/pq_matrix/README.md` states: *"the two halves run as separate processes
+because they are separate builds"*. With at_client 3.14.0 no longer a cell
+there is no second build to host, and the scenario package, the `##PQM##` line
+protocol and the per-arm `pub get` go with it. What survives of the released
+arm is a single standalone test that keeps
+[UC-G1.14](#uc-g114--pqready-is-invisible-to-a-deployed-peer) proven, because
+nothing else in the tree compares this tree's legacy posture against a released
+at_client, and that row's two positive controls both run *through* the released
+build.
 
-**Arm 4, the server-version arm.** Client posture crossed with atServer version,
-built as ephemeral environments at named `at_server` refs. This retires the
-`legacy-server` tag and the pinned image as special cases, and gives UC-B0.1 an
-ordinary home.
+⚠️ **The 4×4's sixteen cells were never posture-faithful, and all sixteen
+encrypted legacy.** `tests/pq_matrix/current/lib/arm.dart` took two of the nine
+axes, so `AtClientPreference`'s default posture left every cell at
+`PqPosture.legacy` on the era-default, seeding and refusal axes. The narrowing's
+stated reason named three axes it would disturb and one of them was wrong:
+`keyExchangeMode` has no behavioural consumer in at_client at all — every
+mention is a declaration, a constant or a comparison — which `PqPosture`'s own
+dartdoc says, calling it an at_auth value at_client only *carries*.
+
+**Arm 3, the advance ladder.** Kept separate from the grid, because re-running
+the grid after each advance adds **no posture pair a static grid does not
+already have**: advancing the legacy row to pqReady leaves four distinct pairs,
+all of them already cells. What a ladder buys instead is what a re-run cannot —
+the shape of the `.atKeys` file after each rung, and the proof that data
+written *before* an advance is still readable *after* it.
+
+Its two rungs are different mechanisms, and neither is a call:
+
+- **legacy → pqReady happens by itself.** A client whose posture wants a
+  stronger authentication algorithm than its key material holds is retrofitted
+  by `AtClientImpl._settleEnrollmentIdentity` *during construction*, and comes
+  up on a **new** enrollment id. This is not hypothetical: 2 of arm 1's 3 cells
+  do it on every run.
+- **pqReady → pqActive keeps the enrollment.** Both authenticate with ML-DSA-65,
+  so no retrofit is due; what moves is the data signing key, through
+  `SigningKeyMinting.reconcileSigningKeys`, which reads a **final** preference
+  field. That needs a second client object for the same
+  `(atSign, enrollmentId)`, which `AtClientImpl.refuseChangedRolloutAxes`
+  refuses — so the rung evicts `AtClientImpl.atClientInstanceMap` first, as
+  several at_client unit tests already do.
+
+⛔ **Arm 4 is cancelled** (gkc, 2026-08-23). The atServer-version axis is out of
+scope for this project: the hosted fleet will run the version a release
+requires, and atServers hosted elsewhere are not this project's concern.
+[UC-B0.1](#uc-b01--a-pq-capable-client-cannot-pq-upgrade-against-a-legacy-atserver)
+therefore keeps its pinned-image special case rather than gaining an ordinary
+home, and the `legacy-server` tag stays.
+
+### How the postures are provisioned
+
+**Two atSigns, seven enrollments each, one namespace per posture** — not the six
+atSigns the axes look like they demand.
+
+It works because the two kinds of axis have different scopes. The credential
+axes are per-enrollment: an enrollment's `_apsk` lives at
+`public:_apsk.<enrollmentId>.a.__e@<atSign>`. But `seedNamespaceKeys` publishes
+to `public:__nskey.<ns>@<owner>` — **per atSign per namespace, with no
+enrollment id in the address**. Three postures on one atSign would therefore
+contend one nskey record, and a legacy receiver would stop being the unseeded
+destination several rows need it to be. Giving each posture its own namespace
+removes the contention rather than working around it: `NskeySeeding.seed` walks
+the *enrollment's authorised* namespaces, and `PublishedNskeyKeyRing` resolves
+by `(owner, namespace)` throughout, its dartdoc saying outright that *"There is
+no atSign-level key to fall back to."*
+
+Measured live on `@alice🛠` and `@bob🛠` simultaneously, 2026-08-24 — 14 clients
+in one process, each with its own Hive store:
+
+| Namespace | Posture(s) | `__nskey` advertisement | Why it is in the grid |
+|-----------|--------------------------------|-------------------------|-----------------------------------------------|
+| `pqga` | legacy | **absent** | the unseeded destination a refusal needs |
+| `pqgb` | pqReady | present | |
+| `pqgc` | pqActive, **two** enrollments | present | so "every authorised enrollment reads" is not measuring one |
+| `pqgd` | a posture no constant names | present | PQ writes with the legacy fallback still permitted |
+| `pqgm` | pqReady **and** pqActive | present, **one** record | two installs of one app at different stages |
+
+Three of those need saying plainly:
+
+- **`pqga` absent while its own atSign has seeded four other namespaces** is the
+  whole claim, and it is why two atSigns suffice.
+- **`pqgd` exists because no named stage expresses it.**
+  `disallowLegacyEncryption` is settable only through a posture, and every named
+  stage either writes legacy or refuses it — so the rows about an *opted-in*
+  fallback are unreachable from the three constants. `PqPosture`'s unnamed
+  constructor is there for exactly this.
+- **`pqgm`'s two stages resolve the same advertisement**, which is the
+  behaviour the design requires: the second client to start adopts what is
+  published rather than minting a rival generation and rotating the key out
+  from under peers that already fetched it.
+
+⚠️ **An enrollment authorised for `*` seeds nothing.** `NskeySeeding` skips the
+wildcard deliberately, so a pqReady or pqActive enrollment approved with
+`{'*': 'rw'}` publishes no namespace key and then refuses every write it makes —
+a failure that looks like a broken data path and is a provisioning mistake. Each
+cell names its own namespace, and the grid asserts that rather than relying on
+it.
 
 ### Which rows arm 1 owes
 
@@ -1890,19 +1977,26 @@ to `lib/`; the row-level ledger did not.
 ### The two environments: VE and EE
 
 gkc ruled 2026-08-23 that the suite is not constrained to the virtual
-environment. That changes what arm 3 can be, because arm 3 is blocked on the VE
-for a structural reason rather than an effort one: a transition has to re-mint,
-`(appName, deviceName)` is one-shot server state, and CRAM activation is one-shot
-per atSign per virtualenv. That is what the atSign ledger in
-`tests/at_functional_test/config/config.yaml` records, and why the matrix forbids
-re-minting in cells.
+environment.
 
-The ephemeral environment removes the constraint rather than working around it.
-Read from `at_server` at `origin/trunk`:
+⚠️ **This section read "arm 3 is blocked on the VE for a structural reason
+rather than an effort one", and that is now measured false.** The reasoning was:
+a transition has to re-mint, `(appName, deviceName)` is one-shot server state,
+and CRAM activation is one-shot per atSign per virtualenv. The first clause is
+the error — it generalises the matrix's rule against re-minting *in a cell* to
+an advance, which is a self-enrollment and was never tested against it. Across
+five live runs on one never-restarted virtualenv, 24 retrofits completed with no
+collision. **Arm 3 runs in the VE**, and neither it nor arm 2 needs the EE.
+
+That leaves the EE with no arm asking for it, because the one that did — arm 4,
+the server-version axis — is cancelled. It is described here so a later reader
+knows what exists rather than re-deriving it. Read from `at_server` at
+`origin/trunk`:
 
 - `tools/build_ephemeral_environment/ee_base/Dockerfile` does `COPY . .` and
   compiles `packages/at_secondary_server/bin/main.dart`, so an EE built at ref X
-  **is** an atServer at ref X. That is arm 4, from any ref.
+  **is** an atServer at ref X. That was arm 4's whole mechanism, and it remains
+  the way to get an atServer at an arbitrary ref should anything need one.
 - The atSign list is a mounted file (`/tmp/setup/atsigns`), defaulting to 26
   phonetic-alphabet atSigns, so each arm gets atSigns named for their role and
   freshly CRAM-activatable rather than drawn from a shared one-shot pool.
