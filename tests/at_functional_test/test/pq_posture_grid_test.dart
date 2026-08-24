@@ -69,8 +69,25 @@ void main() {
     keyEstablishmentAlgorithms: PqPosture.pqActive.keyEstablishmentAlgorithms,
   );
 
+  /// Namespaces are RUN-UNIQUE, and that is a correctness requirement rather
+  /// than hygiene.
+  ///
+  /// A namespace key is minted once and then adopted: a client starting into a
+  /// namespace that already advertises one takes the published advertisement
+  /// rather than re-minting, because re-minting would rotate the key out from
+  /// under every peer that had already fetched it. Adopting conveys no
+  /// private half.
+  ///
+  /// So against a virtualenv that outlives one run — which is every local run
+  /// after the first — a fixed namespace means this run's enrollments adopt a
+  /// generation whose private belongs to a previous run's clients, and every
+  /// reader fails with "no nskey private held". Measured: with fixed
+  /// namespaces, ZERO of three authorised readers could read, including the
+  /// one that appeared to have seeded.
+  final runId = DateTime.now().microsecondsSinceEpoch.toRadixString(36);
+
   /// The namespace every peer has a namespace key for.
-  const nsReady = 'pqgr';
+  final nsReady = 'pqgr$runId';
 
   /// The namespace the RECEIVER has never seeded.
   ///
@@ -86,7 +103,7 @@ void main() {
   /// asymmetric: an enrollment seeds every namespace it is authorised for, so
   /// a sender able to write here necessarily seeds it on its own atSign. Only
   /// the receiver's side is asserted absent.
-  const nsUnready = 'pqgn';
+  final nsUnready = 'pqgn$runId';
 
   /// One cell of the provisioning: which atSign, which posture, and which
   /// namespaces the enrollment is authorised for.
@@ -150,6 +167,16 @@ void main() {
   /// Keyed by cell name, so a failure says which cell produced it.
   final cells = <String, EnrolledClient>{};
   final storagePaths = <String, String>{};
+
+  /// One keyfile per cell, and it is not optional.
+  ///
+  /// `AtClient.atKeysIo` is where a minted nskey private is FILED. Without
+  /// one it is null, the mint publishes an advertisement whose private half
+  /// nothing kept, and every reader — the minter included — then fails with
+  /// "no nskey private held". Measured: with no `atKeysIo`, ZERO of three
+  /// authorised readers could read a record sealed to their own atSign's
+  /// published key.
+  final keyfiles = <String, InMemoryAtKeysIo>{};
 
   /// A path safe on disk — the demo atSigns carry an emoji.
   String slug(String name) => name.replaceAll(RegExp(r'[^A-Za-z0-9-]'), '');
@@ -221,6 +248,9 @@ void main() {
           'in ${spec.namespaces.keys.join("+")}');
       final approver =
           await approverFor('ap-$name', spec.atSign, approverNamespace);
+      final keysIo = InMemoryAtKeysIo();
+      await keysIo.write(spec.atSign, AtKeys());
+      keyfiles[name] = keysIo;
       cells[name] = await enrolAndAuthenticate(
         approver: approver,
         atSign: spec.atSign,
@@ -235,8 +265,11 @@ void main() {
         // refuses every write it makes.
         namespaces: spec.namespaces,
         // `(appName, deviceName)` is one-shot server state.
-        deviceName: 'pqprobe-$name-'
+        deviceName: 'pqgrid-$name-'
             '${DateTime.now().microsecondsSinceEpoch}',
+        // The cell's own keyfile. Without it there is nowhere to file a minted
+        // namespace private, and the cell measures an inert client.
+        atKeysIo: keysIo,
       );
       stdout.writeln('##GRID## up: $name '
           'enrolledAs=${cells[name]!.enrollmentId} '
@@ -308,28 +341,165 @@ void main() {
             'missing key, not on its own');
   });
 
-  test('MEASUREMENT: a cross-atSign write from each posture, to a ready peer '
-      'and to an unready one', () async {
-    final stamp = DateTime.now().microsecondsSinceEpoch;
-    final outcomes = <String, String>{};
+  /// Whether a sender at [posture] must be REFUSED a write toward a peer that
+  /// has published no namespace key.
+  ///
+  /// Derived from the posture rather than tabulated, so a new posture needs no
+  /// new row here — and so the expectation is the product's own statement
+  /// rather than a transcription of a run. A client that writes post-quantum
+  /// by default has no legacy path to fall back to unless the fallback is
+  /// separately opted into, and no post-quantum scheme can address a
+  /// recipient that advertises no key.
+  ///
+  /// It still discriminates: were the wiring to break so that a pqActive
+  /// client wrote legacy, the cell would succeed while this predicate — read
+  /// from the constant — still demanded a refusal.
+  bool mustRefuseUnready(PqPosture posture) => posture.writesPqByDefault;
 
-    for (final name in cellSpec.keys.where((k) => k.startsWith('s-'))) {
+  test('a cross-atSign write is refused exactly when the sender writes PQ and '
+      'the recipient has published no namespace key', () async {
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final wrote = <String, AtKey>{};
+
+    for (final entry
+        in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
+      final name = entry.key;
+      final posture = entry.value.posture;
+      final client = cells[name]!.client;
+
       for (final ns in [nsReady, nsUnready]) {
-        final client = cells[name]!.client;
         final key = AtKey()
           ..key = 'xw$stamp${slug(name)}'
           ..namespace = ns
           ..sharedWith = receiver
           ..sharedBy = sender;
-        String outcome;
-        try {
-          outcome = await client.put(key, 'v') ? 'WROTE' : 'put returned false';
-        } on Object catch (e) {
-          outcome = e.runtimeType.toString();
+        final expectRefusal = ns == nsUnready && mustRefuseUnready(posture);
+
+        if (expectRefusal) {
+          await expectLater(
+              () => client.put(key, 'v-$name',
+                  putRequestOptions: PutRequestOptions()
+                    ..useRemoteAtServer = true),
+              throwsA(isA<NamespaceKeyUnavailableException>()),
+              reason: '$name writes post-quantum by default and $receiver has '
+                  'published no $ns key, so there is no recipient to seal to '
+                  'and no legacy path opted into. A write that SUCCEEDED here '
+                  'went out under a scheme this posture was built to refuse');
+        } else {
+          expect(
+              await client.put(key, 'v-$name',
+                  putRequestOptions: PutRequestOptions()
+                    ..useRemoteAtServer = true),
+              isTrue,
+              reason: '$name -> $ns must write: '
+                  '${ns == nsReady ? "the recipient has published a key" : "this posture writes legacy, which needs none"}');
+          wrote['$name -> $ns'] = key;
         }
-        outcomes['$name -> $ns'] = outcome;
-        stdout.writeln('##GRID## cross $name -> $ns: $outcome');
       }
     }
+
+    // The refusals are only meaningful beside writes that went through: an
+    // arm where everything failed would satisfy the throwsA above just as
+    // well, and would mean the harness was broken rather than the posture
+    // working.
+    expect(wrote, isNotEmpty,
+        reason: 'every cell refused, so the refusing cells prove nothing '
+            'about the posture — this is a broken harness, not a passing grid');
+    stdout.writeln('##GRID## wrote ${wrote.length} of '
+        '${cellSpec.keys.where((k) => k.startsWith("s-")).length * 2} cells');
+  });
+
+  test('the recipient enrollment holding the namespace private reads what was '
+      'written, and its siblings are pending conveyance rather than broken',
+      () async {
+    // Three receiving enrollments share one namespace deliberately, and only
+    // ONE of them can read at this point — which is the finding, not a
+    // shortcoming of the grid.
+    //
+    // Minting a namespace key is what puts its private in a keyfile. A second
+    // enrollment starting later ADOPTS the published advertisement, which is
+    // correct — re-minting would rotate the key out from under peers that
+    // already fetched it — but adopting conveys no private. Siblings get it
+    // over the secret-sharing substrate, whose serve is driven by a HOLDER'S
+    // START-TIME SWEEP: the holder consumes pending requests when it comes up.
+    // Every client here came up in setUpAll, so no holder starts after the
+    // ask, and no answer can arrive.
+    //
+    // So "every authorised enrollment reads" is not a static property and
+    // cannot be a cell of this grid — it needs a restart, which is arm 3's.
+    // What this asserts is the pair arm 3 needs an after-state for: exactly
+    // one reader reads, and the others fail for the conveyance-pending reason
+    // SPECIFICALLY rather than for any reason at all.
+    final readers = ['r-legacy', 'r-pqReady', 'r-pqActive'];
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final senderName = 's-pqActive';
+
+    final key = AtKey()
+      ..key = 'rb$stamp'
+      ..namespace = nsReady
+      ..sharedWith = receiver
+      ..sharedBy = sender;
+    const value = 'readback-payload';
+    expect(
+        await cells[senderName]!.client.put(key, value,
+            putRequestOptions: PutRequestOptions()..useRemoteAtServer = true),
+        isTrue,
+        reason: '$senderName could not write the record to be read back');
+
+    final read = <String>[];
+    final pending = <String>[];
+    for (final readerName in readers) {
+      try {
+        final got = await cells[readerName]!.client.get(key,
+            getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+        expect(got.value, value,
+            reason: '$readerName returned a value that is not what was '
+                'written, which is neither a read nor a pending conveyance');
+        read.add(readerName);
+      } on Object catch (e) {
+        expect('$e', contains('no nskey private held'),
+            reason: '$readerName failed for a reason that is NOT a pending '
+                'conveyance. Reads are maximal under every posture by '
+                'construction, so any other failure here is a real one: $e');
+        pending.add(readerName);
+      }
+    }
+
+    stdout.writeln('##GRID## readback: read=$read pending=$pending');
+
+    // Predicted from the posture, not transcribed from a run. An enrollment
+    // that seeds ends up holding the namespace private — by minting it, or by
+    // pulling it while seeding finds one already published. One that does not
+    // seed never acquires it, and so cannot open data sealed to its own
+    // atSign's namespace key.
+    //
+    // That is not a hole: it is the pre-capability install of UC-B4.3, whose
+    // remedy is upgrading that install, and it is why a rollout seeds a stage
+    // BEFORE it switches writes over. "Reads are maximal under every posture"
+    // is a statement about the crypto path, and this is the key-acquisition
+    // path — a distinction nothing else in the suite exercises.
+    final shouldRead = [
+      for (final r in readers)
+        if (cellSpec[r]!.posture.seedNamespaceKeys) r
+    ];
+    final shouldNotRead =
+        readers.where((r) => !shouldRead.contains(r)).toList();
+
+    expect(read, shouldRead,
+        reason: 'the enrollments that seed $nsReady must hold its private and '
+            'read. If one of them cannot, seeding published an advertisement '
+            'whose private half nothing kept, and every peer sealing to this '
+            'atSign is writing data it can never open');
+    expect(pending, shouldNotRead,
+        reason: 'an enrollment that does not seed never acquires the private, '
+            'so it must be pending rather than reading. If it READ, seeding '
+            'is not what governs key acquisition and the rollout ordering '
+            'this project rests on is not what the postures describe');
+    expect(shouldRead, isNotEmpty,
+        reason: 'no reader was expected to read, so this cell discriminates '
+            'nothing - the receiving side needs at least one seeding posture');
+    expect(shouldNotRead, isNotEmpty,
+        reason: 'no reader was expected to fail, so the negative arm is '
+            'absent and this would pass for a client that reads everything');
   });
 }
