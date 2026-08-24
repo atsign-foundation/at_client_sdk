@@ -291,11 +291,19 @@ void main() {
 
     // ⚠️ The provider is chosen PER CALL, not by posture. Building the
     // enrollments with `PqPosture.pqActive` did make writes PQ — and
-    // broke the monitor: under it the receiver's monitor received nothing at
-    // all, not even `statsNotification`, and the sender's never reached
-    // `listening`. The monitor authenticates on its own socket, so a posture
-    // that moves the signing algorithm takes that connection with it. Recorded
-    // separately; it is not this row's business.
+    // ⚠️ **This comment said pqActive "broke the monitor: under it the
+    // receiver's monitor received nothing at all, not even
+    // `statsNotification`, and the sender's never reached `listening`. The
+    // monitor authenticates on its own socket, so a posture that moves the
+    // signing algorithm takes that connection with it." That is measured
+    // false.** A posture grid running five sender postures against one
+    // pqActive listener delivered and decrypted every one, the pqActive
+    // senders included, and the listener itself is a pqActive enrollment. An
+    // earlier interleaved run had already put the rate at 16 of 18 for
+    // pqActive against 18 of 20 for a control, both arms failing alike with
+    // `AT0014` — so the failure is real, is monitor-readiness flakiness, and
+    // is not posture-dependent. The per-call provider below stays for the
+    // reason in the next paragraph, not for that one.
     //
     // `AtClientPreference`'s own doc licenses this: "a per-call algorithm
     // overrides the posture's value for that one axis". The migration default

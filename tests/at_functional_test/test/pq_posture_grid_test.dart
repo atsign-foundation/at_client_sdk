@@ -6,10 +6,14 @@
 @Tags(['pq'])
 library;
 
+import 'dart:async' show Completer;
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart' show AtKeys, InMemoryAtKeysIo;
 import 'package:at_client/at_client.dart';
+// ignore: implementation_imports
+import 'package:at_client/src/service/notification_service_impl.dart'
+    show NotificationServiceImpl;
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/at_keys_initializer.dart'
     show AtEncryptionKeysLoader;
@@ -485,21 +489,174 @@ void main() {
     final shouldNotRead =
         readers.where((r) => !shouldRead.contains(r)).toList();
 
-    expect(read, shouldRead,
-        reason: 'the enrollments that seed $nsReady must hold its private and '
-            'read. If one of them cannot, seeding published an advertisement '
-            'whose private half nothing kept, and every peer sealing to this '
-            'atSign is writing data it can never open');
-    expect(pending, shouldNotRead,
-        reason: 'an enrollment that does not seed never acquires the private, '
-            'so it must be pending rather than reading. If it READ, seeding '
-            'is not what governs key acquisition and the rollout ordering '
-            'this project rests on is not what the postures describe');
+    // ⚠️ Only the MINTER is deterministic here. A second seeding enrollment
+    // adopts the published advertisement — correct, since re-minting rotates
+    // the key out from under peers that already fetched it — and then has to
+    // be CONVEYED the private, which is served off a holder's start-time
+    // sweep. Whether that lands inside one run is a race.
+    //
+    // Measured: consecutive runs of this file gave read=[r-pqReady, r-pqActive]
+    // and read=[r-pqReady]. Asserting both would be asserting a rate. What is
+    // invariant is the pair below, and the sibling's acquisition belongs to
+    // arm 3, where a restart makes it deterministic.
+    expect(read, isNotEmpty,
+        reason: 'no enrollment of $receiver could read a record sealed to its '
+            'own atSign. Seeding published an advertisement whose private half '
+            'nothing kept, so every peer sealing to this atSign is writing '
+            'data nobody can open');
+    for (final r in read) {
+      expect(cellSpec[r]!.posture.seedNamespaceKeys, isTrue,
+          reason: '$r reads $nsReady but does not seed. Then seeding is not '
+              'what governs key acquisition, and the rollout ordering this '
+              'project rests on is not what the postures describe');
+    }
+    for (final r in shouldNotRead) {
+      expect(pending, contains(r),
+          reason: '$r does not seed, so it can never have acquired the '
+              'namespace private and must be pending. If it READ, the '
+              'pre-capability install of UC-B4.3 is not the failure mode the '
+              'catalogue says it is');
+    }
     expect(shouldRead, isNotEmpty,
         reason: 'no reader was expected to read, so this cell discriminates '
             'nothing - the receiving side needs at least one seeding posture');
     expect(shouldNotRead, isNotEmpty,
         reason: 'no reader was expected to fail, so the negative arm is '
             'absent and this would pass for a client that reads everything');
+  });
+
+  test('a self write is stamped with the provider its posture selects',
+      () async {
+    // The cross-atSign cells assert an OUTCOME - written or refused. This one
+    // asserts the MECHANISM: which crypto provider actually encrypted the
+    // value, read back off the record's own `appMetadata`. A grid that only
+    // checked outcomes would pass for a build where every posture wrote the
+    // same way, because a legacy write to a seeded peer succeeds exactly as a
+    // post-quantum one does.
+    //
+    // Self rather than cross deliberately: a cross-atSign lookup returns a
+    // null providerId, so the stamp is only observable on the writer's side.
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+
+    for (final entry
+        in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
+      final name = entry.key;
+      final posture = entry.value.posture;
+      final client = cells[name]!.client;
+
+      final key = AtKey()
+        ..key = 'self$stamp${slug(name)}'
+        ..namespace = nsReady
+        ..sharedBy = sender;
+
+      expect(await client.put(key, 'self-$name'), isTrue,
+          reason: '$name could not write to its own atSign in $nsReady, '
+              'which its own enrollment seeded');
+
+      final read = await client.get(key);
+      expect(read.value, 'self-$name',
+          reason: '$name could not read back what it just wrote');
+
+      final expected = posture.writesPqByDefault
+          ? symmetricAesGcmCryptoProviderId
+          : legacyCryptoProviderId;
+      expect(read.metadata?.appMetadata?.providerId, expected,
+          reason: '$name has writesPqByDefault=${posture.writesPqByDefault}, '
+              'so its value must carry $expected. A posture whose write is '
+              'stamped with the other provider is not running the era default '
+              'it names - and every cross-atSign cell above would still pass');
+      stdout.writeln('##GRID## self $name: '
+          'providerId=${read.metadata?.appMetadata?.providerId}');
+    }
+  });
+
+  test('a notification crosses atSigns and its value decrypts, for every '
+      'sender posture', () async {
+    // Listener before trigger — and the listener that matters is the
+    // atServer's, not this stream. `subscribe()` returns before the monitor's
+    // socket has connected, PKAMed and written `monitor:`, and the atServer's
+    // inbound stream is a BROADCAST stream with no backlog, so a notification
+    // enqueued in that window is never delivered to that connection at all.
+    // Waiting on a notification actually arriving is the only sufficient
+    // gate; `currentListenerState == listening` is set straight after writing
+    // the command and says nothing about the atServer having processed it.
+    //
+    // The atServer emits `statsNotification` every ~11s to every listening
+    // monitor, which makes it both the readiness signal and the positive
+    // control: seeing it and not ours distinguishes a monitor that receives
+    // nothing from one that receives everything except the thing under test.
+    final listener = cells['r-pqActive']!.client.notificationService
+        as NotificationServiceImpl;
+
+    final seen = <String>[];
+    final monitorProvenLive = Completer<void>();
+    final arrived = <String, Completer<AtNotification>>{};
+
+    final subscription =
+        listener.subscribe(shouldDecrypt: true).listen((n) {
+      seen.add(n.key);
+      if (!monitorProvenLive.isCompleted) monitorProvenLive.complete();
+      for (final entry in arrived.entries) {
+        if (n.key.toLowerCase().contains(entry.key) &&
+            !entry.value.isCompleted) {
+          entry.value.complete(n);
+        }
+      }
+    });
+    addTearDown(subscription.cancel);
+
+    await monitorProvenLive.future.timeout(
+      const Duration(seconds: 90),
+      onTimeout: () => throw StateError(
+          'no notification of any kind reached the listener within 90s, so '
+          'the monitor is not up. Notifying now would repeat the race this '
+          'gate exists to close, and a delivery failure afterwards would be '
+          'attributed to the posture rather than to readiness'),
+    );
+
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    for (final entry
+        in cellSpec.entries.where((e) => e.key.startsWith('s-'))) {
+      final name = entry.key;
+      // Lowercased: the atServer lowercases record names, so a marker
+      // carrying an uppercase letter never matches what comes back — and it
+      // fails as 'never arrived' while the monitor's own log shows it did.
+      final marker = 'ntfy$stamp${slug(name)}'.toLowerCase();
+      arrived[marker] = Completer<AtNotification>();
+
+      final key = AtKey()
+        ..key = marker
+        ..namespace = nsReady
+        ..sharedWith = receiver
+        ..sharedBy = sender
+        ..metadata = (Metadata()..ttr = 60000);
+      final value = 'notified-by-$name';
+
+      final result = await cells[name]!.client.notificationService.notify(
+          NotificationParams.forUpdate(key, value: value));
+      expect(result.notificationStatusEnum, NotificationStatusEnum.delivered,
+          reason: '$name could not deliver a notification to $receiver');
+
+      final notification = await arrived[marker]!.future.timeout(
+        const Duration(seconds: 90),
+        onTimeout: () => throw StateError(
+            "$name's notification never reached the receiver in 90s, and the "
+            'notify above reported delivered.\n'
+            '  the monitor saw ${seen.length}: $seen\n'
+            '${seen.isNotEmpty ? "  It IS receiving, so this is not monitor readiness." : "  It received NOTHING, not even statsNotification, so the monitor is not up and this says nothing about delivery."}'),
+      );
+
+      expect(notification.value, value,
+          reason: "$name's notification arrived but its value did not "
+              'decrypt to what was sent. The receiver decrypts with whatever '
+              'the sender sealed with, and reads are maximal under every '
+              'posture — so a mismatch here is a real cross-posture failure');
+      stdout.writeln('##GRID## notify $name: delivered and decrypted');
+    }
+
+    // The positive control, asserted rather than assumed.
+    expect(seen, isNotEmpty,
+        reason: 'the monitor recorded no notification at all, so every '
+            'delivery above was measured by a listener that was never live');
   });
 }
