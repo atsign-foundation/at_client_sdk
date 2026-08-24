@@ -1521,10 +1521,17 @@ burn-down is back to **0 skipped**, and the `ke2` blocker constant is deleted �
 `catalogue_test.dart` forced that in the same commit, because a blocker
 guarding nothing tells whoever greps it the project owes no scenarios.
 
-⚠️ **Three clauses those rows assert are NOT proven, and are recorded rather
-than quietly claimed** — plan **14.19 item 36**: a superseded kpid's envelope
-still opening, a peer negotiating to its preferred key, and UC-A2.6's
-revoked-enrollment gate.
+✅ **All three are proven live, 2026-08-24**, in
+`tests/at_functional_test/test/key_package_amendment_live_test.dart` and pinned
+as clauses from `a2_enrollment_test.dart`. ⚠️ This read "**Three clauses those
+rows assert are NOT proven, and are recorded rather than quietly claimed** —
+plan **14.19 item 36**: a superseded kpid's envelope still opening, a peer
+negotiating to its preferred key, and UC-A2.6's revoked-enrollment gate."
+Proving them corrected two of the three: nothing is *superseded* by an
+amendment (a key is joined and the original stays `active`), and the
+"revoked-enrollment gate" is not a check inside `enroll:update` — the outcome
+comes from the revoked enrollment being unable to authenticate at all, plus
+every other connection being refused as not-self.
 
 ⚠️ **A real defect was found only by reasoning about the live path**, after the
 unit suite was green: `KeyPackageMinting` read tagged key material only, and
@@ -2907,12 +2914,17 @@ open: **three are not work at all** — 20, 21 and 26, each of which says so in
 its own text ("deliberately left", "accepted … recorded so it is not
 rediscovered", "that is deliberate") — and **two belong elsewhere**: 14 is not
 PQ (16 `atProtocol` spellings outside this doc set) and 35 lands in
-`atGettingStarted`. That leaves **seven genuinely open**: 2, 4, 10, 28, 29, 34
-and **36**.
+`atGettingStarted`. That leaves **six genuinely open**: 2, 4, 10, 28, 29 and 34.
+⚠️ This read "**seven genuinely open**: 2, 4, 10, 28, 29, 34 and **36**".
 
-⛔ **Item 36 is a D1 GATE**; the other six are not. D1 now ends when the
-acceptance set is complete, implemented and verified, and item 36 is the one
-known case of the catalogue asserting clauses no live row proves. Items 8, 23
+✅ **Item 36 — the only D1 GATE among them — is CLOSED 2026-08-24**, and this
+paragraph read "⛔ **Item 36 is a D1 GATE**; the other six are not." Its three
+clauses are live-proven in
+`tests/at_functional_test/test/key_package_amendment_live_test.dart`. D1 still
+ends when the acceptance set is complete, implemented and verified; what item
+36 named — the one known case of the catalogue asserting clauses no live row
+proves — is discharged, and the ledger's clause level now computes any
+successor rather than leaving it to a reader. Items 8, 23
 and 30 were settled the same day and carry their rulings in place.
 
 Each is real, verified at the time of writing, and too small to be a step of

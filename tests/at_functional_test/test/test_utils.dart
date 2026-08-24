@@ -19,25 +19,34 @@ class TestUtils {
   static int get rootServerPort =>
       int.tryParse(Platform.environment['VIRTUALENV_BASE_PORT'] ?? '') ?? 64;
 
-  /// [posture], [authenticationKeyAlgorithm], [dataSigningKeyAlgorithms] and
-  /// [keyEstablishmentAlgorithms] must be threaded here because all four are
-  /// final at construction — a test cannot set any of them on the returned
-  /// instance.
+  /// [posture], [authenticationKeyAlgorithm], [dataSigningKeyAlgorithms],
+  /// [keyEstablishmentAlgorithms] and [sealsToKeyAlgorithms] must be threaded
+  /// here because all five are final at construction — a test cannot set any
+  /// of them on the returned instance.
+  ///
+  /// ⚠️ [keyEstablishmentAlgorithms] and [sealsToKeyAlgorithms] are different
+  /// sides of the same exchange and are easy to confuse. The first is what
+  /// this atSign MINTS and advertises; the second is the order in which, as a
+  /// SENDER, it picks among the keys a recipient advertises. A test varying
+  /// the wrong one changes nothing it can observe.
   static AtClientPreference getPreference(String atsign,
       {PqPosture? posture,
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms,
-      List<String>? keyEstablishmentAlgorithms}) {
+      List<String>? keyEstablishmentAlgorithms,
+      List<String>? sealsToKeyAlgorithms}) {
     var preference = posture == null &&
             authenticationKeyAlgorithm == null &&
             dataSigningKeyAlgorithms == null &&
-            keyEstablishmentAlgorithms == null
+            keyEstablishmentAlgorithms == null &&
+            sealsToKeyAlgorithms == null
         ? AtClientPreference()
         : AtClientPreference(
             posture: posture ?? PqPosture.legacy,
             authenticationKeyAlgorithm: authenticationKeyAlgorithm,
             dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
-            keyEstablishmentAlgorithms: keyEstablishmentAlgorithms);
+            keyEstablishmentAlgorithms: keyEstablishmentAlgorithms,
+            sealsToKeyAlgorithms: sealsToKeyAlgorithms);
     preference.hiveStoragePath = 'test/hive/client/$atsign';
     preference.commitLogPath = 'test/hive/client/$atsign';
     preference.rootDomain = 'vip.ve.atsign.zone';

@@ -8,8 +8,7 @@ import 'dart:convert';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
-import 'package:at_client/src/secret_sharing/key_package.dart'
-    show KeyPackage, PackageKey;
+import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope, verifyEnvelope;
 import 'package:at_functional_test/src/config_util.dart';
@@ -59,8 +58,12 @@ void main() {
   /// Enrols and authenticates a client whose preference advertises
   /// [algorithms], sharing one keyfile with the test so that what
   /// `KeyPackageMinting` files is what this test can read back.
+  /// The keyfile each enrolment was given, so an enrollment can be re-opened.
+  final keyfiles = <String, InMemoryAtKeysIo>{};
+
   Future<EnrolledClient> enrol(String device, List<String> algorithms) async {
     final keysIo = InMemoryAtKeysIo();
+    keyfiles[device] = keysIo;
     return enrolAndAuthenticate(
       approver: approver,
       atSign: atSign,
@@ -301,4 +304,344 @@ void main() {
         reason: 'and the key it DID name must have landed, or this row would '
             'pass for a write that did nothing at all');
   });
+
+  /// Re-opens [enrollmentId] as a fresh client whose preference advertises
+  /// [algorithms], which is how an EXISTING enrollment amends its package.
+  ///
+  /// The amendment is a startup reconciliation against the configured list,
+  /// not a call — so gaining a key means constructing a second client for the
+  /// same enrollment with a wider list. That needs the client cache evicted
+  /// first: `AtClientImpl` keys its cache by `(atSign, enrollmentId)` and
+  /// `refuseChangedRolloutAxes` throws when a second client asks for the same
+  /// key under different rollout axes, so without the eviction the second
+  /// construction never happens and the test measures the first client again.
+  Future<AtClient> reopen(
+      String device, String enrollmentId, List<String> algorithms) async {
+    AtClientImpl.atClientInstanceMap
+        .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
+    final keysIo = keyfiles[device]!;
+    final auth = AtAuth.create();
+    final response = await auth.authenticate(AtAuthRequest(
+      atSign,
+      rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
+      atKeysIo: keysIo,
+      // Named rather than defaulted: with no id, AtAuthRequest falls back to
+      // the keyfile's FLAT enrollment id, which is not this one.
+    )..enrollmentId = enrollmentId);
+    expect(response.isSuccessful, isTrue,
+        reason: 'could not re-authenticate as $enrollmentId, so the amendment '
+            'below would be measuring the wrong enrollment');
+
+    final storage = 'test/hive/amend/$runId-$device';
+    final preference = TestUtils.getPreference(atSign,
+        keyEstablishmentAlgorithms: algorithms)
+      ..hiveStoragePath = storage
+      ..commitLogPath = storage;
+    final manager = await AtClientManager(atSign).setCurrentAtSign(
+        atSign, namespace, preference,
+        atChops: auth.atChops,
+        atKeysIo: keysIo,
+        enrollmentId: enrollmentId);
+    // ⚠️ **Startup is deliberately NOT awaited here.** Step 9 of the PQ
+    // bootstrap sweeps for envelopes, and a sweep consumes and DELETES what
+    // it opens — so a caller that awaits `startupComplete` before subscribing
+    // to `receivedEnvelopes` has already missed the event. `receivedEnvelopes`
+    // is a broadcast stream and does not replay. Measured 2026-08-24: the
+    // envelope this file seals before an amendment was gone from the atServer
+    // by the time the caller looked, and read as a lost secret when it had in
+    // fact been opened correctly.
+    return manager.atClient;
+  }
+
+  test('UC-A2.5 · an envelope sealed before the amendment still opens after it',
+      () async {
+    // The clause this row exists to protect: a secret correctly sent to an
+    // enrollment, sitting unread while that enrollment amends its package,
+    // must still open. The failure it guards against is silent and
+    // unattributable — the sender did everything right, the envelope is on
+    // the atServer, and it simply never decrypts.
+    final recipient =
+        await enrol('a25-carry', const [SecretSharingAlgos.xWing]);
+    await (recipient.client as AtClientImpl).pqBootstrap!.startupComplete;
+
+    final before = await servedPackage(recipient);
+    expect(before.keys, hasLength(1),
+        reason: 'the premise: this enrollment starts advertising one key, so '
+            'the amendment below has something to change');
+    final kpidOld = before.keys.single.kid;
+    expect(kpidOld, recipient.kpid);
+
+    // ⚠️ **Silence the pre-amendment client first.** Both it and the
+    // post-amendment client sweep the same address, a sweep consumes and
+    // deletes, and whichever wins is a race — so without this the envelope is
+    // sometimes opened by the client that existed BEFORE the amendment, which
+    // is not what this row claims. Measured 2026-08-24: the stream carried the
+    // envelope on one run and was empty on the next, with no code change.
+    AtClientSecretSharing.forClient(recipient.client).stopListening();
+
+    // Sealed to the package as it stands NOW, and deliberately left unread.
+    final sender = AtClientSecretSharing(approver)
+      ..sendWakeUpNotification = false;
+    await sender.register();
+    await sender.sendEnvelope(before, namespace, {'sealed': 'before'});
+
+    final atRest = await recipient.client.getAtKeys(
+        regex: '.*\\.$kpidOld\\.__ssenv\\..*', useRemoteAtServer: true);
+    expect(atRest, isNotEmpty,
+        reason: 'the envelope must be on the atServer before the amendment, '
+            'or what follows proves nothing about carrying it across one');
+
+    // WHEN the enrollment amends its package to gain a second KEM.
+    final amendedClient =
+        await reopen('a25-carry', recipient.enrollmentId, const [
+      SecretSharingAlgos.xWing,
+      SecretSharingAlgos.mlKem1024,
+    ]);
+
+    // Listener BEFORE the startup that sweeps. `forClient` returns the same
+    // instance the bootstrap holds, so this is the stream the sweep emits on.
+    final receiving = AtClientSecretSharing.forClient(amendedClient);
+    final received = <ReceivedEnvelope>[];
+    final sub = receiving.receivedEnvelopes.listen(received.add);
+    addTearDown(sub.cancel);
+
+    await (amendedClient as AtClientImpl).pqBootstrap!.startupComplete;
+
+    final after = await servedPackage(recipient);
+    expect(after.keys.map((k) => k.alg).toSet(),
+        {SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024},
+        reason: 'the amendment did not take, so the read below would carry '
+            'the envelope across nothing');
+    expect(after.keys.firstWhere((k) => k.kid == kpidOld).status,
+        KeyEntryStatus.active,
+        reason: 'this amendment JOINS a key rather than superseding one, so '
+            'the original address stays active. A build that retired it here '
+            'is exactly the defect this row names');
+
+    // THEN it still opens, read by the enrollment on its post-amendment
+    // client — the private half filed before the amendment is still the one
+    // that answers at the old address.
+    //
+    // A second sweep in case the startup's own ran before the envelope was
+    // visible to it; both feed the same stream, so the assertion below is on
+    // what actually arrived rather than on which sweep delivered it.
+    if (received.isEmpty) await receiving.sweepOnce(fromRemote: true);
+
+    // `anyElement(equals(...))`, not `contains(...)`: Dart Maps do not override
+    // ==, so `contains` on an iterable of Maps compares identity and fails
+    // against a map that is deeply equal. Measured 2026-08-24 — this row
+    // reported the envelope lost while printing it in the Actual.
+    expect(received.map((e) => e.payload),
+        anyElement(equals({'sealed': 'before'})),
+        reason: 'the envelope sealed to $kpidOld BEFORE the amendment did not '
+            'open afterwards — a secret that was correctly sent is lost, and '
+            'nothing on either side would report it. A failed open does not '
+            'delete the envelope (the sweep releases its claim so a later one '
+            'can retry), so an empty stream here is a real failure to '
+            'decrypt rather than a race with another consumer');
+  }, timeout: Timeout(Duration(minutes: 4)));
+
+  test('UC-A2.5 · a sender picks by its own order and stamps the matching '
+      'version', () async {
+    // A DIFFERENTIAL over one recipient: the only thing that varies between
+    // the two arms is the SENDER's sealsToKeyAlgorithms order. Same package,
+    // same namespace, same build — so a difference in what lands can only be
+    // the order.
+    //
+    // ⚠️ The axis is `sealsToKeyAlgorithms`, not `keyEstablishmentAlgorithms`.
+    // The latter is what an atSign MINTS; varying it here would change the
+    // senders' own packages and nothing about their choice among the
+    // recipient's.
+    final recipient = await enrol('a25-negotiate', const [
+      SecretSharingAlgos.xWing,
+      SecretSharingAlgos.mlKem1024,
+    ]);
+    await (recipient.client as AtClientImpl).pqBootstrap!.startupComplete;
+
+    final offered = await servedPackage(recipient);
+    expect(offered.keys.map((k) => k.alg).toSet(),
+        {SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024},
+        reason: 'the premise: a recipient offering ONE key gives a sender no '
+            'choice, and both arms below would agree for that reason alone');
+
+    // ⚠️ **Stop the recipient watching, or there is nothing to read.** An
+    // enrolled client sweeps for envelopes addressed to it on a timer and on
+    // every sync, and a sweep CONSUMES and deletes what it opens — so each
+    // arm's envelope is gone from the atServer within moments of being
+    // written. Measured 2026-08-24: both arms found zero new envelopes at an
+    // address they had just written to. What is under test here is what the
+    // SENDER stamped, so the recipient is asked to leave it alone.
+    AtClientSecretSharing.forClient(recipient.client).stopListening();
+
+    /// What lands at the recipient's address when [order] is the sender's
+    /// preference, as ({suite, version}) read back off the atServer.
+    Future<({String suite, int version})> sealedBy(
+        String device, List<String> order) async {
+      final client = await enrol(device, const [SecretSharingAlgos.xWing]);
+      await (client.client as AtClientImpl).pqBootstrap!.startupComplete;
+      // A second client for this enrollment, differing only in the sender
+      // order. Evicted first, as any second construction must be.
+      AtClientImpl.atClientInstanceMap
+          .remove(AtClientImpl.instanceKey(atSign, client.enrollmentId));
+      final storage = 'test/hive/amend/$runId-$device-sender';
+      final preference = TestUtils.getPreference(atSign,
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
+          sealsToKeyAlgorithms: order)
+        ..hiveStoragePath = storage
+        ..commitLogPath = storage;
+      final auth = AtAuth.create();
+      final response = await auth.authenticate(AtAuthRequest(
+        atSign,
+        rootDomain: AtRootDomain(rootDomain, TestUtils.rootServerPort),
+        atKeysIo: keyfiles[device]!,
+      )..enrollmentId = client.enrollmentId);
+      expect(response.isSuccessful, isTrue);
+      final manager = await AtClientManager(atSign).setCurrentAtSign(
+          atSign, namespace, preference,
+          atChops: auth.atChops,
+          atKeysIo: keyfiles[device]!,
+          enrollmentId: client.enrollmentId);
+
+      final party = AtClientSecretSharing(manager.atClient)
+        ..sendWakeUpNotification = false;
+      await party.register();
+
+      // ⚠️ **The snapshot is taken around the SEND alone**, not around the arm.
+      // Enrolling and registering above both write `__ssenv` envelopes of
+      // their own — approving an enrollment seals this atSign's secrets to the
+      // package it advertised — so a window that opens before them attributes
+      // those to this sender. Measured 2026-08-24: isolated the arm found one
+      // new envelope and passed; in the full pack it found dozens.
+      final before = <String>{
+        for (final k in await approver.getAtKeys(
+            regex: '.*__ssenv.*', useRemoteAtServer: true))
+          k.toString()
+      };
+      await party.sendEnvelope(offered, namespace, {'from': device});
+
+      // ⚠️ **The arm cannot be identified by its payload — the payload is
+      // SEALED.** Only `suite` and the version byte are cleartext on the
+      // envelope; the marker this arm put in the plaintext is inside the
+      // ciphertext and unreadable from here. So the new envelope is found by
+      // DIFFERENCE against what was at the address before this arm sent.
+      // Swept across EVERY __ssenv address, not just `offered.kpid`: an
+      // envelope is addressed to the kid of the key the sender CHOSE, so the
+      // ML-KEM arm lands somewhere the x-wing address never sees. Scoping this
+      // to one address is how both arms reported finding nothing.
+      final now = await approver.getAtKeys(
+          regex: '.*__ssenv.*', useRemoteAtServer: true);
+      final fresh =
+          now.where((k) => !before.contains(k.toString())).toList();
+      expect(fresh, hasLength(1),
+          reason: 'this arm must have written exactly one new envelope; '
+              '${fresh.length} appeared, so the suite read below would not be '
+              'attributable to this sender. Envelope keys seen: '
+              '${now.map((k) => k.key).toList()}');
+      final v = await approver.get(fresh.single,
+          getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+      final payload = (SignedEnvelope.fromJson(
+                  jsonDecode(v.value as String) as Map)
+              .payload as Map)
+          .cast<String, dynamic>();
+      return (
+        suite: payload['suite'] as String,
+        version: base64Decode(payload['sealed'] as String).first,
+      );
+    }
+
+    final prefersXWing = await sealedBy('a25-sender-x',
+        const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+    final prefersMlKem = await sealedBy('a25-sender-m',
+        const [SecretSharingAlgos.mlKem1024, SecretSharingAlgos.xWing]);
+
+    expect(prefersXWing.suite, SecretSharingAlgos.xWingRfc9180);
+    expect(prefersMlKem.suite, SecretSharingAlgos.mlKem1024Rfc9180,
+        reason: 'the recipient offers both, so a sender listing ML-KEM first '
+            'must seal to the ML-KEM key. Both arms agreeing would mean the '
+            "sender's order is not consulted at all");
+
+    // And the stamped version matches the suite each arm negotiated. A
+    // mismatch here opens on the far side as an AEAD failure naming neither
+    // party, which is why the byte is asserted rather than the suite alone.
+    expect(prefersXWing.version,
+        SecretSharingAlgos.sealVersionFor(SecretSharingAlgos.xWingRfc9180));
+    expect(prefersMlKem.version,
+        SecretSharingAlgos.sealVersionFor(SecretSharingAlgos.mlKem1024Rfc9180));
+    expect(prefersXWing.version, isNot(prefersMlKem.version),
+        reason: 'if both stamped the same byte the version assertion above '
+            'would pass for a build that ignores the negotiation entirely');
+  }, timeout: Timeout(Duration(minutes: 5)));
+
+  test('UC-A2.6 · a revoked enrollment cannot re-advertise a key package',
+      () async {
+    // The state gate. What makes it hold is NOT a revocation check inside
+    // enroll:update — measured 2026-08-24, there is none, and there does not
+    // need to be. Two mechanisms close it between them, and this test asserts
+    // both because either alone would leave a door:
+    //
+    //   - the revoked enrollment can no longer authenticate at all, so the
+    //     only connection that could pass the self-only check is gone; and
+    //   - every other connection, the owner's included, is refused as not
+    //     being that enrollment.
+    final victim =
+        await enrol('a26-revoked', const [SecretSharingAlgos.xWing]);
+    await (victim.client as AtClientImpl).pqBootstrap!.startupComplete;
+
+    Map<String, dynamic> amendment(String marker) => {
+          'keyPackage': KeyPackage.payloadFor(
+            createdAt: DateTime.now().toUtc(),
+            keys: [
+              PackageKey(
+                  use: SecretSharingAlgos.useEnc,
+                  alg: SecretSharingAlgos.xWing,
+                  pub: base64Encode(List<int>.filled(1216, marker.codeUnitAt(0))))
+            ],
+          )
+        };
+
+    // The control, and it runs FIRST: the same request on the same connection
+    // is accepted while the enrollment is approved. Without it, the refusal
+    // below is equally explained by a malformed request or a broken fixture.
+    final accepted = await AtEnrollment.create().update(
+        EnrollmentUpdateRequest(
+            enrollmentId: victim.enrollmentId, metadata: amendment('a')),
+        lookupOf(victim));
+    expect(accepted.enrollmentId, victim.enrollmentId,
+        reason: 'the control arm did not take, so this test cannot tell a '
+            'state gate from a request the atServer never liked');
+
+    final revoked = await approver.enrollmentService!.revoke(
+        EnrollmentRequestDecision.revoked(victim.enrollmentId, atSign));
+    expect(revoked.enrollmentStatus, EnrollmentStatus.revoked,
+        reason: 'the atServer ACKed the revoke without moving the record, so '
+            'a refusal below would not be about revocation');
+
+    // Arm 1: the enrollment itself. It is refused before the request is even
+    // considered — the connection cannot re-authenticate.
+    await expectLater(
+        AtEnrollment.create().update(
+            EnrollmentUpdateRequest(
+                enrollmentId: victim.enrollmentId, metadata: amendment('b')),
+            lookupOf(victim)),
+        throwsA(predicate((e) => '$e'.contains('AT0027') &&
+            '$e'.contains('is revoked'))),
+        reason: 'a revoked enrollment must not be able to re-advertise an '
+            'encapsulation target. The assertion names AT0027 rather than '
+            'accepting any throw, because a connection that failed for an '
+            'unrelated reason would satisfy a bare throwsA and prove nothing');
+
+    // Arm 2: the owner, naming it. Refused as not-self — which is what closes
+    // the door the first arm leaves open, since an owner connection is not
+    // revoked and could otherwise write the record on its behalf.
+    await expectLater(
+        AtEnrollment.create().update(
+            EnrollmentUpdateRequest(
+                enrollmentId: victim.enrollmentId, metadata: amendment('c')),
+            approver.getRemoteSecondary()!.atLookUp),
+        throwsA(predicate((e) => '$e'.contains('self-only'))),
+        reason: 'the owner connection is fully privileged and is not revoked, '
+            'so if the self-only check were an authorization lookup this arm '
+            'would succeed and the revoked record would be re-advertised by '
+            'proxy');
+  }, timeout: Timeout(Duration(minutes: 4)));
 }

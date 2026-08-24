@@ -213,10 +213,36 @@ void main() {
         clauses: ['an unnamed metadata key survives'],
       );
 
-      // ⛔ NOT proven, and deliberately not claimed: the pre-existing envelope
-      // at a SUPERSEDED kpid still opening, and a peer negotiating to its own
-      // preferred key. Both need a secret sealed before the amendment and read
-      // after it. Recorded as plan 14.19 item 36.
+      // ✅ Both of these were the ⛔ NOT-proven pair, and both are live now.
+      // This read: "NOT proven, and deliberately not claimed: the pre-existing
+      // envelope at a SUPERSEDED kpid still opening, and a peer negotiating to
+      // its own preferred key."
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.5 · an envelope sealed before the amendment still opens after it',
+        proves: 'a secret sealed to the enrollment BEFORE it amends its key '
+            'package is opened by the client that exists after — the arm the '
+            'catalogue calls the silent, unattributable loss. Both the '
+            'pre-amendment and post-amendment clients sweep that address and '
+            'a sweep deletes what it opens, so the pre-amendment one is '
+            'silenced first; without that the row passes on whichever won the '
+            'race. Break-it: seal nothing beforehand and the precondition '
+            'assertion reddens rather than the outcome.',
+        clauses: ['the pre-existing envelope at'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.5 · a sender picks by its own order',
+        proves: 'two senders differing ONLY in sealsToKeyAlgorithms order, '
+            'against one recipient advertising both KEMs: the ML-KEM-first '
+            'sender seals to the ML-KEM key and stamps 0x03, the X-Wing-first '
+            'one stamps 0x02. The version byte is asserted as well as the '
+            'suite because a mismatch between them opens on the far side as '
+            'an AEAD failure naming neither party. Break-it: give both arms '
+            'the same order and the ML-KEM assertion reddens, so the arms '
+            'genuinely differ in the varied thing.',
+        clauses: ['negotiates to whichever key its own'],
+      );
     });
 
     test('UC-A2.6 · only the enrollment itself may amend its metadata', () {
@@ -250,8 +276,26 @@ void main() {
         ],
       );
 
-      // ⛔ NOT proven, and deliberately not claimed: the state gate — the same
-      // request against a REVOKED E4. Recorded as plan 14.19 item 36.
+      // ✅ The state gate, live since 2026-08-24. This read "⛔ NOT proven,
+      // and deliberately not claimed: the state gate — the same request
+      // against a REVOKED E4."
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.6 · a revoked enrollment cannot re-advertise a key package',
+        proves: 'the outcome, by the two mechanisms that actually produce it — '
+            'measured 2026-08-24, there is NO revocation check inside '
+            'enroll:update. The revoked enrollment cannot authenticate at all '
+            '(AT0027 "is revoked"), and every other connection including the '
+            'fully-privileged owner is refused as not-self (AT0011 '
+            '"enroll:update is self-only"). Both arms are asserted on their '
+            'error text rather than on throwing, because a connection failing '
+            'for an unrelated reason satisfies a bare throwsA. The control '
+            'runs first and is accepted; skip the revoke and the same request '
+            'succeeds, which is what attributes the refusal to revocation. '
+            '⚠️ NOT proven: an enrollment revoked while it holds an already '
+            'open, already authenticated connection — this arm reconnects.',
+        clauses: ['the same request against a'],
+      );
     });
   });
 }

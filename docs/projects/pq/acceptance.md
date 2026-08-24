@@ -490,11 +490,19 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - the amended package still verifies against E4's `_apsk` — it is re-signed by the same
     APKAM private, and nothing about the update path relaxes the signature check;
   - a peer sealing to E4 now negotiates to whichever key its own `keyAlgos` order prefers,
-    and stamps the matching `pqSeal` version;
-  - **the pre-existing envelope at `kpidOld` still opens.** `alice4` retains the superseded
-    private half and keeps answering at the old address. This is the row that fails if a
+    and stamps the matching `pqSeal` version. ✅ **Proven live 2026-08-24** as a
+    differential over one recipient, two senders. The field is
+    `AtClientPreference.sealsToKeyAlgorithms` — what a sender picks among the keys a
+    recipient offers — and **not** `keyEstablishmentAlgorithms`, which is what an atSign
+    mints; a test varying the second observes nothing;
+  - **the pre-existing envelope at `kpidOld` still opens.** `alice4` retains the private
+    half and keeps answering at the old address. This is the row that fails if a
     replaced kpid is treated as retired, and the failure would otherwise be a silent,
-    unattributable loss of a secret that was correctly sent;
+    unattributable loss of a secret that was correctly sent. ✅ **Proven live 2026-08-24**
+    (`key_package_amendment_live_test.dart`). ⚠️ This said `alice4` retains the
+    **superseded** private half, and in this row nothing is superseded: an amendment
+    **joins** a key and the original stays `active`, which the test asserts. Supersession
+    is rotation's shape, not the amendment's — see the A5 rows;
   - nothing already sealed is re-sealed, and no conveyance fires: the updater is an
     enrollment that already holds the plaintext and re-files it locally.
 - **Then (an unnamed metadata key survives):** setting `keyPackage` leaves any sibling
@@ -512,7 +520,16 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   `true`, so this arm is the one that goes green for the wrong reason if the self-only
   check is written as an authorization lookup rather than an identity test.
 - **Then (state gate):** the same request against a **revoked** E4 is refused, so a revoked
-  enrollment cannot re-advertise an encapsulation target.
+  enrollment cannot re-advertise an encapsulation target. ✅ **Proven live 2026-08-24**,
+  and the mechanism is not what the name suggests: **there is no revocation check inside
+  `enroll:update`.** Two things close it between them — the revoked enrollment can no
+  longer authenticate at all (`AT0027 … is revoked`), and every other connection, the
+  fully privileged owner included, is refused as not being that enrollment
+  (`AT0011 … enroll:update is self-only`). Both arms are asserted on their error text,
+  because a connection failing for any other reason satisfies a bare "it threw".
+  ⚠️ **One arm is NOT proven**: an enrollment revoked while it holds an already open,
+  already authenticated connection. The live arm reconnects, so it measures the
+  post-revocation handshake rather than a session that never re-handshakes.
 - **Then (the arms must differ):** the accepted arm — E4 updating E4 — has to run in the
   same session, or the two refusals prove only that the verb refuses everything.
 - **Cross-ref:** [`decisions.md` 68](detail/decisions.md#68-the-enrollment-record-stops-being-a-one-way-door-enrollupdatemetadata-2026-08-10)
