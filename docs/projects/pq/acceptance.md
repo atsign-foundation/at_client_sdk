@@ -1725,52 +1725,57 @@ home, and the `legacy-server` tag stays.
 
 ### How the postures are provisioned
 
-**Two atSigns, seven enrollments each, one namespace per posture** — not the six
-atSigns the axes look like they demand.
+⚠️ **This section described one namespace per posture on both atSigns, and that
+provisioning cannot express the case the grid exists for.** It is corrected
+below rather than patched, because the error was structural: the nskey for a
+write to `@bob:k.<ns>@alice` is resolved at `(owner: bob, namespace: ns)`, and
+`ns` is the **sender's** namespace — so if every posture owns its namespace on
+both sides, every sender finds its peer seeded. Measured 2026-08-24 under the
+old layout: **all seven cross-atSign writes succeeded and none refused.**
 
-It works because the two kinds of axis have different scopes. The credential
-axes are per-enrollment: an enrollment's `_apsk` lives at
-`public:_apsk.<enrollmentId>.a.__e@<atSign>`. But `seedNamespaceKeys` publishes
-to `public:__nskey.<ns>@<owner>` — **per atSign per namespace, with no
-enrollment id in the address**. Three postures on one atSign would therefore
-contend one nskey record, and a legacy receiver would stop being the unseeded
-destination several rows need it to be. Giving each posture its own namespace
-removes the contention rather than working around it: `NskeySeeding.seed` walks
-the *enrollment's authorised* namespaces, and `PublishedNskeyKeyRing` resolves
-by `(owner, namespace)` throughout, its dartdoc saying outright that *"There is
-no atSign-level key to fall back to."*
+**The receiver's posture is not the second axis.** `PqPosture` says why:
+verification and decryption are *maximal under every posture and not settable
+at all*, so the only thing a receiver's posture changes for a write toward it
+is whether it published a namespace key. That is a property of
+`(receiver, namespace)`. The axis is **readiness**, and it is expressed by
+which namespace the write targets.
 
-Measured live on `@alice🛠` and `@bob🛠` simultaneously, 2026-08-24 — 14 clients
-in one process, each with its own Hive store:
+So the data path grid is **sender posture × receiver readiness**, and the
+envelope grid stays **sender posture × receiver posture** — because there the
+receiver's *verifier* is what is under test, and an ungated verifier is
+precisely the claim.
 
-| Namespace | Posture(s) | `__nskey` advertisement | Why it is in the grid |
-|-----------|--------------------------------|-------------------------|-----------------------------------------------|
-| `pqga` | legacy | **absent** | the unseeded destination a refusal needs |
-| `pqgb` | pqReady | present | |
-| `pqgc` | pqActive, **two** enrollments | present | so "every authorised enrollment reads" is not measuring one |
-| `pqgd` | a posture no constant names | present | PQ writes with the legacy fallback still permitted |
-| `pqgm` | pqReady **and** pqActive | present, **one** record | two installs of one app at different stages |
+Two namespaces carry readiness, and it is deliberately **asymmetric**: an
+enrollment seeds every namespace it is authorised for, so a sender able to
+write into the unready namespace necessarily seeds it on its own atSign. Only
+the receiver's side is asserted absent — which is also what proves a refusal is
+about the recipient rather than the sender.
 
-Three of those need saying plainly:
+Measured live, 2026-08-24, `@alice🛠` sending to `@bob🛠`:
 
-- **`pqga` absent while its own atSign has seeded four other namespaces** is the
-  whole claim, and it is why two atSigns suffice.
-- **`pqgd` exists because no named stage expresses it.**
-  `disallowLegacyEncryption` is settable only through a posture, and every named
-  stage either writes legacy or refuses it — so the rows about an *opted-in*
-  fallback are unreachable from the three constants. `PqPosture`'s unnamed
-  constructor is there for exactly this.
-- **`pqgm`'s two stages resolve the same advertisement**, which is the
-  behaviour the design requires: the second client to start adopts what is
-  published rather than minting a rival generation and rotating the key out
-  from under peers that already fetched it.
+| Sender posture | → `pqgr` (peer seeded) | → `pqgn` (peer unseeded) |
+|-------------------------|------------------------|---------------------------------------|
+| legacy | wrote | wrote |
+| pqReady | wrote | wrote |
+| pqActive | wrote | **`NamespaceKeyUnavailableException`** |
+| PQ writes, fallback permitted | wrote | **`NamespaceKeyUnavailableException`** |
+
+with `public:__nskey.pqgn@bob🛠` **absent** while `public:__nskey.pqgn@alice🛠`
+is present — so the refusing cells refuse on the recipient's missing key.
+
+⚠️ **A posture that permits the legacy fallback does not reach it.** The fourth
+row above sets `disallowLegacyEncryption: false` and still refuses, because
+`AtClientPreference.allowLegacyCryptoFallback` is false by default and the two
+are separate switches. So the fourth posture is **necessary and not sufficient**
+for the opted-in-fallback clauses; a cell wanting them must set the preference
+flag as well.
 
 ⚠️ **An enrollment authorised for `*` seeds nothing.** `NskeySeeding` skips the
 wildcard deliberately, so a pqReady or pqActive enrollment approved with
 `{'*': 'rw'}` publishes no namespace key and then refuses every write it makes —
 a failure that looks like a broken data path and is a provisioning mistake. Each
-cell names its own namespace, and the grid asserts that rather than relying on
-it.
+cell names its own namespaces, and the grid asserts that rather than relying
+on it.
 
 ### Which rows arm 1 owes
 
