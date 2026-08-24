@@ -1708,7 +1708,11 @@ Its two rungs are different mechanisms, and neither is a call:
   stronger authentication algorithm than its key material holds is retrofitted
   by `AtClientImpl._settleEnrollmentIdentity` *during construction*, and comes
   up on a **new** enrollment id. This is not hypothetical: 2 of arm 1's 3 cells
-  do it on every run.
+  do it on every run. ⚠️ **It still needs the client cache evicted first**, and
+  this section said it did not, "because the enrollment id changes". The id
+  does change — but *inside* `create`, after the cache has already been checked
+  against the id the caller asked with, so a rung reusing one keyfile is
+  refused by `refuseChangedRolloutAxes` before the retrofit can run.
 - **pqReady → pqActive keeps the enrollment.** Both authenticate with ML-DSA-65,
   so no retrofit is due; what moves is the data signing key, through
   `SigningKeyMinting.reconcileSigningKeys`, which reads a **final** preference

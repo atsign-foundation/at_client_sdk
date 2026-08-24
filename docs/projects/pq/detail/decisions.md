@@ -11394,8 +11394,10 @@ has open — and it belongs beside the catalogue it exists to prove.
   have. Neither rung is a call: legacy → pqReady fires by itself inside
   `AtClientImpl._settleEnrollmentIdentity` when a posture wants a stronger
   authentication algorithm than the key material holds, and pqReady → pqActive
-  keeps the enrollment but needs the client cache evicted, because the axis it
-  moves is final on the preference.
+  keeps the enrollment but moves an axis that is final on the preference.
+  ⚠️ **BOTH rungs need the client cache evicted**, which this bullet implied
+  only the second did: the retrofit changes the enrollment id, but it runs
+  inside `create`, after the cache check on the id the caller asked with.
 - ⛔ **Arm 4 is CANCELLED** (gkc, 2026-08-24). It read "the server-version arm —
   client posture crossed with atServer version, retiring the pinned-image
   special case". The atServer-version axis is out of scope: gkc will ensure the
