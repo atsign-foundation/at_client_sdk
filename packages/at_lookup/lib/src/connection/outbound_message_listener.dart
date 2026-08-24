@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
+import 'dart:math';
+import 'dart:typed_data';
 
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
@@ -13,8 +15,37 @@ class OutboundMessageListener {
   final logger = AtSignLogger('OutboundMessageListener');
   late ByteBuffer _buffer;
   final Queue _queue = Queue();
+
+  /// Completed to wake any pending [read] the moment a response is queued.
+  ///
+  /// Replaced rather than reused, because a [Completer] completes once. Null
+  /// whenever nobody is waiting, so a response arriving with no reader costs
+  /// nothing.
+  Completer<void>? _responseQueued;
+
+  /// Set once the connection this listener reads has gone away.
+  ///
+  /// Never cleared: [AtLookupImpl.createConnection] builds a fresh listener
+  /// with every connection, so a listener whose socket has died is never
+  /// reused for a live one.
+  bool _connectionGone = false;
+
   final AtConnection _connection;
   Function? syncCallback;
+
+  /// Where asynchronous `notification:` lines go, if anywhere.
+  ///
+  /// The atServer frames the two kinds of message differently. A verb response
+  /// ends `\n@<atSign>@` - the newline, then the prompt saying it is ready for
+  /// the next command. A notification is not a reply to anything, so no prompt
+  /// follows it and it ends at a bare `\n`.
+  ///
+  /// While this is null the second framing is not applied at all and the
+  /// listener behaves exactly as it did before it existed. That is deliberate:
+  /// routing notifications to a callback nobody installed would drop them, and
+  /// a dropped notification is indistinguishable from one the atServer never
+  /// sent.
+  void Function(String notification)? onNotification;
   final int newLineCodeUnit = 10;
   final int atCharCodeUnit = 64;
   late DateTime _lastReceivedTime;
@@ -23,13 +54,23 @@ class OutboundMessageListener {
     _buffer = ByteBuffer(capacity: bufferCapacity);
   }
 
+  /// The subscription to the socket, kept so delivery can be stopped.
+  ///
+  /// This used to be discarded. Keeping it is what lets back-pressure reach
+  /// the far end: pausing here stops reading the socket, so bytes accumulate
+  /// in the kernel receive buffer and TCP eventually closes the window on the
+  /// atServer. Without it a slow consumer's only option is to buffer without
+  /// bound in this process, which is not back-pressure - it is a memory leak
+  /// that ends in an overflow.
+  StreamSubscription<Uint8List>? _socketSubscription;
+
   /// Listens to the underlying connection's socket if the connection is created.
   /// @throws [AtConnectException] if the connection is not yet created
   void listen() {
     logger.finest('Calling socket.listen within runZonedGuarded block');
 
     runZonedGuarded(() {
-      _connection
+      _socketSubscription = _connection
           .getSocket()
           .listen(messageHandler, onDone: onSocketDone, onError: onSocketError);
     }, (Object error, StackTrace st) {
@@ -37,6 +78,46 @@ class OutboundMessageListener {
           'runZonedGuarded received socket error $error - calling onSocketError() to close connection');
       onSocketError(error);
     });
+  }
+
+  /// Whether delivery from the socket is currently stopped.
+  bool get isDeliveryPaused => _socketSubscription?.isPaused ?? false;
+
+  /// Stop reading the socket.
+  ///
+  /// ⚠️ Pauses are COUNTED by [StreamSubscription] - measured, not assumed:
+  /// two `pause()` calls need two `resume()` calls before delivery restarts.
+  /// So every call here needs exactly one matching [resumeDelivery]. Wiring
+  /// these to a [StreamController]'s `onPause`/`onResume` satisfies that by
+  /// construction, which is why the notification stream drives them rather
+  /// than callers doing it by hand.
+  ///
+  /// A no-op before [listen] has been called, and a no-op is right: there is
+  /// no delivery to stop.
+  void pauseDelivery() => _socketSubscription?.pause();
+
+  /// Resume reading the socket. Safe when not paused - probed, it does not
+  /// throw - so an unmatched resume costs nothing.
+  void resumeDelivery() => _socketSubscription?.resume();
+
+  /// Called after the connection has been closed because the far end went
+  /// away - either cleanly (`onDone`) or with an error (`onError`).
+  ///
+  /// The listener knows the socket died before anything else does, and until
+  /// now it kept that to itself: it closed the connection and returned, so a
+  /// subscriber waiting on notifications simply stopped hearing anything, with
+  /// no event distinguishing "the atServer is quiet" from "the socket is
+  /// gone". Whoever owns reconnection needs that difference.
+  void Function()? onDisconnect;
+
+  void _notifyDisconnect() {
+    final callback = onDisconnect;
+    if (callback == null) return;
+    try {
+      callback();
+    } catch (e, st) {
+      logger.shout('onDisconnect threw $e - reconnection may not happen\n$st');
+    }
   }
 
   /// Logs the error and closes the [OutboundConnection]
@@ -48,6 +129,7 @@ class OutboundMessageListener {
     await closeConnection();
     logger.finest(
         'outbound socket onError handler called - closeConnection complete');
+    _notifyDisconnect();
   }
 
   /// Closes the [OutboundConnection]
@@ -58,6 +140,7 @@ class OutboundMessageListener {
     await closeConnection();
     logger.finest(
         'outbound socket onDone handler called - closeConnection complete');
+    _notifyDisconnect();
   }
 
   /// Handles messages on the inbound client's connection and calls the verb executor
@@ -70,10 +153,29 @@ class OutboundMessageListener {
     // check buffer overflow
     _checkBufferOverFlow(data);
     // If the data contains a new line character, add until the new line char to buffer
+    // Everything before the LAST newline is appended without being examined
+    // for the `\n@` terminator, and that is not an optimisation - it is what
+    // makes multi-line values work. A `data:` value may itself contain `\n@`
+    // (a key name follows a newline inside the value), and inspecting those
+    // bytes would end the response early and truncate it.
+    //
+    // Notifications need the opposite: they end at a bare newline, so every
+    // newline in that skipped region IS a message boundary. Hence two passes
+    // over it - the notification check byte by byte, the `\n@` check only from
+    // the last newline on, exactly as before.
     if (data.contains(newLineCodeUnit)) {
       offset = data.lastIndexOf(newLineCodeUnit);
-      var dataSubList = data.getRange(0, offset).toList();
-      _buffer.append(dataSubList);
+      final head = data.getRange(0, offset).toList();
+      if (onNotification == null) {
+        _buffer.append(head);
+      } else {
+        for (final byte in head) {
+          _buffer.addByte(byte);
+          if (byte == newLineCodeUnit) {
+            _routeIfNotification();
+          }
+        }
+      }
     } else {
       offset = 0;
     }
@@ -93,12 +195,45 @@ class OutboundMessageListener {
         result = _stripPrompt(result);
         logger.finer('RECEIVED $result');
         _queue.add(result);
+        _wakeReaders();
         //clear the buffer after adding result to queue
         _buffer.clear();
         _buffer.addByte(data[element]);
       } else {
         _buffer.addByte(data[element]);
+        if (data[element] == newLineCodeUnit && onNotification != null) {
+          _routeIfNotification();
+        }
       }
+    }
+  }
+
+  /// Surface the buffer if it holds a complete notification.
+  ///
+  /// Called only when the buffer just gained a newline. A verb response whose
+  /// VALUE contains newlines is left alone, because the test is on the
+  /// buffer's prefix: a multi-line value still begins `data:` or `error:`,
+  /// never `notification:`.
+  void _routeIfNotification() {
+    final bytes = _buffer.getData();
+    if (bytes.isEmpty || bytes.last != newLineCodeUnit) return;
+    final body = bytes.sublist(0, bytes.length - 1);
+    if (body.isEmpty) return;
+    final String stripped;
+    try {
+      stripped = _stripPrompt(utf8.decode(body));
+    } catch (_) {
+      // Not decodable yet - more bytes are coming. Leave the buffer alone.
+      return;
+    }
+    if (!stripped.startsWith('notification:')) return;
+
+    logger.finer('NOTIFICATION $stripped');
+    _buffer.clear();
+    try {
+      onNotification!(stripped);
+    } catch (e, st) {
+      logger.shout('onNotification threw $e - notification dropped\n$st');
     }
   }
 
@@ -116,8 +251,19 @@ class OutboundMessageListener {
 
   /// The method accepts the result (server response) and trim's the prompt from the response
   /// and returns the actual response.
+  ///
+  /// A response with no colon has no prompt to strip and is returned as it
+  /// stands. The bare `@<atSign>@` that completes the handshake is exactly
+  /// that, and [_isValidResponse] accepts it, so without this guard
+  /// `substring(0, -1)` throws a RangeError from inside the socket's data
+  /// handler - which `runZonedGuarded` turns into a socket error, destroying a
+  /// healthy connection and leaving the caller with a timeout that names the
+  /// wrong cause.
   String _stripPrompt(String result) {
     var colonIndex = result.indexOf(':');
+    if (colonIndex == -1) {
+      return result;
+    }
     var responsePrefix = result.substring(0, colonIndex);
     var response = result.substring(colonIndex);
     if (responsePrefix.contains('@')) {
@@ -127,19 +273,77 @@ class OutboundMessageListener {
     return '$responsePrefix$response';
   }
 
+  void _wakeReaders() {
+    final waiter = _responseQueued;
+    _responseQueued = null;
+    if (waiter != null && !waiter.isCompleted) {
+      waiter.complete();
+    }
+  }
+
+  /// Fails anything waiting in [read], at once, because the connection is gone.
+  ///
+  /// A response can only arrive on the socket this listener reads, so once that
+  /// socket is gone a pending [read] is waiting for something that can never
+  /// come. That wait is not free: `AtLookupImpl._process` holds
+  /// `requestResponseMutex` across it, so the next request on the same
+  /// AtLookupImpl queues behind a dead one for the whole transient budget -
+  /// measured at 30 seconds, long enough to blow past a test's own timeout and
+  /// long enough that an application reads it as a hang.
+  ///
+  /// Deliberately NOT the same thing as a timeout: nothing timed out. The
+  /// caller is told the connection went away, which is both true and
+  /// actionable, where `AtTimeoutException` would send it looking at the
+  /// atServer's latency.
+  ///
+  /// A response already parsed and queued is still returned - those bytes
+  /// arrived while the connection was alive and the caller is owed them.
+  void abortPendingRequests() {
+    _connectionGone = true;
+    final waiter = _responseQueued;
+    _responseQueued = null;
+    if (waiter != null && !waiter.isCompleted) {
+      // Logged because it is otherwise invisible: the request simply fails, and
+      // a failure attributed to the atServer rather than to the connection
+      // being closed underneath it sends the reader to the wrong end.
+      logger.info('Connection closed with a request in flight - failing it now '
+          'rather than waiting out its response budget');
+      waiter.complete();
+    }
+  }
+
   /// Reads the response sent by remote socket from the queue.
-  /// If there is no message in queue after [maxWaitMilliSeconds], return null. Defaults to 90 seconds.
-  /// Whenever data is received on client socket from server, [_lastReceivedTime] will be updated to current time.
-  /// [transientWaitTimeMillis] specifies the max duration to wait between current time and [_lastReceivedTime] before timing out.Defaults to 10 seconds.
-  Future<String> read(
-      {int maxWaitMilliSeconds = 90000,
-      int transientWaitTimeMillis = 10000}) async {
+  ///
+  /// Two independent budgets bound the wait, and they measure different things:
+  ///
+  /// - [maxWaitMilliSeconds] is the whole response, from this call to the
+  ///   terminating byte. Defaults to [AtNetworkTimeouts.defaultResponseBudget].
+  /// - [transientWaitTimeMillis] is the gap between *chunks*. Every byte the
+  ///   socket delivers moves [_lastReceivedTime], so this restarts whenever the
+  ///   atServer is still sending. Defaults to
+  ///   [AtNetworkTimeouts.effectiveDefault].
+  ///
+  /// Passing null for either takes the default at the time of the call, so a
+  /// process that moves `AtNetworkTimeouts.defaultTimeout` at startup moves
+  /// this too.
+  ///
+  /// The wait is event-driven: this sleeps until a response is queued or until
+  /// the nearer of the two deadlines, whichever happens first. It does not poll,
+  /// so a response is surfaced as soon as its last byte is parsed rather than up
+  /// to a polling interval later.
+  Future<String> read({
+    int? maxWaitMilliSeconds,
+    int? transientWaitTimeMillis,
+  }) async {
+    final maxWait = maxWaitMilliSeconds ??
+        AtNetworkTimeouts.defaultResponseBudget.inMilliseconds;
+    final transientWait = transientWaitTimeMillis ??
+        AtNetworkTimeouts.effectiveDefault.inMilliseconds;
     String result;
     _lastReceivedTime = DateTime.now();
     var startTime = DateTime.now();
     while (true) {
-      var queueLength = _queue.length;
-      if (queueLength > 0) {
+      if (_queue.isNotEmpty) {
         result = _queue.removeFirst();
         // result from another secondary is either data or a @<atSign>@ denoting complete
         // of the handshake
@@ -151,25 +355,48 @@ class OutboundMessageListener {
         throw AtLookUpException('AT0014', 'Unexpected response found');
       }
 
-      // if currentTime - startTime  is greater than maxWaitMillis throw AtTimeoutException
-      if (DateTime.now().difference(startTime).inMilliseconds >
-          maxWaitMilliSeconds) {
+      // Checked after the queue and before the deadlines: a response that
+      // arrived before the connection died is still owed to the caller, and a
+      // connection that has gone will never produce another one.
+      if (_connectionGone) {
+        _buffer.clear();
+        throw ConnectionInvalidException(
+            'The connection went away before a response arrived');
+      }
+
+      // if currentTime - startTime  is greater than maxWait throw AtTimeoutException
+      final sinceStart = DateTime.now().difference(startTime).inMilliseconds;
+      if (sinceStart > maxWait) {
         _buffer.clear();
         await closeConnection();
         throw AtTimeoutException(
-            'Full response not received after $maxWaitMilliSeconds millis from remote atServer');
+            'Full response not received after $maxWait millis from remote atServer');
       }
       // if no data is received from server and if currentTime - _lastReceivedTime is greater than
-      // transientWaitTimeMillis throw AtTimeoutException
-      if (DateTime.now().difference(_lastReceivedTime).inMilliseconds >
-          transientWaitTimeMillis) {
+      // transientWait throw AtTimeoutException
+      final sinceReceived =
+          DateTime.now().difference(_lastReceivedTime).inMilliseconds;
+      if (sinceReceived > transientWait) {
         _buffer.clear();
         await closeConnection();
         throw AtTimeoutException(
-            'Waited for $transientWaitTimeMillis millis. No response after $_lastReceivedTime ');
+            'Waited for $transientWait millis. No response after $_lastReceivedTime ');
       }
-      // wait for 10 ms before attempting to read from queue again
-      await Future.delayed(Duration(milliseconds: 10));
+
+      // Sleep until a response is queued or the nearer deadline passes. The
+      // extra millisecond matters: both checks above are strict `>`, so waking
+      // exactly ON a deadline would find neither exceeded and sleep again for
+      // zero, spinning until the clock ticked over.
+      //
+      // A chunk that does not complete a response does not wake anything. It
+      // does not need to - it can only push the transient deadline further
+      // out, and the wake that was already scheduled recomputes it from
+      // _lastReceivedTime and sleeps again.
+      final untilDeadline = Duration(
+          milliseconds:
+              min(maxWait - sinceStart, transientWait - sinceReceived) + 1);
+      _responseQueued ??= Completer<void>();
+      await _responseQueued!.future.timeout(untilDeadline, onTimeout: () {});
     }
   }
 
@@ -188,6 +415,11 @@ class OutboundMessageListener {
     if (delayBeforeClose != null) {
       await Future.delayed(delayBeforeClose!);
     }
+    // Before the close, so a reader woken by it finds the flag already set.
+    // This covers the far end going away - `onSocketDone` and `onSocketError`
+    // both arrive here. A close started anywhere else reaches
+    // [abortPendingRequests] through `AtLookupImpl`.
+    abortPendingRequests();
     await _connection.close();
   }
 }

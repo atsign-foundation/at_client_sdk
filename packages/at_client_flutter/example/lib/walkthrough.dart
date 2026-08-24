@@ -97,9 +97,9 @@ Future<void> onboard(BuildContext context) async {
   });
 }
 
-/// Login using an atSign stored in the keychain
-Future<void> loginWithKeychain(BuildContext context) async {
-  await _safeExecute('loginWithKeychain', () async {
+/// Authenticate using an atSign stored in the keychain
+Future<void> authenticateWithKeychain(BuildContext context) async {
+  await _safeExecute('authenticateWithKeychain', () async {
     _logger.info('Step 1: Loading atSigns from keychain');
     var atSigns = await keychainStorage.getAllAtsigns();
     _logger.info('Found ${atSigns.length} atSigns in keychain: $atSigns');
@@ -153,9 +153,9 @@ Future<void> loginWithKeychain(BuildContext context) async {
   }, context: context);
 }
 
-/// Login using an atKeys file from the file system
-Future<void> loginWithFile(BuildContext context) async {
-  await _safeExecute('loginWithFile', () async {
+/// Authenticate using an atKeys file from the file system
+Future<void> authenticateWithFile(BuildContext context) async {
+  await _safeExecute('authenticateWithFile', () async {
     _logger.info('Step 1: Showing AtKeysFileDialog');
     FileAtKeysIo? atKeysIo = await AtKeysFileDialog.show(context);
 
@@ -191,8 +191,8 @@ Future<void> loginWithFile(BuildContext context) async {
   }, context: context);
 }
 
-Future<void> loginWithApkam(BuildContext context) async {
-  await _safeExecute('loginWithApkam', () async {
+Future<void> authenticateWithApkam(BuildContext context) async {
+  await _safeExecute('authenticateWithApkam', () async {
     _logger.info('Step 1: Showing AtSignSelectionDialog');
     AuthRequest? request = await AtSignSelectionDialog.show(context);
     if (request == null) {

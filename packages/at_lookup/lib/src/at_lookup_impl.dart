@@ -3,6 +3,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:math';
 import 'dart:typed_data';
 
 import 'package:at_commons/at_builders.dart';
@@ -11,7 +12,6 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:at_lookup/src/connection/outbound_message_listener.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:at_utils/at_utils.dart' show AtUtils;
-import 'package:meta/meta.dart' show visibleForTesting;
 import 'package:mutex/mutex.dart';
 import 'package:at_chops/at_chops.dart';
 
@@ -26,7 +26,12 @@ final RegExp _fromChallengeUuid = RegExp(
 /// [atSign]; throws [UnAuthenticatedException] otherwise.
 ///
 /// [challenge] is the response with any `data:` prefix already stripped.
-@visibleForTesting
+///
+/// Public, not `@visibleForTesting`: authentication is moving out of at_lookup
+/// and into at_auth, where the key material is, and the side that signs the
+/// challenge is the side that has to refuse a bad one. Duplicating this check
+/// there would be the worse answer - two copies of a security control drift,
+/// and the one that drifts is the one nobody is looking at.
 String validatedFromChallenge(String challenge, String atSign) {
   void refuse(String why) {
     // The challenge itself is not secret — it is a session id and a nonce the
@@ -62,7 +67,7 @@ String validatedFromChallenge(String challenge, String atSign) {
   return challenge;
 }
 
-class AtLookupImpl implements AtLookUp {
+class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   final logger = AtSignLogger('AtLookup');
 
   /// Listener for reading verb responses from the remote server
@@ -82,10 +87,37 @@ class AtLookupImpl implements AtLookUp {
 
   late int _rootPort;
 
-  @Deprecated("privateKey reference is no longer used")
+  /// The legacy PKAM credential: a private key and nothing else.
+  ///
+  /// The message this annotation used to carry - "privateKey reference is no
+  /// longer used" - was false. The ladder in [_process] reads this field and
+  /// calls authenticate() with it, and before the authenticator seam landed
+  /// that was the leg most ladder traffic took.
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
+      'instead - at_auth builds one from a bare private key with '
+      'authenticatorForPrivateKey(). '
+      'Removed with the credential ladder in the next major release.')
   String? privateKey;
 
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
+      'instead - at_auth builds one that falls back to CRAM with '
+      'authenticatorFor(). '
+      'Removed with the credential ladder in the next major release.')
   String? cramSecret;
+
+  /// Takes over authentication entirely when set, in place of the
+  /// atChops/privateKey/cramSecret ladder below.
+  ///
+  /// The ladder asks "which credential do I hold?" in at_lookup, which is the
+  /// wrong place to ask: at_lookup cannot see an enrollment, a keystore or a
+  /// signing algorithm, so every credential it might use has to be handed to
+  /// it and stored here first. A caller that sets this hands over one closure
+  /// instead, and keeps all of that on its own side. See [AtAuthenticator].
+  ///
+  /// Both routes work while this exists. The ladder and the fields feeding it
+  /// go once every caller supplies an authenticator.
+  @override
+  AtAuthenticator? authenticator;
 
   /// Permitted number of milliseconds before connection to atServer
   /// is deemed 'idle' and will be closed. The default is usually set to
@@ -103,8 +135,26 @@ class AtLookupImpl implements AtLookUp {
   /// Represents the client configurations.
   late Map<String, dynamic> _clientConfig;
 
+  // Holds what the deprecated `atChops` accessors set. The type cannot leave
+  // while those accessors are part of this class's API, so it goes when the
+  // credential ladder does.
+  // TODO(4.0): remove with the credential ladder.
+  // ignore: deprecated_member_use
   AtChops? _atChops;
 
+  /// Prefer [AtLookUp.withSecureSocket].
+  ///
+  /// This takes a `String, int` root pair where [AtRootDomain] validates the
+  /// port and knows about proxy addresses, it accepts key material at_lookup
+  /// no longer needs, and it hands back a concrete type where a caller only
+  /// ever needs an interface.
+  ///
+  /// The warnings this raises at every construction site ARE the deliverable:
+  /// they are the mechanical list of what still has to move. `dart analyze`
+  /// reports them as `info`, so nothing breaks while the list is worked
+  /// through.
+  @Deprecated('Use AtLookUp.withSecureSocket, which returns an '
+      'AtLookupMuxable. Removed in the next major release.')
   AtLookupImpl(String atSign, String rootDomain, int rootPort,
       {this.privateKey,
       this.cramSecret,
@@ -228,6 +278,13 @@ class AtLookupImpl implements AtLookUp {
       logger.finer('value: $value dataSignature:$dataSignature');
       // RSA SHA-256 verify via at_chops (wraps the same crypton
       // RSAPublicKey.verifySHA256Signature).
+      // TODO(4.0): not part of the credential ladder, so this one outlives
+      // it. at_chops directs it to RsaSignatureAlgo — but that class pins a
+      // modulus size per instance, and this verifies a PEER's key, whose
+      // size we do not control: rsa2048() returns false for a 4096-bit key
+      // that verifies here today. Choose the instance by the key, or keep a
+      // size-agnostic verify.
+      // ignore: deprecated_member_use
       var isDataValid = PkamSigningAlgo(null, HashingAlgoType.sha256).verify(
           Uint8List.fromList(utf8.encode(value)), base64Decode(dataSignature),
           publicKey: publicKeyResult);
@@ -293,7 +350,7 @@ class AtLookupImpl implements AtLookUp {
       if (_connection != null) {
         // Clean up the connection before creating a new one
         logger.finer('Closing old connection');
-        await _connection!.close();
+        await _closeConnection();
       }
       logger.info('Creating new connection');
       //1. find secondary url for atsign from lookup library
@@ -306,6 +363,14 @@ class AtLookupImpl implements AtLookUp {
           host, port.toString(), _currentAtSign, _secureSocketConfig);
       //3. listen to server response
       messageListener = socketListenerFactory.createListener(_connection!);
+      // Re-established on every connection, because createConnection builds a
+      // fresh listener each time. Installed only when somebody has asked for
+      // the stream: with no controller there is nowhere to put a notification,
+      // and routing one into a void drops it silently.
+      if (_notificationController != null) {
+        messageListener.onNotification = _routeNotification;
+        messageListener.onDisconnect = _onNotificationConnectionLost;
+      }
       messageListener.listen();
       logger.info('New connection created OK');
     }
@@ -314,7 +379,11 @@ class AtLookupImpl implements AtLookUp {
   /// Executes the command returned by [VerbBuilder] build command on a remote secondary server.
   /// Catches any exception and throws [AtLookUpException]
   @override
-  Future<String> executeVerb(VerbBuilder builder, {sync = false}) async {
+  Future<String> executeVerb(VerbBuilder builder,
+      {@Deprecated('Inert: nothing reads it. The verb always executes '
+          'on the remote atServer; there is no sync behaviour here '
+          'to control. Removed in 4.0.')
+      sync = false}) async {
     String verbResult = '';
     try {
       if (builder is UpdateVerbBuilder) {
@@ -474,7 +543,63 @@ class AtLookupImpl implements AtLookUp {
     return _verbResponseHandler(verbResponse);
   }
 
+  /// Records on the connection the identity it has just authenticated as, so
+  /// a later caller can tell which enrollment a live socket holds rather than
+  /// which one the next authentication would use.
+  void _recordAuthentication({String? enrollmentId}) {
+    final metaData = _connection!.getMetaData()!;
+    metaData.isAuthenticated = true;
+    metaData.authenticatedAsEnrollmentId = enrollmentId;
+    metaData.authenticatedAt = DateTime.now().toUtc();
+  }
+
   final Mutex _pkamAuthenticationMutex = Mutex();
+
+  @override
+  Future<String> readResponse(
+          {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) =>
+      messageListener.read(
+          maxWaitMilliSeconds: maxWaitMilliSeconds,
+          transientWaitTimeMillis: transientWaitTimeMillis);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    await _sendCommand(command);
+    return messageListener.read(
+        maxWaitMilliSeconds: maxWaitMilliSeconds,
+        transientWaitTimeMillis: transientWaitTimeMillis);
+  }
+
+  /// Runs [authenticate] against this connection, under the same mutex the
+  /// ladder's own methods take.
+  ///
+  /// [enrollmentId] is what gets recorded on the connection. It is a parameter
+  /// rather than always this object's field because the two can differ: a
+  /// caller reaching [pkamAuthenticate] names the enrollment in that call,
+  /// while a verb going through [_process] has only the field to go on.
+  Future<void> _authenticateWith(AtAuthenticator authenticate,
+      {String? enrollmentId}) async {
+    await createConnection();
+    try {
+      await _pkamAuthenticationMutex.acquire();
+      if (_connection!.getMetaData()!.isAuthenticated) {
+        return;
+      }
+      if (!await authenticate(this)) {
+        throw UnAuthenticatedException(
+            'Failed connecting to $_currentAtSign.'
+            ' The authenticator reported failure');
+      }
+      // The enrollment id still comes from the caller or this object, because
+      // the ladder still needs the field. When the ladder goes, so does the
+      // field, and the authenticator - which is the side that knows the
+      // enrollment - becomes the only thing that can supply it.
+      _recordAuthentication(enrollmentId: enrollmentId ?? this.enrollmentId);
+    } finally {
+      _pkamAuthenticationMutex.release();
+    }
+  }
 
   /// Generates digest using from verb response and [privateKey] and performs a PKAM authentication to
   /// secondary server. This method is executed for all verbs that requires authentication.
@@ -501,8 +626,17 @@ class AtLookupImpl implements AtLookUp {
         logger.finer('fromResponse $fromResponse');
         // RSA SHA-256 sign via at_chops (wraps the same crypton
         // RSAPrivateKey.createSHA256Signature; only the private key is used).
+        // TODO(4.0): remove with the privateKey ladder credential this method
+        // exists to serve. If it outlives the ladder instead, RsaSignatureAlgo
+        // produces identical signature bytes for a 2048-bit key — but refuses
+        // any other modulus size, which this path never checked, so a
+        // caller-supplied 3072- or 4096-bit key that authenticates today
+        // would start throwing.
+        // ignore: deprecated_member_use
         var sha256signature = PkamSigningAlgo(
-                AtPkamKeyPair.create('', privateKey), HashingAlgoType.sha256)
+                // ignore: deprecated_member_use
+                AtPkamKeyPair.create('', privateKey),
+                HashingAlgoType.sha256)
             .sign(Uint8List.fromList(utf8.encode(fromResponse)));
         var signature = base64Encode(sha256signature);
         logger.finer('Sending command pkam:$signature');
@@ -510,7 +644,7 @@ class AtLookupImpl implements AtLookUp {
         var pkamResponse = await messageListener.read();
         if (pkamResponse == 'data:success') {
           logger.info('auth success');
-          _connection!.getMetaData()!.isAuthenticated = true;
+          _recordAuthentication();
         } else {
           throw UnAuthenticatedException(
               'Failed connecting to $_currentAtSign. $pkamResponse');
@@ -524,6 +658,15 @@ class AtLookupImpl implements AtLookUp {
 
   @override
   Future<bool> pkamAuthenticate({String? enrollmentId}) async {
+    // Prefer an injected authenticator here too, not only in [_process].
+    // at_auth reaches this method directly rather than through a verb, so a
+    // seam wired only into [_process] would leave the authenticate() path
+    // still running the ladder - the seam would look connected and do nothing
+    // on the one call that matters most.
+    if (authenticator != null) {
+      await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
+      return _connection!.getMetaData()!.isAuthenticated;
+    }
     await createConnection();
     try {
       await _pkamAuthenticationMutex.acquire();
@@ -542,9 +685,13 @@ class AtLookupImpl implements AtLookUp {
         logger.finer('fromResponse $fromResponse');
         logger.finer(
             'signingAlgoType: $signingAlgoType hashingAlgoType:$hashingAlgoType');
+        // TODO(4.0): remove with the credential ladder; at_chops directs this
+        // to calling an AtSigningAlgorithm implementation directly.
+        // ignore: deprecated_member_use
         final atSigningInput = AtSigningInput(fromResponse)
           ..signingAlgoType = signingAlgoType
           ..hashingAlgoType = hashingAlgoType
+          // ignore: deprecated_member_use
           ..signingMode = AtSigningMode.pkam;
         var signingResult = _atChops!.sign(atSigningInput);
         var pkamBuilder = PkamVerbBuilder()
@@ -558,7 +705,7 @@ class AtLookupImpl implements AtLookUp {
         var pkamResponse = await messageListener.read();
         if (pkamResponse == 'data:success') {
           logger.info('auth success');
-          _connection!.getMetaData()!.isAuthenticated = true;
+          _recordAuthentication(enrollmentId: enrollmentId);
         } else {
           throw UnAuthenticatedException(
               'Failed connecting to $_currentAtSign. $pkamResponse');
@@ -598,7 +745,7 @@ class AtLookupImpl implements AtLookUp {
             transientWaitTimeMillis: 4000, maxWaitMilliSeconds: 10000);
         if (cramResponse == 'data:success') {
           logger.info('auth success');
-          _connection!.getMetaData()!.isAuthenticated = true;
+          _recordAuthentication();
         } else {
           throw UnAuthenticatedException('Auth failed');
         }
@@ -651,7 +798,9 @@ class AtLookupImpl implements AtLookUp {
       await requestResponseMutex.acquire();
 
       if (auth && _isAuthRequired()) {
-        if (_atChops != null) {
+        if (authenticator != null) {
+          await _authenticateWith(authenticator!);
+        } else if (_atChops != null) {
           logger.finer('calling pkam using atchops');
           await pkamAuthenticate(enrollmentId: enrollmentId);
         } else if (privateKey != null) {
@@ -699,6 +848,7 @@ class AtLookupImpl implements AtLookUp {
     return true;
   }
 
+  @override
   bool isConnectionAvailable() {
     return _connection != null && !_connection!.isInValid();
   }
@@ -709,7 +859,410 @@ class AtLookupImpl implements AtLookUp {
 
   @override
   Future<void> close() async {
-    await _connection?.close();
+    await _closeConnection();
+  }
+
+  /// Closes the connection and fails whatever was waiting on it.
+  ///
+  /// Every close goes through here rather than calling `_connection.close()`
+  /// directly, because a close leaves a request in flight with nowhere for its
+  /// response to arrive from. [OutboundMessageListener.read] cannot see that on
+  /// its own, so it waits out its transient budget - and it is holding
+  /// [requestResponseMutex] while it does, which stalls the NEXT request on
+  /// this instance for the same 30 seconds.
+  ///
+  /// That is not hypothetical: it is what made an atSign switch stall the
+  /// request that followed it, because `AtClientImpl.stop()` destroys the
+  /// outgoing client's socket while its startup work is still in flight, and
+  /// the same AtLookupImpl is handed back when that atSign is switched to
+  /// again.
+  ///
+  /// The listener aborts on `onDone` as well, and in Dart a local
+  /// `Socket.destroy()` does deliver one - measured - so the two routes
+  /// usually agree. This one is still needed, and not merely as belt and
+  /// braces: **a PAUSED subscription delivers no done event**, also measured,
+  /// and this class pauses the socket to push back-pressure at the atServer
+  /// during notification delivery. Closing while paused reaches the abort
+  /// through here and through nothing else.
+  Future<void> _closeConnection() async {
+    final connection = _connection;
+    if (connection == null) {
+      return;
+    }
+    // `messageListener` is `late` and assigned in [createConnection] - which is
+    // also where `_connection` is assigned, so a non-null connection means
+    // there is a listener to tell.
+    messageListener.abortPendingRequests();
+    await connection.close();
+  }
+
+  // ---------------------------------------------------------------------
+  // AtLookupMuxable - the second framing, on a connection of its own.
+  // See the warning on [AtLookupMuxable]: sharing one socket with verb
+  // traffic is NOT safe today, because no atServer implements the flag that
+  // was supposed to make it safe.
+  // ---------------------------------------------------------------------
+
+  /// Created on first read of [notifications], not in the constructor.
+  ///
+  /// Its existence is what tells [createConnection] to install the framing
+  /// seam, so a lookup nobody asked notifications of behaves exactly as it
+  /// always did - including leaving a stray notification in the buffer, which
+  /// is pinned by test as the behaviour the seam exists to fix.
+  StreamController<String>? _notificationController;
+
+  bool _isNotifying = false;
+
+  // --- reconnect, reauth and heartbeat -----------------------------------
+  //
+  // Owned here because this object holds the socket. at_client's Monitor
+  // carries an identical [1,2,3,5,8,13,21,34] delay list; both cannot own
+  // reconnection, and on a connection that also carries verb traffic a
+  // Monitor-owned reconnect would be healing a socket it does not own for a
+  // subsystem that is not it.
+
+  /// Delays between reconnect attempts. The last is repeated indefinitely.
+  static const List<Duration> notificationReconnectDelays = [
+    Duration(seconds: 1),
+    Duration(seconds: 2),
+    Duration(seconds: 3),
+    Duration(seconds: 5),
+    Duration(seconds: 8),
+    Duration(seconds: 13),
+    Duration(seconds: 21),
+    Duration(seconds: 34),
+  ];
+
+  /// How often a quiet notification connection is probed, and how long the
+  /// probe waits. Settable so a test does not have to wait 30 seconds.
+  @override
+  Duration heartbeatInterval = const Duration(seconds: 30);
+
+  @override
+  Duration heartbeatResponseTimeout = const Duration(seconds: 10);
+
+  String? _notifyRegex;
+  /// The caller's watermark source, asked on every (re)connect.
+  ///
+  /// A function rather than a value because the caller's position moves as it
+  /// consumes notifications, and a reconnect should resume from where it has
+  /// got to - not from where it was when notifications started.
+  Future<int?> Function()? _getLastNotificationTime;
+  bool _notifySelfNotifications = true;
+
+  int _reconnectIx = 0;
+  bool _reconnecting = false;
+
+  /// Bumped by every start of a reconnect loop and by every
+  /// [stopNotifications], so a loop can tell whether the notification session
+  /// it belongs to is still the current one. A stop followed by a start puts
+  /// `_isNotifying` back to true, which is why that flag alone cannot answer
+  /// it.
+  int _notifyGeneration = 0;
+  Timer? _heartbeatTimer;
+
+  /// Whether a reconnect is in flight. Visible so a test can assert the loop
+  /// is running rather than inferring it from a delay.
+  @override
+  bool get isReconnectingNotifications => _reconnecting;
+
+  StreamController<bool>? _connectionUpController;
+
+  @override
+  Stream<bool> get notificationConnectionUp {
+    _connectionUpController ??= StreamController<bool>.broadcast();
+    return _connectionUpController!.stream;
+  }
+
+  void _emitConnectionUp(bool up) {
+    final controller = _connectionUpController;
+    if (controller == null || controller.isClosed) return;
+    controller.add(up);
+  }
+
+  void _onNotificationConnectionLost() {
+    if (!_isNotifying || _reconnecting) return;
+    // `warning`: the subscriber cannot see this any other way, and a silent
+    // reconnect looks identical to an atServer that has simply gone quiet.
+    logger.warning(
+        'Notification connection to $_currentAtSign lost - reconnecting');
+    _emitConnectionUp(false);
+    _stopHeartbeat();
+    unawaited(_reconnectNotifications());
+  }
+
+  Future<void> _reconnectNotifications() async {
+    // The generation this loop belongs to. `_isNotifying` alone is not enough
+    // to decide whether waking is safe: a stop followed by a start inside the
+    // backoff window sets it back to true, and a loop orphaned by that stop
+    // would then act on a connection somebody else established - writing a
+    // second `monitor:` on it, resetting its heartbeat and announcing an `up`
+    // that never went down.
+    final generation = ++_notifyGeneration;
+    _reconnecting = true;
+    try {
+      while (_isNotifying && generation == _notifyGeneration) {
+        final delay = notificationReconnectDelays[
+            min(_reconnectIx, notificationReconnectDelays.length - 1)];
+        _reconnectIx++;
+        logger.info('Reconnecting notifications in ${delay.inSeconds}s '
+            '(attempt $_reconnectIx)');
+        await Future.delayed(delay);
+        // Re-checked after the delay, not only before it: stopNotifications
+        // can land while this is sleeping, and reconnecting after that would
+        // resurrect a connection the caller asked to be rid of - or, if a
+        // start followed that stop, interfere with the connection the restart
+        // just made.
+        if (!_isNotifying || generation != _notifyGeneration) return;
+        try {
+          await _openNotificationStream();
+          logger.info('Notification connection re-established');
+          _reconnectIx = 0;
+          _startHeartbeat();
+          _emitConnectionUp(true);
+          return;
+        } catch (e) {
+          logger.warning('Reconnect attempt $_reconnectIx failed: $e');
+        }
+      }
+    } finally {
+      // Only if this loop is still the current one. A superseded loop clearing
+      // the flag would disarm nothing and re-arm the live loop's guard.
+      if (generation == _notifyGeneration) _reconnecting = false;
+    }
+  }
+
+  void _startHeartbeat() {
+    _stopHeartbeat();
+    _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
+  }
+
+  void _stopHeartbeat() {
+    _heartbeatTimer?.cancel();
+    _heartbeatTimer = null;
+  }
+
+  /// Probe a quiet connection with `noop:0`.
+  ///
+  /// ⚠️ This makes the notification connection carry verb traffic, which is
+  /// the arrangement [AtLookupMuxable] warns about: no atServer implements the
+  /// `multiplexed` interlock, so a notification written between this command
+  /// and its reply is absorbed into the reply rather than routed. The window
+  /// is one short round trip every [heartbeatInterval], and it is the same
+  /// exposure at_client's Monitor has had all along - this moves that
+  /// behaviour, it does not add it. It closes when an atServer implements the
+  /// flag.
+  Future<void> _heartbeat() async {
+    if (!_isNotifying) return;
+    // A paused subscriber is not reading the socket, so nothing can fill the
+    // read queue and the probe below could never be answered - it would time
+    // out and destroy a healthy connection. Pausing is a documented feature of
+    // [notifications], not misuse, so skip this round and try again at the
+    // next interval. A connection that really has gone is still detected: the
+    // done event is buffered by the paused subscription and delivered when
+    // delivery resumes.
+    if (messageListener.isDeliveryPaused) {
+      _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
+      return;
+    }
+    try {
+      await requestResponseMutex.acquire();
+      try {
+        await _sendCommand('noop:0\n');
+        await messageListener.read(
+            maxWaitMilliSeconds: heartbeatResponseTimeout.inMilliseconds,
+            transientWaitTimeMillis: heartbeatResponseTimeout.inMilliseconds);
+      } finally {
+        requestResponseMutex.release();
+      }
+      _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
+    } catch (e) {
+      // The same pause, landing after the probe went out rather than before
+      // it: the failure is our own reader being starved, not the connection.
+      // Tearing down here would destroy a healthy socket for doing exactly
+      // what the back-pressure contract invites.
+      if (messageListener.isDeliveryPaused) {
+        logger.info('Notification heartbeat could not complete while delivery '
+            'is paused - leaving the connection alone and retrying');
+        _heartbeatTimer = Timer(heartbeatInterval, _heartbeat);
+        return;
+      }
+      logger.info('Notification heartbeat failed ($e) - closing the '
+          'connection so it reconnects');
+      // Closing is what starts recovery: the socket going away drives the
+      // listener's onDone, which is wired to [_onNotificationConnectionLost].
+      await _closeConnection();
+    }
+  }
+
+  @override
+  bool get isNotifying => _isNotifying;
+
+  @override
+  Stream<String> get notifications {
+    _notificationController ??= StreamController<String>(
+      // Back-pressure that reaches the far end. A listener that stops reading
+      // stops the socket, so bytes pile up in the kernel buffer and TCP closes
+      // the window on the atServer - rather than being absorbed here without
+      // bound until the byte buffer overflows.
+      onPause: () => _setNotificationDelivery(paused: true),
+      onResume: () => _setNotificationDelivery(paused: false),
+    );
+    // A connection may already exist - `notifications` can be read after the
+    // first verb - so the seams are installed here too, not only on connect.
+    // BOTH of them: a listener given a route but no disconnect callback loses
+    // its connection silently, because `_notifyDisconnect` is the only path to
+    // `_onNotificationConnectionLost` and so the only thing that emits `false`
+    // and starts a reconnect. Installing the disconnect seam before anything
+    // is notifying is harmless - it returns immediately unless `_isNotifying`.
+    if (_connection != null) {
+      messageListener.onNotification = _routeNotification;
+      messageListener.onDisconnect = _onNotificationConnectionLost;
+    }
+    return _notificationController!.stream;
+  }
+
+  /// [messageListener] is `late` and is assigned only inside
+  /// [createConnection], immediately after `_connection`. So a null
+  /// `_connection` is exactly the case where touching it throws a
+  /// `LateInitializationError` - and the controller can be paused before
+  /// anything has connected.
+  void _setNotificationDelivery({required bool paused}) {
+    if (_connection == null) return;
+    if (paused) {
+      messageListener.pauseDelivery();
+    } else {
+      messageListener.resumeDelivery();
+    }
+  }
+
+  void _routeNotification(String notification) {
+    final controller = _notificationController;
+    if (controller == null || controller.isClosed) {
+      // `warning`, not `finer`. A silently dropped notification is
+      // indistinguishable from one the atServer never sent, so the failure
+      // gets attributed to the sender. Nothing retries this.
+      logger.warning('Notification DROPPED for $_currentAtSign - the stream is '
+          '${controller == null ? "not open" : "closed"}: $notification');
+      return;
+    }
+    controller.add(notification);
+  }
+
+  @override
+  Future<void> startNotifications({
+    String? regex,
+    Future<int?> Function()? getLastNotificationTime,
+    bool selfNotificationsEnabled = true,
+  }) async {
+    if (_isNotifying) {
+      logger.info('startNotifications: already notifying, nothing sent');
+      return;
+    }
+    // Reading this getter is what creates the controller and installs the
+    // seam, so it must happen before `monitor:` goes out - otherwise the first
+    // notifications arrive with nowhere to go.
+    notifications;
+
+    // Remembered, because reconnecting has to re-issue the same monitor:. A
+    // reconnect that dropped the regex would start delivering everything.
+    //
+    // The watermark is remembered as the CALLER'S FUNCTION, not as a value:
+    // it is asked again on every reconnect, so the command carries where the
+    // caller has actually got to rather than where it had got to when
+    // notifications first started. Freezing the value re-requests the whole
+    // retained backlog on every reconnect, which is what a caller holding a
+    // durable watermark is keeping one to avoid.
+    _notifyRegex = regex;
+    _getLastNotificationTime = getLastNotificationTime;
+    _notifySelfNotifications = selfNotificationsEnabled;
+
+    await _openNotificationStream();
+    _isNotifying = true;
+    _reconnectIx = 0;
+    _startHeartbeat();
+    _emitConnectionUp(true);
+  }
+
+  /// Connect, authenticate if required, and send `monitor:`.
+  ///
+  /// Shared by [startNotifications] and the reconnect loop, so a reconnected
+  /// connection is established exactly as the first one was. Anything else and
+  /// the two paths drift, with the difference only visible after an outage.
+  Future<void> _openNotificationStream() async {
+    await requestResponseMutex.acquire();
+    try {
+      await createConnection();
+      if (_isAuthRequired()) {
+        if (authenticator != null) {
+          await _authenticateWith(authenticator!, enrollmentId: enrollmentId);
+        } else {
+          throw UnAuthenticatedException(
+              'monitor requires authentication and no authenticator is set');
+        }
+      }
+      // Asked here rather than held from the start, so a reconnect resumes
+      // from the caller's current watermark.
+      //
+      // Guarded, because this is CALLER code running inside the reconnect
+      // loop. Letting it throw would abort the attempt after the connection
+      // was already opened and authenticated - and that connection stays
+      // valid, so every later attempt skips the connect, re-runs only this
+      // call, and backs off forever without ever sending `monitor:`. The
+      // client would be permanently deaf with no symptom but a missing `up`.
+      // Starting without a watermark instead costs a replayed window, which
+      // the caller can absorb.
+      int? lastNotificationTime;
+      try {
+        lastNotificationTime = await _getLastNotificationTime?.call();
+      } catch (e) {
+        logger.warning('Could not read the last-notification watermark, so '
+            'this connection starts without one and the atServer will replay '
+            'from where it last heard: $e');
+      }
+      final command = (MonitorVerbBuilder()
+            ..regex = _notifyRegex
+            ..lastNotificationTime = lastNotificationTime
+            ..selfNotificationsEnabled = _notifySelfNotifications)
+          .buildCommand();
+      // ⚠️ `multiplexed` is deliberately NOT set. It is accepted by the shared
+      // verb syntax and read by no atServer, so setting it would advertise a
+      // safety property that does not exist. See [AtLookupMuxable].
+      logger.info('SENDING: ${command.trim()}');
+      await _connection!.write(command);
+    } finally {
+      requestResponseMutex.release();
+    }
+  }
+
+  @override
+  Future<void> stopNotifications() async {
+    // First, and deliberately: this flag is what the reconnect loop reads to
+    // decide whether to keep trying. Closing the connection before clearing it
+    // would trip the disconnect handler into reconnecting the very connection
+    // this method is tearing down.
+    _isNotifying = false;
+    // Retires any reconnect loop still sleeping on a backoff, and clears the
+    // flag it would otherwise leave set: `_reconnecting` disarms
+    // [_onNotificationConnectionLost], so a stale one left true means a real
+    // loss on a later connection is ignored.
+    _notifyGeneration++;
+    _reconnecting = false;
+    _stopHeartbeat();
+    _emitConnectionUp(false);
+    await _closeConnection();
+    final controller = _notificationController;
+    _notificationController = null;
+    // NOT awaited, and that is the point. `close()` on a single-subscription
+    // controller returns its `done` future, which completes only once a
+    // subscriber has received the done event - so a caller that started
+    // notifications and never listened would hang here forever. Start-then-stop
+    // with no subscriber is a legal caller, and awaiting this deadlocked four
+    // tests for thirty seconds each before it was caught.
+    unawaited(controller?.close() ?? Future<void>.value());
+    final up = _connectionUpController;
+    _connectionUpController = null;
+    unawaited(up?.close() ?? Future<void>.value());
   }
 
   Future<void> _sendCommand(String command) async {
@@ -718,26 +1271,47 @@ class AtLookupImpl implements AtLookUp {
     await _connection!.write(command);
   }
 
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
+      'instead - at_auth builds one with authenticatorForChops(). '
+      'Removed with the credential ladder in the next major release.')
   @override
   set atChops(AtChops? atChops) {
     _atChops = atChops;
   }
 
+  @Deprecated('Pass an AtAuthenticator to AtLookUp.withSecureSocket '
+      'instead - at_auth builds one with authenticatorForChops(). '
+      'Removed with the credential ladder in the next major release.')
   @override
   AtChops? get atChops => _atChops;
 
   /// To use a specific signing algorithm other than default one for pkam auth, set the [SigningAlgoType] and [HashingAlgoType]
+  @Deprecated('Pass the hashing algorithm to the AtAuthenticator that at_auth '
+      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
+      'Removed with the credential ladder in the next major release.')
   @override
   HashingAlgoType hashingAlgoType = HashingAlgoType.sha256;
 
+  @Deprecated('Pass the signing algorithm to the AtAuthenticator that at_auth '
+      'builds - authenticatorForChops() takes signingAlgo and hashingAlgo. '
+      'Removed with the credential ladder in the next major release.')
   @override
   SigningAlgoType signingAlgoType = SigningAlgoType.rsa2048;
 
+  @Deprecated('Pass the enrollment id to the AtAuthenticator that at_auth '
+      'builds. To ask "which enrollment am I", read your own client state - '
+      'not this field, and not '
+      'AtConnectionMetaData.authenticatedAsEnrollmentId, which is what the '
+      'live connection authenticated as rather than what the next '
+      'authentication will use. '
+      'Removed with the credential ladder in the next major release.')
   @override
   String? enrollmentId;
 }
 
 class AtLookupSecureSocketFactory {
+  const AtLookupSecureSocketFactory();
+
   Future<SecureSocket> createSocket(
       String host, String port, SecureSocketConfig socketConfig,
       {Duration? timeout}) async {
@@ -747,6 +1321,8 @@ class AtLookupSecureSocketFactory {
 }
 
 class AtLookupSecureSocketListenerFactory {
+  const AtLookupSecureSocketListenerFactory();
+
   OutboundMessageListener createListener(
       OutboundConnection outboundConnection) {
     return OutboundMessageListener(outboundConnection);
@@ -754,6 +1330,8 @@ class AtLookupSecureSocketListenerFactory {
 }
 
 class AtLookupOutboundConnectionFactory {
+  const AtLookupOutboundConnectionFactory();
+
   OutboundConnection createOutboundConnection(SecureSocket secureSocket) {
     return OutboundConnectionImpl(secureSocket);
   }

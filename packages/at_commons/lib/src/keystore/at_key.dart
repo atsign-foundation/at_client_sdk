@@ -658,6 +658,48 @@ class Metadata {
     return map;
   }
 
+  /// A field-for-field copy of this metadata.
+  ///
+  /// Every caller that hands metadata from one object to another wants this,
+  /// and hand-rolling the field list is how a field added here later goes
+  /// missing on one path and not another — silently, because the value still
+  /// round-trips and only the dropped field is absent at the far end.
+  ///
+  /// A caller that must *not* carry a particular field (the notify request path
+  /// drops the server-derived timestamps, for instance) clears it after
+  /// copying, so the exception is written down where it applies rather than
+  /// being the default.
+  Metadata copy() => Metadata()
+    ..ttl = ttl
+    ..ttb = ttb
+    ..ttr = ttr
+    ..ccd = ccd
+    ..availableAt = availableAt
+    ..expiresAt = expiresAt
+    ..refreshAt = refreshAt
+    ..createdAt = createdAt
+    ..updatedAt = updatedAt
+    ..dataSignature = dataSignature
+    ..sharedKeyStatus = sharedKeyStatus
+    ..isPublic = isPublic
+    ..isHidden = isHidden
+    ..namespaceAware = namespaceAware
+    ..isBinary = isBinary
+    ..isEncrypted = isEncrypted
+    ..isCached = isCached
+    ..sharedKeyEnc = sharedKeyEnc
+    // ignore: deprecated_member_use_from_same_package
+    ..pubKeyCS = pubKeyCS
+    ..pubKeyHash = pubKeyHash
+    ..encoding = encoding
+    ..encKeyName = encKeyName
+    ..encAlgo = encAlgo
+    ..ivNonce = ivNonce
+    ..skeEncKeyName = skeEncKeyName
+    ..skeEncAlgo = skeEncAlgo
+    ..immutable = immutable
+    ..appMetadata = appMetadata;
+
   static Metadata fromJson(Map json) {
     var metaData = Metadata();
 

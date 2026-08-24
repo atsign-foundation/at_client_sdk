@@ -181,9 +181,14 @@ void main() {
   });
 
   group('A group of tests to verify AtTimeOutException', () {
-    OutboundMessageListener outboundMessageListener =
-        OutboundMessageListener(mockOutBoundConnection);
+    // Built per test, not once for the group. Every test here drives a timeout,
+    // and a timeout closes the connection - which now also aborts anything
+    // waiting on it, permanently, because a listener is never reused across
+    // connections in production. Shared, the first test's timeout would make
+    // every later one fail on a dead connection instead of on its own deadline.
+    late OutboundMessageListener outboundMessageListener;
     setUp(() {
+      outboundMessageListener = OutboundMessageListener(mockOutBoundConnection);
       when(() => mockOutBoundConnection.isInValid()).thenAnswer((_) => false);
       when(() => mockOutBoundConnection.close())
           .thenAnswer((Invocation invocation) async {});

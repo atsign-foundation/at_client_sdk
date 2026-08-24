@@ -1,17 +1,42 @@
 import 'dart:async';
-import 'dart:math' show Random;
 import 'dart:typed_data';
 
 import 'package:at_chops/src/algorithm/at_algorithm.dart';
 import 'package:at_chops/src/algorithm/encryption/ml_kem_768_pure_dart.dart';
 import 'package:at_chops/src/algorithm/encryption/x25519_pure_dart_algo.dart';
+import 'package:at_chops/src/algorithm/encryption/x_wing_core.dart';
 import 'package:cryptography/cryptography.dart' as crypto;
 import 'package:meta/meta.dart';
-import 'package:pointycastle/digests/sha3.dart';
-import 'package:pointycastle/digests/shake.dart';
 
 /// X-Wing: general-purpose hybrid post-quantum/traditional KEM combining
-/// X25519 and ML-KEM-768, per draft-connolly-cfrg-xwing-kem-10.
+/// X25519 and ML-KEM-768. Registered at **IANA HPKE KEM id `0x647A`**.
+///
+/// ## Which document to cite
+///
+/// The construction originates in `draft-connolly-cfrg-xwing-kem`, an
+/// Independent Submission that CFRG never adopted and that expires on
+/// 2026-09-03; cite it for history only. The identity that does not lapse is
+/// the IANA code point, plus the CFRG research-group document
+/// `draft-irtf-cfrg-concrete-hybrid-kems` section 4.2, which states that its
+/// `MLKEM768-X25519` "is identical to the X-Wing construction" and retains the
+/// same combiner label for compatibility.
+///
+/// The IANA registry row still reads **X-Wing** (referencing
+/// `draft-connolly-cfrg-xwing-kem-06`). `draft-ietf-hpke-pq` *requests* the
+/// rename to `MLKEM768-X25519`, and that request has not been effected, so the
+/// code point should not be described as registered under the new name.
+///
+/// Conformance is checked against the IETF HPKE working group's published
+/// `0x647A` vectors — see `test/hpke_wg_kem_vectors.dart`. Go's standard
+/// library vendors the same file, so `crypto/hpke.MLKEM768X25519()` is an
+/// independent oracle for these bytes.
+///
+/// Interop note for other implementations: Bouncy Castle has carried X-Wing
+/// since 1.78, but releases 1.78 to 1.80 feed the combiner label **first**
+/// rather than last and so derive a different shared secret from the same
+/// inputs. **1.81 is the floor.** Since X-Wing rejects implicitly, getting this
+/// wrong surfaces as an opaque AEAD authentication failure rather than a key
+/// error.
 ///
 /// - secret (decapsulation) key: a 32-byte seed, expanded on use via
 ///   SHAKE-256 into the ML-KEM-768 (d, z) and the X25519 secret key
@@ -28,22 +53,21 @@ import 'package:pointycastle/digests/shake.dart';
 /// Pure-Dart composition of [MlKem768PureDartAlgo] (`pqcrypto`) and the
 /// `cryptography` package's X25519. Stateless — safe to share the single
 /// [instance].
-final class XWingPureDartAlgo implements AtKemAlgorithm {
+final class XWingPureDartAlgo with KemSeedMixin implements AtKemAlgorithm {
   static const XWingPureDartAlgo instance = XWingPureDartAlgo._();
 
   const XWingPureDartAlgo._();
 
-  static const int seedLength = 32;
-  static const int publicKeyLength = 1216;
-  static const int ciphertextLength = 1120;
-  static const int sharedSecretLength = 32;
+  @override
+  int get kemSeedLength => seedLength;
 
-  static const int _mlKemPublicKeyLength = 1184;
-  static const int _mlKemCiphertextLength = 1088;
+  @override
+  String get kemSeedDescription => 'an X-Wing seed';
 
-  /// `XWingLabel`: the ASCII bytes of `\.//^\`.
-  static final Uint8List _label =
-      Uint8List.fromList([0x5c, 0x2e, 0x2f, 0x2f, 0x5e, 0x5c]);
+  static const int seedLength = XWingCore.seedLength;
+  static const int publicKeyLength = XWingCore.publicKeyLength;
+  static const int ciphertextLength = XWingCore.ciphertextLength;
+  static const int sharedSecretLength = XWingCore.sharedSecretLength;
 
   static final crypto.X25519 _x25519 = crypto.X25519();
 
@@ -56,13 +80,20 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
   @override
   Future<({Uint8List publicKey, Uint8List secretKey})> generateKeyPair(
       [Uint8List? seed]) async {
-    seed ??= _randomSeed();
+    seed ??= newSeed();
     final _Expanded expanded = await _expand(seed);
-    final Uint8List publicKey = Uint8List(publicKeyLength)
-      ..setRange(0, _mlKemPublicKeyLength, expanded.mlKemPublicKey)
-      ..setRange(_mlKemPublicKeyLength, publicKeyLength, expanded.x25519Public);
+    final Uint8List publicKey = XWingCore.concatPublicKey(
+        expanded.mlKemPublicKey, expanded.x25519Public);
     return (publicKey: publicKey, secretKey: Uint8List.fromList(seed));
   }
+
+  /// For X-Wing this is the same call as [generateKeyPair] with a seed — the
+  /// secret key IS the seed — but callers that do not name the backend go
+  /// through [keyPairFromSeed], because that identity does not hold for
+  /// ML-KEM.
+  @override
+  Future<({Uint8List publicKey, Uint8List secretKey})>
+      keyPairFromValidatedSeed(Uint8List seed) => generateKeyPair(seed);
 
   @override
   Future<({Uint8List ciphertext, Uint8List sharedSecret})> encapsulate(
@@ -92,71 +123,52 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
       Uint8List publicKey,
       Uint8List ephemeralX25519Secret,
       Uint8List? mlKemRandomness) async {
-    if (publicKey.length != publicKeyLength) {
-      throw ArgumentError.value(publicKey.length, 'publicKey',
-          'X-Wing public key must be $publicKeyLength bytes');
-    }
-    final Uint8List mlKemPublic = publicKey.sublist(0, _mlKemPublicKeyLength);
-    final Uint8List x25519Public = publicKey.sublist(_mlKemPublicKeyLength);
+    final halves = XWingCore.splitPublicKey(publicKey);
 
-    final (ciphertext: ctM, sharedSecret: ssM) = await MlKem768PureDartAlgo
-        .instance
-        .encapsulate(mlKemPublic, mlKemRandomness);
+    // The seeded arm is reached only via this backend's own
+    // @visibleForTesting encapsulateDerand, so the testing hook is the right
+    // callee.
+    final (ciphertext: ctM, sharedSecret: ssM) = mlKemRandomness == null
+        ? await MlKem768PureDartAlgo.instance.encapsulate(halves.mlKem)
+        : await MlKem768PureDartAlgo.instance
+            // ignore: invalid_use_of_visible_for_testing_member
+            .encapsulateDerand(halves.mlKem, mlKemRandomness);
 
     final crypto.SimpleKeyPair ephemeral =
         await _x25519.newKeyPairFromSeed(ephemeralX25519Secret);
     final Uint8List ctX =
         Uint8List.fromList((await ephemeral.extractPublicKey()).bytes);
     final Uint8List ssX = await X25519PureDartAlgo.instance
-        .dh(ephemeralX25519Secret, x25519Public);
+        .dh(ephemeralX25519Secret, halves.x25519);
 
-    final Uint8List ciphertext = Uint8List(ciphertextLength)
-      ..setRange(0, _mlKemCiphertextLength, ctM)
-      ..setRange(_mlKemCiphertextLength, ciphertextLength, ctX);
     return (
-      ciphertext: ciphertext,
-      sharedSecret: _combine(ssM, ssX, ctX, x25519Public),
+      ciphertext: XWingCore.concatCiphertext(ctM, ctX),
+      sharedSecret: XWingCore.combine(ssM, ssX, ctX, halves.x25519),
     );
   }
 
   @override
   Future<Uint8List> decapsulate(
       Uint8List secretKey, Uint8List ciphertext) async {
-    if (secretKey.length != seedLength) {
-      throw ArgumentError.value(secretKey.length, 'secretKey',
-          'X-Wing secret key must be the $seedLength-byte seed');
-    }
-    if (ciphertext.length != ciphertextLength) {
-      throw ArgumentError.value(ciphertext.length, 'ciphertext',
-          'X-Wing ciphertext must be $ciphertextLength bytes');
-    }
+    XWingCore.checkDecapsulationInputs(secretKey, ciphertext);
     final _Expanded expanded = await _expand(secretKey);
-    final Uint8List ctM = ciphertext.sublist(0, _mlKemCiphertextLength);
-    final Uint8List ctX = ciphertext.sublist(_mlKemCiphertextLength);
+    final ct = XWingCore.splitCiphertext(ciphertext);
 
     final Uint8List ssM = await MlKem768PureDartAlgo.instance
-        .decapsulate(expanded.mlKemSecretKey, ctM);
+        .decapsulate(expanded.mlKemSecretKey, ct.mlKem);
     final Uint8List ssX =
-        await X25519PureDartAlgo.instance.dh(expanded.x25519Secret, ctX);
+        await X25519PureDartAlgo.instance.dh(expanded.x25519Secret, ct.x25519);
 
-    return _combine(ssM, ssX, ctX, expanded.x25519Public);
+    return XWingCore.combine(ssM, ssX, ct.x25519, expanded.x25519Public);
   }
 
-  /// `expandDecapsulationKey(sk)`: SHAKE-256(sk, 96 bytes); bytes [0:64]
-  /// are ML-KEM-768's (d || z), bytes [64:96] the X25519 secret key.
+  /// Materialises [XWingCore.expandSeed]'s halves with this backend's
+  /// components.
   Future<_Expanded> _expand(Uint8List seed) async {
-    if (seed.length != seedLength) {
-      throw ArgumentError.value(
-          seed.length, 'seed', 'X-Wing seed must be $seedLength bytes');
-    }
-    final SHAKEDigest shake = SHAKEDigest(256);
-    shake.update(seed, 0, seed.length);
-    final Uint8List expanded = Uint8List(96);
-    shake.doOutput(expanded, 0, 96);
-
+    final halves = XWingCore.expandSeed(seed);
     final (publicKey: pkM, secretKey: skM) = await MlKem768PureDartAlgo.instance
-        .generateKeyPair(expanded.sublist(0, 64));
-    final Uint8List skX = expanded.sublist(64, 96);
+        .generateKeyPair(halves.mlKemSeed);
+    final Uint8List skX = halves.x25519Secret;
     final crypto.SimpleKeyPair x25519Pair =
         await _x25519.newKeyPairFromSeed(skX);
     final Uint8List pkX =
@@ -167,25 +179,6 @@ final class XWingPureDartAlgo implements AtKemAlgorithm {
       x25519Secret: skX,
       x25519Public: pkX,
     );
-  }
-
-  /// `SHA3-256(ss_M || ss_X || ct_X || pk_X || XWingLabel)`.
-  Uint8List _combine(
-      Uint8List ssM, Uint8List ssX, Uint8List ctX, Uint8List pkX) {
-    final Uint8List input =
-        Uint8List(ssM.length + ssX.length + ctX.length + pkX.length + 6)
-          ..setRange(0, 32, ssM)
-          ..setRange(32, 64, ssX)
-          ..setRange(64, 96, ctX)
-          ..setRange(96, 128, pkX)
-          ..setRange(128, 134, _label);
-    return SHA3Digest(256).process(input);
-  }
-
-  Uint8List _randomSeed() {
-    final Random random = Random.secure();
-    return Uint8List.fromList(
-        List<int>.generate(seedLength, (_) => random.nextInt(256)));
   }
 }
 
