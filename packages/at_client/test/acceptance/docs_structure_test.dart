@@ -589,4 +589,44 @@ void main() {
               'replaced rather than layered over');
     });
   });
+
+  group('every PQ test in the tree is nameable from the doc set', () {
+    // A test no doc names is work the next reader rebuilds. Arm 3 of the
+    // acceptance suite shipped as
+    // `tests/at_functional_test/test/pq_advance_ladder_test.dart` and was
+    // named in no project document at all, so the plan went on listing it as
+    // owed while it sat green in the tree — and a plan worked top-down
+    // rebuilds what it says is owed. A filename is the cheapest thing to
+    // check and the one that rots without anything going red.
+    test('each pq_*_test.dart is named somewhere under docs/projects/pq', () {
+      final names = Directory('${repoRoot().path}/tests')
+          .listSync(recursive: true)
+          .whereType<File>()
+          .map((f) => f.uri.pathSegments.last)
+          .where((n) => n.startsWith('pq_') && n.endsWith('_test.dart'))
+          .toSet();
+
+      // The enumeration is what this rail rests on, so it is asserted rather
+      // than assumed: an empty walk satisfies every check below while
+      // measuring nothing at all.
+      expect(names.length, greaterThanOrEqualTo(8),
+          reason: 'the live packs held 11 such files on 2026-08-24. A sharp '
+              'drop means this walk stopped finding them, not that the tests '
+              'went away — fix the walk before believing the green');
+
+      final docs = _pq()
+          .listSync(recursive: true)
+          .whereType<File>()
+          .where((f) => f.path.endsWith('.md'))
+          .map((f) => f.readAsStringSync())
+          .join('\n');
+
+      final unnamed = names.where((n) => !docs.contains(n)).toList()..sort();
+      expect(unnamed, isEmpty,
+          reason: 'name each of these under docs/projects/pq/ — in the '
+              'catalogue row it proves, or the plan entry that built it — so '
+              'that a reader working the plan top-down cannot rebuild work '
+              'that already exists:\n${unnamed.join('\n')}');
+    });
+  });
 }

@@ -1665,9 +1665,15 @@ than routing it legacy. Recorded rather than silently repaired because of how it
 read: a precise-looking `file:line` beside a measured `0`, so the figure carries
 the citation's credibility and nobody opens the line.
 
-**Arm 2, the posture grid.** Sender posture × receiver posture, in **one
+**Arm 2, the posture grid.** ✅ **BUILT 2026-08-24** —
+`tests/at_functional_test/test/pq_posture_grid_test.dart`, 7 `test()` calls over
+9 enrollments on 2 atSigns. Sender posture × receiver **readiness**, in **one
 process** in `tests/at_functional_test`, exercising self and cross-atSign puts,
-gets, and notification send and receive. Cells carry **per-cell expected
+gets, and notification send and receive. ⚠️ **This read "Sender posture ×
+receiver posture"** for the data path, and that axis cannot express the case
+the grid exists for — see [how the postures are
+provisioned](#how-the-postures-are-provisioned). The *envelope* grid is still
+posture × posture. Cells carry **per-cell expected
 outcomes**: some pairs must refuse, and a cell that succeeds where it should
 refuse is the finding. It also carries the signed-envelope exchange that
 [UC-G1.15](#uc-g115--every-rollout-stage-verifies-every-other-stages-envelope)
@@ -1695,7 +1701,9 @@ stated reason named three axes it would disturb and one of them was wrong:
 mention is a declaration, a constant or a comparison — which `PqPosture`'s own
 dartdoc says, calling it an at_auth value at_client only *carries*.
 
-**Arm 3, the advance ladder.** Kept separate from the grid, because re-running
+**Arm 3, the advance ladder.** ✅ **BUILT 2026-08-24** —
+`tests/at_functional_test/test/pq_advance_ladder_test.dart`, one phased test.
+Kept separate from the grid, because re-running
 the grid after each advance adds **no posture pair a static grid does not
 already have**: advancing the legacy row to pqReady leaves four distinct pairs,
 all of them already cells. What a ladder buys instead is what a re-run cannot —
