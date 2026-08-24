@@ -1,3 +1,20 @@
+## 3.6.1
+
+- fix: an ML-DSA-65 PKAM key of the wrong length now says what is likely wrong
+  with it. `PkamMlDsa65SigningAlgo.sign` reported only
+  `ML-DSA-65 secret key must be 4032 bytes: N`, which names neither the
+  credential nor the likeliest cause — and the likeliest cause is not a corrupt
+  key. A PKAM key of about 1.2 kB is an RSA-2048 private key, and a caller ends
+  up holding one by naming one enrollment's algorithm while carrying another
+  enrollment's credentials: a retrofitted keyfile holds ML-DSA material for the
+  new enrollment and the original RSA keypair in the flat fields, and the two
+  are selected separately. The message now states the size, the expected size,
+  and — only for a key in the RSA-2048 range — that the algorithm and the
+  credentials most likely come from different enrollments.
+  - Message only. A correctly sized key signs exactly as before, which the
+    third case of `pkam_mldsa65_wrong_key_message_test.dart` pins, and the
+    RSA hint is conditional so a 7-byte key is not told it might be RSA.
+
 ## 3.6.0
 
 Shipped as a minor despite the breaks below. Both are source-breaking only for
