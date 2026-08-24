@@ -587,8 +587,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
         return;
       }
       if (!await authenticate(this)) {
-        throw UnAuthenticatedException(
-            'Failed connecting to $_currentAtSign.'
+        throw UnAuthenticatedException('Failed connecting to $_currentAtSign.'
             ' The authenticator reported failure');
       }
       // The enrollment id still comes from the caller or this object, because
@@ -942,6 +941,7 @@ class AtLookupImpl implements AtLookUp, AtCommandExecutor, AtLookupMuxable {
   Duration heartbeatResponseTimeout = const Duration(seconds: 10);
 
   String? _notifyRegex;
+
   /// The caller's watermark source, asked on every (re)connect.
   ///
   /// A function rather than a value because the caller's position moves as it
