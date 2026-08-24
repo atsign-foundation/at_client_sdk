@@ -11,6 +11,16 @@
 // failing unrelated tests on the 30s default timeout, and a batch that begins
 // timing out is spent rather than evidence.
 //
+// ⛔ RUN THIS FIRST, ON A FRESHLY RECYCLED VIRTUALENV, OR IT READS 0 AND
+// MEANS NOTHING. Measured 2026-08-24: every run that went first reproduced
+// (13-22 wrong of 50 on an unfixed atServer); every run that followed
+// `concurrent_relayed_lookup_test` in the same virtualenv read 0 wrong — on
+// fixed and unfixed images alike, five and three, cleanly split. The atServer
+// still issues the same number of relayed lookups either way (378 against 408
+// and 418), so it is not that the reads stop happening; the overlap window
+// narrows. A green from the wrong position is indistinguishable from a fix,
+// and it produced two wrong conclusions before it was found.
+//
 // ## What it shows
 //
 // A `get` returns another record's content, with no exception raised. Captured
@@ -70,7 +80,8 @@
 // so counting it would inflate the denominator with attempts that could not
 // have failed. That mattered — an early run read as 1-in-50 while a third of
 // its cycles had gone legacy, and the real figure was 1-in-34.
-@Skip('reproduces an open defect ~1 cycle in 5; run by hand, see the header')
+@Skip(
+    'reproduces an open defect, 13-22 of 50 cycles; run it FIRST on a fresh virtualenv - see the header')
 @Tags(['pq'])
 library;
 
@@ -168,8 +179,7 @@ void main() {
       ..commitLogPath = storage;
     final manager = await AtClientManager(atSign).setCurrentAtSign(
         atSign, ns, preference,
-        atKeysIo: keysIo,
-        atChops: loader.createAtChopsFromDemoKeys(atSign));
+        atKeysIo: keysIo, atChops: loader.createAtChopsFromDemoKeys(atSign));
     await loader.setEncryptionKeys(manager.atClient, atSign);
     await AtClientSecretSharing.forClient(manager.atClient).register();
     return manager.atClient;
@@ -180,7 +190,8 @@ void main() {
         'iterations=$iterations');
     final grants = {sharedNs: 'rw'};
 
-    Future<EnrolledClient> cell(String name, String atSign, PqPosture posture) async {
+    Future<EnrolledClient> cell(
+        String name, String atSign, PqPosture posture) async {
       final approver = await primaryFor('ap-$name', atSign, namespaces.first);
       final storage = 'test/hive/ratesprobe/$name';
       final enrolled = await enrolAndAuthenticate(
@@ -218,9 +229,8 @@ void main() {
     receiverSiblings.add(await cell('rcv2', receiver, PqPosture.legacy));
     receiverSiblings.add(await cell('rcv3', receiver, PqPosture.pqActive));
     // A live monitor, as the grid runs one throughout.
-    final listener =
-        receiverSiblings.last.client.notificationService
-            as NotificationServiceImpl;
+    final listener = receiverSiblings.last.client.notificationService
+        as NotificationServiceImpl;
     final monitorLive = Completer<void>();
     monitorSub = listener.subscribe(shouldDecrypt: true).listen((n) {
       if (!monitorLive.isCompleted) monitorLive.complete();
@@ -247,9 +257,11 @@ void main() {
       final ns = namespaces[i];
       // Signed, so the write carries an envelope and the reads below have an
       // `_apsk` fetch to interleave with — as they do in the grid.
-      final payload = await _ProbeSigner(
-              [senderCell, ...senderSiblings][i % (1 + senderSiblings.length)]
-                  .client)
+      final payload = await _ProbeSigner([
+        senderCell,
+        ...senderSiblings
+      ][i % (1 + senderSiblings.length)]
+              .client)
           .wrapAndSignAndJsonEncode({'cycle': i, 'ns': ns});
 
       final writeKey = AtKey()
