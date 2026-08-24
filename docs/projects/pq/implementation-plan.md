@@ -96,10 +96,14 @@ can contain a thing that was never built.
 matrix included**, with the acceptance set complete, implemented and verified
 (gkc, 2026-08-23). Everything else is a judgement call.
 
-⚠️ **The D1 gates are `G2`–`G7`.** `G1` sits below them under **POST-D1
-CLEAN-UP** — it was a gate until 2026-08-23 and keeps its letter, because prose
-above and below cites these letters and renumbering would silently repoint every
-one of them.
+⚠️ **The letters are not a count and never were — read the list, do not infer
+from the range.** `G1` sits below the gates under **POST-D1 CLEAN-UP**: it was a
+gate until 2026-08-23 and keeps its letter, because prose above and below cites
+these letters and renumbering would silently repoint every one of them. `G0` was
+then added at the FRONT on 2026-08-24 for the same reason, so the sequence now
+runs G0, G2–G7 with G1 elsewhere. ⚠️ This said "the D1 gates are `G2`–`G7`",
+which G0 falsified the day it was written, and the same sentence had already
+been copied into memory.
 
 **The release train's live gate**: at_chops 3.6.0, at_commons 5.16.0,
 **at_lookup 3.7.0-rc1** and **at_server_status 1.1.2-rc1** are all on pub.dev as
@@ -190,6 +194,41 @@ inbound connection as every non-cache relay already does. The two differ in
 what they cost — a lock serialises every relayed lookup to a peer atSign; the
 pool-key change spends a connection per client. Then rebuild
 `at_virtual_env:local` and re-run both probes.
+
+**Why several content keys were alive for one scope — measured 2026-08-24, and
+it is a second defect, not part of the first.** The condition that made the
+symptom reproduce deserved an answer of its own and did not have one.
+
+What is multiple is **content keys, not nskeys**, and it is bounded: **one CK
+per writing enrollment per scope**, cut at that enrollment's first write, with
+no re-minting afterwards. The run that reproduced the symptom wrote six
+conveyances in total — three under `(bob, ns)` and three under `(alice, ns)`,
+one per sender enrollment — and no more for the remaining 50 cycles.
+
+`CurrentCkPointer` is the only thing meant to make a second enrollment adopt the
+first's CK rather than cut another, and it cannot do that job as written: the
+pointer is written **`localOnly`** into each enrollment's own store and reaches
+its siblings only when sync has carried it up and back down. Three enrollments
+starting cold and writing together therefore each read no pointer, each mint,
+and each write their own — `read` → mutate → `write` on shared durable state
+with no atomic verb and no interlock, where the nskey mint beside it has
+`MintLock`. `CkManager._resumeCurrent`'s `Could not resume content key … so
+cutting a fresh one` fired **zero** times across the run, so no resume ever got
+as far as reading a conveyance: the pointer was simply not there. Sync then
+dropped some of those pointer writes outright — four
+`sync queue race: __ckcur.… missing persisted record; removing` warnings.
+
+**Why it is worth fixing rather than tolerating**: `rotateContentKey` supersedes
+only the CK the rotating client knows about — `cache.current(...)` or what the
+pointer names — so with N content keys alive from N enrollments, a rotation
+asking for forward secrecy leaves the other N−1 keys live and the data written
+under them readable. That reading is from `CkManager.rotateContentKey`; I have
+not run it against several coexisting CKs.
+
+**What is owed**: rule whether one CK per enrollment per scope is the intent. If
+it is not, the pointer has to be written remote-first and taken with an atomic
+verb or an interlock, and the rotation path has to supersede every CK in scope
+rather than the one in hand.
 
 ⚠️ **Also owed, and separate**: at_lookup's
 `OutboundMessageListener.read` handles `AT0014 "Unexpected response found"` by
@@ -364,8 +403,12 @@ state.
 
 **G4. Migrate 14.11's bucket B** — the 71 credential-ladder uses
 (`enrollmentId` 59, `signingAlgoType` 12) onto the `AtAuthenticator` seam that
-at_lookup 3.7.0-rc1 ships **on trunk** — pub.dev is still 3.6.1, and in this
-file that distinction is the whole gate. 24 sites in `lib/`, 47 in tests, across
+at_lookup 3.7.0-rc1 ships. ⚠️ **This read "ships **on trunk** — pub.dev is
+still 3.6.1, and in this file that distinction is the whole gate", and it was
+wrong**: `3.7.0-rc1` has been on pub.dev since 2026-08-23. pub.dev's `latest`
+field excludes prereleases, which is the trap this file names at the top and
+then fell into here. So the distinction G4 called its whole gate does not
+exist, and nothing external blocks this entry. 24 sites in `lib/`, 47 in tests, across
 at_client, at_onboarding_cli and at_auth. The only one of the five
 `deprecated_member_use` buckets with a replacement that exists today.
 
@@ -536,9 +579,11 @@ carried inside a closed one.
 
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
-| **at_chops 3.6.1 — [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181)** | ⛔ **Carved and OPEN, and it is NOT in the train's ordering above** — it was cut on 2026-08-24 from trunk, not from the spike, because at_chops 3.6.0 is already published and had no in-progress CHANGELOG heading to fold into. Message-only change: `PkamMlDsa65SigningAlgo.sign` reported a bare `ML-DSA-65 secret key must be 4032 bytes: N`, which names neither the credential nor the likeliest cause. A PKAM key of ~1.2 kB is an RSA-2048 private key, which a caller holds by naming one enrollment's algorithm while carrying another's credentials. Owed: merge, then gkc publishes 3.6.1. ⚠️ **Nothing depends on it** — no floor in this tree requires 3.6.1, so it can land whenever; but it is a second at_chops publish the train's ordering does not mention | Nothing. It is independent of at_auth and of the spike |
+| **at_chops 3.6.1 — [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181)** | ⛔ **MERGED 2026-08-24, and NOT yet published — pub.dev tops out at at_chops `3.6.0`, so what is owed here is the publish, not the review.** ⚠️ This row read "Carved and OPEN" until 2026-08-24. It is NOT in the train's ordering above** — it was cut on 2026-08-24 from trunk, not from the spike, because at_chops 3.6.0 is already published and had no in-progress CHANGELOG heading to fold into. Message-only change: `PkamMlDsa65SigningAlgo.sign` reported a bare `ML-DSA-65 secret key must be 4032 bytes: N`, which names neither the credential nor the likeliest cause. A PKAM key of ~1.2 kB is an RSA-2048 private key, which a caller holds by naming one enrollment's algorithm while carrying another's credentials. Owed: merge, then gkc publishes 3.6.1. ⚠️ **Nothing depends on it** — no floor in this tree requires 3.6.1, so it can land whenever; but it is a second at_chops publish the train's ordering does not mention | Nothing. It is independent of at_auth and of the spike |
+| **atServer: concurrent cross-atSign lookups are answered pairwise** | ⚠️ **IN ANOTHER REPO — the fix lands in `at_server`, not here.** Recorded in this list so it survives **G0**'s discharge, because at_client_sdk carries the evidence and neither of its harnesses can go green until at_server moves. Two shapes, and they cost different things: lock `OutboundClient`'s send-and-read pair, which serialises every relayed lookup to a peer atSign; or stop sharing one outbound client between unrelated relays by keying the pool on the asking inbound connection, which spends a connection per client. `OutboundClientManager.getClient` is also not atomic — two concurrent misses each create and add a client. See **G0** in [`## THE NEXT MOVE`](#the-next-move) for the measurements and the file-by-file mechanism | gkc ruling on which shape. Then rebuild `at_virtual_env:local` and re-run both harnesses |
+| **several content keys alive for one `(nskeyOwner, namespace)` scope** | ⚠️ **A second defect, found while diagnosing G0 and separate from it.** One CK per writing enrollment per scope, cut at that enrollment's first write, no re-minting — three sender enrollments produced three CKs under `(bob, ns)` and three under `(alice, ns)`. `CurrentCkPointer` is the only thing meant to converge them and cannot as written: it is put **`localOnly`** into each enrollment's own store and reaches siblings only by sync, so cold enrollments writing together each read no pointer and each mint. `CkManager._resumeCurrent`'s "cutting a fresh one" fired **zero** times across the run. Sync dropped four of those pointer writes, logging `sync queue race: __ckcur.… missing persisted record; removing`.<br><br>**Why it matters beyond waste**: `rotateContentKey` supersedes only the CK in hand, so a rotation asking for forward secrecy leaves the other enrollments' keys live and their data readable — read from the source, **not run**. The measurements are in **G0** in [`## THE NEXT MOVE`](#the-next-move) | gkc ruling on whether one CK per enrollment per scope is the intent. If not: the pointer needs a remote-first write taken with an atomic verb or an interlock, and rotation needs to supersede every CK in scope |
 | arm 2's UC-G1.15 read returns a content key | ⛔ **DIAGNOSED 2026-08-24, and it is an atServer defect with nothing PQ about it** — see **G0** in [`## THE NEXT MOVE`](#the-next-move), which carries the measurements, the mechanism and what is owed.<br><br>⚠️ **This row read “a conveyance payload sits at a VALUE record’s address” and it was wrong.** Nothing is stored wrongly: `llookup:all:` on the sender’s atServer and `lookup:all:` from the receiver both return the correct 6668-byte record for the very read that had just handed back a 44-character content key. Two cross-atSign lookups in flight at once are answered with each other’s responses, because every relayed lookup on an atServer shares one outbound connection and `OutboundClient.lookUp` holds no lock across send-and-read.<br><br>**Two harnesses reproduce it.** `tests/at_functional_test/test/concurrent_relayed_lookup_test.dart` is the minimal one — no PQ, no encryption, four sockets, four records — and scores 41 ok out of 480 at width 4 against 120 out of 120 at width 1. `tests/at_functional_test/test/pq_read_returns_another_record_test.dart` is the PQ symptom it was found through, at roughly 1 cycle in 5. Both are `@Skip`ped; run them by hand on a **freshly recycled** virtualenv.<br><br>⛔ **Ruled out with evidence — do not re-derive any of these:** at_client’s read path (the key asked for is the key returned, and a `CONVEYANCE-FOR-VALUE` probe inside `GetResponseTransformer` never fired); the shared `AtKey` object between put and get (150 cycles, clean); metadata aliasing via `ckConveyanceKey`; `CryptoRuntime._stampEncrypted` colliding with a read (0 shared metadata objects over 15 runs); concurrent nskey seeding (serialising provisioning did **not** help); and the write itself, settled by the raw lookups above | Nothing here. The fix is in at_server; `cd tests/at_functional_test && VIRTUALENV_IMAGE=at_virtual_env:local ./runLocal.sh` for the pack |
-| spike CI result unseen | ⚠️ Both workflows were dispatched against `gkc-pq-d1-spike` on 2026-08-24 (`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike`, same for `at_libraries.yaml`) and **the result was never read** — the session ended first. It is the first CI over arms 1–3, the deleted rollout matrix, the released-peer test and the enrolment fix; everything before that was local only. ⚠️ **A red there may be the IMAGE, not the code**: CI's functional job uses `atsigncompany/virtualenv:dev_env` while every local run used `at_virtual_env:local`, and they differ in whether they can verify an ML-DSA PKAM signature — which is exactly what arm 2's pqActive cells, arm 3's rungs and `pq_native_app_enrollment_test.dart` rest on. Check the image before the code | Nothing. `gh run list --branch gkc-pq-d1-spike --limit 4` |
+| spike CI result read, and 12 commits behind | ✅ **Both workflows were `success` at `f304bf383`, 2026-08-24T12:38.** ⚠️ That is **12 commits behind head** and does not cover them — and in this repo docs are build inputs for the acceptance rail, so a plan edit can redden CI. Re-derive rather than trusting this line:<br>`gh run list --repo atsign-foundation/at_client_sdk --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 1 --json headSha,conclusion` (and the same for `at_libraries.yaml`), then `git rev-list --count <headSha>..HEAD`<br><br>⚠️ This row read "spike CI result unseen" until 2026-08-24, when the answer had been sitting there for hours | A dispatch against head, once the branch stops moving |
 | ~~app enrollments cannot be PQ-native~~ **FIXED 2026-08-24** | ✅ **DONE — do not rebuild it.** `AtEnrollmentRequest` now **requires** `signingAlgo` on both constructors (no default, so the compiler enumerated all 22 call sites across 6 packages), and also forwards `advertisedSigningKey`, which the base class declared and neither constructor passed on. `mintApkamKeyPair` is shared with onboarding so the two cannot drift. A non-rsa2048 enrolment files typed material under the enrollment id once the atServer names it — the flat copy STAYS, because one enrollment named by the keyfile's own `enrollmentId` resolves the same either way, and clearing it breaks the approval handshake, which needs the keypair and the symmetric key from one `toAtChops`. ⚠️ **Three things the API change alone did not fix, each found by a failing run rather than by reading:** `enroll` did not forward `signingAlgo` to `sendEnrollRequest`, so the parameter would have existed and done nothing; `enrollmentKeyPackageBuilder` was never told the algorithm, though it has always taken one; and the approval handshake never set `signingAlgoType`, so an ML-DSA enrolment PKAM'd under at_lookup's rsa2048 default. **Proven at two layers**: `tests/at_functional_test/test/pq_native_app_enrollment_test.dart` (an mldsa65 enrolment keeps its id, an rsa2048 one still retrofits — the control) and `tests/at_onboarding_cli_functional_tests/test/pq_native_enroll_test.dart` against a real VE, where the assertion that matters is that the enrolment **authenticates**: PKAM is record-authoritative, so a client holding ML-DSA material can only authenticate if the atServer's record says ML-DSA. ⛔ **What is NOT covered, and is separate**: every other atServer implementation would record an ML-DSA enrollment and then never authenticate it. That gap is pre-existing, independent of this fix, and lives on an unmerged branch | Nothing. `--posture` now reaches the enrolment in `at_activate enroll`, defaulted once at the `enroll`/`sendEnrollRequest` boundary where a caller has no rollout position to read |
 | doc-set reduction, phases 3–5 | ⛔ **RULED BY gkc 2026-08-23, AFTER D1 — do not start it while D1 is open.** The end state is five files: `roadmap.md` (stale, needs a pass), `design.md`, `acceptance.md`, `decisions.md` (seriously shrunk) and this plan, which from now records **only what is still owed**. Phases 1 and 2 landed 2026-08-23 — the rejections and measurements became [rulings 116 and 117](decisions.md), and this plan went 1,878 → 1,075 lines. **What remains, and phase 3 MUST precede phase 4:** (3) trim the **117** ruling bodies in `detail/decisions.md` and inline them into `decisions.md` — they average **98 lines each**, and only **4 of 116** rulings are dead, so this is an editorial pass over live content rather than a purge of obsolete ones; (4) delete `detail/` and repoint or remove the **250** links into it (113 from this file, 63 acceptance, 62 design, 9 roadmap, 2 decisions, 1 seal-spec), rewriting `docs_structure_test.dart`, which enforces index↔body correspondence both ways and names `detail` 28 times — the rail changes in the SAME commit or CI goes red; (5) substitute explanations for the code that cites `detail/` paths, which is a standing rule violation as well as a broken link: ⚠️ **this item shrank on 2026-08-24** — it named `pq_rollout_matrix_test.dart` and a dartdoc in `tests/pq_matrix/current/lib/envelope_exchange.dart`, and both files are now deleted along with the rollout matrix. The README was rewritten in the same change and cites `detail/` no longer, so **item (5) is discharged**. Measured 2026-08-24: only two code files still name `detail/`, and neither is item (5)'s — `cross_cutting_test.dart` reads `detail/decisions.md` as a build input and this row already exempts it, and `docs_structure_test.dart` is the rail item (4) rewrites. Re-derive before acting: `git grep --untracked -n 'detail/' -- tests packages | grep -v '\.md:'`. `cross_cutting_test.dart` reads `detail/decisions.md` as a build input and is fine. ⚠️ **Phase 3 is where this goes wrong silently** — a ruling trimmed too far reads complete, and 112 of 116 rulings are still in force. Re-derive the size: `for f in docs/projects/pq/*.md docs/projects/pq/detail/*.md; do echo "$(grep -c '' $f) $f"; done` | Nothing but D1 closing. `detail/` is **19,141 lines against 7,231 live**, so this is most of the reduction |
 | arm 1 vs arm 3 bucketing | ⛔ **A RULING IS OWED FROM gkc, and it is not a research task** — the measuring is done. [`acceptance.md`'s "Which rows arm 1 owes"](acceptance.md#which-rows-arm-1-owes) has both readings and the evidence; nothing here repeats them. In short: section 14's kind table says **3** transition rows, its arm-3 paragraph names **12**, and four rows — UC-B1.1, UC-B1.2, UC-B4.4, UC-A5.3 — are assigned to arm 1 and arm 3 at once, so the published "21 axis and consequence rows" double-counts. The two readings differ in what arm 1 *is*: under the count an arm-1 cell must drive a retrofit, so the arm stops being three static clients; under the prose a retrofit is an edge and belongs to arm 3. **Arm 1 as built sidesteps it** by covering only the 14 rows both derivations agree on, so nothing is blocked — but arm 3 cannot be scoped until this is settled, and the count table stays wrong until then | Nothing but the ruling. Arm 3 is the work it unblocks — arm 4 was cancelled 2026-08-24 |
@@ -622,9 +667,6 @@ trust it and orphan subscribers.
 
 ### 14.34 An unexplained intermittent in `self_enrollment_retrofit_live_test.dart`
 
-### 14.34 An unexplained intermittent in
-`self_enrollment_retrofit_live_test.dart`
-
 ⛔ **D1 GATE (gkc, 2026-08-23).** D1 ends when every rail is green, and an
 unexplained live-pack failure makes "green" a rate rather than a state.
 
@@ -655,6 +697,24 @@ copy the atServer log out first**: `docker cp test-virtualenv-1:/apps/logs
 **If it recurs,** the bisect point is `0668cf91d` — code there is the
 local-key fix without the `_apsk` write serialisation, so green at that commit
 pins it on the serialisation.
+
+**A lead from G0, NOT a diagnosis.** G0's mechanism is an atServer sharing one
+outbound connection between unrelated relays, because `AtCacheManager` hands
+`OutboundClientPool.get` a `DummyInboundConnection` and
+`DummyInboundConnection.equals` answers true for any other one. The
+**notification** path has the same shape in its own pool:
+`NotifyConnectionPool.getOutboundClient` builds a fresh
+`DummyInboundConnection()` per call and matches it the same way, so every
+notification to a given destination atSign shares one `OutboundClient` too
+(at_server `a0deee69`,
+`packages/at_secondary_server/lib/src/notification/notify_connection_pool.dart`).
+
+That is a shared mechanism, not a shared cause: this row's open question is
+which *inbound* monitor the atServer treated as the subscriber, and nothing
+shown so far reaches that from the outbound pool. The rates matching at 1 in 5
+is not evidence either. **The cheap check** is to run this file's pack against
+an atServer with G0's fix in it — once that build exists, it costs one run, and
+it either clears this row or leaves it exactly where it was.
 
 ⚠️ **Probably the same phenomenon as
 [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)**
@@ -1213,6 +1273,13 @@ awk '/^\*\*Stage 5/,/^\*\*Stage 6/' docs/projects/pq/implementation-plan.md
 grep -rn "}, skip:" packages/at_client/test/acceptance/*_test.dart
 grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 
+# which atServer build the local virtualenv image actually IS. G0 cites at_server
+# a0deee69 because that is what this image was built from; a rebuilt image is a
+# different claim and the doc cannot know it has moved.
+docker pull atsigncompany/virtualenv:vip >/dev/null 2>&1   # only for the vip arm
+docker image inspect at_virtual_env:local \
+  --format '{{index .Config.Labels "org.opencontainers.image.revision"}}'
+
 # row 2 and row 12: the external gates. The at_auth release is a pub.dev
 # question; the atServer image gate is gkc's call and is NOT to be checked
 # against atsigncompany/virtualenv:vip (ruled 2026-08-13).
@@ -1222,13 +1289,16 @@ grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 # and three of these five were re-measured 15 commits after the other two.
 cd packages/at_client         && dart analyze lib test       # exit 0, 360 info  @642a5899f
 cd packages/at_client         && dart test --concurrency=1   # 1455 (2 skipped)  @642a5899f
-cd packages/at_client         && dart test test/acceptance --concurrency=1  # 106 (2) @642a5899f
+cd packages/at_client         && dart test test/acceptance --concurrency=1  # 111 (2) @8d79066ae
 cd packages/at_auth           && dart test --concurrency=1   # 315              @642a5899f
 cd packages/at_onboarding_cli && dart test --concurrency=1   # 49               @642a5899f
 cd tests/at_functional_test   && bash runLocal.sh            # 174/174 EXIT=0   @642a5899f
 cd tests/at_end2end_test      && bash runLocal.sh            # 54/54  EXIT=0    @642a5899f
 # ✅ ALL SEVEN were re-measured together on 2026-08-19 at `642a5899f`, which is
 # the first commit where both live packs are green after the PqPosture rename.
+# ⚠️ SIX of them still carry that stamp. Only the acceptance line was re-run
+# since, at `8d79066ae` on 2026-08-24 — the others are 2026-08-19 figures and
+# a block reading as one date would promote them to head without a run.
 # ALL THREE runLocal.sh default VIRTUALENV_IMAGE to `at_virtual_env:local`, so a
 # bare run is the PQ-capable arm — the var only has to be set by hand when
 # driving `dart test` directly. ⚠️ This said "Both", and there are three:
