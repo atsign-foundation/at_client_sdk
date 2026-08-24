@@ -372,8 +372,11 @@ The last CI-verified commit is **`64480808d`** — runs **`32588333812`**
 `success`, measured 2026-08-22. Since then, re-derived 2026-08-24:
 
 ```bash
-git rev-list --count 64480808d..HEAD                              # 53
-git diff --name-only 64480808d..HEAD | grep -vc '^docs/'          # 108
+# Both figures GROW with every commit, so they are stamped with the head they
+# were measured at rather than a date — an unstamped answer beside its own
+# command reads as current forever. Re-run; do not quote.
+git rev-list --count 64480808d..HEAD                              # 53 at 52ad01a59
+git diff --name-only 64480808d..HEAD | grep -vc '^docs/'          # 108 at 52ad01a59
 ```
 
 ⚠️ **This paragraph read "THE BRANCH IS GREEN, at the current tip … HEAD is 8
