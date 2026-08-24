@@ -5,7 +5,7 @@
 // it live would make the functional pack red at that rate. Run it by hand:
 //
 //   cd tests/at_functional_test
-//   dart test test/pq_conveyance_at_value_address_test.dart --concurrency=1
+//   dart test test/pq_read_returns_another_record_test.dart --concurrency=1
 //
 // ⚠️ Recycle the virtualenv first. One that has been up ~2 hours starts
 // failing unrelated tests on the 30s default timeout, and a batch that begins
