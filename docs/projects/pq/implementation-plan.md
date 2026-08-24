@@ -187,13 +187,37 @@ control arm sends cleanly 120 times.
 - `getClient` is not atomic either: two concurrent misses each create and add a
   client, so the pool can hold duplicates for one key (observed, 6 ms apart).
 
-**What is owed** is a decision and then a fix, both in at_server: whether to
-lock `OutboundClient` per request/response pair, or to stop sharing one
-outbound client between unrelated relays by keying the pool on the *asking*
-inbound connection as every non-cache relay already does. The two differ in
-what they cost — a lock serialises every relayed lookup to a peer atSign; the
-pool-key change spends a connection per client. Then rebuild
-`at_virtual_env:local` and re-run both probes.
+✅ **RULED by gkc, 2026-08-24: all three, not a choice between them.** The
+shape was put as lock-or-pool-key and the answer was both, plus the third
+thing beside them:
+
+1. **Key the pool on the asking inbound connection** for the relayed-lookup
+   path, as every non-cache relay already does. `AtCacheManager.remoteLookUp`
+   has two callers that hold a real connection — `LookupVerbHandler` and
+   `ProxyLookupVerbHandler` — and one that does not, `CacheRefreshJob`, which
+   keeps a dummy.
+2. **Lock `OutboundClient` across each request/response pair**, as
+   `AtLookupImpl._process` already does on the client side. This is what makes
+   the remaining sharing safe rather than corrupting — the refresh job's
+   dummy, `PolVerbHandler`'s, and `NotifyConnectionPool`, which builds a fresh
+   `DummyInboundConnection` per call and shares one client per destination for
+   the same reason.
+3. **Make `OutboundClientManager.getClient` atomic**, so two concurrent misses
+   stop each creating and adding a client for one key.
+
+⚠️ `DummyInboundConnection.equals` answering true for any other dummy is the
+root of the sharing, and changing it is NOT part of this: the notify pool
+builds a new dummy per call and relies on that match to reuse a connection at
+all, so identity equality there would open a connection per notification. The
+lock covers it instead.
+
+**What is owed** is that work, in **at_server** — branch from its trunk — then
+rebuild `at_virtual_env:local` and re-run both probes here. Note
+`mutex: ^3.1.0` is already a dependency of `at_secondary_server`, and
+`OutboundClient` has send/read pairs in `lookUp`, `scan`, `plookUp`, `notify`
+and `_sendToVerb` plus two inside `_establishHandShake`; the handshake ones run
+under `connect()` before the client is reachable from the pool, so a
+non-reentrant lock on the public operations does not deadlock against them.
 
 **Why several content keys were alive for one scope — measured 2026-08-24, and
 it is a second defect, not part of the first.** The condition that made the
@@ -580,7 +604,7 @@ carried inside a closed one.
 | Item                            | What is owed                                                        | Blocked on                                                                       |
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | **at_chops 3.6.1 — [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181)** | ⛔ **MERGED 2026-08-24, and NOT yet published — pub.dev tops out at at_chops `3.6.0`, so what is owed here is the publish, not the review.** ⚠️ This row read "Carved and OPEN" until 2026-08-24. It is NOT in the train's ordering above** — it was cut on 2026-08-24 from trunk, not from the spike, because at_chops 3.6.0 is already published and had no in-progress CHANGELOG heading to fold into. Message-only change: `PkamMlDsa65SigningAlgo.sign` reported a bare `ML-DSA-65 secret key must be 4032 bytes: N`, which names neither the credential nor the likeliest cause. A PKAM key of ~1.2 kB is an RSA-2048 private key, which a caller holds by naming one enrollment's algorithm while carrying another's credentials. Owed: merge, then gkc publishes 3.6.1. ⚠️ **Nothing depends on it** — no floor in this tree requires 3.6.1, so it can land whenever; but it is a second at_chops publish the train's ordering does not mention | Nothing. It is independent of at_auth and of the spike |
-| **atServer: concurrent cross-atSign lookups are answered pairwise** | ⚠️ **IN ANOTHER REPO — the fix lands in `at_server`, not here.** Recorded in this list so it survives **G0**'s discharge, because at_client_sdk carries the evidence and neither of its harnesses can go green until at_server moves. Two shapes, and they cost different things: lock `OutboundClient`'s send-and-read pair, which serialises every relayed lookup to a peer atSign; or stop sharing one outbound client between unrelated relays by keying the pool on the asking inbound connection, which spends a connection per client. `OutboundClientManager.getClient` is also not atomic — two concurrent misses each create and add a client. See **G0** in [`## THE NEXT MOVE`](#the-next-move) for the measurements and the file-by-file mechanism | gkc ruling on which shape. Then rebuild `at_virtual_env:local` and re-run both harnesses |
+| **atServer: concurrent cross-atSign lookups are answered pairwise** | ⚠️ **IN ANOTHER REPO — the fix lands in `at_server`, not here.** Recorded in this list so it survives **G0**'s discharge, because at_client_sdk carries the evidence and neither of its harnesses can go green until at_server moves. Two shapes, and they cost different things: lock `OutboundClient`'s send-and-read pair, which serialises every relayed lookup to a peer atSign; or stop sharing one outbound client between unrelated relays by keying the pool on the asking inbound connection, which spends a connection per client. `OutboundClientManager.getClient` is also not atomic — two concurrent misses each create and add a client. See **G0** in [`## THE NEXT MOVE`](#the-next-move) for the measurements and the file-by-file mechanism | Nothing — ✅ **gkc ruled 2026-08-24: all three** (pool key, the lock, atomic `getClient`); see **G0** for the shape and the deadlock note. The work itself is owed in at_server |
 | **several content keys alive for one `(nskeyOwner, namespace)` scope** | ⚠️ **A second defect, found while diagnosing G0 and separate from it.** One CK per writing enrollment per scope, cut at that enrollment's first write, no re-minting — three sender enrollments produced three CKs under `(bob, ns)` and three under `(alice, ns)`. `CurrentCkPointer` is the only thing meant to converge them and cannot as written: it is put **`localOnly`** into each enrollment's own store and reaches siblings only by sync, so cold enrollments writing together each read no pointer and each mint. `CkManager._resumeCurrent`'s "cutting a fresh one" fired **zero** times across the run. Sync dropped four of those pointer writes, logging `sync queue race: __ckcur.… missing persisted record; removing`.<br><br>**Why it matters beyond waste**: `rotateContentKey` supersedes only the CK in hand, so a rotation asking for forward secrecy leaves the other enrollments' keys live and their data readable — read from the source, **not run**. The measurements are in **G0** in [`## THE NEXT MOVE`](#the-next-move) | gkc ruling on whether one CK per enrollment per scope is the intent. If not: the pointer needs a remote-first write taken with an atomic verb or an interlock, and rotation needs to supersede every CK in scope |
 | arm 2's UC-G1.15 read returns a content key | ⛔ **DIAGNOSED 2026-08-24, and it is an atServer defect with nothing PQ about it** — see **G0** in [`## THE NEXT MOVE`](#the-next-move), which carries the measurements, the mechanism and what is owed.<br><br>⚠️ **This row read “a conveyance payload sits at a VALUE record’s address” and it was wrong.** Nothing is stored wrongly: `llookup:all:` on the sender’s atServer and `lookup:all:` from the receiver both return the correct 6668-byte record for the very read that had just handed back a 44-character content key. Two cross-atSign lookups in flight at once are answered with each other’s responses, because every relayed lookup on an atServer shares one outbound connection and `OutboundClient.lookUp` holds no lock across send-and-read.<br><br>**Two harnesses reproduce it.** `tests/at_functional_test/test/concurrent_relayed_lookup_test.dart` is the minimal one — no PQ, no encryption, four sockets, four records — and scores 41 ok out of 480 at width 4 against 120 out of 120 at width 1. `tests/at_functional_test/test/pq_read_returns_another_record_test.dart` is the PQ symptom it was found through, at roughly 1 cycle in 5. Both are `@Skip`ped; run them by hand on a **freshly recycled** virtualenv.<br><br>⛔ **Ruled out with evidence — do not re-derive any of these:** at_client’s read path (the key asked for is the key returned, and a `CONVEYANCE-FOR-VALUE` probe inside `GetResponseTransformer` never fired); the shared `AtKey` object between put and get (150 cycles, clean); metadata aliasing via `ckConveyanceKey`; `CryptoRuntime._stampEncrypted` colliding with a read (0 shared metadata objects over 15 runs); concurrent nskey seeding (serialising provisioning did **not** help); and the write itself, settled by the raw lookups above | Nothing here. The fix is in at_server; `cd tests/at_functional_test && VIRTUALENV_IMAGE=at_virtual_env:local ./runLocal.sh` for the pack |
 | spike CI result read, and 12 commits behind | ✅ **Both workflows were `success` at `f304bf383`, 2026-08-24T12:38.** ⚠️ That is **12 commits behind head** and does not cover them — and in this repo docs are build inputs for the acceptance rail, so a plan edit can redden CI. Re-derive rather than trusting this line:<br>`gh run list --repo atsign-foundation/at_client_sdk --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 1 --json headSha,conclusion` (and the same for `at_libraries.yaml`), then `git rev-list --count <headSha>..HEAD`<br><br>⚠️ This row read "spike CI result unseen" until 2026-08-24, when the answer had been sitting there for hours | A dispatch against head, once the branch stops moving |
