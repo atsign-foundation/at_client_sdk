@@ -130,21 +130,29 @@ prevent, so it is now stated rather than left to be re-derived:
 
 | gate | startable in this repo, by a session? |
 | ---- | ------------------------------------- |
-| G0 `[RECOMMENDED]` | **No.** Diagnosed, fixed and verified; what is owed is the MERGE of at_server PR #2771 — another repo, gkc's call |
-| G2, G5 | **No** — discharged |
-| **G3** | **YES** — diagnose 14.34, and there is now a G0-fixed atServer image locally to test it against |
+| G0, G2, G5 | **No** — discharged |
+| **G3** `[RECOMMENDED]` | **YES** — diagnose 14.34, against a G0-fixed atServer, which now exists in three forms (see that entry) |
 | **G4** | **YES** — and it was unblocked on 2026-08-24 when its stated gate turned out already lifted |
 | G6, G7 | **No** — a merge and a publish, both gkc's |
 
-G0 keeps `[RECOMMENDED]` because it is the sharpest thing open and the merge
-should be chased. It is not the thing to *type* first.
+⚠️ **`[RECOMMENDED]` moved from G0 to G3 on 2026-08-25**, when at_server merged
+the G0 fix. This table's first row read "G0 `[RECOMMENDED]` — **No.** Diagnosed,
+fixed and verified; what is owed is the MERGE of at_server PR #2771", under a
+note saying G0 kept the recommendation because the merge should be chased and
+was "not the thing to *type* first". The merge happened, so the recommendation
+now sits on something a session can start typing on.
 
-**G0. [RECOMMENDED] An atServer answers concurrent cross-atSign lookups with
-each other's records.** Two `lookup:` requests for different records of the
-same peer atSign, in flight at the same moment on one atServer, can each come
-back carrying the other's record — **with no exception raised**, so an app
-receives a well-formed record that is not the one it asked for. Nothing is
-stored wrongly; the record at rest is correct at both ends.
+**G0. ✅ DISCHARGED 2026-08-25 — an atServer answered concurrent cross-atSign
+lookups with each other's records.** Nothing here is startable: the fix is on
+at_server trunk. The entry is kept for the same reason G2's is — it carries the
+diagnosis, the measurements, the controls and the three instrument faults, and
+the deferred pooling discussion in [`## TODO`](#todo) is written against it.
+
+The defect, in an atServer that predates the fix: two `lookup:` requests for
+different records of the same peer atSign, in flight at the same moment on one
+atServer, can each come back carrying the other's record — **with no exception
+raised**, so an app receives a well-formed record that is not the one it asked
+for. Nothing is stored wrongly; the record at rest is correct at both ends.
 
 ⚠️ **This entry read "A conveyance payload is landing at VALUE record
 addresses" until 2026-08-24, and that was wrong.** The write was never at
@@ -267,9 +275,10 @@ operations, so locking only those leaves no nesting. ⚠️ **`plookUp` delegate
 to `lookUp` and must therefore NOT take the lock itself** — a "lock every
 public method" pass deadlocks there.
 
-✅ **VERIFIED END TO END ON THE REAL WIRE, 2026-08-24 — and G0 STAYS OPEN,
-because nothing is merged.** The fix exists on a branch in at_server and every
-atServer that is not that branch still carries the defect.
+✅ **VERIFIED END TO END ON THE REAL WIRE, 2026-08-24.** ⚠️ **This continued
+"and G0 STAYS OPEN, because nothing is merged"; it merged on 2026-08-25.** Every
+atServer built before that merge still carries the defect, which is why the
+before-and-after images below are worth keeping rather than deleting.
 
 Two virtualenv images built from named refs, `g0base` from trunk `a37e3e3b` and
 `g0fixed` from `af957440`, run minutes apart on one machine with one probe:
@@ -351,23 +360,38 @@ were four.
 **Also owed in at_server, and not part of this fix** (both found by being
 bitten): `tests/at_functional_test/runLocal.sh` and `tests/at_end2end_test/runLocal.sh`
 each `mkdir -p` the `root` contents directory and not the `secondary` one, so
-both work in a checkout that has run before and fail on a fresh clone; and the
-`at_server_spec` hosted fallback above, which reaches CI — its `unit_tests` job
+both work in a checkout that has run before and fail on a fresh clone — that
+half is **at_server
+[PR #2772](https://github.com/atsign-foundation/at_server/pull/2772), open as of
+2026-08-25**; and the `at_server_spec` hosted fallback above, which is filed
+nowhere and reaches CI — its `unit_tests` job
 runs `dart pub get` per package with no melos step, so a PR changing
 `at_server_spec` and `at_secondary_server` together tests the new server
 against the old published spec, green.
 
-**Where the work is**: **at_server
+**Where the work landed**: **at_server
 [PR #2771](https://github.com/atsign-foundation/at_server/pull/2771)**, branch
-`gkc-outbound-client-concurrency`, **open and not merged** — re-derive with
-`gh pr view 2771 --repo atsign-foundation/at_server` rather than trusting this
-line. ⚠️ This said "three commits, head `52d63b63` — unpushed as of
-2026-08-24"; it is pushed, the head has moved past that, and at_server trunk
-has moved too. `af957440` is the ref the measurements above were taken against. Its own rails: a new
-`outbound_client_concurrency_test.dart`, the package suite at 1030/1030, and
-at_server's two real-wire suites at 239 and 47. **What is owed is the merge**,
-and after it, a rebuild of `at_virtual_env:local` from trunk before anything
-here trusts that tag again.
+`gkc-outbound-client-concurrency`, **merged to at_server trunk 2026-08-25** as
+merge commit `8f4a985a`. ⚠️ **This paragraph read "open and not merged … what is owed is the
+merge"**, and before that "three commits, head `52d63b63` — unpushed as of
+2026-08-24". Re-derive rather than trusting
+either: `gh pr view 2771 --repo atsign-foundation/at_server`, or
+`git -C <at_server> merge-base --is-ancestor af957440 origin/trunk`. The merge
+carries four files — `outbound_client.dart`, `outbound_client_manager.dart`,
+their CHANGELOG entry, and a new `outbound_client_concurrency_test.dart` —
+which is the ruled scope and nothing beyond it. `af957440`, the ref every
+measurement above was taken against, is now an ancestor of trunk. Its own
+rails: that new concurrency test, the package suite at 1030/1030, and
+at_server's two real-wire suites at 239 and 47.
+
+⚠️ **The merge leaves one rig action owed, and nothing performs it
+automatically.** `at_virtual_env:local` on this machine is whatever tree last
+built it, so it does *not* become a fixed atServer by virtue of the merge —
+rebuild it from at_server trunk before anything here trusts that tag again,
+using the recipe in [Re-deriving the state](#re-deriving-the-state), and pin the
+image explicitly on every live run until then. No image label can answer "which
+at_server code is in this image"; that is the first of the three instrument
+faults below.
 
 ⚠️ **Also owed, and separate**: at_lookup's
 `OutboundMessageListener.read` handles `AT0014 "Unexpected response found"` by
@@ -376,9 +400,11 @@ queue or closing the connection**, unlike both timeout paths beside it. A stale
 queued response is then handed to the next command, offsetting every read after
 it. It did not fire in any of these runs; it is a hazard on its own merits.
 
-⚠️ **This displaces G6 as the recommendation.** The train is release
-sequencing and will keep; a cross-atSign read that silently returns the wrong
-record is the sharpest thing open anywhere in the tree.
+⚠️ **This displaced G6 as the recommendation on 2026-08-24, and handed
+it on to G3 on 2026-08-25 when the fix merged** — see the table above. The
+reasoning while it stood, kept because it is the standing tie-breaker: release
+sequencing will keep, and a cross-atSign read that silently returns the wrong
+record was the sharpest thing open anywhere in the tree.
 
 **G2. ✅ DISCHARGED 2026-08-24 — build the acceptance suite out per [ruling 115](detail/decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23).** Arms 1–3, the ledger and its clause level are all built; arm 4 is cancelled. Nothing here is startable — the entry is kept because it carries the design and the measurements, and because a reader who deletes it re-derives ruling 115 from scratch.
 The gate that D1's own definition rests on, and the largest. gkc's framing:
@@ -535,10 +561,25 @@ proving 2 use cases" — the rollout matrix was **deleted** on 2026-08-24 and it
 two rows rehomed: UC-G1.15 onto `pq_posture_grid_test.dart`, UC-G1.14 onto
 `pq_released_peer_test.dart`.
 
-**G3. Diagnose [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart).**
+**G3. [RECOMMENDED] Diagnose [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart).**
 A live-pack failure at once in five, unexplained. A gate only because D1 now
 ends when every rail is green, and at that rate "green" is a rate rather than a
 state.
+
+**Start by RE-MEASURING the rate, not by diagnosing.** The recorded figures are
+1 of 5 pack runs (2026-08-17) and 1 of 2 (2026-08-19 at `327cf4fa2`), which must
+not be pooled — and two things have moved underneath them since: 14.43, which
+this may share a phenomenon with, was fixed and re-measured, and the G0 defect
+whose mechanism it borrows a lead from is fixed on at_server trunk as of
+2026-08-25. So the cheap check the row has been waiting on is now available:
+run the functional pack against a **G0-fixed** atServer (`at_virtual_env:g0fixed`
+is on this machine, or rebuild from at_server trunk) and against an unfixed one,
+and count. It either clears the row or leaves it exactly where it was. ⛔ Read
+[14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)
+and [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)
+together before starting: they were written months apart without noticing each
+other, and the instruction to work them together is the part that keeps getting
+lost.
 
 **G4. Migrate 14.11's bucket B** — the 71 credential-ladder uses
 (`enrollmentId` 59, `signingAlgoType` 12) onto the `AtAuthenticator` seam that
@@ -722,7 +763,7 @@ carried inside a closed one.
 | `acceptance-report.json` is ignored only on this branch | ⚠️ **Deferred by gkc 2026-08-25 — recorded so the deferral is not silent.** `.gitignore` here carries `acceptance-report.json`, `citations.jsonl` and `acceptance-ledger.md`; **`gkc-pq-d1-at-auth` and trunk carry none of them**. A per-run report is sitting in `packages/at_auth/` at 220 KB, and on the carve branch a `git add <directory>` wants to track it — the commit hook refused exactly that on 2026-08-25.<br><br>⚠️ **gkc's reason was that [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) merges to trunk shortly, and that does not by itself fix it**: #2179's head is `gkc-pq-d1-at-auth`, which is the branch LACKING the ignore. Trunk gets it when this branch merges, not when #2179 does | Nothing. It resolves itself when this branch lands; until then, name files rather than directories when staging on the carve |
 | **atServer outbound connection pooling and concurrency** | ⚠️ **IN ANOTHER REPO (`at_server`), and gkc asked for it as a discussion rather than a change** — 2026-08-24, when he took pool keying out of the G0 fix: *"I'd rather serialize on a single connection for now, and have a longer discussion on how to handle outbound connection pooling and concurrency at a later date"*. Recorded so the deferral does not read as a decision.<br><br>**What that discussion has to weigh**, all established while diagnosing G0: every relayed lookup to a remote atSign now serialises behind every other one, and a request queued on the mutex is waiting before its 5 s read budget even starts; `InboundConnectionImpl.equals` matches on remote address and port rather than object identity, so keying on "the real inbound connection" is not the identity keying it sounds like; `NotifyConnectionsPool.getOutboundClient` has the same non-atomic get/connect/add shape that G0 fixes in `getClient`; and `PolVerbHandler` holds a third `DummyInboundConnection`, so pol's `lookUp`/`plookUp` share a pooled client with relayed lookups at `handshakeRequired: false` <br><br>**Four residual findings belong to this discussion**, all pre-existing and none claimed by the G0 fix: `poolSize` is not enforced across different pool keys, so concurrent misses for different atSigns can take the pool past its declared maximum; an evicted client is dropped without `close()`, leaking its socket; `OutboundMessageListener` can queue a bare `@atSign@` prompt as its own entry when the response and the prompt arrive in separate socket reads, and `read()` accepts a bare prompt as valid — a mis-pairing channel a mutex does not touch, since making an exchange's two steps adjacent never validates or drains the queue; and there is no bound on a slow-but-alive peer. The bare-prompt path has exactly **one** sighting in the wild — a single `FormatException` in the g0base arm — which is a sighting and not a rate | gkc scheduling it. Not a D1 gate |
 | **at_auth `enrollment_submitter`: two defects from the #2179 review** | ✅ **BOTH FIXED 2026-08-25, on both branches** — see `git log` for `fix(at_auth): a builder failure no longer degrades a first enrollment`. ⚠️ This row read "neither fixed". It is kept because the two corrections below are what stop the review being re-applied as written, and because the at_client half of (b) is NOT on the at_auth carve branch: at_client's PQ secret sharing is not there at all. From srieteja's review of [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179), 2026-08-25. The other four items in that review are fixed and on both branches.<br><br>**(a) A PQ first enrollment can activate with no encapsulation key.** `_buildMetadata` writes the keys into a fresh `InMemoryAtKeysIo`, then wraps only the `builder(keysIo)` call in try/catch — it logs `severe` and returns null. `_handleFirstEnrollmentRequest` submits anyway, with no equivalent of the `isPq`/`keyPackage` guard the OTP path has. ⚠️ **The review calls this permanent capability loss and it is not**: that rested on a doc line saying `metadata.keyPackage` is written only by the request that creates the record, which the code itself retracted on 2026-08-19 — `KeyPackageMinting` rewrites it whole by the enrollment's own `enroll:update`. So it is degraded and recoverable. ⚠️ **The recommended fix cannot be written as stated**: `FirstEnrollmentRequest` has no `keyExchangeMode`, so there is no `isPq` on that path — the only signal is `metadataBuilder != null`.<br><br>**(b) `_handleAtEnrollmentRequest` never adopts what the builder filed.** `metadataBuilder` runs before the request so it can advertise a key package, so everything it files lands in the atSign-scope container; after `enrollmentIdFromServer` arrives only the flat APKAM keypair is re-filed under it. `_handleSelfEnrollmentRequest` and `onboard()` both call `adoptMaterials` and this path does not, so `keysForEnrollment(id)` never returns the key package's private half and it is left behind when the enrollment is retired.<br><br>⛔ **DO NOT apply the one-liner the review recommends.** Adding `adoptMaterials` at the `enrollmentIdFromServer` assignment breaks the PQ OTP flow: `enrollmentApkamSymmetricKeyResolver` → `keyPackageMaterial(keys)` is called with **no** enrollment id, so re-homing the material under one puts it where that resolver cannot see it. It looks obviously right, which is why it is written down here | gkc scheduling them. Neither blocks the 4.0.0-rc1 publish |
-| **atServer: concurrent cross-atSign lookups are answered pairwise** | ✅ **Fixed and verified on the real wire; what is owed is the MERGE of [at_server PR #2771](https://github.com/atsign-foundation/at_server/pull/2771), which is open.** The table of measurements, the mechanism and the controls are in **G0** in [`## THE NEXT MOVE`](#the-next-move); this row is a pointer. ⚠️ It carried its own copy until 2026-08-25 and said "the branch is unpushed" while G0 said it was pushed | gkc, or the at_server session, merging #2771 |
+| **atServer: concurrent cross-atSign lookups are answered pairwise** | ✅ **DONE — diagnosed, fixed, verified on the real wire, and [at_server PR #2771](https://github.com/atsign-foundation/at_server/pull/2771) merged to at_server trunk on 2026-08-25** as merge commit `8f4a985a`. ⚠️ This cell read "what is owed is the MERGE … which is open", and before that carried its own copy of the measurements, saying "the branch is unpushed" while G0 said it was pushed. The table of measurements, the mechanism and the controls are in **G0** in [`## THE NEXT MOVE`](#the-next-move); this row is a pointer. ⚠️ **The merge does not rebuild `at_virtual_env:local`** — that tag is still whatever tree last built it | One rig action: rebuild the local virtualenv image from at_server trunk before the next live run that needs a fixed atServer |
 | **several content keys alive for one `(nskeyOwner, namespace)` scope** | ⚠️ **A second defect, found while diagnosing G0 and separate from it.** One CK per writing enrollment per scope, cut at that enrollment's first write, no re-minting — three sender enrollments produced three CKs under `(bob, ns)` and three under `(alice, ns)`. `CurrentCkPointer` is the only thing meant to converge them and cannot as written: it is put **`localOnly`** into each enrollment's own store and reaches siblings only by sync, so cold enrollments writing together each read no pointer and each mint. `CkManager._resumeCurrent`'s "cutting a fresh one" fired **zero** times across the run. Sync dropped four of those pointer writes, logging `sync queue race: __ckcur.… missing persisted record; removing`.<br><br>**Why it matters beyond waste**: `rotateContentKey` supersedes only the CK in hand, so a rotation asking for forward secrecy leaves the other enrollments' keys live and their data readable — read from the source, **not run**. The measurements are in **G0** in [`## THE NEXT MOVE`](#the-next-move) | gkc ruling on whether one CK per enrollment per scope is the intent. If not: the pointer needs a remote-first write taken with an atomic verb or an interlock, and rotation needs to supersede every CK in scope |
 | arm 2's UC-G1.15 read returns a content key | ⛔ **DIAGNOSED, FIXED and VERIFIED — it is an atServer defect with nothing PQ about it.** The substance, the measurements and the ruled-out list all live in **G0** in [`## THE NEXT MOVE`](#the-next-move); this row is a pointer and must not grow a second copy. ⚠️ It carried its own copy until 2026-08-25, and the two had already begun to disagree | Nothing here — G0 names what is owed |
 | spike CI result read, and 12 commits behind | ✅ **Both workflows were `success` at `f304bf383`, 2026-08-24T12:38.** ⚠️ That is **12 commits behind head** and does not cover them — and in this repo docs are build inputs for the acceptance rail, so a plan edit can redden CI. Re-derive rather than trusting this line:<br>`gh run list --repo atsign-foundation/at_client_sdk --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml --limit 1 --json headSha,conclusion` (and the same for `at_libraries.yaml`), then `git rev-list --count <headSha>..HEAD`<br><br>⚠️ This row read "spike CI result unseen" until 2026-08-24, when the answer had been sitting there for hours | A dispatch against head, once the branch stops moving |
@@ -858,8 +899,11 @@ rates "matching at 1 in 5", and they do not match**: the PQ harness measures
 13-22 wrong of 50 — 26% to 44% — against this row's 1 of 5 pack runs and then
 1 of 2. They were never the same figure, and a coincidence would not have been
 evidence in any case. **The cheap check** is to run this file's pack against
-an atServer with G0's fix in it — once that build exists, it costs one run, and
-it either clears this row or leaves it exactly where it was.
+an atServer with G0's fix in it. ⚠️ **This read "once that build exists"; it
+exists.** `at_virtual_env:g0fixed` (at_server `af957440`) is on this machine,
+and the same fix merged to at_server trunk on 2026-08-25 — so the check is one
+run against a fixed image, one against an unfixed one, and a count. It either
+clears this row or leaves it exactly where it was.
 
 ⚠️ **Probably the same phenomenon as
 [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)**
@@ -1458,7 +1502,11 @@ grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 # fix, so a bare run here tests a patched atServer and looks identical. Build
 # from a named ref and say which (see the note above this block on why no image
 # label can tell you). The figures below were taken against at_server
-# `a37e3e3b` — which WAS trunk when they were measured and is not any more.
+# `a37e3e3b` — which WAS trunk when they were measured, and which PREDATES the
+# G0 fix, merged to at_server trunk on 2026-08-25 as `8f4a985a`. So the three
+# live packs below were last measured against an atServer that still answers
+# concurrent cross-atSign lookups pairwise. Rebuild the image from a named ref
+# before re-measuring, and record which ref.
 
 cd packages/at_client         && dart analyze lib test                     # exit 0, 422 info
 cd packages/at_client         && dart format . -o none --set-exit-if-changed  # exit 0 — a CI gate
