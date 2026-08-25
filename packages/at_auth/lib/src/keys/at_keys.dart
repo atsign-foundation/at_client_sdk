@@ -81,6 +81,14 @@ class AtKeys {
     'atsign',
     'enrollments',
     'atsignKeys',
+    // Obsolete, and reserved BECAUSE it is obsolete. at_auth 3.3.0 wrote a
+    // top-level `keys` array on every keyfile whose atSign was set, empty
+    // whenever it held no typed material, and reserved the name itself. This
+    // build drops it in [fromJson] and never writes one, so leaving it out
+    // here would make it a legacy value that has to be preserved verbatim —
+    // and the update assurance would then refuse the first flush onto every
+    // keyfile 3.3.0 wrote, with the mutation lost rather than reported.
+    'keys',
   };
 
   //todo: make non-nullable and final in v5

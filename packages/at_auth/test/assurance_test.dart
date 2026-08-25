@@ -83,6 +83,34 @@ void main() {
       assurance.validateMapUpdate(existing: existing, candidate: candidate);
     });
 
+    test('accepts the first flush onto a keyfile at_auth 3.3.0 wrote', () {
+      // 3.3.0's `toJson` emitted `version`, `atsign` and a top-level `keys`
+      // array together whenever the atSign was set — which is every normal
+      // keyfile — with `keys` empty while it held no typed material, and it
+      // reserved that name itself. This build drops the field in
+      // `AtKeys.fromJson` and never writes one, so unless it stays RESERVED
+      // here the assurance reads it as a legacy value the candidate failed to
+      // preserve and refuses the write. That refusal lands on the first
+      // enrollment, retrofit or key-filing save onto any keyfile 3.3.0 wrote,
+      // and the mutation is lost rather than reported.
+      //
+      // The fixture alone does not cover this: it predates 3.3.0 and carries
+      // neither `version` nor `keys`.
+      final existing = {
+        ..._fixtureLegacyJson(),
+        'atsign': '@alice🛠',
+        'version': AtKeys.supportedVersion,
+        'keys': <dynamic>[],
+      };
+      final candidate = _documentMap(
+        atsign: '@alice🛠',
+        legacyJson: _fixtureLegacyJson(),
+        keys: [_symmetricMaterial()],
+      );
+
+      assurance.validateMapUpdate(existing: existing, candidate: candidate);
+    });
+
     test(
         'accepts the upgrade when the legacy spelling normalizes to the '
         'candidate atSign', () {
