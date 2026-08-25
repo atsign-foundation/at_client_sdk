@@ -839,12 +839,32 @@ trust, because the whole item rests on the feature already existing:**
 - **at_client has none of it**: zero occurrences of `noCommit` anywhere in
   `packages/at_client/lib`.
 
+**The commit entry costs more than log growth, and the code already says so.**
+`local_secondary.dart`'s expiry sweep carries this, written for a different
+reason: `_nskeylock` records are *"created remote-only by MintLock, synced down
+like any other key, and released by ttl alone"*. So each lock is replicated into
+every client's local store, expires there, and then needs a special
+`isExpiry: true` delete to be reclaimed at all — because a client whose
+enrollment does not cover the record's namespace *"can never reclaim it"*
+otherwise. A write that drives no commit entry is never synced down, so none of
+that happens.
+
+**Both lock records go through one call site.** There are two —
+`_nskeylock.<ns>@<owner>` and `_rootlock@<atSign>` — and `MintLock` takes both
+by the same path, so `mint_lock.dart:139` covers them together.
+
 **What to build:**
 
 1. `noCommit` on **`PutRequestOptions`** and **`DeleteRequestOptions`**
    (`packages/at_client/lib/src/client/request_options.dart`), defaulting off.
 2. Propagation from each into `UpdateVerbBuilder` / `DeleteVerbBuilder`.
 3. The lock writers themselves set it.
+
+**Where the two options land**: `put_request_transformer.dart:33` builds the
+put path's `UpdateVerbBuilder`, and `at_client_impl.dart:1118` builds delete's.
+Fifteen sites in `lib/` construct one of the two builders; the rest are durable
+records — shared keys, the published key ring, the signing root — which must
+keep committing.
 
 ⚠️ **Step 1 alone does not reach the records that motivated this, and it looks
 as though it would.** The lock writers do not call `put()`:
