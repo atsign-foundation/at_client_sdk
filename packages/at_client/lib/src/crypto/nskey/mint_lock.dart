@@ -138,7 +138,14 @@ class MintLock {
     try {
       await atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
         ..atKey = lockKey
-        ..value = _holder);
+        ..value = _holder
+        // A lock lives for its ttl and is never read by another device, so a
+        // commit entry for it buys nothing and costs everything that syncs:
+        // every client pulls the record down, waits out the same ttl, and then
+        // reclaims it locally. Asking the atServer not to record the write
+        // keeps the interlock — the refusal of a second write to an immutable
+        // record is what the lock IS, and that is unaffected.
+        ..noCommit = true);
       return true;
     } catch (e) {
       // The atServer refuses a second write to an immutable record, which is

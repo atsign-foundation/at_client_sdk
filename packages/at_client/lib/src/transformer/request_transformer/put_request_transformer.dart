@@ -32,6 +32,7 @@ class PutRequestTransformer
 
     UpdateVerbBuilder updateVerbBuilder = UpdateVerbBuilder();
     updateVerbBuilder.atKey = tuple.one;
+    updateVerbBuilder.noCommit = options.noCommit;
     // Append '@' to the atSign if missed.
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedWith);
     AtClientUtil.fixAtSign(updateVerbBuilder.atKey.sharedBy);

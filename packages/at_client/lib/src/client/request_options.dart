@@ -33,6 +33,28 @@ class PutRequestOptions extends RequestOptions {
   ///
   /// Leave null to use [AtClientPreference.crypto]'s default provider.
   String? cryptoProviderId;
+
+  /// Whether the atServer should carry out this operation **without recording
+  /// a commit**.
+  ///
+  /// A record written normally gets an entry in the atServer's commit log, and
+  /// that entry is what every other client of this atSign syncs. For a record
+  /// that exists only for a few seconds — an interlock taken and abandoned to
+  /// its time-to-live — that is pure cost: the record is replicated to every
+  /// device, expires there, and has to be reclaimed locally afterwards.
+  ///
+  /// It does more than skip: an atServer honouring it also purges any commit
+  /// entry the key already has, and answers `-1` where it would otherwise
+  /// return a commit id.
+  ///
+  /// ⚠️ **An atServer that does not honour it fails SILENTLY, and a caller
+  /// cannot tell.** The flag travels as `:nc`, which the shared verb syntax
+  /// has parsed for far longer than any atServer has acted on it — so an older
+  /// atServer accepts the command, ignores the flag, and records the commit
+  /// anyway. Nothing is refused and no error comes back. Treat this as an
+  /// optimisation that may not happen, never as a guarantee that a record
+  /// stayed out of the commit log.
+  bool noCommit = false;
 }
 
 /// Parameters that application code can optionally provide when calling
@@ -40,4 +62,26 @@ class PutRequestOptions extends RequestOptions {
 class DeleteRequestOptions extends RequestOptions {
   /// Whether to send this delete request directly to the remote atServer
   bool useRemoteAtServer = false;
+
+  /// Whether the atServer should carry out this operation **without recording
+  /// a commit**.
+  ///
+  /// A record written normally gets an entry in the atServer's commit log, and
+  /// that entry is what every other client of this atSign syncs. For a record
+  /// that exists only for a few seconds — an interlock taken and abandoned to
+  /// its time-to-live — that is pure cost: the record is replicated to every
+  /// device, expires there, and has to be reclaimed locally afterwards.
+  ///
+  /// It does more than skip: an atServer honouring it also purges any commit
+  /// entry the key already has, and answers `-1` where it would otherwise
+  /// return a commit id.
+  ///
+  /// ⚠️ **An atServer that does not honour it fails SILENTLY, and a caller
+  /// cannot tell.** The flag travels as `:nc`, which the shared verb syntax
+  /// has parsed for far longer than any atServer has acted on it — so an older
+  /// atServer accepts the command, ignores the flag, and records the commit
+  /// anyway. Nothing is refused and no error comes back. Treat this as an
+  /// optimisation that may not happen, never as a guarantee that a record
+  /// stayed out of the commit log.
+  bool noCommit = false;
 }

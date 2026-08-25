@@ -1,5 +1,16 @@
 ## 3.15.0-rc1
 
+- feat: `PutRequestOptions.noCommit` and `DeleteRequestOptions.noCommit` ask the
+  atServer to carry out the operation without recording a commit, and the mint
+  interlock now uses it. A lock record lives for a few seconds and is read by
+  nobody, but its commit entry is replicated to every device this atSign has,
+  expires there, and then has to be reclaimed locally — for a record that never
+  mattered. The flag reaches the wire as `:nc` on the built command, pinned as a
+  raw literal with and without it, because what the atServer sees is whatever
+  the builder copied in. ⚠️ An atServer that does not honour the flag ignores it
+  silently and records the commit anyway, so treat it as an optimisation that
+  may not happen rather than a guarantee.
+
 - fix: `AtRpc.sendRequest` waits for this atSign's notification listener before
   it sends. The far side answers a request with a notification back to the
   caller, and `subscribe()` starts the listener without waiting for it — the

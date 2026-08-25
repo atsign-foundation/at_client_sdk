@@ -1115,7 +1115,9 @@ class AtClientImpl implements AtClient {
     if (atKey.metadata.namespaceAware) {
       atKey.namespace ??= preference?.namespace;
     }
-    var builder = DeleteVerbBuilder()..atKey = atKey;
+    var builder = DeleteVerbBuilder()
+      ..atKey = atKey
+      ..noCommit = deleteRequestOptions?.noCommit ?? false;
 
     var deleteResult = await executeUpdateOrDelete(
       builder,
