@@ -3,16 +3,16 @@ import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_lookup/at_lookup.dart';
 
-@Deprecated('remove in v4 in favour of AtAuthSession')
+@Deprecated('remove in v5 in favour of AtAuthSession')
 sealed class AuthResponse {
   String atSign;
   bool isSuccessful = false;
-  //todo: v4, please return a AtRootDomain, helps cleanup the sdk.
-  @Deprecated('remove in v4')
+  //todo: v5, please return a AtRootDomain, helps cleanup the sdk.
+  @Deprecated('remove in v5')
   AtKeys? atAuthKeys;
-  @Deprecated('remove in v4')
+  @Deprecated('remove in v5')
   AtLookUp? atLookUp;
-  @Deprecated('remove in v4')
+  @Deprecated('remove in v5')
   AtChops? atChops;
 
   /// Explicit, typed hand-off to the client. Populated on success when the
@@ -26,7 +26,7 @@ sealed class AuthResponse {
   AuthResponse(this.atSign);
 }
 
-@Deprecated('remove in v4 in favour of AtAuthSession')
+@Deprecated('remove in v5 in favour of AtAuthSession')
 
 /// Represents an onboarding response of an atSign.
 class AtOnboardingResponse extends AuthResponse {
@@ -40,7 +40,7 @@ class AtOnboardingResponse extends AuthResponse {
   }
 }
 
-@Deprecated('remove in v4 in favour of AtAuthSession')
+@Deprecated('remove in v5 in favour of AtAuthSession')
 class AtAuthResponse extends AuthResponse {
   /// Constructor that takes an @sign as a parameter
   AtAuthResponse(super.atSign);

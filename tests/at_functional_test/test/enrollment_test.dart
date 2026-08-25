@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/response/response.dart';
@@ -180,7 +181,8 @@ void main() {
           appName: 'buzz',
           deviceName: 'iphone-${Uuid().v4().hashCode}',
           namespaces: {'buzz': 'rw'},
-          otp: 'a1b2c3'); //random invalid OTP
+          otp: 'a1b2c3',
+          signingAlgo: SigningAlgoType.rsa2048); //random invalid OTP
       var atEnrollment = AtEnrollment.create();
       var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       expect(
@@ -202,7 +204,8 @@ void main() {
           appName: 'buzz',
           deviceName: 'iphone-${Uuid().v4().hashCode}',
           namespaces: {'buzz': 'rw'},
-          otp: otp);
+          otp: otp,
+          signingAlgo: SigningAlgoType.rsa2048);
       var atEnrollment = AtEnrollment.create();
       var newAtLookup = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
       var enrollmentResponse =
@@ -309,7 +312,8 @@ void main() {
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: (await atClientManager.atClient.getOTP()).response,
-          namespaces: {'wavi': 'rw'});
+          namespaces: {'wavi': 'rw'},
+          signingAlgo: SigningAlgoType.rsa2048);
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
@@ -414,7 +418,8 @@ void main() {
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: (await atClientManager.atClient.getOTP()).response,
-          namespaces: {'wavi': 'rw'});
+          namespaces: {'wavi': 'rw'},
+          signingAlgo: SigningAlgoType.rsa2048);
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
@@ -490,7 +495,8 @@ void main() {
           appName: 'wavi-$random',
           deviceName: 'iphone',
           otp: (await atClientManager.atClient.getOTP()).response,
-          namespaces: {'wavi': 'r'});
+          namespaces: {'wavi': 'r'},
+          signingAlgo: SigningAlgoType.rsa2048);
       AtEnrollmentResponse? atEnrollmentResponse =
           await atEnrollmentBase.submit(enrollmentRequest, atLookUp);
       expect(atEnrollmentResponse.enrollStatus, EnrollmentStatus.pending);
@@ -650,7 +656,8 @@ void main() {
             appName: 'wavi',
             deviceName: 'device-$random',
             otp: (await atClientManager.atClient.getOTP()).response,
-            namespaces: {'wavi': 'rw'}),
+            namespaces: {'wavi': 'rw'},
+          signingAlgo: SigningAlgoType.rsa2048),
         atLookUp,
       );
 
@@ -748,6 +755,7 @@ void main() {
           deviceName: 'pixel-enrollee',
           otp: otp,
           namespaces: {'buzz': 'rw'},
+          signingAlgo: SigningAlgoType.rsa2048,
         ),
         enrolleeLookup,
       );

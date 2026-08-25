@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_client_flutter/at_client_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:pinput/pinput.dart';
@@ -106,6 +107,16 @@ class _ApkamActivationDialogState extends State<ApkamActivationDialog> {
       appName: appName,
       namespaces: namespaces,
       otp: otp,
+      // RSA-2048 because this dialog has no rollout position to read one
+      // from: it knows the atSign, the app and the namespaces, and nothing
+      // about how far the deployment has moved. It is also what this path
+      // minted unconditionally before the parameter existed, so an app
+      // showing this dialog enrols exactly as it always did.
+      //
+      // An app that HAS a position should not be enrolling through a widget
+      // that cannot carry one — it can build the request itself and pass
+      // `PqPosture.authenticationKeyAlgorithm`.
+      signingAlgo: SigningAlgoType.rsa2048,
     );
     return await enrollmentService.enroll(request, waitForApproval: true);
   }

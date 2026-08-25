@@ -4,16 +4,35 @@ import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_request.dart';
 import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/enroll/models/enrollment_request_decision.dart';
+import 'package:at_auth/src/enroll/models/enrollment_update_request.dart';
 import 'package:at_auth/src/enroll/models/otp.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_utils/at_progress.dart';
+import 'package:at_chops/at_chops.dart';
 
 /// An abstract class for submitting and managing the enrollment requests.
 abstract class AtEnrollment {
   factory AtEnrollment.create() {
     return AtEnrollmentImpl();
   }
+
+  /// How long [waitForApproval] leaves between polls when a caller states no
+  /// interval of its own.
+  static const Duration defaultRetryInterval = Duration(seconds: 2);
+
+  /// How many consecutive failures to reach the atServer [waitForApproval]
+  /// rides out when a caller states no budget of its own. It has never
+  /// bounded the wait for a decision — see [waitForApproval].
+  static const int defaultMaxRetries = 15;
+
+  /// Whether [waitForApproval] narrates itself on [progressStream] when a
+  /// caller states no preference.
+  static const bool defaultLogProgress = true;
+
+  /// How long a passcode from [generateOtp] or [setSpp] stays valid when a
+  /// caller states no expiry of its own.
+  static const Duration defaultOtpExpiry = Duration(minutes: 5);
 
   Stream<ProgressEvent> get progressStream;
 
@@ -93,7 +112,12 @@ abstract class AtEnrollment {
   ///  To approve an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
+  /// final atLookup = AtLookUp.withSecureSocket(
+  ///   atSign: '@alice',
+  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   transport: secureSocketTransport(SecureSocketConfig()),
+  ///   authenticator: authenticatorFor(keysIo, '@alice'),
+  /// );
   ///
   /// EnrollmentRequestDecision enrollmentRequestDecision =
   ///           EnrollmentRequestDecision.approved(ApprovedRequestDecisionBuilder(
@@ -103,8 +127,14 @@ abstract class AtEnrollment {
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.approve(
   ///       enrollmentRequestDecision, atLookupImpl);
   /// ```
+  ///
+  /// [approverChops] is the approving client's own crypto. What approval needs
+  /// is not authentication - the atSign's encryption private key, its
+  /// self-encryption key - so it does not belong on the network object. While
+  /// null, the implementation falls back to `atLookUp.atChops`.
   Future<AtEnrollmentResponse> approve(
-      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+      EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp,
+      {AtChops? approverChops});
 
   /// Denies an enrollment request.
   ///
@@ -117,7 +147,12 @@ abstract class AtEnrollment {
   ///  To deny an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
+  /// final atLookup = AtLookUp.withSecureSocket(
+  ///   atSign: '@alice',
+  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   transport: secureSocketTransport(SecureSocketConfig()),
+  ///   authenticator: authenticatorFor(keysIo, '@alice'),
+  /// );
   ///
   /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.denied('dummy-enrollment-id');
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.deny(enrollmentRequestDecision, atLookupImpl);
@@ -136,13 +171,49 @@ abstract class AtEnrollment {
   ///  To revoke an enrollment request
   ///
   /// AtEnrollmentBase atEnrollmentBase = AtEnrollmentImpl('@alice');
-  /// AtLookup atLookup = AtLookupImpl('@alice', 'dummy-root-domain', 64);
+  /// final atLookup = AtLookUp.withSecureSocket(
+  ///   atSign: '@alice',
+  ///   rootDomain: AtRootDomain.atsignDomain,
+  ///   transport: secureSocketTransport(SecureSocketConfig()),
+  ///   authenticator: authenticatorFor(keysIo, '@alice'),
+  /// );
   ///
   /// EnrollmentRequestDecision enrollmentRequestDecision = EnrollmentRequestDecision.revoked('dummy-enrollment-id');
   /// AtEnrollmentResponse atEnrollmentResponse = await atEnrollmentBase.revoke(enrollmentRequestDecision, atLookupImpl);
   /// ```
   Future<AtEnrollmentResponse> revoke(
       EnrollmentRequestDecision enrollmentRequestDecision, AtLookUp atLookUp);
+
+  /// Amends this enrollment's own record — its APKAM authentication key, the
+  /// signing keys it advertises, or its metadata.
+  ///
+  /// Self-only: [atLookUp] must be authenticated as the enrollment named by
+  /// [EnrollmentUpdateRequest.enrollmentId], and the enrollment must already be
+  /// approved. Unlike [approve], [deny] and [revoke], this needs no `__manage`
+  /// privilege — and holding `__manage` does not substitute for being the
+  /// enrollment, because the atServer refuses an owner connection here rather
+  /// than waving it through.
+  ///
+  /// Nothing this reaches can widen the enrollment's own grant: the namespaces
+  /// and the approval state are permanently out of reach, and a request naming
+  /// them is refused rather than partly obeyed.
+  ///
+  /// ⚠️ Rotating the APKAM keypair changes what every later authentication is
+  /// judged against, and nothing here writes the new keypair to a keyfile —
+  /// see [EnrollmentUpdateRequest.apkamPublicKey].
+  ///
+  /// ```dart
+  /// AtEnrollmentResponse response = await atEnrollment.update(
+  ///     EnrollmentUpdateRequest(
+  ///         enrollmentId: enrollmentId,
+  ///         signingKeys: [
+  ///           ApskSigningKey.forPublicKey(
+  ///               alg: SigningAlgoType.mldsa65, pub: publicKey)
+  ///         ]),
+  ///     atLookUp);
+  /// ```
+  Future<AtEnrollmentResponse> update(
+      EnrollmentUpdateRequest enrollmentUpdateRequest, AtLookUp atLookUp);
 
   /// Lists all enrollments.
   ///
@@ -155,22 +226,42 @@ abstract class AtEnrollment {
 
   /// Generates a one-time passcode from the server.
   ///
-  /// [expiry] defaults to 5 minutes.
+  /// [expiry] defaults to [defaultOtpExpiry].
   Future<Otp> generateOtp(AtLookUp atLookUp,
-      {Duration expiry = const Duration(minutes: 5)});
+      {Duration expiry = defaultOtpExpiry});
 
   /// Sets a semi-permanent passcode on the server.
   ///
   /// [spp] must be alphanumeric and exactly 6 characters.
-  /// [expiry] defaults to 5 minutes.
+  /// [expiry] defaults to [defaultOtpExpiry].
   Future<Otp> setSpp(String spp, AtLookUp atLookUp,
-      {Duration expiry = const Duration(minutes: 5)});
+      {Duration expiry = defaultOtpExpiry});
 
-  ///Awaits for approval/deny of an enrollment request at regular intervals.
-  /// The polling continues until a final status is received or the maximum number of retries is reached.
-  ///The [logProgress] parameter, when set to true, enables logging of the progress during the polling process.
-  /// The [maxRetries] parameter specifies the maximum number of polling attempts before giving up.
-  /// The [retryInterval] parameter defines the duration to wait between each polling attempt.
+  /// Polls for the approval or denial of an enrollment request, and on
+  /// approval collects and decrypts what the approval released.
+  ///
+  /// **The wait for a decision is unbounded.** Somebody has to decide this
+  /// request, on their own schedule, so polling continues until the atServer
+  /// reports approval or denial — for as long as that takes. No parameter
+  /// here shortens it; a caller that needs to give up must race this against
+  /// its own timer.
+  ///
+  /// [maxRetries] is a budget for **consecutive failures to reach the
+  /// atServer**, and nothing else — the exit from an atServer that is
+  /// genuinely gone. An answer restores it, including a refusal, which is an
+  /// answer about the enrollment. Exhausting it propagates the underlying
+  /// connection failure.
+  ///
+  /// [retryInterval] is the pause between polls, and [logProgress] narrates
+  /// the wait on [progressStream] (which costs a brief additional pause per
+  /// attempt). Their defaults, and [maxRetries]', are
+  /// [defaultRetryInterval], [defaultLogProgress] and [defaultMaxRetries].
+  ///
+  /// Dart resolves a default in the method that runs, not from the type of
+  /// the reference a caller holds, so what an implementation declares here
+  /// is what its callers actually get and what is declared on this interface
+  /// is documentation. Naming the same constants on both is what keeps that
+  /// documentation true.
   ///
   /// ```dart
   /// AtEnrollment atEnrollment = AtEnrollment.create();
@@ -186,10 +277,14 @@ abstract class AtEnrollment {
   ///   // Handle errors
   /// }
   /// ```
+  /// [atLookup] is the connection the approval handshake runs on — the PKAM
+  /// retries and the post-approval key fetches. When null, one is built from
+  /// the response's atSign and rootDomain.
   Future<void> waitForApproval(
     AtEnrollmentResponse enrollmentResponse, {
-    bool logProgress = false,
-    int maxRetries = 48,
-    Duration retryInterval = const Duration(minutes: 1),
+    bool logProgress = defaultLogProgress,
+    int maxRetries = defaultMaxRetries,
+    Duration retryInterval = defaultRetryInterval,
+    AtLookUp? atLookup,
   });
 }

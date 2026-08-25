@@ -1,4 +1,4 @@
-import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:path/path.dart' as path;
 import 'package:at_commons/atsign.dart';
 

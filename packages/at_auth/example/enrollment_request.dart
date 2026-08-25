@@ -2,6 +2,8 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
+import 'package:at_chops/at_chops.dart' show SigningAlgoType;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 
@@ -43,7 +45,8 @@ void main(List<String> args) async {
         appName: 'buzz',
         deviceName: 'pixel',
         namespaces: {'buzz': 'rw'},
-        otp: argResults['otp']);
+        otp: argResults['otp'],
+        signingAlgo: SigningAlgoType.rsa2048);
 
     // Contains the response from the server.
     final atEnrollmentResponse =
