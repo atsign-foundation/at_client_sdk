@@ -1927,7 +1927,7 @@ three mechanisms only `putIfNewer` dedup exists — making duplicates correct, b
 N holders means N seals and N writes per request.
 
 Suppression can only ever be **coarse**: the envelope key is
-`<msgId>.<requesterKpid>.__ssenv.<ns>`, carrying no secret name, and its payload is sealed to
+`<msgId>.<inReplyTo>.<requesterKpid>.__ssenv.<ns>`, carrying no secret name, and its payload is sealed to
 the requester. A responder can see *that* someone answered, not *what* they answered.
 
 That turns out to be sound rather than approximate, for a non-obvious reason: a responder
@@ -5354,7 +5354,9 @@ exported from the registry file instead of the provider files.
 ### 57.3 EnvelopeAddressing owns the `__ssenv` address
 
 The substrate's envelope address —
-`<msgId>.<recipientKpid>.__ssenv.<appNamespace>@<atSign>` — was hand-built and
+`<msgId>.<inReplyTo>.<recipientKpid>.__ssenv.<appNamespace>@<atSign>` (this
+read `<msgId>.<recipientKpid>.__ssenv.<appNamespace>@<atSign>` until the
+correlation segment was added) — was hand-built and
 hand-parsed at seven sites (the key builder, a substring fragment, three
 subtly different regexes, the namespace parse with its magic `+2`, and a scan
 regex in the enrollment-symmetric-key collector). All of it now lives on

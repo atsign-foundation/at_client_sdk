@@ -294,7 +294,8 @@ the **existing** immutable write (`Metadata.immutable`) for mint-once, plus —
 - **Retirement** — `enroll:revoke` + the enrollment-**expiry timer**. There is
   **no** per-APKAM-key delete and no TTL/usage eviction of APKAM keys.
 
-The substrate's `<msgId>.<kpid>.__ssenv.<ns>@owner` delivery envelope, its
+The substrate's `<msgId>.<inReplyTo>.<kpid>.__ssenv.<ns>@owner` delivery
+envelope, its
 `pqSeal`/verify-before-decrypt safety, and the push/pull primitives are defined
 once in `design.md`; UCs below reference them by name.
 
@@ -387,7 +388,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
        namespace-scoped enrollment never receives it;
      - `nskey.app_1.my_apps@alice⁻¹` (authorised namespace only) is delivered by the
        **substrate push** — sealed (`pqSeal`) to E2's key package and put to
-       `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`
+       `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice`
        (`shareAllSecretsWithEnrollment(E2, approvedNamespaces)`).
   5. `alice2` consumes the envelope + bundle, decapsulates, verifies, persists AtKeys.
   6. `alice2` verifies PQ APKAM auth.
@@ -479,7 +480,7 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Given:** `@alice` pq-native; `alice4` enrolled (E4) with a key package advertising a
   **single** X-Wing key, and secrets already sealed to that kpid sitting unread at
-  `<msgId>.<kpidOld>.__ssenv.app_1.my_apps@alice`.
+  `<msgId>.<inReplyTo>.<kpidOld>.__ssenv.app_1.my_apps@alice`.
 - **When:** `alice4` mints a second KEM keypair (ML-KEM-1024), rebuilds and re-signs its key
   package with **both** keys, and sends `enroll:update` on its own
   APKAM-authenticated connection.
@@ -601,7 +602,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      `enroll:listns:app_1.my_apps`, verify each member's advertised key package's
      APKAM signature against its `_apsk` ([section 13](#13-cross-cutting-acceptance-applies-to-all-flows)), `pqSeal` the private to each member's
      key package (addressed by `kpid`), put on
-     `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies the envelope
+     `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice`. `alice2` verifies
+     the envelope
      signature, then correspondence against the published
      `public:__nskey.app_1.my_apps@alice`, and `putIfNewer`s.
 - **Then:**

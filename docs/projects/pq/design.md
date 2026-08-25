@@ -191,7 +191,7 @@ content-key kids. Working names marked.
 | **signing-root mint lock** *(working)* | `_rootlock@alice` (self key, immutable create, short ttl — no namespace, matching the record it guards) | no | n/a | serialises minting the signing root between the owner's own privileged enrollments |
 | **CK conveyance** *(working)* | `<ckKid>.__ck.app_1.my_apps@alice` (self key) | no | n/a (it *is* a sealed CK) | `at/nskey` value: `pqSeal(ck)` to the nskey named by `nskeyKid`, under the KEM that nskey's `alg` names |
 | **data value** | `<key>.app_1.my_apps@alice` | no | n/a | `at/symmetric/AES/GCM`: AES-GCM under a CK, cites `ckKid` |
-| **substrate envelope** *(working)* | `<msgId>.<kpid>.__ssenv.app_1.my_apps@alice` (self key) | no | n/a | Layer-1 plumbing: `pqSeal(nskey private)` to key package `kp` |
+| **substrate envelope** *(working)* | `<msgId>.<inReplyTo>.<kpid>.__ssenv.app_1.my_apps@alice` (self key) | no | n/a | Layer-1 plumbing: `pqSeal(nskey private)` to key package `kp` |
 | **APKAM key package** | per [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) | (enrollment record) | the APKAM keypair | recipient unit for Layer-1 |
 
 Cross-atSign mirrors this with `@bob` as owner of the values he writes for
@@ -739,7 +739,8 @@ The full built/gap inventory with `file:line` evidence is in
 
 ### 2.1 kpid addressing, __ssenv envelope, sign/verify
 
-**Envelope key shape.** `<msgId>.<kpid>.__ssenv.<ns>@<owner>` — a self key,
+**Envelope key shape.** `<msgId>.<inReplyTo>.<kpid>.__ssenv.<ns>@<owner>` — a
+self key,
 `shouldEncrypt=false` (the value is already ciphertext). The body is raw `pqSeal`
 bytes (versioned HPKE sealing — KEM and AEAD per the version byte, see
 [seal-spec.md](seal-spec.md) — HKDF info domain-separation
@@ -1571,7 +1572,8 @@ APKAM keypairs."
 1. **Layer 1 — the nskey private, per-APKAM (substrate).** `Kb3` generates its key
    package locally and registers the *public* half in its enrollment record (gated,
    never published). A holder (`Kb1`) `pqSeal`s the `at_talk` nskey **private** to
-   `Kb3`'s key package and writes `<msgId>.<kp(Kb3)>.__ssenv.at_talk@bob` —
+   `Kb3`'s key package and writes
+   `<msgId>.<inReplyTo>.<kp(Kb3)>.__ssenv.at_talk@bob` —
    addressed by `kpid`, per-APKAM, once per APKAM keypair (approval-time push /
    `enroll:listns` / `requestSecret` pull backstop). Both gates of
    [§2.1](#21-kpid-addressing-__ssenv-envelope-signverify) protect the copy: the transport gate (Kb3 is `at_talk`-authorised) and the
