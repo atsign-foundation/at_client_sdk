@@ -223,6 +223,50 @@ void main() {
             'another enrollment is never a candidate');
   });
 
+  test('the package tagged for THIS enrollment wins over an untagged one',
+      () async {
+    // The submitter now adopts what the metadataBuilder filed under the
+    // enrollment id the atServer assigned, so a current keyfile has this
+    // enrollment's package tagged. An untagged one beside it is older material
+    // and must not be preferred to it.
+    final keys = AtKeys()..enrollmentId = 'mine';
+    fileKeyPackage(keys, keyId: 'untagged-kpid', seed: 70);
+    fileKeyPackage(keys, keyId: 'mine-kpid', enrollmentId: 'mine');
+
+    final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+        timeout: Duration(milliseconds: 1),
+        pollInterval: Duration(milliseconds: 1));
+
+    await expectLater(
+        resolve(keys, lookupWith(signer: 'live-enrollment', apsk: 'whatever')),
+        throwsA(isA<StateError>().having((e) => '$e', 'message',
+            allOf(contains('mine-kpid'), isNot(contains('untagged-kpid'))))),
+        reason: 'a package filed against this enrollment is this '
+            'enrollment\'s, whatever else the keyfile carries');
+  });
+
+  test(
+      'an untagged package still resolves for a keyfile written before '
+      'adoption existed', () async {
+    // The fallback, and it is not optional: enrollments already in the field
+    // have their package in the atSign's container, because the submitter did
+    // not adopt it under the id. Scoping without this would stop them opening
+    // anything sealed to them.
+    final keys = AtKeys()..enrollmentId = 'mine';
+    fileKeyPackage(keys, keyId: kpid);
+
+    final resolve = enrollmentApkamSymmetricKeyResolver(atSign,
+        timeout: Duration(milliseconds: 1),
+        pollInterval: Duration(milliseconds: 1));
+
+    await expectLater(
+        resolve(keys, lookupWith(signer: 'live-enrollment', apsk: 'whatever')),
+        throwsA(
+            isA<StateError>().having((e) => '$e', 'message', contains(kpid))),
+        reason: 'the untagged package is still this enrollment\'s when nothing '
+            'was ever filed under its id');
+  });
+
   test('an nskey private is not mistaken for a key package', () async {
     // Same part type, but filed alone — its public half lives on the
     // atServer. Adopting it as the recipient identity would make this

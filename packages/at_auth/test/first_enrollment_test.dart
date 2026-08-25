@@ -3,12 +3,16 @@ import 'dart:convert';
 import 'package:at_auth/at_auth.dart';
 import 'package:at_auth/src/enroll/at_enrollment_impl.dart';
 import 'package:at_chops/at_chops.dart';
+import 'package:at_demo_data/at_demo_data.dart' as demo;
+import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 class MockAtLookUp extends Mock implements AtLookupImpl {}
+
+class _FakeVerbBuilder extends Fake implements VerbBuilder {}
 
 /// The first enrollment — the one CRAM onboarding submits — can now name its
 /// APKAM's signing algorithm and carry metadata, which is what lets an atSign
@@ -17,6 +21,7 @@ class MockAtLookUp extends Mock implements AtLookupImpl {}
 /// `metadata.keyPackage` is written by the request that creates the enrollment
 /// record and never again, so this is the only moment it can be set at all.
 void main() {
+  setUpAll(() => registerFallbackValue(_FakeVerbBuilder()));
   const atSign = '@alice';
   const approvedResponse =
       'data:{"enrollmentId":"first-1","status":"approved"}';
@@ -148,6 +153,63 @@ void main() {
           reason: 'the builder must mutate the caller\'s own AtKeys, not a '
               'copy — this is the only place the private half is written');
       expect(filed!.bytes.toString(), b64('the-seed'));
+    });
+
+    test('a builder that throws fails the activation rather than degrading it',
+        () async {
+      // Degrading here activates the atSign for good with no encapsulation key
+      // advertised, reports success, and leaves the only evidence in a log
+      // line — and for an rsa2048 activation the request that goes out is
+      // indistinguishable from a deliberate legacy onboard. Nothing exists
+      // server-side yet and the CRAM secret is unspent, so failing costs a
+      // retry and nothing else.
+      final mock = approvingLookUp();
+
+      await expectLater(
+          AtEnrollmentImpl().submit(
+              FirstEnrollmentRequest(
+                  atSign: atSign,
+                  appName: 'wavi',
+                  deviceName: 'iphone',
+                  apkamPublicKey: b64('apkam-public'),
+                  signingAlgo: SigningAlgoType.mldsa65,
+                  atKeys: keysWithApkam(),
+                  metadataBuilder: (_) async =>
+                      throw StateError('could not mint the key package')),
+              mock),
+          throwsA(isA<StateError>()));
+
+      verifyNever(
+          () => mock.executeCommand(any(that: startsWith('enroll:request')),
+              auth: any(named: 'auth')));
+    });
+
+    test('a builder that throws on a LATER enrollment still degrades',
+        () async {
+      // The control, and the reason the change is scoped to the first
+      // enrollment: on every other path there IS an enrollment to cost the
+      // caller, the metadata is opaque and additive, and a request without it
+      // is a valid request. That behaviour must not move.
+      final mock = approvingLookUp();
+      // The later-enrollment path also reads the atSign's encryption public
+      // key, which the first-enrollment path does not.
+      when(() => mock.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async => 'data:${demo.encryptionPublicKeyMap['@alice🛠']}');
+
+      final response = await AtEnrollmentImpl().submit(
+          AtEnrollmentRequest(
+              atSign: atSign,
+              appName: 'wavi',
+              deviceName: 'iphone',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'},
+              signingAlgo: SigningAlgoType.rsa2048,
+              metadataBuilder: (_) async =>
+                  throw StateError('could not mint the key package')),
+          mock);
+
+      expect(response.enrollmentId, isNotEmpty,
+          reason: 'a later enrollment must not be lost over optional metadata');
     });
 
     test('a metadataBuilder without atKeys is refused, not silently dropped',

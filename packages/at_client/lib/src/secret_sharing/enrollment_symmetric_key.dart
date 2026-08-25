@@ -118,9 +118,18 @@ Future<(String, Uint8List, String)> _keyPackageHalves(AtKeys keys) async {
   // enrollment times out. keyPackageMaterials requires both halves under one
   // keyId, skips dead material, and orders active-then-newest.
   //
-  // No enrollment id to scope by: this runs before one has been filed against
-  // the freshly minted package, and that is the case the untagged arm serves.
-  final CryptographicMaterial? private = keyPackageMaterial(keys);
+  // Scoped by the enrollment the keys name. By the time this runs the atServer
+  // has assigned an id and the submitter has adopted the builder's material
+  // under it, so the package is the enrollment's rather than the atSign's.
+  //
+  // The untagged fallback is for keyfiles written before that adoption
+  // existed, where the halves are still in the atSign's container: without it
+  // an enrollment already in the field could no longer open what was sealed
+  // to it. It is also the path a caller driving the providers directly takes,
+  // where no enrollment id is filed at all.
+  final CryptographicMaterial? private =
+      keyPackageMaterial(keys, enrollmentId: keys.enrollmentId) ??
+          keyPackageMaterial(keys);
   if (private == null) {
     throw StateError(
         'These AtKeys hold no key-establishment decapsulation private key, so '

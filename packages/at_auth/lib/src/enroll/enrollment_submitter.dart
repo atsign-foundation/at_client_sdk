@@ -83,7 +83,8 @@ class EnrollmentSubmitter {
     final Map<String, dynamic>? metadata = await _buildMetadata(
         enrollmentRequest.metadataBuilder,
         enrollmentRequest.atSign,
-        enrollmentRequest.atKeys ?? AtKeys());
+        enrollmentRequest.atKeys ?? AtKeys(),
+        failOnBuilderError: true);
 
     EnrollVerbBuilder enrollVerbBuilder = EnrollVerbBuilder()
       ..appName = enrollmentRequest.appName
@@ -191,10 +192,21 @@ class EnrollmentSubmitter {
   /// throws, must not cost the caller its enrollment: the metadata is opaque
   /// and additive, so a request without it is a valid request, and the
   /// alternative is failing an enrollment over an optional payload.
+  ///
+  /// [failOnBuilderError] inverts that for the FIRST enrollment, and only
+  /// there. The reasoning above depends on there being an enrollment to cost
+  /// the caller, and on that path there is not one yet: nothing exists
+  /// server-side and the CRAM secret has not been spent, so failing costs a
+  /// retry and nothing else. Degrading instead activates the atSign for good
+  /// with no encapsulation key advertised, reports success, and leaves the
+  /// only evidence in a `severe` log line — and for an `rsa2048` activation
+  /// the request that goes out is indistinguishable from a deliberate legacy
+  /// onboard rather than a failure.
   Future<Map<String, dynamic>?> _buildMetadata(
       FutureOr<Map<String, dynamic>?> Function(AtKeysIo keysIo)? builder,
       String atSign,
-      AtKeys keys) async {
+      AtKeys keys,
+      {bool failOnBuilderError = false}) async {
     if (builder == null) return null;
 
     final keysIo = InMemoryAtKeysIo();
@@ -202,6 +214,12 @@ class EnrollmentSubmitter {
     try {
       return await builder(keysIo);
     } catch (e, st) {
+      if (failOnBuilderError) {
+        _logger.severe('metadataBuilder threw on a first enrollment, so the '
+            'activation is being failed rather than completed without a key '
+            'package: $e, $st');
+        rethrow;
+      }
       _logger.severe('metadataBuilder threw; submitting the enrollment request '
           'without metadata: $e, $st');
       return null;
@@ -243,10 +261,26 @@ class EnrollmentSubmitter {
       ..defaultEncryptionPublicKey =
           AtBytes.fromString(defaultEncryptionPublicKey);
 
+    // The builder gets its OWN AtKeys, not the one this method returns.
+    // It files what it mints, and at this moment the enrollment does not
+    // exist, so there is no id to file under: anything written straight into
+    // `atAuthKeys` lands in the atSign's container and stays there, because
+    // nothing below re-tags it. `_handleSelfEnrollmentRequest` and
+    // `AtAuthImpl.onboard` both hand over construction keys for this reason
+    // and adopt afterwards; this path did not, so a key package's private
+    // half was filed as the atSign's rather than the enrollment's — not
+    // reaped when the enrollment is retired, and absent from
+    // `keysForEnrollment`.
+    final constructionKeys = AtKeys()
+      ..apkamPrivateKey = AtBytes.fromString(apkam.privateKey)
+      ..apkamPublicKey = AtBytes.fromString(apkam.publicKey)
+      ..defaultEncryptionPublicKey =
+          AtBytes.fromString(defaultEncryptionPublicKey);
+
     final Map<String, dynamic>? metadata = await _buildMetadata(
         atEnrollmentRequest.metadataBuilder,
         atEnrollmentRequest.atSign,
-        atAuthKeys);
+        constructionKeys);
 
     // A key package is advertised in every mode — it is also how an approver
     // seals this atSign's existing secrets to the new device — so its presence
@@ -315,6 +349,12 @@ class EnrollmentSubmitter {
     var enrollStatus = getEnrollStatusFromString(enrollJson['status']);
 
     atAuthKeys.enrollmentId = enrollmentIdFromServer;
+
+    // Whatever the metadataBuilder filed — the key package's two halves —
+    // re-tagged with the enrollment id it now belongs to, which is the step
+    // the other two enrollment paths already take.
+    atAuthKeys.adoptMaterials(constructionKeys.keys,
+        enrollmentId: enrollmentIdFromServer);
 
     // Now that the enrollment has a name, a non-rsa2048 APKAM is ALSO filed as
     // typed material under it — which is what tells a later reader the
