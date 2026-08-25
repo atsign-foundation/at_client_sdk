@@ -24,6 +24,9 @@ class AtKeysAssurance {
     'atsign',
     'enrollments',
     'atsignKeys',
+    // See AtKeys._reservedTopLevelKeys: obsolete, and reserved because a
+    // keyfile written by at_auth 3.3.0 carries an empty one.
+    'keys',
   };
 
   // ---- low-level parsing/value primitives, called by the models' fromJson ----
