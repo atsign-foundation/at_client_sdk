@@ -1119,15 +1119,44 @@ class AtClientImpl implements AtClient {
       ..atKey = atKey
       ..noCommit = deleteRequestOptions?.noCommit ?? false;
 
-    var deleteResult = await executeUpdateOrDelete(
-      builder,
-      SecondaryManager.getRemoteLocalPrefForOp(
-        deleteRequestOptions?.useRemoteAtServer,
-        preference?.remoteLocalPref,
-      ),
+    final prefForOp = SecondaryManager.getRemoteLocalPrefForOp(
+      deleteRequestOptions?.useRemoteAtServer,
+      preference?.remoteLocalPref,
     );
+    _refuseNoCommitWithoutRemote(
+        deleteRequestOptions?.noCommit ?? false, prefForOp);
+
+    var deleteResult = await executeUpdateOrDelete(builder, prefForOp);
 
     return deleteResult != null;
+  }
+
+  /// Where a put goes: a `local:` key never leaves the device, and everything
+  /// else is decided by the caller's preference. Extracted so the refusal
+  /// below and the write itself cannot disagree about the answer.
+  RemoteLocalPref _routingFor(
+          AtKey atKey, bool? useRemoteAtServer) =>
+      atKey.isLocal
+          ? RemoteLocalPref.localOnly
+          : SecondaryManager.getRemoteLocalPrefForOp(
+              useRemoteAtServer, preference?.remoteLocalPref);
+
+  /// Refuses a write that asks not to be recorded but is not going to the
+  /// atServer.
+  ///
+  /// The flag is part of a command the atServer parses, and a local write
+  /// sends no command: the record would take a local commit entry and sync
+  /// would push it later under a command carrying no flag, so the commit would
+  /// happen anyway. Doing nothing quietly is the worse outcome, because a
+  /// caller cannot tell "not recorded" from "recorded after all".
+  void _refuseNoCommitWithoutRemote(bool noCommit, RemoteLocalPref prefForOp) {
+    if (noCommit && prefForOp != RemoteLocalPref.remoteOnly) {
+      throw IllegalArgumentException(
+          'noCommit asks the atServer not to record this operation, so the '
+          'operation has to reach the atServer. Set useRemoteAtServer as '
+          'well, or drop noCommit — as written it would silently record the '
+          'commit it was asked to avoid.');
+    }
   }
 
   Future<String?> executeUpdateOrDelete(
@@ -1379,6 +1408,12 @@ class AtClientImpl implements AtClient {
     dynamic value,
     PutRequestOptions? putRequestOptions,
   ) async {
+    // Refused before any work: the routing decision needs only the key and the
+    // options, so doing the encryption first would reach the same answer more
+    // slowly — and on a client with no local store it would not reach it at
+    // all, dying on the missing secondary instead.
+    _refuseNoCommitWithoutRemote(putRequestOptions?.noCommit ?? false,
+        _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
     // Performs the put request validations.
     AtClientValidation.validatePutRequest(atKey, value, preference!);
     // Set sharedBy to currentAtSign if not set.
@@ -1481,16 +1516,8 @@ class AtClientImpl implements AtClient {
       );
     }
 
-    RemoteLocalPref remoteLocalPref;
-    if (atKey.isLocal) {
-      remoteLocalPref = RemoteLocalPref.localOnly;
-    } else {
-      remoteLocalPref = SecondaryManager.getRemoteLocalPrefForOp(
-        putRequestOptions?.useRemoteAtServer,
-        preference?.remoteLocalPref,
-      );
-    }
-    var putResponse = await executeUpdateOrDelete(putBuilder, remoteLocalPref);
+    var putResponse = await executeUpdateOrDelete(
+        putBuilder, _routingFor(atKey, putRequestOptions?.useRemoteAtServer));
 
     // If putResponse is null or empty, return AtResponse with isError set to true
     if (putResponse == null || putResponse.isEmpty) {

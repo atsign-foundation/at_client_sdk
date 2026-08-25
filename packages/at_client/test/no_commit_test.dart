@@ -112,6 +112,69 @@ void main() {
     });
   });
 
+  group('asking for no commit without going remote is refused', () {
+    // Refused rather than ignored: a local write sends no command, so the flag
+    // would do nothing, the record would take a local commit entry, and sync
+    // would push it later under a command carrying no flag. The commit the
+    // caller asked to avoid would happen, and nothing would say so.
+    Future<AtClient> clientFor(String atSign) async {
+      final remote = MockRemoteSecondary();
+      when(() => remote.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async => 'data:-1');
+      return AtClientImpl.create(
+          atSign,
+          'testing',
+          AtClientPreference()
+            ..hiveStoragePath = 'test/hive/no_commit'
+            ..commitLogPath = 'test/hive/no_commit/commit'
+            ..isLocalStoreRequired = false,
+          remoteSecondary: remote);
+    }
+
+    AtKey keyFor(String atSign) => AtKey()
+      ..key = 'ordinary'
+      ..namespace = 'testing'
+      ..sharedBy = atSign
+      ..metadata = (Metadata()..namespaceAware = true);
+
+    // Both assert the MESSAGE, not just the type: the refusal is only useful
+    // if it names the fix, and a type-only assertion is green for any other
+    // exception the call happens to raise.
+    final namesTheFix = predicate<Object>(
+        (e) => e.toString().contains('Set useRemoteAtServer as well'),
+        'names the fix');
+
+    test('a put refuses', () async {
+      final atClient = await clientFor('@ncputlocal');
+      await expectLater(
+          atClient.put(keyFor('@ncputlocal'), 'a value',
+              putRequestOptions: PutRequestOptions()..noCommit = true),
+          // put wraps everything it throws into AtClientException; delete does
+          // not. That difference is at_client's, not this feature's.
+          throwsA(allOf(isA<AtClientException>(), namesTheFix)));
+    });
+
+    test('a delete refuses', () async {
+      final atClient = await clientFor('@ncdellocal');
+      await expectLater(
+          atClient.delete(keyFor('@ncdellocal'),
+              deleteRequestOptions: DeleteRequestOptions()..noCommit = true),
+          throwsA(allOf(isA<IllegalArgumentException>(), namesTheFix)));
+    });
+
+    test('and the same call going remote is accepted', () async {
+      // The control. Without it the refusal above would pass for a client that
+      // threw on every put, whatever the options said.
+      final atClient = await clientFor('@ncremoteok');
+      await expectLater(
+          atClient.delete(keyFor('@ncremoteok'),
+              deleteRequestOptions: DeleteRequestOptions()
+                ..useRemoteAtServer = true
+                ..noCommit = true),
+          completion(isTrue));
+    });
+  });
+
   group('the mint lock asks for no commit', () {
     test('taking a lock writes a command carrying ":nc"', () async {
       // The record the whole feature exists for: an interlock held for a few

@@ -7,9 +7,16 @@
   expires there, and then has to be reclaimed locally — for a record that never
   mattered. The flag reaches the wire as `:nc` on the built command, pinned as a
   raw literal with and without it, because what the atServer sees is whatever
-  the builder copied in. ⚠️ An atServer that does not honour the flag ignores it
-  silently and records the commit anyway, so treat it as an optimisation that
-  may not happen rather than a guarantee.
+  the builder copied in.
+  - **Asking for it on a write that is not going to the atServer is refused**,
+    rather than quietly doing nothing. A local write sends no command, so the
+    record would take a local commit entry and sync would push it later under a
+    command carrying no flag — the commit would happen anyway, and no caller
+    could tell. The refusal names the fix. `useRemoteAtServer` has to be set
+    alongside it.
+  - ⚠️ An atServer that does not honour the flag ignores it silently and
+    records the commit anyway, so treat it as an optimisation that may not
+    happen rather than a guarantee.
 
 - fix: `AtRpc.sendRequest` waits for this atSign's notification listener before
   it sends. The far side answers a request with a notification back to the

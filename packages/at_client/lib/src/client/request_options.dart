@@ -47,13 +47,20 @@ class PutRequestOptions extends RequestOptions {
   /// entry the key already has, and answers `-1` where it would otherwise
   /// return a commit id.
   ///
-  /// ⚠️ **An atServer that does not honour it fails SILENTLY, and a caller
+  /// ⚠️ **Set [useRemoteAtServer] alongside it, or this does nothing.** The
+  /// flag is part of a command sent to the atServer, and the default routing
+  /// writes to local storage instead — where the record gets a local commit
+  /// entry, and sync later pushes it with a command that carries no flag. The
+  /// commit then happens anyway.
+  ///
+  /// ⚠️ **An atServer that does not honour it fails SILENTLY too, and a caller
   /// cannot tell.** The flag travels as `:nc`, which the shared verb syntax
   /// has parsed for far longer than any atServer has acted on it — so an older
   /// atServer accepts the command, ignores the flag, and records the commit
-  /// anyway. Nothing is refused and no error comes back. Treat this as an
-  /// optimisation that may not happen, never as a guarantee that a record
-  /// stayed out of the commit log.
+  /// anyway. Nothing is refused and no error comes back.
+  ///
+  /// Between those two, treat this as an optimisation that may not happen,
+  /// never as a guarantee that a record stayed out of the commit log.
   bool noCommit = false;
 }
 
@@ -76,12 +83,19 @@ class DeleteRequestOptions extends RequestOptions {
   /// entry the key already has, and answers `-1` where it would otherwise
   /// return a commit id.
   ///
-  /// ⚠️ **An atServer that does not honour it fails SILENTLY, and a caller
+  /// ⚠️ **Set [useRemoteAtServer] alongside it, or this does nothing.** The
+  /// flag is part of a command sent to the atServer, and the default routing
+  /// writes to local storage instead — where the record gets a local commit
+  /// entry, and sync later pushes it with a command that carries no flag. The
+  /// commit then happens anyway.
+  ///
+  /// ⚠️ **An atServer that does not honour it fails SILENTLY too, and a caller
   /// cannot tell.** The flag travels as `:nc`, which the shared verb syntax
   /// has parsed for far longer than any atServer has acted on it — so an older
   /// atServer accepts the command, ignores the flag, and records the commit
-  /// anyway. Nothing is refused and no error comes back. Treat this as an
-  /// optimisation that may not happen, never as a guarantee that a record
-  /// stayed out of the commit log.
+  /// anyway. Nothing is refused and no error comes back.
+  ///
+  /// Between those two, treat this as an optimisation that may not happen,
+  /// never as a guarantee that a record stayed out of the commit log.
   bool noCommit = false;
 }
