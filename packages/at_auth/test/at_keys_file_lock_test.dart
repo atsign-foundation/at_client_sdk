@@ -136,4 +136,62 @@ void main() {
             'stuck sibling into a hung app with no diagnosis — the timeout '
             'must name the lock');
   });
+
+  test('a create that fails for a reason contention cannot fix still times out',
+      () async {
+    // The lock file does not exist and never will: the directory is not
+    // writable. `create(exclusive: true)` fails, the stat that follows fails
+    // too because there is nothing to stat, and both of those used to
+    // `continue` — skipping the deadline check AND the poll sleep. The result
+    // was an unbounded 100%-CPU spin with the documented timeout never
+    // applying and the real I/O error never surfaced.
+    Process.runSync('chmod', ['500', dir.path]);
+    addTearDown(() => Process.runSync('chmod', ['700', dir.path]));
+
+    final lock = AtKeysFileLock(protected,
+        timeout: const Duration(milliseconds: 300),
+        pollInterval: const Duration(milliseconds: 20));
+
+    final started = DateTime.now();
+    await expectLater(
+        lock.synchronized(() async => 1).timeout(const Duration(seconds: 4)),
+        throwsA(isA<FileSystemException>().having((e) => e.message, 'message',
+            contains('The last failure was'))),
+        reason: 'the wait must be bounded even when the failure is not '
+            'contention, and the timeout must name the real cause rather '
+            'than blaming a process that holds nothing');
+    expect(DateTime.now().difference(started), lessThan(const Duration(seconds: 3)),
+        reason: 'it must give up at its own deadline, not spin');
+  });
+
+  test('a restore never overwrites a lock taken while we were inspecting',
+      () async {
+    // Both `_breakStale` and `_release` rename lockPath aside before deciding
+    // what to do with it, and that leaves the path vacant long enough for a
+    // contender's exclusive create to succeed. Putting the claimed file back
+    // over that new lock would evict a live holder and leave a stale
+    // timestamp in its place, which the next contender breaks — two processes
+    // in the critical section.
+    final lock = AtKeysFileLock(protected);
+    final claimed = File('${lock.lockPath}.claimed');
+
+    // CONTROL — with lockPath vacant, the restore must still put it back.
+    // Without this the test would pass on a restore that never restores.
+    claimed.writeAsStringSync('an-earlier-holder\n');
+    lock.restoreClaimed(claimed);
+    expect(File(lock.lockPath).readAsStringSync(), 'an-earlier-holder\n',
+        reason: 'a claimed lock must go back when nothing has taken the path');
+    File(lock.lockPath).deleteSync();
+
+    // THE CASE — a contender acquired during the window.
+    claimed.writeAsStringSync('an-earlier-holder\n');
+    File(lock.lockPath).writeAsStringSync('the-new-holder\n');
+    lock.restoreClaimed(claimed);
+
+    expect(File(lock.lockPath).readAsStringSync(), 'the-new-holder\n',
+        reason: "the live holder's lock must survive; overwriting it puts a "
+            'stale timestamp at lockPath, which the next contender breaks');
+    expect(claimed.existsSync(), isFalse,
+        reason: 'the spent claim must not be left beside the keyfile');
+  });
 }
