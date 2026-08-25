@@ -30,8 +30,13 @@ void main() {
 
     setUpAll(() => config = GateConfig.load());
 
-    test('parses, and gates the two packages that are web-safe today', () {
-      expect(config.gates.map((g) => g.package), ['at_chops', 'at_auth']);
+    // Nothing here names a package or a baseline. Adding a package is meant to
+    // be one stanza, and this suite gates `wasm_ratchet` — so an assertion that
+    // has to be edited alongside the config would turn onboarding a package, or
+    // tightening a baseline, into a red tooling job that skips the gates
+    // entirely. Everything below is a property every stanza must have.
+    test('gates at least one package, so the checks below are not vacuous', () {
+      expect(config.gates, isNotEmpty);
     });
 
     test('every barrel it names resolves to a file on disk', () {
@@ -39,11 +44,18 @@ void main() {
       expect(config.unresolvableBarrels(resolvePackageRoots()), isEmpty);
     });
 
-    test('carries the baselines the gates were measured at', () {
-      final atAuth = config['at_auth']!;
-      expect(atAuth.ratchets.single.maxBlockedPackages, 4);
-      expect(atAuth.ratchets.single.minFilesWalked, 850);
-      expect(atAuth.ratchets.single.allowedOffenders, isEmpty);
+    test('every gate has a ratchet with usable baselines', () {
+      for (final gate in config.gates) {
+        expect(gate.ratchets, isNotEmpty, reason: gate.package);
+        for (final ratchet in gate.ratchets) {
+          // Near the real figure, not 1: every other ratchet check is about
+          // what the walk did not find, and a stalled walk finds nothing.
+          expect(ratchet.minFilesWalked, greaterThan(1),
+              reason: '${gate.package} ${ratchet.barrel}');
+          expect(ratchet.maxBlockedPackages, greaterThanOrEqualTo(0),
+              reason: '${gate.package} ${ratchet.barrel}');
+        }
+      }
     });
 
     test('every gated package has at least one probe barrel', () {
@@ -55,15 +67,11 @@ void main() {
 
     test('every gated package has a positive control', () {
       // Not enforced by the parser — a package might have no platform seam.
-      // Both gated today do, and losing one would make an empty offender set
-      // unfalsifiable.
+      // Every package gated so far has one, and losing it would make an empty
+      // offender set unfalsifiable.
       for (final gate in config.gates) {
         expect(gate.controls, isNotEmpty, reason: gate.package);
       }
-    });
-
-    test('controls default to io semantics', () {
-      expect(config['at_chops']!.controls.single.environment, ioEnvironment);
     });
   });
 
@@ -170,7 +178,7 @@ void main() {
               '      min_files_walked: 850\n'
               '  probe: [package:at_auth/at_auth.dart]\n'),
           throwsA(isA<GateConfigException>()
-              .having((e) => e.message, 'message', contains('must be a int'))));
+              .having((e) => e.message, 'message', contains('must be int'))));
     });
 
     test('an unknown control environment', () {
@@ -187,6 +195,15 @@ void main() {
   });
 
   group('parsing accepts', () {
+    test('a control defaults to io semantics', () {
+      final config = _parse('''$_valid  controls:
+    - barrel: package:at_auth/at_auth_io.dart
+      reaches_library: dart:io
+      because: the filesystem code
+''');
+      expect(config['at_auth']!.controls.single.environment, ioEnvironment);
+    });
+
     test('a control with both axes, and an explicit web environment', () {
       final config = _parse('''$_valid  controls:
     - barrel: package:at_auth/at_auth.dart

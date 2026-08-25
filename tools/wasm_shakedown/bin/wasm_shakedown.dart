@@ -41,11 +41,14 @@ Future<void> main(List<String> args) async {
       stdout.write(_usage);
       return;
     } else if (arg == '--package' || arg == '-p') {
-      if (i + 1 >= args.length) _die('--package needs a package name');
-      only.add(args[++i]);
+      final (value, next) =
+          _optionValue(args, i, '--package', 'a package name');
+      only.add(value);
+      i = next;
     } else if (arg == '--config' || arg == '-c') {
-      if (i + 1 >= args.length) _die('--config needs a path');
-      configPath = args[++i];
+      final (value, next) = _optionValue(args, i, '--config', 'a path');
+      configPath = value;
+      i = next;
     } else {
       _die('unrecognised argument "$arg"\n\n$_usage');
     }
@@ -56,13 +59,8 @@ Future<void> main(List<String> args) async {
     config = GateConfig.load(path: configPath);
   } on GateConfigException catch (e) {
     _die('$e');
-  }
-
-  final unresolvable = config.unresolvableBarrels(resolvePackageRoots());
-  if (unresolvable.isNotEmpty) {
-    _die('${config.path} names barrels that do not exist. A renamed barrel '
-        'makes a gate walk less and still pass, so this is an error:\n'
-        '${unresolvable.entries.map((e) => '  ${e.key} — ${e.value}').join('\n')}');
+  } on StateError catch (e) {
+    _die(e.message);
   }
 
   for (final name in only) {
@@ -76,6 +74,14 @@ Future<void> main(List<String> args) async {
       ? config.gates
       : config.gates.where((g) => only.contains(g.package)).toList();
 
+  final scopedConfig = GateConfig(gates, config.path);
+  final unresolvable = scopedConfig.unresolvableBarrels(resolvePackageRoots());
+  if (unresolvable.isNotEmpty) {
+    _die('${config.path} names barrels that do not exist. A renamed barrel '
+        'makes a gate walk less and still pass, so this is an error:\n'
+        '${unresolvable.entries.map((e) => '  ${e.key} — ${e.value}').join('\n')}');
+  }
+
   final runner = GateRunner();
   final results = <GateResult>[];
   for (final gate in gates) {
@@ -85,7 +91,7 @@ Future<void> main(List<String> args) async {
 
     for (final ratchet in result.ratchets) {
       // Every run, pass or fail: a loose baseline shows up nowhere else.
-      stdout.writeln('  ${ratchet.verdict.figure}');
+      _line('ratchet', ratchet.verdict.figure, ratchet.holds);
     }
     for (final control in result.controls) {
       _line(
@@ -114,6 +120,14 @@ Future<void> main(List<String> args) async {
 
   _summary(results, config, only.isNotEmpty);
   if (failed.isNotEmpty) exitCode = 1;
+}
+
+(String, int) _optionValue(
+    List<String> args, int index, String option, String valueName) {
+  if (index + 1 >= args.length || args[index + 1].startsWith('-')) {
+    _die('$option needs $valueName');
+  }
+  return (args[index + 1], index + 1);
 }
 
 void _summary(List<GateResult> results, GateConfig config, bool narrowed) {

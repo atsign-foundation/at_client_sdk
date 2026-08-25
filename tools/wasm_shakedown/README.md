@@ -44,16 +44,16 @@ here alongside the compile.
 Run it, read the reported figures off the failure, and set the baselines from them.
 
 ```yaml
-at_utils:
+some_package:
   ratchets:
-    - barrel: package:at_utils/at_utils.dart
+    - barrel: package:some_package/some_package.dart
       allowed_offenders: []
       max_blocked_packages: 2
       min_files_walked: 150
   probe:
-    - package:at_utils/at_utils.dart
+    - package:some_package/some_package.dart
   controls:
-    - barrel: package:at_utils/at_utils_io.dart
+    - barrel: package:some_package/some_package_io.dart
       reaches_library: dart:io
       because: the filesystem code it exists to quarantine
 ```
@@ -74,9 +74,9 @@ did *not* find, and a walk that found nothing satisfies all of them — so a con
 walks the other side of the platform seam and asserts the walk still *reaches*
 something known to be there. Without one, `at_chops_ffi.dart` could be emptied and the
 gate would still read green. Two axes, each weak alone: `reaches_library` pins that a
-forbidden library is still reached but not where, `reaches_file` pins a source but not
-what it imports. Controls resolve with io semantics; `environment: web` pins the other
-branch of a conditional export.
+forbidden library is still reached but not where, `reaches_file` pins which package
+source directly imports a forbidden library. Controls resolve with io semantics;
+`environment: web` pins the other branch of a conditional export.
 
 The walk crosses package boundaries via `.dart_tool/package_config.json` and resolves
 configurable URIs the way the target platform would. Run `dart pub get` first.

@@ -333,7 +333,7 @@ class GateConfig {
     return value is T
         ? value
         : throw GateConfigException(
-            _at(path, node, '$what must be a $T, got "${node.value}"'));
+            _at(path, node, '$what must be $T, got "${node.value}"'));
   }
 
   static void _rejectUnknown(
