@@ -885,6 +885,27 @@ atServer refuses a second write to an immutable record in its pre-processing,
 before the write the flag modifies, so the refusal that *is* the lock still
 happens.
 
+⚠️ **A third fault, found by gkc asking what breaks on the `-1`: the option was
+a silent no-op on the default routing.** `PutRequestOptions.useRemoteAtServer`
+defaults to `false`, and `getRemoteLocalPrefForOp(false, …)` returns
+`localOnly` **unconditionally** — the preference is not even consulted. The
+local secondary has no notion of the flag, so the record took a local commit
+entry and sync pushed it later under a hand-built command carrying none: the
+commit happened anyway and nothing said so. **Now refused, naming the fix**, at
+the top of the put before any encryption or storage work — the old position was
+never even reached on a client with no local store. The routing decision is
+extracted so the refusal and the write cannot disagree. Three more tests, three
+more mutations; at_client unit **1559**, functional pack **183 pass, 2 skipped**.
+
+**And the `-1` question itself, answered narrowly:** one place would misread it.
+`sync_service_impl.dart`'s batch-push response handler does
+`commitId = int.parse(responseObject.data!)` and then treats `-1` as *the
+operation having failed*, logging `severe`. It is unreachable today because sync
+builds its own commands and none carries the flag. Everything else tolerates it:
+the response is carried as a **String**, `put` returns `response.isNotEmpty`,
+`delete` returns `result != null`, the other two `int.parse` sites read a stored
+watermark rather than a write response, and `MintLock` discards the response.
+
 The original entry follows, because the two traps in it are what a later caller
 needs.
 
