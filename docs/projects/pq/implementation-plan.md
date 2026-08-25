@@ -131,7 +131,7 @@ prevent, so it is now stated rather than left to be re-derived:
 | gate | startable in this repo, by a session? |
 | ---- | ------------------------------------- |
 | G0, G2, G5 | **No** — discharged |
-| **G3** `[RECOMMENDED]` | **YES** — diagnose 14.34, against a G0-fixed atServer, which now exists in three forms (see that entry) |
+| **G3** `[RECOMMENDED]` | **Diagnosed 2026-08-25**; what is left is a RULING between four named fixes, then a small change. The investigation is closed |
 | **G4** | **YES** — and it was unblocked on 2026-08-24 when its stated gate turned out already lifted |
 | G6, G7 | **No** — a merge and a publish, both gkc's |
 
@@ -361,9 +361,11 @@ were four.
 bitten): `tests/at_functional_test/runLocal.sh` and `tests/at_end2end_test/runLocal.sh`
 each `mkdir -p` the `root` contents directory and not the `secondary` one, so
 both work in a checkout that has run before and fail on a fresh clone — that
-half is **at_server
-[PR #2772](https://github.com/atsign-foundation/at_server/pull/2772), open as of
-2026-08-25**; and the `at_server_spec` hosted fallback above, which is filed
+half is **FIXED: at_server
+[PR #2772](https://github.com/atsign-foundation/at_server/pull/2772) merged to
+trunk on 2026-08-25** as `064640bb`, and both runners now create the directory
+(⚠️ this read "open as of 2026-08-25"); and the `at_server_spec` hosted fallback
+above, which gkc has deliberately left for a considered decision, is filed
 nowhere and reaches CI — its `unit_tests` job
 runs `dart pub get` per package with no melos step, so a PR changing
 `at_server_spec` and `at_secondary_server` together tests the new server
@@ -389,7 +391,11 @@ automatically.** `at_virtual_env:local` on this machine is whatever tree last
 built it, so it does *not* become a fixed atServer by virtue of the merge —
 rebuild it from at_server trunk before anything here trusts that tag again,
 using the recipe in [Re-deriving the state](#re-deriving-the-state), and pin the
-image explicitly on every live run until then. No image label can answer "which
+image explicitly on every live run until then. ⛔ **And "just build trunk" is no
+longer a baseline**: trunk carries the fix, so an image built from it is a FIXED
+arm. An unfixed control has to come from `a37e3e3b` or from `8f4a985a`'s first
+parent — `at_virtual_env:g0base` already is one. The relay probe named above
+tells the two apart in seconds and is the only thing that reliably does. No image label can answer "which
 at_server code is in this image"; that is the first of the three instrument
 faults below.
 
@@ -566,18 +572,101 @@ A live-pack failure at once in five, unexplained. A gate only because D1 now
 ends when every rail is green, and at that rate "green" is a rate rather than a
 state.
 
-**Start by RE-MEASURING the rate, not by diagnosing.** The recorded figures are
-1 of 5 pack runs (2026-08-17) and 1 of 2 (2026-08-19 at `327cf4fa2`), which must
-not be pooled — and two things have moved underneath them since: 14.43, which
-this may share a phenomenon with, was fixed and re-measured, and the G0 defect
-whose mechanism it borrows a lead from is fixed on at_server trunk as of
-2026-08-25. So the cheap check the row has been waiting on is now available:
-run the functional pack against a **G0-fixed** atServer (`at_virtual_env:g0fixed`
-is on this machine, or rebuild from at_server trunk) and against an unfixed one,
-and count. It either clears the row or leaves it exactly where it was. ⛔ Read
-[14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)
+✅ **DIAGNOSED 2026-08-25, with the far-side log this time captured.** ⚠️ This
+entry read *"Start by RE-MEASURING the rate, not by diagnosing"*; the rate turned
+out to be the wrong instrument and the diagnosis came from the margin instead —
+see below. **What is now owed is a decision about the fix, not an investigation.**
+
+**What happens.** The atServer receives the test's ping *before* it has processed
+the retrofitted client's `monitor:`, so at that instant nothing is subscribed and
+the notification is written to **no connection at all**. Captured on the atServer's
+own log, one failing run, times are the atServer's:
+
+| | |
+| --- | --- |
+| `RCVD: notify:…rf2cmon-618149102…` | `09:42:08.207762` |
+| `NotificationManager enqueue …rf2cmon-618149102…` | `09:42:08.208185` |
+| `RCVD: monitor:selfNotifications` (the retrofit client) | `09:42:08.210581` |
+| `SENT: notification:` for that id | **never, to any connection** |
+
+The client had written `monitor:` 6.9 ms earlier (`AtLookup|SENDING: monitor:
+selfNotifications` at `10:42:08.203687` local, `Monitor|monitor started` 248 µs
+after) — so the inversion is in how long the atServer took to *read* the command
+on a socket it had just PKAM-authenticated, not in what order the client sent.
+
+**Why the test's guard cannot close it, and why no guard could.** Three facts,
+each read in source rather than inferred:
+
+- `AtLookupImpl._openNotificationStream` emits `notificationConnectionUp = true`
+  — which is what becomes `NotificationListenerState.listening` — immediately
+  after `await _connection!.write(command)`. It means *"we wrote `monitor:`"*,
+  never *"the atServer is delivering to us"*.
+- `MonitorVerbHandler.processVerb` subscribes the connection to the atServer's
+  notification broadcast stream only when it *processes* that command.
+- ⛔ **The `monitor:` verb is unacknowledged by design**: at_server's
+  `MonitorResponseHandler.getResponseMessage` returns `''`, so the atServer writes
+  **zero bytes** back. There is no signal on that socket a client could wait for.
+
+And nothing recovers the gap: a first-ever monitor sends `monitor:selfNotifications`
+with no watermark, and only `monitor:…:<epochMillis>` replays from the store. A
+long-lived client is exposed on its **first** subscribe only; this test builds a
+brand-new client every run, so it is exposed every run.
+
+**The margin is the instrument; the pass/fail outcome is not.** Measured
+2026-08-25 against `at_virtual_env:g0fixed`, as microseconds between the atServer
+receiving `monitor:` and receiving the ping (positive = the monitor got there
+first). Two arms differing in one thing — an environment-driven pause inserted
+between the client calling itself `listening` and the ping going out:
+
+| arm | n | margin, µs |
+| --- | -: | --- |
+| no pause (the shipped behaviour) | 10 | **−2819**, +92, +114, +121, +225, +859, +975, +1063, +1155, +3472 |
+| 500 ms pause | 6 | +503734, +504348, +505349, +506870, +509759, +510254 |
+
+One negative value, and it is the failing run. A distribution straddling zero is
+the finding — not the failure count.
+
+⛔ **Do not use the pass/fail rate to decide anything here.** The identical
+unpaused arm gave **4 failures of 10** and then **0 of 10** within one hour, same
+image, same virtualenv, same test bytes. That is the same shape as G0's ordering
+confounder and it has already produced two wrong conclusions on this row. The
+margin yields a number from every run, including the ones that pass.
+
+**To reproduce**: bring the virtualenv up on a named image and leave it up
+(`docker compose up -d` in `tests/at_functional_test/test` with `VIRTUALENV_IMAGE`
+set, then the pkamLoad wait out of that pack's `runLocal.sh`), run
+`dart test test/self_enrollment_retrofit_live_test.dart --concurrency=1` in a
+loop, and **copy `/apps/logs` out before any compose-down**
+(`docker cp test-virtualenv-1:/apps/logs <dir>`). ⚠️ The atServer logs at FINEST
+here and **rotates at ~52 MB**, so `alice🛠.log` alone covers only the last few
+seconds of a 20-run block — read `alice🛠.log.*` too, or a grep returns a
+confident zero. Pair each notification with the `monitor:` nearest it in time and
+subtract.
+
+**What is owed is a ruling on the fix.** Four candidates, in the order they cost:
+
+1. **Fix the test only** — have it prove registration before it pings (send a
+   warm-up notification and wait for it, or retry the ping). Closes this gate;
+   leaves every app with the same window on its first subscribe.
+2. **Acknowledge `monitor:`** — the atServer returns a line once it has
+   subscribed, and at_lookup holds `up` until it arrives. Closes it for everyone,
+   and it is a protocol seam: at_server plus at_lookup in one sweep, with a
+   timeout fallback so an older atServer that answers nothing does not hang a
+   client (which reopens the window against old servers, knowingly).
+3. **Send a watermark when there is none** — ⚠️ the epoch is compared against the
+   atServer's own notification timestamps, so a client-local `DateTime.now()`
+   makes delivery depend on clock agreement between two machines. A
+   server-supplied value would fix that, and **there is none to hand on the
+   monitor connection**: the `from:` challenge on the self path is a bare
+   `Uuid().v4()` with no timestamp in it (read in at_server's
+   `FromVerbHandler`, trunk, 2026-08-25). So this option costs a new
+   server-clock source before it costs anything else.
+4. **Do nothing and say so in the API** — document that `listening` means the
+   command was written, and that a first subscribe has no delivery guarantee.
+
+⛔ Read [14.34](#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)
 and [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)
-together before starting: they were written months apart without noticing each
+together before acting: they were written months apart without noticing each
 other, and the instruction to work them together is the part that keeps getting
 lost.
 
@@ -898,12 +987,14 @@ shown so far reaches that from the outbound pool. ⚠️ **This said the two
 rates "matching at 1 in 5", and they do not match**: the PQ harness measures
 13-22 wrong of 50 — 26% to 44% — against this row's 1 of 5 pack runs and then
 1 of 2. They were never the same figure, and a coincidence would not have been
-evidence in any case. **The cheap check** is to run this file's pack against
-an atServer with G0's fix in it. ⚠️ **This read "once that build exists"; it
-exists.** `at_virtual_env:g0fixed` (at_server `af957440`) is on this machine,
-and the same fix merged to at_server trunk on 2026-08-25 — so the check is one
-run against a fixed image, one against an unfixed one, and a count. It either
-clears this row or leaves it exactly where it was.
+evidence in any case. ⛔ **The G0 lead is DEAD, settled 2026-08-25.** This paragraph proposed
+running the pack against a G0-fixed atServer as "the cheap check". It was run —
+20 iterations against `at_virtual_env:g0fixed`, which carries the G0 fix — and
+the timeout still occurs. The cause is unrelated to outbound pooling: the
+atServer receives the ping before it has processed the receiving client's
+`monitor:`, so nothing is subscribed and the notification reaches no connection.
+The evidence, the margin measurement and the four candidate fixes are in **G3**
+in [`## THE NEXT MOVE`](#the-next-move); this paragraph is a pointer.
 
 ⚠️ **Probably the same phenomenon as
 [14.43](detail/implementation-plan.md#1443-the-functional-suites-convergence-race)**
