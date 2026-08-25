@@ -22,7 +22,11 @@ dependencies:
   zxing2: ^0.2.0
   at_auth: ^4.0.0-rc1
   at_chops: ^3.0.0
-  at_client: ^3.10.0
+  # 3.15.0-rc1 for PqPosture, named twelve times in this package's lib/ and
+  # present in no published at_client. Written as a prerelease deliberately: a
+  # caret on a stable lower bound does not accept one. Workspace resolution is
+  # by path, so nothing here fails on a floor too low for a pub.dev consumer.
+  at_client: ^3.15.0-rc1
   at_commons: ^5.6.0
   at_lookup: ^3.6.0
   at_server_status: ^1.0.5
