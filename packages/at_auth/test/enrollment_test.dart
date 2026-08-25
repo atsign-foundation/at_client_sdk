@@ -27,6 +27,68 @@ void main() {
     registerFallbackValue(MockLookupVerbBuilder());
   });
 
+  group('what the metadataBuilder files belongs to the enrollment', () {
+    const atSign = '@alice🛠';
+    const enrollmentId = 'otp-enrollment-1';
+
+    MockAtLookUp approvingLookUp() {
+      final mock = MockAtLookUp();
+      when(() => mock.executeCommand(any(that: startsWith('enroll:')),
+              auth: any(named: 'auth')))
+          .thenAnswer((_) async =>
+              'data:{"enrollmentId":"$enrollmentId","status":"pending"}');
+      // The atSign's encryption public key, which this path RSA-encrypts to.
+      when(() => mock.executeVerb(any(), sync: any(named: 'sync')))
+          .thenAnswer((_) async => 'data:${encryptionPublicKeyMap[atSign]}');
+      return mock;
+    }
+
+    test('a key package the builder mints is the ENROLLMENT\'s, not the atSign\'s',
+        () async {
+      // The builder runs before the request, so it files what it mints with no
+      // enrollment id — the atServer has not named one yet. The two sibling
+      // paths adopt that material under the id once it arrives; this one did
+      // not, so a key package's private half stayed in the atSign's container:
+      // never returned by keysForEnrollment, and not reaped when the
+      // enrollment is retired.
+      final response = await AtEnrollmentImpl().submit(
+          AtEnrollmentRequest(
+              atSign: atSign,
+              appName: 'wavi',
+              deviceName: 'iphone',
+              otp: 'ABC123',
+              namespaces: {'wavi': 'rw'},
+              signingAlgo: SigningAlgoType.rsa2048,
+              metadataBuilder: (keysIo) async {
+                final handed = await keysIo.read(atSign);
+                handed.addKey(CryptographicMaterial(
+                    keyId: 'kpid-1',
+                    role: CryptographicMaterialRole.privateDecapsulation,
+                    algorithm: CryptographicMaterialAlgorithm.xWing,
+                    bytes: AtBytes.fromString('c2VlZA=='),
+                    createdAt: DateTime.now().toUtc()));
+                return {'keyPackage': 'signed-envelope'};
+              }),
+          approvingLookUp());
+
+      final keys = response.atAuthKeys!;
+      expect(keys.keysForEnrollment(enrollmentId).map((m) => m.keyId),
+          contains('kpid-1'),
+          reason: 'the material the builder minted for THIS enrollment must be '
+              'reachable as this enrollment\'s, or it is never reaped with it');
+
+      // The other half of the same claim, and what makes this discriminate
+      // from a copy: it must not ALSO be sitting in the atSign's container,
+      // which is where it landed before the adoption existed.
+      expect(
+          keys.getAtSignKey(
+              'kpid-1', CryptographicMaterialRole.privateDecapsulation),
+          isNull,
+          reason: 'a key package belongs to the enrollment that advertised it, '
+              'not to the atSign');
+    });
+  });
+
   test(
       'A test to verify submitting enrollment to server and verify enrollment status is pending',
       () async {
