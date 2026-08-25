@@ -12,6 +12,8 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:test/test.dart';
 
@@ -114,7 +116,7 @@ void main() {
         reason: 'nothing has been conveyed yet, so a pass here would mean the '
             'assertion below is measuring leftover state');
 
-    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-live'));
+    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-live'), inReplyTo: EnvelopeAddressing.unsolicited);
 
     expect(await collectConveyedKeyMaterial(atClient, io), 1);
 
@@ -136,9 +138,9 @@ void main() {
 
     // Both arms in one collection, so the negative cannot pass for the wrong
     // reason: if nothing were swept at all, the positive arm would fail too.
-    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-mine'));
+    await from.shareSecretWith(receiver.myKeyPackage, nskeySecret('kid-mine'), inReplyTo: EnvelopeAddressing.unsolicited);
     await from.shareSecretWith(
-        elsewhere.myKeyPackage, nskeySecret('kid-elsewhere'));
+        elsewhere.myKeyPackage, nskeySecret('kid-elsewhere'), inReplyTo: EnvelopeAddressing.unsolicited);
 
     await collectConveyedKeyMaterial(atClient, io);
 

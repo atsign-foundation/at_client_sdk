@@ -469,12 +469,27 @@ void main() {
       expect(
           EnvelopeAddressing.envelopeKey(
                   msgId: 'msg-1',
+                  inReplyTo: 'req-1',
                   recipientKpid: 'kp-1',
                   appNamespace: 'myapp',
                   sharedBy: '@alice',
                   ttl: const Duration(hours: 1))
               .toString(),
-          'msg-1.kp-1.__ssenv.myapp@alice');
+          'msg-1.req-1.kp-1.__ssenv.myapp@alice');
+      // The unsolicited form, pinned separately: a request and a push carry
+      // this rather than omitting the segment, so the address always has the
+      // same shape.
+      expect(EnvelopeAddressing.unsolicited, '0');
+      expect(
+          EnvelopeAddressing.envelopeKey(
+                  msgId: 'msg-1',
+                  inReplyTo: EnvelopeAddressing.unsolicited,
+                  recipientKpid: 'kp-1',
+                  appNamespace: 'myapp',
+                  sharedBy: '@alice',
+                  ttl: const Duration(hours: 1))
+              .toString(),
+          'msg-1.0.kp-1.__ssenv.myapp@alice');
       expect(EnvelopeAddressing.fragmentFor('kp-1'), '.kp-1.__ssenv.');
       expect(EnvelopeAddressing.regexFor('kp-1'), '\\.kp-1\\.__ssenv\\.');
       expect(
@@ -483,8 +498,32 @@ void main() {
           '\\.(kp-1|kp-2)\\.__ssenv\\.');
       expect(EnvelopeAddressing.sweepRegexForAny(['kp-1', 'kp-2']),
           '.*\\.(kp-1|kp-2)\\.__ssenv\\..*');
-      expect(EnvelopeAddressing.namespaceSweepRegexFor('kp-1', 'myapp'),
-          '.*\\.kp-1\\.__ssenv\\.myapp.*');
+      expect(EnvelopeAddressing.answerSweepRegexFor('req-1', 'kp-1', 'myapp'),
+          '.*\\.req-1\\.kp-1\\.__ssenv\\.myapp.*');
+    });
+
+    test('the answer filter matches answers to its request and nothing else',
+        () {
+      // The pin above fixes the string; this fixes the MEANING, which is the
+      // half that was wrong. The old filter matched every envelope at an
+      // address, so a request written there by a third enrollment's fan-out
+      // read as "somebody already answered" and holders that could serve the
+      // request stood down.
+      final sweep =
+          RegExp(EnvelopeAddressing.answerSweepRegexFor('req-1', 'kp-1', 'ns'));
+      expect(sweep.hasMatch('m1.req-1.kp-1.__ssenv.ns@alice'), isTrue,
+          reason: 'an answer to req-1 addressed to kp-1 is what it is for');
+      expect(sweep.hasMatch('m2.0.kp-1.__ssenv.ns@alice'), isFalse,
+          reason: 'a REQUEST or an unsolicited push at the same address must '
+              'not read as an answer — this is the defect the correlation '
+              'segment exists to close');
+      expect(sweep.hasMatch('m3.req-2.kp-1.__ssenv.ns@alice'), isFalse,
+          reason: 'an answer to a DIFFERENT request must not suppress this '
+              'one, or one exchange silences the next');
+      expect(sweep.hasMatch('m4.req-1.kp-2.__ssenv.ns@alice'), isFalse,
+          reason: 'an answer to another enrollment is not this one\'s');
+      expect(sweep.hasMatch('m5.req-1.kp-1.__ssenv.other@alice'), isFalse,
+          reason: 'namespace still scopes it');
     });
 
     test('the alternation filter really matches only the named addresses', () {

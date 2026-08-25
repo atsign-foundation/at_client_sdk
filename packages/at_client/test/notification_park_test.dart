@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
+    show NskeyPrivateFiling;
 import 'package:at_client/src/manager/monitor.dart';
 import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:mocktail/mocktail.dart';
@@ -205,6 +207,21 @@ void main() {
         reason: 'the park is for a key that is coming; a corrupt ciphertext '
             'would sit there until its ttl and be dropped anyway, having '
             'delayed nothing but the report');
+  });
+
+  test('the park outlasts the conveyance it is waiting for', () {
+    // The ordering is the contract, not either number. The park held a
+    // notification for 2 minutes while the pull that fetches its key gave a
+    // holder 5, so a conveyance that succeeded slowly still lost the
+    // notification — and the drop was attributed to the sender.
+    //
+    // The two values lived as literals in different files that never named
+    // each other, which is why nothing could go red when they inverted.
+    expect(NotificationServiceImpl.parkTtl,
+        greaterThan(NskeyPrivateFiling.conveyanceWait),
+        reason: 'a park that expires before the pull it is waiting on gives '
+            'up drops a notification whose key is still legitimately in '
+            'flight');
   });
 
   test('the park is bounded, and says what it drops', () async {

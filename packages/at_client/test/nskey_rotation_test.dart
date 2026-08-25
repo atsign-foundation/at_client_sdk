@@ -124,6 +124,13 @@ void main() {
   ({MockSharing sharing, List<(Secret, Set<String>)> pushes}) sharing() {
     final mock = MockSharing();
     final pushes = <(Secret, Set<String>)>[];
+    // A real store, because conveyance now writes the minted private into it
+    // before pushing: the minter has to be able to ANSWER a later pull for
+    // what it just minted, and the answering path reads this store. Left as a
+    // bare mock, the getter returns null through noSuchMethod into a
+    // non-nullable type and the push below never happens — with `dart analyze`
+    // perfectly clean.
+    when(() => mock.secretStore).thenReturn(SecretStore());
     when(() => mock.pushSecretToNamespaceMembers(any(),
             excludeEnrollmentIds: any(named: 'excludeEnrollmentIds')))
         .thenAnswer((inv) async {
@@ -230,6 +237,54 @@ void main() {
   });
 
   group('rotation-time conveyance', () {
+    test('seeding puts the minted private in the store it answers pulls from',
+        () async {
+      // The minter has to be able to SERVE what it just minted. The answering
+      // path reads the secret store, and the store is filled from the keyfile
+      // only by hydrateStoreFromFiling — which runs at bootstrap, before the
+      // mint. Without the store write, the one enrollment guaranteed to hold
+      // the generation offered an empty candidate list to every pull for it
+      // and answered nothing until the process restarted, writing no envelope
+      // and logging nothing.
+      final c = client();
+      // The legacy-PKAM shape, as the sibling test below uses: no enrollment,
+      // namespaces named by the preference — the path seed() takes without a
+      // roster round trip.
+      final lookUp = c.client.getRemoteSecondary()!.atLookUp;
+      when(() => lookUp.enrollmentId).thenReturn(null);
+      when(() => c.client.getPreferences())
+          .thenReturn(AtClientPreference()..namespace = namespace);
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      final s = sharing();
+      // seed()'s push omits excludeEnrollmentIds, so stub that call shape.
+      when(() => s.sharing.pushSecretToNamespaceMembers(any()))
+          .thenAnswer((_) async => 1);
+
+      expect(s.sharing.secretStore.listSecrets(), isEmpty,
+          reason: 'the premise: nothing is in the store before the mint');
+
+      final minted = await NskeySeeding(
+              atClient: c.client,
+              ring: ring,
+              privateFiling: filer,
+              sharing: s.sharing)
+          .seed();
+      expect(minted, {namespace});
+
+      final kid = (await ring.currentPublic(atSign, namespace))!.nskeyKid;
+      final held = s.sharing.secretStore
+          .getSecret(namespace, '${NskeyPrivateFiling.secretNamePrefix}$kid');
+      expect(held, isNotNull,
+          reason: 'a pull for the generation this client just minted is '
+              'answered from the secret store, so the mint has to leave it '
+              'there');
+      expect(base64Decode(held!.value),
+          (await filer.readSeed(namespace, kid))!.bytes,
+          reason: 'and it must be the SEED, which is what a receiver '
+              're-derives the published public half from');
+    });
+
     test('pushes the successor private to the namespace members', () async {
       final c = client();
       final filer = await filing();

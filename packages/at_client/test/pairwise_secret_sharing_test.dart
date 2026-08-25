@@ -256,11 +256,15 @@ void main() {
 
     test('the envelope key emits its exact layout, segment by segment',
         () async {
-      // Emitter pin (frozen forever): <msgId uuidV4>.<recipientKpid>.__ssenv
+      // Emitter pin: <msgId uuidV4>.<inReplyTo>.<recipientKpid>.__ssenv
       // .<appNamespace>@<sender>. The layout is hand-built and hand-parsed at
       // seven sites in this file's production twin plus two more in
       // enrollment_symmetric_key.dart — the sibling tests match fragments,
       // which would survive a segment being added, dropped or reordered.
+      //
+      // The inReplyTo segment is what an answer is correlated by, and it
+      // reads '0' here because sendEnvelope's own default is "answers
+      // nothing".
       await sharerA
           .sendEnvelope(sharerB.myKeyPackage, 'myapp', {'hello': 'bob'});
 
@@ -268,7 +272,19 @@ void main() {
       expect(
           key,
           matches(RegExp(
-              '^[0-9a-f-]{36}\\.${sharerB.kpid}\\.__ssenv\\.myapp@alice\$')));
+              '^[0-9a-f-]{36}\\.0\\.${sharerB.kpid}\\.__ssenv\\.myapp@alice\$')));
+
+      // And an envelope that DOES answer something carries that id instead —
+      // the pair is the point, since a pin on one form alone would pass for
+      // an emitter that ignored the argument.
+      remoteData.clear();
+      await sharerA.sendEnvelope(
+          sharerB.myKeyPackage, 'myapp', {'hello': 'bob'},
+          inReplyTo: 'abcdef0123456789');
+      expect(
+          remoteData.keys.singleWhere((k) => k.contains('.__ssenv.')),
+          matches(RegExp('^[0-9a-f-]{36}\\.abcdef0123456789\\.'
+              '${sharerB.kpid}\\.__ssenv\\.myapp@alice\$')));
     });
 
     test('writes the envelope remote-first, so the wake-up cannot outrun it',
@@ -1077,6 +1093,96 @@ void main() {
       expect(await sharerA.sweepOnce(), 1);
       expect(sharerA.secretStore.getSecret('myapp', '__rk.1.dupe')!.value,
           'KEYBYTES');
+    });
+
+    test(
+        'another enrollment\'s request at my address does not silence my '
+        'holders', () async {
+      // The measured defect, as a unit. Every envelope — request, answer and
+      // unsolicited push alike — is addressed to the recipient's kpid, and a
+      // request fans out one record per OTHER roster member. So C asking for
+      // something writes a record to A's address, and a holder deciding
+      // whether A had already been answered used to match it.
+      //
+      // The consequence was not a duplicate: it was silence. B stood down, A
+      // waited out its window, and nothing logged an error on either side.
+      final sharerC = buildSharer('enroll-c', seedC)..directory = directory;
+      directory.authorize('myapp', 'enroll-c');
+      directory.seed('enroll-c', await sharerC.register());
+
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.1.cross', value: 'KEYBYTES'),
+          allowReservedName: true);
+
+      // C broadcasts its own request. That fans out to A as well as B, so a
+      // record now sits at A's address that is not an answer to anything.
+      await sharerC
+          .requestSecretsFromNamespace('myapp', names: ['__rk.1.cross']);
+      final atAsAddress = remoteData.keys
+          .where((k) => k.contains('.${sharerA.kpid}.__ssenv.'))
+          .length;
+      expect(atAsAddress, greaterThan(0),
+          reason: 'the premise: C\'s fan-out really does write to A\'s '
+              'address. Without this the test proves nothing about '
+              'suppression');
+
+      // A, which has NOT swept C's request, now asks for the same secret.
+      expect(
+          await sharerA
+              .requestSecretsFromNamespace('myapp', names: ['__rk.1.cross']),
+          2);
+
+      // B must answer A. Before the correlation segment it saw C's request
+      // sitting at A's address and returned early.
+      expect(await sharerB.sweepOnce(), greaterThan(0));
+      await sharerA.sweepOnce();
+      expect(sharerA.secretStore.getSecret('myapp', '__rk.1.cross')?.value,
+          'KEYBYTES',
+          reason: 'a holder must stand down only for an answer to THIS '
+              'request; standing down for another enrollment\'s request '
+              'costs the requester the secret outright');
+    });
+
+    test(
+        'a holder answers a second request even with the first still '
+        'unconsumed', () async {
+      // Suppression keyed on the address alone also made a requester's own
+      // unconsumed answer silence its next ask, for the whole envelope ttl.
+      //
+      // The anti-storm cap is neutralised deliberately: it is a SEPARATE
+      // guard, keyed on (requester, secret name) with a 5s floor, and at unit
+      // timescales it refuses the second answer on its own. Leaving it in
+      // place would make this test pass or fail for that reason instead, and
+      // say nothing about the correlation this test exists to check.
+      sharerB.requestAnswerMinInterval = Duration.zero;
+      await sharerB.secretStore.putSecret(
+          Secret(namespace: 'myapp', name: '__rk.1.twice', value: 'KEYBYTES'),
+          allowReservedName: true);
+
+      await sharerA
+          .requestSecretsFromNamespace('myapp', names: ['__rk.1.twice']);
+      expect(await sharerB.sweepOnce(), 1);
+      // A deliberately does NOT sweep, so B's answer stays at A's address.
+
+      // Count ANSWERS, not sweeps. A request from A travels to B's address,
+      // so everything at A's address is an answer — whereas sweepOnce's
+      // return counts the request B consumes, and is >0 whether or not B
+      // answers it. That distinction is the whole test.
+      int answersToA() => remoteData.keys
+          .where((k) => k.contains('.${sharerA.kpid}.__ssenv.'))
+          .length;
+      final afterFirst = answersToA();
+      expect(afterFirst, 1,
+          reason: 'the premise: B\'s first answer is still '
+              'sitting unconsumed at A\'s address');
+
+      await sharerA
+          .requestSecretsFromNamespace('myapp', names: ['__rk.1.twice']);
+      await sharerB.sweepOnce();
+      expect(answersToA(), greaterThan(afterFirst),
+          reason: 'the second request is a different exchange; a holder that '
+              'stands down because an answer to the FIRST is still unconsumed '
+              'leaves the second unanswered for the whole envelope ttl');
     });
 
     test('namePrefix request pulls every matching held secret', () async {

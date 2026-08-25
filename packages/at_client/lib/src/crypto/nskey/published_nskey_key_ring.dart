@@ -46,7 +46,7 @@ Future<void> requestAndFileNskeyPrivate(
   String namespace,
   String secretName, {
   required AtSignLogger logger,
-  Duration timeout = const Duration(minutes: 5),
+  Duration timeout = NskeyPrivateFiling.conveyanceWait,
 }) async {
   await sharing.requestSecretsFromNamespace(namespace, names: [secretName]);
   unawaited(sharing
@@ -300,11 +300,27 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   final Future<void> Function(String namespace, String secretName)?
       _requestConveyance;
 
-  /// Generations already asked for, so a burst of failed reads collapses to
-  /// one broadcast. Per instance and never expiring: the answer is filed
-  /// durably when it arrives, and a fresh client (or the next start) asks
-  /// again if it never did.
-  final Set<String> _askedConveyance = {};
+  /// When each generation was last asked for, so a burst of failed reads
+  /// collapses to one broadcast.
+  ///
+  /// ⚠️ This used to be a `Set` with no expiry, documented as "per instance
+  /// and never expiring: the answer is filed durably when it arrives, and a
+  /// fresh client (or the next start) asks again if it never did". The second
+  /// half is the whole session's worth of asking: a long-lived client that
+  /// asked once and was never answered never asked again, so a notification
+  /// waiting on that generation had nothing left that could rescue it.
+  ///
+  /// A timestamp keeps the burst collapse — which is a sub-second phenomenon
+  /// — and drops the permanent silence.
+  final Map<String, DateTime> _askedConveyance = {};
+
+  /// How long after asking for a generation this ring stays quiet about it.
+  ///
+  /// Long enough to collapse the burst a synced backlog produces, short
+  /// enough that a request nobody answered is asked again while the reader
+  /// that needs it is still waiting.
+  @visibleForTesting
+  Duration askCooldown = const Duration(seconds: 5);
 
   /// Serialises minting between this atSign's own enrollments.
   final MintLock mintLock;
@@ -854,20 +870,27 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   void _askForMissingPrivate(String namespace, String nskeyKid) {
     final ask = _ask;
     if (ask == null) return;
-    // One broadcast per generation per instance: every conveyance of a synced
-    // backlog fails through here in a burst, and N identical requests buy
-    // nothing the first did not.
-    if (!_askedConveyance.add(_generation('own', namespace, nskeyKid))) return;
+    // One broadcast per generation per [askCooldown]: every conveyance of a
+    // synced backlog fails through here in a burst, and N identical requests
+    // buy nothing the first did not. Past the cooldown they do buy something
+    // — the first ask may have reached holders that could not serve it.
+    final generation = _generation('own', namespace, nskeyKid);
+    final asked = _askedConveyance[generation];
+    if (asked != null && DateTime.now().difference(asked) < askCooldown) {
+      return;
+    }
+    _askedConveyance[generation] = DateTime.now();
 
     final secretName = '${NskeyPrivateFiling.secretNamePrefix}$nskeyKid';
     unawaited(ask(namespace, secretName).then((_) {
       _logger.info('Asked the other enrollments for the nskey private '
           '$namespace:$nskeyKid; the answer is filed when a holder replies');
     }).catchError((Object e) {
-      // Retried naturally: the next instance (or the next start's sweep) asks
-      // again, and the miss itself is already surfacing as a typed error.
+      // Clear the stamp so the next miss re-asks rather than waiting out a
+      // cooldown earned by a request that never went out.
+      _askedConveyance.remove(generation);
       _logger.info('Could not request the missing nskey private for '
-          '$namespace:$nskeyKid: $e');
+          '$namespace:$nskeyKid, and the next read miss will ask again: $e');
     }));
   }
 }

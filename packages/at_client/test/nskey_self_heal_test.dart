@@ -328,6 +328,52 @@ void main() {
               'identical broadcasts buy nothing the first did not');
     });
 
+    test('a later miss asks again once the cooldown has passed', () async {
+      // The burst collapse above is kept, but it used to be permanent: the
+      // set of asked-for generations never expired, so a client whose one
+      // broadcast reached only holders that could not serve it never asked
+      // again for the life of the instance — and anything waiting on that
+      // generation had nothing left that could rescue it.
+      final atClient = client();
+      final asked = <(String, String)>[];
+      final ring = PublishedNskeyKeyRing(
+        atClient,
+        privateFiling: await filing(),
+        requestConveyance: (ns, name) async => asked.add((ns, name)),
+      )..askCooldown = Duration.zero;
+
+      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
+      await Future<void>.delayed(Duration.zero);
+      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(asked, hasLength(2),
+          reason: 'past the cooldown a repeat ask buys something the first '
+              'did not — the holders that can serve it may not have been '
+              'reachable, or may not have held it, when the first went out');
+    });
+
+    test('inside the cooldown a repeat miss still collapses', () async {
+      // The other arm, so the pair discriminates: this must stay at one even
+      // though the cooldown is now time-based rather than permanent.
+      final atClient = client();
+      final asked = <(String, String)>[];
+      final ring = PublishedNskeyKeyRing(
+        atClient,
+        privateFiling: await filing(),
+        requestConveyance: (ns, name) async => asked.add((ns, name)),
+      )..askCooldown = const Duration(minutes: 10);
+
+      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
+      await Future<void>.delayed(Duration.zero);
+      expect(await ring.privateHalf(atSign, namespace, 'kid1'), isNull);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(asked, hasLength(1),
+          reason: 'a synced backlog fails through here in a burst, and N '
+              'identical broadcasts buy nothing the first did not');
+    });
+
     test('a miss on a PEER\'s generation never asks', () async {
       final atClient = client();
       final asked = <(String, String)>[];

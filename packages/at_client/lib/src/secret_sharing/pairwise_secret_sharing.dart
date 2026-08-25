@@ -189,8 +189,9 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// at once: N holders, N seals, N writes, for one secret the requester only
   /// needs once. [requestAnswerMinInterval] does not help — it is per
   /// responder, so it stops one holder repeating itself and says nothing about
-  /// the crowd. The wait spreads them out so that [_answerAlreadySent] has
-  /// something to observe. Set to [Duration.zero] to answer immediately.
+  /// the crowd. The wait spreads them out so that
+  /// [_envelopesSuggestingAnAnswer] has something to observe. Set to
+  /// [Duration.zero] to answer immediately.
   Duration requestAnswerJitter = const Duration(seconds: 2);
 
   /// Source of the jitter, injectable so a test can make it deterministic.
@@ -228,11 +229,17 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   ///
   /// Throws [StateError] if [to] advertises no key with a mutually-supported
   /// algorithm.
+  /// [inReplyTo] correlates this envelope with the request it answers, and is
+  /// [EnvelopeAddressing.unsolicited] for a request or an unsolicited push.
+  /// This is the ONE place it is defaulted: a caller sending an arbitrary
+  /// payload has no basis to choose, and the default is the safe direction —
+  /// an envelope that claims to answer nothing suppresses nothing.
   Future<void> sendEnvelope(
     KeyPackage to,
     String appNamespace,
-    Map<String, dynamic> payload,
-  ) async {
+    Map<String, dynamic> payload, {
+    String inReplyTo = EnvelopeAddressing.unsolicited,
+  }) async {
     // What this client is willing to seal to, not merely what it can: a
     // deployment that narrowed the list is refusing on purpose, and the
     // message names the list so the refusal is not read as the recipient's
@@ -301,6 +308,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
 
     final atKey = EnvelopeAddressing.envelopeKey(
       msgId: Uuid().v4(),
+      inReplyTo: inReplyTo,
       recipientKpid: recipientKey.kid,
       appNamespace: appNamespace,
       sharedBy: atClient.getCurrentAtSign(),
@@ -620,6 +628,11 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     final members = await directory.listForNamespace(namespace,
         excludeEnrollmentIds: excludeEnrollmentIds);
     final String selfId = enrollmentId;
+    // ONE id for the whole fan-out, not one per holder: every holder is
+    // answering the same question, and the id is what lets a second holder
+    // see that a first has already answered THIS request rather than some
+    // other traffic at the same address.
+    final String requestId = Uuid().v4().replaceAll('-', '').substring(0, 16);
     int sent = 0;
     for (final member in members) {
       final to = member.keyPackage;
@@ -631,11 +644,19 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         // N holders precisely so that some can be unreachable — aborting the
         // broadcast on the first one undoes that.
         try {
-          await sendEnvelope(to, namespace, {
-            'kind': secretRequestKind,
-            if (names != null) 'want': names,
-            if (namePrefix != null) 'namePrefix': namePrefix,
-          });
+          await sendEnvelope(
+              to,
+              namespace,
+              {
+                'kind': secretRequestKind,
+                'requestId': requestId,
+                if (names != null) 'want': names,
+                if (namePrefix != null) 'namePrefix': namePrefix,
+              },
+              // The request itself answers nothing. Its own id travels in the
+              // sealed payload, where a holder can trust it; the address
+              // carries the id only of what an envelope ANSWERS.
+              inReplyTo: EnvelopeAddressing.unsolicited);
           sent++;
         } catch (e) {
           // Warning, not finer: a request that never went out is
@@ -717,9 +738,33 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               requestAnswerRandom.nextInt(requestAnswerJitter.inMicroseconds)));
     }
 
-    if (await _answerAlreadySent(received.fromKpid, received.appNamespace)) {
-      logger.info('Not answering kpid ${received.fromKpid}: another holder '
-          'already did');
+    // Read from the SEALED payload, never from the key name: the name is
+    // written by the sender and nothing authenticates it.
+    final String? requestId = received.payload['requestId'] as String?;
+    if (requestId == null) {
+      // Fail open, the same direction _envelopeKeysFor takes when its scan
+      // fails: answering costs a duplicate the requester merges away, while
+      // standing down costs it the secret with no error either side.
+      logger.info('Answering kpid ${received.fromKpid} in '
+          '${received.appNamespace} without checking whether another holder '
+          'already did: the request carries no requestId to correlate on');
+    }
+    final suppressedBy = requestId == null
+        ? const <String>{}
+        : await _envelopesSuggestingAnAnswer(
+            requestId, received.fromKpid, received.appNamespace);
+    if (suppressedBy.isNotEmpty) {
+      // Warning, and it names the record it matched, for the same reason the
+      // policy decline above is a warning: this drops an answer inside a
+      // dispatch loop, and the requester cannot tell a holder that stood down
+      // from one that never held the secret. Naming the matched key is what
+      // makes the difference readable — the address carries no indication of
+      // whether the record is a request, an answer, or an unsolicited push,
+      // so a match here is not by itself evidence that anybody answered.
+      logger.warning('Not answering request $requestId from kpid '
+          '${received.fromKpid} (enrollment ${received.fromEnrollmentId}) in '
+          '${received.appNamespace}: ${suppressedBy.length} envelope(s) '
+          'already answer it. Matched: ${suppressedBy.join(", ")}');
       return;
     }
 
@@ -755,7 +800,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         continue;
       }
       _lastAnsweredRequest[rateKey] = now;
-      await shareSecretWith(requester, secret);
+      await shareSecretWith(requester, secret,
+          inReplyTo: requestId ?? EnvelopeAddressing.unsolicited);
     }
   }
 
@@ -797,18 +843,20 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// Envelope keys currently addressed to [kpid] in [appNamespace], read from
   /// the atServer — which is where [sendEnvelope] writes them, and where a
   /// holder that does not sync would look.
-  Future<Set<String>> _envelopeKeysFor(String kpid, String appNamespace) async {
+  Future<Set<String>> _answerKeysFor(
+      String requestId, String kpid, String appNamespace) async {
     try {
       final keys = await atClient.getAtKeys(
-          regex: EnvelopeAddressing.namespaceSweepRegexFor(kpid, appNamespace),
+          regex: EnvelopeAddressing.answerSweepRegexFor(
+              requestId, kpid, appNamespace),
           useRemoteAtServer: true);
       return keys.map((k) => k.toString()).toSet();
     } catch (e) {
       // Observation is an optimisation. If it fails, answering anyway costs a
       // duplicate the requester merges away; staying quiet could cost it the
       // secret entirely.
-      logger.info('Could not check whether kpid $kpid was already answered, '
-          'so answering: $e');
+      logger.info('Could not check whether request $requestId to kpid $kpid '
+          'was already answered, so answering: $e');
       return const {};
     }
   }
@@ -831,10 +879,25 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   /// are the ones that answer. Presence alone is the better rule — the
   /// requester deletes each envelope as it consumes it, and it is
   /// demonstrably online, having just sent the request, so anything still
-  /// waiting for it is almost certainly a fresh answer. Over-suppressing costs
-  /// a retry; under-suppressing costs the storm this exists to stop.
-  Future<bool> _answerAlreadySent(String kpid, String appNamespace) async =>
-      (await _envelopeKeysFor(kpid, appNamespace)).isNotEmpty;
+  /// waiting for it is almost certainly a fresh answer.
+  ///
+  /// ⚠️ The cost of over-suppressing is **not** a retry. Nothing re-asks: a
+  /// read miss broadcasts once per generation for the life of the ring, and
+  /// the single wait then gives up until the next process start. So a holder
+  /// that stands down here on a record which is not an answer costs the
+  /// requester the secret outright, and silently.
+  ///
+  /// Returns the envelope keys that caused the suppression rather than a bool,
+  /// so the caller can name them.
+  ///
+  /// Narrowed to envelopes that answer [requestId]. It used to match anything
+  /// addressed to the requester in the namespace, which is also true of a
+  /// request written there by a third enrollment's fan-out and of an
+  /// unconsumed leftover — so holders stood down for records that were not
+  /// answers at all.
+  Future<Set<String>> _envelopesSuggestingAnAnswer(
+          String requestId, String kpid, String appNamespace) async =>
+      _answerKeysFor(requestId, kpid, appNamespace);
 
   /// Returns the secret `(namespace, name)` as soon as this client holds
   /// it: immediately from [secretStore] when already present, otherwise the
@@ -902,14 +965,25 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
   }
 
   /// Shares one secret with one key package.
-  Future<void> shareSecretWith(KeyPackage to, Secret secret) =>
-      sendEnvelope(to, secret.namespace, {
-        'kind': secretPayloadKind,
-        'name': secret.name,
-        'value': secret.value,
-        if (secret.version != null) 'version': secret.version,
-        'createdAt': secret.createdAt.toIso8601String(),
-      });
+  ///
+  /// [inReplyTo] is required rather than defaulted so that the compiler names
+  /// every call site: whether a share answers a request decides whether other
+  /// holders stand down for it, and a share that silently claimed to answer
+  /// nothing (or to answer everything) is the defect this parameter exists to
+  /// close. Pass [EnvelopeAddressing.unsolicited] for a push nobody asked for.
+  Future<void> shareSecretWith(KeyPackage to, Secret secret,
+          {required String inReplyTo}) =>
+      sendEnvelope(
+          to,
+          secret.namespace,
+          {
+            'kind': secretPayloadKind,
+            'name': secret.name,
+            'value': secret.value,
+            if (secret.version != null) 'version': secret.version,
+            'createdAt': secret.createdAt.toIso8601String(),
+          },
+          inReplyTo: inReplyTo);
 
   /// Shares every secret in [secretStore] with [to], filtered — when
   /// [approvedNamespaces] is given — to secrets whose namespace that
@@ -941,7 +1015,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
               approvedNamespaces, secret.namespace)) {
         continue;
       }
-      await shareSecretWith(to, secret);
+      await shareSecretWith(to, secret,
+          inReplyTo: EnvelopeAddressing.unsolicited);
       shared++;
     }
     return shared;
@@ -988,7 +1063,8 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         // peer this client cannot seal to must not stop the broadcast reaching
         // the others.
         try {
-          await shareSecretWith(to, secret);
+          await shareSecretWith(to, secret,
+              inReplyTo: EnvelopeAddressing.unsolicited);
           pushed++;
         } catch (e) {
           logger.warning('Could not push "${secret.name}" to enrollment '

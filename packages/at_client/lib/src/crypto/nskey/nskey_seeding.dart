@@ -7,6 +7,8 @@ import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart' show NskeySeed;
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
 import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -209,7 +211,8 @@ class NskeySeeding {
         // offline for days, and this client's start (and this sweep) must not
         // wait on that.
         unawaited(sharing
-            .waitForSecret(namespace, name, timeout: const Duration(minutes: 5))
+            .waitForSecret(namespace, name,
+                timeout: NskeyPrivateFiling.conveyanceWait)
             .then((secret) => filing.file(secret))
             .then((filed) {
           if (filed) {
@@ -254,18 +257,38 @@ class NskeySeeding {
               namespace: namespace,
               name: '${NskeyPrivateFiling.secretNamePrefix}${entry.key}',
               value: base64Encode(entry.value.bytes),
-            ));
+            ),
+            inReplyTo: EnvelopeAddressing.unsolicited);
         sent++;
       }
     }
     return sent;
   }
 
-  /// Sends the minted private to the atSign's other enrollments.
+  /// Sends the minted private to the atSign's other enrollments, and puts it
+  /// in this client's own secret store so it can answer for it.
   ///
   /// Read back from the durable store rather than passed along from the mint:
   /// what is conveyed is then exactly what this client will itself use, and a
   /// private that failed to persist is never sent to anyone.
+  ///
+  /// The store write is what lets the minter serve a later pull. The answering
+  /// path reads the secret store (`_candidatesFor`), and the store is filled
+  /// from the filing only by `hydrateStoreFromFiling` at bootstrap — which
+  /// runs before the mint, not after. Without this the enrollment that minted
+  /// the generation holds it in its filing, offers an empty candidate list to
+  /// every request for it, and answers nothing until the process restarts:
+  /// silently, because a holder with no matching candidate writes no envelope
+  /// and logs nothing.
+  ///
+  /// It grants no access the push below does not already grant — that fans
+  /// these exact bytes, unsolicited, to every key package on the same roster,
+  /// so serving them to a roster member that *asks* is strictly less.
+  ///
+  /// ⚠️ Not closed here: `PublishedNskeyKeyRing._mint` is a second mint path
+  /// that never reaches this method, so a generation minted during rotation
+  /// still leaves that client's store unprimed. The ring holds no sharing
+  /// instance, so closing it there is a wider change than this.
   Future<void> _convey(String namespace, String nskeyKid) async {
     final sharing = this.sharing;
     // The SEED, never the expanded decapsulation key: the receiver validates
@@ -277,10 +300,12 @@ class NskeySeeding {
     final seed = await privateFiling?.readSeed(namespace, nskeyKid);
     if (sharing == null || seed == null) return;
 
-    await sharing.pushSecretToNamespaceMembers(Secret(
+    final secret = Secret(
       namespace: namespace,
       name: '${NskeyPrivateFiling.secretNamePrefix}$nskeyKid',
       value: base64Encode(seed.bytes),
-    ));
+    );
+    await sharing.secretStore.putIfNewer(secret);
+    await sharing.pushSecretToNamespaceMembers(secret);
   }
 }

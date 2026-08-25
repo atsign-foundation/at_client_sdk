@@ -43,6 +43,16 @@ final _logger = AtSignLogger('NskeyPrivateFiling');
 /// a cache — a reader re-fetches any CK from its conveyance record.
 @experimental
 class NskeyPrivateFiling {
+  /// How long a pull for a conveyed nskey private waits for a holder to
+  /// answer.
+  ///
+  /// One name for what were two copies of the same policy number, in two
+  /// files. It is the lower bound on how long anything holding out for that
+  /// key must be willing to wait: `NotificationServiceImpl.parkTtl` is
+  /// asserted to exceed it, because a park that expires first drops a
+  /// notification whose key is still legitimately on its way.
+  static const Duration conveyanceWait = Duration(minutes: 5);
+
   /// The reserved [Secret] name an nskey private arrives under:
   /// `__nskey.<nskeyKid>`, in the namespace the key belongs to.
   ///

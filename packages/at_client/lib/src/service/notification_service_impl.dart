@@ -11,6 +11,8 @@ import 'package:at_client/src/crypto/crypto.dart'
         NskeyPrivateUnavailableException,
         SignalsPrivateFiling;
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
+    show NskeyPrivateFiling;
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/response/at_notification.dart';
 import 'package:at_client/src/service/notification_service.dart';
@@ -81,8 +83,19 @@ class NotificationServiceImpl extends NotificationService {
   @visibleForTesting
   static int maxParked = 64;
 
+  /// How long a notification may sit parked waiting for the key that opens
+  /// it.
+  ///
+  /// ⚠️ **The ordering is the contract, not the number.** This must exceed
+  /// [NskeyPrivateFiling.conveyanceWait], the window a pull gives a holder to
+  /// answer. Below it, a notification is dropped while the key it is waiting
+  /// for is still legitimately in flight, and the drop is attributed to the
+  /// sender rather than to this timer. It was two minutes against a five
+  /// minute wait, in two files that never mentioned each other, which is why
+  /// nothing could go red on the inversion.
   @visibleForTesting
-  static Duration parkTtl = const Duration(minutes: 2);
+  static Duration parkTtl =
+      NskeyPrivateFiling.conveyanceWait + const Duration(minutes: 1);
 
   StreamSubscription<FiledNskeyPrivate>? _filingSubscription;
 

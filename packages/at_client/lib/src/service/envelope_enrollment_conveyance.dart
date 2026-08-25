@@ -10,6 +10,8 @@ import 'package:at_client/src/enroll/privilege_resolver.dart'
 import 'package:at_client/src/mixins/at_client_envelope_signer.dart';
 import 'package:at_client/src/response/enrollment.dart';
 import 'package:at_client/src/secret_sharing/secret_sharing.dart';
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
 import 'package:at_client/src/util/enroll_list_request_param.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
@@ -99,7 +101,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
             namespace: _conveyanceNamespaceFor(enrollment),
             name: enrollmentApkamSymmetricKeySecretName,
             value: mintedApkamSymmetricKey,
-          ));
+          ),
+          inReplyTo: EnvelopeAddressing.unsolicited);
     }
 
     // Vouch for the enrollment this approver has just approved, so a verifier
@@ -137,7 +140,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
                 namespace: _conveyanceNamespaceFor(enrollment),
                 name: PqSigningChain.rootLinkSecretName,
                 value: PqSigningChain.encodeLink(link),
-              ));
+              ),
+              inReplyTo: EnvelopeAddressing.unsolicited);
         }
       } else {
         _logger.info('Not conveying a link for ${enrollment.enrollmentId}: '
@@ -154,7 +158,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
               namespace: _conveyanceNamespaceFor(enrollment),
               name: PqSigningChain.linkSecretName,
               value: PqSigningChain.encodeLink(link.toJson()),
-            ));
+            ),
+            inReplyTo: EnvelopeAddressing.unsolicited);
       }
     }
 
@@ -176,7 +181,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
               namespace: _conveyanceNamespaceFor(enrollment),
               name: PqSigningRoot.secretName,
               value: base64Encode(private),
-            ));
+            ),
+            inReplyTo: EnvelopeAddressing.unsolicited);
       }
     }
 
@@ -290,7 +296,8 @@ class EnvelopeEnrollmentConveyance implements EnrollmentConveyance {
               namespace: _conveyanceNamespaceFor(enrollment),
               name: PqSigningChain.rootLinkSecretName,
               value: PqSigningChain.encodeLink(link),
-            ));
+            ),
+            inReplyTo: EnvelopeAddressing.unsolicited);
         conveyed++;
       } catch (e) {
         // One enrollment failing must not stop the sweep; it is retried at

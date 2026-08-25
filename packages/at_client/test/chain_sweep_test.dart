@@ -18,6 +18,8 @@ import 'package:at_chops/at_chops.dart' show MlDsa65PureDartAlgo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/service/enrollment_service_impl.dart';
+import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
+    show EnvelopeAddressing;
 import 'package:at_commons/at_builders.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -264,7 +266,8 @@ void main() {
           namespace: namespace,
           name: PqSigningChain.rootLinkSecretName,
           value: PqSigningChain.encodeLink(forged),
-        ));
+        ),
+        inReplyTo: EnvelopeAddressing.unsolicited);
 
     expect(await enrollee.sweepOnce(), greaterThan(0));
     expect(await PqSigningChain(enrolleeClient).publishPendingLink(), isFalse,

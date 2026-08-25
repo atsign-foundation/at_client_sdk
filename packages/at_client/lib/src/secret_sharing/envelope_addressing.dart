@@ -2,33 +2,65 @@ import 'package:at_commons/at_commons.dart' show AtKey;
 
 /// The `__ssenv` envelope address, in one place:
 ///
-///     <msgId>.<recipientKpid>.__ssenv.<appNamespace>@<atSign>
+///     <msgId>.<inReplyTo>.<recipientKpid>.__ssenv.<appNamespace>@<atSign>
 ///
 /// Every builder, matcher and parser of that shape lives here, so the emitted
 /// name, the sweep filters and the namespace parse cannot drift apart. The
-/// marker is frozen wire vocabulary — unconsumed envelopes carrying today's
-/// names sit on live atServers until their ttl expires — and the emitted forms
-/// are pinned in `test/wire_literal_pins_test.dart`.
+/// emitted forms are pinned in `test/wire_literal_pins_test.dart`, and an
+/// intended change edits those pins in the same commit.
+///
+/// [inReplyTo] correlates an answer with the request that asked for it, and
+/// exists because without it nothing in the address ordered one against the
+/// other. A holder deciding whether some other holder had already answered a
+/// requester could only ask "is any envelope addressed to that requester in
+/// this namespace" — which is true of a *request* written to that same
+/// address by a third enrollment's fan-out, and true of an unconsumed
+/// leftover from an unrelated exchange. Holders that could serve the request
+/// therefore stood down for records that were not answers, and the requester
+/// got nothing back and no error.
+///
+/// ⚠️ The segment sits BEFORE the kpid on purpose. [fragmentFor], [regexFor],
+/// [regexForAny], the sweep filters and [appNamespaceOf] all anchor on the
+/// kpid-then-marker pair, so a segment inserted ahead of it is invisible to
+/// every one of them and they keep matching unchanged. Putting it after the
+/// kpid would have broken all of them at once.
 class EnvelopeAddressing {
   /// Marker segment in envelope key names.
   static const String marker = '__ssenv';
 
+  /// The [inReplyTo] value for an envelope that answers nothing — a request
+  /// itself, or an unsolicited push.
+  ///
+  /// A single character rather than an absent segment, so the address always
+  /// has the same number of parts and every parser can count on it.
+  static const String unsolicited = '0';
+
   /// The at-key for one envelope addressed to [recipientKpid] through
-  /// [appNamespace].
+  /// [appNamespace], answering the request identified by [inReplyTo].
   ///
   /// The namespace suffix is what scopes delivery — the atServer only lets
   /// enrollments authorized for it get/scan/sync the envelope — and [msgId]
   /// is the sender's random uuid, the only part of the address the recipient
   /// cannot know in advance.
+  ///
+  /// [inReplyTo] is [unsolicited] for a request or a push. It is required
+  /// rather than defaulted here so that every call site has to state which it
+  /// is; the one place it is defaulted is `PairwiseSecretSharing.sendEnvelope`,
+  /// whose callers genuinely have no basis to choose.
+  ///
+  /// ⚠️ The copy in the address is a routing hint only. It is written by the
+  /// sender into an unauthenticated key name, so a suppression decision must
+  /// read the id from the SEALED payload instead.
   static AtKey envelopeKey({
     required String msgId,
+    required String inReplyTo,
     required String recipientKpid,
     required String appNamespace,
     required String? sharedBy,
     required Duration ttl,
   }) =>
       AtKey()
-        ..key = '$msgId.$recipientKpid.$marker'
+        ..key = '$msgId.$inReplyTo.$recipientKpid.$marker'
         ..namespace = appNamespace
         ..sharedBy = sharedBy
         ..metadata.ttl = ttl.inMilliseconds;
@@ -71,9 +103,16 @@ class EnvelopeAddressing {
   static String sweepRegexForAny(Iterable<String> kpids) =>
       '.*${regexForAny(kpids)}.*';
 
-  /// [sweepRegexFor] narrowed to envelopes addressed through one namespace.
-  static String namespaceSweepRegexFor(String kpid, String appNamespace) =>
-      '.*\\.$kpid\\.$marker\\.$appNamespace.*';
+  /// Envelopes addressed to [kpid] through [appNamespace] that answer the
+  /// request [requestId].
+  ///
+  /// Replaces a filter that matched every envelope at an address regardless of
+  /// what it was: a holder used it to decide whether a requester had already
+  /// been answered, and a request or a stale push matched it just as well as
+  /// an answer.
+  static String answerSweepRegexFor(
+          String requestId, String kpid, String appNamespace) =>
+      '.*\\.$requestId\\.$kpid\\.$marker\\.$appNamespace.*';
 
   /// The full application namespace of an envelope key: everything between
   /// the `.__ssenv.` marker and the atSign. `AtKey.namespace` only carries
