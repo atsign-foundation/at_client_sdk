@@ -13,11 +13,11 @@
 /// branch that platform would actually take — see [webEnvironment] and
 /// [ioEnvironment].
 ///
-/// Typical use from a package's `test/wasm/dep_tree_test.dart`:
+/// Typical use, from `runner.dart` over a `wasm_gates.yaml` stanza:
 ///
 /// ```dart
 /// final result = shakedown('package:at_utils/at_logger.dart');
-/// expect(result.blockedPackages, isEmpty, reason: result.report());
+/// if (result.blockedPackages.isNotEmpty) print(result.report());
 /// ```
 library;
 
@@ -108,7 +108,10 @@ class Shakedown {
     };
   }
 
-  /// A human-readable listing for use as a test failure `reason`.
+  /// A human-readable listing, for the body of a gate's failure message.
+  ///
+  /// Printed whole rather than summarised: widening a baseline means copying
+  /// from this, so there is nothing to transcribe by hand.
   String report() => (offenders.keys.toList()..sort())
       .map((k) => '  ${packageOf(k)}: $k -> ${offenders[k]!.join(', ')}')
       .join('\n');
@@ -171,28 +174,44 @@ String selectUri(String clause, Map<String, bool> environment) {
   return _firstUri.firstMatch(clause)!.group(1)!;
 }
 
+/// The nearest `.dart_tool/package_config.json`, walking up from [from]
+/// (default: the current directory).
+///
+/// Extracted so that [workspaceRoot] and [resolvePackageRoots] cannot disagree
+/// about which checkout they are looking at. Throws [StateError] rather than
+/// returning null: a missing config makes every walk find nothing, which reads
+/// identically to a clean result.
+File packageConfigFile({Directory? from}) {
+  var dir = from ?? Directory.current;
+  while (true) {
+    final candidate = File('${dir.path}/.dart_tool/package_config.json');
+    if (candidate.existsSync()) return candidate;
+    final parent = dir.parent;
+    if (parent.path == dir.path) break;
+    dir = parent;
+  }
+  throw StateError('no .dart_tool/package_config.json found above '
+      '${(from ?? Directory.current).path} — run `dart pub get` first');
+}
+
+/// The pub workspace root: the directory holding [packageConfigFile].
+///
+/// Callers needing repository layout — `packages/`, `.github/` — go
+/// through here rather than [Directory.current], so the answer is the same
+/// whether a command runs from the workspace root or from a package.
+///
+/// In this workspace there is exactly one package config, at the root, covering
+/// every member; no member has its own. That is what lets one command walk and
+/// compile for every package.
+Directory workspaceRoot({Directory? from}) =>
+    packageConfigFile(from: from).parent.parent;
+
 /// Package name -> absolute `lib/` path, from the nearest package config.
 ///
 /// Walks up from [from] (default: the current directory) so this works whether
 /// a test runs from its package directory or the workspace root.
 Map<String, String> resolvePackageRoots({Directory? from}) {
-  var dir = from ?? Directory.current;
-  File? config;
-  while (true) {
-    final candidate = File('${dir.path}/.dart_tool/package_config.json');
-    if (candidate.existsSync()) {
-      config = candidate;
-      break;
-    }
-    final parent = dir.parent;
-    if (parent.path == dir.path) break;
-    dir = parent;
-  }
-  if (config == null) {
-    throw StateError('no .dart_tool/package_config.json found above '
-        '${(from ?? Directory.current).path} — run `dart pub get` first');
-  }
-
+  final config = packageConfigFile(from: from);
   final json = jsonDecode(config.readAsStringSync()) as Map<String, dynamic>;
   final base = Uri.file('${config.parent.path}/');
   return {
