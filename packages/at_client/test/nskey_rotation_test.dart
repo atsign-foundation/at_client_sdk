@@ -285,6 +285,45 @@ void main() {
               're-derives the published public half from');
     });
 
+    test('rotation puts the successor in the store it answers pulls from',
+        () async {
+      // The sibling of the mint-time case above, on the other path into
+      // _mint. The rotating enrollment is the one certain to hold the
+      // successor and, without this, the only one that cannot serve it — the
+      // answering path reads the secret store, and hydrateStoreFromFiling has
+      // already run by the time anything rotates.
+      final c = client();
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      await ring.mintAndPublish(namespace);
+      final s = sharing();
+
+      final before = s.sharing.secretStore.listSecrets().length;
+
+      final outcome = await NskeyRotation(
+              atClient: c.client,
+              ring: ring,
+              privateFiling: filer,
+              sharing: s.sharing)
+          .rotateNamespaceKey(namespace);
+
+      final held = s.sharing.secretStore.getSecret(namespace,
+          '${NskeyPrivateFiling.secretNamePrefix}${outcome.advertisement.nskeyKid}');
+      expect(held, isNotNull,
+          reason: 'a pull for the generation this client just rotated to is '
+              'answered from the secret store, so the rotation has to leave '
+              'it there');
+      expect(
+          base64Decode(held!.value),
+          (await filer.readSeed(namespace, outcome.advertisement.nskeyKid))!
+              .bytes,
+          reason: 'and it must be the SEED, which is what a receiver '
+              're-derives the published public half from');
+      expect(s.sharing.secretStore.listSecrets().length, before + 1,
+          reason: 'the successor, and nothing else — the superseded '
+              'generation is retained in the keyfile, not re-primed here');
+    });
+
     test('pushes the successor private to the namespace members', () async {
       final c = client();
       final filer = await filing();

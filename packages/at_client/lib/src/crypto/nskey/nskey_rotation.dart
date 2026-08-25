@@ -165,17 +165,37 @@ class NskeyRotation {
           'rotation supersedes this one');
     }
 
+    final secret = Secret(
+      namespace: namespace,
+      name: '${NskeyPrivateFiling.secretNamePrefix}'
+          '${advertisement.nskeyKid}',
+      value: base64Encode(private.bytes),
+    );
+
+    // Into this client's own store before the fan-out, for the same reason
+    // the mint-time convey does it: the request-answer path serves from the
+    // secret store, and the store is filled from the keyfile only by
+    // `hydrateStoreFromFiling` at bootstrap — which has already run by the
+    // time anything rotates. Without this the enrollment that rotated is the
+    // one enrollment certain to hold the successor and the only one that
+    // cannot serve it, until it restarts, and it fails silently: a holder
+    // with no matching candidate writes no envelope and logs nothing.
+    //
+    // It grants nothing the fan-out below does not already grant — that sends
+    // these exact bytes, unsolicited, to every key package on the roster,
+    // minus [excludeEnrollmentIds]. ⚠️ Serving a later PULL is not filtered by
+    // that exclusion, so an enrollment excluded from the rotation can still
+    // ask for the successor and be answered. Rotation-to-exclude is therefore
+    // not a revocation on its own; revoking the enrollment is what stops it
+    // being on the roster the answer path resolves against.
+    await sharing.secretStore.putIfNewer(secret);
+
     // Outside the mint lock deliberately. The lock serialises *minting*, and a
     // concurrent rotation is already refused by the time this runs; holding it
     // across a per-enrollment fan-out would make an atSign's lock-held window
     // scale with its enrollment count for no interlock gained.
     final conveyedTo = await sharing.pushSecretToNamespaceMembers(
-      Secret(
-        namespace: namespace,
-        name: '${NskeyPrivateFiling.secretNamePrefix}'
-            '${advertisement.nskeyKid}',
-        value: base64Encode(private.bytes),
-      ),
+      secret,
       excludeEnrollmentIds: excludeEnrollmentIds,
     );
 
