@@ -366,6 +366,26 @@ class AtAuthImpl implements AtAuth {
     );
     _atAuthKeys.enrollmentId = enrollmentIdFromServer;
 
+    // Reinstall, now that the atServer has named the enrollment. The
+    // authenticator installed above closed over a null id because none
+    // existed yet, and `enrollmentId` is captured at install time rather than
+    // read per call - so without this the activation PKAM below goes out with
+    // no `enrollmentId:` segment however the id is passed to
+    // `pkamAuthenticate`. The atServer then authenticates that connection as
+    // `pkamLegacy` against the default PKAM public key, while at_lookup
+    // records it as authenticated for this enrollment: the two ends disagree
+    // about who is on the connection, and the enrollment-record-authoritative
+    // signing-algorithm check never runs.
+    _installAuthenticator(
+        atLookUp,
+        authenticatorFor(
+          await _keysSourceFor(atOnboardingRequest.atSign, _atAuthKeys),
+          atOnboardingRequest.atSign,
+          enrollmentId: enrollmentIdFromServer,
+          chops: atChops,
+          signingAlgo: atOnboardingRequest.signingAlgoType,
+        ));
+
     //4. Close connection to server
     try {
       await atLookUp!.close();

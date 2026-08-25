@@ -10,6 +10,7 @@ import 'package:at_auth/src/enroll/models/at_enrollment_response.dart';
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/file_io.dart';
+import 'package:at_auth/src/keys/io/memory_io.dart';
 import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
@@ -19,6 +20,21 @@ import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 class MockAtLookUp extends Mock implements AtLookupImpl {}
+
+/// Runs an installed [AtAuthenticator] for real and records what it sent.
+class _RecordingExecutor implements AtCommandExecutor {
+  final List<String> sent = [];
+  final List<String> replies;
+
+  _RecordingExecutor(this.replies);
+
+  @override
+  Future<String> sendSync(String command,
+      {int? maxWaitMilliSeconds, int? transientWaitTimeMillis}) async {
+    sent.add(command);
+    return replies.removeAt(0);
+  }
+}
 
 class MockAtEnrollment extends Mock implements AtEnrollment {}
 
@@ -397,6 +413,67 @@ void main() {
       expect(response.isSuccessful, true);
       expect(response.enrollmentId, 'abc123');
     });
+    test('the activation PKAM names the enrollment the atServer just assigned',
+        () async {
+      // `onboard` installs the authenticator BEFORE the enrollment exists, so
+      // that first one closes over a null enrollment id - correct at that
+      // moment, since the connection is CRAM-authenticated. It has to be
+      // reinstalled once the atServer names the enrollment, because
+      // `enrollmentId` is captured at install time and never re-read: without
+      // that, the activation PKAM goes out with no `enrollmentId:` segment
+      // however the id is passed to `pkamAuthenticate`, the atServer
+      // authenticates the connection as `pkamLegacy` against the default PKAM
+      // public key, and the two ends disagree about who is on the connection.
+      when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
+          .thenAnswer((_) => Future.value(true));
+      when(() => mockAtLookUp.executeVerb(any()))
+          .thenAnswer((_) => Future.value('data:2'));
+      when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
+      when(() => mockPkamAuthenticator.authenticate(any(), any(),
+          enrollmentId: 'abc123')).thenAnswer((_) => Future.value(true));
+      when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer(
+          (_) => Future.value(
+              AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
+
+      final atOnboardingRequest = AtOnboardingRequest('@alice🛠')
+        ..atKeysIo = InMemoryAtKeysIo()
+        ..appName = 'wavi'
+        ..deviceName = 'iphone';
+      atAuth.secondaryAddressFinder = fakeSecondaryAddressFinder;
+      atAuth.probeSocket = (host, port) async {};
+
+      await atAuth.onboard(atOnboardingRequest, testCramSecret);
+
+      final installed = verify(() => mockAtLookUp.authenticator = captureAny())
+          .captured
+          .cast<AtAuthenticator>();
+
+      // The authenticator in force when the activation PKAM runs is the last
+      // one installed. Run it for real against demo material.
+      const challenge = '_9e8169dc-5618-44ec-ab43-1a5b2144c581@alice🛠'
+          ':c3d345fc-5691-4f90-bc34-17cba31f060f';
+      final executor = _RecordingExecutor(['data:$challenge', 'data:success']);
+      expect(await installed.last(executor), isTrue);
+      final pkam = executor.sent.last;
+
+      expect(pkam, contains(':enrollmentId:abc123:'),
+          reason: 'the activation PKAM must name the enrollment the atServer '
+              'assigned, or the atServer authenticates it as pkamLegacy while '
+              'at_lookup records it as this enrollment');
+
+      // The control, and it is what makes this discriminate: the FIRST
+      // authenticator legitimately carries no id, because none existed when it
+      // was installed. Asserting only on the last one would pass if the
+      // reinstall were dropped and the first one happened to be right.
+      final firstExecutor =
+          _RecordingExecutor(['data:$challenge', 'data:success']);
+      await installed.first(firstExecutor);
+      expect(firstExecutor.sent.last, isNot(contains(':enrollmentId:')),
+          reason: 'nothing had named the enrollment when this was installed');
+      expect(installed.length, greaterThanOrEqualTo(2),
+          reason: 'the reinstall is the fix; one install means it was dropped');
+    });
+
     test('Test onboard with default appName and deviceName', () async {
       when(() => mockAtLookUp.cramAuthenticate(testCramSecret))
           .thenAnswer((_) => Future.value(true));
