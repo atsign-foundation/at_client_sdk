@@ -516,8 +516,7 @@ void main() {
       expect(atKeys.keysForEnrollment('unknown'), isEmpty);
     });
 
-    test('unknown role/algorithm tokens round-trip unmodified',
-        () {
+    test('unknown role/algorithm tokens round-trip unmodified', () {
       // role and algorithm are open Strings: a reader must
       // hold and re-emit tokens it does not recognise, so a keyfile written
       // by a newer client survives a read-modify-flush by an older one.
@@ -535,8 +534,8 @@ void main() {
 
       final reparsed = AtKeys.fromJson(atKeys.toJson());
       expect(
-        reparsed.getAtSignKey(
-            'from-the-future', CryptographicMaterialRole.of('somethingNotInventedYet')),
+        reparsed.getAtSignKey('from-the-future',
+            CryptographicMaterialRole.of('somethingNotInventedYet')),
         futuristic,
       );
       expect(reparsed, atKeys);
@@ -588,7 +587,8 @@ void main() {
 
       final retired = atKeys.atSignKeysForKeyId('pair').toList();
       expect(retired, hasLength(2));
-      expect(retired.map((m) => m.status), everyElement(CryptographicMaterialStatus.retired));
+      expect(retired.map((m) => m.status),
+          everyElement(CryptographicMaterialStatus.retired));
       expect(
         atKeys
             .getAtSignKey('pair', CryptographicMaterialRole.publicEncryption)!
@@ -616,8 +616,8 @@ void main() {
       atKeys.retireAtSignKey('solo');
       atKeys.retireAtSignKey('solo', to: CryptographicMaterialStatus.dead);
 
-      expect(
-          atKeys.atSignKeysForKeyId('solo').single.status, CryptographicMaterialStatus.dead);
+      expect(atKeys.atSignKeysForKeyId('solo').single.status,
+          CryptographicMaterialStatus.dead);
     });
 
     test('throws on a backward transition', () {
@@ -628,8 +628,8 @@ void main() {
         () => atKeys.retireAtSignKey('solo'),
         throwsA(isA<ArgumentError>()),
       );
-      expect(
-          atKeys.atSignKeysForKeyId('solo').single.status, CryptographicMaterialStatus.dead);
+      expect(atKeys.atSignKeysForKeyId('solo').single.status,
+          CryptographicMaterialStatus.dead);
     });
 
     test('throws for an unknown keyId', () {
@@ -645,7 +645,8 @@ void main() {
       final atKeys = AtKeys(keysList: [symmetricKey('solo')]);
 
       expect(
-        () => atKeys.retireAtSignKey('solo', to: CryptographicMaterialStatus.active),
+        () => atKeys.retireAtSignKey('solo',
+            to: CryptographicMaterialStatus.active),
         throwsA(isA<ArgumentError>()),
       );
     });
@@ -728,8 +729,7 @@ void main() {
           target.keysForKeyId('the-new-enrollment', 'kem:xwing').single;
       expect(adopted.enrollmentId, 'the-new-enrollment');
       expect(adopted.keyId, 'kem:xwing');
-      expect(
-          adopted.role, CryptographicMaterialRole.symmetricEncryption);
+      expect(adopted.role, CryptographicMaterialRole.symmetricEncryption);
       expect(adopted.algorithm, CryptographicMaterialAlgorithm.aes256);
       expect(adopted.bytes.toString(), 'c2VjcmV0');
       // The builder's own timestamp, not the adoption's.
@@ -811,7 +811,8 @@ void main() {
     CryptographicMaterial authKey(String keyId,
             {required String enrollmentId,
             String value = 'YXV0aA==',
-            CryptographicMaterialStatus status = CryptographicMaterialStatus.active}) =>
+            CryptographicMaterialStatus status =
+                CryptographicMaterialStatus.active}) =>
         CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
@@ -920,9 +921,11 @@ void main() {
     // shape, which are only comparable if they are given the same material.
     String b64(String label) => base64Encode(utf8.encode(label));
 
-    CryptographicMaterial part(
-            String keyId, CryptographicMaterialRole type, CryptographicMaterialAlgorithm algo, String value,
-            {String? enrollmentId, CryptographicMaterialStatus status = CryptographicMaterialStatus.active}) =>
+    CryptographicMaterial part(String keyId, CryptographicMaterialRole type,
+            CryptographicMaterialAlgorithm algo, String value,
+            {String? enrollmentId,
+            CryptographicMaterialStatus status =
+                CryptographicMaterialStatus.active}) =>
         CryptographicMaterial(
             keyId: keyId,
             enrollmentId: enrollmentId,
@@ -933,10 +936,12 @@ void main() {
             status: status);
 
     /// A complete signing keypair for [enrollmentId], both halves.
-    List<CryptographicMaterial> signingPair(String enrollmentId, CryptographicMaterialAlgorithm algo,
+    List<CryptographicMaterial> signingPair(
+            String enrollmentId, CryptographicMaterialAlgorithm algo,
             {int generation = 1,
             String value = 'a',
-            CryptographicMaterialStatus status = CryptographicMaterialStatus.active}) =>
+            CryptographicMaterialStatus status =
+                CryptographicMaterialStatus.active}) =>
         [
           part('sign:$algo:$generation',
               CryptographicMaterialRole.privateSigning, algo, '$value-priv',
@@ -1012,7 +1017,8 @@ void main() {
           ...signingPair('E1', CryptographicMaterialAlgorithm.ed25519,
               value: 'old', status: CryptographicMaterialStatus.retired),
           // What a newer client's keyfile looks like from here.
-          ...signingPair('E1', CryptographicMaterialAlgorithm.of('pq-something-later'),
+          ...signingPair(
+              'E1', CryptographicMaterialAlgorithm.of('pq-something-later'),
               value: 'future'),
           ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
               value: 'live'),
@@ -1189,8 +1195,7 @@ void main() {
         // keyfile's word travels out unchanged.
         final atKeys = AtKeys(atsign: '@alice'.toAtsign(), keysList: [
           ...signingPair('E1', CryptographicMaterialAlgorithm.rsa2048,
-              value: 'rsa',
-              status: CryptographicMaterialStatus.of('revoked')),
+              value: 'rsa', status: CryptographicMaterialStatus.of('revoked')),
           ...signingPair('E1', CryptographicMaterialAlgorithm.mlDsa65,
               value: 'mldsa'),
         ]);

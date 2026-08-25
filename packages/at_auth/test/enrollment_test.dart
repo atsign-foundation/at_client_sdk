@@ -43,7 +43,8 @@ void main() {
       return mock;
     }
 
-    test('a key package the builder mints is the ENROLLMENT\'s, not the atSign\'s',
+    test(
+        'a key package the builder mints is the ENROLLMENT\'s, not the atSign\'s',
         () async {
       // The builder runs before the request, so it files what it mints with no
       // enrollment id — the atServer has not named one yet. The two sibling

@@ -431,8 +431,8 @@ void main() {
       when(() => mockAtLookUp.close()).thenAnswer((_) async => {});
       when(() => mockPkamAuthenticator.authenticate(any(), any(),
           enrollmentId: 'abc123')).thenAnswer((_) => Future.value(true));
-      when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer(
-          (_) => Future.value(
+      when(() => mockAtEnrollment.submit(any(), mockAtLookUp)).thenAnswer((_) =>
+          Future.value(
               AtEnrollmentResponse('abc123', EnrollmentStatus.approved)));
 
       final atOnboardingRequest = AtOnboardingRequest('@alice🛠')

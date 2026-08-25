@@ -44,7 +44,8 @@ void main() {
     // The control. Without it, the test above would pass just as well against
     // a serialiser that always locks, or one that locks nothing and happens to
     // schedule sequentially - this proves the file case is doing the work.
-    final trace = await interleavingOf(fileRetrofitSerializer, InMemoryAtKeysIo());
+    final trace =
+        await interleavingOf(fileRetrofitSerializer, InMemoryAtKeysIo());
 
     expect(trace.length, 4);
     expect(trace.sublist(0, 2), ['in0', 'in1'],

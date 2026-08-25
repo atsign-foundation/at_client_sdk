@@ -175,7 +175,8 @@ class EnrollmentSubmitter {
   /// The keyfile's spelling of [algorithm]. The material tokens equal the
   /// [SigningAlgoType] member names — both are the wire spelling — so a second
   /// spelling here would file material the reader skips.
-  static CryptographicMaterialAlgorithm _materialAlgorithmOf(SigningAlgoType algorithm) =>
+  static CryptographicMaterialAlgorithm _materialAlgorithmOf(
+          SigningAlgoType algorithm) =>
       switch (algorithm) {
         SigningAlgoType.mldsa65 => CryptographicMaterialAlgorithm.mlDsa65,
         SigningAlgoType.rsa2048 => CryptographicMaterialAlgorithm.rsa2048,
@@ -451,8 +452,7 @@ class EnrollmentSubmitter {
       //    rsa2048 would have it believe it holds a mode it does not.
       final alreadyRetrofitted = existing.keys
           .where((m) =>
-              m.role ==
-                  CryptographicMaterialRole.privateAuthentication &&
+              m.role == CryptographicMaterialRole.privateAuthentication &&
               m.status == CryptographicMaterialStatus.active &&
               m.enrollmentId != null)
           .firstOrNull;
