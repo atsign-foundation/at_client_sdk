@@ -752,9 +752,40 @@ still 3.6.1, and in this file that distinction is the whole gate", and it was
 wrong**: `3.7.0-rc1` has been on pub.dev since 2026-08-23. pub.dev's `latest`
 field excludes prereleases, which is the trap this file names at the top and
 then fell into here. So the distinction G4 called its whole gate does not
-exist, and nothing external blocks this entry. 24 sites in `lib/`, 47 in tests, across
-at_client, at_onboarding_cli and at_auth. The only one of the five
+exist, and nothing external blocks this entry. The only one of the five
 `deprecated_member_use` buckets with a replacement that exists today.
+
+⚠️ **RE-MEASURED 2026-08-25 and the scope was wrong in two ways.** This read
+"**24** sites in `lib/`, **47** in tests, across at_client, at_onboarding_cli
+and at_auth", from `enrollmentId` **59** and `signingAlgoType` **12**. Measured
+after the at_auth merge:
+
+| package | `lib/` | `test/` | files |
+| ------- | -----: | ------: | ----- |
+| at_client | 15 | 32 | 10 + 17 |
+| at_onboarding_cli | 8 | 17 | 1 + 3 |
+| at_client_flutter | 0 | 10 | 3 |
+| at_auth | 3 | 0 | 2 |
+| **total** | **26** | **59** | **85 sites in 36 files** |
+
+⛔ **`at_client_flutter` is in scope and was not named** — 10 sites in
+`keychain_io_impl_test.dart` (8), `keychain_storage_test.dart` and
+`test/data/keychain_data.dart`. That is a whole package missing from the stated
+scope, not a stale count.
+
+**Use the ANALYZER, never a grep.** `enrollmentId` is a legitimate identifier in
+hundreds of places; only the analyzer knows which uses are of the deprecated
+member. Re-derive per package with
+`dart analyze lib test | grep deprecated_member_use | grep -c "'enrollmentId'"`,
+and the same for `'signingAlgoType'`.
+
+**Where the work concentrates**, which is what makes it a list rather than a
+sweep: `at_onboarding_cli/lib/src/onboard/at_onboarding_service_impl.dart` holds
+**all 8** of that package's library sites;
+`at_client/lib/src/client/remote_secondary.dart` holds 5 of at_client's 15; and
+on the test side `at_client_flutter/test/keychain_io_impl_test.dart` (8) and
+`at_client/test/signing_algo_threading_test.dart` (7) are the two largest. Four
+files carry 28 of the 85.
 
 **G5. ✅ DISCHARGED 2026-08-24 — close 14.19 item 36.** All three clauses are
 live-proven in `tests/at_functional_test/test/key_package_amendment_live_test.dart`
