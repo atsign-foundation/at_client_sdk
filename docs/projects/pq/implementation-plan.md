@@ -131,12 +131,13 @@ prevent, so it is now stated rather than left to be re-derived:
 | gate | startable in this repo, by a session? |
 | ---- | ------------------------------------- |
 | G0, G2, G5 | **No** — discharged |
-| **G3** `[RECOMMENDED]` | **Diagnosed 2026-08-25**; what is left is a RULING between four named fixes, then a small change. The investigation is closed |
-| **G4** | **YES** — and it was unblocked on 2026-08-24 when its stated gate turned out already lifted |
+| G3 | **Diagnosed, ruled and fixed 2026-08-25.** What is left is one full functional pack run carrying the change |
+| **G4** `[RECOMMENDED]` | **YES** — and it was unblocked on 2026-08-24 when its stated gate turned out already lifted |
 | G6, G7 | **No** — a merge and a publish, both gkc's |
 
-⚠️ **`[RECOMMENDED]` moved from G0 to G3 on 2026-08-25**, when at_server merged
-the G0 fix. This table's first row read "G0 `[RECOMMENDED]` — **No.** Diagnosed,
+⚠️ **`[RECOMMENDED]` moved from G0 to G3 and then to G4, both on 2026-08-25** —
+first when at_server merged the G0 fix, then when G3 was diagnosed, ruled and
+fixed the same day. This table's first row read "G0 `[RECOMMENDED]` — **No.** Diagnosed,
 fixed and verified; what is owed is the MERGE of at_server PR #2771", under a
 note saying G0 kept the recommendation because the merge should be chased and
 was "not the thing to *type* first". The merge happened, so the recommendation
@@ -643,7 +644,60 @@ seconds of a 20-run block — read `alice🛠.log.*` too, or a grep returns a
 confident zero. Pair each notification with the `monitor:` nearest it in time and
 subtract.
 
-**What is owed is a ruling on the fix.** Four candidates, in the order they cost:
+✅ **RULED by gkc 2026-08-25, after the shape below was measured: fix the
+CALLER and the test, not the protocol.** The window is real but it is largely
+self-healing in production — `getLastNotificationTime()` seeds the watermark to
+`DateTime.now()` on its first call and returns null, so the *next* monitor
+reconnect asks the atServer to replay from just before the window and the
+missed notification arrives then. ⚠️ That seed is a **client** clock compared
+against the atServer's own notification timestamps, so a client running ahead
+of its atServer skips the replay and the notification is gone; "delayed rather
+than lost" is conditional on clock agreement, not on the race.
+
+**What that ruling produced, and it is not confined to the test:**
+
+⛔ **`AtRpc` was exposed and undefended, which is what turned the ruling.**
+`AtRpc.start()` subscribes for response notifications and returns — it does not
+even wait for `listening`, so it is *more* exposed than the test was. The caller
+then sends a request, and the far side answers with a notification back over
+that same listener. Measured across 94 monitor starts in this session, the gap
+between `subscribe()` returning and `monitor:` reaching the socket ran **19 ms
+to 383 ms, median 152** — long enough for a fast round trip to beat it, and the
+microsecond figures below are only the *residual* after a `listening` wait.
+`sendRequest`'s retry loop does not cover it: it sets `sent = true` as soon as
+the notify succeeds and retries only on an exception. `AtRpcClient.call()` is
+the sharp end — it returns a future completed only by the response, with **no
+timeout**, so a lost response hangs the caller for good.
+
+**Built 2026-08-25:** `AtRpc.ready()` and `AtRpc.listenerReadyTimeout`, with
+`sendRequest` awaiting readiness when `isClient`; and the ping in
+`self_enrollment_retrofit_live_test.dart` retried until one lands rather than
+sent once. Rails: `packages/at_client/test/rpc/at_rpc_readiness_test.dart`
+(4 tests, four mutations each reddening its own assertion — the wait deleted,
+the current-state read deleted, the `isClient` guard removed, and the timeout
+swallowed), at_client unit **1550** and at_policy **5** at exit 0, at_client
+`dart analyze lib test` exit 0 / 422 info and the format gate exit 0,
+`tests/at_functional_test` analyze exit 0 / 246 info.
+
+**Live, against `at_virtual_env:g0fixed`.** The shipped shape ran **8 of 8
+green**, one ping each — the window fell the right way every time, so those runs
+do not exercise the retry. The retry was proven separately by forcing the window
+open (skipping the client's `listening` wait, which puts the ping inside it
+every time) and varying only whether the ping is retried: **retry off, 3 of 3
+failed** with `TimeoutException` on the awaited notification; **retry on, 2 of 3
+passed**. ⚠️ The third was red for an unrelated reason — a keyfile lock
+contention (`Could not acquire the keyfile lock`) on `rf2b-t5@alice🛠.atKeys`
+inside `mintLegacyKeyfile`. That is **one sighting** under an artificial
+configuration, absent from 30 pre-change runs and from 8 post-change shipped
+runs; it is a sighting, not a rate, and it is not attributed to anything.
+
+⚠️ **What is NOT owed: the protocol change.** The four candidates were weighed
+and gkc chose the caller-side fix. The protocol option is real and is already
+specified upstream — see the `monitor:` acknowledgement row in
+[`## TODO`](#todo), which also carries a correction to that specification that
+must be settled before anyone builds it.
+
+The four candidates, kept because the ruling is only legible against them:
 
 1. **Fix the test only** — have it prove registration before it pings (send a
    warm-up notification and wait for it, or retry the ping). Closes this gate;
@@ -735,7 +789,11 @@ fleet-adoption wait: see the standing premise above.
 ⛔ **G1 was a D1 gate until 2026-08-23 and is now post-D1 clean-up** (gkc).
 It keeps its letter rather than being renumbered, because prose above and
 below cites these letters and a shift would silently repoint every one of
-them. So the D1 gates are **G2–G7**, and G1 sits here.
+them. So the D1 gates are **G0 and G2–G7**, and G1 sits here. ⚠️ This read
+"**G2–G7**" until 2026-08-25 — the same falsified sentence that the note under
+[`## THE NEXT MOVE`](#the-next-move) had already corrected in its own copy, left
+standing here because a claim with two homes only ever gets fixed in the one you
+have open.
 
 **G1. Test the registrar's certificate validation, on
 [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) while
@@ -850,6 +908,7 @@ carried inside a closed one.
 |---------------------------------|---------------------------------------------------------------------|----------------------------------------------------------------------------------|
 | **at_chops 3.6.1 — [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181)** | ⛔ **MERGED 2026-08-24, and NOT yet published — pub.dev tops out at at_chops `3.6.0`, so what is owed here is the publish, not the review.** ⚠️ This row read "Carved and OPEN" until 2026-08-24. It is NOT in the train's ordering above** — it was cut on 2026-08-24 from trunk, not from the spike, because at_chops 3.6.0 is already published and had no in-progress CHANGELOG heading to fold into. Message-only change: `PkamMlDsa65SigningAlgo.sign` reported a bare `ML-DSA-65 secret key must be 4032 bytes: N`, which names neither the credential nor the likeliest cause. A PKAM key of ~1.2 kB is an RSA-2048 private key, which a caller holds by naming one enrollment's algorithm while carrying another's credentials. Owed: merge, then gkc publishes 3.6.1. ⚠️ **Nothing depends on it** — no floor in this tree requires 3.6.1, so it can land whenever; but it is a second at_chops publish the train's ordering does not mention | Nothing. It is independent of at_auth and of the spike |
 | `acceptance-report.json` is ignored only on this branch | ⚠️ **Deferred by gkc 2026-08-25 — recorded so the deferral is not silent.** `.gitignore` here carries `acceptance-report.json`, `citations.jsonl` and `acceptance-ledger.md`; **`gkc-pq-d1-at-auth` and trunk carry none of them**. A per-run report is sitting in `packages/at_auth/` at 220 KB, and on the carve branch a `git add <directory>` wants to track it — the commit hook refused exactly that on 2026-08-25.<br><br>⚠️ **gkc's reason was that [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179) merges to trunk shortly, and that does not by itself fix it**: #2179's head is `gkc-pq-d1-at-auth`, which is the branch LACKING the ignore. Trunk gets it when this branch merges, not when #2179 does | Nothing. It resolves itself when this branch lands; until then, name files rather than directories when staging on the carve |
+| **the `monitor:` verb has no acknowledgement** | ⚠️ **NOT D1, and it is a protocol seam across three repositories.** A client writes `monitor:` and there is nothing to read back — at_server's `MonitorResponseHandler` returns the empty string on success — so it cannot tell acceptance from refusal, and reports a connection as up the moment the command is *written*. Specified upstream as [at_protocol#367](https://github.com/atsign-foundation/at_protocol/issues/367) with three open sub-issues: at_commons [#2175](https://github.com/atsign-foundation/at_client_sdk/issues/2175) (a `prompts` parameter on the verb, opt-in and additive, and it ships first), at_server [#2764](https://github.com/atsign-foundation/at_server/issues/2764) (answer the command, and terminate every notification with a prompt), at_lookup [#2176](https://github.com/atsign-foundation/at_client_sdk/issues/2176) (send it, wait for the answer, frame on the prompt).<br><br>⛔ **A correction to that specification, to settle BEFORE anyone builds it.** #367 says the acknowledgement lets "a refused `monitor:` be reported as a failure". Today `monitor:` is **not** refused: `MonitorVerbHandler.processVerb` checks only that the connection is authenticated, subscribes it, and the refusal then happens per notification inside `_sendNotification` via `isAuthorized`, dropping each one with a server-side warning the app never sees. A replay does not rescue it either — replayed notifications go through the same check. So the acknowledgement ALONE does not fix the case #367 leads with; at_server must also decide the refusal **at `monitor:` time**. #2764 gestures at this ("A refusal must be answerable too") as an aside rather than as the work.<br><br>⚠️ **Cost, so the deferral is a decision rather than a drift**: at_commons is published at 5.16.0 with no in-progress heading, so the parameter needs a version gkc chooses; at_server is a separate repository and needs that published before it can be written against it; and at_lookup's half re-does a release-train position that has already shipped (3.7.0-rc1). The window it closes is measured in **G3** | gkc scheduling it, after the release train. The caller-side mitigation is already built — see G3 |
 | **atServer outbound connection pooling and concurrency** | ⚠️ **IN ANOTHER REPO (`at_server`), and gkc asked for it as a discussion rather than a change** — 2026-08-24, when he took pool keying out of the G0 fix: *"I'd rather serialize on a single connection for now, and have a longer discussion on how to handle outbound connection pooling and concurrency at a later date"*. Recorded so the deferral does not read as a decision.<br><br>**What that discussion has to weigh**, all established while diagnosing G0: every relayed lookup to a remote atSign now serialises behind every other one, and a request queued on the mutex is waiting before its 5 s read budget even starts; `InboundConnectionImpl.equals` matches on remote address and port rather than object identity, so keying on "the real inbound connection" is not the identity keying it sounds like; `NotifyConnectionsPool.getOutboundClient` has the same non-atomic get/connect/add shape that G0 fixes in `getClient`; and `PolVerbHandler` holds a third `DummyInboundConnection`, so pol's `lookUp`/`plookUp` share a pooled client with relayed lookups at `handshakeRequired: false` <br><br>**Four residual findings belong to this discussion**, all pre-existing and none claimed by the G0 fix: `poolSize` is not enforced across different pool keys, so concurrent misses for different atSigns can take the pool past its declared maximum; an evicted client is dropped without `close()`, leaking its socket; `OutboundMessageListener` can queue a bare `@atSign@` prompt as its own entry when the response and the prompt arrive in separate socket reads, and `read()` accepts a bare prompt as valid — a mis-pairing channel a mutex does not touch, since making an exchange's two steps adjacent never validates or drains the queue; and there is no bound on a slow-but-alive peer. The bare-prompt path has exactly **one** sighting in the wild — a single `FormatException` in the g0base arm — which is a sighting and not a rate | gkc scheduling it. Not a D1 gate |
 | **at_auth `enrollment_submitter`: two defects from the #2179 review** | ✅ **BOTH FIXED 2026-08-25, on both branches** — see `git log` for `fix(at_auth): a builder failure no longer degrades a first enrollment`. ⚠️ This row read "neither fixed". It is kept because the two corrections below are what stop the review being re-applied as written, and because the at_client half of (b) is NOT on the at_auth carve branch: at_client's PQ secret sharing is not there at all. From srieteja's review of [PR #2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179), 2026-08-25. The other four items in that review are fixed and on both branches.<br><br>**(a) A PQ first enrollment can activate with no encapsulation key.** `_buildMetadata` writes the keys into a fresh `InMemoryAtKeysIo`, then wraps only the `builder(keysIo)` call in try/catch — it logs `severe` and returns null. `_handleFirstEnrollmentRequest` submits anyway, with no equivalent of the `isPq`/`keyPackage` guard the OTP path has. ⚠️ **The review calls this permanent capability loss and it is not**: that rested on a doc line saying `metadata.keyPackage` is written only by the request that creates the record, which the code itself retracted on 2026-08-19 — `KeyPackageMinting` rewrites it whole by the enrollment's own `enroll:update`. So it is degraded and recoverable. ⚠️ **The recommended fix cannot be written as stated**: `FirstEnrollmentRequest` has no `keyExchangeMode`, so there is no `isPq` on that path — the only signal is `metadataBuilder != null`.<br><br>**(b) `_handleAtEnrollmentRequest` never adopts what the builder filed.** `metadataBuilder` runs before the request so it can advertise a key package, so everything it files lands in the atSign-scope container; after `enrollmentIdFromServer` arrives only the flat APKAM keypair is re-filed under it. `_handleSelfEnrollmentRequest` and `onboard()` both call `adoptMaterials` and this path does not, so `keysForEnrollment(id)` never returns the key package's private half and it is left behind when the enrollment is retired.<br><br>⛔ **DO NOT apply the one-liner the review recommends.** Adding `adoptMaterials` at the `enrollmentIdFromServer` assignment breaks the PQ OTP flow: `enrollmentApkamSymmetricKeyResolver` → `keyPackageMaterial(keys)` is called with **no** enrollment id, so re-homing the material under one puts it where that resolver cannot see it. It looks obviously right, which is why it is written down here | gkc scheduling them. Neither blocks the 4.0.0-rc1 publish |
 | **atServer: concurrent cross-atSign lookups are answered pairwise** | ✅ **DONE — diagnosed, fixed, verified on the real wire, and [at_server PR #2771](https://github.com/atsign-foundation/at_server/pull/2771) merged to at_server trunk on 2026-08-25** as merge commit `8f4a985a`. ⚠️ This cell read "what is owed is the MERGE … which is open", and before that carried its own copy of the measurements, saying "the branch is unpushed" while G0 said it was pushed. The table of measurements, the mechanism and the controls are in **G0** in [`## THE NEXT MOVE`](#the-next-move); this row is a pointer. ⚠️ **The merge does not rebuild `at_virtual_env:local`** — that tag is still whatever tree last built it | One rig action: rebuild the local virtualenv image from at_server trunk before the next live run that needs a fixed atServer |
