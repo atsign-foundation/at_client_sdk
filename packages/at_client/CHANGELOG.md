@@ -1,5 +1,17 @@
 ## 3.15.0-rc1
 
+- fix: `AtRpc.sendRequest` waits for this atSign's notification listener before
+  it sends. The far side answers a request with a notification back to the
+  caller, and `subscribe()` starts the listener without waiting for it — the
+  socket has still to connect, authenticate and write `monitor:`. A response
+  arriving in that window reaches the atServer with nothing subscribed and is
+  written to no connection, and nothing replays it, because a client that has
+  never received a notification asks the atServer for no backlog. `AtRpcClient`
+  was the sharp case: its `call()` returns a future completed only by the
+  response, with no timeout, so a lost response hung the caller for good. New:
+  `AtRpc.ready()`, which a server should await before advertising itself as
+  reachable, and `AtRpc.listenerReadyTimeout`, which bounds it.
+
 - **BREAKING** refactor: follows at_auth's typed keyfile vocabularies.
   `PackageKey.status`, `PersistedEncKey.status` and the `withdrawn` entries
   `apskEntries` takes are now typed rather than `String`. No record this

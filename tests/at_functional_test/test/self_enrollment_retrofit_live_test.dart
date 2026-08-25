@@ -6,6 +6,7 @@
 @Tags(['pq'])
 library;
 
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -258,16 +259,15 @@ void main() {
     final notifications = client.notificationService as NotificationServiceImpl;
     final firstNotification = notifications
         .subscribe(shouldDecrypt: false)
-        .firstWhere((n) => n.key.contains('rf2cmon'))
-        .timeout(const Duration(seconds: 40));
+        .firstWhere((n) => n.key.contains('rf2cmon'));
 
     // Listener first, trigger second, await third — but the listener that
-    // matters is the SERVER's. `subscribe()` returns ~50ms before the
-    // monitor's own socket has connected, PKAMed and written `monitor:`,
-    // and the monitor asks for no backlog (`lastNotificationTime: null`),
-    // so anything the atServer creates in that window is unrecoverable.
-    // Registering the client-side stream is NOT the same as the atServer
-    // knowing this client is listening.
+    // matters is the SERVER's. `subscribe()` returns before the monitor's own
+    // socket has connected, PKAMed and written `monitor:`, and the monitor
+    // asks for no backlog (`lastNotificationTime: null`), so anything the
+    // atServer creates in that window is unrecoverable. Registering the
+    // client-side stream is NOT the same as the atServer knowing this client
+    // is listening.
     if (notifications.monitor.currentState !=
         NotificationListenerState.listening) {
       await notifications.monitor.currentStateStream
@@ -280,15 +280,42 @@ void main() {
       ..namespace = namespace
       ..sharedBy = atSign
       ..sharedWith = atSign;
-    final notifyResult = await atClient.notificationService
-        .notify(NotificationParams.forUpdate(pingKey, value: 'ping'));
-    expect(notifyResult.notificationStatusEnum,
-        NotificationStatusEnum.delivered,
-        reason: 'atClientException being null does NOT mean delivered — the '
-            'status switch has no default arm and the atServer never says '
-            '"undelivered", so an errored notification returns silently');
 
-    final received = await firstNotification;
+    Future<void> ping() async {
+      final result = await atClient.notificationService
+          .notify(NotificationParams.forUpdate(pingKey, value: 'ping'));
+      expect(result.notificationStatusEnum, NotificationStatusEnum.delivered,
+          reason: 'atClientException being null does NOT mean delivered — the '
+              'status switch has no default arm and the atServer never says '
+              '"undelivered", so an errored notification returns silently');
+    }
+
+    // Pinged until one lands, rather than once, and the wait above is why it
+    // has to be. `listening` means this client has WRITTEN `monitor:` to its
+    // socket, not that the atServer has read it — and the atServer answers
+    // `monitor:` with an empty string, so there is no acknowledgement a client
+    // could wait for instead. A ping arriving inside that gap is announced
+    // with nothing subscribed and is written to no connection at all, and
+    // nothing replays it. Measured on the atServer's own log, the two arrivals
+    // land within a few hundred microseconds to a few milliseconds of each
+    // other, in either order.
+    //
+    // The retry does not weaken what this proves. A monitor that is genuinely
+    // deaf — a refused enrollment, a PKAM that did not take — fails every
+    // attempt, and each attempt still asserts the atServer accepted the
+    // notification for delivery.
+    await ping();
+    late AtNotification received;
+    final deadline = DateTime.now().add(const Duration(seconds: 40));
+    while (true) {
+      try {
+        received = await firstNotification.timeout(const Duration(seconds: 5));
+        break;
+      } on TimeoutException {
+        if (!DateTime.now().isBefore(deadline)) rethrow;
+        await ping();
+      }
+    }
     expect(received.key, contains('rf2cmon'),
         reason: 'the retrofitted, SCOPED enrollment receives notifications '
             'for its own namespace over a monitor its ML-DSA key '

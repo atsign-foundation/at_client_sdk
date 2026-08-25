@@ -264,12 +264,70 @@ class AtRpc {
     }
   }
 
+  /// How long [ready] waits for the notification listener before giving up.
+  ///
+  /// Bounded, because a caller blocked forever on a listener that will never
+  /// come up is indistinguishable from one waiting on a slow network, and the
+  /// request it is holding is the diagnosis.
+  Duration listenerReadyTimeout = const Duration(seconds: 30);
+
+  /// Completes once this atSign's notification listener is up.
+  ///
+  /// [start] subscribes and returns immediately: the listener's socket has
+  /// still to connect, authenticate and write its `monitor:` command, and
+  /// [NotificationService.subscribe] does not wait for any of that. Anything
+  /// the far side sends in that window reaches this atSign's atServer with
+  /// nothing subscribed to receive it, and nothing replays it — a client that
+  /// has never received a notification asks the atServer for no backlog, so a
+  /// response sent inside the window is not merely late, it is never seen.
+  ///
+  /// [sendRequest] waits for this rather than leaving it to each caller. A
+  /// server should await it too, before it advertises itself as reachable: a
+  /// request that arrives before the request listener is up is lost the same
+  /// way.
+  ///
+  /// Throws [TimeoutException] if the listener has not come up within
+  /// [listenerReadyTimeout].
+  Future<void> ready({Duration? timeout}) async {
+    final NotificationService ns = atClient.notificationService;
+    final Completer<void> up = Completer<void>();
+    // Listener first, state second. currentListenerStateStream is broadcast
+    // and does not replay, so reading the state before subscribing would drop
+    // a transition that landed in between and then wait for the next one.
+    final StreamSubscription<NotificationListenerState> sub =
+        ns.currentListenerStateStream.listen((NotificationListenerState s) {
+      if (s == NotificationListenerState.listening && !up.isCompleted) {
+        up.complete();
+      }
+    }, onError: (Object e) {
+      if (!up.isCompleted) up.completeError(e);
+    });
+    try {
+      if (ns.currentListenerState == NotificationListenerState.listening &&
+          !up.isCompleted) {
+        up.complete();
+      }
+      await up.future.timeout(timeout ?? listenerReadyTimeout);
+    } finally {
+      await sub.cancel();
+    }
+  }
+
   /// Sends a request by sending a notification with 'key' of
   /// `request.${request.reqId}.$domainNameSpace.$rpcsNameSpace.$baseNameSpace`
   /// with payload of `jsonEncode([request].toJson())`
   /// to [toAtSign]
+  ///
+  /// Waits for [ready] first when [isClient], so the response cannot arrive
+  /// before there is anything subscribed to receive it.
   Future<void> sendRequest(
       {required String toAtSign, required AtRpcReq request}) async {
+    // Only when this object is listening for responses. A caller that built an
+    // AtRpc with isClient false has said it is not expecting any, and has no
+    // response listener to wait for.
+    if (isClient) {
+      await ready();
+    }
     toAtSign = AtUtils.fixAtSign(toAtSign);
     String requestRecordIDName =
         'request.${request.reqId}.$domainNameSpace.$rpcsNameSpace';
