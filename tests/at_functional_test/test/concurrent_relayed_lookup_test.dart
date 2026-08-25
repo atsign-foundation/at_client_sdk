@@ -52,8 +52,13 @@
 // The width-1 arm is the same sockets, the same commands and the same
 // background load, with only one lookup in flight. It must be clean; anything
 // in it is a broken probe rather than a finding.
+// ⚠️ Deliberately NOT tagged `pq`, and it must stay that way. This drives no
+// post-quantum mechanism at all — no conveyance, no postures, not even
+// encryption — and that is the point: it shows the defect with all of that
+// stripped away. `pq_tag_test` guards the tag set in both directions, so
+// naming one of the symbols it greps for, even in a comment like this one,
+// is enough to make it demand the tag.
 @Skip('reproduces an open atServer defect; run by hand, see the header')
-@Tags(['pq'])
 library;
 
 import 'dart:async';
