@@ -27,7 +27,11 @@ dependencies:
   internet_connection_checker: ^1.0.0+1
   async: ^2.9.0
   at_base2e15: ^1.0.0
-  at_commons: ^5.15.0
+  # 5.16.0 for Metadata.copy(), which notify_request_transformer.dart calls.
+  # Verified against the published packages: the method is absent from
+  # at_commons 5.15.0 and present in 5.16.0, so a consumer resolving from
+  # pub.dev at the old floor gets a package that does not compile.
+  at_commons: ^5.16.0
   at_utils: ^3.2.0
   at_chops: ^3.6.0
   at_lookup: ^3.7.0-rc1
