@@ -20,7 +20,8 @@ import 'package:at_chops/at_chops.dart'
         SigningAlgoType;
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_lookup/at_lookup.dart' show AtLookUp, AtLookupImpl;
+import 'package:at_lookup/at_lookup.dart'
+    show AtLookUp, AtLookupImpl, AtLookUpException;
 import 'package:at_commons/at_commons.dart' show EnrollmentConstants;
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
@@ -251,10 +252,17 @@ void main() {
     }
 
     // Arm 1: no proof at all.
-    await expectLater(sendWith(null), throwsA(isA<Object>()),
+    await expectLater(
+        sendWith(null),
+        throwsA(isA<AtLookUpException>().having((e) => e.errorMessage,
+            'errorMessage', contains('requires apkamPublicKeySignature'))),
         reason: 'a rekey with no possession proof must be refused: the '
             'connection proves possession of the CURRENT key and nothing else '
-            'proves possession of the new one');
+            'proves possession of the new one. Asserted on the atServer\'s '
+            'own message rather than on any throw — this is a live test, so a '
+            'connection reset, a timeout and a malformed command all throw '
+            'too, and a bare isA<Object>() cannot tell the guard firing from '
+            'the call failing');
 
     // Arm 2: a proof, but by the wrong key. This is the arm that discriminates
     // — a server that merely checked the field was present would pass arm 1's
@@ -270,10 +278,37 @@ void main() {
       apkamPrivateKey: other.privateKey,
       signingAlgo: SigningAlgoType.rsa2048,
     );
-    await expectLater(sendWith(wrong), throwsA(isA<Object>()),
+    await expectLater(
+        sendWith(wrong),
+        throwsA(isA<AtLookUpException>().having(
+            (e) => e.errorMessage,
+            'errorMessage',
+            contains(
+                'does not verify against the apkamPublicKey being installed'))),
         reason: 'a proof signed by a key other than the one being installed '
             'must be refused, or an authenticated-but-compromised client '
-            'could install a key whose private half someone else holds');
+            'could install a key whose private half someone else holds. The '
+            'message differs from arm 1\'s, so the two arms are distinguished '
+            'by which check refused them rather than only by both throwing');
+
+    // The record is unchanged. Checked where it SHOWS: enroll:fetch returns
+    // five fields and apkamPublicKey is not among them, so "unchanged" means
+    // the key that authenticated before still does, and neither refused
+    // request installed the one it carried. A server that refused AFTER
+    // writing would pass without this, and that outcome installs a key whose
+    // private half the caller may not hold.
+    //
+    // ⚠️ It has to sit HERE, before the valid-proof control below, which
+    // rewrites the record deliberately.
+    expect(
+        await authenticatesWith(
+            client, client.keys.apkamPrivateKey!.toString()),
+        isTrue,
+        reason: 'the enrollment must still authenticate with the key it had, '
+            'or a refused rekey took its credential away');
+    expect(await authenticatesWith(client, fresh.privateKey), isFalse,
+        reason: 'and the key both refusals tried to install must not work — a '
+            'refusal that had already written is worse than no guard');
 
     // The control. Without it both refusals above are satisfied by a server
     // that refuses every update, and this row would prove nothing about the
@@ -309,17 +344,52 @@ void main() {
             'all — the escalation is refused on the wire below, and is also '
             'unreachable from the API');
 
-    // The server half: a request that DOES name them is refused by its own
-    // error rather than by a generic failure, because this is the
-    // privilege-escalation guard and "it failed" would not distinguish it
-    // from a typo.
+    // The server half: the privilege-escalation guard, refused by its own
+    // named error rather than by a generic failure.
+    //
+    // ⛔ **The request must name a VALID field alongside `namespaces`, or it
+    // never reaches that guard**, so do not simplify it down to the illegal
+    // field alone. A request naming nothing the verb recognises is refused by
+    // an EARLIER well-formedness check:
+    //
+    //   AT0022 · enroll:update must name at least one of apkamPublicKey,
+    //            signingAlgo, apsk, apskLegacy or metadata
+    //
+    // which says nothing about namespaces. Stripped that far, the arm varies
+    // two things at once — it adds `namespaces` AND omits every field the verb
+    // knows — so it cannot tell "namespaces is refused" from "namespaces is
+    // ignored and the command was empty", and removing the escalation guard
+    // altogether leaves it green. The `metadata` entry below is what keeps the
+    // request well-formed, so the namespaces entry is the only thing left that
+    // can refuse it.
     final raw = 'enroll:update:${jsonEncode({
+          'enrollmentId': client.enrollmentId,
+          'metadata': {'note': 'g112'},
+          'namespaces': {'__manage': 'rw'},
+        })}\n';
+    await expectLater(
+        lookupOf(client).executeCommand(raw, auth: true),
+        throwsA(isA<AtLookUpException>().having((e) => e.errorMessage,
+            'errorMessage', contains('cannot change namespaces'))),
+        reason: 'an enrollment must not be able to widen its own grant, and '
+            'the refusal must be THAT guard — the metadata beside it is a '
+            'field the verb accepts, so the request is well-formed and only '
+            'the namespaces entry can be what refuses it');
+
+    // And the earlier check, pinned as its own arm so the two refusals stay
+    // distinguishable. Without it, a change that collapsed both into one
+    // message would go unnoticed.
+    final bare = 'enroll:update:${jsonEncode({
           'enrollmentId': client.enrollmentId,
           'namespaces': {'__manage': 'rw'},
         })}\n';
     await expectLater(
-        lookupOf(client).executeCommand(raw, auth: true), throwsA(isA<Object>()),
-        reason: 'an enrollment must not be able to widen its own grant');
+        lookupOf(client).executeCommand(bare, auth: true),
+        throwsA(isA<AtLookUpException>().having((e) => e.errorMessage,
+            'errorMessage', contains('must name at least one of'))),
+        reason: 'a request naming only namespaces is refused for naming '
+            'nothing the verb knows, which is a different refusal from the '
+            'one above and must not be mistaken for it');
 
     expect((await fetch(client))['namespace'], before['namespace'],
         reason: 'and the record is unchanged — a refusal that had already '
@@ -344,9 +414,16 @@ void main() {
               signingAlgo: SigningAlgoType.rsa2048,
             ),
             lookupOf(mine)),
-        throwsA(isA<Object>()),
+        throwsA(isA<AtLookUpException>().having(
+            (e) => e.errorMessage,
+            'errorMessage',
+            allOf(contains('self-only'), contains(mine.enrollmentId),
+                contains(other.enrollmentId)))),
         reason: 'E1 must not amend E2: the whole point of a self-only verb is '
-            'that holding one enrollment grants nothing over another');
+            'that holding one enrollment grants nothing over another. The '
+            'message must name BOTH enrollments — the one that asked and the '
+            'one it reached for — so a refusal for any other reason, or one '
+            'about the wrong pair, cannot satisfy it');
 
     // Arm 2: a connection carrying no enrollment id at all — the owner's own,
     // authenticated over legacy PKAM. It is refused rather than waved through,
@@ -360,9 +437,15 @@ void main() {
               signingAlgo: SigningAlgoType.rsa2048,
             ),
             approver.getRemoteSecondary()!.atLookUp),
-        throwsA(isA<Object>()),
+        throwsA(isA<AtLookUpException>().having(
+            (e) => e.errorMessage,
+            'errorMessage',
+            allOf(contains('self-only'), contains('the owner'),
+                contains(mine.enrollmentId)))),
         reason: 'an owner connection names no enrollment, so it cannot be the '
-            'enrollment this record belongs to');
+            'enrollment this record belongs to. The message says "the owner" '
+            'rather than an id, which is what distinguishes this refusal from '
+            'arm 1\'s — the same assertion for both would not tell them apart');
 
     // The control: the same request on its OWN connection succeeds, so both
     // refusals are about who asked rather than about the request being
