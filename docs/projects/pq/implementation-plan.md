@@ -143,7 +143,7 @@ TODO row names a section whose body declares itself done").
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
-| [what the citation audit left owed](#what-the-citation-audit-left-owed) | **Seven open findings from the audit, and one has a security consequence.** F11: all seven refusal assertions in the `enroll:update` live cluster are `throwsA(isA<Object>())`, so a timeout and the privilege-escalation guard firing are the same green — and UC-G1.12's row demands a *named* error in its own words. F16: the nskey mint lock's live refusal is proven for `_rootlock` and modelled by a mock for `_nskeylock`, which is the same measurement the seeding P0 is missing. The rest are unasserted clauses | Nothing. F11 and F12 need one live probe first |
+| [what the citation audit left owed](#what-the-citation-audit-left-owed) | **Five open findings.** F16 is the one that matters: the nskey mint lock's live refusal is proven for `_rootlock` and only modelled by a mock for `_nskeylock`, which is the same measurement the seeding P0 is missing, so one live test discharges both. F15 and F8 are unasserted clauses; F1 and F3 are ledger-precision work. ⚠️ **F11, F12 and F18 closed 2026-08-26** — the `enroll:update` refusals are now asserted by the atServer's own messages, and UC-G1.12 turned out to be green for a refusal that was not the guard it names | Nothing |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
 | **advertisement fetch volume, ttr and client caching** | Three questions, one subject, raised by gkc 2026-08-26 after a wire capture showed **110 `_apsk` lookups in a single short client run** — more than either control atSign made. (1) Why are there so many? Establish what re-fetches, and whether anything is re-reading per operation what it could hold. (2) Should an advertisement carry a `ttr`, and if so how long — it is a public record that peers must not read stale after a rotation, and rotation is the revocation lever. (3) How should a client cache advertisements it has fetched, and for how long? ⛔ **These interact**: a client-side cache with no server-side `ttr` is a rotation that does not take effect, and a `ttr` shorter than a session is the fetch volume in (1) by design | Nothing. It needs a measurement, then a ruling |
 | [the at_client carve stack](#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
@@ -158,6 +158,7 @@ TODO row names a section whose body declares itself done").
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
+| **`notificationStatusEnum` is not an outcome, and its name says it is** | **A dartdoc fix, not a behaviour change** — raised by the at_talk demo session 2026-08-26 and routed here by gkc, because every app author meets it and only one of them is that session. `NotificationResult.notificationStatusEnum` initialises to `undelivered`. With `checkForFinalDeliveryStatus: true`, which is the **default**, `_waitForAndHandleFinalNotificationSendStatus` polls and sets it from the atServer, so it means what it says. Pass **`false`** and that method returns early: the field is never assigned on the success path, so an accepted send, a refused send and a failed send all read `undelivered`. The only signal left is `atClientException == null`, which no field name suggests. ⚠️ **Verified here against the source, and the request understated one thing and overstated another**: the enum *is* assigned `delivered` on the default path, so the trap is narrower than "only ever assigned undelivered" — it needs the caller to opt out of polling. And the `on AtException` handler's own comment reads *"Setting notificationStatusEnum to errored"* while it sets `undelivered`, naming a value the enum does not have (`{delivered, undelivered}`). **Owed, and the comment comes first**: a reader who reaches that handler while debugging is told the distinction they are hunting for exists, goes looking for where `errored` is set, and concludes their build is stale — worse than an undocumented field, which at least does not mislead. Then the qualifier on `notificationStatusEnum` and on `NotificationResult`, naming `atClientException == null` as what to read instead. ✅ **Confirmed by the requesting session 2026-08-26**: `bin/at_talk.dart` passes `checkForFinalDeliveryStatus: false`, so the mis-scored cells were the inert opted-out path and the narrowing above is the accurate statement of the defect. ⛔ **No change to when the exception is caught rather than thrown was asked for, and none should be smuggled into a docs fix** | Nothing |
 | **a pq enrolment costs a post-approval round trip** | Measure it, and decide whether the enrolment APIs should say so. A legacy enrollee carries its own symmetric key in and is done at approval; a pq enrollee must then **collect** the key the approver encapsulated to its key package, polling for the envelope (`enrollmentApkamSymmetricKeyResolver`, 30 s budget, 2 s interval). ⚠️ **Found 2026-08-26 by it breaking two tests**, not by design review: two authorisation tests in the CLI functional pack wait 10 s before approving and have a 30 s budget, and under the `pqReady` default that no longer fit — they now name `legacy` because they assert authorisation, not key exchange. The pin keeps them honest; it does not measure the cost | Nothing. It needs a measurement and then a judgement about whether callers are told |
 | [the registrar certificate test](#the-registrar-certificate-test) | Three arms against a self-signed cert. The last S-5 behaviour change that exercises nothing, and the only one with a security consequence. ⛔ **POST-D1 clean-up, not a gate** (gkc, 2026-08-23) | Nothing. It lands wherever at_auth is next touched |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Item 8 is the only one still waiting on a ruling. Items 20 and 21 are examined-and-left, not work; item 35 lands in `atGettingStarted` | gkc, on item 8 |
@@ -219,11 +220,11 @@ figure, and `rm -f` the file first** — `provenIn` appends, so a stale file rea
 as twice the corpus. The command is in
 [Re-deriving the state](#re-deriving-the-state).
 Cluster A (37 citations, 20 rows), C1 (25, 6), B (42, 25), G1 (37, 16), and the
-cross-cutting bucket (14 citations over 6 of its 10 scenarios). **Seventeen
-findings, ten closed and seven open** — re-derive both by tallying the `F<n>`
-headings in that detail file, since one of them recorded itself CLOSED in its
-body while its heading was never struck, and every command keying on headings
-counted it open.
+cross-cutting bucket (14 citations over 6 of its 10 scenarios). **Eighteen
+findings, thirteen closed and five open** — re-derive both by tallying the
+`F<n>` headings in that detail file, since one of them recorded itself CLOSED
+in its body while its heading was never struck, and every command keying on
+headings counted it open.
 
 ⚠️ **The bucket is the part worth remembering.** Four clusters were audited, each
 one finished, and none of them was the corpus: the passes were scoped by the
@@ -298,66 +299,59 @@ from their acceptance scenario*. Do not restate it as coverage.
 
 ### What the citation audit left owed
 
-Seven open findings, recorded in full in
+Five open findings, recorded in full in
 [detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26)
 and the cluster sections under it. **Tally them by the `F<n>` headings in that
 file rather than from this list** — one finding recorded itself CLOSED in its
 body while its heading was never struck, so a command keying on headings counted
 it open and disagreed with the prose. Both were honest and one was wrong.
 
-**F11 is the one with a consequence, and it is small to fix.** Every refusal in
-`tests/at_functional_test/test/enroll_update_live_test.dart` — seven assertions
-across UC-G1.11, UC-G1.12 and UC-G1.13 — is `throwsA(isA<Object>())`, which
-matches a connection reset, a timeout and a malformed command as readily as the
-guard firing. UC-G1.12's catalogue row forbids exactly that: *"the atServer
-refuses it by its own named error, not by 'it failed' — this is the
-privilege-escalation guard"*, and the test's own comment restates the
-requirement immediately above an assertion that does not meet it.
+⚠️ **F11, F12 and F18 closed on 2026-08-26**, and what closing them turned up is
+worth reading before writing any refusal test. F11 was that all seven refusals in
+`enroll_update_live_test.dart` were `throwsA(isA<Object>())`, which cannot tell
+the guard firing from a timeout. Probing first — rather than inferring from the
+handler — showed all five come back as `AtLookUpException` with distinct
+messages, so they are now asserted by name and each was mutated to prove it
+discriminates.
 
-⚠️ **The arms around those assertions are good** — genuine enrollments, a
-possession proof signed by the production helper with the wrong private half, a
-control showing the same request succeeds when the guard should not fire. What
-the controls cannot rule out is a transport failure on the refusal arm itself,
-because the control is a different call made later.
+⛔ **F18 came out of that probe and is the sharper defect.** UC-G1.12's arm sent
+`enroll:update` naming `namespaces` **and nothing else**, so the atServer refused
+it for naming no recognised field at all — an earlier well-formedness check,
+which says nothing about namespaces. The escalation guard the row names was never
+reached, and deleting it would have left the test green. Naming one valid field
+alongside reaches it. **The shape generalises: a refusal arm must differ from the
+accepted case in the forbidden thing and in nothing else**, and stripping a
+request down to only the illegal field is the natural way to write the test and
+the reliable way to miss the guard.
 
-**Start with a probe, not a rewrite.** What the atServer actually returns for
-each of the three refusals is unmeasured, as is whether at_lookup surfaces it as
-a typed exception or an error string. One throwaway probe against an
-already-provisioned atSign answers all three, and inferring it from the handler
-is the thing this tree has a rule against.
+**F16 is now the one that matters, and it shares a measurement with the open
+seeding P0.** `neither key record is immutable; the lock that mints them is`
+names `_rootlock@owner` and `_nskeylock.<ns>@owner`, and proves the live refusal
+for the first only. The nskey lock is covered by a raw-literal pin of the
+client's intent and by a mock that models the refusal on the key name — and a
+mock cannot test a refusal it does not model, so the guard's presence and its
+absence look the same.
+[The seeding P0](#a-client-that-exits-during-its-startup-tail-abandons-seeding)
+records its self-perpetuating-interlock arm as reasoned from the code rather than
+measured. **It is the same measurement, and one live test discharges both.**
+`pq_signing_root_mint_lock_test.dart` already takes, releases and re-takes a lock
+against a live atServer; a fourth test doing that with `nskeyMintLockKey` is the
+same shape against a different key.
 
-**F16 shares a measurement with the open seeding P0.**
-`neither key record is immutable; the lock that mints them is` names
-`_rootlock@owner` and `_nskeylock.<ns>@owner`, and proves the live refusal for
-the first only. The nskey lock is covered by a raw-literal pin of the client's
-intent and by a mock that models the refusal on the key name — and a mock cannot
-test a refusal it does not model, so the guard's presence and its absence look
-the same. [The seeding P0](#a-client-that-exits-during-its-startup-tail-abandons-seeding)
-records its self-perpetuating-interlock arm as reasoned from the code rather
-than measured. **It is the same measurement, and one live test discharges both.**
-`pq_signing_root_mint_lock_test.dart` already takes, releases and re-takes a
-lock against a live atServer; a fourth test doing that with `nskeyMintLockKey`
-is the same shape against a different key.
+**The remaining four:**
 
-**The remaining five are unasserted clauses**, each a line or two of test:
-
-- **F12** — UC-G1.11 promises *"the atServer refuses **and the record is
-  unchanged**"* and never fetches the record, so a server that refused after
-  writing would pass. The assertion has to sit before the valid-proof control,
-  which rewrites the record deliberately.
 - **F15** — UC-G1.2 promises the resolver returns the new enrollment id after a
   retrofit, and nothing calls it. Sharper than it looks: the flat `enrollmentId`
   stays at the legacy enrolment, so the keyfile answers the question two ways
   depending on which field a reader takes, and the row promises one of them.
-- **F1** — the clause level is 9% adopted. A citation may name the clauses it
-  carries; almost none do, so the ledger cannot show which part of a row an
-  individual citation is for.
-- **F3** — about 8 citations rest on tests they do not pin.
 - **F8** — every UC-B1 assertion is a restriction, so an enrolment that gained
   nothing and can do nothing satisfies the whole cluster. Partly answered by
   UC-B1.4 to UC-B1.7, which assert capabilities; the review question it
   generalises to is worth keeping: *does this row assert a capability, or only a
   restriction?*
+- **F1** — the clause level is 9% adopted, so the ledger cannot show which part
+  of a row an individual citation is for.
+- **F3** — about 8 citations rest on tests they do not pin.
 
 ⚠️ **Also still open from cluster B**: UC-B1.3's `nskey`-subset clause is stated
 in the catalogue and established by no citation, recorded at the row.

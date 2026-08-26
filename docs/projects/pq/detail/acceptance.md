@@ -655,7 +655,7 @@ produced, to guard an array carrying nothing.
 Corrected in place, with what the row used to say and both directions it was
 wrong in.
 
-#### F11 — every refusal in the `enroll:update` cluster is `throwsA(isA<Object>())`
+#### F11 — every refusal in the `enroll:update` cluster is `throwsA(isA<Object>())` — ✅ CLOSED 2026-08-26
 
 `tests/at_functional_test/test/enroll_update_live_test.dart` carries seven
 refusal assertions across UC-G1.11, UC-G1.12 and UC-G1.13, and **all seven
@@ -688,13 +688,28 @@ the guard should not fire. Those controls rule out *"a server that says no to
 everything"*. What they cannot rule out is a transport failure on the refusal
 arm specifically, since the control is a different call made later.
 
-**What is owed is a probe before an assertion**, not a rewrite: the atServer's
-actual error for each of the three refusals, read once against a live
-virtualenv, then asserted by name. Whether at_lookup surfaces those as typed
-exceptions or as error strings is unmeasured — it is the same question the
-tree's own rule answers by probing rather than by inferring from the handler.
+**Closed by probing first, then asserting.** All five refusals come back as
+`AtLookUpException` with a distinct message, measured against a live
+virtualenv rather than inferred from the handler:
 
-#### F12 — UC-G1.11's "and the record is unchanged" is asserted by nothing
+| arm | code | message fragment now asserted |
+| --- | --- | --- |
+| G1.11 no signature | AT0011 | `requires apkamPublicKeySignature` |
+| G1.11 wrong key | AT0011 | `does not verify against the apkamPublicKey being installed` |
+| G1.12 escalation | AT0022 | `cannot change namespaces` |
+| G1.13 other enrollment | AT0011 | `self-only`, naming **both** enrollment ids |
+| G1.13 owner connection | AT0011 | `self-only … authenticated as the owner` |
+
+The control — the same request on its own connection — succeeds, so every row
+above is a refusal rather than a broken rig.
+
+**Each assertion was then mutated, and each reddened quoting its own reason.**
+Arm 2's expectation set to arm 1's message reddens, which is what proves the
+two arms are refused by *different* checks: under `isA<Object>()` they were one
+measurement, and a server that merely checked the field was present would have
+satisfied both.
+
+#### F12 — UC-G1.11's "and the record is unchanged" is asserted by nothing — ✅ CLOSED 2026-08-26
 
 The row's *Then* is *"the atServer refuses **and the record is unchanged**"*.
 UC-G1.12 asserts its half of that, comparing `namespace` before and after.
@@ -705,8 +720,55 @@ It is the sharper half of the two, because a partial write here installs a key
 whose private half the caller may not hold, and the row's own request dartdoc
 calls that outcome *"the emergency it is"*.
 
-The assertion has to sit before the valid-proof control, which rewrites the
-record deliberately.
+**Closed.** Asserted where it shows rather than where it is stored, because
+`enroll:fetch` returns five fields and `apkamPublicKey` is not among them: the
+key that authenticated before still does, and the key both refusals carried
+does not. It sits before the valid-proof control, which rewrites the record
+deliberately. Mutating the second half to `isTrue` reddens on its own
+assertion.
+
+#### F18 — UC-G1.12 was green for the wrong reason, and the guard it names was never reached — ✅ CLOSED 2026-08-26
+
+**Found while closing [F11](#f11--every-refusal-in-the-enrollupdate-cluster-is-throwsaisaobject--closed-2026-08-26), and it is the more serious of the two.** F11 says
+the assertion was too weak to tell the guard from a timeout. This says the
+assertion was checking a refusal that had nothing to do with the guard.
+
+UC-G1.12's server arm sent `enroll:update` naming `namespaces` **and nothing
+else**. Measured live:
+
+```
+AT0022 · enroll:update must name at least one of apkamPublicKey, signingAlgo,
+         apsk, apskLegacy or metadata
+```
+
+That is "you named nothing I recognise". The arm varied **two things at once** —
+it added `namespaces` *and* omitted every field the verb knows — so it could not
+distinguish *namespaces is refused* from *namespaces is ignored and the command
+was empty*, which is the whole question the row exists to settle.
+
+**The guard is real, and naming one valid field alongside reaches it:**
+
+```
+AT0022 · enroll:update cannot change namespaces: an enrollment amending itself
+         must not be able to widen its own grant
+```
+
+⛔ **Proven by mutation, both directions.** Reverting the request to the
+namespaces-only form while keeping the `cannot change namespaces` expectation
+reddens, and the failure quotes the *other* message — so the arm as it stood
+before today never reached the escalation guard, and deleting that guard
+outright would have left it green. The catalogue row was right about the
+mechanism the whole time; nothing was exercising it.
+
+Both refusals are now pinned as separate arms, so a change collapsing them into
+one message goes red.
+
+⚠️ **The shape, and it generalises well past this row:** *a refusal arm must
+differ from the accepted case in the forbidden thing and in nothing else.*
+Stripping a request down to only the illegal field is the natural way to write
+the test and the reliable way to miss the guard — an earlier well-formedness
+check answers first, and its refusal is indistinguishable from the one you
+meant. It is the differential-test rule wearing a refusal's clothing.
 
 #### F13 — UC-G1.9's title clause was cited under UC-G1.8 — ✅ CLOSED
 
