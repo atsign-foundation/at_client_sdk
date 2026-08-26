@@ -164,6 +164,16 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     // ??= to support mocking
     _atLookUp ??= atClientManager.atClient.getRemoteSecondary()?.atLookUp;
 
+    /// The keypair the connection signs its PKAM challenge with.
+    ///
+    /// Resolved beside the enrollment id and the algorithm, and from the same
+    /// source as whichever of them this flow trusts, because the three are one
+    /// fact: an enrollment, the key it holds, and the routine that key is
+    /// signed with. Taking two of them from the client and the third from the
+    /// caller is what left `at_activate list` unable to run a verb on a
+    /// retrofitted keyfile.
+    final AtChops authenticationSigner;
+
     if (serviceBuiltTheLookup) {
       // Enrolment. The APKAM keypair was minted moments ago under the
       // posture's axis and the keyfile that will hold it is written later, so
@@ -172,6 +182,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       _atLookUp!.enrollmentId = enrollmentId;
       _atLookUp!.signingAlgoType =
           atOnboardingPreference.authenticationKeyAlgorithm;
+      authenticationSigner = atChops;
     } else {
       // Authentication. The lookup just adopted is the client's own, and the
       // client has already read the keyfile — which outranks any preference,
@@ -188,9 +199,23 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
       // the client's rather than the argument's, because a client that
       // retrofitted during its own init came up on a different enrollment
       // from the one the keyfile named when this call started.
+      //
+      // ⛔ **And the signer comes from the client for the same reason**, which
+      // it did not until a retrofitted keyfile made the two disagree. `atChops`
+      // here is at_auth's, built for the enrollment the keyfile's flat fields
+      // name; a client that retrofitted during its own init rebuilt its own to
+      // the new enrollment's ML-DSA keypair. Declaring the client's algorithm
+      // over the caller's keypair is a pairing at_chops refuses outright —
+      // `this PKAM key is 1218 bytes, and an ML-DSA-65 secret key is 4032` —
+      // and it refuses it on the first PKAM the adopted lookup performs, which
+      // is the one before the verb. So authentication reports success and the
+      // command fails, on every run: the retrofit is due again each time,
+      // because it deliberately leaves the keyfile's own `enrollmentId` at the
+      // capped legacy enrollment.
       final client = atClientManager.atClient;
       _atLookUp!.enrollmentId = client.enrollmentId ?? enrollmentId;
       _atLookUp!.signingAlgoType = AtClientImpl.signingAlgoOf(client);
+      authenticationSigner = client.atChops ?? atChops;
     }
     // Neither key material nor a posture says how a challenge is *hashed*, so
     // this axis is the preference's on both paths — and asserting it is what
@@ -200,6 +225,13 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     _atLookUp!.hashingAlgoType = atOnboardingPreference.hashingAlgoType;
 
     atClient ??= atClientManager.atClient;
+    // The caller's, on both flows, and deliberately not [authenticationSigner]:
+    // this field is what at_auth's EnrollmentApprover reads for enrollment
+    // crypto, where the material that matters is the encryption keypair and the
+    // APKAM symmetric key rather than the APKAM signing keypair. A retrofitted
+    // client's AtChops is built from its own enrollment's authentication
+    // material and carries no APKAM symmetric key, so putting it here would
+    // move a second, unrelated behaviour under cover of fixing authentication.
     _atLookUp!.atChops = atChops;
     // Beside atChops, not instead of it: at_auth's EnrollmentApprover reads
     // that field for enrollment crypto, which is not authentication.
@@ -209,7 +241,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         _keysIo(),
         _atSign,
         enrollmentId: lookUp.enrollmentId,
-        chops: atChops,
+        chops: authenticationSigner,
       );
     }
   }

@@ -1,5 +1,28 @@
 ## 1.17.0-rc1
 
+- fix: a client that retrofits its enrolment at startup can run authenticated
+  verbs again. `at_activate list` on a keyfile that had been retrofitted printed
+  "Connected" and then failed the verb, and it failed on every run — the
+  retrofit deliberately leaves the keyfile's own `enrollmentId` at the capped
+  legacy enrolment, so it is due again at each start.
+  - `_initAtClient` stamped three things on the client's lookup and took them
+    from two places: the enrolment id and the signing algorithm from the client,
+    which had moved to the new enrolment, and the **signer** from the caller,
+    which at_auth had built for the old one. The lookup then declared
+    `mldsa65` over an RSA-2048 keypair.
+  - `authenticatorFor` could not reconcile them, which is what made it silent:
+    given an injected signer it takes only the *algorithm* from the keyfile, so
+    both halves are read from one file for one enrolment id and still disagree.
+    at_chops refuses the pair outright.
+  - The signer is now resolved beside the id and the algorithm, from whichever
+    source that flow trusts — the client when authenticating, the caller when
+    enrolling, where the APKAM keypair was minted moments earlier and no keyfile
+    holds it yet. `AtLookUp.atChops` stays the caller's on both: that field is
+    what at_auth's `EnrollmentApprover` reads for enrollment crypto, which is
+    not authentication.
+  - Authentication itself was never broken, which is why nothing caught this:
+    at_auth authenticates on its own connection, before the client exists.
+
 - fix: an enrolment now travels its key under the posture's key-exchange mode,
   and can be told otherwise. This is the second half of the same defect as the
   entry below: `--posture` reached the preference and the authentication key

@@ -65,8 +65,13 @@ void main() {
 
   /// Enrols one app under [signingAlgo], approves it **through the CLI**, and
   /// reports what the keyfile holds and whether authenticating as it worked.
-  Future<({AtKeys keys, String enrollmentId, bool authenticated})> enrolAt(
-      SigningAlgoType signingAlgo, String label) async {
+  Future<
+      ({
+        AtKeys keys,
+        String enrollmentId,
+        bool authenticated,
+        String keysFilePath
+      })> enrolAt(SigningAlgoType signingAlgo, String label) async {
     final apkamKeysFilePath = testKeysFile(atSign, suffix: label);
     final service = AtOnboardingServiceImpl(
         atSign, _preference(atSign, apkamKeysFilePath));
@@ -108,7 +113,8 @@ void main() {
     return (
       keys: keys,
       enrollmentId: enrollmentId,
-      authenticated: authenticated
+      authenticated: authenticated,
+      keysFilePath: apkamKeysFilePath
     );
   }
 
@@ -157,6 +163,74 @@ void main() {
     expect(legacy.authenticated, isTrue,
         reason: 'the rsa2048 arm must still authenticate, or this file is '
             'measuring a broken enrolment path rather than an algorithm');
+  }, timeout: Timeout(Duration(minutes: 6)));
+
+  /// ⛔ **The arm that was missing, and its absence is why the defect shipped.**
+  ///
+  /// The test above ends at `authenticated == true`, and that is at_auth's own
+  /// connection reporting success — a connection built before the client
+  /// exists. The client is built afterwards, retrofits itself, and every verb
+  /// runs over a DIFFERENT connection. So a legacy enrolment could authenticate
+  /// and then be unable to do anything, with nothing in this pack noticing.
+  ///
+  /// `at_activate list` is the reported reproduction, run here as the shipped
+  /// binary path rather than as a hand-built call: it builds its own client
+  /// through `createAtClient`, which names no posture and so runs at the SDK
+  /// default, and then sends `enroll:list` with `auth: true`.
+  ///
+  /// **The retrofit is asserted, not assumed.** A green from a run where the
+  /// retrofit never happened would say nothing at all, so the keyfile is read
+  /// on both sides: legacy shape before, and typed ML-DSA material under a
+  /// second enrolment id after. That second read is this test's positive
+  /// control, and it is the thing that fails first if the atServer stops
+  /// auto-approving self-enrolments.
+  test('a legacy enrolment that retrofits at start can still run a verb',
+      () async {
+    final legacy = await enrolAt(SigningAlgoType.rsa2048, 'retrofitverb');
+
+    expect(legacy.authenticated, isTrue,
+        reason: 'the precondition: this enrolment authenticates before '
+            'anything retrofits it. Without it a red below could be an '
+            'enrolment that was never usable');
+    expect(legacy.keys.authenticationAlgorithmFor(legacy.enrollmentId), isNull,
+        reason: 'the other precondition: an rsa2048 enrolment keeps its '
+            'keypair in the flat fields and files no typed authentication '
+            'material. Typed material here means the retrofit already ran and '
+            'the comparison below has nothing left to vary');
+
+    // The reported command, on the retrofitted keyfile.
+    expect(
+        await auth_cli.wrappedMain([
+          'list', '-a', atSign, //
+          '-r', 'vip.ve.atsign.zone', //
+          '-k', legacy.keysFilePath,
+        ]),
+        0,
+        reason: 'at_activate list authenticates and then sends enroll:list '
+            'over the client\'s own connection. A client that retrofitted '
+            'during its init runs as the new enrolment and must sign with the '
+            'new enrolment\'s key; signing with the one at_auth resolved '
+            'before the move reaches at_chops as "this PKAM key is ~1218 '
+            'bytes, and an ML-DSA-65 secret key is 4032" and the verb never '
+            'goes out');
+
+    // The positive control: the keyfile really did move, so the green above is
+    // about a retrofitted client rather than about one that stayed put.
+    final after =
+        await FileAtKeysIo(filePath: (_) => legacy.keysFilePath).read(atSign);
+    final retrofittedIds =
+        after.enrollmentIds.where((id) => id != legacy.enrollmentId).toSet();
+    expect(retrofittedIds, isNotEmpty,
+        reason: 'the SDK default posture asks for mldsa65 and this enrolment '
+            'holds rsa2048, so the client must have retrofitted onto a second '
+            'enrolment and written its material here. Nothing new in the '
+            'keyfile means no retrofit ran, and the assertion above then '
+            'proves only that an unretrofitted client works');
+    for (final id in retrofittedIds) {
+      expect(after.authenticationAlgorithmFor(id), SigningAlgoType.mldsa65,
+          reason: 'the retrofit exists to move the authentication key, so the '
+              'enrolment it created has to hold ML-DSA-65 material');
+    }
   }, timeout: Timeout(Duration(minutes: 6)));
 }
 
