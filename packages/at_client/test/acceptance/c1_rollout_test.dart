@@ -121,10 +121,13 @@ void main() {
         proves: 'every axis of the last stage, pinned as literals');
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'legacy drives no upgrade',
-        proves: 'the default stage is also a contract, not an accident');
+        proves: 'the stage an app names to opt OUT is a contract too, not an '
+            'accident — it is what makes a compatibility test possible');
     provenIn('packages/at_client/test/pq_posture_test.dart',
-        'a bare preference runs the legacy posture',
-        proves: 'naming nothing keeps today\'s behaviour byte-identical');
+        'a bare preference runs the pqReady posture',
+        proves: 'what an app that names nothing gets, pinned as a literal, so '
+            'moving the shipped default is an edit to that test and the edit '
+            'is the review');
   });
 
   test('UC-C1.7 · the signing-set axis: which keys an enrollment holds', () {

@@ -268,12 +268,18 @@ model's detail lives in [`design.md`](design.md) [section 1.8](design.md#18-migr
    both directions; a mixed pair stays legacy *in that direction only*, by the
    app's own choice of fallback.
 4. **Retire legacy, then the v4 default flip** — lazy re-encrypt on touch, then
-   `at_client 4.0` flips its default posture from `PqPosture.legacy`
-   to `PqPosture.pqActive`: one edit moving all seven rollout axes at
+   `at_client 4.0` flips its default posture from `PqPosture.pqReady`
+   to `PqPosture.pqActive`: one edit moving the remaining rollout axes at
    once (era config, `disallowLegacyEncryption`, the in-use signing set,
    enrolment key exchange, retrofit signing algorithm), which is why the flag
    and the era default can no longer be flipped apart
    ([`decisions.md` 70](detail/decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)).
+   ⚠️ This read "from `PqPosture.legacy`" until 2026-08-26, when the 3.x
+   release candidate moved the default to `pqReady`. The 4.0 flip is therefore
+   the second half of the move, not the whole of it: authentication, the
+   signing set, seeding and enrolment key exchange have already gone, and what
+   4.0 still turns on is writing post-quantum by default and refusing legacy
+   encryption.
    Legacy *reads* and the legacy provider remain. Minting/conveying legacy key
    material stops only in a later, **ecosystem-gated** release
    ([`decisions.md` 37](detail/decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)).

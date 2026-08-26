@@ -1,5 +1,26 @@
 ## 3.15.0-rc1
 
+- feat: **`AtClientPreference.posture` now defaults to `PqPosture.pqReady`**,
+  where it defaulted to `PqPosture.legacy`. An app that names no posture moves
+  four axes at once: it authenticates with ML-DSA-65, keeps an active classical
+  signing key of its own, seeds namespace keys for the namespaces it is
+  authorised for, and enrols advertising a key package.
+  - **What it does not change is what you write.** `writesPqByDefault` and
+    `disallowLegacyEncryption` are both false at this stage, so new data is
+    still encrypted with the legacy provider and every deployed reader can read
+    it. Ready before active; 4.0 is the release that turns writing over.
+  - ⚠️ **An existing enrollment holding a weaker authentication key is
+    retrofitted at the next client start, and there is no opt-out.** The
+    retrofit mints a new enrollment and caps the old one rather than deleting
+    it, so the change is not visible as a failure. An app that must stay where
+    it is names `PqPosture.legacy` explicitly.
+  - A client built with **no `AtKeysIo` seeds nothing**, whatever the posture
+    asks for. It has nowhere to file the private, so seeding would publish an
+    advertisement whose key dies with the process and leave every peer sealing
+    to something permanently unreadable. Startup seeding now checks for a key
+    source, as the sibling startup steps already did; an explicit
+    `mintAndPublish` is unaffected.
+
 - fix: minting or rotating a namespace key writes the advertisement to the
   atServer and no longer also writes it to local storage. A local write of a
   sync-eligible key queues the key's *name* for a client→server push, and the

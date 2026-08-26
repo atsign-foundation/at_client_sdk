@@ -76,7 +76,8 @@ void main() {
       expect(atAuthResponse.atAuthKeys, isNotNull);
 
       // create atclient instance
-      var atClientPreference = AtClientPreference()
+      // Direct construction: no compiler names this site.
+      var atClientPreference = AtClientPreference(posture: PqPosture.legacy)
         ..commitLogPath = 'test/hive/commit/'
         ..hiveStoragePath = 'test/hive/client'
         ..rootDomain = 'vip.ve.atsign.zone'
@@ -844,7 +845,8 @@ void main() {
 }
 
 AtClientPreference getClient2Preferences() {
-  return AtClientPreference()
+  // Direct construction: no compiler names this site.
+  return AtClientPreference(posture: PqPosture.legacy)
     ..commitLogPath = 'test/hive/client_2/commit'
     ..hiveStoragePath = 'test/hive/client_2'
     ..rootDomain = 'vip.ve.atsign.zone'

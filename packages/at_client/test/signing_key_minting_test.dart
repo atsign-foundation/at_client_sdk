@@ -116,8 +116,13 @@ void main() {
   }
 
   group('what it does not do', () {
-    test('an empty in-use set mints nothing — the 3.x default', () async {
-      when(() => atClient.getPreferences()).thenReturn(AtClientPreference());
+    test('an empty in-use set mints nothing', () async {
+      // The set is named rather than taken from the default. It used to be
+      // the default — this test read "the 3.x default" — and the shipped
+      // default is now pqReady, which keeps one classical signing key. The
+      // property being pinned is the set's, not the default's, so it says so.
+      when(() => atClient.getPreferences()).thenReturn(AtClientPreference(
+          posture: PqPosture.legacy, dataSigningKeyAlgorithms: const {}));
 
       expect(await mint(), isEmpty);
       expect(updates, isEmpty);

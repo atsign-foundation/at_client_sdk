@@ -60,12 +60,18 @@ void main() {
     AtClientImpl.atClientInstanceMap
         .remove(AtClientImpl.instanceKey(atSign, enrollmentId));
 
-    final preferences = AtClientPreference()
+    final preferences = AtClientPreference(posture: PqPosture.legacy)
       ..hiveStoragePath = 'test/hive'
       ..commitLogPath = 'test/hive/path';
 
     // A keyfile with no typed entries at all — the flat-fields legacy shape.
     final io = InMemoryAtKeysIo();
+    // NB the preference above names the legacy era deliberately. A pqReady
+    // client holding a legacy enrollment does not "fall back" to rsa2048 — it
+    // RETROFITS, because the posture asks for a stronger authentication key
+    // than the enrollment holds and `retrofitIsDue` has no opt-out. That is a
+    // different behaviour with its own coverage; this test is about what the
+    // resolution answers when nothing is being upgraded.
     await io.write(atSign, AtKeys());
 
     final ac = await AtClientImpl.create(

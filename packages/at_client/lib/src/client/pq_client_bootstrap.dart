@@ -462,7 +462,22 @@ class PqClientBootstrap {
 
   /// Mints and publishes namespace keys for this client's authorised
   /// namespaces, per `AtClientPreference.seedNamespaceKeys`.
+  ///
+  /// **A client with no key source seeds nothing, whatever the posture asks
+  /// for.** There would be nowhere to file the private, so the generation
+  /// would be published with its private held in memory and nowhere else:
+  /// peers seal to the advertised key and every value they seal becomes
+  /// unreadable the moment this process ends. `_mint` says so itself, at
+  /// `severe`, and declines to refuse there because a fixture may legitimately
+  /// mint into memory — which is a decision about an explicit call, not about
+  /// a client seeding on its own at startup.
+  ///
+  /// It also keeps a keyless client inert on the wire. An advertisement or a
+  /// signing root written to a real atSign outlives the run that wrote it and
+  /// nothing rotates it back out, so a client built to read must not publish
+  /// PQ state merely because it named no posture.
   Future<void> _seedNamespaceKeys() async {
+    if (_keysIo == null) return;
     if (_atClient.getPreferences()?.seedNamespaceKeys != true) return;
     try {
       await seeding.seed();

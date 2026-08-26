@@ -51,9 +51,24 @@ class AtClientPreference {
   final bool disallowLegacyEncryption;
 
   /// How far into the post-quantum rollout this client runs — every rollout
-  /// axis set as a group. Defaults to [PqPosture.legacy]; pass
-  /// [PqPosture.pqReady] or [PqPosture.pqActive] to run a later stage today,
-  /// or a posture of your own for a combination none of them expresses.
+  /// axis set as a group. Defaults to [PqPosture.pqReady]; pass
+  /// [PqPosture.legacy] to behave as a client built before any of this, or
+  /// [PqPosture.pqActive] to run the last stage today, or a posture of your
+  /// own for a combination none of them expresses.
+  ///
+  /// ⚠️ **The default moved from [PqPosture.legacy] in this release**, and it
+  /// moves four axes at once: this client authenticates with ML-DSA-65, keeps
+  /// an active classical signing key of its own, seeds namespace keys for the
+  /// namespaces it is authorised for, and enrols advertising a key package.
+  /// What it does **not** change is what it writes — `writesPqByDefault` and
+  /// `disallowLegacyEncryption` are false at this stage, so new data is still
+  /// encrypted with the legacy provider and every deployed reader can read it.
+  /// That is the point of the stage: ready before active.
+  ///
+  /// ⚠️ **An existing enrollment holding a weaker authentication key is
+  /// RETROFITTED at the next start**, and there is no opt-out — see
+  /// `AtClientImpl.retrofitIsDue`. An app that must not move names
+  /// [PqPosture.legacy] explicitly.
   ///
   /// Individual axes still win: an explicit [authenticationKeyAlgorithm] or
   /// [dataSigningKeyAlgorithms] argument, an assigned [crypto], or a per-call
@@ -135,7 +150,7 @@ class AtClientPreference {
   final List<String> sealsToKeyAlgorithms;
 
   AtClientPreference(
-      {this.posture = PqPosture.legacy,
+      {this.posture = PqPosture.pqReady,
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms,
       List<String>? sealsToKeyAlgorithms,

@@ -199,7 +199,14 @@ void main() {
             '— anchored-then-filed needs a second start to anchor at all');
 
     // Anchor before the privileged chain sweep.
-    final sweepCommand = firstIndex('cmd:enroll:list');
+    //
+    // The trailing colon is what makes this the SWEEP. `firstIndex` matches a
+    // prefix, and `enroll:listns:<ns>` — the roster read that seeding drives —
+    // starts with `cmd:enroll:list` too. Under a posture that does not seed it
+    // never appeared, so the loose prefix found the sweep by luck; under one
+    // that does, it matched the roster read four events earlier and the
+    // assertion read a correct startup as an inverted one.
+    final sweepCommand = firstIndex('cmd:enroll:list:');
     expect(anchorPublish, lessThan(sweepCommand),
         reason: 'the sweep signs links for OTHER enrollments; a sweeper that '
             'has not anchored itself adds a hop without reaching the root');

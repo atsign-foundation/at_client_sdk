@@ -69,12 +69,24 @@ void main() {
             'it');
   });
 
-  test('seeding is off unless the preference asks for it', () async {
-    // Minting publishes a permanent, discoverable record on the atSign. That
-    // is not something to start doing behind an app's back while the data
-    // path is experimental, so the default is off and the release that wants
-    // fleet-wide seeding turns it on deliberately.
-    expect(AtClientPreference().seedNamespaceKeys, isFalse);
+  test('seeding follows the posture, and the shipped default now seeds',
+      () async {
+    // Minting publishes a permanent, discoverable record on the atSign, so
+    // this stayed off by default while the data path was experimental. ⚠️ That
+    // is what this test used to assert — "seeding is off unless the preference
+    // asks for it", against a legacy default. This release candidate is the
+    // one that turns it on fleet-wide: the default posture is pqReady, and
+    // seeding is one of the four axes that moves with it.
+    expect(AtClientPreference().seedNamespaceKeys, isTrue,
+        reason: 'the shipped default is pqReady, whose whole point is that a '
+            'client is READY — it holds the keys a peer needs before anyone '
+            'writes post-quantum to it');
+    // And the axis is still an axis: a client that names the legacy era
+    // publishes nothing, which is what makes a compatibility test possible.
+    expect(AtClientPreference(posture: PqPosture.legacy).seedNamespaceKeys,
+        isFalse,
+        reason: 'a client asked to behave as though it were built before any '
+            'of this must not publish a discoverable record');
   });
 
   test('a wildcard enrollment seeds nothing at start', () async {

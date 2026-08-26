@@ -163,15 +163,21 @@ void main() {
   });
 
   group('the preference applies the posture at construction', () {
-    test('a bare preference runs the legacy posture', () {
+    test('a bare preference runs the pqReady posture', () {
+      // The shipped default, pinned as a raw expectation rather than derived
+      // from the constant, so moving the default is an edit here and that
+      // edit is the review. It moved legacy → pqReady for this release
+      // candidate; 4.0 moves it again, to pqActive.
       final preference = AtClientPreference();
-      expect(preference.posture, same(PqPosture.legacy),
+      expect(preference.posture, same(PqPosture.pqReady),
           reason: 'the default stage is the default — an app that names '
               'nothing rides the SDK\'s own rollout schedule');
+      // Still false at pqReady, and it is pqActive that turns it on: this
+      // stage reads post-quantum and goes on writing what the fleet can read.
       expect(preference.disallowLegacyEncryption, false);
-      expect(preference.authenticationKeyAlgorithm, SigningAlgoType.rsa2048);
-      expect(preference.dataSigningKeyAlgorithms, isEmpty);
-      expect(preference.seedNamespaceKeys, false);
+      expect(preference.authenticationKeyAlgorithm, SigningAlgoType.mldsa65);
+      expect(preference.dataSigningKeyAlgorithms, {SigningAlgoType.rsa2048});
+      expect(preference.seedNamespaceKeys, true);
     });
 
     test('pqActive sets disallowLegacyEncryption', () {
@@ -255,7 +261,11 @@ void main() {
 
   group('the data signing set', () {
     test('follows the posture, and an explicit set beats it both ways', () {
-      expect(AtClientPreference().dataSigningKeyAlgorithms, isEmpty);
+      expect(AtClientPreference().dataSigningKeyAlgorithms,
+          {SigningAlgoType.rsa2048},
+          reason: 'the shipped default is pqReady, which keeps one active '
+              'signing key and keeps it classical — the array form a deployed '
+              'reader cannot parse is what 4.0 takes on');
       expect(
           AtClientPreference(posture: PqPosture.pqActive)
               .dataSigningKeyAlgorithms,
