@@ -222,3 +222,91 @@ The residue worth keeping: **a Markdown link checker must strip inline code
 spans, and its controls must include a backticked instance**, or its first
 finding will be the documentation of its own bug. This one got as far as a
 filed TODO row before the check was re-run properly.
+
+## The citation audit — cluster A, 2026-08-26
+
+The [acceptance audit](../implementation-plan.md#the-acceptance-audit) is the
+judgement no rail can make: does the test a row cites actually establish what
+the citation's `proves:` prose claims. This section is the running record.
+**Cluster A is done (36 citations); B, C and G are not (109 remaining).**
+
+**Method, and it is worth copying.** Enumerate with the suite's own recorder
+rather than a regex over `provenIn(` — the call wraps in most files and a
+matcher that misses a third of the corpus is how this project has been wrong
+before:
+
+```bash
+cd packages/at_client && rm -f /tmp/cit.jsonl && \
+  ACCEPTANCE_LEDGER=/tmp/cit.jsonl dart test test/acceptance --concurrency=1 >/dev/null
+```
+
+⛔ **`rm -f` first.** `provenIn` **appends**, so a stale file reads as roughly
+twice the citations. Measured 2026-08-26: 284 records where the answer was 145,
+and the doubling looked like a real property of the suite until one file was run
+alone. The count agrees with `grep -c 'provenIn('` at **147 minus the 2
+declarations in `proven_elsewhere.dart`**, which is the second derivation that
+makes the enumeration trustworthy.
+
+### F1 — the clause level is 9% adopted
+
+**13 of 145 citations carry `clauses:`. The other 132 keep the old
+all-or-nothing verdict.** Legal by design — `provenIn`'s dartdoc says omitting
+it is not a failure and the ledger reports such a row as *unpinned* rather than
+covered — but the live plan described clause pinning as though citations
+generally did it. Corrected there in the same commit as this entry.
+
+### F2 — UC-A4.5's central clause is unguarded, though it is true
+
+The row's clause: *"Alice's configuration decides what `@alice` is a
+**recipient** for and nothing about who she can send to."*
+
+Its two citations are `pairwise_secret_sharing_test.dart` ("two ML-KEM-1024
+clients exchange the no-hybrid construction") and `kem_selection_test.dart`
+("the two KEMs are not interchangeable"). **Neither isolates the clause.** The
+first has sender *and* recipient configured for ML-KEM; the default arms have
+both on X-Wing. So the two arms vary the recipient's advertised KEM **and** the
+sender's configuration together — the differential fault this project's own
+rules name, where the arms must differ in the varied thing and in nothing else.
+The second proves that a cross-KEM open fails, which is the row's *motivation*,
+not its behaviour.
+
+⚠️ **The property itself holds.** `CkManager` routes by the recipient's
+advertisement — `ck_manager.dart:107` and `:169` both pass
+`keyAlgo: advertised.alg` — and `NskeyProvider.encrypt` refuses when
+`advertised.alg != keyAlgo` (`nskey_provider.dart:153`). So this is an
+**unguarded property, not a false claim**, and the citation is not dishonest;
+it is under-powered.
+
+**Why it still matters:** a regression that passed the *sender's* configured
+algorithm would leave both cited arms green — both-X-Wing and both-ML-KEM still
+agree — and would surface only as that provider guard throwing, i.e. as two
+atSigns unable to communicate. That is precisely the outcome the row rejects in
+its own words: *"refusing would protect nothing."*
+
+**Owed:** one arm holding the sender's configuration fixed while varying only
+the recipient's advertised KEM. `nskey_kem_selection_test.dart`'s "a provider
+will not seal to the other KEM's advertisement" is the nearest thing and is not
+it — it addresses a provider directly, bypassing the routing that is the claim.
+
+### F3 — about 8 citations rest on tests they do not pin
+
+`provenIn` pins **one** test name, and the rail asserts that one still exists.
+Some arguments rest on more: *"Paired with the negotiation arms in the same
+group"* (UC-A4.5), *"asserted directly in `test/nskey_rotation_test.dart`"*
+(UC-A5.3), *"pinned deterministically … by the revocation-guard group in
+`test/pairwise_secret_sharing_test.dart`"* (UC-A5.2). Rename or delete a
+supporting test and the citation stays green while its stated argument loses a
+leg — the same silent decay `provenIn` exists to prevent, one level up.
+
+**Bounded rather than guessed:** 3 of 145 name a *different file* in their
+prose; a phrase scan (`paired with|in the same group|sibling|companion|…`, with
+both controls proven) returns 12, of which several use "sibling" for a domain
+object rather than a test. Call it **~8**, and re-derive rather than quoting it.
+
+⚠️ **I first read this as systemic from three examples I happened to open, and
+the measurement cut it to about 6%.** Worth recording because the impression
+was wrong in the direction that would have justified redesigning the mechanism.
+
+**The cheap fix, if it is wanted:** let `provenIn` take a list of supporting
+paths it also asserts the existence of. That keeps one citation per row while
+making every leg of its argument rot-detectable.

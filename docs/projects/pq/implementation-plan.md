@@ -49,10 +49,27 @@ D1 closes". R-2 still follows D1.
 definition needs.** All 69 catalogue rows read `PROVEN` (68 live, UC-C1.3
 withdrawn) and all 68 live ones have a scenario — but the rail checks
 **structure**: that a scenario exists, that ids resolve, that counts match, and,
-since the clause level landed, that a citation pins the THEN clauses it claims.
-What no rail checks is whether the cited test really *establishes* the clause;
-that judgement is the citation's, written in `proves:`. Reading those is the
-[acceptance audit](#the-acceptance-audit) row.
+where a citation pins THEN clauses, that each pin resolves to exactly one.
+
+⚠️ **Almost no citation pins anything, and this sentence used to read as
+though they generally did** ("since the clause level landed, that a citation
+pins the THEN clauses it claims"). Measured 2026-08-26 at `c014e4fa5`:
+**13 of 145 citations carry `clauses:`; the other 132 keep the old
+all-or-nothing verdict.** That is legal by design — `provenIn`'s own dartdoc
+says omitting it is not a failure, and the ledger reports such a row as having
+unpinned clauses rather than pretending they are covered — but it means the
+clause level is a *facility* that is 9% adopted, not a property the catalogue
+has. Re-derive, never quote:
+
+```bash
+cd packages/at_client && rm -f /tmp/cit.jsonl &&   ACCEPTANCE_LEDGER=/tmp/cit.jsonl dart test test/acceptance --concurrency=1 >/dev/null
+# ⛔ rm first — provenIn APPENDS, and a stale file reads as ~2x the citations
+python3 -c "import json;r=[json.loads(l) for l in open('/tmp/cit.jsonl')];print(len(r),'citations,',sum(1 for x in r if not x.get('clauses')),'unpinned')"
+```
+
+And what no rail checks at all is whether the cited test really *establishes*
+the clause; that judgement is the citation's, written in `proves:`. Reading
+those is the [acceptance audit](#the-acceptance-audit) row.
 
 ---
 
@@ -202,6 +219,21 @@ and in
 against the test it cites and record where the citation does not establish the
 clause. The pins compute the *known* overclaim; they cannot tell you a cited
 test proves something narrower than the clause it is attached to.
+
+**Started 2026-08-26. Cluster A is done — 36 citations of 145 — and the running
+record, the method and the three findings are in
+[detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26).
+B, C and G remain: 109 citations.** The one substantive finding so far is
+**UC-A4.5**, whose central clause ("Alice's configuration decides what she is a
+*recipient* for and nothing about who she can send to") is true in the code and
+established by neither of its citations — both arms co-vary the sender's
+configuration with the recipient's. It owes one arm that varies only the
+recipient.
+
+⛔ **Enumerate with the suite's own recorder, and `rm` the file first** —
+`provenIn` appends, and a stale file reads as twice the citations. The command
+is in that detail section; it cost a wrong figure of 284 before one file run
+alone exposed it.
 
 **Coverage was never the gap**, measured 2026-08-23: of the 68 live rows, 59
 have live proof of some kind and 9 have none (12 LIVE_DIRECT, 43 LIVE_PARTIAL,
