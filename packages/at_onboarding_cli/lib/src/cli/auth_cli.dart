@@ -545,11 +545,21 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     // `authenticationKeyAlgorithm` is what the stage means by "which key
     // authenticates", so that is what the enrolment is submitted under.
     //
-    // Falls back to rsa2048 rather than to any posture's value when `--posture`
-    // is absent: "the caller named no posture" is not "the caller asked for
-    // the default one", a distinction `postureIn` exists to keep.
-    signingAlgo: AuthCliArgs.postureIn(argResults)?.authenticationKeyAlgorithm ??
-        SigningAlgoType.rsa2048,
+    // Null when `--posture` is absent, which the service reads as "the
+    // position this service was built at" — and that is the same preference,
+    // built from the same `postureIn(argResults)` a few lines up in
+    // `createOnboardingService`.
+    //
+    // ⚠️ This fell back to `SigningAlgoType.rsa2048`, on the argument that
+    // "the caller named no posture" is not "the caller asked for the default
+    // one". `preferenceUnder` does not keep that distinction — an unnamed
+    // `--posture` leaves the superclass default in place, deliberately, so the
+    // binary rides the rollout schedule of the at_client it was built against.
+    // So the fallback made the enrolment mint under one answer while
+    // `authenticate()` declared the other, and once the shipped default became
+    // `pqReady` they stopped agreeing: an RSA-2048 APKAM key with an ML-DSA-65
+    // declaration, which at_chops refuses by size.
+    signingAlgo: AuthCliArgs.postureIn(argResults)?.authenticationKeyAlgorithm,
   );
 
   return true;

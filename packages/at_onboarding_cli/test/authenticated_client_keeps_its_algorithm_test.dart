@@ -71,17 +71,29 @@ void main() {
   }
 
   /// A service whose `authenticate()` will succeed without a server, reading
-  /// [keysFilePath], under a **bare** preference — the `PqPosture.legacy`
-  /// default that `createAtClient` gives every `otp`/`list` invocation.
+  /// [keysFilePath], under `PqPosture.legacy`.
+  ///
+  /// ⚠️ **Named, not inherited.** This read "under a **bare** preference — the
+  /// `PqPosture.legacy` default" until the SDK default moved to `pqReady`, at
+  /// which point the assertion below caught it: an inherited default gives
+  /// `mldsa65` and these tests then compare `mldsa65` with `mldsa65`. What the
+  /// CLI does with a bare preference is a different question, and
+  /// `onboarding_preference_forwards_test` is where it belongs — deliberately,
+  /// because `auth_cli_args.preferenceUnder` leaves an unset `--posture`
+  /// riding the SDK default rather than pinning the binary to the stage it was
+  /// compiled on.
   AtOnboardingServiceImpl legacyPostureService(
       String atSign, String keysFilePath, String enrollmentId, AtAuth atAuth) {
-    final preference = AtOnboardingPreference()
+    final preference = AtOnboardingPreference(posture: PqPosture.legacy)
       ..atKeysFilePath = keysFilePath
       ..namespace = 'unit_test'
       ..hiveStoragePath = 'test/storage/hive/$atSign'
       ..commitLogPath = 'test/storage/hive/$atSign/commit';
+    // Kept, and it is the reason this file survived the default moving: it
+    // fires the moment the rig stops supplying what these tests contrast
+    // against, instead of letting them pass while measuring nothing.
     expect(preference.authenticationKeyAlgorithm, SigningAlgoType.rsa2048,
-        reason: 'the rig must supply the legacy default, or these tests '
+        reason: 'the rig must supply the legacy algorithm, or these tests '
             'compare mldsa65 with mldsa65 and discriminate nothing');
 
     when(() => atAuth.progressStream).thenAnswer((_) => Stream.empty());

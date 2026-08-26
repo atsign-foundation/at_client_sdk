@@ -112,7 +112,15 @@ void main() {
 
     final reader = AtOnboardingServiceImpl(
         atSign,
-        AtOnboardingPreference()
+        // Named, not inherited, and identically in both arms. The reader's
+        // preference is the FALLBACK for how this client authenticates, and
+        // this comparison needs that fallback to be rsa2048: in the PQ arm so
+        // that mldsa65 proves the keyfile won, and in the legacy arm so that
+        // there is anything to contrast with. When it rode the SDK default it
+        // did say rsa2048 — until the default moved to pqReady, at which point
+        // the legacy arm's rig check went red and this arm quietly stopped
+        // discriminating.
+        AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
           ..hiveStoragePath = 'test/storage/hive/$atSign-reader'
           ..commitLogPath = 'test/storage/hive/$atSign-reader/commit'
@@ -122,7 +130,8 @@ void main() {
     final client = reader.atClient!;
     expect(AtClientImpl.signingAlgoOf(client), SigningAlgoType.mldsa65,
         reason: 'the keyfile is the authority on how this enrollment '
-            'authenticates; the bare preference above says rsa2048');
+            'authenticates; the preference above names rsa2048, so resolving '
+            'mldsa65 can only have come from the key material');
 
     // --- 2. the key package is on the enrollment record --------------------
     // Never published, so `enroll:listns` is the only route to it — and it can
@@ -222,7 +231,15 @@ void main() {
 
     final reader = AtOnboardingServiceImpl(
         legacyAtSign,
-        AtOnboardingPreference()
+        // Named, not inherited, and identically in both arms. The reader's
+        // preference is the FALLBACK for how this client authenticates, and
+        // this comparison needs that fallback to be rsa2048: in the PQ arm so
+        // that mldsa65 proves the keyfile won, and in the legacy arm so that
+        // there is anything to contrast with. When it rode the SDK default it
+        // did say rsa2048 — until the default moved to pqReady, at which point
+        // the legacy arm's rig check went red and this arm quietly stopped
+        // discriminating.
+        AtOnboardingPreference(posture: PqPosture.legacy)
           ..rootDomain = 'vip.ve.atsign.zone'
           ..hiveStoragePath = 'test/storage/hive/$legacyAtSign-reader'
           ..commitLogPath = 'test/storage/hive/$legacyAtSign-reader/commit'

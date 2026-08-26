@@ -379,7 +379,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     File? atKeysFile,
     Duration? apkamKeysExpiryDuration,
     bool allowOverwrite = false,
-    SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
+    SigningAlgoType? signingAlgo,
   }) async {
     // Fails early if the filePath already exists (or) isn't writable
     if (atKeysFile != null) {
@@ -470,7 +470,15 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
       {Duration? apkamKeysExpiryDuration,
-      SigningAlgoType signingAlgo = SigningAlgoType.rsa2048}) async {
+      SigningAlgoType? signingAlgo}) async {
+    // One source for the algorithm this enrollment authenticates with. The
+    // preference is what `authenticate()` stamps on the connection
+    // (`_atLookUp!.signingAlgoType = atOnboardingPreference
+    // .authenticationKeyAlgorithm` on the enrolment branch), so minting under
+    // anything else hands at_chops a key of one algorithm and a declaration of
+    // another. A caller with a position of its own still passes it.
+    final algo =
+        signingAlgo ?? atOnboardingPreference.authenticationKeyAlgorithm;
     if (appName == null || deviceName == null) {
       throw AtEnrollmentException(
           'appName and deviceName are mandatory for enrollment');
@@ -484,7 +492,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         deviceName: deviceName,
         namespaces: namespaces,
         otp: otp,
-        signingAlgo: signingAlgo);
+        signingAlgo: algo);
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 

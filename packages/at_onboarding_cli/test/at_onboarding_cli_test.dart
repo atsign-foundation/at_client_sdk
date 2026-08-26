@@ -74,9 +74,14 @@ void main() {
     test('A test to check atOnboardingService.authenticate() returns true',
         () async {
       final atSign = '@alice🛠';
-      AtOnboardingPreference onboardingPreference = AtOnboardingPreference()
-        ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
-        ..namespace = 'unit_test';
+      // Era named, not inherited: these two are about at_chops creation, and
+      // authenticate() builds a client from THIS preference — under a posture
+      // wanting a stronger authentication key that start reaches the retrofit,
+      // which mockAtLookup does not model.
+      AtOnboardingPreference onboardingPreference =
+          AtOnboardingPreference(posture: PqPosture.legacy)
+            ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
+            ..namespace = 'unit_test';
       AtOnboardingService onboardingService =
           AtOnboardingServiceImpl(atSign, onboardingPreference);
       onboardingService.atLookUp = mockAtLookup;
@@ -105,9 +110,14 @@ void main() {
 
     test('authenticate hands the key source across to the client', () async {
       final atSign = '@alice🛠';
-      AtOnboardingPreference onboardingPreference = AtOnboardingPreference()
-        ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
-        ..namespace = 'unit_test';
+      // Era named, not inherited: these two are about at_chops creation, and
+      // authenticate() builds a client from THIS preference — under a posture
+      // wanting a stronger authentication key that start reaches the retrofit,
+      // which mockAtLookup does not model.
+      AtOnboardingPreference onboardingPreference =
+          AtOnboardingPreference(posture: PqPosture.legacy)
+            ..atKeysFilePath = 'test/data/@alice🛠_key.atKeys'
+            ..namespace = 'unit_test';
       AtOnboardingService onboardingService =
           AtOnboardingServiceImpl(atSign, onboardingPreference);
       onboardingService.atLookUp = mockAtLookup;
@@ -839,7 +849,14 @@ Future<void> tearDownFunc() async {
 }
 
 AtClientPreference getAtClientPreferenceAlice() {
-  var preference = AtClientPreference();
+  // The era is named, not inherited. These tests are about at_chops creation,
+  // and under a posture asking for a stronger authentication key the client
+  // start reaches the retrofit instead — a call MockAtLookupImpl does not
+  // model, so the failure arrives as a type error a long way from its cause.
+  // What the CLI does under a bare preference belongs to
+  // onboarding_preference_forwards_test, which compares against the SDK's own
+  // defaults and so follows them.
+  var preference = AtClientPreference(posture: PqPosture.legacy);
   preference.hiveStoragePath = 'test/storage/hive/client';
   preference.commitLogPath = 'test/storage/hive/client/commit';
   preference.rootDomain = 'vip.ve.atsign.zone';

@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart' show SHA256HashingAlgo;
+import 'package:at_commons/atsign.dart';
 import 'package:at_onboarding_cli/src/util/at_file_util.dart';
 import 'package:at_utils/at_logger.dart';
 import 'package:meta/meta.dart';
@@ -62,9 +63,24 @@ class EnrollmentCheckpoint {
     expiry ??= defaultCheckpointExpiry;
 
     final Map<String, dynamic> json = er.toJson();
-    json.remove(
-        'atSign'); // do not reveal which atSign this checkpoint belongs to
-    json['atAuthKeys'] = er.atAuthKeys?.toJson();
+
+    // ⚠️ **The atSign is recorded.** This removed it — "do not reveal which
+    // atSign this checkpoint belongs to" — and that stopped being possible
+    // once an enrolment could mint TYPED key material: `AtKeys.toJson` refuses
+    // a document carrying enrollments or atSign keys with no `atsign`, because
+    // such a document does not say whose keys it holds, and it emits the
+    // atsign itself when it does have one. Keeping the removal would have left
+    // the checkpoint throwing on every post-quantum enrolment — which is what
+    // `at_activate enroll --posture pqActive` did, unnoticed, because the only
+    // test driving a post-quantum enrolment goes through `sendEnrollRequest`
+    // and never reaches a checkpoint.
+    //
+    // The property was thin: this file already holds the enrollment's own
+    // APKAM private key material, at chmod 600. Which atSign it belongs to is
+    // the least of what reading it gives away.
+    final keys = er.atAuthKeys;
+    keys?.atsign ??= _atSign.toAtsign();
+    json['atAuthKeys'] = keys?.toJson();
     json['validTill'] = DateTime.now().add(expiry).millisecondsSinceEpoch;
 
     final file = getFile(appName, deviceName, namespaces);

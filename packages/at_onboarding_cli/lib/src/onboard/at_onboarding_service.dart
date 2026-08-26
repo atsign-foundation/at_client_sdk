@@ -79,14 +79,24 @@ abstract class AtOnboardingService implements ProgressPublisher {
     /// with no default, so that every caller states what it means rather than
     /// inheriting an algorithm it never chose. This is the boundary where a
     /// caller genuinely has none to state: an app calling `enroll` knows its
-    /// appName and its namespaces, not the atSign's rollout position. RSA-2048
-    /// is safe as that default because it is what this path minted
-    /// unconditionally before the parameter existed, so an app that says
-    /// nothing enrolls exactly as it always did.
+    /// appName and its namespaces, not the atSign's rollout position.
     ///
-    /// A deployment that HAS a position says so: pass
-    /// `PqPosture.authenticationKeyAlgorithm`.
-    SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
+    /// Null means "the position this service was built at" — the preference's
+    /// `authenticationKeyAlgorithm`, which is the same field `authenticate()`
+    /// stamps on the connection.
+    ///
+    /// ⚠️ **It used to default to `SigningAlgoType.rsa2048`, and that was a
+    /// second source for one fact.** The argument then was that RSA-2048 is
+    /// what this path minted before the parameter existed, so an app saying
+    /// nothing enrolled as it always had — true while the preference's default
+    /// posture also meant RSA. It stopped being true when the shipped default
+    /// became `pqReady`: the enrolment minted an RSA APKAM keypair while
+    /// `authenticate()` declared ML-DSA-65 for the same enrollment, and
+    /// at_chops
+    /// refused the pair — *"this PKAM key is 1218 bytes, and an ML-DSA-65
+    /// secret key is 4032"*. Two defaults for one fact agree only until one of
+    /// them moves.
+    SigningAlgoType? signingAlgo,
   });
 
   /// Sends enrollment request. Application code may subsequently call
@@ -94,10 +104,10 @@ abstract class AtOnboardingService implements ProgressPublisher {
   Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
       {Duration? apkamKeysExpiryDuration,
-      /// See [enroll]'s `signingAlgo`: this is the same value on the
-      /// send-then-await-separately path, defaulted the same way and for the
+      /// See [enroll]'s `signingAlgo`: the same value on the
+      /// send-then-await-separately path, resolved the same way and for the
       /// same reason.
-      SigningAlgoType signingAlgo = SigningAlgoType.rsa2048});
+      SigningAlgoType? signingAlgo});
 
   /// Attempts PKAM auth until successful (i.e. request was approved).
   /// If the request was denied, an exception is thrown.

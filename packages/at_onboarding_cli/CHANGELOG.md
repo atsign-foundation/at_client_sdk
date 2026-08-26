@@ -5,13 +5,32 @@
   `enroll` has always accepted it — and it reached the client's preference and
   nothing else, so the enrolment still minted RSA-2048 and the client
   retrofitted it away on its first start.
-  - `enroll` and `sendEnrollRequest` take a `signingAlgo`, defaulted **once**
-    to `rsa2048` at that boundary because an app calling them knows its appName
-    and namespaces, not the atSign's rollout position — and rsa2048 is what the
-    path minted before the parameter existed, so an app that says nothing
-    enrols exactly as it did.
+  - `enroll` and `sendEnrollRequest` take a `signingAlgo`. It is **nullable**,
+    and null means "the position this service was built at" — the preference's
+    `authenticationKeyAlgorithm`, which is the same field `authenticate()`
+    stamps on the connection. ⚠️ It defaulted to `rsa2048` at that boundary,
+    on the argument that an app calling `enroll` knows its appName and
+    namespaces rather than the atSign's rollout position. That made **two
+    defaults for one fact**, and they agreed only while the shipped posture
+    also meant RSA: once it became `pqReady`, the enrolment minted an RSA-2048
+    APKAM keypair while `authenticate()` declared ML-DSA-65 for it, and
+    at_chops refused the pair by size. `auth_cli`'s own
+    `?? SigningAlgoType.rsa2048` went with it, for the same reason — the
+    preference it sits beside is built from the same `--posture`.
   - `enroll` forwards it to `sendEnrollRequest`, which it did not, so the
     parameter would have existed and done nothing.
+
+- fix: an enrolment checkpoint can hold **typed** key material. `enroll` saves
+  one so an interrupted enrolment resumes, and `AtKeys.toJson` refuses a
+  document carrying enrollments or atSign keys with no `atsign` — so
+  `at_activate enroll --posture pqActive` threw `atsign is required to
+  serialize typed atKeys material` and could not checkpoint at all. Unnoticed
+  because the only post-quantum enrolment test drives `sendEnrollRequest`,
+  which never reaches a checkpoint.
+  - ⚠️ **The checkpoint now records which atSign it belongs to**, where it
+    deliberately removed that. The property is not compatible with typed
+    material, and it was thin: the file already holds the enrollment's own
+    APKAM private key material at chmod 600.
 
 - refactor: follows at_auth's barrel split — `FileAtKeysIo` now comes from
   `package:at_auth/at_auth_io.dart`. No API change here.
