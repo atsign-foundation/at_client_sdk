@@ -74,7 +74,9 @@ python3 -c "import json;r=[json.loads(l) for l in open('/tmp/cit.jsonl')];print(
 
 And what no rail checks at all is whether the cited test really *establishes*
 the clause; that judgement is the citation's, written in `proves:`. Reading
-those is the [acceptance audit](#the-acceptance-audit) row.
+those is the [acceptance audit](#the-acceptance-audit), which is finished —
+the reading it describes was done on 2026-08-26 and what it found is
+[a row of its own](#what-the-citation-audit-left-owed).
 
 ---
 
@@ -105,66 +107,24 @@ file instead.
 
 ---
 
-## THE NEXT MOVE
-
-⛔ **One recommendation, and it is the only entry in this section.** Everything
-else — including what is blocked and why — is a row in [`## TODO`](#todo) with a
-priority on it. This section used to carry a second ranked list of lettered
-gates, `G0`–`G8`, which drifted out of step with the table below it and twice
-carried two `[RECOMMENDED]` markers at once. The letters are gone; their
-discharged bodies are in
-[`detail/implementation-plan.md`](detail/implementation-plan.md#15-the-lettered-d1-gates-g0g8-as-they-were-discharged)
-and every open one became a P0 or P1 row.
-
-**`[RECOMMENDED]`: finish the [acceptance audit](#the-acceptance-audit).**
-Cluster **G1 is the last one** — 35 citations across 15 rows. Read every
-scenario's `proves:` prose against the test it cites and record where the
-citation does not establish the clause. A, C1 and B are done; G1 is the
-keyfile-and-wire cluster, where the raw-literal pins live, so a citation either
-names the pinned bytes or it does not.
-
-**Start by re-deriving the denominator** — the command is in
-[Re-deriving the state](#re-deriving-the-state), and `rm -f` first. The corpus
-moved twice on 2026-08-26 and the figure written into this plan was stale
-within the same session that wrote it.
-
-⚠️ **Two of the four P0 rows are unblocked, and this marker picks between them
-rather than describing the band.** The other is
-[a client that exits during its startup tail](#a-client-that-exits-during-its-startup-tail-abandons-seeding),
-which is a live data-loss defect and sits ABOVE this one in the table — take it
-instead if you would rather chase a bug than read. It is second here only
-because it needs an in-tree reproduction that three attempts have not produced,
-so it is the higher-variance of the two. The remaining two P0s are gkc's
-publishes. ⛔ This section said "the only P0 left that a session can start
-typing on" while the table held two unblocked rows; a cold read caught it.
-
-⛔ **The audit is unbounded reading, so bound it yourself**: work the catalogue
-in id order, record a verdict per clause, and stop at the end of a cluster
-rather than at the end of a session. What makes it P0 is that D1's own
-definition rests on it and no rail can compute it.
-
-⚠️ **Two things this recommended before it, both landed 2026-08-26.**
-Reproducing
-[a retrofitted enrolment cannot run an authenticated verb](#a-retrofitted-enrolment-cannot-run-an-authenticated-verb),
-which is fixed — the signer was taken from the caller while the enrolment id
-and the algorithm beside it came from the client; and the CLI's key-exchange
-routing, `--key-exchange` plus the posture-driven constructor choice, with the
-detail in [14.39](#1439-pqposture-and-the-rollout-it-drives). Both rows are gone
-from the table, which is what a finished row does here.
-
-**Blocked, and what lifts it:** the at_client, at_client_flutter and
-at_onboarding_cli carves wait on **at_auth 4.0.0-rc1 reaching pub.dev**, which is
-gkc's to do. Step 20's rotation arm waits on that same publish plus a dedicated
-CRAM atSign. ⛔ Nothing else in the list is externally blocked.
-
----
-
 ## TODO
 
-⛔ **The single list. One row per open item, ordered by priority.** A row's
-"what is owed" is the whole of what is owed; where that needs more than a
-sentence, the row links to a `###` section below or to
+⛔ **The single list, and the only one. One row per open item, bucketed by
+priority.** A row's "what is owed" is the whole of what is owed; where that
+needs more than a sentence, the row links to a `###` section below or to
 [`detail/implementation-plan.md`](detail/implementation-plan.md).
+
+**The next move is: pick one of the P0s. If there are no P0s, pick a P1, and so
+on.** That is the whole rule (gkc, 2026-08-26). A row whose "Blocked on" column
+says anything other than Nothing is not pickable, so it does not compete.
+
+⛔ **There is no `[RECOMMENDED]` marker and no `## THE NEXT MOVE` section** —
+both were deleted on 2026-08-26. A single recommendation sitting above the table
+is one fact with two homes, and it drifted every time: it twice carried two
+`[RECOMMENDED]` markers at once, it went on recommending work that had shipped,
+and it kept its own copy of what was blocked beside the column that already said
+so. The buckets are the ranking. Nothing ranks within a bucket, and nothing needs
+to.
 
 ⚠️ **A row leaves this table when it is done — it does not gain a ✅.** There is
 nowhere to move it to: what was done is in `git log`. A rail enforces the
@@ -176,7 +136,6 @@ TODO row names a section whose body declares itself done").
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
 | [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | **Reproduce it in this tree, then fix it.** A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. Three in-tree reproduction attempts failed; the row says how |
-| [the acceptance audit](#the-acceptance-audit) | Read every scenario's `proves:` prose against the test it cites, and record where the citation does not establish the clause. The structural half is built and green; this is the judgement half, and it is what D1's own definition rests on | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **gkc publishes at_auth 4.0.0-rc1**, then carve at_client (stacked) → at_client_flutter → at_onboarding_cli. Six of the eight positions are through by merge; what is left is publishes | gkc. ⚠️ **Merged is not published, and only the publishes gate anything now** |
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
 
@@ -184,6 +143,7 @@ TODO row names a section whose body declares itself done").
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
+| [what the citation audit left owed](#what-the-citation-audit-left-owed) | **Seven open findings from the audit, and one has a security consequence.** F11: all seven refusal assertions in the `enroll:update` live cluster are `throwsA(isA<Object>())`, so a timeout and the privilege-escalation guard firing are the same green — and UC-G1.12's row demands a *named* error in its own words. F16: the nskey mint lock's live refusal is proven for `_rootlock` and modelled by a mock for `_nskeylock`, which is the same measurement the seeding P0 is missing. The rest are unasserted clauses | Nothing. F11 and F12 need one live probe first |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
 | **advertisement fetch volume, ttr and client caching** | Three questions, one subject, raised by gkc 2026-08-26 after a wire capture showed **110 `_apsk` lookups in a single short client run** — more than either control atSign made. (1) Why are there so many? Establish what re-fetches, and whether anything is re-reading per operation what it could hold. (2) Should an advertisement carry a `ttr`, and if so how long — it is a public record that peers must not read stale after a rotation, and rotation is the revocation lever. (3) How should a client cache advertisements it has fetched, and for how long? ⛔ **These interact**: a client-side cache with no server-side `ttr` is a rotation that does not take effect, and a `ttr` shorter than a session is the fetch volume in (1) by design | Nothing. It needs a measurement, then a ruling |
 | [the at_client carve stack](#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
@@ -245,35 +205,62 @@ cancelled. Their design and measurements are in
 and in
 [detail](detail/implementation-plan.md#15-the-lettered-d1-gates-g0g8-as-they-were-discharged).
 
-**What is owed is the judgement half**: read each scenario's `proves:` prose
-against the test it cites and record where the citation does not establish the
-clause. The pins compute the *known* overclaim; they cannot tell you a cited
-test proves something narrower than the clause it is attached to.
+⛔ **THE READING IS DONE — every cluster and the bucket that belonged to none,
+finished 2026-08-26.** What it was: read each scenario's `proves:` prose against
+the test it cites and record where the citation does not establish the clause.
+The pins compute the *known* overclaim; they cannot tell you a cited test proves
+something narrower than the clause it is attached to, and that judgement is what
+no rail can make.
 
-**Started 2026-08-26.** Cluster A is done — 36 citations — and the running
-record, the method and every finding are in
-[detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26).
-**C1 is done too — 24 citations, four findings, three closed the same day**
-(a posture axis pinned by nothing, proven by a mutation that left 1573 tests
-green; a count stale in six places; a row reading PROVEN while its axis reached
-no production caller; and a scenario still describing the pre-flip default).
-B is started and G is untouched: **91 of 153** remain against the tree today,
-re-derived 2026-08-26 — the corpus grew by six when UC-B1.4 to UC-B1.7 landed,
-so the older `85 of 147` is arithmetic over a corpus that no longer exists.
-Cluster B is audited — 42 citations, 25 cited rows of 28, one finding found and
-closed the same day (UC-B0.1 stated "No partial state on the server"
-unconditionally while its own second scenario disproved it). ⛔ **The number a
-reader counting PROVEN cannot see: 22 of B's 28 rows have LIVE proof** — three
-rest wholly on unit citations and three cite nothing at all. Not a defect, since
-PROVEN means a scenario asserts it and runs; it is what the status column does
-not distinguish. **G1 is next: 35 citations across 15 rows.** The record, the
-method and the correction are in that detail section.** The one substantive finding, **UC-A4.5**, is
-✅ **closed**: its central clause ("Alice's configuration decides what she is a
-*recipient* for and nothing about who she can send to") was true in the code and
-established by neither citation, because both arms co-varied the sender's
-configuration with the recipient's. The isolating arm now exists in
-`packages/at_client/test/nskey_kem_selection_test.dart` and the row cites it
-first.
+**What it covered.** 161 citations, measured 2026-08-26 by the recorder and
+again by `git grep -c 'provenIn('` minus the two declarations in
+`proven_elsewhere.dart`, which agree. ⛔ **Re-derive rather than quoting that
+figure, and `rm -f` the file first** — `provenIn` appends, so a stale file reads
+as twice the corpus. The command is in
+[Re-deriving the state](#re-deriving-the-state).
+Cluster A (37 citations, 20 rows), C1 (25, 6), B (42, 25), G1 (37, 16), and the
+cross-cutting bucket (14 citations over 6 of its 10 scenarios). **Seventeen
+findings, ten closed and seven open** — re-derive both by tallying the `F<n>`
+headings in that detail file, since one of them recorded itself CLOSED in its
+body while its heading was never struck, and every command keying on headings
+counted it open.
+
+⚠️ **The bucket is the part worth remembering.** Four clusters were audited, each
+one finished, and none of them was the corpus: the passes were scoped by the
+`UC-` ids in the catalogue, and a scenario with no id belongs to no cluster, so
+the cross-cutting invariants sat at `—` in the enumeration table from the day it
+was built. An audit organised by the ids in a catalogue cannot see work that has
+no id. It held the largest legibility gap in the corpus.
+
+**What is left is the fixing**, and it is a row of its own:
+[what the citation audit left owed](#what-the-citation-audit-left-owed).
+
+**The running record, the method and every finding** are in
+[detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26)
+and the cluster sections below it. The headline findings, one line each:
+
+- **UC-A4.5** — its central clause was true in the code and established by
+  neither citation, because both arms co-varied the sender's configuration with
+  the recipient's. Closed by an isolating arm in
+  `packages/at_client/test/nskey_kem_selection_test.dart`.
+- **C1** — a posture axis pinned by nothing, proven by a mutation that left 1573
+  tests green; a count stale in six places; a row reading PROVEN while its axis
+  reached no production caller; a scenario still describing the pre-flip default.
+- **B** — UC-B0.1 stated "No partial state on the server" unconditionally while
+  its own second scenario disproved it. ⛔ **The number a reader counting PROVEN
+  cannot see: 22 of B's 28 rows have LIVE proof** — three rest wholly on unit
+  citations and three cite nothing at all. Not a defect, since PROVEN means a
+  scenario asserts it and runs; it is what the status column does not
+  distinguish.
+- **G1** — the catalogue refused an empty `keys` array that the code, the
+  scenario and the citations had all accepted since 2026-08-22; and two clauses
+  whose proof existed in the tree and was cited from a neighbouring row or from
+  no row at all.
+- **cross-cutting** — the security clause of "advertised recipient keys are
+  signed and verified" was described in a comment naming two test files and
+  cited nowhere, while 16 of the 17 rejection tests in those files carried no
+  citation. ⚠️ **A comment naming a test file is not a citation** — it reads like
+  one, it is usually true, and the ledger counts none of it.
 
 ⛔ **Enumerate with the suite's own recorder, and `rm` the file first** —
 `provenIn` appends, and a stale file reads as twice the citations. The command
@@ -308,6 +295,72 @@ of UC-A1.1.
 ⚠️ **A citation count is not a coverage count.** An earlier pass reported "27 of
 68 have no live proof" when what it had measured was 27 with no live proof *cited
 from their acceptance scenario*. Do not restate it as coverage.
+
+### What the citation audit left owed
+
+Seven open findings, recorded in full in
+[detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26)
+and the cluster sections under it. **Tally them by the `F<n>` headings in that
+file rather than from this list** — one finding recorded itself CLOSED in its
+body while its heading was never struck, so a command keying on headings counted
+it open and disagreed with the prose. Both were honest and one was wrong.
+
+**F11 is the one with a consequence, and it is small to fix.** Every refusal in
+`tests/at_functional_test/test/enroll_update_live_test.dart` — seven assertions
+across UC-G1.11, UC-G1.12 and UC-G1.13 — is `throwsA(isA<Object>())`, which
+matches a connection reset, a timeout and a malformed command as readily as the
+guard firing. UC-G1.12's catalogue row forbids exactly that: *"the atServer
+refuses it by its own named error, not by 'it failed' — this is the
+privilege-escalation guard"*, and the test's own comment restates the
+requirement immediately above an assertion that does not meet it.
+
+⚠️ **The arms around those assertions are good** — genuine enrollments, a
+possession proof signed by the production helper with the wrong private half, a
+control showing the same request succeeds when the guard should not fire. What
+the controls cannot rule out is a transport failure on the refusal arm itself,
+because the control is a different call made later.
+
+**Start with a probe, not a rewrite.** What the atServer actually returns for
+each of the three refusals is unmeasured, as is whether at_lookup surfaces it as
+a typed exception or an error string. One throwaway probe against an
+already-provisioned atSign answers all three, and inferring it from the handler
+is the thing this tree has a rule against.
+
+**F16 shares a measurement with the open seeding P0.**
+`neither key record is immutable; the lock that mints them is` names
+`_rootlock@owner` and `_nskeylock.<ns>@owner`, and proves the live refusal for
+the first only. The nskey lock is covered by a raw-literal pin of the client's
+intent and by a mock that models the refusal on the key name — and a mock cannot
+test a refusal it does not model, so the guard's presence and its absence look
+the same. [The seeding P0](#a-client-that-exits-during-its-startup-tail-abandons-seeding)
+records its self-perpetuating-interlock arm as reasoned from the code rather
+than measured. **It is the same measurement, and one live test discharges both.**
+`pq_signing_root_mint_lock_test.dart` already takes, releases and re-takes a
+lock against a live atServer; a fourth test doing that with `nskeyMintLockKey`
+is the same shape against a different key.
+
+**The remaining five are unasserted clauses**, each a line or two of test:
+
+- **F12** — UC-G1.11 promises *"the atServer refuses **and the record is
+  unchanged**"* and never fetches the record, so a server that refused after
+  writing would pass. The assertion has to sit before the valid-proof control,
+  which rewrites the record deliberately.
+- **F15** — UC-G1.2 promises the resolver returns the new enrollment id after a
+  retrofit, and nothing calls it. Sharper than it looks: the flat `enrollmentId`
+  stays at the legacy enrolment, so the keyfile answers the question two ways
+  depending on which field a reader takes, and the row promises one of them.
+- **F1** — the clause level is 9% adopted. A citation may name the clauses it
+  carries; almost none do, so the ledger cannot show which part of a row an
+  individual citation is for.
+- **F3** — about 8 citations rest on tests they do not pin.
+- **F8** — every UC-B1 assertion is a restriction, so an enrolment that gained
+  nothing and can do nothing satisfies the whole cluster. Partly answered by
+  UC-B1.4 to UC-B1.7, which assert capabilities; the review question it
+  generalises to is worth keeping: *does this row assert a capability, or only a
+  restriction?*
+
+⚠️ **Also still open from cluster B**: UC-B1.3's `nskey`-subset clause is stated
+in the catalogue and established by no citation, recorded at the row.
 
 ### The at_client carve stack
 
@@ -676,6 +729,16 @@ it is unawaited is good — construction must not block on the network — and
 blocking it would trade this problem for a worse one in every app that never
 needs to receive.
 
+⚠️ **One live probe discharges part of this row and part of another.** The
+interlock arm below is reasoned from the code rather than measured, and
+[F16](#what-the-citation-audit-left-owed) needs the same measurement from the
+other direction: whether the atServer refuses a second `_nskeylock` create the
+way it demonstrably refuses a second `_rootlock` one. `_nskeylock` is covered
+today by a raw-literal pin of the client's intent and by a mock that models the
+refusal, and a mock cannot test a refusal it does not model.
+`pq_signing_root_mint_lock_test.dart` already takes, releases and re-takes a
+lock live; the same shape against `nskeyMintLockKey` answers both.
+
 ⚠️ **And the interlock half is the sharper one**: if the lock cannot be made
 self-healing, a client that takes it should release it on shutdown, and one that
 finds it held with nothing published should say so at warning rather than
@@ -981,8 +1044,8 @@ workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only —
 so the newest run is only ever as new as the last manual dispatch. Dispatch
 first, because CI's at_client job runs a **bare** `dart analyze` that reads
 `benchmark/`, which the routine `dart analyze lib test` never opens; that hid
-five errors for six days. The dispatch and comparison commands are in [`## THE
-NEXT MOVE`](#the-next-move).
+five errors for six days. The dispatch and comparison commands are on the **CI at
+head** row in [`## TODO`](#todo).
 
 Each carve merges to trunk on its own. ⛔ **The spike branch itself never
 merges** — it is carved from, never landed.

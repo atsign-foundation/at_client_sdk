@@ -259,13 +259,16 @@ declarations in `proven_elsewhere.dart`.
 | --- | --- | --- | --- |
 | A | 37 | 20 | ✅ |
 | C1 | 25 | 6 | ✅ |
-| B | 42 | 25 | started |
-| G1 | 35 | 15 | — |
-| cross-cutting (no `UC-` id) | 14 | — | — |
+| B | 42 | 25 | ✅ |
+| G1 | 35 | 16 | ✅ |
+| cross-cutting (no `UC-` id) | 14 | 6 scenarios of 10 | ✅ |
 
-⚠️ **The plan's `85 of 147` was arithmetic over the pre-2026-08-26 corpus**;
-against the tree today it is **91 of 153** remaining. Re-derive rather than
-quoting either — the command is in the method above, and `rm -f` first.
+⚠️ **Nothing remains: the audit finished on 2026-08-26**, every cluster plus
+the cross-cutting bucket. This paragraph read *"the plan's `85 of 147` was
+arithmetic over the pre-2026-08-26 corpus; against the tree today it is 91 of
+153 remaining"* — both figures were correct when written and neither is a
+statement about the tree now. Re-derive rather than quoting any of them; the
+command is in the method above, and `rm -f` first.
 
 **F-B1 — three rows are PROVEN and cite nothing live: UC-B3.1, UC-B3.2 and
 UC-B5.2.** They produce **zero** records from the recorder. That is
@@ -546,7 +549,7 @@ reported: no seeding, every send refused, unreachable as a recipient.
 *does this row assert a capability, or only a restriction?* A cluster of
 restrictions cannot fail for "it gained nothing and can now do nothing".
 
-#### F9 — no B1 test builds a fresh client from the retrofitted keyfile
+#### F9 — no B1 test builds a fresh client from the retrofitted keyfile — ✅ CLOSED 2026-08-26
 
 UC-B1.1, B1.2 and B1.3 all perform their post-retrofit work on the client
 `selfRetrofit` handed back: the same process that did the retrofit, holding an
@@ -604,3 +607,265 @@ explicitly so neither can be read as covering the other.
 ⚠️ **Still open from this audit:** B1.3's `nskey`-subset clause is stated in the
 catalogue and established by no citation (recorded at the row); and the design
 question above — what `authenticate()` promises after a retrofit — is undecided.
+
+### G1 — the keyfile-and-wire cluster, audited 2026-08-26
+
+The last of the four clusters. **35 citations across 16 rows, and every row in
+the catalogue is cited** — G1 is the only cluster with no uncited row. Six
+findings, four of them closed the same day.
+
+⚠️ **The enumeration table above recorded 15 rows and there are 16.** It folded
+`UC-G1.9a` into `UC-G1.9`; the two are separate rows with separate citations,
+and the count is corrected in place. Re-derive rather than trusting either
+figure — the recorder groups by the `UC-` id in each scenario name.
+
+**What makes this cluster different from A, B and C1.** Every one of its rows
+was rewritten on 2026-08-18, and three of the four keyfile rows were describing
+code that had been deleted or reversed under them. That history shows in the
+`proves:` prose, which is unusually careful: most citations here say what the
+row used to claim and why the old wording would have been proven backwards. The
+audit's job in a cluster like that is not to find careless prose. It is to ask
+whether the corrections have themselves gone stale, and one of them had.
+
+#### F10 — UC-G1.4 refused an empty `keys` array in the catalogue and accepted it everywhere else — ✅ CLOSED
+
+The row's *Then* read *"A `version: 1` document carrying a top-level `keys`
+array is **refused by name**, not read as legacy"*, unqualified, and its own
+⚠️ correction note said `AtKeys.fromJson` throws on `containsKey('keys')`,
+*"empty array included"*.
+
+`262b5f597` (2026-08-22) narrowed that throw to a **non-empty** array:
+
+```dart
+if (legacyKeys is! List || legacyKeys.isNotEmpty) { throw ... }
+```
+
+So the row had been false for four days, and the correction note was false in
+the same breath as asserting itself. Both the scenario in
+`g1_keyfile_test.dart` and the citation on the test say the right thing —
+*"an EMPTY keys array is accepted, because that is what shipped"* — because
+they were rewritten in that commit and the catalogue row was not.
+
+**Why it matters more than a stale sentence.** The empty array is the shape
+every released build wrote: that version never populated it, since `addKey` has
+no caller outside `AtKeys` itself there. A reader working from the catalogue
+would restore the blanket refusal and strand every keyfile a release had ever
+produced, to guard an array carrying nothing.
+
+Corrected in place, with what the row used to say and both directions it was
+wrong in.
+
+#### F11 — every refusal in the `enroll:update` cluster is `throwsA(isA<Object>())`
+
+`tests/at_functional_test/test/enroll_update_live_test.dart` carries seven
+refusal assertions across UC-G1.11, UC-G1.12 and UC-G1.13, and **all seven
+match any throw at all** — a connection reset, a timeout, a malformed command,
+a server-side crash. Nothing distinguishes the guard firing from the call
+failing.
+
+⛔ **UC-G1.12's row forbids exactly this in its own words**: *"the atServer
+refuses it by its own named error, not by 'it failed' — this is the
+privilege-escalation guard."* The test's comment restates the requirement
+faithfully and the assertion under it is `throwsA(isA<Object>())`:
+
+```dart
+// ... refused by its own error rather than by a generic failure, because
+// this is the privilege-escalation guard and "it failed" would not
+// distinguish it from a typo.
+await expectLater(
+    lookupOf(client).executeCommand(raw, auth: true), throwsA(isA<Object>()),
+```
+
+The comment is the specification and the assertion does not meet it.
+`at_keys_test.dart` gets the same job right two packages away, asserting on
+`e.message` with a reason saying why a bare throw would not do.
+
+**In fairness to the tests, the arms around the assertions are good.** UC-G1.11
+signs its wrong-key proof with the production helper, so it is a well-formed
+proof over the right bytes; UC-G1.13 runs two genuine enrollments plus the
+owner's connection; both carry a control showing the same request succeeds when
+the guard should not fire. Those controls rule out *"a server that says no to
+everything"*. What they cannot rule out is a transport failure on the refusal
+arm specifically, since the control is a different call made later.
+
+**What is owed is a probe before an assertion**, not a rewrite: the atServer's
+actual error for each of the three refusals, read once against a live
+virtualenv, then asserted by name. Whether at_lookup surfaces those as typed
+exceptions or as error strings is unmeasured — it is the same question the
+tree's own rule answers by probing rather than by inferring from the handler.
+
+#### F12 — UC-G1.11's "and the record is unchanged" is asserted by nothing
+
+The row's *Then* is *"the atServer refuses **and the record is unchanged**"*.
+UC-G1.12 asserts its half of that, comparing `namespace` before and after.
+UC-G1.11 never fetches the record at all — `before` is not captured in the
+test — so a server that refused the rekey *after* writing it would pass.
+
+It is the sharper half of the two, because a partial write here installs a key
+whose private half the caller may not hold, and the row's own request dartdoc
+calls that outcome *"the emergency it is"*.
+
+The assertion has to sit before the valid-proof control, which rewrites the
+record deliberately.
+
+#### F13 — UC-G1.9's title clause was cited under UC-G1.8 — ✅ CLOSED
+
+The row is called *"a retired algorithm still verifies history"* and its two
+citations covered the transition and the retained advertisement. The test that
+proves an envelope of the retired algorithm still verifies —
+`signing_key_minting_test.dart`, *"an envelope signed before the withdrawal
+still verifies"* — was cited under **UC-G1.8**, one row above.
+
+Nothing was unproven; it was unfindable from the row that names it, which is
+the whole complaint the audit exists to answer. Cited under UC-G1.9 as well,
+which seven other tests in the corpus already do for their own second row.
+
+#### F14 — UC-G1.9a's `enroll:update` branch rested on no citation — ✅ CLOSED
+
+The row's *Then* names two advertisement branches: *"by `enroll:update` where
+there is an enrollment record and by publishing `_apsk` directly where there is
+not"*. The second is cited explicitly. The first was not.
+
+The trap is a test name. *"mints, advertises and files the algorithm the set
+names"* reads as covering it, and its assertions are `mint()`, `heldKeyIds()`
+and the keyfile — `heldKeyIds()` reads the **keyfile**, not the advertisement.
+Its `proves:` prose was honest about that all along: *"the mint itself, and
+that the key reaches the keyfile."* So the row led with a branch its own
+citations disclaimed, while two tests six lines away asserted it.
+
+Closed by citing *"the advertisement names the minted key and drops the auth
+key"*, which asserts the update carries the minted key and no longer carries
+the APKAM authentication key.
+
+⚠️ **Worth carrying as a review question**: *does the test's NAME cover the
+clause, or do its assertions?* A name written aspirationally is the cheapest
+way for a citation to look sound.
+
+#### F15 — UC-G1.2's resolver clause is asserted by nothing
+
+The row's *Then* ends *"and UC-G1.1's resolver returns the new enrollment id"*.
+The single citation covers the byte-identical flat fields and the typed
+material; `resolveAuthenticatingEnrollment()` is never called in it, and the
+scenario in `g1_keyfile_test.dart` drops the clause silently rather than
+restating it.
+
+The clause is almost certainly true — after the retrofit exactly one typed
+`privateAuthentication` is active, and the resolver returns the single
+candidate — but it is a one-line assertion in a test that already holds the
+retrofitted keyfile, so there is no reason for it to rest on an inference.
+
+⚠️ **And the flat `enrollmentId` stays at the legacy enrolment**, which is what
+makes the clause worth asserting rather than assuming: the file answers the
+question two different ways depending on which field a reader takes, and the
+row promises one of them.
+
+#### What the cluster got right, since a finding list reads as an indictment
+
+UC-G1.10 is the strongest row in the catalogue. It asserts the new key
+authenticates *and* the old one no longer does, before checking what did not
+move, so a server that accepted the request and did nothing fails rather than
+passes. It explains why the rotation is checked where it shows rather than
+where it is stored — `enroll:fetch` returns five fields and `apkamPublicKey` is
+not among them. And it compares `_apsk` by **key** rather than by spelling,
+because the record has a second writer: the client's own start-time heal path
+republishes a lone `rsa2048` key in the bare form, so an array written at
+approval becomes a bare string moments later, and which spelling is on the
+record at any instant is a race with startup rather than anything the rekey
+did.
+
+UC-G1.14 and UC-G1.15 both name what they do not prove. G1.14 says outright
+that the fail-closed half rests on an observation from a discarded draft and is
+not separately proven; G1.15 records that mutating `pqActive` to resolve as
+`pqReady` leaves all nine cells green, so the algorithm assertion is the only
+thing discriminating. Neither needed a finding, and both would have earned one
+without those sentences.
+
+### The cross-cutting bucket — audited 2026-08-26, and nothing had looked at it
+
+**14 citations across 6 of the 10 cross-cutting scenarios**, and the enumeration
+table above carried them as `—` from the day it was built. Not deferred and not
+declined: the audit was scoped cluster by cluster on the `UC-` ids, and a
+scenario with no id belongs to no cluster, so the bucket fell between the
+passes. The plan's own wording is *"read **every scenario's** `proves:` prose
+against the test it cites"*, which includes them.
+
+⚠️ **The shape to carry forward: an audit organised by the ids in a catalogue
+cannot see work that has no id.** Four clusters were audited, each one finished,
+and the denominator they were measured against was never the corpus.
+
+These are the best-written scenarios in the suite. `reads are universal` is a
+differential with a control and asserts the failure message names both the
+missing provider id and the registered set; `performance is measured, not
+assumed` runs `dart analyze benchmark` inside the assertion, because existence
+plus four identifiers cannot tell a working harness from a broken one — which is
+how the bench sat with five compile errors for six days. Two findings, and one
+of them is the corpus's largest legibility gap.
+
+#### F16 — the nskey mint lock's refusal is proven for the *other* lock
+
+`neither key record is immutable; the lock that mints them is` names two locks:
+`_rootlock@owner` and `_nskeylock.<ns>@owner`. Its three citations prove the
+signing root's metadata is mutable, prove the second `_rootlock` create is
+refused **with the immutability error** and succeeds once released, and prove
+the published nskey is mutable across a re-mint.
+
+**None of them is about `_nskeylock`.** `pq_signing_root_mint_lock_test.dart`
+holds exactly three tests and all three are cited, so there is no uncited arm to
+point at. What covers the nskey lock instead is a raw-literal pin of the client's
+*intent* — `wire_literal_pins_test.dart` pins the name, the immutable flag and
+the two-minute ttl — and a mock in `nskey_minting_test.dart` that models the
+refusal by matching on the key name:
+
+```dart
+if (builder.atKey.key == '_nskeylock' && lockAlreadyHeld) { ... }
+```
+
+⛔ **A mock cannot test a refusal it does not model, and the test is green
+either way.** The mechanism here *is* the atServer saying no to a second
+immutable create; a fake that returns whatever the test arranged makes the
+guard's presence and its absence indistinguishable. The `_rootlock` arm shows
+the live refusal exists on that record; nothing carries it across to the other.
+
+**Cheap to close, and it is the same rig**: `pq_signing_root_mint_lock_test.dart`
+already takes a lock against a live atServer, releases it and re-takes it. A
+fourth test doing that with `nskeyMintLockKey` is the same shape against a
+different key.
+
+⚠️ **It touches the open P0.** [A client that exits during its startup tail
+abandons seeding](../implementation-plan.md#a-client-that-exits-during-its-startup-tail-abandons-seeding)
+records the self-perpetuating interlock as *"reasoned from the code, not
+measured"* — a short-lived client that dies after the lock lands leaves an
+immutable key with a 120-second ttl that nothing deletes, and a successor that
+finds it held with nothing published throws rather than minting. The
+measurement that row is missing and the citation this row is missing are the
+same measurement.
+
+#### F17 — the security clause of `advertised recipient keys are signed and verified` was described, not cited — ✅ CLOSED
+
+The scenario claims *"A tampered, unsigned, or wrong-signer advertised key is
+**REJECTED**"* and then says, in a comment, *"Both halves hold today at unit
+level — `published_nskey_key_ring_test` and `key_package_registration_test`
+cover the rejections"*. It names neither test. Its three citations are all about
+the atServer side — `_apsk` fetchable without a client publish, a
+cross-enrollment overwrite refused, a live `enroll:listns`.
+
+**Measured: 16 of the 17 rejection-shaped tests across those two files are cited
+by nothing**, including every shape the clause names — `an advertisement signed
+by another atSign is rejected`, `a tampered advertisement is rejected`, `an
+unsigned advertisement is rejected, not accepted bare`, and their key-package
+counterparts. The one cited exception is about a package naming no suites, cited
+from a cluster A row for a different reason.
+
+So the one clause in this scenario that is a security guarantee was the one
+clause a reader could find no evidence for, while ten well-built tests asserted
+it two directories away. **The tests were never the gap. The ledger could not
+see them, and this audit exists precisely because a reader cannot either.**
+
+Closed by citing all six — three shapes on each half — and by replacing the
+comment that described the coverage with the citations that carry it. The
+verification rail was proven positive on the way in: mistyping one cited name
+reddens the suite with a message quoting the citation and its `proves:` prose.
+
+⚠️ **Generalises past this row**: *a comment naming a test file is not a
+citation.* It reads like one, it is usually true, and the ledger — the artefact
+this whole gate exists to produce — counts none of it.

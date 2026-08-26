@@ -2527,16 +2527,27 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   **no `version`, `atsign`, `enrollments` or `atsignKeys` key** — every
   self-encrypted field's ciphertext unchanged, and only the key **order** may
   differ, because the emitter has one fixed order. A `version: 1` document
-  carrying a top-level `keys` array is **refused by name**, not read as legacy.
+  carrying a **populated** top-level `keys` array is **refused by name**, not
+  read as legacy; an **empty** one is accepted and dropped, because that is the
+  only shape any released build ever wrote.
 
-  ⚠️ **Both of this row's sentences were wrong.** It promised the file comes
-  back *byte-identical*, which a foreign-ordered legacy file does not — the
-  guarantee is field-for-field. And it said "a `version: 1` file holding
-  `keys: []` comes back as pure legacy", which is now the **opposite** of the
-  code: since `cb3848b4d` (2026-08-14) `AtKeys.fromJson` throws on
-  `containsKey('keys')`, empty array included, because reading it would file
-  the material as legacy metadata and authenticate as the wrong enrollment.
+  ⚠️ **This row promised the file comes back *byte-identical*, which a
+  foreign-ordered legacy file does not** — the guarantee is field-for-field.
   Corrected 2026-08-18.
+
+  ⚠️ **And the empty `keys` array went round twice.** The row originally said a
+  `version: 1` file holding `keys: []` comes back as pure legacy; the
+  2026-08-18 correction replaced that with a blanket refusal, because
+  `cb3848b4d` (2026-08-14) threw on `containsKey('keys')` with no regard to
+  what the array held. `262b5f597` (2026-08-22) narrowed the throw to a
+  *non-empty* array and the blanket wording became false in the other
+  direction. What settled it is a measurement rather than an argument: a
+  keyfile CRAM-onboarded with the published at_auth that introduced `keys`
+  carries `"keys": []` — that build never populated the array, since `addKey`
+  has no caller outside `AtKeys` itself there — so refusing the empty shape
+  stranded every keyfile a release had written, to guard an array carrying
+  nothing. The scenario and its citations were rewritten on 2026-08-22 and
+  **this row was not**, which is what the citation audit found on 2026-08-26.
 
 ### 16.3 The wire rows
 
