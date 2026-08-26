@@ -134,6 +134,13 @@ class TestSuiteInitializer {
       }
       atClientPreference ??= TestPreferences.getInstance()
           .getPreference(atSign, posture: posture);
+      // Again here, and deliberately not only inside getPreference: a caller
+      // may hand in a preference it built itself, and that route reaches a
+      // live client without passing through the helper at all. This is the
+      // last point before setCurrentAtSign, so it is the one place every
+      // route has in common.
+      TestPreferences.refuseDurableWritesToLongLivedAtSigns(
+          atSign, atClientPreference);
       // Create the atClientManager for the atSign
       var atClientManager = await (manager ?? AtClientManager.getInstance())
           .setCurrentAtSign(atSign, namespace, atClientPreference,

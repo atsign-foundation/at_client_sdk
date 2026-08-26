@@ -31,6 +31,7 @@ paths:
   - test/deletion_key_test.dart
   - test/encryption_test.dart
   - test/key_stream_test.dart
+  - test/long_lived_atsign_guard_test.dart
   - test/notify_test.dart
   - test/notify_with_isolate_test.dart
   - test/sharing_key_test.dart

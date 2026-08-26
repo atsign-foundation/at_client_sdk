@@ -2,6 +2,7 @@ import 'dart:io';
 import 'dart:isolate';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/test_initializers.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
@@ -86,5 +87,11 @@ AtClientPreference getAtClientPreferences(String atSign) {
   atClientPreference.commitLogPath = 'test/hive/$atSign/commit/';
   atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];
   atClientPreference.rootPort = ConfigUtil.getYaml()['root_server']['port'] ?? 64;
+  // The one route in this pack that reaches a live client without passing
+  // through TestPreferences or testInitializer, so the guard is invoked by
+  // hand. Leaving it out would make this file the single hole in a rule the
+  // rest of the suite cannot break.
+  TestPreferences.refuseDurableWritesToLongLivedAtSigns(
+      atSign, atClientPreference);
   return atClientPreference;
 }
