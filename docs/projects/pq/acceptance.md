@@ -1549,11 +1549,14 @@ FFI), **at_commons 5.13.0**, **at_client 3.14.0** (carrying the SS-0 substrate,
 PR #2037) and **at_auth 3.3.0-rc1** (extended `AtKeys` + `AtKeysIo.flush()`), so
 SS-0 / SS-1b / S-1 / S-2 acceptance is against shipped code.
 
-⚠️ **`tests/` holds 7 Dart packages, of which 4 are live test packs.** The
-other 3 are `tests/pq_matrix/{current,published,scenario}` — the child processes
-the pair grid spawns, which is why the `published` column can hold a released
-at_client this tree cannot. Count them with `find tests -name pubspec.yaml`, not
-`tests/*/`: a depth-2 glob returns 4 and reads as the whole answer.
+⚠️ **`tests/` holds 6 Dart packages, of which 4 are live test packs.** The
+other 2 are `tests/pq_matrix/{published,scenario}` — the child processes the pair
+grid spawns, which is why the `published` column can hold a released at_client
+this tree cannot. ⚠️ **This read "7 … `{current,published,scenario}`" until
+2026-08-26**; it was true when written and stopped being true when
+`tests/pq_matrix/current` was deleted, and it survived because its own warning
+was about a different miscount. Count them with `find tests -name pubspec.yaml`,
+never `tests/*/`: a depth-2 glob returns 4 and reads as the whole answer.
 
 No `provenIn` citation reaches either CLI pack, which is why the CLI pack's
 two-arm posture differential — the best live evidence for UC-C1.6 and a second
@@ -2072,8 +2075,8 @@ Four were named, each verified against the tree rather than assumed. **Two are
 discharged:**
 
 - ✅ **Test selection**, built 2026-08-23. The functional pack declares the `pq`
-  tag and **29** of its 49 test files carry it, chosen by the mechanisms they
-  drive rather than their names — `copied_keyfile_test` and
+  tag and **34** of the 55 test files it weighs carry it, chosen by the
+  mechanisms they drive rather than their names — `copied_keyfile_test` and
   `crypto_era_default_test` have no `pq` in their filenames and both needed it.
   ⛔ No `paths:` allowlist, deliberately, and `test/pq_tag_test.dart` keeps the
   set honest instead
@@ -2082,7 +2085,7 @@ discharged:**
   **not posture-dependent** — pqActive **16 of 18** monitors received against a
   control's **18 of 20**, both arms failing alike with `AT0014` "the connection
   went away", which is monitor-readiness flakiness of
-  [14.34](implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
+  [14.34](detail/implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
   family rather than an algorithm problem. A pqActive cell is no worse off than
   a legacy one. ⚠️ The rate is the rig's, and two earlier figures were wrong
   before this one

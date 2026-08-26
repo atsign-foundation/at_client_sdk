@@ -41,9 +41,11 @@ the best live evidence for UC-C1.6.
 
 Across all 4 the strict matcher gives **194** and a multi-line-aware one
 **247**. A separate error hid inside the same sentence: `tests/*/` is a depth-2
-glob and counted 4 Dart packages where `find tests -name pubspec.yaml` finds 7,
-missing `tests/pq_matrix/{current,published,scenario}` — the very packages the
-pair grid's out-of-process arm depends on.
+glob and counted 4 Dart packages where `find tests -name pubspec.yaml` found 7 at
+the time, missing `tests/pq_matrix/{current,published,scenario}` — the very
+packages the pair grid's out-of-process arm depends on. ⚠️ **The figure is 6
+now**: `tests/pq_matrix/current` was deleted, and the lesson is the glob rather
+than the number. Re-derive.
 
 ## The ledger's first version scored 28 instead of 62
 
@@ -82,7 +84,7 @@ prerequisite. Three measurements in sequence, each correcting the last:
    distinguishes them.
 
 A related hypothesis died on the way: that this and
-[14.34](../implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)
+[14.34](implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)
 were one problem. `NotificationServiceImpl` has built its Monitor with
 `signingAlgoType: signingAlgoOf(atClient)` since 2026-08-10, before both
 observations, so the monitor was never authenticating RSA for want of anything

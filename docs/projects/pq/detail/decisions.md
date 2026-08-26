@@ -11458,7 +11458,7 @@ rebuilt monthly against a VE that publishes per commit.
 
 **4 prerequisites**, each verified and each written up in the specification.
 **Two are already discharged**: the functional pack had no `dart_test.yaml` and
-no `pq` tag and now declares the tag with 29 of its 49 test files carrying it, guarded by
+no `pq` tag and now declares the tag, guarded by
 `test/pq_tag_test.dart`; and `PqPosture.pqActive` was thought to break the
 monitor and does not — measured, and the failure is not posture-dependent.
 **Two remain**: `manifest.dart` sits where no pack can import it, and
@@ -11485,7 +11485,7 @@ which is before **both** observations — checked against the tree as it stood o
 never authenticating RSA for want of anything setting its algorithm.
 
 That also re-reads
-[14.34](../implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
+[14.34](implementation-plan.md#1434-an-unexplained-intermittent-in-self_enrollment_retrofit_live_testdart)'s
 evidence rather than leaving it as a defect: `signingAlgoOf` resolves from key
 material, and that run had two clients — the legacy owner and the retrofitted
 one. A monitor whose PKAM went out as `signingAlgo:rsa2048` was the **legacy**

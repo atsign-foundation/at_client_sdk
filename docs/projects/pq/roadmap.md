@@ -33,7 +33,7 @@ the canonical home rather than duplicating it.
 | Doc | What lives there |
 |---|---|
 | **roadmap.md** (this doc) | Roadmap & high-level design — the WHY + WHAT: deliverables D1/D2, the conceptual `nskey` shape, migration philosophy, usability/crypto-agility constraints, the phase trajectory at a glance. |
-| [`implementation-plan.md`](implementation-plan.md) | The build sequence, as **TODO / PARKED / DONE**: full detail for open work, one row each for parked and completed items. The project list (Wave-0 baseline, P-1..P-3, S-1..S-6, SS-*, B-*, RF-*, R-1/R-2, ON-1, D2-1), the dependency graph, waves/parallelism, effort, publish gates, the critical path and the coverage map moved to [`detail/implementation-plan.md`](detail/implementation-plan.md) on 2026-08-16. |
+| [`implementation-plan.md`](implementation-plan.md) | **What is still owed**, as one prioritised list (`## TODO`, P0–P3) plus `## PARKED`. ⚠️ This read "as **TODO / PARKED / DONE**" until 2026-08-26; there is no DONE section — what was done is in `git log`. The project list (Wave-0 baseline, P-1..P-3, S-1..S-6, SS-*, B-*, RF-*, R-1/R-2, ON-1, D2-1), the dependency graph, waves/parallelism, effort, publish gates, the critical path and the coverage map moved to [`detail/implementation-plan.md`](detail/implementation-plan.md) on 2026-08-16. |
 | [`design.md`](design.md) | Detailed designs by subsystem — the D1 `nskey` data-path key shapes / 3 providers / `appMetadata` / CK model / cold-start / FS + rotation levers; the secret-sharing substrate (`kpid`, `__ssenv`, `SecretStore`, push/pull, `enroll:listns`, the enrollment record + self-retrofit flow); at_chops primitives; the `CryptoProvider` seam / key stores / WASM split; and the worked walkthroughs (NoPorts, at_talk). Build-level notes with `file:line`. |
 | [`acceptance.md`](acceptance.md) | The given/when/then use-case catalogue (A1.x–A5.x, B0.x–B5.x) with concrete at-keys plus the impl/verify steps and the test harness. |
 | [`decisions.md`](decisions.md) | The decision **index** — one row per ruling, with date and status, and nothing else. Since 2026-08-16 it is deliberately bodyless, so grepping it returns headlines; the reasoning behind every choice is in [`detail/decisions.md`](detail/decisions.md), under a `## <number>.` heading matching the row. |
@@ -340,9 +340,10 @@ own; later ones build on earlier. **M0–M3 are Deliverable 1** (PQ-safe messagi
 via the `nskey` data path); **M4–M6 are Deliverable 2** (the `at/pqmls` group
 provider through to the pq-mls engine).
 
-⚠️ **This table is about capability, not progress.** Which milestone is done
-lives in [`implementation-plan.md`](implementation-plan.md)'s TODO / PARKED /
-DONE sections, and only there. Status written here goes stale silently, because
+⚠️ **This table is about capability, not progress.** What is still owed lives in
+[`implementation-plan.md`](implementation-plan.md)'s one prioritised
+[`## TODO`](implementation-plan.md#todo) list, and only there; what is done is in
+`git log`. Status written here goes stale silently, because
 nothing reads this file when work lands.
 
 | Milestone | Capability added | Why it matters |
@@ -388,10 +389,10 @@ the retrofit signing algorithm) is an independent flag with a 3.x and a 4.0
 default, plus a convenience posture that sets them as a group; all the code ships
 in 3.x, and the acceptance suite drives the entire rollout by flag manipulation.
 
-**Where the build has got to is not recorded here.** What is owed, what is
-parked and what has landed are in
-[`implementation-plan.md`](implementation-plan.md)'s TODO / PARKED / DONE
-sections, which are the only place progress is written down; the project
+**Where the build has got to is not recorded here.** What is owed and what is
+parked are in [`implementation-plan.md`](implementation-plan.md)'s
+[`## TODO`](implementation-plan.md#todo) and `## PARKED` sections, which are the
+only place owed work is written down; the project
 sequence, the dependency graph, publish gates and the coverage map are one
 level down in [`detail/implementation-plan.md`](detail/implementation-plan.md). This document describes the shape of the work, and
 that shape does not change when a project lands.
