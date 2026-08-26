@@ -1429,6 +1429,16 @@ awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.
 # rows 3-9: the stage-5 table, which owns steps 23-31
 awk '/^\*\*Stage 5/,/^\*\*Stage 6/' docs/projects/pq/implementation-plan.md
 
+# the citation audit's denominator. ⛔ `rm -f` FIRST — provenIn APPENDS, and a
+# stale file reads as roughly twice the corpus (measured: 284 where the answer
+# was 145, and the doubling looked like a real property of the suite).
+cd packages/at_client && rm -f /tmp/cit.jsonl && \
+  ACCEPTANCE_LEDGER=/tmp/cit.jsonl dart test test/acceptance --concurrency=1 >/dev/null
+wc -l < /tmp/cit.jsonl            # RUN IT. 2026-08-26: 153
+# the second derivation, which is what makes the first trustworthy: this sums
+# to the same figure PLUS the 2 declarations in proven_elsewhere.dart.
+git grep -c 'provenIn(' -- packages/at_client/test/acceptance | awk -F: '{s+=$2} END {print s}'
+
 # acceptance: what is skipped, and on which blocker.
 # Anchor on "}, skip:" — a bare "skip:" also matches catalogue_test.dart's and
 # manifest.dart's prose ABOUT skips and reports 5 where the answer is 2.
