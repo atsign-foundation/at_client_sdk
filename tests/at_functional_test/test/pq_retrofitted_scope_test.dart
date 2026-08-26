@@ -17,7 +17,8 @@ import 'test_utils.dart';
 
 /// **What a retrofitted, namespace-SCOPED enrollment can do afterwards.**
 ///
-/// UC-B1.4 to UC-B1.7. A legacy atSign upgrades by running a client at a newer
+/// UC-B1.4 to UC-B1.7, plus one arm that is not a catalogue row — see its
+/// own comment. A legacy atSign upgrades by running a client at a newer
 /// posture, so this is the migration path itself: the client comes up, finds
 /// its enrollment authenticates with a weaker key than the posture asks for,
 /// and retrofits itself onto a fresh enrollment before its constructor
@@ -220,5 +221,55 @@ void main() {
             'its own record and nothing else. Seeing the parent here would '
             'mean the retrofit had been granted management rights it was never '
             'asked for');
+  }, timeout: Timeout(Duration(minutes: 3)));
+
+  /// ⛔ **Not a catalogue row: this arm was written to reproduce a reported
+  /// defect and did not reproduce it.** Kept because it guards a real property
+  /// and because its GREEN is the finding — it narrows where the reported
+  /// fault can live.
+  ///
+  /// Reported 2026-08-26 from a live ephemeral environment: a retrofitted
+  /// atSign never publishes its own namespace advertisement, so it can SEND
+  /// post-quantum and cannot RECEIVE. On this path it does publish one, with
+  /// the negative control proven — asking for a namespace nothing seeds
+  /// returns null here.
+  ///
+  /// ⚠️ **What this arm does NOT cover, and the reported case has all four.**
+  /// Listed so the green is not read as wider than it is:
+  ///
+  /// | | here | reported |
+  /// | --- | --- | --- |
+  /// | key source | `InMemoryAtKeysIo` | a real keyfile on disk |
+  /// | process | one — enrol and retrofit together | two — onboard, exit, retrofit on a later run |
+  /// | posture | `pqReady` | `pqActive` |
+  /// | route | `fromAuthSession` | the app's own onboarding |
+  ///
+  /// The second row is the one to suspect first: a fresh process reading a
+  /// keyfile is the durable arm, and nothing about an in-memory retrofit
+  /// exercises it.
+  test('a retrofitted scoped enrollment publishes its own namespace key',
+      () async {
+    final enrolled = await retrofittedScopedClient('seed');
+    final client = enrolled.client;
+
+    // Seeding is unawaited startup work, so read until it lands or the
+    // deadline passes — a single read the moment the client returns cannot
+    // distinguish "never seeded" from "not yet".
+    final ring = PublishedNskeyKeyRing(client);
+    NskeyAdvertisement? advertisement;
+    final deadline = DateTime.now().add(Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      advertisement = await ring.publishedAdvertisement(atSign, namespace);
+      if (advertisement != null) break;
+      await Future.delayed(Duration(milliseconds: 500));
+    }
+
+    expect(client.getPreferences()!.seedNamespaceKeys, isTrue,
+        reason: 'the control for the assertion below: pqReady asks this '
+            'client to seed. If the axis is false the arm proves nothing');
+    expect(advertisement, isNotNull,
+        reason: 'REPORTED DEFECT: a retrofitted enrollment authorised for '
+            'this namespace should publish public:__nskey.<ns>, or no peer '
+            'can seal anything to it — it sends and cannot receive');
   }, timeout: Timeout(Duration(minutes: 3)));
 }
