@@ -59,7 +59,9 @@ the scenarios and cannot drift, and this line is prose that nothing checked. It
 is checked now — `docs_structure_test.dart` derives all four numbers from the
 table and from `manifest.dart`, and fails when they disagree.
 
-⚠️ The scenario figure is **79, not 70**: my first correction inferred it from
+⚠️ **That correction is itself dated — the scenario figure is 83 today**, and
+this paragraph is kept for the mistake it records rather than for its number.
+The figure was **79, not 70**: my first correction inferred it from
 the old sentence's own arithmetic (`53 use cases and 53 scenarios — UC-A5.1 has
 two`), which is the same mistake in the other direction. It comes from
 `scenarioCount()`, which counts every registered file — including the ten

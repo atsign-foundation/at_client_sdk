@@ -46,16 +46,21 @@ boundary. "In D1" means "owed before D1 closes"; it does not mean "defines when
 D1 closes". R-2 still follows D1.
 
 ⛔ **"All acceptance tests pass" is true today and does not yet mean what this
-definition needs.** All 69 catalogue rows read `PROVEN` (68 live, UC-C1.3
-withdrawn) and all 68 live ones have a scenario — but the rail checks
+definition needs.** Every catalogue row reads `PROVEN` and every live one has a
+scenario — **73 rows, 72 live, UC-C1.3 withdrawn** at the time of writing, and
+that pair moves whenever a row lands, so re-derive it from `acceptance.md`'s
+own summary sentence rather than from here — but the rail checks
 **structure**: that a scenario exists, that ids resolve, that counts match, and,
 where a citation pins THEN clauses, that each pin resolves to exactly one.
 
 ⚠️ **Almost no citation pins anything, and this sentence used to read as
 though they generally did** ("since the clause level landed, that a citation
 pins the THEN clauses it claims"). Measured 2026-08-26 at `c014e4fa5`:
-**13 of 145 citations carry `clauses:`; the other 132 keep the old
-all-or-nothing verdict.** That is legal by design — `provenIn`'s own dartdoc
+**13 of 145 citations carried `clauses:`; the other 132 kept the old
+all-or-nothing verdict.** ⚠️ The denominator has moved since — the corpus is
+**153** as of the same day's later work — so treat the 13 as a floor and
+re-derive both with the command in
+[Re-deriving the state](#re-deriving-the-state). That is legal by design — `provenIn`'s own dartdoc
 says omitting it is not a failure, and the ledger reports such a row as having
 unpinned clauses rather than pretending they are covered — but it means the
 clause level is a *facility* that is 9% adopted, not a property the catalogue
@@ -111,8 +116,8 @@ discharged bodies are in
 [`detail/implementation-plan.md`](detail/implementation-plan.md#15-the-lettered-d1-gates-g0g8-as-they-were-discharged)
 and every open one became a P0 or P1 row.
 
-**`[RECOMMENDED]`: finish the [acceptance audit](#the-acceptance-audit) —
-**cluster G1 is the last one**, 35 citations across 15 rows. Read every
+**`[RECOMMENDED]`: finish the [acceptance audit](#the-acceptance-audit).**
+Cluster **G1 is the last one** — 35 citations across 15 rows. Read every
 scenario's `proves:` prose against the test it cites and record where the
 citation does not establish the clause. A, C1 and B are done; G1 is the
 keyfile-and-wire cluster, where the raw-literal pins live, so a citation either
@@ -123,8 +128,15 @@ names the pinned bytes or it does not.
 moved twice on 2026-08-26 and the figure written into this plan was stale
 within the same session that wrote it.
 
-It is the only P0 a session can start typing on: the seeding P0 needs a
-reproduction nobody has yet, and the other two are gkc's publishes.
+⚠️ **Two of the four P0 rows are unblocked, and this marker picks between them
+rather than describing the band.** The other is
+[a client that exits during its startup tail](#a-client-that-exits-during-its-startup-tail-abandons-seeding),
+which is a live data-loss defect and sits ABOVE this one in the table — take it
+instead if you would rather chase a bug than read. It is second here only
+because it needs an in-tree reproduction that three attempts have not produced,
+so it is the higher-variance of the two. The remaining two P0s are gkc's
+publishes. ⛔ This section said "the only P0 left that a session can start
+typing on" while the table held two unblocked rows; a cold read caught it.
 
 ⛔ **The audit is unbounded reading, so bound it yourself**: work the catalogue
 in id order, record a verdict per clause, and stop at the end of a cluster
@@ -172,7 +184,7 @@ TODO row names a section whose body declares itself done").
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
-| [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | `[RECOMMENDED]` Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
+| [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
 | **advertisement fetch volume, ttr and client caching** | Three questions, one subject, raised by gkc 2026-08-26 after a wire capture showed **110 `_apsk` lookups in a single short client run** — more than either control atSign made. (1) Why are there so many? Establish what re-fetches, and whether anything is re-reading per operation what it could hold. (2) Should an advertisement carry a `ttr`, and if so how long — it is a public record that peers must not read stale after a rotation, and rotation is the revocation lever. (3) How should a client cache advertisements it has fetched, and for how long? ⛔ **These interact**: a client-side cache with no server-side `ttr` is a rotation that does not take effect, and a `ttr` shorter than a session is the fetch volume in (1) by design | Nothing. It needs a measurement, then a ruling |
 | [the at_client carve stack](#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
 | [arm 1 vs arm 3 bucketing](#arm-1-vs-arm-3-bucketing) | **A ruling from gkc** — the measuring is done. Arm 3 cannot be scoped and the catalogue's count table stays wrong until it is settled | gkc's ruling. Nothing else |
@@ -238,8 +250,8 @@ against the test it cites and record where the citation does not establish the
 clause. The pins compute the *known* overclaim; they cannot tell you a cited
 test proves something narrower than the clause it is attached to.
 
-**Started 2026-08-26. Cluster A is done — 36 citations — and the running record,
-the method and the three findings are in
+**Started 2026-08-26.** Cluster A is done — 36 citations — and the running
+record, the method and every finding are in
 [detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26).
 **C1 is done too — 24 citations, four findings, three closed the same day**
 (a posture axis pinned by nothing, proven by a mutation that left 1573 tests
@@ -268,10 +280,13 @@ first.
 is in that detail section; it cost a wrong figure of 284 before one file run
 alone exposed it.
 
-**Coverage was never the gap**, measured 2026-08-23: of the 68 live rows, 59
-have live proof of some kind and 9 have none (12 LIVE_DIRECT, 43 LIVE_PARTIAL,
-4 LIVE_INCIDENTAL, 9 NO_LIVE_PROOF). Only **29 of the 69** use-case ids are
-nameable anywhere in the live suite.
+**Coverage was never the gap**, measured 2026-08-23 **against the 69-row
+catalogue of that date**: of its 68 live rows, 59 had live proof of some kind
+and 9 had none (12 LIVE_DIRECT, 43 LIVE_PARTIAL, 4 LIVE_INCIDENTAL, 9
+NO_LIVE_PROOF), and only 29 of the 69 use-case ids were nameable anywhere in the
+live suite. ⚠️ **Dated deliberately: the catalogue is 73 rows now**, so these
+are a snapshot rather than the current state — the figure to trust for cluster B
+is the one the audit measured directly, 22 of 28 rows with live proof.
 
 ⚠️ **`tests/` holds 6 Dart packages, of which 4 are live test packs.** The other
 2 are `tests/pq_matrix/{published,scenario}` — the child processes the pair grid
