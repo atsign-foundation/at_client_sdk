@@ -111,10 +111,20 @@ discharged bodies are in
 [`detail/implementation-plan.md`](detail/implementation-plan.md#15-the-lettered-d1-gates-g0g8-as-they-were-discharged)
 and every open one became a P0 or P1 row.
 
-**`[RECOMMENDED]`: the [acceptance audit](#the-acceptance-audit).** Read every
+**`[RECOMMENDED]`: finish the [acceptance audit](#the-acceptance-audit) —
+**cluster G1 is the last one**, 35 citations across 15 rows. Read every
 scenario's `proves:` prose against the test it cites and record where the
-citation does not establish the clause. It is the only P0 left that a session
-can start typing on — the other two are gkc's publishes.
+citation does not establish the clause. A, C1 and B are done; G1 is the
+keyfile-and-wire cluster, where the raw-literal pins live, so a citation either
+names the pinned bytes or it does not.
+
+**Start by re-deriving the denominator** — the command is in
+[Re-deriving the state](#re-deriving-the-state), and `rm -f` first. The corpus
+moved twice on 2026-08-26 and the figure written into this plan was stale
+within the same session that wrote it.
+
+It is the only P0 a session can start typing on: the seeding P0 needs a
+reproduction nobody has yet, and the other two are gkc's publishes.
 
 ⛔ **The audit is unbounded reading, so bound it yourself**: work the catalogue
 in id order, record a verdict per clause, and stop at the end of a cluster
