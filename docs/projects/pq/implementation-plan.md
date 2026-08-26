@@ -235,7 +235,10 @@ the method and the three findings are in
 (a posture axis pinned by nothing, proven by a mutation that left 1573 tests
 green; a count stale in six places; a row reading PROVEN while its axis reached
 no production caller; and a scenario still describing the pre-flip default).
-B and G remain: 85 of 147.** The one substantive finding, **UC-A4.5**, is
+B is started and G is untouched: **91 of 153** remain against the tree today,
+re-derived 2026-08-26 — the corpus grew by six when UC-B1.4 to UC-B1.7 landed,
+so the older "85 of 147" is arithmetic over a corpus that no longer exists.
+Cluster B's enumeration and its first two findings are in that detail section.** The one substantive finding, **UC-A4.5**, is
 ✅ **closed**: its central clause ("Alice's configuration decides what she is a
 *recipient* for and nothing about who she can send to") was true in the code and
 established by neither citation, because both arms co-varied the sender's

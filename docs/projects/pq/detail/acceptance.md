@@ -247,6 +247,47 @@ alone. The count agrees with `grep -c 'provenIn('` at **147 minus the 2
 declarations in `proven_elsewhere.dart`**, which is the second derivation that
 makes the enumeration trustworthy.
 
+### Cluster B — started 2026-08-26, the enumeration and the first two findings
+
+**Re-derived, both ways, after the enumeration moved.** The corpus is now
+**153** citations, not 147: UC-B1.4 to UC-B1.7 landed the same day and brought
+six with them. The recorder and the regex agree — 153 records, and
+`git grep -c 'provenIn(' -- test/acceptance` sums to 155 minus the two
+declarations in `proven_elsewhere.dart`.
+
+| cluster | citations | rows | audited |
+| --- | --- | --- | --- |
+| A | 37 | 20 | ✅ |
+| C1 | 25 | 6 | ✅ |
+| B | 42 | 25 | started |
+| G1 | 35 | 15 | — |
+| cross-cutting (no `UC-` id) | 14 | — | — |
+
+⚠️ **The plan's "85 of 147" was arithmetic over the pre-2026-08-26 corpus**;
+against the tree today it is **91 of 153** remaining. Re-derive rather than
+quoting either — the command is in the method above, and `rm -f` first.
+
+**F-B1 — UC-B3.1 and UC-B3.2 are PROVEN and cite nothing live.** They are the
+only rows in cluster B that produce **zero** records from the recorder. That is
+legitimate under the catalogue's own definition — PROVEN means a scenario
+asserts it and runs, not that a live test proves it — and
+`b3_mixed_intra_test.dart` does assert, against a `MockAtClient`, that
+`CryptoRuntime.providerIdFor` answers `legacyCryptoProviderId` for a
+`readsNskeyWritesLegacy` config. What the row cannot show is the ladder
+*behaving* that way against an atServer. Recorded rather than actioned: the
+honest count of cluster B's live coverage is **25 of 27 rows**, and a reader
+counting PROVEN gets 27.
+
+**F-B2 — CLEARED, and worth recording as cleared.** UC-B3.1's assertion rests
+on a claim about code the test does not touch: *"put and notify share this one
+decision point, so this covers both"*. That is the shape that ships wrong — a
+comment asserting what other code does. Checked: `providerIdFor` is named in
+`lib/` by exactly two files, and the notify path is not one of them. It reaches
+it through the wrapper — `CryptoRuntime.prepareWrite` calls it, and both
+`notification_service_impl.dart:674` and
+`notify_request_transformer.dart:35` call `prepareWrite`. The claim holds, and
+it holds for a reason a symbol grep alone would have missed.
+
 ### F1 — the clause level is 9% adopted
 
 **13 of 145 citations carry `clauses:`. The other 132 keep the old
