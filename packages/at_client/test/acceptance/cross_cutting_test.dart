@@ -426,13 +426,64 @@ void main() {
       // refused). The signing root is not on this list: it is a verification
       // key, so nothing is ever encapsulated to it.
       //
-      // Both halves hold today at unit level — published_nskey_key_ring_test
-      // and key_package_registration_test cover the rejections — and the nskey
-      // half is driven on the live wire by nskey_cross_atsign_test. What this
-      // still owed was the atServer side (_apsk present without a client
-      // publish, a cross-enrollment overwrite refused) plus a live
-      // enroll:listns. All three needed two genuine APKAM enrollments, since
-      // the interesting case is one enrollment reaching for another's record.
+      // The rejection half is cited below rather than described. It was
+      // described until 2026-08-26 — this comment said the two unit files
+      // "cover the rejections" and named neither test, so the one clause here
+      // that is a security guarantee was the one clause with no citation at
+      // all, and a reader counting evidence for it found nothing. The tests
+      // were there the whole time; the ledger could not see them.
+      //
+      // Three shapes, each on both halves, because an advertised key can be
+      // substituted three ways and a reader that catches two of them is not a
+      // reader that catches the third.
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'an advertisement signed by another atSign is rejected',
+        proves: 'the wrong-signer shape on the nskey half: the payload is a '
+            'genuine signed advertisement and the _apsk served for its owner '
+            'is somebody else\'s, which is what a substituted key looks like '
+            'from the sender\'s side',
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'a tampered advertisement is rejected',
+        proves: 'the tampered shape: the signature stays valid over the '
+            'original body and only the advertised key is swapped, so a '
+            'verifier that checked the envelope without binding it to the '
+            'key inside would pass this',
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'an unsigned advertisement is rejected, not accepted bare',
+        proves: 'the unsigned shape, which is the one a tolerant reader gets '
+            'wrong: accepting a bare key leaves the sealing target only as '
+            'trustworthy as the server that served it',
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'a key package signed by another enrollment is not sealed to',
+        proves: 'the same wrong-signer shape on the key-package half — '
+            'enroll-b\'s record carrying a package enroll-d signed, which '
+            'accepted would hand enroll-d every secret meant for enroll-b',
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'a tampered key package is not sealed to',
+        proves: 'and the tampered shape there, signature intact over the '
+            'original body with the advertised key swapped',
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'an unsigned key package is not sealed to',
+        proves: 'and the bare one, refused rather than read — the member '
+            'comes back with a null key package instead of an unverified one',
+      );
+
+      // The atServer side is the half no unit test can reach: the _apsk
+      // present without a client publish, the cross-enrollment overwrite
+      // refused, and a live enroll:listns. All three need two genuine APKAM
+      // enrollments, since the interesting case is one enrollment reaching
+      // for another's record.
       provenIn(
         'tests/at_functional_test/test/apsk_server_side_test.dart',
         'the atServer publishes _apsk itself, and refuses a cross-enrollment',

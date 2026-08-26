@@ -121,6 +121,13 @@ void main() {
         'advertises the retired key beside the new one',
         proves: 'the entry remains rather than being withdrawn — withdrawing '
             'it would retroactively unverify everything it signed');
+    provenIn('packages/at_client/test/signing_key_minting_test.dart',
+        'an envelope signed before the withdrawal still verifies',
+        proves: 'the clause this row is named for, which was reachable only '
+            'from UC-G1.8 until 2026-08-26. Retaining the entry is the '
+            'mechanism; an envelope of the retired algorithm verifying after '
+            'the drop is the property, and a reader counting this row\'s '
+            'evidence saw neither citation covering it');
   });
 
   test(
@@ -144,6 +151,13 @@ void main() {
             'the client sign under a key its advertisement does not name, and '
             'every envelope written in that window is permanently '
             'unverifiable');
+    provenIn('packages/at_client/test/signing_key_minting_test.dart',
+        'the advertisement names the minted key and drops the auth key',
+        proves: 'the first branch, which nothing cited until 2026-08-26: an '
+            'enrollment with a record advertises by enroll:update, and the '
+            'update names the key just minted. "mints, advertises and files" '
+            'is named for this and asserts only the keyfile, so the branch '
+            'the row leads with rested on no citation at all');
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'publishes the record itself rather than sending enroll:update',
         proves: 'the second branch — a client with no enrollment record '
