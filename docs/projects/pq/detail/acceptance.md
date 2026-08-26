@@ -399,3 +399,55 @@ to the pre-posture SDK."* True until the SDK default became `PqPosture.pqReady`
 on 2026-08-26 — after which a bare preference means ML-DSA PKAM, namespace-key
 seeding on, pq key exchange, and a startup retrofit with no opt-out. Corrected
 in place with what it used to say.
+
+### B1 — the cluster asserts only what a retrofit must NOT gain
+
+Audited 2026-08-26 at gkc's direction, after a demo session hit a retrofitted
+enrolment that could do nothing. **Two structural gaps, and the second is the
+one that let a live defect through.**
+
+#### F8 — every B1 assertion is a restriction
+
+UC-B1.3, the scoped-retrofit row, asserts: a new enrollment id, `mldsa65`, NOT
+fully privileged, the root untouched, no root private, cannot anchor itself.
+Every one is about what the enrolment must not gain. UC-B1.1 and UC-B1.2 have
+the same shape, with the privileged additions inverted.
+
+**Nothing in the cluster asserts a retrofitted enrolment can still do its
+job** — seed its namespace key, write into its namespace, be sealed to, read
+what it could read before. An atSign that authenticates and can do nothing
+satisfies every assertion in the cluster, and that is exactly what was
+reported: no seeding, every send refused, unreachable as a recipient.
+
+⚠️ **This generalises past B1** and is worth carrying as a review question:
+*does this row assert a capability, or only a restriction?* A cluster of
+restrictions cannot fail for "it gained nothing and can now do nothing".
+
+#### F9 — no B1 test builds a fresh client from the retrofitted keyfile
+
+UC-B1.1, B1.2 and B1.3 all perform their post-retrofit work on the client
+`selfRetrofit` handed back: the same process that did the retrofit, holding an
+`AtChops` it rebuilt in memory. **None of them ever re-resolves credentials
+from the keyfile on disk**, which is precisely where a flat-versus-typed
+selection goes wrong — the file now holds the original enrolment's RSA keypair
+in the flat fields and the new enrolment's ML-DSA material under `enrollments`,
+and something has to pick.
+
+⚠️ **Predicted from outside this tree**, by a session with less information
+than the tree contains, and confirmed by reading: `git grep AtClientImpl.create`
+over that file returns nothing.
+
+**An arm was written and reverted the same day.** It authenticated afresh from
+the retrofitted keyfile and asserted the session came up as the retrofitted
+enrolment; it went **red**, returning the legacy id. It was reverted rather
+than shipped because the assertion may be wrong rather than the product:
+`AtAuth.authenticate()` returning the legacy id looks intended, with
+`_settleEnrollmentIdentity` re-pointing the client afterwards — and that only
+runs under a PQ posture, which this file's harness refuses to build alongside
+its legacy one. ⛔ **Do not re-add that assertion without settling what
+`authenticate()` promises**; a red test on an undecided design is worse than
+the gap.
+
+The owed work is a reproduction in the **CLI functional pack**, where
+`at_activate` runs for real — see [the retrofit
+row](../implementation-plan.md#a-retrofitted-enrolment-cannot-run-an-authenticated-verb).

@@ -111,10 +111,19 @@ discharged bodies are in
 [`detail/implementation-plan.md`](detail/implementation-plan.md#15-the-lettered-d1-gates-g0g8-as-they-were-discharged)
 and every open one became a P0 or P1 row.
 
-**`[RECOMMENDED]`: the [acceptance audit](#the-acceptance-audit)** — read each
-scenario's `proves:` prose against the test it cites and record where the
-citation does not establish the clause. It is the only P0 a session can start
-typing on; the other two are gkc's publishes.
+**`[RECOMMENDED]`: reproduce
+[a retrofitted enrolment cannot run an authenticated verb](#a-retrofitted-enrolment-cannot-run-an-authenticated-verb)
+in this tree.** It is the migration path — a legacy atSign upgrades by running
+a client at a newer posture, and today that leaves it authenticating and unable
+to work. It is reproduced with shipped code in another environment and by
+nothing here. **Write the failing test first**, in
+`tests/at_onboarding_cli_functional_tests`, where `at_activate` runs for real:
+that is what reproduced it. ⛔ Do not write a fix against a hypothesis — every
+mechanism proposed so far has been eliminated, and the row lists them so they
+are not re-derived.
+
+The [acceptance audit](#the-acceptance-audit) is the other P0 a session can
+start typing on; the remaining two are gkc's publishes.
 
 ⚠️ **This recommended the CLI's key-exchange routing until 2026-08-26, when
 that landed** — `--key-exchange` and the posture-driven constructor choice, with
@@ -149,6 +158,7 @@ TODO row names a section whose body declares itself done").
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
+| [a retrofitted enrolment cannot run an authenticated verb](#a-retrofitted-enrolment-cannot-run-an-authenticated-verb) | **Find the mechanism, then fix it.** `at_activate list` succeeds on a keyfile and fails on the SAME keyfile after a retrofit, with at_chops refusing to sign — declared `mldsa65`, loaded a 1218-byte RSA key. Shipped code, interleaved control-then-test, one variable. ⛔ **This is the migration path**: a legacy atSign upgrades by running a client at a newer posture, and today that leaves it authenticating but unable to work | Nothing. The reproduction exists in another environment; what is owed is one in this tree |
 | [the acceptance audit](#the-acceptance-audit) | Read every scenario's `proves:` prose against the test it cites, and record where the citation does not establish the clause. The structural half is built and green; this is the judgement half, and it is what D1's own definition rests on | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **gkc publishes at_auth 4.0.0-rc1**, then carve at_client (stacked) → at_client_flutter → at_onboarding_cli. Six of the eight positions are through by merge; what is left is publishes | gkc. ⚠️ **Merged is not published, and only the publishes gate anything now** |
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
@@ -525,6 +535,81 @@ there is no bound on a slow-but-alive peer.
 folded in** — `NotifyConnectionPool.getOutboundClient` builds a fresh dummy per
 call and relies on that match to reuse a connection at all, so identity equality
 there would open a connection per notification.
+
+### A retrofitted enrolment cannot run an authenticated verb
+
+⛔ **Reported 2026-08-26 by the at_talk demo session, from a live ephemeral
+environment, and proven with SHIPPED CODE rather than a probe.** Same
+`at_activate` binary, same atSign, same environment, interleaved control then
+test on one keyfile, the only variable being whether the retrofit ran:
+
+| | |
+| --- | --- |
+| `at_activate list`, keyfile NOT retrofitted | exit 0, one enrolment listed |
+| `at_activate list`, SAME keyfile, retrofitted | **exit 1** — `this PKAM key is 1218 bytes, and an ML-DSA-65 secret key is 4032` |
+
+⚠️ **Both runs print "Connected".** `authenticate()` succeeds in the failing
+run and the VERB fails after it — so the auth path resolves correctly and the
+verb path does not. ML-DSA PKAM with the new enrollment id is observed
+succeeding on the wire.
+
+**The enrolment is namespace-scoped and OTP-provisioned** — `{ai6bh: rw}`,
+reported by `at_activate list` itself rather than inferred — so it is the same
+shape as UC-B1.3's, which passes.
+
+**What the retrofit does to the keyfile, field by field**, measured on both
+sides:
+
+| | posture legacy | after the retrofit |
+| --- | --- | --- |
+| flat `enrollmentId` | `d42eca99…` | `d42eca99…` (unchanged) |
+| `enrollments[0]` id | `d42eca99…` — **the same** | `8628dc32…` — **diverged** |
+| its keyIds | `['82cf358d…']`, no `auth:*` | `auth:mldsa65:1`, `sign:rsa2048:1`, … |
+| flat `aesPkamPrivateKey` | 2176 (RSA) | 2176, byte-identical |
+
+⛔ **The retention is CORRECT — do not "fix" it.**
+[UC-G1.2](acceptance.md) specifies the legacy keypair staying in the flat
+fields byte-identical and statusless, so the capped legacy enrolment keeps
+authenticating until the atServer expires it. What the retrofit changes is that
+the flat id and the typed id stop agreeing, and after that one code path
+follows one and another follows the other.
+
+⛔ **RULED OUT, so nobody re-derives them:**
+
+- **at_auth does not need to "prefer active typed material" — it already
+  does.** Both `signingAlgorithmForEnrollment` and `authenticationFor` filter on
+  `role == privateAuthentication && status == active` over the same list, and
+  fall back to the flat fields together. An **absent** `status` deserialises to
+  `active` (`atkey_material.dart:282`), so the demo's status-less entries are
+  active. A ruling was taken on 2026-08-26 to make at_auth prefer typed
+  material; the premise was wrong and the ruling is void.
+- **`signingAlgoOf`'s preference fallback is not the source of the ML-DSA
+  claim.** `AtClientPreference.signingAlgoType` is a separate deprecated field
+  whose own default is `rsa2048`, not the posture's
+  `authenticationKeyAlgorithm`, so that fallback yields RSA.
+- **`at_onboarding_cli`'s `authenticate()` is not stamping a preference over
+  key material.** Its authentication branch takes both the id and the algorithm
+  from the client (`client.enrollmentId`, `AtClientImpl.signingAlgoOf(client)`),
+  which is the fix for an earlier defect of exactly that shape.
+- **Not the probe.** The reporter's probe never sets `signingAlgoType`, builds
+  no `AtLookupImpl` and touches no `AtChops` — and `at_activate list`
+  reproduces it without any probe at all.
+
+⚠️ **THE MECHANISM IS NOT FOUND.** Everything above is elimination. Do not
+write a fix against a hypothesis; the next step is a reproduction in this tree.
+
+**What is owed, in order:**
+
+1. **A failing test in the CLI functional pack** — `at_activate list` (or any
+   verb) on a keyfile after a posture-driven retrofit. That pack runs
+   `at_activate` for real, which is exactly what reproduced it.
+2. Then bisect which of the two ids the failing path is holding, and where it
+   got the other one.
+3. Only then, the fix.
+
+⚠️ **And a coverage gap that let it through, which is a finding in its own
+right** — see the B1 audit in
+[detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26).
 
 ### 14.39 `PqPosture` and the rollout it drives
 
