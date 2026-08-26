@@ -164,19 +164,20 @@ TODO row names a section whose body declares itself done").
 | [content keys per scope](#content-keys-per-scope) | **A ruling from gkc** on whether one content key per writing enrollment per scope is the intent. If not: `CurrentCkPointer` needs a remote-first write through an atomic verb, and rotation needs to supersede every CK in scope | gkc's ruling, then the fix |
 | [the late-arriving nskey private](#the-late-arriving-nskey-private) | File a late-arriving nskey private **only for a generation this client actually asked for**. The reverted attempt filed any arrival, which breached the seeding guarantee | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Add the `pending` enrollment status value and build the rotation arm against its own dedicated CRAM atSign. ⛔ There is **no** fleet-adoption wait — see the standing premise | The at_auth publish, and a dedicated CRAM atSign |
-| **a pq enrolment costs a post-approval round trip** | Measure it, and decide whether the enrolment APIs should say so. A legacy enrollee carries its own symmetric key in and is done at approval; a pq enrollee must then **collect** the key the approver encapsulated to its key package, polling for the envelope (`enrollmentApkamSymmetricKeyResolver`, 30 s budget, 2 s interval). ⚠️ **Found 2026-08-26 by it breaking two tests**, not by design review: two authorisation tests in the CLI functional pack wait 10 s before approving and have a 30 s budget, and under the `pqReady` default that no longer fit — they now name `legacy` because they assert authorisation, not key exchange. The pin keeps them honest; it does not measure the cost | Nothing. It needs a measurement and then a judgement about whether callers are told |
 | **CI at head** | Dispatch both workflows at head and read them. "Every rail green" is half of D1's definition, and **nothing fires on push on this branch** — the workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only, so the newest run is only ever as new as the last manual dispatch. ⚠️ **Dispatch matters beyond staleness**: CI's at_client job runs a **bare** `dart analyze` that reads `benchmark/`, which the routine `dart analyze lib test` never opens — that hid five errors for six days. ⛔ **And docs are build inputs here**, so a plan edit alone can redden the acceptance rail. Re-derive, never quote:<br>`gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName --jq '.[] \| [.headSha[0:9], .workflowName, .conclusion] \| @tsv'`<br>`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike` | A head worth dispatching |
 
 ### P2 — should be done if there is time
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
+| **a pq enrolment costs a post-approval round trip** | Measure it, and decide whether the enrolment APIs should say so. A legacy enrollee carries its own symmetric key in and is done at approval; a pq enrollee must then **collect** the key the approver encapsulated to its key package, polling for the envelope (`enrollmentApkamSymmetricKeyResolver`, 30 s budget, 2 s interval). ⚠️ **Found 2026-08-26 by it breaking two tests**, not by design review: two authorisation tests in the CLI functional pack wait 10 s before approving and have a 30 s budget, and under the `pqReady` default that no longer fit — they now name `legacy` because they assert authorisation, not key exchange. The pin keeps them honest; it does not measure the cost | Nothing. It needs a measurement and then a judgement about whether callers are told |
 | [the registrar certificate test](#the-registrar-certificate-test) | Three arms against a self-signed cert. The last S-5 behaviour change that exercises nothing, and the only one with a security consequence. ⛔ **POST-D1 clean-up, not a gate** (gkc, 2026-08-23) | Nothing. It lands wherever at_auth is next touched |
 | [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) | Item 8 is the only one still waiting on a ruling. Items 20 and 21 are examined-and-left, not work; item 35 lands in `atGettingStarted` | gkc, on item 8 |
 | **at_auth `enrollment_submitter`** | Both defects are fixed in at_auth on both branches. What is left: **the at_client half of (b)** is not on the at_auth carve branch, because at_client's PQ secret sharing is not there at all. ⛔ **Do not apply the one-liner the review recommends** — it breaks the PQ OTP flow; see [detail](detail/implementation-plan.md#the-enrollment_submitter-review-and-why-the-recommended-fix-is-wrong) | gkc scheduling it |
 | **at_lookup `OutboundMessageListener.read`** | `AT0014 "Unexpected response found"` pops one entry off `_queue` and clears `_buffer` **without draining the queue or closing the connection**, unlike both timeout paths beside it. A stale queued response is then handed to the next command, offsetting every read after it. It fired in none of the relayed-lookup runs that found it; it is a hazard on its own merits | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | Why `enrollment_setup.dart` takes ~4 minutes. gkc asked for the cause, 2026-08-20 — not a D1 gate, but owed to him rather than plan-generated hygiene | ⛔ **@ce2e-only — it does not reproduce locally** |
 | [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | Scope the e2e teardown to the run that created the enrollments | Nothing. Needs no permission and no publish |
+| **`bypasscache_test` is red in the full e2e pack and green alone** | Diagnose it. Measured 2026-08-26 against the local virtualenv: **red 2 of 2** in the full pack, **green alone on two different images** (`at_virtual_env:g0fixed` and `atsigncompany/virtualenv:dev_env`). So it is an ORDERING or cross-file effect, not the image and not a random flake — it reproduces every time in the pack. The test already polls 60 s with `bypassCache = true` and still reads `initial_value`, so it is not a propagation tail either; someone hardened it against that already.<br><br>⚠️ **Not attributable to the posture work**: the test names `PqPosture.legacy` explicitly at every client, and `git diff 13099c622..HEAD -- packages/at_client/lib` is one **dartdoc-only** file, while CI's `end2end_tests` was green at `13099c622`. ⚠️ **But I have NOT run the full pack at an older commit**, so "pre-existing" is an inference from those two facts rather than a measurement.<br><br>Same family as [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) and 14.43 — read them together. ⚠️ There is a recorded incident where this very test surfaced a real defect (two `SyncService` instances against one Hive queue losing writes), so do not classify it as harness noise without looking | Nothing. Reproduce with the full pack, then bisect the file that precedes it |
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | A unit-tree isolation flake in `local_secondary_sync_queue_test.dart`. Green alone and green in the full suite; red only in one hand-constructed ordering nothing runs | Reproduce at rate first |
 | [14.44](#1444-residuals-from-the-at_chops-pr-review) | Two remain, both ⛔ **POST-D1** (gkc, 2026-08-23): at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence (amend that section in place), and `XWingCore.combine` sizes its buffer from its inputs' actual lengths while writing at literal offsets 0/32/64/96/128 | Nothing. Both ride the next at_chops touch |
 | **third-party dependency floors** | at_client alone declares **seven** below what it resolves — `path`, `crypto`, `uuid`, `archive`, `http`, `async`, `meta` — all minor or patch gaps, none checked against first use. The sibling floors were swept 2026-08-25; these were not.<br><br>⚠️ **And the gap runs the OTHER way too, which nothing here was watching.** at_client declares `at_persistence_secondary_server: ^5.1.0` and this workspace resolves **5.1.0**, so every pack exercises that version and only that version — while any consumer resolving fresh today takes **5.2.1**, which we have never run against. Found 2026-08-26 by the at_talk demo session, whose external resolution took 5.2.1 while mine took 5.1.0 and neither side would have noticed. That layer owns local storage, the commit log and the keystore. ⚠️ The same version pair already cost time once, when the local keystore's expired-record handling was characterised from 5.2.1's source while the workspace resolved 5.1.0 — the claims held in 5.1.0 by luck. "Readable as interchangeable" is what makes this expensive | Nothing. Two questions, not one: are the seven floors too low, and is at_client actually correct against the top of the range it already admits |
@@ -1280,13 +1281,29 @@ cd tests/at_onboarding_cli_functional_tests && dart analyze test           # exi
 # carries its own stamp for exactly this reason — a block with one date at the
 # bottom promotes every number in it to head, and three of these were once
 # re-measured 15 commits after the others.
-VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_functional_test/runLocal.sh              # 183 pass, 2 skipped — at `ecf1082de`, NOT re-run since
-VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh                 # 54, EXIT=0 — at `ecf1082de`, NOT re-run since
+VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_functional_test/runLocal.sh              # 183 pass, 0 skipped — RE-RUN 2026-08-26 on at_virtual_env:g0fixed
+VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh                 # 62 pass 1 FAIL — RE-RUN 2026-08-26, see below
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_onboarding_cli_functional_tests/runLocal.sh  # 18, EXIT=0 — RE-RUN 2026-08-26 at the key-exchange fix
-# ⚠️ The FUNCTIONAL and E2E packs were last measured on 2026-08-25 at
-# `ecf1082de`; the tree has moved since — the posture default flipped to
-# `pqReady` and both gained required-parameter pins. Re-run before quoting
-# either.
+# ✅ The FUNCTIONAL pack was re-run on 2026-08-26 carrying the posture default
+# flip and the key-exchange routing: 183 pass, 2 skipped, unchanged from the
+# baseline.
+# ⛔ THOSE TWO SKIPS ARE NOW GONE. `concurrent_relayed_lookup_test` and
+# `pq_read_returns_another_record_test` reproduced the atServer's
+# concurrent-relayed-lookup defect and were skipped because they are SUPPOSED
+# to go red against an unfixed atServer. gkc deleted them on 2026-08-26: the
+# atServer is fixed, so they reproduce nothing. Expect 0 skipped from here.
+# ⚠️ What went with them is the fastest way to tell a FIXED atServer from an
+# unfixed one — the relay probe answered that in seconds and nothing else in
+# the tree does. If that question ever needs asking again, the harness and its
+# measurements are in detail/implementation-plan.md under the discharged G0.
+# ⚠️ THE E2E PACK IS RED, 2 of 2 runs on 2026-08-26, and the count moved: it is
+# 63 tests now, not the 54 this block recorded at `ecf1082de`. The one failure
+# is `bypasscache_test`, and it is an ORDERING effect rather than the image or a
+# flake — green ALONE on both `at_virtual_env:g0fixed` and
+# `atsigncompany/virtualenv:dev_env`, red both times in the full pack. It has
+# its own row in `## TODO`. ⚠️ I first concluded "it is the image" from a single
+# arm and that was WRONG; the controlled arm (alone, same image) is what
+# corrected it.
 # ✅ The CLI pack WAS re-run on 2026-08-26, carrying the key-exchange routing,
 # and is 18 EXIT=0. ⛔ It went 14/4 first: flipping the default to a posture
 # whose key-exchange mode is `pq` broke four of its tests, and nothing in any
@@ -1322,12 +1339,11 @@ VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_onboarding_cli_functional_tests
 # stops testing the thing it exists for — the same image CI uses for it:
 #   VIRTUALENV_IMAGE=atsigncompany/virtualenv:vip-p3.15.0 \
 #     bash tests/at_end2end_test/runLocal.sh 26000 test/pq -t legacy-server
-# ⚠️ The two skipped functional tests are deliberate — the reproduction
-# harnesses for the atServer's concurrent-relayed-lookup defect, run by hand.
-# `--run-skipped` runs them, and against an atServer built before that fix the
-# pack goes red at the rate recorded in detail/implementation-plan.md.
-# ⛔ RUN concurrent_relayed_lookup_test FIRST ON A FRESHLY RECYCLED VIRTUALENV
-# or it reads 0 and means nothing.
+# ⚠️ There are no deliberate skips in this pack any more — the two
+# reproduction harnesses were deleted on 2026-08-26 when the atServer fix
+# landed. A skip appearing here again is new information.
+# (The two reproduction harnesses that used to be skipped here were deleted on
+# 2026-08-26 once the atServer fix landed; see the note above.)
 # ⚠️ Figures move for reasons worth knowing rather than growth: functional
 # 169 → 174 (the matrix's cells, once its driver stopped asking the arms for
 # stage names that no longer exist) → 183 (the acceptance arms and the two

@@ -7121,7 +7121,16 @@ one's decrypt — so a single `get` puts two relayed lookups in flight where a
 legacy read has one. (Why legacy never surfaced it is untested; I have not
 measured a legacy arm.)
 
-**Start by RUNNING the standalone probe, which has no PQ in it at all:**
+⛔ **BOTH HARNESSES WERE DELETED on 2026-08-26** (gkc), once the atServer fix
+was merged and shipping: they reproduce nothing against a fixed atServer, which
+is what they were for. The commands and measurements below are therefore a
+RECORD, not instructions — `test/concurrent_relayed_lookup_test.dart` and
+`test/pq_read_returns_another_record_test.dart` no longer exist. ⚠️ **What went
+with them is the only fast way to tell a fixed atServer from an unfixed one**;
+recover them from git history if that question ever needs asking again, rather
+than rewriting them from this prose.
+
+**The standalone probe, as it was — it had no PQ in it at all:**
 
 ```bash
 docker rm -f test-virtualenv-1        # recycle the VE first, always

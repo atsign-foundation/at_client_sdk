@@ -48,9 +48,18 @@ void main() {
     });
 
     test('pqActive is post-quantum by default', () {
-      // Every axis as a raw literal, like the two above: this is the stage an
-      // app adopts when it wants tomorrow's defaults today, and reading a
-      // value back through the type would follow an accidental edit silently.
+      // The seven axes that MOVE between stages, as raw literals, like the two
+      // above: this is the stage an app adopts when it wants tomorrow's
+      // defaults today, and reading a value back through the type would follow
+      // an accidental edit silently.
+      //
+      // ⚠️ **NOT "every axis", which this said until 2026-08-26.** `PqPosture`
+      // carries nine fields. The two that hold the same value at every
+      // released stage — `sealsToKeyAlgorithms` and
+      // `keyEstablishmentAlgorithms` — are pinned once each in the 'seal-to
+      // list' group below, across all three stages, rather than three times
+      // here. `keyEstablishmentAlgorithms` had NO pin at all until a mutation
+      // showed the whole suite staying green while it changed.
       const p = PqPosture.pqActive;
       expect(p.authenticationKeyAlgorithm, SigningAlgoType.mldsa65);
       expect(p.dataSigningKeyAlgorithms, {SigningAlgoType.mldsa65},

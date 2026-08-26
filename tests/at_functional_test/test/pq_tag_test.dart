@@ -30,12 +30,19 @@ import 'package:test/test.dart';
 /// Every client in this pack now names its posture — `TestUtils.getPreference`
 /// and `TestUtils.initAtClient` require one, so the compiler can name any test
 /// that has not chosen — and `PqPosture.legacy` is what a test that drives no
-/// post-quantum mechanism says. The symbol therefore appears in all 55 files
-/// and discriminates nothing; left in, it flagged the whole pack and failed
-/// this guard's own negative control. What still means "post-quantum" is a
-/// posture that is not the legacy one: `pqReady`, `pqActive`, or one built
-/// axis by axis. Measured when the change landed: the narrowed set flags 34
-/// files, exactly the 34 that carry the tag, with none of them lost.
+/// post-quantum mechanism says. The symbol therefore appears in EVERY file in
+/// this pack and discriminates nothing; left in, it flagged the whole pack and
+/// failed this guard's own negative control. What still means "post-quantum"
+/// is a posture that is not the legacy one: `pqReady`, `pqActive`, or one
+/// built axis by axis. When the change landed the narrowed set flagged exactly
+/// the files that carry the tag, with none lost — which is the property, and
+/// it is what the two assertions below check on every run.
+///
+/// ⚠️ **No counts here, deliberately.** This said "all 55 files" and "flags 34
+/// files, exactly the 34 that carry the tag". Both were true when written and
+/// both moved on 2026-08-26 when two reproduction harnesses were deleted; the
+/// guard re-derives its own denominator every run, so a number in the prose
+/// only ever rots.
 ///
 /// ⚠️ **Those three posture clauses currently flag nothing on their own** —
 /// every one of the 34 also matches a mechanism symbol, so deleting them today
