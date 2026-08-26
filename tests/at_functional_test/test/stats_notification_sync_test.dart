@@ -17,7 +17,8 @@ void main() {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     atSign2 = ConfigUtil.getYaml()['atSign']['secondAtSign'];
 
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
     atClientManager.atClient.syncService.sync();
   });
 

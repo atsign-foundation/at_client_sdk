@@ -25,7 +25,8 @@ void main() {
   group('AtClient lifecycle tests', () {
     test('create, use, and stop AtClient successfully', () async {
       var atClientManager =
-          await TestUtils.initAtClient(firstAtSign, namespace);
+          await TestUtils.initAtClient(firstAtSign, namespace,
+              posture: PqPosture.legacy);
       var atClient = atClientManager.atClient;
 
       final phoneKey = AtKey()
@@ -46,7 +47,8 @@ void main() {
 
     test('close() is idempotent and handles active operations', () async {
       var atClientManager =
-          await TestUtils.initAtClient(secondAtSign, namespace);
+          await TestUtils.initAtClient(secondAtSign, namespace,
+              posture: PqPosture.legacy);
       var atClient = atClientManager.atClient as AtClientImpl;
 
       await atClient.put(AtKey()..key = 'location', 'San Francisco');
@@ -61,7 +63,8 @@ void main() {
 
     test('stop with active notifications cleans up gracefully', () async {
       var atClientManager =
-          await TestUtils.initAtClient(firstAtSign, namespace);
+          await TestUtils.initAtClient(firstAtSign, namespace,
+              posture: PqPosture.legacy);
       var atClient = atClientManager.atClient;
 
       final receivedNotifications = <AtNotification>[];
@@ -83,14 +86,16 @@ void main() {
 
   group('Implicit client caching behavior', () {
     test('keeps both clients in cache when switching atSigns', () async {
-      final atClient1 = (await TestUtils.initAtClient(firstAtSign, namespace))
+      final atClient1 = (await TestUtils.initAtClient(firstAtSign, namespace,
+          posture: PqPosture.legacy))
           .atClient;
       var atKey = AtKey()
         ..key = 'alice_data'
         ..namespace = namespace;
       await atClient1.put(atKey, 'Alice value');
 
-      final atClient2 = (await TestUtils.initAtClient(secondAtSign, namespace))
+      final atClient2 = (await TestUtils.initAtClient(secondAtSign, namespace,
+          posture: PqPosture.legacy))
           .atClient;
       atKey = AtKey()..key = 'bob_data';
       await atClient2.put(atKey, 'Bob value');
@@ -115,16 +120,18 @@ void main() {
     });
 
     test('reuses cached instance when switching back to same atSign', () async {
-      final atClient1 = (await TestUtils.initAtClient(firstAtSign, namespace))
+      final atClient1 = (await TestUtils.initAtClient(firstAtSign, namespace,
+          posture: PqPosture.legacy))
           .atClient;
       final key = AtKey()
         ..key = 'alice_reuse'
         ..namespace = namespace;
       await atClient1.put(key, 'Alice value');
 
-      await TestUtils.initAtClient(secondAtSign, namespace);
+      await TestUtils.initAtClient(secondAtSign, namespace,
+          posture: PqPosture.legacy);
       final reusedAtClient = (await TestUtils.initAtClient(
-              firstAtSign, namespace))
+              firstAtSign, namespace, posture: PqPosture.legacy))
           .atClient;
 
       expect(identical(atClient1, reusedAtClient), true);
@@ -136,10 +143,11 @@ void main() {
     });
 
     test('soft-close stops services but keeps instance in cache', () async {
-      final atClient1 = (await TestUtils.initAtClient(firstAtSign, namespace))
+      final atClient1 = (await TestUtils.initAtClient(firstAtSign, namespace,
+          posture: PqPosture.legacy))
           .atClient as AtClientImpl;
       final atClientManager = await TestUtils.initAtClient(
-          secondAtSign, namespace);
+          secondAtSign, namespace, posture: PqPosture.legacy);
 
       expect(AtClientImpl.atClientInstanceMap.containsKey(firstAtSign), true);
       expect(atClient1.isStopped, true);
@@ -161,7 +169,8 @@ void main() {
         secondAtSign
       ];
       for (var atSignToSwitch in switchSequence) {
-        await TestUtils.initAtClient(atSignToSwitch, namespace);
+        await TestUtils.initAtClient(atSignToSwitch, namespace,
+            posture: PqPosture.legacy);
         await atClientManager.atClient.put(
             AtKey()
               ..key = 'rapid'

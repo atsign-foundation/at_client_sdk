@@ -48,7 +48,8 @@ void main() {
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo);
+        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
+            posture: PqPosture.legacy);
     approver = manager.atClient;
   });
 
@@ -69,7 +70,7 @@ void main() {
       atSign: atSign,
       namespace: namespace,
       preference: TestUtils.getPreference(atSign,
-          keyEstablishmentAlgorithms: algorithms),
+          keyEstablishmentAlgorithms: algorithms, posture: PqPosture.legacy),
       rootDomain: rootDomain,
       rootPort: TestUtils.rootServerPort,
       deviceName: '$device-$runId',
@@ -334,7 +335,7 @@ void main() {
 
     final storage = 'test/hive/amend/$runId-$device';
     final preference = TestUtils.getPreference(atSign,
-        keyEstablishmentAlgorithms: algorithms)
+        keyEstablishmentAlgorithms: algorithms, posture: PqPosture.legacy)
       ..hiveStoragePath = storage
       ..commitLogPath = storage;
     final manager = await AtClientManager(atSign).setCurrentAtSign(
@@ -486,7 +487,7 @@ void main() {
       final storage = 'test/hive/amend/$runId-$device-sender';
       final preference = TestUtils.getPreference(atSign,
           keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
-          sealsToKeyAlgorithms: order)
+          sealsToKeyAlgorithms: order, posture: PqPosture.legacy)
         ..hiveStoragePath = storage
         ..commitLogPath = storage;
       final auth = AtAuth.create();

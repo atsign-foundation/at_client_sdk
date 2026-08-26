@@ -56,7 +56,8 @@ void main() {
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo);
+        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
+            posture: PqPosture.legacy);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -71,7 +72,7 @@ void main() {
         approver: approver,
         atSign: atSign,
         namespace: namespace,
-        preference: TestUtils.getPreference(atSign),
+        preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',
@@ -211,7 +212,8 @@ void main() {
     await startIo.write(other, seeded);
 
     final manager =
-        await TestUtils.initAtClient(other, namespace, atKeysIo: startIo);
+        await TestUtils.initAtClient(other, namespace, atKeysIo: startIo,
+            posture: PqPosture.legacy);
 
     final sharing = AtClientSecretSharing.forClient(manager.atClient);
     final wanted = '${NskeyPrivateFiling.secretNamePrefix}$kid';

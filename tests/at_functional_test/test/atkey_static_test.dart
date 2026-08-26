@@ -14,7 +14,8 @@ void main() {
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     sharedWithAtSign = ConfigUtil.getYaml()['atSign']['secondAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
   });
 
   group('A group of tests to verify positive scenarios of put and get', () {

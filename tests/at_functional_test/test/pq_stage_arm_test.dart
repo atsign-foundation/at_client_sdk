@@ -102,7 +102,8 @@ void main() {
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final owner =
-        (await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo))
+        (await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
+            posture: PqPosture.legacy))
             .atClient;
     await AtClientSecretSharing.forClient(owner).register();
 

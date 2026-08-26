@@ -112,7 +112,8 @@ void main() {
     await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
     final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign, namespace, TestUtils.getPreference(atSign),
+        atSign, namespace, TestUtils.getPreference(atSign,
+            posture: PqPosture.legacy),
         atKeysIo: keysIo,
         atChops: loader.createAtChopsFromDemoKeys(atSign));
     await loader.setEncryptionKeys(manager.atClient, atSign);

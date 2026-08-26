@@ -47,7 +47,8 @@ void main() {
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo);
+        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
+            posture: PqPosture.legacy);
     atClient = manager.atClient;
     // The approver seals the enrollee's symmetric key to its own key package,
     // so it has to have one registered before it can approve anything.

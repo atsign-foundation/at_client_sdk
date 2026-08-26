@@ -15,7 +15,8 @@ void main() {
   setUpAll(() async {
     AtSignLogger.root_level = 'SHOUT';
     atSign_1 = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    await TestUtils.initAtClient(atSign_1, namespace);
+    await TestUtils.initAtClient(atSign_1, namespace,
+        posture: PqPosture.legacy);
   });
 
   tearDownAll(() {
@@ -24,7 +25,8 @@ void main() {
 
   Future<AtClient> getAtClient(String atSign) async {
     return (await AtClientManager.getInstance().setCurrentAtSign(
-            atSign, namespace, TestUtils.getPreference(atSign_1)))
+            atSign, namespace, TestUtils.getPreference(atSign_1,
+                posture: PqPosture.legacy)))
         .atClient;
   }
 

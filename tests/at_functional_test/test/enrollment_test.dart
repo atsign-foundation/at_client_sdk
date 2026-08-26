@@ -32,7 +32,8 @@ void main() {
 
   setUp(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atClientManager = await TestUtils.initAtClient(atSign, namespace);
+    atClientManager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
     aliceApkamSymmetricKey = apkamSymmetricKeyMap[atSign]!;
     aliceDefaultEncryptionPrivateKey = encryptionPrivateKeyMap[atSign]!;
     aliceSelfEncryptionKey = aesKeyMap[atSign]!;
@@ -229,7 +230,8 @@ void main() {
   test(
       'validate client functionality to fetch pending enrollments on legacy pkam authenticated client',
       () async {
-    atClientManager = await TestUtils.initAtClient(atSign, 'new_app');
+    atClientManager = await TestUtils.initAtClient(atSign, 'new_app',
+        posture: PqPosture.legacy);
     AtClient? client = atClientManager.atClient;
     // fetch first otp
     String? otp =
@@ -292,7 +294,8 @@ void main() {
       'A group of tests to validate approve and deny operations of an enrollment',
       () {
     setUp(() async {
-      atClientManager = await TestUtils.initAtClient(atSign, namespace);
+      atClientManager = await TestUtils.initAtClient(atSign, namespace,
+          posture: PqPosture.legacy);
       // Load encryption public key into remote secondary
       await atClientManager.atClient.getRemoteSecondary()!.executeCommand(
           'update:public:publickey$atSign ${encryptionPublicKeyMap[atSign]}\n',
@@ -382,7 +385,8 @@ void main() {
       // After authentication is successful, create an instance of atClient with enrollment Id
       // to perform put operation.
       await AtClientManager.getInstance().setCurrentAtSign(
-          atSign, namespace, TestUtils.getPreference(atSign),
+          atSign, namespace, TestUtils.getPreference(atSign,
+              posture: PqPosture.legacy),
           atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
@@ -578,7 +582,8 @@ void main() {
       // After authentication is successful, create an instance of atClient with enrollment Id
       // to perform put operation.
       await AtClientManager.getInstance().setCurrentAtSign(
-          atSign, namespace, TestUtils.getPreference(atSign),
+          atSign, namespace, TestUtils.getPreference(atSign,
+              posture: PqPosture.legacy),
           atChops: atChops, enrollmentId: atEnrollmentResponse.enrollmentId);
 
       // Insert key which has access to namespace authorized by enrollment.
@@ -627,7 +632,8 @@ void main() {
       AtLookUp atLookUp = AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort);
 
       AtClientManager atClientManager =
-          await TestUtils.initAtClient(atSign, namespace);
+          await TestUtils.initAtClient(atSign, namespace,
+              posture: PqPosture.legacy);
 
       // let's initialize the notification service before we do anything else
       // to ensure that the monitor is started etc
@@ -722,7 +728,8 @@ void main() {
       expect(ownerAuthResponse.isSuccessful, true);
 
       final ownerManager = await AtClientManager.getInstance().setCurrentAtSign(
-          cramAtSign, namespace, TestUtils.getPreference(cramAtSign),
+          cramAtSign, namespace, TestUtils.getPreference(cramAtSign,
+              posture: PqPosture.legacy),
           atChops: ownerAuth.atChops,
           enrollmentId: onboardResponse.enrollmentId);
       final ownerClient = ownerManager.atClient;
@@ -811,7 +818,8 @@ void main() {
       expect(enrolleeAuthResponse.isSuccessful, true);
 
       await AtClientManager.getInstance().setCurrentAtSign(
-          cramAtSign, 'buzz', TestUtils.getPreference(cramAtSign),
+          cramAtSign, 'buzz', TestUtils.getPreference(cramAtSign,
+              posture: PqPosture.legacy),
           atChops: enrolleeChops, enrollmentId: enrollResponse.enrollmentId);
       final enrolleeClient = AtClientManager.getInstance().atClient;
 

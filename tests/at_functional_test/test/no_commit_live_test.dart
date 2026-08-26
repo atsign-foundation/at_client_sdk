@@ -26,7 +26,8 @@ void main() async {
 
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    atClient = (await TestUtils.initAtClient(currentAtSign, namespace)).atClient;
+    atClient = (await TestUtils.initAtClient(currentAtSign, namespace,
+        posture: PqPosture.legacy)).atClient;
   });
 
   /// The atServer's own latest commit id, read fresh over the wire.

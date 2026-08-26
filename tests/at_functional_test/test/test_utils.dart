@@ -29,24 +29,42 @@ class TestUtils {
   /// this atSign MINTS and advertises; the second is the order in which, as a
   /// SENDER, it picks among the keys a recipient advertises. A test varying
   /// the wrong one changes nothing it can observe.
+  /// [posture] has no default **on purpose**: what a posture decides is not
+  /// cosmetic — whether this client mints signing keys, publishes an `_apsk`
+  /// advertisement, seeds namespace keys and retrofits its own enrollment —
+  /// and a test that has not chosen is a test whose subject is undeclared.
+  /// Required so the compiler names every site, and so a new test cannot be
+  /// written without choosing.
+  ///
+  /// ⚠️ **An approver or fixture client is `PqPosture.legacy`**, whatever the
+  /// test is about. Seeding is the only posture-gated step in the whole PQ
+  /// bootstrap, so an approver at `pqReady` or `pqActive` publishes
+  /// `public:__nskey.<ns>@<atSign>` before any subject client does — and stays
+  /// green while doing it. Classify by what the CLIENT does, not by what the
+  /// file is called.
+  ///
+  /// ⚠️ **One atSign in one process holds one posture.** Every axis here is
+  /// final at construction, and `setCurrentAtSign` refuses a preference that
+  /// differs from the running client's — see
+  /// `AtClientPreference.rolloutDifferencesFrom`. Two tests in a file that
+  /// share an atSign therefore share a posture; give one its own atSign or its
+  /// own enrollment to vary it.
   static AtClientPreference getPreference(String atsign,
-      {PqPosture? posture,
+      {required PqPosture posture,
       SigningAlgoType? authenticationKeyAlgorithm,
       Set<SigningAlgoType>? dataSigningKeyAlgorithms,
       List<String>? keyEstablishmentAlgorithms,
       List<String>? sealsToKeyAlgorithms}) {
-    var preference = posture == null &&
-            authenticationKeyAlgorithm == null &&
-            dataSigningKeyAlgorithms == null &&
-            keyEstablishmentAlgorithms == null &&
-            sealsToKeyAlgorithms == null
-        ? AtClientPreference()
-        : AtClientPreference(
-            posture: posture ?? PqPosture.legacy,
-            authenticationKeyAlgorithm: authenticationKeyAlgorithm,
-            dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
-            keyEstablishmentAlgorithms: keyEstablishmentAlgorithms,
-            sealsToKeyAlgorithms: sealsToKeyAlgorithms);
+    // One construction, not two. The constructor defaults every algorithm
+    // field to the posture's own value (`?? posture.<field>`), so passing
+    // nulls is indistinguishable from omitting them — the branch this used to
+    // carry chose between two identical objects.
+    var preference = AtClientPreference(
+        posture: posture,
+        authenticationKeyAlgorithm: authenticationKeyAlgorithm,
+        dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
+        keyEstablishmentAlgorithms: keyEstablishmentAlgorithms,
+        sealsToKeyAlgorithms: sealsToKeyAlgorithms);
     preference.hiveStoragePath = 'test/hive/client/$atsign';
     preference.commitLogPath = 'test/hive/client/$atsign';
     preference.rootDomain = 'vip.ve.atsign.zone';
@@ -84,9 +102,16 @@ class TestUtils {
   /// Supplying it also forces `setCurrentAtSign` past its same-atSign
   /// short-circuit, which checks for exactly these override arguments — so it
   /// reaches the client rather than being dropped on an already-current atSign.
+  /// [posture] is required even when [preference] is supplied, because the
+  /// `??=` below applies [getPreference] inside this helper: a required
+  /// parameter on that alone would leave every caller here naming nothing, and
+  /// this is where most callers are. A supplied preference naming a different
+  /// posture is refused rather than silently winning.
   static Future<AtClientManager> initAtClient(
       String currentAtSign, String namespace,
-      {AtClientPreference? preference, AtKeysIo? atKeysIo}) async {
+      {required PqPosture posture,
+      AtClientPreference? preference,
+      AtKeysIo? atKeysIo}) async {
     // `info`, matching the e2e pack (`test_initializers.dart`), not `shout`.
     //
     // At `shout` the client's own account of what it did is filtered out
@@ -100,7 +125,15 @@ class TestUtils {
     // A test wanting the monitor's frame-by-frame detail still has to ask for
     // `finest` — and must do so AFTER this call, which resets the level.
     AtSignLogger.root_level = 'info';
-    preference ??= TestUtils.getPreference(currentAtSign);
+    if (preference != null && preference.posture != posture) {
+      throw ArgumentError(
+          'the supplied AtClientPreference for $currentAtSign was built at a '
+          'different posture from the one named here. Every posture axis is '
+          'final at construction, so this call cannot reconcile them — name '
+          'the posture the preference was built with, or build it at the '
+          'posture you want.');
+    }
+    preference ??= TestUtils.getPreference(currentAtSign, posture: posture);
     final encryptionKeysLoader = AtEncryptionKeysLoader.getInstance();
     var atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
         currentAtSign, namespace, preference,

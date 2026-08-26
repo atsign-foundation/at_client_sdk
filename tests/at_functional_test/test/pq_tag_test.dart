@@ -25,8 +25,27 @@ import 'package:test/test.dart';
 /// names: `pq_*` naming is a convention nobody enforces, and the two files
 /// that most needed the tag (`copied_keyfile_test`, `crypto_era_default_test`)
 /// carry no `pq` in their names at all.
-final _pqSymbols = RegExp(r'PqPosture|nskey|Nskey|pqSeal|pqOpen|'
-    r'SigningAlgoType|keyPackage|KeyPackage|__ssenv|_apsk|'
+///
+/// ⚠️ **A bare `PqPosture` used to be in this list and had to come out.**
+/// Every client in this pack now names its posture — `TestUtils.getPreference`
+/// and `TestUtils.initAtClient` require one, so the compiler can name any test
+/// that has not chosen — and `PqPosture.legacy` is what a test that drives no
+/// post-quantum mechanism says. The symbol therefore appears in all 55 files
+/// and discriminates nothing; left in, it flagged the whole pack and failed
+/// this guard's own negative control. What still means "post-quantum" is a
+/// posture that is not the legacy one: `pqReady`, `pqActive`, or one built
+/// axis by axis. Measured when the change landed: the narrowed set flags 34
+/// files, exactly the 34 that carry the tag, with none of them lost.
+///
+/// ⚠️ **Those three posture clauses currently flag nothing on their own** —
+/// every one of the 34 also matches a mechanism symbol, so deleting them today
+/// would change no verdict. They are here for the test whose *only*
+/// post-quantum signal is the era it runs at, which is what classifying this
+/// pack by posture is expected to produce. Re-derive before removing them:
+/// find a file matching a posture clause and none of the others.
+final _pqSymbols = RegExp(
+    r'PqPosture\.pqReady|PqPosture\.pqActive|PqPosture\(|nskey|Nskey|'
+    r'pqSeal|pqOpen|SigningAlgoType|keyPackage|KeyPackage|__ssenv|_apsk|'
     r'AtClientSecretSharing|signingRoot|SigningRoot|mldsa|enroll:');
 
 bool _drivesPq(String source) => _pqSymbols.hasMatch(source);
@@ -80,7 +99,10 @@ void main() {
             'a matcher that does not flag it is broken, not the pack');
     expect(_drivesPq(negative.readAsStringSync()), isFalse,
         reason: 'atclient_put_test.dart drives no PQ mechanism, so a matcher '
-            'that flags it would tag the whole pack and mean nothing');
+            'that flags it would tag the whole pack and mean nothing. It does '
+            'name PqPosture.legacy, like every other client in this pack, '
+            'which is exactly why the bare symbol is not in _pqSymbols — this '
+            'control is what caught that');
   });
 
   test('the placement check rejects a tag the runner would ignore', () {

@@ -174,7 +174,8 @@ void main() {
     await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
     final storage = 'test/hive/ratesprobe/$name';
-    final preference = TestUtils.getPreference(atSign)
+    final preference = TestUtils.getPreference(atSign,
+        posture: PqPosture.legacy)
       ..hiveStoragePath = storage
       ..commitLogPath = storage;
     final manager = await AtClientManager(atSign).setCurrentAtSign(

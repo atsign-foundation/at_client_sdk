@@ -52,7 +52,8 @@ void main() {
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final manager =
-        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo);
+        await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
+            posture: PqPosture.legacy);
     atClient = manager.atClient;
     await AtClientSecretSharing.forClient(atClient).register();
   });

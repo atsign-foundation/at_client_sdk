@@ -223,7 +223,7 @@ void main() {
   String slug(String name) => name.replaceAll(RegExp(r'[^A-Za-z0-9-]'), '');
 
   AtClientPreference preferenceFor(String name, String atSign,
-      {required String role, PqPosture? posture}) {
+      {required String role, required PqPosture posture}) {
     final storage = 'test/hive/pqprobe/$role-${slug(name)}';
     final preference = TestUtils.getPreference(atSign, posture: posture)
       ..hiveStoragePath = storage
@@ -248,7 +248,17 @@ void main() {
     await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
     final manager = await AtClientManager(atSign).setCurrentAtSign(
-        atSign, namespace, preferenceFor(name, atSign, role: 'approver'),
+        atSign,
+        namespace,
+        // ⚠️ legacy, and this is the grid's readiness axis. Seeding is the
+        // only posture-gated step in the PQ bootstrap, so an approver at any
+        // other posture publishes `public:__nskey.<ns>@<atSign>` before a
+        // single cell runs — minting the namespace key the grid is measuring
+        // and moving its private into the approver's keyfile. Every readback
+        // assertion would then pass for the wrong reason, and nothing would
+        // go red.
+        preferenceFor(name, atSign,
+            role: 'approver', posture: PqPosture.legacy),
         atKeysIo: keysIo,
         atChops: loader.createAtChopsFromDemoKeys(atSign));
     await loader.setEncryptionKeys(manager.atClient, atSign);
@@ -305,6 +315,14 @@ void main() {
         // wildcard, so such an enrollment publishes no namespace key and then
         // refuses every write it makes.
         namespaces: spec.namespaces,
+        // The enrollment mode follows the cell's own posture, which is the
+        // one axis of it this harness can apply: a legacy cell submits a
+        // legacy request and so is not sealed to at approval time. ⚠️ That
+        // does NOT make it an un-upgraded install — the client still registers
+        // a key package at startup — so read a legacy cell here as "an app
+        // that asked for the legacy stage", never as "a peer without the
+        // capability". The faithful peer is `pq_released_peer_test.dart`.
+        keyExchangeMode: spec.posture.keyExchangeMode,
         // `(appName, deviceName)` is one-shot server state.
         deviceName: 'pqgrid-$name-'
             '${DateTime.now().microsecondsSinceEpoch}',

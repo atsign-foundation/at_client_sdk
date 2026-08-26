@@ -45,14 +45,15 @@ void main() {
           publicKey: appNsPair.publicKeyBytes,
           privateKey: appNsPair.privateKeyBytes);
 
-    final preference = TestUtils.getPreference(atSign)
+    final preference = TestUtils.getPreference(atSign,
+        posture: PqPosture.legacy)
       ..crypto = CryptoConfig.nskey(keyRing: ring);
 
     atClientManager = await TestUtils.initAtClient(
       atSign,
       namespace,
       preference: preference,
-    );
+    posture: PqPosture.legacy);
   });
 
   test('a self value round-trips through the nskey data path', () async {

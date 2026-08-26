@@ -71,7 +71,7 @@ void main() {
     // and the enrollment handshake depends on those writes. Only the SENDER
     // needs to write PQ, and posture is per-client.
     final manager = await TestUtils.initAtClient(atSign, namespace,
-        atKeysIo: approverKeysIo);
+        atKeysIo: approverKeysIo, posture: PqPosture.legacy);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -80,7 +80,7 @@ void main() {
         approver: approver,
         atSign: atSign,
         namespace: namespace,
-        preference: TestUtils.getPreference(atSign),
+        preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',

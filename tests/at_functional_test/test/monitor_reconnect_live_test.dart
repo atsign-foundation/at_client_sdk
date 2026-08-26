@@ -59,7 +59,8 @@ void main() {
   setUpAll(() async {
     currentAtSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     logger = AtSignLogger(' monitor_reconnect_live_test ');
-    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace);
+    atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
+        posture: PqPosture.legacy);
     atClientManager.atClient.syncService.sync();
   });
 

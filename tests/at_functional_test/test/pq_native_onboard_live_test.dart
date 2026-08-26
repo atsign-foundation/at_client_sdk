@@ -56,7 +56,8 @@ void main() {
   test('UC-A1.1 · a CRAM activation is PQ-native, and still legacy-reachable',
       () async {
     final keysIo = FileAtKeysIo(filePath: keysFilePath);
-    final preference = TestUtils.getPreference(atSign)
+    final preference = TestUtils.getPreference(atSign,
+        posture: PqPosture.legacy)
       ..rootDomain = rootDomain.rootDomain
       ..rootPort = rootDomain.rootPort
       ..namespace = namespace;

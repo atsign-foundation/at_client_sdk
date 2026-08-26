@@ -16,7 +16,8 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    final preference = TestUtils.getPreference(atSign)
+    final preference = TestUtils.getPreference(atSign,
+        posture: PqPosture.legacy)
       ..crypto = CryptoConfig(
         defaultProviderId: 'legacy',
         providers: [
@@ -27,7 +28,7 @@ void main() {
       atSign,
       namespace,
       preference: preference,
-    );
+    posture: PqPosture.legacy);
     atClientManager.atClient.syncService.sync();
   });
 

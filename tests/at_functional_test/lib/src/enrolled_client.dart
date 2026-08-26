@@ -41,7 +41,26 @@ class EnrolledClient {
 
   /// The key package id this enrollment advertised, which is the address
   /// anything sealed to it is written under.
-  final String kpid;
+  ///
+  /// Throws for a **legacy-mode** enrollment, which advertises no key package
+  /// at all — that is the point of the mode, not a gap. A throwing getter
+  /// rather than a nullable field because every existing reader is a test
+  /// about key packages, so `null` would only have been forced away with `!`
+  /// at each one; this way the failure names what happened. Use [kpidOrNull]
+  /// where either mode is possible.
+  String get kpid =>
+      _kpid ??
+      (throw StateError(
+          'enrollment $enrollmentId was submitted in legacy key-exchange mode, '
+          'so it advertised no key package and has no kpid. Nothing can be '
+          'sealed to it and it takes no part in secret sharing — which is what '
+          'PqPosture.legacy asks for. Read kpidOrNull if either mode is '
+          'possible here'));
+
+  /// The advertised key package id, or null for a legacy-mode enrollment.
+  final String? kpidOrNull;
+
+  String? get _kpid => kpidOrNull;
 
   /// This enrollment's key material, as `waitForApproval` left it: its APKAM
   /// keypair, its key-package private half, and the encryption keys unwrapped
@@ -58,7 +77,7 @@ class EnrolledClient {
   EnrolledClient({
     required this.client,
     required this.enrollmentId,
-    required this.kpid,
+    required this.kpidOrNull,
     required this.keys,
     required this.manager,
   });
@@ -66,6 +85,28 @@ class EnrolledClient {
 
 /// Enrols a new APKAM enrollment on [atSign], approves it from [approver], and
 /// returns a client authenticated as it.
+///
+/// [keyExchangeMode] decides how the enrollment's `apkamSymmetricKey` travels,
+/// and therefore whether this enrollment advertises a key package at all. It
+/// defaults to **pq**, which is what nearly every test here wants and what
+/// this helper always did.
+///
+/// ⚠️ It is a parameter rather than being read from
+/// `preference.posture.keyExchangeMode`, even though `PqPosture`'s dartdoc
+/// tells *app* authors to derive it from the posture. Deriving it here was
+/// tried and reverted: [AtClientPreference]'s posture defaults to
+/// `PqPosture.legacy`, so every caller that names no posture — which is most
+/// of this pack — would silently switch to legacy-mode enrollment and lose its
+/// key package. Measured: seven substrate tests went red at once.
+///
+/// ⚠️ Legacy mode is **not** a faithful legacy client, and must not be read as
+/// one. It submits a legacy request, so nothing is sealed to it at approval
+/// time — but the running client still registers a key package of its own at
+/// startup (`collectConveyedKeyMaterial` calls `register()` unconditionally),
+/// so it remains addressable and can still take part in secret sharing. The
+/// faithful un-upgraded peer in this repo is a separate process running a
+/// released at_client: `tests/pq_matrix/published` on 3.14.0, spawned by
+/// `pq_released_peer_test.dart`.
 ///
 /// [approver] must be a privileged client able to call `otp:get` and approve —
 /// in this package, the ordinary `TestUtils.initAtClient` client.
@@ -108,6 +149,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
   Map<String, String>? namespaces,
   AtKeysIo? atKeysIo,
   SigningAlgoType signingAlgo = SigningAlgoType.rsa2048,
+  EnrollmentKeyExchangeMode keyExchangeMode = EnrollmentKeyExchangeMode.pq,
 }) async {
   final otp = (await approver.getOTP()).response;
 
@@ -126,6 +168,8 @@ Future<EnrolledClient> enrolAndAuthenticate({
     atKeysIo: atKeysIo ?? InMemoryAtKeysIo(),
   );
 
+  final legacyMode = keyExchangeMode == EnrollmentKeyExchangeMode.legacy;
+
   Map<String, dynamic>? built;
   // The key package is signed by the APKAM keypair this enrolment is about to
   // submit, so the builder has to be told which algorithm that is. It has
@@ -133,35 +177,63 @@ Future<EnrolledClient> enrolAndAuthenticate({
   // carry an algorithm, the answer could only ever be rsa2048.
   final build = enrollmentKeyPackageBuilder(atSign, signingAlgo: signingAlgo);
 
-  final response = await AtEnrollment.create().submit(
-    AtEnrollmentRequest.pq(
-      session: session,
-      appName: namespace,
-      deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
-      namespaces: namespaces ?? {namespace: 'rw'},
-      otp: otp,
-      // pq mode, so the approver mints the symmetric key and seals it to the
-      // advertised key package. On the legacy path it would RSA-wrap it, which
-      // is the thing this branch exists to remove.
-      metadataBuilder: (keysIo) async => built = await build(keysIo),
-      apkamSymmetricKeyResolver: enrollmentApkamSymmetricKeyResolver(atSign),
-      signingAlgo: signingAlgo,
-    ),
-    AtLookUp.withSecureSocket(
-      atSign: atSign,
-      rootDomain: AtRootDomain(rootDomain, rootPort),
-      transport: secureSocketTransport(SecureSocketConfig()),
-      authenticator: null,
-    ),
+  final atLookUp = AtLookUp.withSecureSocket(
+    atSign: atSign,
+    rootDomain: AtRootDomain(rootDomain, rootPort),
+    transport: secureSocketTransport(SecureSocketConfig()),
+    authenticator: null,
   );
+
+  final response = await AtEnrollment.create().submit(
+    legacyMode
+        // No metadataBuilder and no resolver: a legacy request advertises no
+        // key package, and the symmetric key travels RSA-wrapped on the
+        // enrollment record instead of being sealed to one.
+        ? AtEnrollmentRequest(
+            session: session,
+            appName: namespace,
+            deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
+            namespaces: namespaces ?? {namespace: 'rw'},
+            otp: otp,
+            signingAlgo: signingAlgo,
+          )
+        : AtEnrollmentRequest.pq(
+            session: session,
+            appName: namespace,
+            deviceName: deviceName ?? 'enrolled-${Uuid().v4().hashCode}',
+            namespaces: namespaces ?? {namespace: 'rw'},
+            otp: otp,
+            // pq mode, so the approver mints the symmetric key and seals it to
+            // the advertised key package. On the legacy path it would RSA-wrap
+            // it, which is the thing this branch exists to remove.
+            metadataBuilder: (keysIo) async => built = await build(keysIo),
+            apkamSymmetricKeyResolver:
+                enrollmentApkamSymmetricKeyResolver(atSign),
+            signingAlgo: signingAlgo,
+          ),
+    atLookUp,
+  );
+
+  // The approver's half differs by mode too, and getting it wrong is silent:
+  // a legacy request carries its own RSA-wrapped symmetric key on the record
+  // and the approver hands that back, where a pq approver mints one.
+  final AtBytes apkamSymmetricKey;
+  if (legacyMode) {
+    final record = (await approver.enrollmentService!.fetchEnrollmentRequests())
+        .firstWhere((e) => e.enrollmentId == response.enrollmentId);
+    apkamSymmetricKey =
+        AtBytes.fromString(record.encryptedAPKAMSymmetricKey!);
+  } else {
+    // Empty: pq mode means the approver mints it rather than unwrapping one
+    // the enrollee sent.
+    apkamSymmetricKey = AtBytes.fromString('');
+  }
 
   await approver.enrollmentService!
       .approve(EnrollmentRequestDecision.approved(
     atSign: atSign,
     enrollmentId: response.enrollmentId,
-    // Empty: pq mode means the approver mints it rather than unwrapping one
-    // the enrollee sent.
-    apkamSymmetricKey: AtBytes.fromString(''),
+    apkamSymmetricKey: apkamSymmetricKey,
   ));
 
   await AtEnrollment.create().waitForApproval(response);
@@ -175,11 +247,17 @@ Future<EnrolledClient> enrolAndAuthenticate({
       response.session ?? session, preference,
       reuse: true);
 
-  final payload = SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
+  // Null in legacy mode: `built` is only populated by the pq metadataBuilder,
+  // and there is no key package to read a kid out of.
+  final String? kpid = built == null
+      ? null
+      : ((SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload
+                  as Map)['keys'] as List)
+              .single['kid'] as String;
   return EnrolledClient(
     client: manager.atClient,
     enrollmentId: response.enrollmentId,
-    kpid: ((payload['keys'] as List).single as Map)['kid'] as String,
+    kpidOrNull: kpid,
     keys: await (response.session ?? session).atKeysIo.read(atSign),
     manager: manager,
   );

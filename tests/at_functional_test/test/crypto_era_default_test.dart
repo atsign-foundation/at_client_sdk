@@ -30,7 +30,7 @@ void main() {
   test('a client that named no CryptoConfig still resolves the nskey providers',
       () async {
     final manager = await TestUtils.initAtClient(atSign, namespace,
-        atKeysIo: InMemoryAtKeysIo());
+        atKeysIo: InMemoryAtKeysIo(), posture: PqPosture.legacy);
     final client = manager.atClient;
 
     // Checked, not assumed: if the harness had named a config the assertions

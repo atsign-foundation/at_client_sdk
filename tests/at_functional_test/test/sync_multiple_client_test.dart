@@ -326,7 +326,7 @@ Future<void> startClient(ChildIsolatePreferences clientParameters) async {
       hiveStoragePath: clientParameters.hiveStoragePath,
       commitLogPath: clientParameters.commitLogPath);
   atClientManager = await TestUtils.initAtClient(currentAtSign, namespace,
-      preference: atClientPreferences);
+      preference: atClientPreferences, posture: PqPosture.legacy);
 }
 
 Future<void> updateOrDeleteKey(AtKey atKey, int randomValueForOperation,

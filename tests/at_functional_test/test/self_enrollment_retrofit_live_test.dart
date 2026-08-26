@@ -86,7 +86,8 @@ void main() {
 
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
-    final manager = await TestUtils.initAtClient(atSign, namespace);
+    final manager = await TestUtils.initAtClient(atSign, namespace,
+        posture: PqPosture.legacy);
     atClient = manager.atClient;
     await mintLegacyKeyfile(keysFilePath);
   });
@@ -229,7 +230,7 @@ void main() {
         // parameter default is the rollout-window RSA mode.
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
-        preference: TestUtils.getPreference(atSign),
+        preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
         appName: 'rf2b-app',
         deviceName: 'rf2c-${Uuid().v4().hashCode}',
         namespaces: {namespace: 'rw'},
@@ -406,7 +407,7 @@ void main() {
     final session = await legacySession(t5Path);
     final manager = await selfRetrofit(
         session: session,
-        preference: TestUtils.getPreference(atSign),
+        preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
         appName: 'rf2b-app',
         deviceName: 'rf2e-${Uuid().v4().hashCode}',
         namespaces: {namespace: 'rw'},
