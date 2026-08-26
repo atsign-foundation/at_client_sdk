@@ -346,6 +346,38 @@ void main() {
       }
     });
 
+    /// The OTHER key-establishment axis, and until 2026-08-26 no test pinned
+    /// it for any posture.
+    ///
+    /// ⚠️ **Proven by mutation, not suspected:** changing
+    /// `PqPosture.pqActive.keyEstablishmentAlgorithms` from `[x-wing]` to
+    /// `[ml-kem-1024]` left the whole at_client suite — 1573 tests — green.
+    /// Found by the citation audit while checking UC-C1.6's "all seven axes".
+    ///
+    /// It is not interchangeable with [sealsToKeyAlgorithms] above and the
+    /// two are easy to conflate: that one is what this client will seal *to*,
+    /// a sender-side preference among what a recipient offers. This one is
+    /// what this atSign **advertises for others to seal to it**, so it decides
+    /// the algorithm of the encapsulation key minted at the next mint — and an
+    /// accidental edit changes what every peer encrypts to this atSign with.
+    ///
+    /// Raw ids for the same reason the list above uses them: reading the value
+    /// back through `SecretSharingAlgos.xWing` would follow an edit to that
+    /// constant silently.
+    test('every released stage advertises the same key-establishment list', () {
+      for (final p in [
+        PqPosture.legacy,
+        PqPosture.pqReady,
+        PqPosture.pqActive
+      ]) {
+        expect(p.keyEstablishmentAlgorithms, ['x-wing'],
+            reason: 'the hybrid alone is what a released stage advertises. '
+                'Widening it is a deployment decision an operator makes '
+                'through AtClientPreference, never something a posture does '
+                'on its behalf');
+      }
+    });
+
     test('the stages agree because it is a deployment choice, not a stage', () {
       // Ruling 50.3, restated as an assertion: which KEM an atSign will use is
       // where it is deployed, not how far through the rollout it is. If a

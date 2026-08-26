@@ -204,7 +204,7 @@ The file-partition/track detail and the `CryptoConfig`/`CryptoRuntime` mechanics
      S-5 at_auth 4.0 WASM split → S-6 consumer bumps          D2-1 at/pqmls carve + D1-E (D2)
      KF-1 .atKeys-at-rest protection + backup/restore (builds on S-3)
      IS-1 inter-server PQ auth (FROM/POL: swap challenge signature RSA→ML-DSA-65, PR #2683) — no KEM, no cert; builds on published at_chops 3.4.x (ungated)
-     R-2 at_client 4.0 (apply the pqActive posture defaults - seven axes, decisions 70) - final; NO CLIENT-SIDE WORK OUTSTANDING as of 2026-08-17, gated on the ecosystem floor alone (see 14.33)
+     R-2 at_client 4.0 (apply the pqActive posture defaults - every axis, decisions 70) - final; NO CLIENT-SIDE WORK OUTSTANDING as of 2026-08-17, gated on the ecosystem floor alone (see 14.33)
 ```
 
 **Hosted-publish ordering (stated once).** `at_chops` (`P-1`, `P-2`) and `at_commons` (`SS-1a`) are
@@ -1731,7 +1731,7 @@ directions; only the opt-out refuses it).
 **Builds on:** B-2 + RF-2c + S-6 (R-1's flag is delivered). **Gated on the ecosystem floor** (last published downstream versions).
 **Deliverables → [design.md](../design.md)** (the v4 flip): change
 `AtClientPreference`'s default posture from `PqPosture.legacy` to
-`PqPosture.pqActive` — one edit that flips all seven rollout axes
+`PqPosture.pqActive` — one edit that flips every rollout axis
 (era `CryptoConfig` → nskey writes, `disallowLegacyEncryption` → true — SHOUT
 if re-enabled false, envelope emission → JWS v2, posture-built enrollments →
 pq key exchange, argless retrofits → ML-DSA). The at_auth-side hard defaults (the
@@ -1916,7 +1916,7 @@ what to publish next.
 | 6  | `at_auth`           | **major `3.4.x → 4.0.0`**     | S-5        | breaking WASM cut: `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
 | 6b | `at_lookup`         | minor `3.6.1 → 3.7.0` **(in-tree, UNPUBLISHED)** | 14.39 | `AtConnectionMetaData.authenticatedAsEnrollmentId` + `authenticatedAt`, set by every path in `AtLookupImpl` that authenticates and by `Monitor._authenticateConnection`. Minor because it is purely additive and `AtConnectionMetaData` is not exported from the barrel, so nothing outside can `implements` it. ⚠️ **at_client now pins `^3.7.0`**, so row 7 cannot publish before this does — the same shape as its at_chops gate. at_auth still pins `^3.6.0` and is unaffected |
 | 7  | `at_client`         | minor `3.14.x → 3.15.x`       | S-2…B-2, KE-1 | `at_auth ^4.0.0`; `CryptoContext.keys`; nskey data path; rotation; the selectable KEM. **= D1 GA**. ⚠️ **3.13.0 and 3.14.0 both published 2026-07-17** so the GA slot has moved off 3.14.x; trunk is already 3.14.1. For compatibility purposes the baseline is **3.13.0** ([`decisions.md` §91.4](decisions.md#914-what-is-released-and-therefore-what-must-still-be-read)) — re-derive the target minor at execution against pub.dev. ⚠️ **S-2's `CryptoContext.keys` (#2076) is on trunk but unreleased** — it merged after 3.14.0 published, so the next at_client release is the first that carries it. ⚠️ **gated on rows 3 and 6b** — this release cannot go out against an unpublished `at_chops 3.6.0` (a published 3.5.0 does not discharge that gate) nor against an unpublished `at_lookup 3.7.0`, which its own pubspec now pins at `^3.7.0` |
-| 8  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | default posture → `PqPosture.pqActive` (all seven axes, [decisions 70](decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)); plus the normal major-version deprecation cleanup (orthogonal to the rollout, [decisions 56.4](decisions.md#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults)). *(selfEncryptionKey stop-existing moved to a later ecosystem-gated release, [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05))* |
+| 8  | `at_client`         | **major `3.15.x → 4.0.0`**    | R-2        | default posture → `PqPosture.pqActive` (every axis, [decisions 70](decisions.md#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)); plus the normal major-version deprecation cleanup (orthogonal to the rollout, [decisions 56.4](decisions.md#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults)). *(selfEncryptionKey stop-existing moved to a later ecosystem-gated release, [decisions 37](decisions.md#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05))* |
 | 9  | `at_onboarding_cli` | minor `1.16.0 → 1.17.0`       | S-6        | `at_auth ^4.0.0`; imports `FileAtKeysIo` from `at_auth_io.dart`; explicit injection. 1.16.0 published 2026-07-17, so 1.17.0 is a clean next slot |
 | 10 | `at_client_flutter` | minor `1.1.4 → 1.2.0`         | S-6        | `at_auth ^4.0.0`; `file_picker` imports `at_auth_io.dart` |
 | 11 | `at_cli_commons`    | minor (constraint bump)       | S-6        | consumes the new `at_onboarding_cli` / `at_client` (transitive at_auth) |

@@ -223,7 +223,11 @@ test proves something narrower than the clause it is attached to.
 **Started 2026-08-26. Cluster A is done — 36 citations — and the running record,
 the method and the three findings are in
 [detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26).
-B, C and G remain: 109 of 146.** The one substantive finding, **UC-A4.5**, is
+**C1 is done too — 24 citations, four findings, three closed the same day**
+(a posture axis pinned by nothing, proven by a mutation that left 1573 tests
+green; a count stale in six places; a row reading PROVEN while its axis reached
+no production caller; and a scenario still describing the pre-flip default).
+B and G remain: 85 of 147.** The one substantive finding, **UC-A4.5**, is
 ✅ **closed**: its central clause ("Alice's configuration decides what she is a
 *recipient* for and nothing about who she can send to") was true in the code and
 established by neither citation, because both arms co-varied the sender's

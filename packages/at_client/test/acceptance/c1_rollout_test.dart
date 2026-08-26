@@ -7,7 +7,9 @@ import 'proven_elsewhere.dart';
 /// The capstone of the rollout-posture design (`decisions.md` 56.4): 4.0 is
 /// final-3.x code with different flag defaults, so the entire rollout must be
 /// drivable from this codebase by flag manipulation — each axis in isolation,
-/// and all seven at once as the grouped `PqPosture`.
+/// and all of them at once as the grouped `PqPosture`. (Not "all seven": the
+/// count was correct when written and an eighth axis was added the same day.
+/// Re-derive from the type rather than restating a number.)
 ///
 /// The envelope-shape axis (UC-C1.3) is gone because the envelope stopped
 /// having a second shape to roll out to, so there was no axis left to drive;
@@ -79,6 +81,26 @@ void main() {
     // WHEN  the request is submitted with keyExchangeMode = pq.
     // THEN  no RSA-wrapped apkamSymmetricKey rides the wire; the approver
     //       mints and conveys instead.
+    //
+    // ⚠️ **This row read PROVEN while NOBODY applied the posture's value.**
+    // The citations below prove the two ends — the posture carries the mode,
+    // and at_auth honours the mode when it is given one — and until
+    // 2026-08-26 nothing joined them: `at_onboarding_cli`, the only production
+    // caller that submits an app enrolment, built the unnamed
+    // `AtEnrollmentRequest(...)`, whose initialiser hard-sets `legacy`. The
+    // GIVEN above names the gap honestly ("applied by whoever builds the
+    // request") and no citation covered that clause. Found by the citation
+    // audit; the first citation below is now that middle.
+    provenIn(
+        'packages/at_onboarding_cli/test/enroll_key_exchange_mode_test.dart',
+        'PqPosture.pqActive submits a pq request',
+        proves: 'the middle the other three do not reach: a real production '
+            'builder reading a posture and choosing the constructor from it. '
+            'The request captured off the AtEnrollment seam under '
+            'PqPosture.pqActive carries EnrollmentKeyExchangeMode.pq and both '
+            'the callbacks a pq request needs, where the same service under '
+            'PqPosture.legacy submits the wrapped-key shape. Mutating the '
+            'service to keep the unnamed constructor reddens it.');
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'pqActive is post-quantum by default',
         proves: 'the posture carries EnrollmentKeyExchangeMode.pq');
@@ -109,7 +131,7 @@ void main() {
             'constant fails this arm');
   });
 
-  test('UC-C1.6 · the grouped posture: one value moves all seven axes', () {
+  test('UC-C1.6 · the grouped posture: one value sets every axis', () {
     // GIVEN nothing but AtClientPreference(posture: PqPosture.pqActive).
     // WHEN  a client, its signers, its enrollment submissions and its
     //       retrofits are built from that one preference.

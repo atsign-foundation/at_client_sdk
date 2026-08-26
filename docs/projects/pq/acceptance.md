@@ -130,7 +130,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-C1.3  | WITHDRAWN — there is no envelope axis                                               | WITHDRAWN | —                            |
 | UC-C1.4  | The key-exchange axis: the posture names pq enrollment                              | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.5  | The retrofit axis: an argless retrofit follows the posture                          | PROVEN    | `c1_rollout_test.dart`       |
-| UC-C1.6  | The grouped posture: one value moves all seven axes                                 | PROVEN    | `c1_rollout_test.dart`       |
+| UC-C1.6  | The grouped posture: one value sets every axis                                      | PROVEN    | `c1_rollout_test.dart`       |
 | UC-C1.7  | The signing-set axis: which keys an enrollment holds                                | PROVEN    | `c1_rollout_test.dart`       |
 | UC-G1.1   | The derivation is offered, not applied                                             | PROVEN    | `g1_keyfile_test.dart` |
 | UC-G1.2   | A retrofit leaves one active auth key, touching nothing legacy                     | PROVEN    | `g1_keyfile_test.dart` |
@@ -2182,7 +2182,7 @@ right" pass rather than numbered projects.
 
 From the PQ project's view, at_client 4.0 is final-3.x code with different flag
 defaults, so every stage of the rollout must be reachable from this codebase by
-flag manipulation: each axis flipped in isolation, and all seven at once as
+flag manipulation: each axis flipped in isolation, and all of them at once as
 the grouped `PqPosture`. These rows assert the mechanism itself — the
 posture reaching each flag's natural home, and every axis remaining
 individually overridable — not the underlying crypto behaviours, which Parts A
@@ -2252,17 +2252,32 @@ on failure.
   same call mints RSA — the two postures resolve into different per-algorithm
   idempotence pools, which is what tells them apart live.
 
-### 15.6 UC-C1.6 — The grouped posture: one value moves all seven axes
+### 15.6 UC-C1.6 — The grouped posture: one value sets every axis
 
 - **Given:** nothing but
   `AtClientPreference(posture: PqPosture.pqActive)`.
 - **When:** a client, its signers, its enrollment submissions and its
   retrofits are built from that one preference.
-- **Then:** all seven axes run the last stage's values — the pinned columns of the
+- **Then:** every axis runs the last stage's values — the pinned columns of the
   `decisions.md` 56.4 table — and each remains individually overridable
   (UC-C1.1, C1.2, C1.4, C1.5 and C1.7 prove the arms; C1.3 is withdrawn and
-  its axis no longer exists). A bare preference runs the legacy posture,
-  byte-identical to the pre-posture SDK.
+  its axis no longer exists).
+
+⚠️ **This row said "all seven axes" until 2026-08-26, in four places, and the
+number was never re-derived after it stopped being true.** It was correct when
+written (`f22ec76e7`) and falsified hours later by `824508719`, which added
+`sealsToKeyAlgorithms` as an eighth. Today `PqPosture` carries **9** final
+fields, its own dartdoc enumerates **8** under "The axes", and only **6** differ
+between `legacy` and `pqActive` — so "seven" was not any of the three readings.
+Re-derive rather than restating a number:
+`grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart`.
+
+⚠️ **And this said "a bare preference runs the legacy posture, byte-identical
+to the pre-posture SDK".** That was true until the default moved to
+`PqPosture.pqReady` on 2026-08-26. A bare preference now runs **pqReady**:
+ML-DSA PKAM, namespace-key seeding on, pq key exchange — and a client with an
+enrollment id retrofits itself at startup with no opt-out. An app that must
+stay put names `PqPosture.legacy` explicitly.
 
 ### 15.7 UC-C1.7 — The signing-set axis: which keys an enrollment holds
 

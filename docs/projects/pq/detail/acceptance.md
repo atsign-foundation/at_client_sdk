@@ -334,3 +334,68 @@ was wrong in the direction that would have justified redesigning the mechanism.
 **The cheap fix, if it is wanted:** let `provenIn` take a list of supporting
 paths it also asserts the existence of. That keeps one citation per row while
 making every leg of its argument rot-detectable.
+
+### C1 — four findings, three of them closed
+
+Audited 2026-08-26. **24 citations.**
+
+#### F4 — one posture axis was pinned by nothing at all — ✅ CLOSED
+
+`PqPosture.keyEstablishmentAlgorithms` — what an atSign **advertises for others
+to seal to it**, and therefore the algorithm of the encapsulation key minted at
+its next mint — had no raw-literal pin for any posture.
+
+**Proven by mutation, not suspected.** Changing
+`PqPosture.pqActive.keyEstablishmentAlgorithms` from `[x-wing]` to
+`[ml-kem-1024]` left the entire at_client suite — **1573 tests** — green, zero
+failures. That is a hole in the family of pins whose stated job is to catch
+exactly this: *"reading a value back through the type would follow an accidental
+edit silently."*
+
+⚠️ **Easy to believe it was covered, because its near-twin is.**
+`sealsToKeyAlgorithms` has its own group and its own raw-literal pin across all
+three stages. The two are one word apart and opposite in direction: that one is
+what this client seals *to*; this one is what others seal to *this atSign*.
+
+✅ Closed by `every released stage advertises the same key-establishment list`
+in `test/pq_posture_test.dart`. The same mutation now reddens quoting the
+reason string.
+
+#### F5 — "all seven axes" was stale in six places — ✅ CLOSED
+
+UC-C1.6's title, heading, THEN clause, the section intro, the scenario file's
+dartdoc and its test name all said **seven**. `PqPosture` carries **9** final
+fields; its own dartdoc enumerates **8** under "The axes"; and only **6** differ
+between `legacy` and `pqActive`. Seven was none of the three.
+
+**It was correct when written and falsified within hours.** `f22ec76e7` wrote
+it; `824508719` — *"the sender-side algorithm list becomes a posture axis"* —
+added the eighth the same day and swept no count. The number then sat in six
+homes for a week. Replaced with "every axis" plus the derivation, rather than
+with 8, because a number in six places is the defect.
+
+#### F6 — UC-C1.4 read PROVEN while its axis reached no production caller — ✅ CLOSED
+
+The row is *"the key-exchange axis: the posture names pq enrollment"*. Its three
+citations proved the two ends — the posture carries the mode, and at_auth
+honours a mode it is given — and nothing joined them. The scenario's own GIVEN
+names the gap ("at_auth cannot read a preference, so the posture's value is
+applied by whoever builds the request") and no citation covered that clause.
+Until 2026-08-26 the only production caller that submits an app enrolment,
+`at_onboarding_cli`, built the unnamed `AtEnrollmentRequest(...)` — hard-set to
+`legacy`.
+
+⚠️ **The catalogue's kind table marked this row `partial`, which is honest about
+depth and says nothing about the axis being inert in production.** "Partial" is
+not a warning; it reads as "covered enough".
+
+✅ Closed by the fix in `at_onboarding_cli` and a citation to
+`enroll_key_exchange_mode_test.dart`, which is that middle.
+
+#### F7 — a scenario still described the pre-flip default — ✅ CLOSED
+
+UC-C1.6's THEN ended *"A bare preference runs the legacy posture, byte-identical
+to the pre-posture SDK."* True until the SDK default became `PqPosture.pqReady`
+on 2026-08-26 — after which a bare preference means ML-DSA PKAM, namespace-key
+seeding on, pq key exchange, and a startup retrofit with no opt-out. Corrected
+in place with what it used to say.
