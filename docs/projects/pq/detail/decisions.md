@@ -1065,11 +1065,22 @@ is hidden from every scan, the owner's own with `showhidden` included — strict
 stronger, and the first choice. It is unusable: such a key is written with **commit id
 -1**, sits outside the commit log, and **sync can never push it**. An advertisement that
 cannot leave the device is no advertisement. Double underscore carries a real commit id
-and syncs. The advertisement is additionally written **direct to the atServer**, since
-it is only useful once a peer can fetch it and the local-first path would leave it
-unpublished until the next sync. Established against a live atServer after three
-successive attempts to verify it through client machinery each measured something other
-than what they claimed.
+and syncs. The advertisement is written **direct to the atServer**, since it is only
+useful once a peer can fetch it and the local-first path would leave it unpublished
+until the next sync. Established against a live atServer after three successive attempts
+to verify it through client machinery each measured something other than what they
+claimed.
+
+⚠️ **This read "additionally written direct to the atServer" until 2026-08-25** — the
+minter wrote the record twice, remotely and then locally, and the local half is now
+gone. A local write of a sync-eligible key queues the key's *name* for a client→server
+push, and the push sends whatever local storage holds when it drains. Measured on a live
+atServer: a drain landed 14 ms after a rotation's remote update and sent the
+**superseded** generation back over it, after which the client pulled that value over
+its own copy and the queued push re-sent it, so the atSign advertised a key it had
+rotated away from for the rest of the run. The local copy the second write existed for
+still arrives — sync pulls the remotely-written record down as a server-originated
+change, which is the one write path that never queues a push.
 The leak section 11 mitigated is closed at least as tightly, without the two-stage.
 
 **Why mutable — immutability was race control, and it made rotation impossible.**

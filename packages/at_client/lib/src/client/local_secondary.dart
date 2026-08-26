@@ -300,11 +300,17 @@ class LocalSecondary implements Secondary {
   /// the key is sync-eligible and [cameFromServer] is false.
   ///
   /// When [cameFromServer] is true the caller is replaying a
-  /// server-originated change into local storage (today only
-  /// `SyncServiceImpl._pullToLocal` does this). The flag tells
+  /// server-originated change into local storage, or filing a value
+  /// it has just fetched from the atServer. The flag tells
   /// `_update` / `_delete` to skip the sync-queue enqueue — the
-  /// server already has the entry; bouncing it back would be a
-  /// loop.
+  /// server already has the entry; bouncing it back would be a loop,
+  /// and a queued entry carries only the key's name, so a later drain
+  /// would send whatever local storage held by then.
+  ///
+  /// Grep for the flag rather than trusting a list here: this said
+  /// "today only `SyncServiceImpl._pullToLocal` does this" while
+  /// `legacy_encryption.dart` had long been caching a fetched public
+  /// key the same way.
   @override
   Future<String?> executeVerb(VerbBuilder builder,
       {@Deprecated('Inert: nothing reads it, so passing it suppresses '

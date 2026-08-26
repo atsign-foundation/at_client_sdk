@@ -4450,7 +4450,7 @@ release is incorrect against an atServer without it.
 
 | # | What | The differential |
 |---|---|---|
-| 1 | ~~A **remote-only** read of the published advertisement for the mint path. ⚠️ **NOT by changing `currentPublic`** — that is also the sender path, reached from `CkManager.ensureCurrent` on *every* put, so making it remote puts a round trip on the write path and breaks offline writes. A separate read, always remote, skipping both caches — the shape `PqSigningRoot.publishedRoots` already has | a sibling enrollment publishes; this client's pre-check sees it without waiting for sync. ⚠️ **Scope: `published_nskey_key_ring.dart:450` is the read to change, but it is NOT the only optionless read in the subsystem** — `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are optionless too. Those two are **content-key conveyance** reads rather than advertisement reads and are plausibly correct as local-first, so they are out of scope *by argument, not by absence*. Re-derive before believing either way: `git grep -n -A3 "atClient\.get(" -- packages/at_client/lib/src/crypto/nskey/`~~ ✅ **BUILT.** `PublishedNskeyKeyRing.publishedAdvertisement` is the new read; `currentPublic` is untouched. Three mint-path call sites use it — `mintAndPublish`'s post-loss read, `rotate`'s precondition, and `NskeySeeding.seed`'s pre-check |
+| 1 | ~~A **remote-only** read of the published advertisement for the mint path. ⚠️ **NOT by changing `currentPublic`** — that is also the sender path, reached from `CkManager.ensureCurrent` on *every* put, so making it remote puts a round trip on the write path and breaks offline writes. A separate read, always remote, skipping both caches — the shape `PqSigningRoot.publishedRoots` already has | a sibling enrollment publishes; this client's pre-check sees it without waiting for sync. ⚠️ **Scope: `published_nskey_key_ring.dart:450` is the read to change, but it is NOT the only optionless read in the subsystem** — `ck_manager.dart:248` and `symmetric_aes_gcm_provider.dart:250` are optionless too. Those two are **content-key conveyance** reads rather than advertisement reads and are plausibly correct as local-first, so they are out of scope *by argument, not by absence*. Re-derive before believing either way: `git grep -n -A3 "atClient\.get(" -- packages/at_client/lib/src/crypto/nskey/`~~ ✅ **BUILT.** `PublishedNskeyKeyRing.publishedAdvertisement` is the new read. Three mint-path call sites use it — `mintAndPublish`'s post-loss read, `rotate`'s precondition, and `NskeySeeding.seed`'s pre-check. ⚠️ **This said `currentPublic` is untouched until 2026-08-25.** It still reads local first — the reason above is unchanged, and a round trip by default would still break offline writes — but it now falls back to the atServer when local storage holds nothing, which is what makes it correct for the minter to publish the advertisement to the atServer alone |
 | 2 | ~~The **winner's re-check under the lock**, which the nskey path has never had. `_mintUnderLock` (root) re-reads; `_mint` (nskey) does not~~ ✅ **BUILT** as `_mintUnlessPublished`, which wraps `_mint` on the `mintAndPublish` path only — `rotate` still runs `_mint` directly, because a rotation that adopted what it found would have rotated nothing while reporting success | a winner that published between the pre-check and this client taking the lock is adopted, not overwritten |
 | 3 | ~~`withLock` **stops releasing** — the ttl is the release~~ ✅ **BUILT.** `MintLock._release` is deleted, and `withLock` now **refuses a lock key with no ttl** — with nothing deleting the record, a missing ttl means it is never released at all rather than released late | a holder that finishes does not free the lock; a second enrollment is refused until the ttl elapses. This is what made [14.19](#1419-small-items-raised-2026-08-12-and-not-yet-acted-on) item 18 disappear rather than be fixed |
 | 4 | ~~The **loser**: re-read once, adopt a published generation, otherwise **fail** with a reason~~ ✅ **BUILT.** Both arms now have a test; the `StateError` says why the loser must not mint and that the retry is the next client start | lock held + a generation published → adopts. Lock held + nothing published → fails naming the contention, and a waiting `put` fails loudly rather than hanging on another device's crash |
@@ -5999,6 +5999,48 @@ server entry over NEWER local state — the pull-side face of this family,
 which shape C's push-side versioning does not cover. The test-side fix
 landed 2026-08-21 (`ccf4987a4`): all four exposed assertions read through
 `publishedAdvertisement`, and one functional pack ran 177/177 with them.
+
+⚠️ **"The fix is still the TEST's" was wrong, and the same assertion proved it
+2026-08-25.** UC-A5.1(b) went red again — twice in seven runs of one commit —
+now reading through `publishedAdvertisement`, which is remote-only. So the
+stale generation was not the shared Hive box: the **atServer's own copy had
+regressed**. The atServer log attributes it exactly, both connections belonging
+to the same enrollment: the rotation's `update` carried the successor at
+21:08:20.8668, the same client's sync pushed a `batch` carrying the predecessor
+at 21:08:20.8808 — byte-identical to the batch it had sent six seconds earlier,
+same `dataSignature`, same `createdAt` — and the survivor's `llookup` at
+21:08:20.8984 was served the predecessor, which then stood for the remaining
+100 seconds of the run. In all five green runs of the same pack that second
+batch carried the successor, so it is a race rather than a switch. This is the
+push-side face that this entry's own "side observation for a product ruling"
+predicted, at the same key. `_mint`'s local write was what queued it: a
+sync-queue entry is `{atKey, op, ts, seq}` with **no value**, so a drain sends
+whatever local storage holds when it runs. Fixed by removing that write.
+`currentPublic` now reads local first and falls back to the atServer, so the
+record the minter no longer writes is still answered for in the window before
+sync pulls it down, filing what it fetched with `cameFromServer: true` — the
+flag the sync-queue enqueue refuses on, so the cache write cannot become a
+push.
+
+**Measured after the fix, same image (`at_virtual_env:g0fixed`), same machine:
+25 rotations, 0 red.** Five full-pack runs at 183/183 (2 skipped), and 20
+iterations of `nskey_rotation_live_test.dart` alone. ⚠️ **The targeted
+iterations are the weaker half** — the file runs by itself, so the atServer is
+under far less load than in the runs that went red, and a race probe that comes
+back clean is a claim about the load it ran at. The stronger evidence is
+structural: the atServer's own log shows **0** `RCVD: batch` pushes of
+`public:__nskey.buzz@bob🛠` in all 25, against 2 in every run before the fix,
+red or green. Positive control in every one of the 25: both `update` verbs
+decode, so the zero is an absence rather than a decode that found nothing.
+
+Re-derive rather than quoting: run the pack with
+`VIRTUALENV_IMAGE=at_virtual_env:g0fixed`, capture `/apps/logs` from the
+container, and decode every advertisement write with a script that base64-opens
+each `payload` and prints the `kid` — a `RCVD: batch` line for that key is the
+clobbering push. ⚠️ The rotation test cannot be looped inside one virtualenv:
+its enrollments are run-unique but its namespace is a fixed `buzz`, so a second
+iteration finds the advertisement already published, `mintAndPublish` adopts
+instead of minting, and the private this process never minted is absent.
 
 **The harness half, also visible in the red log:**
 `FunctionalTestSyncService.syncData` completed 610µs after starting — too fast

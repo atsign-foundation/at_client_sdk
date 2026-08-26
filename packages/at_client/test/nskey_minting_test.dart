@@ -141,6 +141,31 @@ void main() {
     return NskeyPrivateFiling(keysIo: io, atSign: atSign);
   }
 
+  test('the advertisement is written to the atServer and nowhere else',
+      () async {
+    final c = client();
+    final filer = await filing();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+
+    final advertisement = await ring.mintAndPublish(namespace);
+
+    // The positive half: the update really carried this generation, so the
+    // absence below is a second write that did not happen rather than a mint
+    // that did not.
+    expect(c.values['__nskey'], isNotNull);
+    expect(c.advertised[namespace], c.values['__nskey']);
+    expect(advertisement.nskeyKid, isNotEmpty);
+
+    // A local write of a sync-eligible key queues the key's NAME for a
+    // client→server push, and the push sends whatever local storage holds when
+    // it drains. A second write here would therefore race the update above: a
+    // drain landing in between puts the superseded generation back on the
+    // atServer, this client pulls that back over its own copy, and the atSign
+    // goes on advertising a key it rotated away from.
+    verifyNever(() => c.client
+        .put(any(), any(), putRequestOptions: any(named: 'putRequestOptions')));
+  });
+
   test('the private is durable before the public half is published', () async {
     final c = client();
     final filer = await filing();

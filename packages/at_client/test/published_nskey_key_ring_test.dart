@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+import 'package:at_commons/at_builders.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
     show ApkamSigningKeys, EnvelopeType, envelopeVersion, signEnvelope;
 import 'package:mocktail/mocktail.dart';
@@ -31,6 +32,7 @@ void main() {
   setUpAll(() async {
     bobKey = await XWingKeyPair.generate();
     registerFallbackValue(AtKey());
+    registerFallbackValue(UpdateVerbBuilder());
   });
 
   /// A mock client that signs as [enrollmentId] of [atSign].
@@ -175,7 +177,14 @@ void main() {
     test('an atSign that has never published resolves to nothing', () async {
       final atClient = MockAtClient();
       when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      // Both reads, because the ring asks local storage first and the atServer
+      // second: stubbing only the first would leave the fallback unstubbed,
+      // and this test would then pass on mocktail's complaint rather than on
+      // an absent advertisement.
       when(() => atClient.get(any()))
+          .thenThrow(KeyNotFoundException('no such key'));
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
           .thenThrow(KeyNotFoundException('no such key'));
 
       expect(
@@ -201,6 +210,117 @@ void main() {
           reason: 'served by the same lookup a peer would use, signature '
               'check included — which is what makes "one verify path, '
               'same-atSign and cross-atSign" true rather than aspirational');
+    });
+
+    /// A client holding nothing locally for the advertisement, whose atServer
+    /// serves [payload]. Records how each advertisement read asked, and every
+    /// verb the local secondary was handed.
+    ({
+      MockAtClient atClient,
+      List<bool> askedRemote,
+      List<({String command, bool cameFromServer})> filedLocally,
+    }) clientMissingLocally(String payload) {
+      final atClient = MockAtClient();
+      final localSecondary = MockLocalSecondary();
+      when(() => atClient.getCurrentAtSign()).thenReturn(alice);
+      when(() => atClient.getLocalSecondary()).thenReturn(localSecondary);
+      when(() => atClient.atChops).thenReturn(AtChopsImpl(
+          AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
+
+      // How each advertisement read asked. A mocktail stub cannot tell a
+      // local-first get from a remote one on its own, so the options are what
+      // the order is pinned against.
+      final askedRemote = <bool>[];
+      final filedLocally = <({String command, bool cameFromServer})>[];
+
+      Future<AtValue> answer(Invocation invocation) async {
+        final key = invocation.positionalArguments.first as AtKey;
+        if (key.key != '__nskey') {
+          return AtValue()..value = bobsApskPublicKey();
+        }
+        final options =
+            invocation.namedArguments[#getRequestOptions] as GetRequestOptions?;
+        final remote = options?.useRemoteAtServer ?? false;
+        askedRemote.add(remote);
+        if (!remote) throw AtKeyNotFoundException('$key');
+        return AtValue()..value = payload;
+      }
+
+      when(() => atClient.get(any())).thenAnswer(answer);
+      when(() => atClient.get(any(),
+              getRequestOptions: any(named: 'getRequestOptions')))
+          .thenAnswer(answer);
+
+      when(() => localSecondary.executeVerb(any(),
+          cameFromServer: any(named: 'cameFromServer'))).thenAnswer((i) async {
+        filedLocally.add((
+          command:
+              (i.positionalArguments.first as UpdateVerbBuilder).buildCommand(),
+          cameFromServer: i.namedArguments[#cameFromServer] as bool,
+        ));
+        return 'data:1';
+      });
+
+      return (
+        atClient: atClient,
+        askedRemote: askedRemote,
+        filedLocally: filedLocally,
+      );
+    }
+
+    test(
+        'an advertisement absent from local storage is fetched from the '
+        'atServer', () async {
+      // The advertisement is published to the atServer alone, so it reaches
+      // this device only when sync pulls it down. Between the two, a read that
+      // stopped at local storage would report a published namespace as cold
+      // start — and a client that "fixed" that by minting would rotate the key
+      // out from under every peer that had already fetched it.
+      final c = clientMissingLocally(await signedPayloadFor(bobKey));
+
+      final own = await PublishedNskeyKeyRing(c.atClient)
+          .currentPublic(alice, namespace);
+
+      expect(own?.nskeyKid, nskeyKidOf(bobKey.publicKeyBytes));
+      expect(c.askedRemote, [false, true],
+          reason: 'local first, because this read sits on the write path — a '
+              'round trip by default would break offline writes — and the '
+              'atServer only once local storage has nothing');
+    });
+
+    test('what the atServer answered is filed locally, and not offered back',
+        () async {
+      final c = clientMissingLocally(await signedPayloadFor(bobKey));
+
+      await PublishedNskeyKeyRing(c.atClient).currentPublic(alice, namespace);
+
+      expect(c.filedLocally, hasLength(1),
+          reason: 'a device whose sync is off or paused would otherwise pay '
+              'the round trip on every read');
+      expect(c.filedLocally.single.command,
+          contains('public:__nskey.$namespace$alice'));
+      expect(c.filedLocally.single.cameFromServer, isTrue,
+          reason: 'an ordinary local write queues the key NAME for a '
+              'client→server push, and the push sends whatever local storage '
+              'holds when it drains — which is how a rotation lost its '
+              'successor to its own predecessor. cameFromServer is the flag '
+              'the enqueue refuses on');
+    });
+
+    test("a peer's advertisement is not filed under its own name", () async {
+      final c = clientMissingLocally(await signedPayloadFor(bobKey));
+
+      final peer =
+          await PublishedNskeyKeyRing(c.atClient).currentPublic(bob, namespace);
+
+      expect(peer?.nskeyKid, nskeyKidOf(bobKey.publicKeyBytes),
+          reason: 'the fetch still works — only the filing is scoped');
+      expect(c.filedLocally, isEmpty,
+          reason: "a peer's advertisement is not ours to publish, and a record "
+              'written under its own name is exactly what a push would offer. '
+              'The shared-key path files a peer public key under '
+              '`cached:public:publickey@<peer>` for the same reason; here the '
+              'advertisementTtl cache is the mechanism');
     });
 
     test('what it minted itself costs no lookup', () async {

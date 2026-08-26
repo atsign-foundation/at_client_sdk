@@ -651,17 +651,28 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           'own. Retry: the next attempt takes a fresh lock');
     }
 
-    // Straight to the atServer first: an advertisement is only useful once a
-    // *peer* can fetch it, and going through the local-first put would leave it
-    // unpublished until the next sync.
+    // The atServer, and only the atServer. An advertisement is useful once a
+    // *peer* can fetch it, so it goes straight out rather than through a
+    // local-first put that would leave it unpublished until the next sync.
+    //
+    // Deliberately not written to local storage as well. A local write of a
+    // sync-eligible key appends the key's *name* to the client→server sync
+    // queue, and a drain sends whatever local storage holds at the moment it
+    // runs — so a drain landing between this update and that write pushes the
+    // **superseded** generation back over the one just published. Nothing
+    // corrects it: the atServer's newest value for the key is then the old
+    // generation, so this client pulls it back over its own copy and the queued
+    // push re-sends it. The atSign goes on advertising a key it rotated away
+    // from, which for a rotation that accompanied a revocation is the
+    // generation the revoked enrollment still holds.
+    //
+    // Local storage still ends up with this record: sync pulls it down as a
+    // server-originated change, and that is the one write path that never
+    // enqueues a push. [currentPublic] reads local first and falls back to the
+    // atServer, so it answers correctly in the window before that arrives.
     await _atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
       ..atKey = advertisementKey
       ..value = payload);
-
-    // …then locally, so the owner's own clients hold it across restarts without
-    // a round trip. A `public:__` key carries a real commit id, so the two
-    // converge rather than diverging.
-    await _atClient.put(advertisementKey, payload);
 
     _ownCurrent[_scope(owner, namespace)] = advertisement;
     _ownPrivates[_generation(owner, namespace, advertisement.nskeyKid)] =
@@ -697,9 +708,9 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final String payload;
     try {
       final value =
-          await _atClient.get(nskeyAdvertisementKey(owner, namespace));
-      if (value.value == null) return _staleOrNothing(cached);
-      payload = value.value as String;
+          await _getLocalThenRemote(nskeyAdvertisementKey(owner, namespace));
+      if (value == null) return _staleOrNothing(cached);
+      payload = value;
     } catch (_) {
       // No advertisement: under eager publication that means the recipient has
       // never used this namespace, which is the cold-start case. Keep any
@@ -711,6 +722,79 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     final advertisement = await verifier.verify(owner, payload);
     _remote[scope] = (advertisement: advertisement, fetchedAt: DateTime.now());
     return advertisement;
+  }
+
+  /// Reads [atKey] from local storage, falling back to the atServer when it is
+  /// not held there.
+  ///
+  /// Local first because [currentPublic] sits on the write path —
+  /// `CkManager.ensureCurrent` reaches it on every `put` — so a round trip by
+  /// default would break offline writes.
+  ///
+  /// The fallback is what makes it correct to publish the advertisement to the
+  /// atServer alone. Local storage is no longer where that record is written;
+  /// it arrives when sync pulls it down. Without the fallback, a client that
+  /// has just minted, or whose sibling enrollment minted a moment ago, reads
+  /// its own published namespace as a cold start for as long as that takes —
+  /// and a client that "fixed" a cold start by minting would rotate the key out
+  /// from under every peer that had already fetched it.
+  ///
+  /// What the atServer answers is filed locally on the way back, so a device
+  /// whose sync is disabled or paused pays the round trip once rather than on
+  /// every read.
+  ///
+  /// A general enough shape that it may belong on `AtClient`, most naturally as
+  /// an option on `GetRequestOptions` rather than a method of its own. Private
+  /// until a second caller wants it.
+  Future<String?> _getLocalThenRemote(AtKey atKey) async {
+    try {
+      final local = await _atClient.get(atKey);
+      if (local.value != null) return local.value as String;
+    } on AtKeyNotFoundException {
+      // Absent locally is the ordinary state for a record this device has not
+      // synced yet, so it is a reason to ask the atServer rather than a
+      // failure. Both exception types, because the local keystore and the
+      // client's own validation raise different ones for the same absence.
+    } on KeyNotFoundException {
+      // As above.
+    }
+    final remote = await _atClient.get(atKey,
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+    final value = remote.value as String?;
+    if (value != null) await _fileFetched(atKey, value);
+    return value;
+  }
+
+  /// Files a value this client just fetched from the atServer into local
+  /// storage, without offering it back to the atServer.
+  ///
+  /// `cameFromServer: true` is the whole mechanism: it is the flag
+  /// `LocalSecondary._enqueueForSync` refuses on, so this write queues no
+  /// client→server push. An ordinary `put` here would re-create the defect the
+  /// minter's own local write was removed for — a queued entry carries the
+  /// key's *name*, so the push sends whatever local storage holds when it
+  /// drains, which can be a generation the atServer has already moved past.
+  ///
+  /// **Our own atSign only.** A peer's advertisement is not ours to publish,
+  /// and a record written under its own name is exactly what a push would
+  /// offer; the shared-key path caches a peer's public key under
+  /// `cached:public:publickey@<peer>` for the same reason. For a peer the
+  /// [advertisementTtl] cache is the mechanism, and it is unchanged.
+  ///
+  /// Failure is logged and swallowed. This is an optimisation applied to a
+  /// read that already has its answer, so failing it would turn a working
+  /// fetch into a failed one.
+  Future<void> _fileFetched(AtKey atKey, String value) async {
+    if (atKey.sharedBy != _atClient.getCurrentAtSign()) return;
+    try {
+      await _atClient.getLocalSecondary()!.executeVerb(
+          UpdateVerbBuilder()
+            ..atKey = atKey
+            ..value = value,
+          cameFromServer: true);
+    } on Object catch (e) {
+      _logger.finer('could not file the fetched $atKey locally: $e');
+    }
   }
 
   /// Serve a cached advertisement whose re-fetch just failed, but only inside

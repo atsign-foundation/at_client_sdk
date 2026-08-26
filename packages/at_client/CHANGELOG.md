@@ -1,5 +1,33 @@
 ## 3.15.0-rc1
 
+- fix: minting or rotating a namespace key writes the advertisement to the
+  atServer and no longer also writes it to local storage. A local write of a
+  sync-eligible key queues the key's *name* for a client→server push, and the
+  push sends whatever local storage holds when it drains — so a drain landing
+  between the two writes sent the **superseded** generation back over the one
+  just published. Measured live: 14 ms after a rotation's update, from the
+  rotating client's own sync connection. It did not self-correct, because the
+  atServer's newest value for the key was then the old generation, so the
+  client pulled that back over its own copy and the queued push re-sent it. The
+  atSign went on advertising a key it had rotated away from — which, for a
+  rotation that accompanied a revocation, is the generation the revoked
+  enrollment still holds. The local copy still arrives: sync pulls the
+  remotely-written record down as a server-originated change, the one write
+  path that never queues a push.
+  - `PublishedNskeyKeyRing.currentPublic` now falls back to the atServer when
+    local storage holds nothing, having read local first as before. Without it,
+    a client that had just minted — or whose sibling enrollment had — would
+    read its own published namespace as a cold start until sync caught up, and
+    a client that "fixed" a cold start by minting would rotate the key out from
+    under every peer that had already fetched it.
+  - What the atServer answers is filed into local storage on the way back, so a
+    device whose sync is disabled or paused pays the round trip once rather
+    than on every read. It is filed with `cameFromServer: true` — the flag the
+    sync-queue enqueue refuses on — because an ordinary local write here would
+    re-create the defect above. Our own atSign only: a peer's advertisement is
+    not ours to publish, and for a peer the 15-minute advertisement cache is
+    the mechanism, unchanged.
+
 - feat: `PutRequestOptions.noCommit` and `DeleteRequestOptions.noCommit` ask the
   atServer to carry out the operation without recording a commit, and the mint
   interlock now uses it. A lock record lives for a few seconds and is read by
