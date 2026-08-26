@@ -455,11 +455,29 @@ for the mechanism. The reproduction landed in the **CLI functional pack**, where
 `at_activate` runs for real: a third arm in `pq_native_enroll_test.dart` runs
 `at_activate list` on a keyfile a real retrofit has moved.
 
-⚠️ **What that closes is the defect, not this finding.** The gap this audit
-names is that the pack already enrolled an RSA enrolment under the default
-posture and asserted it authenticated — and stopped there. Authentication is the
-one thing the defect did not break, because at_auth authenticates on its own
-connection before the client exists. **An assertion that a live enrolment
-authenticates proves nothing about whether it can do anything**, and that
-pattern is not confined to the row this audit was reading. The design question
-above — what `authenticate()` promises after a retrofit — is also still open.
+⚠️ **What that closes is the defect. The finding is that the property is
+per-ROUTE, and the catalogue could not say so.** The pack had already enrolled
+an RSA enrolment under the default posture and asserted it authenticated — and
+stopped there. Authentication is the one thing the defect did not break, because
+at_auth authenticates on its own connection before the client exists.
+
+⛔ **An assertion that a live enrolment authenticates proves nothing about
+whether it can do anything.** Worse, the behaviour WAS proven — for the other
+route. `self_enrollment_retrofit_live_test.dart` had a `selfRetrofit` client
+running a verb, receiving over a monitor and signing envelopes, on a
+`{buzz: rw}` scoped enrolment, since before the defect existed. So a reader
+asking "is a retrofitted enrolment proven to work?" found yes, and it was true
+of `selfRetrofit` and false of `AtClientImpl._settleEnrollmentIdentity` — the
+route `at_activate` and every SDK consumer take.
+
+**Closed 2026-08-26 by four rows that name the route**,
+[UC-B1.4](../acceptance.md#84-uc-b14--a-retrofitted-scoped-enrollment-runs-an-authenticated-verb)
+to
+[UC-B1.7](../acceptance.md#87-uc-b17--holds-the-parent-enrollments-grants-verbatim):
+runs a verb, reads and writes inside its namespace, is refused outside it, and
+holds the parent's grants verbatim — with UC-B1.4 citing all three routes
+explicitly so neither can be read as covering the other.
+
+⚠️ **Still open from this audit:** B1.3's `nskey`-subset clause is stated in the
+catalogue and established by no citation (recorded at the row); and the design
+question above — what `authenticate()` promises after a retrofit — is undecided.

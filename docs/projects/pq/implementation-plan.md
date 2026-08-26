@@ -604,11 +604,30 @@ the reported command, `at_activate list`, against a real atServer on a keyfile
 a real retrofit has moved, with the keyfile read on both sides so that a green
 from a run where no retrofit happened fails instead.
 
-⚠️ **The coverage gap that let it through is still open, and it is the finding
-worth carrying forward**: that pack already enrolled an RSA enrolment under the
-default posture and asserted it authenticated — it just never ran a verb
-afterwards, and authentication is the one thing this defect does not break. See
-the B1 audit in
+⛔ **The coverage gap that let it through was per-ROUTE, and closing it took
+four new use cases.** The behaviour had been proven — for the *other* route.
+`self_enrollment_retrofit_live_test.dart` has had a `selfRetrofit` client
+running a verb, receiving over a monitor and signing envelopes on a scoped
+enrolment since before this defect existed. So "is a retrofitted enrolment
+proven to work?" answered yes, and the answer was true of `selfRetrofit` and
+false of `AtClientImpl._settleEnrollmentIdentity` — the route `at_activate` and
+every SDK consumer take.
+
+[UC-B1.4](acceptance.md#84-uc-b14--a-retrofitted-scoped-enrollment-runs-an-authenticated-verb)
+to
+[UC-B1.7](acceptance.md#87-uc-b17--holds-the-parent-enrollments-grants-verbatim)
+now state the property with the route named: a retrofitted scoped enrolment runs
+an authenticated verb, reads and writes inside its namespace, is refused outside
+it, and holds the parent's grants verbatim. The startup route is
+`tests/at_functional_test/test/pq_retrofitted_scope_test.dart` — four arms, each
+asserting the retrofit happened before asserting anything else, with two
+mutations red: a `legacy` posture reddens every arm's precondition, and widening
+the grant reddens exactly the two arms that measure the boundary.
+
+⚠️ **Still open from the same audit**: B1.3 states that a restricted enrolment
+receives only its authorised subset of `nskey` keys, and its citation
+establishes three other things and not that one — recorded at the row. See the
+B1 audit in
 [detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26).
 
 ### 14.39 `PqPosture` and the rollout it drives

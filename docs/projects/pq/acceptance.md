@@ -49,7 +49,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**68 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 69 use cases and 79 scenarios —
+**72 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 73 use cases and 83 scenarios —
 several rows carry more than one.
 
 ⚠️ **This sentence said `50 · 2 · 1` across 53 until 2026-08-18**, when a cold
@@ -105,6 +105,10 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-B1.1  | First client retrofit (`alice1`)                                                    | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B1.2  | Second install on a copied keyfile (`alice1c`)                                      | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B1.3  | Third client, different enrollment (`alice3`, E2)                                   | PROVEN    | `b1_retrofit_test.dart`      |
+| UC-B1.4  | A retrofitted scoped enrollment runs an authenticated verb                           | PROVEN    | `b1_retrofit_test.dart`      |
+| UC-B1.5  | ...reads and writes inside its authorised namespace                                 | PROVEN    | `b1_retrofit_test.dart`      |
+| UC-B1.6  | ...is refused outside it                                                            | PROVEN    | `b1_retrofit_test.dart`      |
+| UC-B1.7  | ...holds the parent enrollment's grants, verbatim                                   | PROVEN    | `b1_retrofit_test.dart`      |
 | UC-B2.1  | Un-upgraded copy is locked out after retirement                                     | PROVEN    | `b2_retirement_test.dart`    |
 | UC-B2.2  | Grace-period variant                                                                | PROVEN    | `b2_retirement_test.dart`    |
 | UC-B3.1  | A capability-stage enrollment reads PQ but still writes legacy                      | PROVEN    | `b3_mixed_intra_test.dart`   |
@@ -1050,11 +1054,102 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   `pq_signing_root@alice⁻¹`). The distinction appears only for **namespaced** secrets — a
   restricted E2 receives only its authorised subset of `nskey` keys.
 
+⚠️ **That last clause is stated here and established by nothing.** The row's
+citation covers three things — a scoped parent cannot escalate to `*` and
+`__manage` on the way through, its retrofit succeeds and upgrades to ML-DSA, and
+the signing root is untouched — and the `nskey` subset is not among them. Found
+2026-08-26 by reading the `proves:` string against the `Then`, which is the
+audit this row's PROVEN status cannot see: the rail matches rows to citations,
+never clauses to evidence. The row stays PROVEN because the clauses that ARE
+cited are proven; what is owed is either evidence for this one or its removal.
+[UC-B1.7](#87-uc-b17--holds-the-parent-enrollments-grants-verbatim) proves the
+adjacent and weaker property — the grants themselves carry over verbatim.
+
+### 8.4 UC-B1.4 — A retrofitted scoped enrollment runs an authenticated verb
+
+⛔ **B1.1 to B1.3 stop at "PQ auth works", and that clause was true in the field
+while the enrollment could not run a single verb.** These four rows exist
+because of it. Authentication is the one thing a mis-stamped connection does
+not break: at_auth authenticates on its own connection, before the client
+exists, and every verb afterwards runs over a different one.
+
+⚠️ **The property is per-ROUTE.** Two pieces of code retrofit a client, and a
+row that does not name which one can be proven for one and false for the other:
+
+| route | driven by | who takes it |
+| --- | --- | --- |
+| explicit | `selfRetrofit` | an SDK consumer that calls it by name |
+| startup | `AtClientImpl._settleEnrollmentIdentity` | `at_activate` and every client whose posture asks for a stronger key |
+
+Both are asserted. The startup route is the migration path itself, and it is the
+one that carried a defect for as long as it existed.
+
+- **Given:** a namespace-scoped, OTP-provisioned enrollment holding an RSA-2048
+  APKAM keypair — what the OTP path mints, since the request carries no
+  algorithm to ask with.
+- **When:** a client is built for it under a posture requiring `mldsa65`, so the
+  client retrofits itself before its constructor returns.
+- **Then:**
+  - it runs as an enrollment id **different** from the one it was enrolled as,
+    resolving `mldsa65` from that enrollment's typed key material;
+  - and an authenticated verb over its own connection **answers**. PKAM is
+    record-authoritative, so a reply proves the connection signed genuine ML-DSA
+    under the new id.
+
+### 8.5 UC-B1.5 — ...reads and writes inside its authorised namespace
+
+- **Given:** UC-B1.4's retrofitted, scoped client.
+- **When:** it writes a key in its granted namespace and reads it back.
+- **Then:** both succeed. The value is encrypted with the atSign-wide self key,
+  which is not per-enrollment, so the retrofit strands nothing — the same
+  mechanism [UC-B5.2](#122-uc-b52--reading-legacy-history-after-retrofit) rests
+  on for data written *before* the retrofit.
+
+### 8.6 UC-B1.6 — ...is refused outside it
+
+- **Given:** UC-B1.4's retrofitted, scoped client.
+- **When:** it writes a key in a namespace it was never granted.
+- **Then:** refused, naming insufficient privilege — with the same write one
+  namespace over succeeding in the same arm, so a refusal cannot be a client
+  that simply cannot write.
+
+⛔ **An escalation is silent where a loss is loud.** A retrofit that dropped a
+grant fails the next thing the app does; one that widened them fails nothing at
+all, which is why this row asserts the boundary rather than the capability.
+
+### 8.7 UC-B1.7 — ...holds the parent enrollment's grants, verbatim
+
+- **Given:** UC-B1.4's retrofitted, scoped client, and the parent enrollment it
+  left behind.
+- **When:** both records are read off the atServer.
+- **Then:**
+  - the child's namespace map equals the parent's, and equals the literal grant
+    that was enrolled — the literal is stated as well as the comparison, so a
+    retrofit that emptied *both* maps goes red rather than satisfying the
+    equality;
+  - and `enroll:list` from the child returns its own record and nothing else,
+    because a scoped enrollment holds no `__manage`. Seeing the parent there
+    would mean the retrofit acquired management rights nobody asked for.
+
+⚠️ **Verbatim carry-over is a property of the STARTUP route only.**
+`_settleEnrollmentIdentity` reads appName, deviceName and the namespace map off
+the enrollment record and passes them through unchanged. `selfRetrofit` and
+`retrofitIdentity` take `namespaces` as a required caller-supplied parameter and
+read no record at all — so on the explicit route the grants are whatever the
+caller passes, and the atServer's own `verifyNoEscalation` is the only thing
+stopping a widening.
+
 - **Cross-ref:** `design.md` (authenticated self-retrofit flow + expiry copy/cap,
   `enroll:request` metadata tail); `decisions.md` (Decision #F 1:1:1, the retrofit
   ruling).
 - **Impl/verify (B1.x):** **RF-SRV** (server auto-approve), **RF-2b** (client
   mint+request), **RF-2c** (orchestration); harness `tests/at_end2end_test` runLocal.sh.
+  B1.4–B1.7 are `tests/at_functional_test/test/pq_retrofitted_scope_test.dart`
+  (the startup route, four arms on one throwaway atSign),
+  `tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart` (the
+  explicit `selfRetrofit` route) and
+  `tests/at_onboarding_cli_functional_tests/test/pq_native_enroll_test.dart`
+  (`at_activate list`, the shipped binary).
   **All three green 2026-08-05** — `tests/at_end2end_test/test/pq/retrofit_e2e_test.dart`
   drives the signing-root step in-flow (privileged mint, clone request+verify,
   scoped skip) and the two clones reaching distinct enrollment ids; the submit

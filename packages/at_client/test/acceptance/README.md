@@ -117,8 +117,20 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## The catalogue
 
-**79 rows** — the catalogue's 53 use cases become 53 scenarios (UC-A5.1 splits
-and UC-C1.3 is withdrawn, both below), plus 10 cross-cutting invariants.
+**83 rows** — one scenario per catalogue use case (UC-A5.1 splits and UC-C1.3
+is withdrawn, both below), plus the cross-cutting invariants.
+
+⚠️ **This said "the catalogue's 53 use cases become 53 scenarios" until
+2026-08-26, when there were 73.** The row total was checked by a rail and the
+breakdown beside it was not, so the two drifted apart while the sentence went
+on reading as one measured statement. Re-derive rather than trusting either
+half: the row count is `scenarioCount()` in `manifest.dart`, and the use-case
+count is
+
+```bash
+git grep -cP '^#{2,4} +(?:[\d.]+ +)?UC-[ABCG]\d+\.\d+[a-z]? +— ' \
+  -- docs/projects/pq/acceptance.md
+```
 
 | Cluster                       | Scenarios                        | Blocked on   |
 |-------------------------------|----------------------------------|--------------|
@@ -128,7 +140,7 @@ and UC-C1.3 is withdrawn, both below), plus 10 cross-cutting invariants.
 | A4 · shared data              | A4.1 ✅, A4.2 ✅, A4.3 ✅, A4.4 ✅, A4.5 ✅, A4.6 ✅, A4.7 ✅ | — |
 | A5 · rotation & revocation    | A5.1(a) ✅, A5.1(b) ✅, A5.2 ✅, A5.3 ✅ | —            |
 | B0 · atServer prerequisite    | B0.1 ✅                           | —            |
-| B1 · retrofit                 | B1.1 ✅, B1.2 ✅, B1.3 ✅           | —            |
+| B1 · retrofit                 | B1.1 ✅, B1.2 ✅, B1.3 ✅, B1.4 ✅, B1.5 ✅, B1.6 ✅, B1.7 ✅ | — |
 | B2 · retirement & lockout     | B2.1 ✅, B2.2 ✅                    | —            |
 | B3 · mixed-PQ intra-atSign    | B3.1 ✅, B3.2 ✅                    | —            |
 | B4 · mixed-PQ cross-atSign    | B4.1 ✅, B4.2 ✅, B4.3 ✅, B4.4 ✅   | —            |
@@ -158,7 +170,7 @@ the 45** rows as the catalogue stood then, and no data-path row could go green u
 centre. Both have now landed, their rows were re-labelled from "waiting on a project"
 to "waiting on a test", and that backlog has since been **worked to zero**.
 
-**0 of the 79** rows are skipped. The burn-down went back above zero on
+**0 of the 83** rows are skipped. The burn-down went back above zero on
 2026-08-10 rather than drifting there — `enroll:update` was ruled
 ([`decisions.md` 68](../../../../docs/projects/pq/decisions.md)) and brought two
 new rows with it, UC-A2.5 and UC-A2.6, so the catalogue grew by two use cases
