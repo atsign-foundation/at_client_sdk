@@ -301,10 +301,10 @@ it is recorded here rather than turned into a row nobody asked for.
 34 of the 42 citations are live; UC-B4.3 and UC-B4.4 each carry one of each.
 ⛔ **None of this is a defect** — PROVEN means a scenario asserts it and runs,
 and every one of these scenarios does. It is the number a reader counting
-PROVEN cannot see: **22 of 28** B rows have live proof, not 28. The mint-lock
-rows are the ones worth a second look, since an interlock is precisely a
-mechanism a mock cannot refuse — see the standing rule that a mocked
-`executeVerb` makes an interlock's presence and absence indistinguishable.
+PROVEN cannot see: **22 of 28** B rows have live proof, not 28. ✅ **The
+mint-lock rows were the ones worth a second look and they are sound** — see
+F-B4: the interlock is split deliberately, and the atServer's half is pinned
+live in a cross-cutting row those three never name.
 
 **F-B2 — CLEARED, and worth recording as cleared.** UC-B3.1's assertion rests
 on a claim about code the test does not touch: *"put and notify share this one
@@ -344,6 +344,31 @@ enrollment authenticating in the same run. Two minor clauses ride uncited: the
 `enroll:revoke` alternative (covered by UC-A5.3, so a cross-reference rather
 than a gap) and "must re-enroll", which nothing exercises. Neither is worth a
 row; recorded so the next reader does not re-derive them.
+
+**F-B4 — CLEARED, and the chain is worth writing down because B5.4's own
+citations do not show it.** UC-B5.4's central clause is *"exactly one takes
+it"*, and an interlock is precisely the mechanism a mock cannot refuse: a fake
+that accepts everything makes its presence and its absence indistinguishable.
+All three of B5.4's citations are unit, so the row looks unproven on the
+interlock. It is not — the property is split across two harnesses on purpose:
+
+| half | where | what it establishes |
+| --- | --- | --- |
+| the client asks for an immutable create | `nskey_minting_test.dart` (unit) | `c.verbs.first.metadata.immutable` is true, and `lockAlreadyHeld` models the refusal rather than asserting it |
+| the atServer refuses a second one | `tests/at_functional_test/test/pq_signing_root_mint_lock_test.dart` (**live**) | named exception and message, a pre-clean so the FIRST take cannot be the refused one, a `finally` release, and a control — the same write accepted once released |
+
+That live pin is on the **root** lock's record, not the nskey lock's. Different
+key, same mechanism, and the refusal is a property of the atServer's immutable
+handling rather than of a particular record — `nskey_records.dart` says so at
+the nskey lock's own definition. One pin is therefore defensible, and it is a
+cross-cutting citation, so B5.4 never names it.
+
+**Nothing owed.** Recorded because a reader auditing B5.4 sees three unit
+citations against a clause about a server refusal and would reasonably conclude
+the interlock rests on a mock. It does not; the evidence is one row over.
+UC-B5.5 and UC-B5.7 sit on the same chain — B5.5's "a lock key with no ttl is
+refused outright" is the client-side guard, which a unit test is the right place
+for.
 
 ### F1 — the clause level is 9% adopted
 
