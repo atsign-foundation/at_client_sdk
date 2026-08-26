@@ -521,15 +521,22 @@ precedent — which is the trap this repo has already hit once, at `66ec12a38`
 ## 6. Filed, not scheduled
 
 ⚠️ **The heading is no longer the whole truth, and the anchor is kept only
-because other sections link to it.** Four of what follows are not filed-and-
-unscheduled at all — they are **required before the credential fields can be
+because other sections link to it.** Some of what follows is not filed-and-
+unscheduled at all — it is **required before the credential fields can be
 deleted**, and burying required work under a heading that says otherwise is how
-it gets skipped. They are marked **BLOCKS THE MAJOR**. The genuinely filed
+it gets skipped. Those are marked **BLOCKS THE MAJOR**. The genuinely filed
 items are at the end, under [Actually filed](#actually-filed).
+
+⛔ **Count them by reading, not by grepping the marker — THREE are open.** This
+paragraph said "four", and the fourth (the approver's crypto) has been done
+since 2026-08-19 while its heading went on carrying the marker beside the word
+DONE. A count keyed on the heading returns four and is honest about a heading
+that lies. Its marker is struck now; the section stays, because what a
+discharged blocker has to say is why it stopped being one.
 
 ⚠️ **These used to be marked `BLOCKS STEP 5`, and the rename is not
 cosmetic.** Step 5 no longer deletes anything — it annotates (see the Status
-block). What these four block is the *later major* that does the deletion. Left
+block). What they block is the *later major* that does the deletion. Left
 saying "step 5", they would read as blocking work that has already shipped, and
 a fresh session would go looking for a gate that is not there.
 
@@ -667,7 +674,7 @@ survive the move. And `apkam_signing.dart:67` reads
 against `'primary'` is comparing against "we did not know", not against an
 enrollment.
 
-### BLOCKS THE MAJOR — the approver's crypto (DONE additively, 2026-08-19)
+### ~~BLOCKS THE MAJOR~~ — the approver's crypto (DONE additively, 2026-08-19)
 
 `EnrollmentApprover.approve` reaches through `atLookUp.atChops` for three
 things, none of them authentication: the atSign's **encryption** private key

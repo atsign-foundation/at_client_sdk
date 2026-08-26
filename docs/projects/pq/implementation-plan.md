@@ -57,8 +57,9 @@ where a citation pins THEN clauses, that each pin resolves to exactly one.
 though they generally did** ("since the clause level landed, that a citation
 pins the THEN clauses it claims"). Measured 2026-08-26 at `c014e4fa5`:
 **13 of 145 citations carried `clauses:`; the other 132 kept the old
-all-or-nothing verdict.** ⚠️ The denominator has moved since — the corpus is
-**153** as of the same day's later work — so treat the 13 as a floor and
+all-or-nothing verdict.** ⚠️ The denominator has moved twice since — it is **161** after the citation
+audit's own closures landed, and this sentence said 153 until the wrap-up cold
+read caught it — so treat the 13 as a floor and
 re-derive both with the command in
 [Re-deriving the state](#re-deriving-the-state). That is legal by design — `provenIn`'s own dartdoc
 says omitting it is not a failure, and the ledger reports such a row as having
@@ -130,6 +131,13 @@ to.
 nowhere to move it to: what was done is in `git log`. A rail enforces the
 direction (`packages/at_client/test/acceptance/docs_structure_test.dart`, "no
 TODO row names a section whose body declares itself done").
+
+⛔ **`## PARKED` runs the OPPOSITE convention, deliberately, and neither section
+said so until a cold read asked.** Parked rows keep a `✅ DONE` or `✅ CLOSED`
+marker in place, because what a parked item needs to say is *why it stopped
+being parked* — a row that simply vanished would read as never having been
+considered. So a ✅ in `## TODO` is a defect and a ✅ in `## PARKED` is the
+record working. Do not "tidy" one to match the other.
 
 ### P0 — on D1's critical path, and startable now
 
@@ -1490,12 +1498,12 @@ for r in $(gh run list --branch gkc-pq-d1-spike --workflow at_client_sdk.yaml \
     --jq '.jobs[] | select(.name|startswith("functional_tests")) | [.name,.conclusion] | @tsv'
 done | sort | uniq -c | sort -rn     # RUN IT. 2026-08-20: beta 3 fail/10, stable 1 fail/10
 
-# row 1: which 14.22 rows have landed? Row 1 landed when this file started
+# 14.22: which of its rows have landed? The first landed when this file started
 # composing apskAdvertisement; row 2 is unbuilt for as long as the prefix
 # still names one algorithm.
 git grep -n "keyIdPrefix =\|apskAdvertisement" -- packages/at_client/lib/src/crypto/nskey/
 
-# row 11: which 14.19 items are still open? (~~struck~~ ones are done)
+# 14.19: which items are still open? (~~struck~~ ones are done)
 # ⚠️ Against detail/, NOT this file. The items moved there in the restructure
 # and this copy was left pointing here, where it matches nothing: it printed
 # ZERO and exited 1 while the answer was 17, so a reader working down this
@@ -1508,7 +1516,7 @@ awk '/^### 14.19 /,/^#### 14.19.1/' docs/projects/pq/detail/implementation-plan.
   #                                 was 10/16, so the warning about stale counts
   #                                 was the fifth home carrying a stale count.
 
-# rows 3-9: the stage-5 table, which owns steps 23-31
+# the stage-5 table, which owns steps 23-31
 awk '/^\*\*Stage 5/,/^\*\*Stage 6/' docs/projects/pq/implementation-plan.md
 
 # the citation audit's denominator. ⛔ `rm -f` FIRST — provenIn APPENDS, and a
@@ -1516,7 +1524,7 @@ awk '/^\*\*Stage 5/,/^\*\*Stage 6/' docs/projects/pq/implementation-plan.md
 # was 145, and the doubling looked like a real property of the suite).
 cd packages/at_client && rm -f /tmp/cit.jsonl && \
   ACCEPTANCE_LEDGER=/tmp/cit.jsonl dart test test/acceptance --concurrency=1 >/dev/null
-wc -l < /tmp/cit.jsonl            # RUN IT. 2026-08-26: 153
+wc -l < /tmp/cit.jsonl            # RUN IT. 2026-08-26, after the audit: 161
 # the second derivation, which is what makes the first trustworthy: this sums
 # to the same figure PLUS the 2 declarations in proven_elsewhere.dart.
 git grep -c 'provenIn(' -- packages/at_client/test/acceptance | awk -F: '{s+=$2} END {print s}'
@@ -1552,7 +1560,8 @@ grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 # `shasum -a 256` the compiled `secondary` from each ref before believing two
 # images differ.
 
-# row 2 and row 12: the external gates. The at_auth release is a pub.dev
+# the external gates — the release train and step 20's rotation arm. The
+# at_auth release is a pub.dev
 # question; the atServer image gate is gkc's call and is NOT to be checked
 # against atsigncompany/virtualenv:vip (ruled 2026-08-13).
 
@@ -1579,7 +1588,7 @@ grep -n "blocked:\|owed:" packages/at_client/test/acceptance/blockers.dart
 cd packages/at_client         && dart analyze lib test                     # exit 0, 428 info
 cd packages/at_client         && dart format . -o none --set-exit-if-changed  # exit 0 — a CI gate
 cd packages/at_client         && dart test --concurrency=1                 # 1572
-cd packages/at_client         && dart test test/acceptance --concurrency=1 # 111
+cd packages/at_client         && dart test test/acceptance --concurrency=1 # 115 (2026-08-26)
 cd packages/at_auth           && dart analyze --fatal-warnings lib test    # exit 0, 158 info
 cd packages/at_auth           && dart test --concurrency=1                 # 351
 cd packages/at_lookup         && dart test --concurrency=1                 # 137
@@ -1603,6 +1612,11 @@ cd tests/at_onboarding_cli_functional_tests && dart analyze test           # exi
 # bottom promotes every number in it to head, and three of these were once
 # re-measured 15 commits after the others.
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_functional_test/runLocal.sh              # 183 pass, 0 skipped — RE-RUN 2026-08-26 on at_virtual_env:g0fixed
+# ⚠️ A SECOND instrument, and not a comparison with the line above: against an
+# already-running at_virtual_env:local, `cd tests/at_functional_test && dart test
+# test --concurrency=1` gave 189 pass, EXIT=0 on 2026-08-26. runLocal.sh recycles
+# the container and this does not, so the two are different measurements of
+# overlapping sets — do not read the difference as 6 tests appearing.
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh                 # 63, EXIT=0 — RE-RUN 2026-08-26 on at_virtual_env:g0fixed
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_onboarding_cli_functional_tests/runLocal.sh  # 18, EXIT=0 — RE-RUN 2026-08-26 at the key-exchange fix
 # ✅ The FUNCTIONAL pack was re-run on 2026-08-26 carrying the posture default

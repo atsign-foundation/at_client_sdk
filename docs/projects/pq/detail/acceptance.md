@@ -260,8 +260,14 @@ declarations in `proven_elsewhere.dart`.
 | A | 37 | 20 | ✅ |
 | C1 | 25 | 6 | ✅ |
 | B | 42 | 25 | ✅ |
-| G1 | 35 | 16 | ✅ |
-| cross-cutting (no `UC-` id) | 14 | 6 scenarios of 10 | ✅ |
+| G1 | 37 | 16 | ✅ |
+| cross-cutting (no `UC-` id) | 20 | 6 scenarios of 10 | ✅ |
+
+⚠️ **These are the counts AFTER the audit's own citations landed**, which is
+why they do not match the figures in the finding bodies below: G1 was 35 and
+cross-cutting 14 when they were read, and closing F13, F14 and F17 added 2 and
+6. The rows sum to 161, which is the corpus — re-derive both, and `rm -f`
+first.
 
 ⚠️ **Nothing remains: the audit finished on 2026-08-26**, every cluster plus
 the cross-cutting bucket. This paragraph read *"the plan's `85 of 147` was
@@ -729,7 +735,7 @@ assertion.
 
 #### F18 — UC-G1.12 was green for the wrong reason, and the guard it names was never reached — ✅ CLOSED 2026-08-26
 
-**Found while closing [F11](#f11--every-refusal-in-the-enrollupdate-cluster-is-throwsaisaobject--closed-2026-08-26), and it is the more serious of the two.** F11 says
+**Found while closing [F11](#f11--every-refusal-in-the-enrollupdate-cluster-is-throwsaisaobject---closed-2026-08-26), and it is the more serious of the two.** F11 says
 the assertion was too weak to tell the guard from a timeout. This says the
 assertion was checking a refusal that had nothing to do with the guard.
 
@@ -862,6 +868,16 @@ assumed` runs `dart analyze benchmark` inside the assertion, because existence
 plus four identifiers cannot tell a working harness from a broken one — which is
 how the bench sat with five compile errors for six days. Two findings, and one
 of them is the corpus's largest legibility gap.
+
+**Examined and NOT a finding, recorded so it is not re-derived.**
+`appMetadata.providerId is authoritative on keys and frames` delegates its
+"and frames" half to `architecture_guard_test.dart` in a comment rather than a
+`provenIn`, which looks like the same defect as F17. It is not:
+`architecture_guard_test.dart` lives in `test/acceptance/` and is a scenario of
+this suite rather than a test elsewhere, so there is nothing for a citation to
+point at. The comment is the right shape — it says the property is one of the
+SOURCE rather than of a run, which is why a rename breaking its grep reports a
+broken guard instead of a failed scenario.
 
 #### F16 — the nskey mint lock's refusal is proven for the *other* lock
 
