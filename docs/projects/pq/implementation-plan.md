@@ -238,7 +238,14 @@ no production caller; and a scenario still describing the pre-flip default).
 B is started and G is untouched: **91 of 153** remain against the tree today,
 re-derived 2026-08-26 — the corpus grew by six when UC-B1.4 to UC-B1.7 landed,
 so the older "85 of 147" is arithmetic over a corpus that no longer exists.
-Cluster B's enumeration and its first two findings are in that detail section.** The one substantive finding, **UC-A4.5**, is
+Cluster B is audited — 42 citations, 25 cited rows of 28, one finding found and
+closed the same day (UC-B0.1 stated "No partial state on the server"
+unconditionally while its own second scenario disproved it). ⛔ **The number a
+reader counting PROVEN cannot see: 22 of B's 28 rows have LIVE proof** — three
+rest wholly on unit citations and three cite nothing at all. Not a defect, since
+PROVEN means a scenario asserts it and runs; it is what the status column does
+not distinguish. **G1 is next: 35 citations across 15 rows.** The record, the
+method and the correction are in that detail section.** The one substantive finding, **UC-A4.5**, is
 ✅ **closed**: its central clause ("Alice's configuration decides what she is a
 *recipient* for and nothing about who she can send to") was true in the code and
 established by neither citation, because both arms co-varied the sender's

@@ -267,16 +267,44 @@ declarations in `proven_elsewhere.dart`.
 against the tree today it is **91 of 153** remaining. Re-derive rather than
 quoting either — the command is in the method above, and `rm -f` first.
 
-**F-B1 — UC-B3.1 and UC-B3.2 are PROVEN and cite nothing live.** They are the
-only rows in cluster B that produce **zero** records from the recorder. That is
+**F-B1 — three rows are PROVEN and cite nothing live: UC-B3.1, UC-B3.2 and
+UC-B5.2.** They produce **zero** records from the recorder. That is
 legitimate under the catalogue's own definition — PROVEN means a scenario
 asserts it and runs, not that a live test proves it — and
 `b3_mixed_intra_test.dart` does assert, against a `MockAtClient`, that
 `CryptoRuntime.providerIdFor` answers `legacyCryptoProviderId` for a
 `readsNskeyWritesLegacy` config. What the row cannot show is the ladder
-*behaving* that way against an atServer. Recorded rather than actioned: the
-honest count of cluster B's live coverage is **25 of 27 rows**, and a reader
-counting PROVEN gets 27.
+*behaving* that way against an atServer. UC-B5.2 is the same shape and better built — a `_RecordingProvider` pair with a
+genuine control, asserting that provider routing is decided **per value** rather
+than per client, so a namespace holding both eras at once decrypts each record
+under the scheme it was written with. Against a mock.
+
+⚠️ **A correction I owe, because I leaned on B5.2 earlier the same day.** When
+deciding the shape of UC-B1.4–B1.7 I declined to add a row for "a retrofitted
+enrolment still reads data written before the retrofit" on the grounds that
+"UC-B5.2 already covers it". A row exists, and what it establishes is narrower
+than I implied: per-value routing against a mock, not a live read of
+pre-retrofit data by a retrofitted client. UC-B1.5 proves the live read half —
+the retrofitted client writes and reads its own record against a real atServer —
+but nothing proves the *pre*-retrofit half live. That gap is real and small, and
+it is recorded here rather than turned into a row nobody asked for.
+
+**Cluster B's evidence base, measured rather than assumed.** 42 citations across
+25 cited rows, of 28 rows in the table:
+
+| | rows |
+| --- | --- |
+| cited, with at least one LIVE citation | 22 |
+| cited, resting **wholly** on unit citations | 3 — UC-B5.4, UC-B5.5, UC-B5.7, all `nskey_minting_test.dart` |
+| not cited at all | 3 — UC-B3.1, UC-B3.2, UC-B5.2 |
+
+34 of the 42 citations are live; UC-B4.3 and UC-B4.4 each carry one of each.
+⛔ **None of this is a defect** — PROVEN means a scenario asserts it and runs,
+and every one of these scenarios does. It is the number a reader counting
+PROVEN cannot see: **22 of 28** B rows have live proof, not 28. The mint-lock
+rows are the ones worth a second look, since an interlock is precisely a
+mechanism a mock cannot refuse — see the standing rule that a mocked
+`executeVerb` makes an interlock's presence and absence indistinguishable.
 
 **F-B2 — CLEARED, and worth recording as cleared.** UC-B3.1's assertion rests
 on a claim about code the test does not touch: *"put and notify share this one
@@ -304,9 +332,9 @@ is in the wrong place — a reader auditing clauses reads the `Then`, and the
 cannot: the row is PROVEN, both citations are accurate, and the sentence a
 reader acts on still overclaims.
 
-**Owed:** qualify the clause — "No partial state on the server *for a parent
-that can deny its own request*; a scoped parent leaves it pending, which
-UC-B0.1's second scenario asserts." A one-line edit, and the review is the diff.
+✅ **CLOSED the same day.** The clause now reads "No partial state on the
+server — **for a parent that can deny its own aborted request**", with the
+scoped case and the scenario that asserts it named beside it.
 
 **B2.1 and B2.2 audited, no finding.** B2.2's three clauses are each covered,
 including the cross-row citation that carries the open-window half. B2.1's

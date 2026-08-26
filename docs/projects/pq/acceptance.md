@@ -968,7 +968,13 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Then:** the new PQ surface — PQ-APKAM (ML-DSA) auth, the flattened
   `enroll:listns`, `EnrollParams.metadata` on `enroll:request`, the
   authenticated self-retrofit auto-approve — is unavailable → `alice1` **aborts
-  cleanly, stays legacy**, mints no PQ keys, logs why. No partial state on the server.
+  cleanly, stays legacy**, mints no PQ keys, logs why. **No partial state on the
+  server — for a parent that can deny its own aborted request.** ⚠️ A
+  namespace-scoped parent holds no `__manage` and cannot, so it leaves its
+  `pending` enrollment behind, one per retry; this row's second scenario asserts
+  that limit rather than hiding it. The clause read unqualified until
+  2026-08-26, when the citation audit read it against the scenario that
+  disproves it.
   (The atServer's immutable write is long-standing and present even here — it is
   **not** a PQ-only verb.) atServer upgrade is a hard prerequisite for Part B.
 - **Cross-ref:** `implementation-plan.md` (B0 depends on server projects SS-1b / RF-SRV).
