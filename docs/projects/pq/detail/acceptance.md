@@ -448,6 +448,18 @@ its legacy one. ⛔ **Do not re-add that assertion without settling what
 `authenticate()` promises**; a red test on an undecided design is worse than
 the gap.
 
-The owed work is a reproduction in the **CLI functional pack**, where
-`at_activate` runs for real — see [the retrofit
-row](../implementation-plan.md#a-retrofitted-enrolment-cannot-run-an-authenticated-verb).
+⛔ **The defect itself was reproduced and fixed on 2026-08-26** — see [the
+retrofit
+section](../implementation-plan.md#a-retrofitted-enrolment-cannot-run-an-authenticated-verb)
+for the mechanism. The reproduction landed in the **CLI functional pack**, where
+`at_activate` runs for real: a third arm in `pq_native_enroll_test.dart` runs
+`at_activate list` on a keyfile a real retrofit has moved.
+
+⚠️ **What that closes is the defect, not this finding.** The gap this audit
+names is that the pack already enrolled an RSA enrolment under the default
+posture and asserted it authenticated — and stopped there. Authentication is the
+one thing the defect did not break, because at_auth authenticates on its own
+connection before the client exists. **An assertion that a live enrolment
+authenticates proves nothing about whether it can do anything**, and that
+pattern is not confined to the row this audit was reading. The design question
+above — what `authenticate()` promises after a retrofit — is also still open.
