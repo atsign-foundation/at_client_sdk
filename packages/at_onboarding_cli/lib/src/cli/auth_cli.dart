@@ -560,6 +560,17 @@ Future<bool> enroll(ArgResults argResults, {AtOnboardingService? svc}) async {
     // `pqReady` they stopped agreeing: an RSA-2048 APKAM key with an ML-DSA-65
     // declaration, which at_chops refuses by size.
     signingAlgo: AuthCliArgs.postureIn(argResults)?.authenticationKeyAlgorithm,
+    // Null unless `--key-exchange` was named, and null means "the posture
+    // decides" — resolved in the service against the same preference this
+    // command's `signingAlgo` above is resolved against.
+    //
+    // It is a separate argument from `--posture` rather than another thing the
+    // posture implies because it answers a question the posture cannot see:
+    // whether the APPROVER on the other side conveys. A pq request carries no
+    // wrapped key, so against an approver that predates conveyance the
+    // enrollment is approved and then cannot decrypt anything. Nobody but the
+    // person running this command knows which approver will pick it up.
+    keyExchangeMode: AuthCliArgs.keyExchangeIn(argResults),
   );
 
   return true;

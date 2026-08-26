@@ -13,7 +13,11 @@ import 'package:at_auth/at_auth_io.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart'
-    show makeActivationPqNative, mintSigningRootAfterActivation;
+    show
+        enrollmentApkamSymmetricKeyResolver,
+        enrollmentKeyPackageBuilder,
+        makeActivationPqNative,
+        mintSigningRootAfterActivation;
 import 'package:at_lookup/at_lookup_io.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:at_onboarding_cli/src/factory/service_factories.dart';
@@ -380,6 +384,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
     Duration? apkamKeysExpiryDuration,
     bool allowOverwrite = false,
     SigningAlgoType? signingAlgo,
+    EnrollmentKeyExchangeMode? keyExchangeMode,
   }) async {
     // Fails early if the filePath already exists (or) isn't writable
     if (atKeysFile != null) {
@@ -401,6 +406,7 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
         namespaces,
         apkamKeysExpiryDuration: apkamKeysExpiryDuration,
         signingAlgo: signingAlgo,
+        keyExchangeMode: keyExchangeMode,
       );
       logger.finer('EnrollmentResponse from server: $enrollmentResponse');
       await enrollCheckpoint.save(
@@ -470,7 +476,8 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
   Future<AtEnrollmentResponse> sendEnrollRequest(String appName,
       String deviceName, String otp, Map<String, String> namespaces,
       {Duration? apkamKeysExpiryDuration,
-      SigningAlgoType? signingAlgo}) async {
+      SigningAlgoType? signingAlgo,
+      EnrollmentKeyExchangeMode? keyExchangeMode}) async {
     // One source for the algorithm this enrollment authenticates with. The
     // preference is what `authenticate()` stamps on the connection
     // (`_atLookUp!.signingAlgoType = atOnboardingPreference
@@ -486,13 +493,57 @@ class AtOnboardingServiceImpl implements AtOnboardingService {
 
     _atLookUp ??= _newLookUp();
 
-    AtEnrollmentRequest newClientEnrollmentRequest = AtEnrollmentRequest(
-        atSign: _atSign,
-        appName: appName,
-        deviceName: deviceName,
-        namespaces: namespaces,
-        otp: otp,
-        signingAlgo: algo);
+    // One source for how the symmetric key travels, resolved the same way the
+    // algorithm above is: the caller's word if it has one, else this service's
+    // posture. `PqPosture.keyExchangeMode` is one of the axes a posture is
+    // *made of*, so a request built without consulting it makes the posture a
+    // partial instruction — which is what `enroll --posture pqActive` was
+    // until now. It reached the preference and the authentication key and
+    // stopped there, so the request went out hard-coded to legacy and the
+    // enrolment got no key package, silently.
+    final mode =
+        keyExchangeMode ?? atOnboardingPreference.posture.keyExchangeMode;
+
+    // The constructor IS the decision, which is why this is a branch and not a
+    // parameter. A pq request needs both callbacks and carries no wrapped key;
+    // a legacy request carries the wrapped key and needs neither. Making the
+    // mode settable independently of the callbacks would create requests
+    // at_auth has to refuse at runtime, so `AtEnrollmentRequest` does not
+    // expose it and this chooses between the two shapes instead.
+    final AtEnrollmentRequest newClientEnrollmentRequest;
+    if (mode == EnrollmentKeyExchangeMode.pq) {
+      newClientEnrollmentRequest = AtEnrollmentRequest.pq(
+          atSign: _atSign,
+          appName: appName,
+          deviceName: deviceName,
+          namespaces: namespaces,
+          otp: otp,
+          signingAlgo: algo,
+          // `algo`, not a constant: the builder signs the key package with the
+          // APKAM keypair this request is about to mint, so it has to be told
+          // which algorithm that is. Passing anything else signs the package
+          // with a key the record does not name, and every peer that resolves
+          // `_apsk` to verify it before sealing a secret verifies against
+          // nothing — the enrollment is created and then receives no conveyed
+          // material at all.
+          metadataBuilder: enrollmentKeyPackageBuilder(_atSign,
+              signingAlgo: algo,
+              // The primary of the configured list. An enrollment is created
+              // holding one encapsulation key; the rest of the list is minted
+              // at the client's first startup.
+              keyEstablishmentAlgo:
+                  atOnboardingPreference.keyEstablishmentAlgorithms.first),
+          apkamSymmetricKeyResolver:
+              enrollmentApkamSymmetricKeyResolver(_atSign));
+    } else {
+      newClientEnrollmentRequest = AtEnrollmentRequest(
+          atSign: _atSign,
+          appName: appName,
+          deviceName: deviceName,
+          namespaces: namespaces,
+          otp: otp,
+          signingAlgo: algo);
+    }
     newClientEnrollmentRequest.apkamKeysExpiryDuration =
         apkamKeysExpiryDuration;
 

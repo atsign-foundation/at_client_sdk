@@ -97,6 +97,22 @@ abstract class AtOnboardingService implements ProgressPublisher {
     /// secret key is 4032"*. Two defaults for one fact agree only until one of
     /// them moves.
     SigningAlgoType? signingAlgo,
+
+    /// How this enrollment's `apkamSymmetricKey` travels.
+    ///
+    /// Null means "whatever this service's posture implies" —
+    /// `AtClientPreference.posture.keyExchangeMode`, resolved the same way and
+    /// for the same reason as [signingAlgo] above.
+    ///
+    /// Naming one overrides the posture, and there is exactly one reason to:
+    /// **the approver is the half a posture cannot see.** A pq request carries
+    /// no wrapped key and relies on the approver sealing one to the key
+    /// package it advertised; against an approver that does not convey, the
+    /// enrollment is approved and then cannot decrypt anything. An app that
+    /// knows it is enrolling against such an approver names
+    /// [EnrollmentKeyExchangeMode.legacy] here, whatever this atSign's rollout
+    /// position is.
+    EnrollmentKeyExchangeMode? keyExchangeMode,
   });
 
   /// Sends enrollment request. Application code may subsequently call
@@ -107,7 +123,11 @@ abstract class AtOnboardingService implements ProgressPublisher {
       /// See [enroll]'s `signingAlgo`: the same value on the
       /// send-then-await-separately path, resolved the same way and for the
       /// same reason.
-      SigningAlgoType? signingAlgo});
+      SigningAlgoType? signingAlgo,
+      /// See [enroll]'s `keyExchangeMode`: the same value on the
+      /// send-then-await-separately path, and this is the method that acts on
+      /// it — [enroll] only passes it through.
+      EnrollmentKeyExchangeMode? keyExchangeMode});
 
   /// Attempts PKAM auth until successful (i.e. request was approved).
   /// If the request was denied, an exception is thrown.

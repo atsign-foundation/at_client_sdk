@@ -2,7 +2,8 @@ import 'dart:io';
 
 import 'package:args/args.dart';
 import 'package:at_chops/at_chops.dart';
-import 'package:at_client/at_client.dart' show PqPosture;
+import 'package:at_client/at_client.dart'
+    show EnrollmentKeyExchangeMode, PqPosture;
 import 'package:at_commons/at_commons.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
 import 'package:meta/meta.dart';
@@ -123,6 +124,7 @@ class AuthCliArgs {
   static const argNamePassPhrase = 'passPhrase';
   static const argNameHashingAlgoType = 'hashingAlgoType';
   static const argNamePosture = 'posture';
+  static const argNameKeyExchange = 'key-exchange';
 
   /// The postures a `--posture` argument may name, and what each one is.
   ///
@@ -143,6 +145,29 @@ class AuthCliArgs {
   static PqPosture? postureIn(ArgResults results) {
     final named = results[argNamePosture];
     return named == null ? null : postureNames[named];
+  }
+
+  /// The key-exchange modes a `--key-exchange` argument may name.
+  ///
+  /// A map rather than a switch, for the same reason [postureNames] is one:
+  /// the parser's `allowed` list and the resolution below cannot drift.
+  static const Map<String, EnrollmentKeyExchangeMode> keyExchangeNames = {
+    'legacy': EnrollmentKeyExchangeMode.legacy,
+    'pq': EnrollmentKeyExchangeMode.pq,
+  };
+
+  /// The key-exchange mode [results] names, or null when it named none.
+  ///
+  /// Null means "let the posture decide", which is the answer for every
+  /// caller that has no reason to override it. Naming one is for the case the
+  /// posture cannot see: **the approver on the other side**. A pq request
+  /// fails closed if the approver does not convey — the enrollment is approved
+  /// and then cannot decrypt anything — so an app enrolling against an
+  /// approver known to predate conveyance says `legacy` here and gets the
+  /// wrapped-key path, whatever this atSign's rollout position is.
+  static EnrollmentKeyExchangeMode? keyExchangeIn(ArgResults results) {
+    final named = results[argNameKeyExchange];
+    return named == null ? null : keyExchangeNames[named];
   }
 
   /// A preference under [posture], or under whatever the at_client this was
@@ -499,6 +524,26 @@ class AuthCliArgs {
       mandatory: false,
       hide: false,
     );
+    // On `enroll` alone, not on the shared parser. The shared parser is where
+    // `--posture` lives because a posture means the same thing on every
+    // command; a key-exchange mode means something only where an enrollment
+    // request is built, and an argument accepted on commands it cannot reach
+    // is the shape #2161 was — `--signingAlgoType` read as though it applied
+    // everywhere and silently did nothing on all but one command.
+    //
+    // No defaultsTo, deliberately, exactly as `--posture` has none: an unset
+    // value means "the posture decides", so the CLI does not pin itself to
+    // whichever mode was current on the day it was written.
+    p.addOption(argNameKeyExchange,
+        help: 'How this enrollment\'s symmetric key travels. pq means the '
+            'approver seals it to the key package this request advertises, so '
+            'nothing RSA-wrapped rides the request; legacy means this app '
+            'wraps it to the atSign\'s encryption public key. Defaults to '
+            'whatever --posture implies. Name legacy explicitly when the '
+            'approving app predates conveyance: a pq request that nothing '
+            'conveys to leaves the enrollment approved and unable to decrypt',
+        mandatory: false,
+        allowed: keyExchangeNames.keys);
     return p;
   }
 

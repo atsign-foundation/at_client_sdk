@@ -94,20 +94,20 @@ discharged bodies are in
 [`detail/implementation-plan.md`](detail/implementation-plan.md#15-the-lettered-d1-gates-g0g8-as-they-were-discharged)
 and every open one became a P0 or P1 row.
 
-**`[RECOMMENDED]`: route the posture's key-exchange axis into `at_onboarding_cli`'s
-enrolment** — [14.39](#1439-pqposture-and-the-rollout-it-drives)'s P0 row. It is
-the sharpest thing open: the CLI ships, and `at_activate enroll --posture
-pqActive` silently produces a **legacy** enrolment with no key package, because
-`sendEnrollRequest` builds the unnamed `AtEnrollmentRequest(...)` whose
-initialiser hard-sets `legacy`. Open
-`packages/at_onboarding_cli/lib/src/onboard/at_onboarding_service_impl.dart:489`
-and choose the constructor by the posture — only the `.pq` named constructor
-sets `pq`. Do **not** add another parameter.
+**`[RECOMMENDED]`: the [acceptance audit](#the-acceptance-audit)** — read each
+scenario's `proves:` prose against the test it cites and record where the
+citation does not establish the clause. It is the only P0 a session can start
+typing on; the other two are gkc's publishes.
 
-Two P0s are startable here and now: that one and
-[the acceptance audit](#the-acceptance-audit). The other two are gkc's publishes.
-The key-exchange fix is recommended first because it is bounded and it is a
-defect in shipped behaviour, where the audit is unbounded reading.
+⚠️ **This recommended the CLI's key-exchange routing until 2026-08-26, when
+that landed** — `--key-exchange` and the posture-driven constructor choice, with
+the detail in [14.39](#1439-pqposture-and-the-rollout-it-drives). Its row is
+gone from the table, which is what a finished row does here.
+
+⛔ **The audit is unbounded reading, so bound it yourself**: work the catalogue
+in id order, record a verdict per clause, and stop at the end of a cluster
+rather than at the end of a session. What makes it P0 is that D1's own
+definition rests on it and no rail can compute it.
 
 **Blocked, and what lifts it:** the at_client, at_client_flutter and
 at_onboarding_cli carves wait on **at_auth 4.0.0-rc1 reaching pub.dev**, which is
@@ -132,7 +132,6 @@ TODO row names a section whose body declares itself done").
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
-| [14.39](#1439-pqposture-and-the-rollout-it-drives) **the CLI ignores `keyExchangeMode`** | Route the posture's key-exchange axis into `at_onboarding_cli`'s enrolment. `sendEnrollRequest` builds the **unnamed** `AtEnrollmentRequest(...)`, whose initialiser hard-sets `legacy`, so `at_activate enroll --posture pqActive` gets **no key package** and nobody is told. The fix is to choose the constructor by the posture, not to add a parameter — `keyExchangeMode` appears **zero** times in that package's `lib/` | Nothing |
 | [the acceptance audit](#the-acceptance-audit) | Read every scenario's `proves:` prose against the test it cites, and record where the citation does not establish the clause. The structural half is built and green; this is the judgement half, and it is what D1's own definition rests on | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **gkc publishes at_auth 4.0.0-rc1**, then carve at_client (stacked) → at_client_flutter → at_onboarding_cli. Six of the eight positions are through by merge; what is left is publishes | gkc. ⚠️ **Merged is not published, and only the publishes gate anything now** |
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
@@ -441,18 +440,39 @@ algorithm list, the CLI's `--posture`, the client-driven retrofit at start and
 the `pqReady` default all shipped and are live-green; none of that is repeated
 here.
 
-**(P0) The CLI ignores the posture's key-exchange axis.** `PqPosture.keyExchangeMode`
-is declared, compared, and documented as part of "the whole of what a posture
-can change" — and **nothing in any package's `lib/` routes it into an enrollment
-request**. `keyExchangeMode` appears **zero** times in `at_onboarding_cli/lib`
-(re-derived 2026-08-26). That is by design as far as at_client goes
+**The key-exchange axis now reaches the CLI's enrolment**, landed 2026-08-26,
+and it is recorded here because what it changed is a **default**, not because
+anything is owed. `sendEnrollRequest` chooses between `AtEnrollmentRequest` and
+`AtEnrollmentRequest.pq` from `preference.posture.keyExchangeMode`, and
+`enroll` gained `--key-exchange legacy|pq` to override it. Guarded by
+`packages/at_onboarding_cli/test/enroll_key_exchange_mode_test.dart` — 7 tests,
+three mutations, one of which is the reason the file has a seventh.
+
+⛔ **`PqPosture.pqReady.keyExchangeMode` is `pq` and pqReady is the SDK default,
+so this moved what an `at_activate enroll` naming no `--posture` does.** A pq
+request carries no RSA-wrapped key and relies on the approver sealing one to
+the advertised key package; against an approver that predates conveyance the
+enrolment is approved and then **cannot decrypt anything**, where before it
+silently degraded to legacy. gkc ruled the trade on 2026-08-26: route it
+faithfully, and add the escape hatch for the case the posture cannot see —
+**which approver will pick the request up**. That is why `--key-exchange` is a
+separate argument rather than another thing the posture implies, and why it
+sits on `enroll` alone rather than on the shared parser.
+
+⚠️ **The CLI is the FIRST production caller of `AtEnrollmentRequest.pq`.**
+Before this, every `.pq(` in the workspace was a test. Nothing else in any
+package's `lib/` routes the axis, and for at_client that is by design
 (`pq_posture.dart`: *"at_client submits no app enrollment, so they take effect
-when the app builds its `AtEnrollmentRequest` from the posture"*) — but
-`at_onboarding_cli` builds the **unnamed** `AtEnrollmentRequest(...)`
-(`at_onboarding_service_impl.dart:489`), whose initialiser hard-sets `legacy`,
-so `at_activate enroll --posture pqActive` gets **no key package** and nobody is
-told. **The fix is to choose the constructor by the posture** — only the `.pq`
-named constructor sets `pq` — not to add another parameter.
+when the app builds its `AtEnrollmentRequest` from the posture"*).
+
+⚠️ **A mutation that should have failed came back green, and the seventh test
+exists because of it.** Hardcoding `SigningAlgoType.rsa2048` into the
+`enrollmentKeyPackageBuilder(...)` call left all six original cells passing:
+`request.signingAlgo` is a *different field* from the one handed to the
+builder, so asserting it says nothing about what the key package is signed
+with. Running the builder against an ML-DSA APKAM keypair is the only way to
+observe that algorithm, and the reddened failure now quotes
+`RsaSigningAlgo.sign` parsing an ML-DSA private key — the mechanism itself.
 
 ⛔ **Two things that sound true and are NOT**, both measured:
 

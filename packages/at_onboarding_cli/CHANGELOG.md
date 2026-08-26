@@ -1,5 +1,31 @@
 ## 1.17.0-rc1
 
+- fix: an enrolment now travels its key under the posture's key-exchange mode,
+  and can be told otherwise. This is the second half of the same defect as the
+  entry below: `--posture` reached the preference and the authentication key
+  and stopped, so `sendEnrollRequest` went on building the **unnamed**
+  `AtEnrollmentRequest(...)`, whose initialiser hard-sets
+  `EnrollmentKeyExchangeMode.legacy`. `at_activate enroll --posture pqActive`
+  therefore submitted a legacy request, the enrolment advertised **no key
+  package**, and nothing said so.
+  - `enroll` and `sendEnrollRequest` take a `keyExchangeMode`. Nullable, and
+    null means "whatever this service's posture implies" — resolved exactly as
+    `signingAlgo` is, against the same preference.
+  - The mode is not a settable field, deliberately: the constructor decides it,
+    so a mode and the callbacks it requires cannot be chosen separately. The
+    service picks between `AtEnrollmentRequest` and `AtEnrollmentRequest.pq`
+    instead, supplying `enrollmentKeyPackageBuilder` and
+    `enrollmentApkamSymmetricKeyResolver` on the pq branch.
+  - ⚠️ **This changes the default.** `PqPosture.pqReady` is the SDK default and
+    its key-exchange mode is `pq`, so an `at_activate enroll` naming no
+    `--posture` now submits a pq request. A pq request carries no RSA-wrapped
+    key and relies on the approver sealing one to the advertised key package —
+    against an approver that predates conveyance the enrolment is approved and
+    then cannot decrypt anything, where before it silently degraded to legacy.
+  - So `enroll` gains **`--key-exchange legacy|pq`**, on that command alone. It
+    exists for the half a posture cannot see: which approver will pick the
+    request up. Unset means the posture decides.
+
 - fix: `at_activate enroll --posture pqActive` now enrols under the posture's
   authentication algorithm. `--posture` is on the shared arg parser, so
   `enroll` has always accepted it — and it reached the client's preference and
