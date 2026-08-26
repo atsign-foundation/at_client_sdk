@@ -606,6 +606,50 @@ The next attempt should start by establishing that a bare
 all — the arms that do publish all reach their client through
 `enrolAndAuthenticate`, and that difference is unexplained.
 
+**What an app author says they need, written down at gkc's request
+2026-08-26.** This is a request with a use case attached, not a ruling and not a
+design — the shape is still owed. It comes from the session that hit the defect
+while building a real chat client, and the case is ordinary: a client driven
+from a script with piped stdin sends one message and exits, which is the same
+shape as a CLI tool, a cron job or a one-shot notifier.
+
+1. **An outcome, not a completion.** Whatever a caller awaits must resolve to
+   *what happened* — published / already published / nothing to do and why /
+   abandoned / failed with this error. ⛔ A future that resolves identically for
+   "did the work" and "was stopped before doing it" is not something an
+   application can branch on, and `startupComplete` is exactly that today.
+2. **A supported way to say "do not exit until I am reachable."** The property
+   an app cares about is not "startup finished" but "other atSigns can now send
+   to me" — different sentences, and only the second is meaningful to an app
+   author. Sketched as `await atClient.ensureReachable(namespace, timeout: …)`:
+   idempotent, safe on every start, cheap when there is nothing to do. **Not
+   asked for as a default.**
+3. **Loud failure when the tail is abandoned or fails** — at warning, naming the
+   atSign and what was not done. Same class as an event dropped on a delivery
+   path, and for the same reason: the cost is paid by a different principal in a
+   different process.
+4. **The asymmetry written down where an app author will see it.** Sending works
+   the moment the client is up; receiving does not, until the tail has run. That
+   one sentence on `AtClient` would have saved the day this cost.
+5. **If `startupComplete` stays as it is**, its dartdoc should name the supported
+   alternative. `pqBootstrap` is `@experimental` and says "tests do; production
+   code must not", so today the only thing that would have helped is explicitly
+   not for app authors — which reads as "there is no way to do this".
+
+**Stated minimum: 1 and 3.** If what a caller awaits tells the truth and an
+abandoned publish is loud, an app author can build the rest.
+
+⛔ **Explicitly NOT requested: making the tail awaited by default.** The reason
+it is unawaited is good — construction must not block on the network — and
+blocking it would trade this problem for a worse one in every app that never
+needs to receive.
+
+⚠️ **And the interlock half is the sharper one**: if the lock cannot be made
+self-healing, a client that takes it should release it on shutdown, and one that
+finds it held with nothing published should say so at warning rather than
+throwing something the caller cannot interpret. A cron-driven notifier is
+precisely a short-lived client relaunched in a loop.
+
 ### A retrofitted enrolment cannot run an authenticated verb
 
 ⛔ **FIXED 2026-08-26, and nothing is owed here.** Kept because the mechanism is

@@ -288,6 +288,35 @@ it through the wrapper — `CryptoRuntime.prepareWrite` calls it, and both
 `notify_request_transformer.dart:35` call `prepareWrite`. The claim holds, and
 it holds for a reason a symbol grep alone would have missed.
 
+**F-B3 — UC-B0.1 states "No partial state on the server" unconditionally, and
+its own second citation proves that is conditional.** The row's `Then` ends
+"aborts cleanly, stays legacy, mints no PQ keys, logs why. No partial state on
+the server." Four of those five are established by the first citation. The fifth
+is not, and the same row's second citation is what shows it: *"a parent without
+`__manage` cannot deny its own aborted request, and the refusal says so instead
+of implying the server is clean"*. So a **scoped** parent aborts and leaves its
+`pending` enrollment behind — one per retry.
+
+⚠️ **The qualification exists, in the Impl/verify prose**: *"where it cannot (a
+scoped parent has no `__manage`) the refusal says so"*. That is honest, and it
+is in the wrong place — a reader auditing clauses reads the `Then`, and the
+`Then` is unqualified. This is the shape the clause level exists to catch and
+cannot: the row is PROVEN, both citations are accurate, and the sentence a
+reader acts on still overclaims.
+
+**Owed:** qualify the clause — "No partial state on the server *for a parent
+that can deny its own request*; a scoped parent leaves it pending, which
+UC-B0.1's second scenario asserts." A one-line edit, and the review is the diff.
+
+**B2.1 and B2.2 audited, no finding.** B2.2's three clauses are each covered,
+including the cross-row citation that carries the open-window half. B2.1's
+central claim — the lockout is the expiry cap and not a per-key delete — is
+established the strong way, by the keypair being untouched and a sibling legacy
+enrollment authenticating in the same run. Two minor clauses ride uncited: the
+`enroll:revoke` alternative (covered by UC-A5.3, so a cross-reference rather
+than a gap) and "must re-enroll", which nothing exercises. Neither is worth a
+row; recorded so the next reader does not re-derive them.
+
 ### F1 — the clause level is 9% adopted
 
 **13 of 145 citations carry `clauses:`. The other 132 keep the old
