@@ -148,12 +148,28 @@ void main() {
     // The set cannot be allowed to drift from the configs it protects: adding
     // a fifth atSign to a config without adding it here would leave that one
     // unguarded, and nothing else would notice.
+    // ⚠️ **Whichever of the two survive, not both.** CI renames one into
+    // place before it runs — `mv config/config23.yaml config/config.yaml` in
+    // the end2end_tests job, config14 in end2end_test_14 — so demanding both
+    // fails in exactly the environment this guard exists to protect. It did,
+    // the first time this ran on CI.
+    //
+    // Either is enough: the two name the same four atSigns in a different
+    // order, so a set covering one covers the other. Requiring at least one
+    // is what keeps a rename of BOTH from leaving this passing over an empty
+    // set — which the isNotEmpty below then also catches.
+    final configs = ['config14.yaml', 'config23.yaml']
+        .map((name) => File('config/$name'))
+        .where((file) => file.existsSync())
+        .toList();
+    expect(configs, isNotEmpty,
+        reason: 'neither config14.yaml nor config23.yaml is present, so this '
+            'guard is checking nothing. CI moves ONE of them to config.yaml; '
+            'if both have gone, they have been renamed or removed and the '
+            'atSign set here has nothing left to be checked against');
+
     final named = <String>{};
-    for (final name in ['config14.yaml', 'config23.yaml']) {
-      final file = File('config/$name');
-      expect(file.existsSync(), isTrue,
-          reason: 'config/$name is what CI moves into place; if it has been '
-              'renamed this guard is checking nothing');
+    for (final file in configs) {
       for (final match
           in RegExp(r"'(@[A-Za-z0-9_]+)'").allMatches(file.readAsStringSync())) {
         named.add(match.group(1)!);
