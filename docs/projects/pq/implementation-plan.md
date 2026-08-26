@@ -177,7 +177,6 @@ TODO row names a section whose body declares itself done").
 | **at_lookup `OutboundMessageListener.read`** | `AT0014 "Unexpected response found"` pops one entry off `_queue` and clears `_buffer` **without draining the queue or closing the connection**, unlike both timeout paths beside it. A stale queued response is then handed to the next command, offsetting every read after it. It fired in none of the relayed-lookup runs that found it; it is a hazard on its own merits | Nothing |
 | [14.42](#1442-why-enrollment-setup-takes-four-minutes) | Why `enrollment_setup.dart` takes ~4 minutes. gkc asked for the cause, 2026-08-20 — not a D1 gate, but owed to him rather than plan-generated hygiene | ⛔ **@ce2e-only — it does not reproduce locally** |
 | [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | Scope the e2e teardown to the run that created the enrollments | Nothing. Needs no permission and no publish |
-| **`bypasscache_test` is red in the full e2e pack and green alone** | Diagnose it. Measured 2026-08-26 against the local virtualenv: **red 2 of 2** in the full pack, **green alone on two different images** (`at_virtual_env:g0fixed` and `atsigncompany/virtualenv:dev_env`). So it is an ORDERING or cross-file effect, not the image and not a random flake — it reproduces every time in the pack. The test already polls 60 s with `bypassCache = true` and still reads `initial_value`, so it is not a propagation tail either; someone hardened it against that already.<br><br>⚠️ **Not attributable to the posture work**: the test names `PqPosture.legacy` explicitly at every client, and `git diff 13099c622..HEAD -- packages/at_client/lib` is one **dartdoc-only** file, while CI's `end2end_tests` was green at `13099c622`. ⚠️ **But I have NOT run the full pack at an older commit**, so "pre-existing" is an inference from those two facts rather than a measurement.<br><br>Same family as [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) and 14.43 — read them together. ⚠️ There is a recorded incident where this very test surfaced a real defect (two `SyncService` instances against one Hive queue losing writes), so do not classify it as harness noise without looking | Nothing. Reproduce with the full pack, then bisect the file that precedes it |
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | A unit-tree isolation flake in `local_secondary_sync_queue_test.dart`. Green alone and green in the full suite; red only in one hand-constructed ordering nothing runs | Reproduce at rate first |
 | [14.44](#1444-residuals-from-the-at_chops-pr-review) | Two remain, both ⛔ **POST-D1** (gkc, 2026-08-23): at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence (amend that section in place), and `XWingCore.combine` sizes its buffer from its inputs' actual lengths while writing at literal offsets 0/32/64/96/128 | Nothing. Both ride the next at_chops touch |
 | **third-party dependency floors** | at_client alone declares **seven** below what it resolves — `path`, `crypto`, `uuid`, `archive`, `http`, `async`, `meta` — all minor or patch gaps, none checked against first use. The sibling floors were swept 2026-08-25; these were not.<br><br>⚠️ **And the gap runs the OTHER way too, which nothing here was watching.** at_client declares `at_persistence_secondary_server: ^5.1.0` and this workspace resolves **5.1.0**, so every pack exercises that version and only that version — while any consumer resolving fresh today takes **5.2.1**, which we have never run against. Found 2026-08-26 by the at_talk demo session, whose external resolution took 5.2.1 while mine took 5.1.0 and neither side would have noticed. That layer owns local storage, the commit log and the keystore. ⚠️ The same version pair already cost time once, when the local keystore's expired-record handling was characterised from 5.2.1's source while the workspace resolved 5.1.0 — the claims held in 5.1.0 by luck. "Readable as interchangeable" is what makes this expensive | Nothing. Two questions, not one: are the seven floors too low, and is at_client actually correct against the top of the range it already admits |
@@ -1282,7 +1281,7 @@ cd tests/at_onboarding_cli_functional_tests && dart analyze test           # exi
 # bottom promotes every number in it to head, and three of these were once
 # re-measured 15 commits after the others.
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_functional_test/runLocal.sh              # 183 pass, 0 skipped — RE-RUN 2026-08-26 on at_virtual_env:g0fixed
-VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh                 # 62 pass 1 FAIL — RE-RUN 2026-08-26, see below
+VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh                 # 63, EXIT=0 — RE-RUN 2026-08-26 on at_virtual_env:g0fixed
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_onboarding_cli_functional_tests/runLocal.sh  # 18, EXIT=0 — RE-RUN 2026-08-26 at the key-exchange fix
 # ✅ The FUNCTIONAL pack was re-run on 2026-08-26 carrying the posture default
 # flip and the key-exchange routing: 183 pass, 2 skipped, unchanged from the
@@ -1296,14 +1295,12 @@ VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_onboarding_cli_functional_tests
 # unfixed one — the relay probe answered that in seconds and nothing else in
 # the tree does. If that question ever needs asking again, the harness and its
 # measurements are in detail/implementation-plan.md under the discharged G0.
-# ⚠️ THE E2E PACK IS RED, 2 of 2 runs on 2026-08-26, and the count moved: it is
-# 63 tests now, not the 54 this block recorded at `ecf1082de`. The one failure
-# is `bypasscache_test`, and it is an ORDERING effect rather than the image or a
-# flake — green ALONE on both `at_virtual_env:g0fixed` and
-# `atsigncompany/virtualenv:dev_env`, red both times in the full pack. It has
-# its own row in `## TODO`. ⚠️ I first concluded "it is the image" from a single
-# arm and that was WRONG; the controlled arm (alone, same image) is what
-# corrected it.
+# ⚠️ The E2E COUNT MOVED: 63 tests, not the 54 this block recorded at
+# `ecf1082de`. ✅ `bypasscache_test` was red 2 of 3 full-pack runs on 2026-08-26
+# and is FIXED — the fault was its own push gate, not the product. Two wrong
+# readings on the way there, both from too few observations: "it is the image"
+# (one arm, varying two things), then "red 2 of 2, an ordering effect, not a
+# flake" (called a kind on two observations, and the third run was green).
 # ✅ The CLI pack WAS re-run on 2026-08-26, carrying the key-exchange routing,
 # and is 18 EXIT=0. ⛔ It went 14/4 first: flipping the default to a posture
 # whose key-exchange mode is `pq` broke four of its tests, and nothing in any
