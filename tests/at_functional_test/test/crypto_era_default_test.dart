@@ -29,8 +29,12 @@ void main() {
 
   test('a client that named no CryptoConfig still resolves the nskey providers',
       () async {
+    // The SDK's default, read rather than named: this test's subject IS the
+    // default, so a named constant would leave it passing while measuring a
+    // posture the SDK had moved on from.
     final manager = await TestUtils.initAtClient(atSign, namespace,
-        atKeysIo: InMemoryAtKeysIo(), posture: PqPosture.legacy);
+        atKeysIo: InMemoryAtKeysIo(),
+        posture: TestUtils.sdkDefaultPosture);
     final client = manager.atClient;
 
     // Checked, not assumed: if the harness had named a config the assertions
@@ -49,6 +53,9 @@ void main() {
         reason: 'and the content key it cites is conveyed under this one');
     expect(resolved.defaultProviderId, legacyCryptoProviderId,
         reason: 'final 3.x reads PQ and still writes legacy; moving this is '
-            'the 4.x step and a fleet-wide commitment');
+            'the 4.x step and a fleet-wide commitment. True of the shipped '
+            'default whether that is legacy or pqReady — both carry '
+            'writesPqByDefault false — and it is pqActive that moves it, '
+            'which is why this reads the default rather than naming one');
   });
 }

@@ -29,6 +29,17 @@ class TestUtils {
   /// this atSign MINTS and advertises; the second is the order in which, as a
   /// SENDER, it picks among the keys a recipient advertises. A test varying
   /// the wrong one changes nothing it can observe.
+  /// Whatever `AtClientPreference` currently defaults its posture to.
+  ///
+  /// For the handful of tests whose SUBJECT is the default — "what does the
+  /// SDK do when the app names nothing?" — and only those. A required
+  /// parameter cannot express "the default", so pinning such a test to a
+  /// named constant makes it stop following the thing it is about: it goes on
+  /// passing while measuring a posture the SDK no longer ships. Every other
+  /// test names the era it wants, so that a release moving the default cannot
+  /// change what that test exercises.
+  static PqPosture get sdkDefaultPosture => AtClientPreference().posture;
+
   /// [posture] has no default **on purpose**: what a posture decides is not
   /// cosmetic — whether this client mints signing keys, publishes an `_apsk`
   /// advertisement, seeds namespace keys and retrofits its own enrollment —
