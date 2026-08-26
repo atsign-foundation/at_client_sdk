@@ -1244,7 +1244,7 @@ the reason is the point of the row.
 | KF-1  | `.atKeys`-at-rest protection + backup/restore        | Off the GA critical path. Issue #2129 |
 | S-5   | at_auth 4.0.0 WASM barrel split                      | **DONE 2026-08-22** — awaits publish |
 | S-6   | Consumer constraint bumps onto at_auth ^4.0.0        | **DONE 2026-08-22** — at the `-rc1` floor |
-| R-2   | at_client 4.0.0 posture defaults                     | After D1, and now after 14.39. **The default `PqPosture` becomes `pqActive`** ([ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)) — one value, replacing the two coupled edits it used to be. Still a pure default-flip carrying no code of its own. Issue #2016 |
+| R-2   | at_client 4.0.0 posture defaults                     | After D1. **The default `PqPosture` becomes `pqActive`** ([ruling 113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18)) — one value, replacing the two coupled edits it used to be. Still a pure default-flip carrying no code of its own. Issue #2016.<br><br>⚠️ **R-2 is now a ONE-STAGE step, not two.** The shipped default moved `legacy` → **`pqReady`** on 2026-08-26, so R-2 is `pqReady` → `pqActive` — the two axes ruling 113 names as the only difference between them (the data signing key becomes ML-DSA, and post-quantum writes become the default). This row said "and now after 14.39" while 14.39's posture work was owed; it landed |
 | D2-1  | Carve `at/pqmls` + D1-E shape fixes                  | D2, out of D1 |
 
 ---
