@@ -44,7 +44,8 @@ void main() {
   test('UC-A4.4: providerId travels on the frame and bob decrypts by it',
       timeout: Timeout(Duration(minutes: 3)), () async {
     final clients =
-        await ConcurrentClients.open(alice, bob, namespace, authType);
+        await ConcurrentClients.open(alice, bob, namespace, authType,
+            posture: PqPosture.legacy);
     addTearDown(clients.close);
 
     // Bob first: alice's pre-pass discovers his published nskey by plookup, so

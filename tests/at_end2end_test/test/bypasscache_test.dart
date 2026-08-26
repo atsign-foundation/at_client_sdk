@@ -18,15 +18,18 @@ void main() async {
     String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedByAtSign, namespace, authType);
+        .testInitializer(sharedByAtSign, namespace, authType,
+            posture: PqPosture.legacy);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType);
+        .testInitializer(sharedWithAtSign, namespace, authType,
+            posture: PqPosture.legacy);
   });
 
   Future<void> setAtSignOneAutoNotify(bool autoNotify) async {
     //  reset the autoNotify to true
     await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
-        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
+        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign,
+            posture: PqPosture.legacy));
 
     var configResult = await AtClientManager.getInstance()
         .atClient
@@ -89,7 +92,8 @@ void main() async {
 
     // Set sharedBy atSign as currentAtSign and Put the initial value
     await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
-        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
+        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign,
+            posture: PqPosture.legacy));
 
     // Per-key gate: register the listener BEFORE the put so the
     // push event for this key can't fire before the listener is in
@@ -119,7 +123,8 @@ void main() async {
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign,
         namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+        TestPreferences.getInstance().getPreference(sharedWithAtSign,
+            posture: PqPosture.legacy));
 
     await E2ESyncService.getInstance()
         .syncData(AtClientManager.getInstance().atClient.syncService);
@@ -136,7 +141,8 @@ void main() async {
 
     // Switch back to sharedByAtSign to update the value of the key.
     await AtClientManager.getInstance().setCurrentAtSign(sharedByAtSign,
-        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign));
+        namespace, TestPreferences.getInstance().getPreference(sharedByAtSign,
+            posture: PqPosture.legacy));
 
     // Set autoNotify to false so that the update doesn't propagate to sharedWith AtSign automatically
     await setAtSignOneAutoNotify(false);
@@ -165,7 +171,8 @@ void main() async {
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign,
         namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+        TestPreferences.getInstance().getPreference(sharedWithAtSign,
+            posture: PqPosture.legacy));
 
     // Sync - after this we still should have the old value
     await E2ESyncService.getInstance()

@@ -36,7 +36,8 @@ void main() {
     await TestSuiteInitializer.getInstance().testInitializer(
         currentAtSign, TestConstants.namespace, authType,
         enableInitialSync: false,
-        atClientPreference: getAtClientPreferences(currentAtSign));
+        atClientPreference: getAtClientPreferences(currentAtSign),
+            posture: PqPosture.legacy);
 
     NotificationResult notificationResult = await AtClientManager.getInstance()
         .atClient
@@ -59,7 +60,8 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
   await TestSuiteInitializer.getInstance().testInitializer(
       sharedWithAtSign, TestConstants.namespace, authType,
       enableInitialSync: false,
-      atClientPreference: getAtClientPreferences(sharedWithAtSign));
+      atClientPreference: getAtClientPreferences(sharedWithAtSign),
+          posture: PqPosture.legacy);
 
   AtClientManager.getInstance()
       .atClient
@@ -74,8 +76,12 @@ Future<void> initSharedAtSign(SendPort mainIsolateSendPort) async {
   });
 }
 
+/// Built here rather than through `TestPreferences`, because this runs inside
+/// a spawned isolate with no access to that singleton — so the posture is named
+/// here too. No compiler names this site: it constructs the preference
+/// directly, and `AtClientPreference.posture` has a default.
 AtClientPreference getAtClientPreferences(String atSign) {
-  var atClientPreference = AtClientPreference();
+  var atClientPreference = AtClientPreference(posture: PqPosture.legacy);
   atClientPreference.hiveStoragePath = 'test/hive/$atSign';
   atClientPreference.commitLogPath = 'test/hive/$atSign/commit/';
   atClientPreference.rootDomain = ConfigUtil.getYaml()['root_server']['url'];

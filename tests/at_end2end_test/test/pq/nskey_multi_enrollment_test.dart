@@ -46,9 +46,9 @@ void main() {
     bob = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final authType = ConfigUtil.getYaml()['authType'];
     await TestSuiteInitializer.getInstance()
-        .testInitializer(alice, namespace, authType);
+        .testInitializer(alice, namespace, authType, posture: PqPosture.legacy);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(bob, namespace, authType);
+        .testInitializer(bob, namespace, authType, posture: PqPosture.legacy);
   });
 
   test('UC-A4.3: every authorised enrollment of the recipient reads the share',
@@ -58,7 +58,8 @@ void main() {
     // syncService is unset the moment the manager moves off him — and the
     // failure would surface much later, far from its cause.
     final clients = await ConcurrentClients.open(
-        alice, bob, sharedNamespace, ConfigUtil.getYaml()['authType']);
+        alice, bob, sharedNamespace, ConfigUtil.getYaml()['authType'],
+            posture: PqPosture.legacy);
     final aliceClient = clients.first;
     final bobPrimary = clients.second;
 
@@ -79,7 +80,8 @@ void main() {
       approver: bobPrimary,
       atSign: bob,
       namespace: sharedNamespace,
-      preference: TestPreferences.getInstance().getPreference(bob),
+      preference: TestPreferences.getInstance().getPreference(bob,
+          posture: PqPosture.legacy),
       rootDomain: bobPreference.rootDomain,
       rootPort: bobPreference.rootPort,
       deviceName: 'bob2-${DateTime.now().microsecondsSinceEpoch}',

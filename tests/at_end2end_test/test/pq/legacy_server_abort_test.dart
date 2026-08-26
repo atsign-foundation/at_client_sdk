@@ -49,7 +49,8 @@ void main() {
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign, namespace, ConfigUtil.getYaml()['authType']);
+        .testInitializer(atSign, namespace, ConfigUtil.getYaml()['authType'],
+            posture: PqPosture.legacy);
     owner = AtClientManager.getInstance().atClient;
   });
 
@@ -132,7 +133,8 @@ void main() {
         // parameter default is the rollout-window RSA mode.
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
-        preference: TestPreferences.getInstance().getPreference(atSign),
+        preference: TestPreferences.getInstance().getPreference(atSign,
+            posture: PqPosture.legacy),
         appName: 'b01-priv',
         deviceName: 'b01-priv-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},
@@ -197,7 +199,8 @@ void main() {
         // parameter default is the rollout-window RSA mode.
         signingAlgo: SigningAlgoType.mldsa65,
         session: session,
-        preference: TestPreferences.getInstance().getPreference(atSign),
+        preference: TestPreferences.getInstance().getPreference(atSign,
+            posture: PqPosture.legacy),
         appName: 'b01-scoped',
         deviceName: 'b01-scoped-rf-$runId',
         namespaces: {'*': 'rw', '__manage': 'rw'},

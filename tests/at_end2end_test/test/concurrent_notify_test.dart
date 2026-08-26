@@ -41,7 +41,8 @@ void main() {
 
   test('a monitor on bob receives and decrypts what alice sends', () async {
     final clients =
-        await ConcurrentClients.open(alice, bob, namespace, authType);
+        await ConcurrentClients.open(alice, bob, namespace, authType,
+            posture: PqPosture.legacy);
     addTearDown(clients.close);
 
     // Asserted, not assumed. If the second client coming up had torn the first

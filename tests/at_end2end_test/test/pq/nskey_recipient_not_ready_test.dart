@@ -60,7 +60,8 @@ void main() {
     // Both atSigns live at once. @bob has to mint for himself, and under the
     // singleton bringing him up would tear alice's client down.
     final clients =
-        await ConcurrentClients.open(alice, bob, namespace, authType);
+        await ConcurrentClients.open(alice, bob, namespace, authType,
+            posture: PqPosture.legacy);
     addTearDown(clients.close);
     final aliceClient = clients.first;
     final bobClient = clients.second;

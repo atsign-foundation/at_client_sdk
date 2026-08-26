@@ -16,7 +16,7 @@ void main() {
         () async {
       await TestSuiteInitializer.getInstance().testInitializer(
           currentAtSign, namespace, 'pkam',
-          enableInitialSync: false);
+          enableInitialSync: false, posture: PqPosture.legacy);
 
       List<Enrollment>? pendingEnrollments = await AtClientManager.getInstance()
           .atClient

@@ -20,9 +20,11 @@ void main() async {
     String authType = ConfigUtil.getYaml()['authType'];
 
     await TestSuiteInitializer.getInstance()
-        .testInitializer(currentAtSign, namespace, authType);
+        .testInitializer(currentAtSign, namespace, authType,
+            posture: PqPosture.legacy);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(sharedWithAtSign, namespace, authType);
+        .testInitializer(sharedWithAtSign, namespace, authType,
+            posture: PqPosture.legacy);
   });
 
   test(
@@ -43,7 +45,8 @@ void main() async {
     // Setting currentAtSign atClient instance to context.
     currentAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, namespace,
-            TestPreferences.getInstance().getPreference(currentAtSign));
+            TestPreferences.getInstance().getPreference(currentAtSign,
+                posture: PqPosture.legacy));
     final notificationResult = await currentAtClientManager
         .atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value));
@@ -55,7 +58,8 @@ void main() async {
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign,
         namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+        TestPreferences.getInstance().getPreference(sharedWithAtSign,
+            posture: PqPosture.legacy));
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
         .notifyList(regex: 'phone$randomValue');
@@ -84,7 +88,8 @@ void main() async {
     // Setting currentAtSign atClient instance to context.
     currentAtClientManager = await AtClientManager.getInstance()
         .setCurrentAtSign(currentAtSign, namespace,
-            TestPreferences.getInstance().getPreference(currentAtSign));
+            TestPreferences.getInstance().getPreference(currentAtSign,
+                posture: PqPosture.legacy));
     final notificationResult = await currentAtClientManager
         .atClient.notificationService
         .notify(NotificationParams.forUpdate(phoneKey, value: value),
@@ -97,7 +102,8 @@ void main() async {
     await AtClientManager.getInstance().setCurrentAtSign(
         sharedWithAtSign,
         namespace,
-        TestPreferences.getInstance().getPreference(sharedWithAtSign));
+        TestPreferences.getInstance().getPreference(sharedWithAtSign,
+            posture: PqPosture.legacy));
     var notificationListResult = await AtClientManager.getInstance()
         .atClient
         .notifyList(regex: 'phone$randomValue');

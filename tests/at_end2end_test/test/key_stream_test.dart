@@ -27,10 +27,10 @@ void main() async {
 
     await TestSuiteInitializer.getInstance().testInitializer(
         currentAtSign, namespace, authType,
-        enableInitialSync: false);
+        enableInitialSync: false, posture: PqPosture.legacy);
     await TestSuiteInitializer.getInstance().testInitializer(
         sharedWithAtSign, namespace, authType,
-        enableInitialSync: false);
+        enableInitialSync: false, posture: PqPosture.legacy);
   });
 
   group('KeyStreamMixin group', () {
@@ -88,7 +88,8 @@ void main() async {
       atClientManager = await AtClientManager.getInstance().setCurrentAtSign(
           currentAtSign,
           namespace,
-          TestPreferences.getInstance().getPreference(currentAtSign));
+          TestPreferences.getInstance().getPreference(currentAtSign,
+              posture: PqPosture.legacy));
       final pro = PutRequestOptions()..useRemoteAtServer = true;
       await Future.wait([
         atClientManager.atClient.put(key, randomValue, putRequestOptions: pro),
@@ -98,7 +99,8 @@ void main() async {
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
           namespace,
-          TestPreferences.getInstance().getPreference(sharedWithAtSign));
+          TestPreferences.getInstance().getPreference(sharedWithAtSign,
+              posture: PqPosture.legacy));
       expect(AtClientManager.getInstance().atClient.getCurrentAtSign(),
           sharedWithAtSign);
       await keyStream.getKeys();
@@ -130,7 +132,8 @@ void main() async {
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
           namespace,
-          TestPreferences.getInstance().getPreference(sharedWithAtSign));
+          TestPreferences.getInstance().getPreference(sharedWithAtSign,
+              posture: PqPosture.legacy));
       keyStream = KeyStreamImpl(
         regex: '$namespace@',
         convert: (key, value) => value.value ?? '',
@@ -176,7 +179,8 @@ void main() async {
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
           namespace,
-          TestPreferences.getInstance().getPreference(sharedWithAtSign));
+          TestPreferences.getInstance().getPreference(sharedWithAtSign,
+              posture: PqPosture.legacy));
       keyStream = IterableKeyStream<String>(
         regex: '$namespace@',
         convert: (key, value) => value.value ?? '',
@@ -228,7 +232,8 @@ void main() async {
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
           namespace,
-          TestPreferences.getInstance().getPreference(sharedWithAtSign));
+          TestPreferences.getInstance().getPreference(sharedWithAtSign,
+              posture: PqPosture.legacy));
       keyStream = MapKeyStream<String, String>(
         regex: '$namespace@',
         convert: (key, value) => MapEntry(key.key, value.value),
@@ -292,13 +297,15 @@ void main() async {
       await AtClientManager.getInstance().setCurrentAtSign(
           currentAtSign,
           namespace,
-          TestPreferences.getInstance().getPreference(currentAtSign));
+          TestPreferences.getInstance().getPreference(currentAtSign,
+              posture: PqPosture.legacy));
 
       // Create atClient instance for atSign2
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
           namespace,
-          TestPreferences.getInstance().getPreference(sharedWithAtSign));
+          TestPreferences.getInstance().getPreference(sharedWithAtSign,
+              posture: PqPosture.legacy));
       // Set Encryption Keys for sharedWithAtSign
       keyStream = KeyStreamImpl(
         regex: '$namespace@',
@@ -318,7 +325,8 @@ void main() async {
       await AtClientManager.getInstance().setCurrentAtSign(
           currentAtSign,
           namespace,
-          TestPreferences.getInstance().getPreference(currentAtSign));
+          TestPreferences.getInstance().getPreference(currentAtSign,
+              posture: PqPosture.legacy));
       await Future.delayed(Duration(milliseconds: 1));
       expect(keyStream.controller.isClosed, true);
 
@@ -336,7 +344,8 @@ void main() async {
       await AtClientManager.getInstance().setCurrentAtSign(
           sharedWithAtSign,
           namespace,
-          TestPreferences.getInstance().getPreference(sharedWithAtSign));
+          TestPreferences.getInstance().getPreference(sharedWithAtSign,
+              posture: PqPosture.legacy));
       await Future.delayed(Duration(milliseconds: 1));
       expect(keyStream2.controller.isClosed, true);
       expect(keyStream.controller.isClosed, true);

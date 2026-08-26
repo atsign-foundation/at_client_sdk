@@ -96,7 +96,8 @@ void main() {
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['fourthAtSign'];
     await TestSuiteInitializer.getInstance()
-        .testInitializer(atSign, namespace, ConfigUtil.getYaml()['authType']);
+        .testInitializer(atSign, namespace, ConfigUtil.getYaml()['authType'],
+            posture: PqPosture.legacy);
     owner = AtClientManager.getInstance().atClient;
     await AtClientSecretSharing.forClient(owner).register();
   });
@@ -127,7 +128,8 @@ void main() {
       // parameter default is the rollout-window RSA mode.
       signingAlgo: SigningAlgoType.mldsa65,
       session: session,
-      preference: TestPreferences.getInstance().getPreference(atSign),
+      preference: TestPreferences.getInstance().getPreference(atSign,
+          posture: PqPosture.legacy),
       appName: 'rt-l1',
       deviceName: 'rt-l1-$runId',
       namespaces: {namespace: 'rw'},

@@ -34,14 +34,15 @@ void main() {
     bob = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final authType = ConfigUtil.getYaml()['authType'];
     await TestSuiteInitializer.getInstance()
-        .testInitializer(alice, namespace, authType);
+        .testInitializer(alice, namespace, authType, posture: PqPosture.legacy);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(bob, namespace, authType);
+        .testInitializer(bob, namespace, authType, posture: PqPosture.legacy);
   });
 
   Future<AtClient> clientFor(String atSign) async {
     final manager = await AtClientManager.getInstance().setCurrentAtSign(
-        atSign, namespace, TestPreferences.getInstance().getPreference(atSign));
+        atSign, namespace, TestPreferences.getInstance().getPreference(atSign,
+            posture: PqPosture.legacy));
     return manager.atClient;
   }
 

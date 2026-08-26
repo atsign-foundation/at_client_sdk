@@ -77,7 +77,8 @@ void main() {
   setUpAll(() async {
     for (var atSign in atSignList) {
       await TestSuiteInitializer.getInstance()
-          .testInitializer(atSign, namespace, 'pkam', enableInitialSync: false);
+          .testInitializer(atSign, namespace, 'pkam', enableInitialSync: false,
+              posture: PqPosture.legacy);
       await _stopSync();
     }
   });
@@ -88,7 +89,7 @@ void main() {
       // Set SPP at the start of enrollment tests to pass as OTP.
       await TestSuiteInitializer.getInstance().testInitializer(
           currentAtSign, namespace, 'pkam',
-          enableInitialSync: false);
+          enableInitialSync: false, posture: PqPosture.legacy);
       // Switching back to an atSign restarts its sync, so stop it again.
       await _stopSync();
       // Set SPP into the Remote Secondary

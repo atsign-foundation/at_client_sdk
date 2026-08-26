@@ -73,8 +73,20 @@ class TestSuiteInitializer {
   /// Pass a dedicated manager to keep this atSign's client alive alongside
   /// another's — see `ConcurrentClients`. The singleton stops the outgoing
   /// client on every switch, so two atSigns cannot both be live under it.
+  /// [posture] is required and has no default, so the compiler names every
+  /// caller. It is required even when [atClientPreference] is supplied: a
+  /// preference built elsewhere already carries a posture, and letting the
+  /// caller stay silent about it is what made this the invisible path — the
+  /// `??=` below applies `TestPreferences.getPreference` inside this library,
+  /// so a required parameter on that helper alone would leave every caller
+  /// here naming nothing. A supplied preference whose posture disagrees is
+  /// refused rather than silently preferred either way.
+  ///
+  /// ⛔ See `TestPreferences.getPreference` for why the choice matters on this
+  /// pack's long-lived atSigns.
   Future<void> testInitializer(String atSign, String namespace, String authType,
-      {bool enableInitialSync = true,
+      {required PqPosture posture,
+      bool enableInitialSync = true,
       AtClientPreference? atClientPreference,
       AtClientManager? manager}) async {
     try {
@@ -112,8 +124,16 @@ class TestSuiteInitializer {
         atChops = createAtChopsFromDemoKeys(atSign);
       }
 
-      atClientPreference ??=
-          TestPreferences.getInstance().getPreference(atSign);
+      if (atClientPreference != null && atClientPreference.posture != posture) {
+        throw ArgumentError(
+            'the supplied AtClientPreference for $atSign was built at a '
+            'different posture from the one named here. AtClientPreference '
+            'holds it final, so this call cannot change it — pass the posture '
+            'the preference was built with, or build the preference at the '
+            'posture you want.');
+      }
+      atClientPreference ??= TestPreferences.getInstance()
+          .getPreference(atSign, posture: posture);
       // Create the atClientManager for the atSign
       var atClientManager = await (manager ?? AtClientManager.getInstance())
           .setCurrentAtSign(atSign, namespace, atClientPreference,

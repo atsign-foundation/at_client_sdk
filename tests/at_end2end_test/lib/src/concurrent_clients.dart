@@ -36,6 +36,10 @@ class ConcurrentClients {
 
   /// Brings [firstAtSign] and [secondAtSign] up together on [namespace].
   ///
+  /// One [posture] for both: these two clients talk to each other, and a pair
+  /// at different eras is a compatibility test rather than the concurrency
+  /// fixture this is. Write that as two explicit initialisations.
+  ///
   /// Sequential rather than concurrent on purpose: both go through the same
   /// authentication and encryption-key setup, and interleaving two of those
   /// buys nothing while making a failure much harder to attribute.
@@ -44,6 +48,7 @@ class ConcurrentClients {
     String secondAtSign,
     String namespace,
     String authType, {
+    required PqPosture posture,
     bool enableInitialSync = true,
   }) async {
     if (firstAtSign == secondAtSign) {
@@ -60,12 +65,16 @@ class ConcurrentClients {
     final firstManager = AtClientManager(firstAtSign);
     await TestSuiteInitializer.getInstance().testInitializer(
         firstAtSign, namespace, authType,
-        enableInitialSync: enableInitialSync, manager: firstManager);
+        posture: posture,
+        enableInitialSync: enableInitialSync,
+        manager: firstManager);
 
     final secondManager = AtClientManager(secondAtSign);
     await TestSuiteInitializer.getInstance().testInitializer(
         secondAtSign, namespace, authType,
-        enableInitialSync: enableInitialSync, manager: secondManager);
+        posture: posture,
+        enableInitialSync: enableInitialSync,
+        manager: secondManager);
 
     // Checked rather than assumed. If either client had been torn down by the
     // other coming up, every test built on this would fail somewhere far from
