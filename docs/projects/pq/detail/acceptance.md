@@ -263,7 +263,7 @@ declarations in `proven_elsewhere.dart`.
 | G1 | 35 | 15 | — |
 | cross-cutting (no `UC-` id) | 14 | — | — |
 
-⚠️ **The plan's "85 of 147" was arithmetic over the pre-2026-08-26 corpus**;
+⚠️ **The plan's `85 of 147` was arithmetic over the pre-2026-08-26 corpus**;
 against the tree today it is **91 of 153** remaining. Re-derive rather than
 quoting either — the command is in the method above, and `rm -f` first.
 

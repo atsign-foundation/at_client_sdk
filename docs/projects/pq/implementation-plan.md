@@ -237,7 +237,7 @@ green; a count stale in six places; a row reading PROVEN while its axis reached
 no production caller; and a scenario still describing the pre-flip default).
 B is started and G is untouched: **91 of 153** remain against the tree today,
 re-derived 2026-08-26 — the corpus grew by six when UC-B1.4 to UC-B1.7 landed,
-so the older "85 of 147" is arithmetic over a corpus that no longer exists.
+so the older `85 of 147` is arithmetic over a corpus that no longer exists.
 Cluster B is audited — 42 citations, 25 cited rows of 28, one finding found and
 closed the same day (UC-B0.1 stated "No partial state on the server"
 unconditionally while its own second scenario disproved it). ⛔ **The number a
