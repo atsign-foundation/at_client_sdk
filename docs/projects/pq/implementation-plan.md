@@ -143,6 +143,7 @@ TODO row names a section whose body declares itself done").
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | `[RECOMMENDED]` Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
 | [the at_client carve stack](#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
 | [arm 1 vs arm 3 bucketing](#arm-1-vs-arm-3-bucketing) | **A ruling from gkc** — the measuring is done. Arm 3 cannot be scoped and the catalogue's count table stays wrong until it is settled | gkc's ruling. Nothing else |
+| [a wildcard enrolment seeds nothing](#a-wildcard-enrolment-seeds-nothing) | **A ruling from gkc** on whether an atSign reachable only through a wildcard (`*`) enrolment is expected to publish namespace keys. Today it publishes none, so nobody can seal to it in any namespace, and the doc comment that said otherwise was false | gkc's ruling. The measuring is done |
 | [content keys per scope](#content-keys-per-scope) | **A ruling from gkc** on whether one content key per writing enrollment per scope is the intent. If not: `CurrentCkPointer` needs a remote-first write through an atomic verb, and rotation needs to supersede every CK in scope | gkc's ruling, then the fix |
 | [the late-arriving nskey private](#the-late-arriving-nskey-private) | File a late-arriving nskey private **only for a generation this client actually asked for**. The reverted attempt filed any arrival, which breached the seeding guarantee | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Add the `pending` enrollment status value and build the rotation arm against its own dedicated CRAM atSign. ⛔ There is **no** fleet-adoption wait — see the standing premise | The at_auth publish, and a dedicated CRAM atSign |
@@ -303,6 +304,43 @@ live and their data readable — **read from the source, not run**.
 **What a fix needs, if the ruling goes that way**: the pointer written
 remote-first through an atomic verb or behind an interlock, and rotation
 superseding every CK in scope rather than the one in hand.
+
+### A wildcard enrolment seeds nothing
+
+⚠️ **Found 2026-08-26 while answering a question about a demo, and the doc
+comment that hid it has been corrected in the same commit.**
+`NskeySeeding.authorisedNamespaces()` skips `*` and `__manage`, and its dartdoc
+said a wildcard enrollment "mints on demand when it writes into a specific one
+instead". **There is no such path.**
+
+**Measured, not reasoned:**
+
+- `PublishedNskeyKeyRing.mintAndPublish` has exactly **one** production caller
+  in at_client — `NskeySeeding.seed()`. The ring's `_mintUnlessPublished` is
+  reachable only from `mintAndPublish` itself.
+- Writing does not mint. `NskeyProvider._nskeyOwnerOf` is
+  `atKey.sharedWith ?? recordOwner`, so an outbound share resolves the
+  **recipient's** nskey; a sender consults its own only for self data, and
+  consulting is not minting.
+- So a client whose enrolment authorises only `*` mints nothing at startup and
+  nothing later. It publishes no advertisement, and every peer trying to seal
+  to it gets `NamespaceKeyUnavailableException`.
+
+⛔ **What is NOT established, and must not be assumed:** whether a first
+(CRAM) enrolment is actually wildcard-only. `FirstEnrollmentRequest` sends no
+namespace map — the atServer assigns it — and that is at_server's to answer,
+not this tree's. Settle it against a real atServer before deciding the size of
+this, with `enroll:list` on a freshly onboarded atSign.
+
+**Why it matters if it is reachable:** the atSign is invisible as a recipient
+for every namespace, permanently, with no error on its own side — the failure
+lands on whoever tries to reach it.
+
+⚠️ **The same shape already bit the e2e suite for a different reason.** The
+⚠️ block at the top of `tests/at_end2end_test/test/pq/nskey_recipient_not_ready_test.dart`
+records a control that only passed when another file had happened to mint
+`@bob`'s key first, because being sent to mints nothing. Read it before
+designing any fix.
 
 ### The late-arriving nskey private
 

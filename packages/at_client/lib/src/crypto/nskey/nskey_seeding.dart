@@ -60,9 +60,24 @@ class NskeySeeding {
   /// the rollout, so that is where seeding coverage actually comes from.
   ///
   /// `*` is skipped. It authorises every namespace, and "every namespace" is
-  /// not a list that can be minted — a wildcard enrollment mints on demand
-  /// when it writes into a specific one instead. `__manage` is skipped for the
-  /// same reason it is not an app namespace.
+  /// not a list that can be minted. `__manage` is skipped for the same reason
+  /// it is not an app namespace.
+  ///
+  /// ⚠️ **A wildcard enrollment therefore seeds NOTHING, and nothing else
+  /// mints for it.** This said "a wildcard enrollment mints on demand when it
+  /// writes into a specific one instead", and there is no such path: the only
+  /// production caller of `PublishedNskeyKeyRing.mintAndPublish` is [seed]
+  /// below, and the ring's `_mintUnlessPublished` is reachable only from that
+  /// same method. Writing does not mint — an outbound share resolves the
+  /// **recipient's** nskey (`NskeyProvider._nskeyOwnerOf` is
+  /// `atKey.sharedWith ?? recordOwner`), so a sender consults its own key only
+  /// for self data, and consulting is not minting.
+  ///
+  /// The consequence is that an atSign reachable only through a wildcard
+  /// enrollment publishes no advertisement, so nobody can seal to it in any
+  /// namespace. Whether that is reachable in practice depends on what the
+  /// atServer grants a first enrollment, which is not this package's to
+  /// assert.
   @visibleForTesting
   Future<Set<String>> authorisedNamespaces() async {
     final enrollmentId = atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
