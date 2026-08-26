@@ -17,3 +17,15 @@ lib/src/config/config_util.dart
 # untracked is exactly what a bulk `git add -A` publishes, and the two live
 # test packages already ignore theirs.
 test/*.atKeys
+
+# And the same thing at the package ROOT, which the rule above does not reach.
+# The proxy functional pack drives this CLI with the package directory as its
+# working directory (`workingDirectory = '../../packages/at_onboarding_cli'`
+# in tests/at_onboarding_cli_functional_tests_proxy/lib/features/), so every
+# keyfile it generates lands here rather than under test/.
+#
+# Globbed rather than named: at_auth's keyfile writer leaves `.bak`, `.lock`
+# and `.tmp` siblings beside each keyfile, and a killed run leaves whichever
+# it had reached. A rule naming one of them would cover exactly that one.
+/*.atKeys
+/*.atKeys.*
