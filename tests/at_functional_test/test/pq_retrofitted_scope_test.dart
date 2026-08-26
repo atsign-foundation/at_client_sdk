@@ -5,6 +5,9 @@
 @Tags(['pq'])
 library;
 
+import 'dart:io';
+
+import 'package:at_auth/at_auth_io.dart' show FileAtKeysIo;
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientSecretSharing;
 import 'package:at_functional_test/src/config_util.dart';
@@ -272,4 +275,89 @@ void main() {
             'this namespace should publish public:__nskey.<ns>, or no peer '
             'can seal anything to it — it sends and cannot receive');
   }, timeout: Timeout(Duration(minutes: 3)));
+
+  /// ⛔ **The COLD-START arm: the difference the arm above does not have.**
+  ///
+  /// The arm above retrofits inside the process that enrolled, holding its
+  /// keys in memory. The reported case does neither: an atSign is onboarded
+  /// and enrolled, the process exits, and a LATER run reads the keyfile off
+  /// disk and retrofits from that alone. Everything that could be decided once
+  /// and never re-evaluated lives in that gap, so it is the arm worth having.
+  ///
+  /// Two clients over one keyfile, varying **only** whether the retrofitting
+  /// client was born from the enrolment session:
+  ///
+  /// 1. enrol scoped under `legacy`, writing a real keyfile. A legacy client
+  ///    does not retrofit and does not seed — asserted, because if it seeded
+  ///    here the second half would find an advertisement that has nothing to
+  ///    do with the retrofit;
+  /// 2. drop every cached client, then build a fresh one from the keyfile
+  ///    alone under `pqReady` — no session, no injected AtChops, the store
+  ///    read cold. That client retrofits, and the question is whether it
+  ///    seeds.
+  test('a cold client that retrofits from a keyfile publishes its namespace '
+      'key', () async {
+    final keysFilePath = 'test/testData/rs-cold@$atSign.atKeys';
+    final keyfile = File(keysFilePath);
+    if (keyfile.existsSync()) keyfile.deleteSync();
+    keyfile.parent.createSync(recursive: true);
+
+    final enrolled = await enrolAndAuthenticate(
+      approver: approver,
+      atSign: atSign,
+      namespace: namespace,
+      // Legacy: this client must NOT retrofit, so that step 2 is the first and
+      // only retrofit and the keyfile it reads is genuinely pre-PQ.
+      preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+      rootDomain: 'vip.ve.atsign.zone',
+      rootPort: TestUtils.rootServerPort,
+      deviceName: 'rs-cold-${uuid.v4().hashCode}',
+      namespaces: {namespace: 'rw'},
+      // A real keyfile on disk, which is the whole point of this arm.
+      atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
+    );
+
+    expect(enrolled.client.enrollmentId, enrolled.enrollmentId,
+        reason: 'step 1 must NOT have retrofitted, or the keyfile the cold '
+            'client reads is already post-PQ and this arm varies nothing');
+    expect(keyfile.existsSync(), isTrue,
+        reason: 'the keyfile has to be on disk for the cold read below; an '
+            'in-memory store here would make this a copy of the arm above');
+
+    // Everything the process is holding for this atSign goes, so the client
+    // below is built the way a later run builds one: from the keyfile.
+    await enrolled.manager.atClient.getRemoteSecondary()?.atLookUp.close();
+    AtClientImpl.atClientInstanceMap.clear();
+
+    final cold = await AtClientManager(atSign).setCurrentAtSign(
+      atSign,
+      namespace,
+      TestUtils.getPreference(atSign, posture: PqPosture.pqReady),
+      atKeysIo: FileAtKeysIo(filePath: (_) => keysFilePath),
+      enrollmentId: enrolled.enrollmentId,
+    );
+    final client = cold.atClient;
+
+    expect(client.enrollmentId, isNot(enrolled.enrollmentId),
+        reason: 'the cold client must retrofit — pqReady asks for mldsa65 and '
+            'the keyfile holds rsa2048. Equal ids mean no retrofit ran and '
+            'the seeding question below is not being asked');
+    expect(client.getPreferences()!.seedNamespaceKeys, isTrue,
+        reason: 'the control: pqReady asks this client to seed');
+
+    final ring = PublishedNskeyKeyRing(client);
+    NskeyAdvertisement? advertisement;
+    final deadline = DateTime.now().add(Duration(seconds: 30));
+    while (DateTime.now().isBefore(deadline)) {
+      advertisement = await ring.publishedAdvertisement(atSign, namespace);
+      if (advertisement != null) break;
+      await Future.delayed(Duration(milliseconds: 500));
+    }
+
+    expect(advertisement, isNotNull,
+        reason: 'REPORTED DEFECT, cold-start form: a retrofitted enrollment '
+            'authorised for this namespace must publish '
+            'public:__nskey.<ns>, or no peer can seal anything to it — it '
+            'sends and cannot receive');
+  }, timeout: Timeout(Duration(minutes: 4)));
 }

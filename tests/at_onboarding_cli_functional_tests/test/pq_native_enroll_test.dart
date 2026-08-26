@@ -231,6 +231,38 @@ void main() {
           reason: 'the retrofit exists to move the authentication key, so the '
               'enrolment it created has to hold ML-DSA-65 material');
     }
+
+    // ⚠️ **Reported 2026-08-26 from a live ephemeral environment**: a
+    // retrofitted atSign never publishes its own namespace advertisement, so
+    // it can SEND post-quantum and cannot RECEIVE. It does not reproduce on
+    // at_client's own routes — `pq_retrofitted_scope_test.dart` in the
+    // functional pack retrofits both in-process and cold from a keyfile, at
+    // pqReady and at pqActive, and publishes one every time, with the negative
+    // control proven. The CLI route is the difference that is left, and this
+    // is where it can be observed.
+    //
+    // Read off the atServer with the master keys rather than through the
+    // retrofitted client: the question is what the atSign PUBLISHED, and a
+    // client that failed to publish would answer from its own cache.
+    final published = await auth_cli.wrappedMain([
+      'list', '-a', atSign, '-r', 'vip.ve.atsign.zone', //
+      '-k', masterKeysFilePath,
+    ]);
+    expect(published, 0, reason: 'the master keys must still work');
+
+    final nskey = await AtOnboardingServiceImpl(
+        atSign, _preference(atSign, masterKeysFilePath));
+    expect(await nskey.authenticate(), isTrue);
+    final record = await nskey.atLookUp!.executeCommand(
+        'llookup:public:__nskey.e2etest$atSign\n',
+        auth: true);
+    stdout.writeln('##CLI## nskey after retrofit: '
+        '${record?.substring(0, record.length.clamp(0, 80))}');
+    expect(record, startsWith('data:'),
+        reason: 'REPORTED DEFECT: the retrofitted enrolment is authorised for '
+            'e2etest, so the atSign must publish public:__nskey.e2etest — '
+            'without it no peer can seal anything to this atSign and it can '
+            'send post-quantum without being able to receive');
   }, timeout: Timeout(Duration(minutes: 6)));
 }
 

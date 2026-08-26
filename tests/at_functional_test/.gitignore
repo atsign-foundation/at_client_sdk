@@ -30,3 +30,6 @@ test/testData/*.atKeys.bak
 # unignored, they are one `git add -A` away from being committed - which is
 # how machine-local lock state ends up in the repo.
 *.atKeys.lock
+# The cold-start retrofit arm: one keyfile, written by an enrolment and
+# re-read by a client built from it alone.
+test/testData/rs-cold@*.atKeys
