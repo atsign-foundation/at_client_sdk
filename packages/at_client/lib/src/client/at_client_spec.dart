@@ -702,7 +702,7 @@ abstract class AtClient {
   /// AtCollection. In `draft()` and `create()`, if you do not set an
   /// `expiresAt`, the default ttl will be `now + defaultExpiration`.
   /// Once the time elapses and the item expires, the atServer hard
-  /// deletes it, just like a regular AtKey ttl.
+  /// deletes it, just like how AtKey ttls function.
   ///
   /// If [fromJson] is supplied it is registered as the factory for items
   /// of type [T] under [typeTag] (the wire-format identifier), via
