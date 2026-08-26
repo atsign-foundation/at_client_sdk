@@ -111,6 +111,27 @@ void main() {
       //       per atSign and never negotiated per message, which is the
       //       downgrade surface SP 800-227 4.6.3 warns about; what is
       //       negotiated is the construction (UC-A4.6).
+      // The clause itself, isolated: ONE sender, configured for ml-kem-1024
+      // throughout, sealing to two destinations that differ only in what they
+      // advertise. Added 2026-08-26 by the citation audit, which found that
+      // the two citations below co-vary the sender's configuration with the
+      // recipient's — both-X-Wing in one arm, both-ML-KEM in the other — so
+      // neither isolates "the recipient decides", and a regression routing by
+      // the sender's own algorithm would leave both green.
+      provenIn(
+        'packages/at_client/test/nskey_kem_selection_test.dart',
+        'the RECIPIENT advertisement decides the conveyance provider',
+        proves: 'the differential the clause names, with the sender held '
+            'fixed: the same ml-kem-1024-configured sender stamps the X-Wing '
+            'conveyance provider for a recipient advertising X-Wing and the '
+            'ML-KEM one for a recipient advertising ML-KEM, so the routing '
+            'follows the advertisement and not the configuration. Mutating '
+            'CkManager to pass the sender\'s own algorithm reddens it, and the '
+            'failure is the production symptom — "@bob:myapp advertises a '
+            'x-wing nskey, which at/nskey/MLKEM1024/AES/GCM cannot seal to", '
+            'i.e. exactly the "refusing would protect nothing" outcome this '
+            'row rejects.',
+      );
       provenIn(
         'packages/at_client/test/pairwise_secret_sharing_test.dart',
         'two ML-KEM-1024 clients exchange the no-hybrid construction',

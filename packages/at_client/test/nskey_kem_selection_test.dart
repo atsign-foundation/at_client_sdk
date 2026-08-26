@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
+import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
 import 'test_utils/mocks.dart';
@@ -17,6 +18,8 @@ void main() {
 
   late MockAtClient atClient;
   late CryptoContext context;
+
+  setUpAll(() => registerFallbackValue(AtKey()));
 
   setUp(() {
     atClient = MockAtClient();
@@ -103,6 +106,98 @@ void main() {
       // never claimed would fail on ITS side as an AEAD error naming nothing.
       await expectLater(provider.encrypt(context, atKey, ck.toBase64()),
           throwsA(isA<AtEncryptionException>()));
+    });
+
+    /// UC-A4.5's central clause, and the arm the row's own citations do not
+    /// have: *"Alice's configuration decides what `@alice` is a **recipient**
+    /// for and nothing about who she can send to."*
+    ///
+    /// ⚠️ **The two arms that used to stand for this co-varied.** One had
+    /// sender and recipient both on X-Wing, the other both on ML-KEM, so they
+    /// differed in the recipient's advertised KEM *and* in the sender's
+    /// configuration together — and a regression that routed by the sender's
+    /// own algorithm would have left both green, surfacing only as
+    /// `NskeyProvider.encrypt`'s guard throwing. That is the outcome the row
+    /// rejects in its own words: "refusing would protect nothing."
+    ///
+    /// Here the sender is configured for **ml-kem-1024 in both arms** and
+    /// nothing about it changes; the only thing that varies is what the
+    /// destination advertises. `CkManager` stamps the conveyance write with
+    /// `nskeyProviderIdFor(advertised.alg)`, so that id is where the routing
+    /// decision becomes observable.
+    // ⚠️ No apostrophe in this name, deliberately: `provenIn` matches the raw
+    // source with `source.contains("'$testName")`, so an escaped `\'` in the
+    // declaration never matches the runtime string a citation carries.
+    test(
+        'the RECIPIENT advertisement decides the conveyance provider, '
+        'not the sender configuration', () async {
+      const bob = '@bob';
+      const carol = '@carol';
+
+      final xWingKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final bobPair = await xWingKem.keyPairFromSeed(xWingKem.newSeed());
+      final carolPair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+
+      final ring = InMemoryNskeyKeyRing()
+        ..seedPublicOnly(bob, namespace,
+            publicKey: bobPair.publicKey, keyAlgo: SecretSharingAlgos.xWing)
+        ..seedPublicOnly(carol, namespace,
+            publicKey: carolPair.publicKey,
+            keyAlgo: SecretSharingAlgos.mlKem1024);
+
+      final cache = ContentKeyCache();
+      // One provider per KEM, and the put routes to whichever id the manager
+      // stamped — the production shape. A single-provider fake would refuse
+      // the second arm at its own guard and prove nothing about routing.
+      final providers = {
+        for (final algo in SecretSharingAlgos.keyAlgos)
+          nskeyProviderIdFor(algo)!:
+              NskeyProvider(keyRing: ring, cache: cache, keyAlgo: algo)
+      };
+
+      final stamped = <String?>[];
+      // ⛔ The varied thing must be the RECIPIENT, so the sender is pinned to
+      // ml-kem-1024 for both — a configuration that disagrees with @bob.
+      // Via the constructor, not `when(() => …getPreferences())`: that is a
+      // concrete override on this mock and stubbing it silently does nothing,
+      // which the mock's own dartdoc says.
+      final sender = MockAtClient(
+          keyEstablishmentAlgorithms: const [SecretSharingAlgos.mlKem1024]);
+      when(() => sender.getCurrentAtSign()).thenReturn(owner);
+      when(() => sender.put(any(), any(),
+              putRequestOptions: any(named: 'putRequestOptions')))
+          .thenAnswer((inv) async {
+        final key = inv.positionalArguments[0] as AtKey;
+        if (key.key.startsWith('__ckcur')) return true;
+        final opts =
+            inv.namedArguments[#putRequestOptions] as PutRequestOptions?;
+        stamped.add(opts?.cryptoProviderId);
+        await providers[opts!.cryptoProviderId]!.encrypt(
+            CryptoContext(atClient: sender),
+            key,
+            inv.positionalArguments[1] as String);
+        return true;
+      });
+
+      final manager = CkManager(cache: cache, keyRing: ring);
+      final senderContext = CryptoContext(atClient: sender);
+      AtKey to(String recipient) => AtKey()
+        ..key = 'treaty'
+        ..namespace = namespace
+        ..sharedBy = owner
+        ..sharedWith = recipient
+        ..metadata = Metadata();
+
+      await manager.ensureCurrent(senderContext, to(bob));
+      await manager.ensureCurrent(senderContext, to(carol));
+
+      expect(stamped, [nskeyCryptoProviderId, mlKemNskeyCryptoProviderId],
+          reason: 'the same sender, configured for ml-kem-1024 throughout, '
+              'must seal to @bob under X-Wing because that is what @bob '
+              'advertises, and to @carol under ML-KEM because that is what '
+              '@carol advertises. A sender that followed its own configuration '
+              'would stamp the ML-KEM id both times');
     });
 
     test('no shared construction is a refusal, not a guess', () async {

@@ -255,7 +255,7 @@ it is not a failure and the ledger reports such a row as *unpinned* rather than
 covered — but the live plan described clause pinning as though citations
 generally did it. Corrected there in the same commit as this entry.
 
-### F2 — UC-A4.5's central clause is unguarded, though it is true
+### F2 — UC-A4.5's central clause was unguarded — ✅ CLOSED 2026-08-26
 
 The row's clause: *"Alice's configuration decides what `@alice` is a
 **recipient** for and nothing about who she can send to."*
@@ -283,10 +283,34 @@ agree — and would surface only as that provider guard throwing, i.e. as two
 atSigns unable to communicate. That is precisely the outcome the row rejects in
 its own words: *"refusing would protect nothing."*
 
-**Owed:** one arm holding the sender's configuration fixed while varying only
-the recipient's advertised KEM. `nskey_kem_selection_test.dart`'s "a provider
-will not seal to the other KEM's advertisement" is the nearest thing and is not
-it — it addresses a provider directly, bypassing the routing that is the claim.
+✅ **The arm was written the same day**, in
+`packages/at_client/test/nskey_kem_selection_test.dart` — "the RECIPIENT
+advertisement decides the conveyance provider, not the sender configuration" —
+and UC-A4.5 now cites it first. One sender, configured for `ml-kem-1024`
+throughout, sealing to two destinations that differ **only** in what they
+advertise; the observable is the `cryptoProviderId` `CkManager` stamps on the
+conveyance write. It reads
+`[at/nskey/XWING/AES/GCM, at/nskey/MLKEM1024/AES/GCM]`.
+
+**Two mutations, because the arm has two lines of defence.** Routing
+`CkManager` by `context.atClient.getPreferences()!.keyEstablishmentAlgorithms
+.first` instead of `advertised.alg` reddens it through the provider guard, and
+the failure text is the production symptom itself: *"@bob:myapp advertises a
+x-wing nskey, which at/nskey/MLKEM1024/AES/GCM cannot seal to"* — the "refusing
+would protect nothing" outcome the row rejects. Separately, mutating the
+**expectation** to `[mlKem, mlKem]` fails quoting the reason string, which
+proves the assertion itself discriminates rather than being carried by the
+throw.
+
+⚠️ **The test name carries no apostrophe, deliberately.** `provenIn` matches
+raw source with `source.contains("'$testName")`, so an escaped `\'` in a test
+declaration can never match the runtime string a citation holds. The rail
+caught this on the first attempt, which is the mechanism working.
+
+⚠️ **`nskey_kem_selection_test.dart`'s existing "a provider will not seal to
+the other KEM's advertisement" is NOT this arm** and was the nearest thing
+before: it addresses a provider directly, bypassing the routing that is the
+claim.
 
 ### F3 — about 8 citations rest on tests they do not pin
 

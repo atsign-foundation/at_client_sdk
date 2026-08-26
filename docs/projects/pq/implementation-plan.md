@@ -220,15 +220,16 @@ against the test it cites and record where the citation does not establish the
 clause. The pins compute the *known* overclaim; they cannot tell you a cited
 test proves something narrower than the clause it is attached to.
 
-**Started 2026-08-26. Cluster A is done — 36 citations of 145 — and the running
-record, the method and the three findings are in
+**Started 2026-08-26. Cluster A is done — 36 citations — and the running record,
+the method and the three findings are in
 [detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26).
-B, C and G remain: 109 citations.** The one substantive finding so far is
-**UC-A4.5**, whose central clause ("Alice's configuration decides what she is a
-*recipient* for and nothing about who she can send to") is true in the code and
-established by neither of its citations — both arms co-vary the sender's
-configuration with the recipient's. It owes one arm that varies only the
-recipient.
+B, C and G remain: 109 of 146.** The one substantive finding, **UC-A4.5**, is
+✅ **closed**: its central clause ("Alice's configuration decides what she is a
+*recipient* for and nothing about who she can send to") was true in the code and
+established by neither citation, because both arms co-varied the sender's
+configuration with the recipient's. The isolating arm now exists in
+`packages/at_client/test/nskey_kem_selection_test.dart` and the row cites it
+first.
 
 ⛔ **Enumerate with the suite's own recorder, and `rm` the file first** —
 `provenIn` appends, and a stale file reads as twice the citations. The command
