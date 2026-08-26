@@ -119,6 +119,31 @@ void main() {
             'nothing enforces');
   });
 
+  test('no test reaches a live client around the guarded doors', () {
+    // The guard can only refuse what passes through it. Three doors reach a
+    // live client in this pack — TestPreferences.getPreference, the
+    // initialiser, and the isolate-local builder in notify_with_isolate_test —
+    // and every one of them calls the guard. A file that BUILT its own
+    // preference and called setCurrentAtSign itself would go round all three,
+    // and nothing else would notice. So: a file may construct an
+    // AtClientPreference only if it also invokes the guard.
+    final offenders = <String>[];
+    for (final entity in Directory('test').listSync(recursive: true)) {
+      if (entity is! File || !entity.path.endsWith('.dart')) continue;
+      final source = entity.readAsStringSync();
+      if (!source.contains('AtClientPreference(')) continue;
+      if (source.contains('refuseDurableWritesToLongLivedAtSigns')) continue;
+      offenders.add(entity.path);
+    }
+    expect(offenders, isEmpty,
+        reason: 'these files build an AtClientPreference of their own and '
+            'never invoke the guard, so they can reach a live client without '
+            'it: $offenders. Either take the preference from '
+            'TestPreferences.getPreference, or call '
+            'TestPreferences.refuseDurableWritesToLongLivedAtSigns on what you '
+            'built before handing it to a client.');
+  });
+
   test('every atSign the CI configs name is covered by the guard', () {
     // The set cannot be allowed to drift from the configs it protects: adding
     // a fifth atSign to a config without adding it here would leave that one
