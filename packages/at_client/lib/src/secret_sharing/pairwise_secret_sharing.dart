@@ -392,7 +392,7 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     ];
 
     _syncListener = _EnvelopeSyncListener(markers, () {
-      unawaited(sweepOnce());
+      _sweepInBackground();
     });
     atClient.syncService.addProgressListener(_syncListener!);
     // A wake-up notification only nudges us; the envelope itself is fetched
@@ -402,14 +402,17 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
         .subscribe(
             regex: EnvelopeAddressing.regexForAny(addresses),
             shouldDecrypt: false)
-        .listen((_) => unawaited(sweepOnce(fromRemote: true)));
+        .listen((_) => _sweepInBackground(fromRemote: true));
     // Envelopes only reach the local store via sync, so a client that does
     // not sync must sweep the atServer or its periodic sweep can never find
     // anything — leaving a missed wake-up as an unrecoverable loss of a
     // message that is still sitting on the atServer.
     final bool sweepRemote = !clientRunsSync;
     _sweepTimer = Timer.periodic(
-        sweepInterval, (_) => unawaited(sweepOnce(fromRemote: sweepRemote)));
+        sweepInterval, (_) => _sweepInBackground(fromRemote: sweepRemote));
+    // Awaited, and so NOT routed through the helper: this one is the caller's
+    // own start-up sweep, and a caller that asked to start watching should
+    // hear about it failing rather than read it in a log line.
     await sweepOnce(fromRemote: sweepRemote);
   }
 
@@ -426,7 +429,40 @@ mixin PairwiseSecretSharing on KeyPackageRegistration {
     _wakeUpSubscription = null;
   }
 
+  /// [sweepOnce] for the three callers that cannot await it — the sync-progress
+  /// listener, the wake-up subscription and the periodic timer.
+  ///
+  /// ⚠️ **They used to call `unawaited(sweepOnce(...))` directly, and that
+  /// discards the future along with any error it carries — so a throw became
+  /// an unhandled async error in whatever zone the timer happened to fire in.
+  /// In a test that fails the test, from a stack naming no assertion; in an
+  /// app it depends entirely on the zone, and can take the isolate down.**
+  ///
+  /// A sweep can fail for reasons that have nothing to do with this client
+  /// being wrong: `sweepOnce` opens with a `getAtKeys` over the wire, so a
+  /// transient network failure throws — and so does a **revoked** enrollment,
+  /// on every one of these three triggers, for as long as the client runs.
+  /// That is how this was found: after a revocation the doomed client's
+  /// background sweep threw `AT0027 … is revoked` into a test that had not
+  /// called it.
+  ///
+  /// Logged at `warning` and swallowed. A background sweep finding nothing is
+  /// indistinguishable from one that could not look, so the log line is the
+  /// only account of it there will be — and losing a sweep is not losing an
+  /// envelope, because the next trigger sweeps the same addresses again.
+  void _sweepInBackground({bool fromRemote = false}) {
+    unawaited(sweepOnce(fromRemote: fromRemote).catchError((Object e) {
+      logger.warning(
+          'Background envelope sweep failed for ${atClient.getCurrentAtSign()}'
+          '${atClient.enrollmentId == null ? '' : ' (enrollment '
+              '${atClient.enrollmentId})'}; the next trigger sweeps the same '
+          'addresses again: $e');
+      return 0;
+    }));
+  }
+
   /// Scans for envelopes addressed to this client; verifies, decrypts, emits
+  /// and deletes each.  /// Scans for envelopes addressed to this client; verifies, decrypts, emits
   /// and deletes each. Returns how many envelopes were consumed. Safe to call
   /// concurrently with the periodic sweep, a sync-triggered sweep, and a
   /// wake-up sweep — each envelope key is claimed synchronously before any

@@ -1,4 +1,4 @@
-import 'dart:async' show StreamController, TimeoutException;
+import 'dart:async' show StreamController, TimeoutException, runZonedGuarded;
 import 'dart:convert';
 import 'dart:typed_data';
 
@@ -1453,5 +1453,52 @@ void main() {
       final secret = await pending;
       expect(secret.value, 'KB');
     });
+  });
+
+  test(
+      'a background sweep that cannot list envelopes is logged, not thrown '
+      'into the zone', () async {
+    // `sweepOnce` opens with a getAtKeys over the wire, so it throws for
+    // reasons that have nothing to do with this client being wrong: a
+    // transient network failure, or a REVOKED enrollment, which throws on
+    // every trigger for as long as the client runs. The three background
+    // triggers cannot await it, and `unawaited` discards the error along with
+    // the future — so it became an unhandled async error in whatever zone the
+    // timer happened to fire in. Found exactly that way: after a revocation
+    // the doomed client's background sweep threw AT0027 into a functional test
+    // that had never called it, from a stack naming no assertion.
+    when(() => sharerA.atClient.getAtKeys(
+            regex: any(named: 'regex'),
+            showHiddenKeys: any(named: 'showHiddenKeys'),
+            useRemoteAtServer: any(named: 'useRemoteAtServer')))
+        .thenThrow(Exception('AT0027: enrollment_id: enroll-a is revoked'));
+
+    // The PERIODIC timer is the trigger, not a wake-up notification: a
+    // hand-built notification has to match the subscribe regex to reach the
+    // listener at all, and one that does not makes this test pass whether the
+    // fix is present or not. The timer needs no such luck — and startListening
+    // creates it BEFORE the awaited sweep that throws, so it is live even
+    // though that call fails.
+    sharerA.sweepInterval = const Duration(milliseconds: 50);
+
+    final unhandled = <Object>[];
+    await runZonedGuarded(() async {
+      // startListening's OWN final sweep is awaited, and is meant to surface:
+      // a caller that asked to start watching should hear that it could not,
+      // rather than read it in a log. Only the background triggers swallow.
+      await expectLater(sharerA.startListening(), throwsA(isA<Exception>()));
+      // Long enough for several timer ticks, each of which sweeps and throws.
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }, (error, stack) => unhandled.add(error));
+
+    expect(unhandled, isEmpty,
+        reason: 'a background sweep failure escaped as an unhandled async '
+            'error. In a test that fails whichever test happens to be running; '
+            'in an app it depends on the zone and can take the isolate down. '
+            'It must be logged and swallowed — losing a sweep is not losing an '
+            'envelope, because the next trigger sweeps the same addresses '
+            'again. Escaped: $unhandled');
+
+    sharerA.stopListening();
   });
 }
