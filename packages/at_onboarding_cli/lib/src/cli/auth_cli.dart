@@ -875,7 +875,20 @@ Future<int> approve(ArgResults ar, AtClient atClient, {int? limit}) async {
     EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
       atSign: atClient.getCurrentAtSign()!,
       enrollmentId: eId,
-      apkamSymmetricKey: AtBytes.fromString(er['encryptedAPKAMSymmetricKey']),
+      // ⛔ `?? ''` is not defensive padding — an ABSENT wrapped key is the
+      // signal that identifies a pq request, and it must reach approve()
+      // rather than crashing here. A pq enrollee sends nothing RSA-wrapped, so
+      // this field is legitimately missing; `AtBytes.fromString(null)` threw
+      // `type 'Null' is not a subtype of type 'String'` and neither approver
+      // could approve such a request at all.
+      //
+      // The value is then IGNORED on that path: EnrollmentServiceImpl.approve
+      // re-reads the pending record, sees an empty wrapped key beside an
+      // advertised keyPackage, mints its own symmetric key and swaps in
+      // EnrollmentRequestDecision.approvedWithMintedKey. Empty is what the
+      // functional harness passes, for the same reason.
+      apkamSymmetricKey:
+          AtBytes.fromString(er['encryptedAPKAMSymmetricKey'] ?? ''),
     );
 
     // Approve through at_client's EnrollmentService, not at_auth directly:
@@ -962,7 +975,10 @@ Future<int> autoApprove(ArgResults ar, AtClient atClient) async {
       EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
         atSign: atClient.getCurrentAtSign()!,
         enrollmentId: eId,
-        apkamSymmetricKey: AtBytes.fromString(er['encryptedAPKAMSymmetricKey']),
+        // See the note on the interactive approve path above: an absent
+        // wrapped key IS a pq request, and approve() mints for itself.
+        apkamSymmetricKey:
+            AtBytes.fromString(er['encryptedAPKAMSymmetricKey'] ?? ''),
       );
 
       // Approve through at_client's EnrollmentService, not at_auth directly:

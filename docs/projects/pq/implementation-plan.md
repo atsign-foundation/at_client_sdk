@@ -164,6 +164,7 @@ TODO row names a section whose body declares itself done").
 | [content keys per scope](#content-keys-per-scope) | **A ruling from gkc** on whether one content key per writing enrollment per scope is the intent. If not: `CurrentCkPointer` needs a remote-first write through an atomic verb, and rotation needs to supersede every CK in scope | gkc's ruling, then the fix |
 | [the late-arriving nskey private](#the-late-arriving-nskey-private) | File a late-arriving nskey private **only for a generation this client actually asked for**. The reverted attempt filed any arrival, which breached the seeding guarantee | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Add the `pending` enrollment status value and build the rotation arm against its own dedicated CRAM atSign. ⛔ There is **no** fleet-adoption wait — see the standing premise | The at_auth publish, and a dedicated CRAM atSign |
+| **a pq enrolment costs a post-approval round trip** | Measure it, and decide whether the enrolment APIs should say so. A legacy enrollee carries its own symmetric key in and is done at approval; a pq enrollee must then **collect** the key the approver encapsulated to its key package, polling for the envelope (`enrollmentApkamSymmetricKeyResolver`, 30 s budget, 2 s interval). ⚠️ **Found 2026-08-26 by it breaking two tests**, not by design review: two authorisation tests in the CLI functional pack wait 10 s before approving and have a 30 s budget, and under the `pqReady` default that no longer fit — they now name `legacy` because they assert authorisation, not key exchange. The pin keeps them honest; it does not measure the cost | Nothing. It needs a measurement and then a judgement about whether callers are told |
 | **CI at head** | Dispatch both workflows at head and read them. "Every rail green" is half of D1's definition, and **nothing fires on push on this branch** — the workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only, so the newest run is only ever as new as the last manual dispatch. ⚠️ **Dispatch matters beyond staleness**: CI's at_client job runs a **bare** `dart analyze` that reads `benchmark/`, which the routine `dart analyze lib test` never opens — that hid five errors for six days. ⛔ **And docs are build inputs here**, so a plan edit alone can redden the acceptance rail. Re-derive, never quote:<br>`gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName --jq '.[] \| [.headSha[0:9], .workflowName, .conclusion] \| @tsv'`<br>`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike` | A head worth dispatching |
 
 ### P2 — should be done if there is time
@@ -178,7 +179,7 @@ TODO row names a section whose body declares itself done").
 | [14.50](#1450-the-e2e-teardown-revokes-enrollments-belonging-to-other-runs) | Scope the e2e teardown to the run that created the enrollments | Nothing. Needs no permission and no publish |
 | [14.47](#1447-the-at_client-unit-tree-has-a-cross-file-isolation-flake) | A unit-tree isolation flake in `local_secondary_sync_queue_test.dart`. Green alone and green in the full suite; red only in one hand-constructed ordering nothing runs | Reproduce at rate first |
 | [14.44](#1444-residuals-from-the-at_chops-pr-review) | Two remain, both ⛔ **POST-D1** (gkc, 2026-08-23): at_chops 3.6.0's CHANGELOG owes the resolution-skew sentence (amend that section in place), and `XWingCore.combine` sizes its buffer from its inputs' actual lengths while writing at literal offsets 0/32/64/96/128 | Nothing. Both ride the next at_chops touch |
-| **third-party dependency floors** | at_client alone declares **seven** below what it resolves — `path`, `crypto`, `uuid`, `archive`, `http`, `async`, `meta` — all minor or patch gaps, none checked against first use. The sibling floors were swept 2026-08-25; these were not | Nothing. Lower risk, and still unmeasured |
+| **third-party dependency floors** | at_client alone declares **seven** below what it resolves — `path`, `crypto`, `uuid`, `archive`, `http`, `async`, `meta` — all minor or patch gaps, none checked against first use. The sibling floors were swept 2026-08-25; these were not.<br><br>⚠️ **And the gap runs the OTHER way too, which nothing here was watching.** at_client declares `at_persistence_secondary_server: ^5.1.0` and this workspace resolves **5.1.0**, so every pack exercises that version and only that version — while any consumer resolving fresh today takes **5.2.1**, which we have never run against. Found 2026-08-26 by the at_talk demo session, whose external resolution took 5.2.1 while mine took 5.1.0 and neither side would have noticed. That layer owns local storage, the commit log and the keystore. ⚠️ The same version pair already cost time once, when the local keystore's expired-record handling was characterised from 5.2.1's source while the workspace resolved 5.1.0 — the claims held in 5.1.0 by luck. "Readable as interchangeable" is what makes this expensive | Nothing. Two questions, not one: are the seven floors too low, and is at_client actually correct against the top of the range it already admits |
 | **at_auth README** | `packages/at_auth/README.md` describes `FileAtKeysIo` at `:144` and `:191` and never mentions `at_auth_io.dart`, which is the barrel it now lives behind. One or two sentences where `FileAtKeysIo` is first named | Nothing |
 | [14.16](detail/implementation-plan.md#1416-four-residuals-the-issue-tree-audit-surfaced-2026-08-09) | Only ③'s **orphan-growth** half is owed here, and it is a decision before it is code. SS-4 resume was ruled NO RESUME | The decision |
 | **rebuild `at_virtual_env:local`** | The concurrent-relayed-lookup fix merged to at_server trunk; the local tag is whatever tree last built it, so it did not become a fixed atServer by virtue of the merge. Rebuild from a named ref before the next live run that needs one. ⛔ Trunk is now a **fixed** arm — an unfixed control has to come from `a37e3e3b` | Nothing. The recipe is in [Re-deriving the state](#re-deriving-the-state) |
@@ -363,11 +364,29 @@ instead". **There is no such path.**
   nothing later. It publishes no advertisement, and every peer trying to seal
   to it gets `NamespaceKeyUnavailableException`.
 
-⛔ **What is NOT established, and must not be assumed:** whether a first
-(CRAM) enrolment is actually wildcard-only. `FirstEnrollmentRequest` sends no
-namespace map — the atServer assigns it — and that is at_server's to answer,
-not this tree's. Settle it against a real atServer before deciding the size of
-this, with `enroll:list` on a freshly onboarded atSign.
+✅ **SETTLED 2026-08-26, measured against a live atServer** in a local
+ephemeral environment by the at_talk demo session, which is where this was
+costing real time. A first (CRAM) enrolment IS wildcard-only:
+
+| Enrollment ID | Status | AppName | DeviceName | Namespaces |
+| --- | --- | --- | --- | --- |
+| `d118c77f-…` | approved | firstApp | firstDevice | `{__manage: rw, *: rw}` |
+
+`_isSeedable` skips both, so `authorisedNamespaces()` returns empty and `seed()`
+mints nothing, ever.
+
+⚠️ **Confirmed behaviourally as well as by reading, and the positive control is
+what makes it evidence**: an atSign onboarded `pqReady` and run at `pqReady`
+with `namespace: 'ai6bh'` had **no** `public:__nskey.ai6bh@…` — while
+`public:pq_signing_root@…` WAS present in the same scan. So the PQ bootstrap
+ran and what is missing is specifically the namespace-key step, rather than the
+whole path being cold.
+
+**The consequence, and it is the reason this is P1 rather than a curiosity:**
+every freshly onboarded atSign is unreachable as a recipient — a pqActive
+sender gets `NamespaceKeyUnavailableException` from it in every namespace —
+until some app enrols with a real namespace. Which makes the app-enrolment path
+the only route out of that state.
 
 **Why it matters if it is reachable:** the atSign is invisible as a recipient
 for every namespace, permanently, with no error on its own side — the failure
@@ -1263,11 +1282,19 @@ cd tests/at_onboarding_cli_functional_tests && dart analyze test           # exi
 # re-measured 15 commits after the others.
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_functional_test/runLocal.sh              # 183 pass, 2 skipped — at `ecf1082de`, NOT re-run since
 VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_end2end_test/runLocal.sh                 # 54, EXIT=0 — at `ecf1082de`, NOT re-run since
-VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_onboarding_cli_functional_tests/runLocal.sh  # 18, EXIT=0 — at `ecf1082de`, NOT re-run since
-# ⚠️ Those three were last measured on 2026-08-25 at `ecf1082de` against
-# `at_virtual_env:g0fixed`, and the tree has moved since — the posture default
-# flipped to `pqReady` and both live packs gained required-parameter pins.
-# Re-run before quoting any of them. ⚠️ The block previously read "ALL SIXTEEN …
+VIRTUALENV_IMAGE=<a-ref-you-named> bash tests/at_onboarding_cli_functional_tests/runLocal.sh  # 18, EXIT=0 — RE-RUN 2026-08-26 at the key-exchange fix
+# ⚠️ The FUNCTIONAL and E2E packs were last measured on 2026-08-25 at
+# `ecf1082de`; the tree has moved since — the posture default flipped to
+# `pqReady` and both gained required-parameter pins. Re-run before quoting
+# either.
+# ✅ The CLI pack WAS re-run on 2026-08-26, carrying the key-exchange routing,
+# and is 18 EXIT=0. ⛔ It went 14/4 first: flipping the default to a posture
+# whose key-exchange mode is `pq` broke four of its tests, and nothing in any
+# unit suite could see it. Delete `*.enrollment.checkpoint` at that package's
+# root before believing a red — `enroll()` RESUMES from one instead of sending
+# a fresh request, so debris from a failed run makes the NEXT run fail at
+# approve with "No pending enrollment requests found", which reads as a
+# product defect. ⚠️ The block previously read "ALL SIXTEEN …
 # at `bef991985`, against at_server `a37e3e3b`"; rows have been added since, so
 # do not quote a count of rows either.
 #

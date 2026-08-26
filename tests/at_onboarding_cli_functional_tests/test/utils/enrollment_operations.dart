@@ -56,10 +56,16 @@ class EnrollmentOperations {
       enrollmentId = enrollment.enrollmentId;
       encApkamSymmetricKey = enrollment.encryptedAPKAMSymmetricKey;
     }
+    // ⛔ `?? ''`, not `!`. A pq-mode request carries NO wrapped symmetric key —
+    // that absence is the signal `EnrollmentServiceImpl.approve` reads to mint
+    // one of its own and swap in `approvedWithMintedKey` — so the null
+    // assertion threw for every request built under the default posture once
+    // that default became pqReady. Empty lets the decision reach approve(),
+    // which is the code that does the right thing.
     EnrollmentRequestDecision decision = EnrollmentRequestDecision.approved(
       enrollmentId: enrollmentId!,
       atSign: atsign,
-      apkamSymmetricKey: AtBytes.fromString(encApkamSymmetricKey!),
+      apkamSymmetricKey: AtBytes.fromString(encApkamSymmetricKey ?? ''),
     );
     AtEnrollmentResponse? enrollmentResponse =
         await enrollmentService.approve(decision);

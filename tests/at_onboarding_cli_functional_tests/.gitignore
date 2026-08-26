@@ -5,3 +5,15 @@
 # Local secondary storage left behind when a test uses a relative path.
 /storage/
 /test/storage/
+
+# Resume checkpoints `AtOnboardingService.enroll()` writes, named
+# `<sha256>.enrollment.checkpoint` at the package root.
+#
+# ⛔ Untracked is not enough — these are ACTIVE debris, not inert. `enroll()`
+# RESUMES from a checkpoint matching (appName, deviceName, namespaces) instead
+# of sending a fresh request, so one left by a failed run makes the NEXT run's
+# approve step fail with "No pending enrollment requests found" — a failure
+# that reads as a product defect and is a stale file. Delete them before
+# believing a red here. Measured 2026-08-26: two of them turned a 2-test
+# failure into a false differential.
+/*.enrollment.checkpoint
