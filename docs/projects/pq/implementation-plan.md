@@ -153,6 +153,7 @@ TODO row names a section whose body declares itself done").
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
+| [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | **Reproduce it in this tree, then fix it.** A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. Three in-tree reproduction attempts failed; the row says how |
 | [the acceptance audit](#the-acceptance-audit) | Read every scenario's `proves:` prose against the test it cites, and record where the citation does not establish the clause. The structural half is built and green; this is the judgement half, and it is what D1's own definition rests on | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **gkc publishes at_auth 4.0.0-rc1**, then carve at_client (stacked) → at_client_flutter → at_onboarding_cli. Six of the eight positions are through by merge; what is left is publishes | gkc. ⚠️ **Merged is not published, and only the publishes gate anything now** |
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
@@ -162,6 +163,7 @@ TODO row names a section whose body declares itself done").
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | `[RECOMMENDED]` Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
+| **advertisement fetch volume, ttr and client caching** | Three questions, one subject, raised by gkc 2026-08-26 after a wire capture showed **110 `_apsk` lookups in a single short client run** — more than either control atSign made. (1) Why are there so many? Establish what re-fetches, and whether anything is re-reading per operation what it could hold. (2) Should an advertisement carry a `ttr`, and if so how long — it is a public record that peers must not read stale after a rotation, and rotation is the revocation lever. (3) How should a client cache advertisements it has fetched, and for how long? ⛔ **These interact**: a client-side cache with no server-side `ttr` is a rotation that does not take effect, and a `ttr` shorter than a session is the fetch volume in (1) by design | Nothing. It needs a measurement, then a ruling |
 | [the at_client carve stack](#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
 | [arm 1 vs arm 3 bucketing](#arm-1-vs-arm-3-bucketing) | **A ruling from gkc** — the measuring is done. Arm 3 cannot be scoped and the catalogue's count table stays wrong until it is settled | gkc's ruling. Nothing else |
 | [a wildcard enrolment seeds nothing](#a-wildcard-enrolment-seeds-nothing) | **A ruling from gkc** on whether an atSign reachable only through a wildcard (`*`) enrolment is expected to publish namespace keys. Today it publishes none, so nobody can seal to it in any namespace, and the doc comment that said otherwise was false | gkc's ruling. The measuring is done |
@@ -530,6 +532,76 @@ there is no bound on a slow-but-alive peer.
 folded in** — `NotifyConnectionPool.getOutboundClient` builds a fresh dummy per
 call and relies on that match to reuse a connection at all, so identity equality
 there would open a connection per notification.
+
+### A client that exits during its startup tail abandons seeding
+
+⛔ **Confirmed live in both directions, 2026-08-26, by the at_talk demo
+session.** The variable is the client's LIFETIME and nothing else — same
+client, same keyfile, same posture, same environment, same minute, with stdin
+held open for 35 s instead of piped and closed:
+
+| | lock frame | advertisement |
+| --- | --- | --- |
+| stdin piped and closed | never reached the atServer | never |
+| stdin held open 35 s | `19:48:12.191Z` | `19:48:12.243Z` — 52 ms later |
+
+After the second run the atSign was reachable as a recipient for the first time
+that day.
+
+**The mechanism.** Seeding is unawaited work: `AtClientImpl._init` fires
+`PqClientBootstrap.startup()` without awaiting it, deliberately, because
+construction must not block on network round trips. A client that finishes its
+job and exits takes the process down wherever the tail has got to. In the
+failing run it got as far as forming the mint interlock write — the client
+logged `update to remote: …_nskeylock.<ns>@<atSign>` — and the wire capture,
+which ran another 26 seconds, carries no such frame from that atSign at all.
+The bytes never left the process.
+
+⚠️ **The retrofit is not the cause**, though that is where a day of
+investigation went. Every route that retrofits publishes, because each keeps
+its client alive:
+[UC-B1.4](acceptance.md#84-uc-b14--a-retrofitted-scoped-enrollment-runs-an-authenticated-verb)'s
+file carries arms for the in-process route, the cold-keyfile route and
+`at_activate list`. The retrofit merely produced an atSign with nothing
+published whose every later client was short-lived.
+
+⛔ **Two failure modes, and the second is worse.**
+
+1. **Silent abandonment.** Nothing tells the caller. The only symptom is at the
+   FAR end, where a *different* atSign reports "@X has no published nskey" —
+   naming the wrong party, which is what sent the investigation to the retrofit.
+2. **A self-perpetuating interlock.** A client that dies *after* the lock lands
+   rather than before leaves an immutable `_nskeylock.<ns>@<atSign>` with a
+   120-second ttl that nothing deletes, and a successor that finds it held with
+   nothing published throws rather than minting. A short-lived client relaunched
+   in a loop could in principle never get through. Not observed — the reported
+   run's frame never left the process — so this one is reasoned from the code,
+   not measured.
+
+**And `startupComplete` cannot be the answer as it stands.** It is the only
+signal a caller has, and `stop()` breaks the step loop and completes it anyway,
+so it resolves identically whether the work ran or was skipped. A caller that
+waits for it still cannot tell.
+
+⚠️ **What is owed is a reliable in-tree reproduction, and three attempts have
+failed.** Recorded so they are not repeated:
+
+1. **Stop the client the enrolment handed back.** Vacuous green — that client
+   was built seconds earlier inside the enrolment dance and its tail had long
+   finished, so `stop()` had nothing to interrupt.
+2. **Build a second client and stop it in the turn `create` returns.** Vacuous
+   green for a different reason: the assertion was that `startupComplete` had
+   resolved, and it resolves on a stopped startup by design.
+3. **Assert the outcome instead — `startupComplete` resolved, so the
+   advertisement must exist.** Went red, and then its own positive control went
+   red too: an identical client left ALIVE on a second run-unique namespace
+   also published nothing, so the rig could not seed for those namespaces at
+   all and the red said nothing about stopping. Not committed.
+
+The next attempt should start by establishing that a bare
+`AtClientImpl.create` with an `atKeysIo` and a run-unique namespace seeds at
+all — the arms that do publish all reach their client through
+`enrolAndAuthenticate`, and that difference is unexplained.
 
 ### A retrofitted enrolment cannot run an authenticated verb
 
