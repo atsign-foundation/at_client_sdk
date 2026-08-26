@@ -185,6 +185,31 @@ true* and *how to test it*; it does not re-explain *how the mechanism works*.
 Substrate mechanics are cited to `design.md`; substrate-related rulings to
 `decisions.md`.
 
+**Evidence standard — what counts as proof.** A row is proven by a test that
+drives a **real atServer**: `tests/at_functional_test`, `tests/at_end2end_test`
+or `tests/at_onboarding_cli_functional_tests`. A proof that runs in-process is
+acceptable **only where a live test would be prohibitively costly or
+impossible** (gkc, 2026-08-26), and the bar for that is "there is no atServer
+in the loop at all" — parsing, format composition, provider selection, crypto
+over fixed vectors. Needing an enrollment dance does not clear it; the live
+packs do that routinely.
+
+⚠️ **The reason this is a rule rather than a preference** is that the two are
+indistinguishable in every summary the catalogue produces. The status table
+says `PROVEN` for a row proven against a live atServer and for one proven
+against a mock, and a mock accepts whatever it is handed — so a refusal, a
+lock or an interlock the mock does not model is green whether the mechanism is
+present or absent. [Section 12.6](#126-uc-b56--a-rotation-inside-the-cooldown-is-refused-and-succeeds-after-it)
+is the worked example: its interlock *is* the atServer refusing a second create
+of an immutable record, and no unit test can find it.
+
+Where a row rests on an in-process proof, the reason is declared in
+`packages/at_client/test/acceptance/manifest.dart` — `liveProofExempt` for a
+row a live test could add nothing to, `liveProofOwed` for one that owes a live
+test and names what owes it. `catalogue_test.dart` reddens on a row that cites
+no live test and declares neither, and again on an entry whose row has since
+gained live proof, so the declaration cannot outlive what justified it.
+
 ## 1. Notation, state model & key objects (test vocabulary)
 
 This is the shared vocabulary every UC below draws on. It is deliberately thin —
@@ -1697,10 +1722,42 @@ kind and 9 have none:
 | LIVE_INCIDENTAL | 4 | the mechanism runs, nothing asserts the row |
 | NO_LIVE_PROOF | 9 | nothing live exercises it |
 
-What is missing is the ability to address that proof. There are 135
-`provenIn(...)` citations, splitting **68 into a live pack** and **67 at
-in-package unit tests**, so half of this catalogue's PROVEN rows rest on mocks
-while the status table's `68 PROVEN · 0 BLOCKED` does not distinguish the two.
+⚠️ **Those verdicts were measured on 2026-08-23 against 68 live rows and have
+not been re-measured since; the catalogue now has 72.** They are also a
+*coverage* judgement — one agent per family searching the packs — and must not
+be restated as a citation figure. The two answer different questions and
+diverge widely: on 2026-08-27 the citation figure for rows with no live proof
+*cited* was **25**, against this table's 9 with no live proof *at all*. The
+difference is rows exercised live by a test their scenario never names.
+
+What is missing is the ability to address that proof. ⚠️ **This said "135
+`provenIn(...)` citations, splitting 68 into a live pack and 67 at in-package
+unit tests" when measured 2026-08-23.** Re-derived 2026-08-27: **161
+citations, 81 into a live pack and 80 in-process**, over 73 rows. Half of this
+catalogue's PROVEN rows still rest on mocks, and the status table does not
+distinguish the two — which is what the [evidence standard](#0-purpose-scope--how-to-read-this-doc)
+and the burn-down below now do.
+
+**The burn-down is the measure to read, and it prints on every run of the
+acceptance suite:**
+
+```
+BURN-DOWN  clauses proven: 17 of 135   server-proven: 10 of 135
+```
+
+A row-level verdict cannot express what *done* means here, because a row reads
+`PROVEN` on one citation however many separate things its THEN states. The two
+columns are the definition (gkc, 2026-08-26): **proven** is a clause some
+citation pins, **server-proven** is a clause pinned by a citation into a live
+pack. `manifest.dart` records both as exact figures and `catalogue_test.dart`
+fails **in both directions**, so landing a pin and raising the count happen in
+one diff — a count and the thing it counts do not get to drift apart here
+again.
+
+⚠️ **A pin is a claim, not a run.** The burn-down says a citation claims a
+clause and that the claim resolves; `tool/acceptance_ledger.dart` is what says
+the cited test actually ran and passed. Both are needed and neither substitutes
+for the other.
 
 ```bash
 perl -0777 -ne 'while (/provenIn\(\s*'"'"'([^'"'"']+)'"'"'/gs) { print "$1\n" }' \

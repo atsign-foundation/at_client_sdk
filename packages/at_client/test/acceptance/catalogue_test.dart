@@ -140,4 +140,150 @@ void main() {
             'with it');
     expect(int.parse(skippedStated[2]!), rows);
   });
+
+  group('every row has live evidence, or a written reason it cannot', () {
+    // The standing rule (gkc, 2026-08-26): a proof by mock is acceptable ONLY
+    // where a live test would be prohibitively costly or impossible. Before
+    // this, a row proven entirely in-process was indistinguishable from one
+    // proven against a real atServer — the status table said PROVEN for both,
+    // and half the catalogue was in the first group without anyone choosing
+    // that.
+    //
+    // The rule needs a rail rather than prose because the doc has already
+    // carried three stale claims about exactly this subject.
+
+    test('no row rests on an in-process proof without a declared reason', () {
+      final undeclared = (useCasesWithoutLiveProof()
+            ..removeAll(liveProofExempt.keys)
+            ..removeAll(liveProofOwed.keys))
+          .toList()
+        ..sort();
+
+      expect(undeclared, isEmpty,
+          reason: 'these rows cite no test in a live pack, and manifest.dart '
+              'says nothing about why: ${undeclared.join(', ')}.\n'
+              'Every row needs one of three things — a citation to a test in '
+              '${livePackPaths.join(', ')}; an entry in liveProofExempt '
+              'saying why a live test could add nothing; or an entry in '
+              'liveProofOwed naming what owes it. Picking one is the point: '
+              'the row that quietly stays on a mock is the one this catches');
+    });
+
+    test('a row does not claim both an exemption and a debt', () {
+      final both = liveProofExempt.keys
+          .where(liveProofOwed.containsKey)
+          .toList()
+        ..sort();
+
+      expect(both, isEmpty,
+          reason: 'a row cannot both be permanently exempt and owe a live '
+              'test: ${both.join(', ')}. The two maps decay in opposite '
+              'directions, so a row in both is a decision nobody has made');
+    });
+
+    test('a declared row is one the catalogue defines', () {
+      final defined = catalogueUseCases().map((u) => u.id).toSet();
+      final unknown = {...liveProofExempt.keys, ...liveProofOwed.keys}
+          .difference(defined)
+          .toList()
+        ..sort();
+
+      expect(unknown, isEmpty,
+          reason: 'these are declared here but are not use cases the '
+              'catalogue defines: ${unknown.join(', ')}. A typo\'d id is a '
+              'waiver that can never be reviewed, because the row it names '
+              'does not exist');
+    });
+
+    test('a row that has since been proven live loses its entry', () {
+      // The direction nobody checks. An exemption or a debt outlives the state
+      // that justified it, and a stale waiver reads exactly like a considered
+      // one — so the map has to shrink when the tree improves, not just grow
+      // when it does not.
+      final withoutLive = useCasesWithoutLiveProof();
+      final stale = {...liveProofExempt.keys, ...liveProofOwed.keys}
+          .where((id) => !withoutLive.contains(id))
+          .toList()
+        ..sort();
+
+      expect(stale, isEmpty,
+          reason: 'these rows now cite a live test, so their entry in '
+              'liveProofExempt / liveProofOwed is spent and must be deleted: '
+              '${stale.join(', ')}');
+    });
+
+    test('every declared reason says something a reviewer can judge', () {
+      final thin = <String>[];
+      for (final entry in {...liveProofExempt, ...liveProofOwed}.entries) {
+        if (entry.value.trim().length < 40) thin.add(entry.key);
+      }
+      thin.sort();
+
+      expect(thin, isEmpty,
+          reason: 'these reasons are too short to carry a judgement: '
+              '${thin.join(', ')}. The reason is the whole value of the '
+              'entry — "unit only" or "TODO" waives the rule without stating '
+              'anything anybody can disagree with');
+    });
+  });
+
+  group('the clause burn-down', () {
+    // What "done" means, in the two columns gkc set (2026-08-26): every THEN
+    // clause proven by something, and as many as feasible proven against a
+    // real atServer. Row-level PROVEN cannot express either — a row reads
+    // proven on one citation however many separate things its THEN states.
+
+    test('the recorded counts are what the tree produces', () {
+      var clauses = 0, proven = 0, server = 0;
+      for (final u in catalogueUseCases().where((u) => !u.isWithdrawn)) {
+        clauses += clausesOf(u.id).length;
+        final cov = clauseCoverageOf(u.id);
+        proven += cov.proven.length;
+        server += cov.serverProven.length;
+      }
+
+      // Printed on every run, pass or fail: the burn-down is the reason this
+      // guard exists, and a number only visible when something breaks is a
+      // number nobody watches.
+      // ignore: avoid_print
+      print('BURN-DOWN  clauses proven: $proven of $clauses   '
+          'server-proven: $server of $clauses');
+
+      expect(proven, provenClauseCount,
+          reason: 'the tree pins $proven of $clauses clauses and '
+              'manifest.dart records $provenClauseCount.\n'
+              'If you just landed a pin, raise provenClauseCount to $proven '
+              'in the same commit — the count and the thing it counts move '
+              'together, or the count becomes one more stale figure.\n'
+              'If you did not, a pin stopped resolving: a clause was reworded '
+              'and its fragment no longer matches');
+
+      expect(server, serverProvenClauseCount,
+          reason: 'the tree pins $server of $clauses clauses from a live '
+              'pack and manifest.dart records $serverProvenClauseCount. '
+              'Same rule: move them together');
+    });
+
+    test('every pin resolves to exactly one clause', () {
+      // provenIn enforces this while a scenario RUNS, which covers the pins
+      // on rows whose scenario executes. This says the same thing about the
+      // sources, so a pin cannot be counted here and rejected there.
+      final broken = <String>[];
+      citationDetailsByUseCase().forEach((useCase, citations) {
+        for (final citation in citations) {
+          for (final pin in citation.pins) {
+            final hits = resolvePin(useCase, pin);
+            if (hits.length != 1) {
+              broken.add('$useCase pin "$pin" -> ${hits.length} clauses');
+            }
+          }
+        }
+      });
+
+      expect(broken, isEmpty,
+          reason: 'a pin must name exactly one clause. Nothing matched means '
+              'the citation claims nothing while reading as coverage; two '
+              'means nobody can tell which:\n${broken.join('\n')}');
+    });
+  });
 }

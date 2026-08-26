@@ -33,6 +33,10 @@ void main() {
             'the test calls mintIfAbsent), files the matching private in the '
             'same keyfile, and anchors the new enrollment — verified as '
             'ChainVerdict.anchored against the published record',
+          clauses: [
+            'serves the private to other fully privileged enrollments on '
+            'request',
+          ]
       );
       provenIn(
         'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
@@ -42,6 +46,9 @@ void main() {
             'the keyfile carrying both enrollments, and immediate ML-DSA PKAM '
             'under the new id (record-authoritative, so an RSA signature would '
             'be refused)',
+          clauses: [
+            'on the fresh auto-approved enrollment; PQ auth works',
+          ]
       );
       provenIn(
         'tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart',
@@ -117,6 +124,10 @@ void main() {
             'verb; the id inequality is asserted first, so a run in which no '
             'retrofit happened fails rather than measuring an ordinary '
             'enrollment',
+          clauses: [
+            'an authenticated verb over its own connection',
+            'from that enrollment\'s typed key material',
+          ]
       );
       provenIn(
         'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
@@ -171,6 +182,9 @@ void main() {
             'as a mutation turns the refusal into a successful write, so the '
             'arm measures the grant boundary rather than the client\'s ability '
             'to write at all',
+          clauses: [
+            'refused, naming insufficient privilege',
+          ]
       );
     });
 
@@ -195,6 +209,10 @@ void main() {
             'different facts. The literal grant is asserted beside the '
             'comparison, so a retrofit that emptied both maps goes red rather '
             'than satisfying the equality',
+          clauses: [
+            'and equals the literal grant that was enrolled',
+            'returns its own record and nothing else',
+          ]
       );
     });
   });

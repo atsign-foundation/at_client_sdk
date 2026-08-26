@@ -114,7 +114,10 @@ void main() {
             'minting it, the advertisement then resolves by the exact lookup a '
             'sender uses, the client holds the private for that generation, '
             'and a second seed is a no-op rather than a rotation',
-      );
+          clauses: [
+            'a later start adopts the published advertisement rather than '
+            'minting over it',
+          ]);
     });
 
     test('UC-A3.3 · self write with no namespace key has no PQ fallback', () {
@@ -220,6 +223,24 @@ void main() {
           reason: 'a signal-only notification is unaffected — if this went to '
               '2, every signal notification is attempting a decryption of '
               'nothing');
+
+      // The four clauses above are established against a hand-built frame, so
+      // they show what the receive path does with a frame rather than that a
+      // real atServer produces one. The live test carries the two clauses that
+      // difference matters for.
+      provenIn(
+          'tests/at_functional_test/test/nskey_self_notify_live_test.dart',
+          'a self notification reaches a second enrollment and decrypts',
+          proves: 'both clauses against a real atServer and a genuinely '
+              'second enrollment: the delivered frame carries providerId in '
+              'its own appMetadata, and the value opens with the nskey '
+              'private conveyed at approval. A mocked frame can show neither '
+              '— it hands the receiver a value it never had to decrypt, and '
+              'a providerId the test itself wrote',
+          clauses: [
+            'same provider routing as a put',
+            'on the notification frame',
+          ]);
     });
 
     test('UC-A3.5 · the nskey advertisement names its KEM and what it opens',
@@ -255,7 +276,10 @@ void main() {
             'only opens the retired construction", both against the same key) '
             'and the refusals ("no shared construction is a refusal, not a '
             'guess"; "a provider will not seal to the other KEM").',
-      );
+          clauses: [
+            'a CK conveyance into that namespace is sealed under the KEM '
+            '`alg` names and stamped',
+          ]);
       provenIn(
         'packages/at_client/test/nskey_kem_selection_test.dart',
         'both ids resolve on every client',

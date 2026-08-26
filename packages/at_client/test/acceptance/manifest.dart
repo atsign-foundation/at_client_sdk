@@ -62,6 +62,122 @@ const guardFiles = <String>[
   'docs_structure_test.dart',
 ];
 
+/// The packages whose tests drive a real atServer.
+///
+/// A citation into one of these is evidence about the product. A citation
+/// anywhere else runs in-process against a mock, where the other side accepts
+/// whatever it is handed — so a refusal, a lock or an interlock the mock does
+/// not model is green whether the mechanism is present or absent.
+///
+/// Trailing slashes are part of the match: `tests/at_functional_test` is also
+/// a prefix of `tests/at_functional_test_helpers`, and a pack added later with
+/// such a name would silently count as this one.
+const livePackPaths = <String>[
+  'tests/at_functional_test/',
+  'tests/at_end2end_test/',
+  'tests/at_onboarding_cli_functional_tests/',
+];
+
+/// Rows allowed to rest on an in-process proof, each with the reason.
+///
+/// The standing rule (gkc, 2026-08-26) is that a proof by mock is acceptable
+/// **only** where a live test would be prohibitively costly or impossible.
+/// This map is where that "only" is spent: an entry here is a claim that no
+/// live test could add anything, and the sentence is what a reviewer judges.
+///
+/// The bar is high, and the shape that clears it is "there is no atServer in
+/// the loop" — parsing, format composition, provider selection, crypto over
+/// fixed vectors. "It would need an enrollment dance" does not clear it: the
+/// live packs do that routinely.
+///
+/// ⛔ Not a place to park work. A row that owes a live test belongs in
+/// [liveProofOwed], which says the same thing about the tree while saying the
+/// opposite about the intent.
+const liveProofExempt = <String, String>{};
+
+/// How many THEN clauses some citation pins, and how many of those are pinned
+/// by a citation into a live pack.
+///
+/// The burn-down, in the two columns gkc asked for (2026-08-26): a clause is
+/// **proven** when something claims it, and **server-proven** when the thing
+/// claiming it drove a real atServer. Done is `proven` reaching the clause
+/// total; `serverProven` is the second axis and has its own target.
+///
+/// ⚠️ **Recorded as an exact figure, not a floor, and the guard fails in both
+/// directions.** A floor would let the real number drift upward unrecorded,
+/// which is how every stale count in this project began — the count and the
+/// thing it counts must move in one diff. Raising these is what landing a pin
+/// looks like in review.
+///
+/// Re-derive rather than guessing:
+/// ```bash
+/// dart test test/acceptance/catalogue_test.dart --concurrency=1
+/// ```
+const provenClauseCount = 61;
+
+/// See [provenClauseCount].
+const serverProvenClauseCount = 37;
+
+/// Rows with no live proof yet, each pointing at what owes it.
+///
+/// Separate from [liveProofExempt] because the two decay in opposite
+/// directions: an exemption is meant to last, and an entry here is meant to be
+/// deleted. Collapsing them into one map would make a permanent waiver and an
+/// unpaid debt indistinguishable, which is the state this rail exists to end.
+const liveProofOwed = <String, String>{
+  'UC-A2.4':
+      'key_package_amendment_live_test.dart reaches this row live, but its '
+      'version assertion compares the stamped byte against the function that '
+      'generates it, so the ver 0x03 clause needs a raw-literal pin before a '
+      'citation can claim it',
+  'UC-A3.1':
+      'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
+  'UC-A3.5':
+      'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
+  'UC-A4.5':
+      'a live test exists and this row names none — key_package_amendment_live_test.dart. Owed a citation, not a test',
+  'UC-A4.7':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-B3.1':
+      'a live test exists and this row names none — pq_posture_grid_test.dart. Owed a citation, not a test',
+  'UC-B3.2':
+      'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
+  'UC-B5.2':
+      'a live test exists and this row names none — pq_advance_ladder_test.dart. Owed a citation, not a test',
+  'UC-B5.4':
+      'a live test exists and this row names none — pq_signing_root_mint_lock_test.dart. Owed a citation, not a test',
+  'UC-B5.5':
+      'a live test exists and this row names none — nskey_rotation_live_test.dart. Owed a citation, not a test',
+  'UC-B5.7':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-C1.4':
+      'a live test exists and this row names none — enrollment_pq_key_exchange_live_test.dart. Owed a citation, not a test',
+  'UC-C1.6':
+      'a live test exists and this row names none — pq_native_onboard_test.dart. Owed a citation, not a test',
+  'UC-C1.7':
+      'a live test exists and this row names none — pq_advance_ladder_test.dart. Owed a citation, not a test',
+  'UC-G1.1':
+      'a live test exists and this row names none — self_enrollment_retrofit_live_test.dart. Owed a citation, not a test',
+  'UC-G1.2':
+      'a live test exists and this row names none — self_enrollment_retrofit_live_test.dart. Owed a citation, not a test',
+  'UC-G1.3':
+      'a live test exists and this row names none — self_enrollment_retrofit_live_test.dart. Owed a citation, not a test',
+  'UC-G1.4':
+      'a live test exists and this row names none — copied_keyfile_test.dart. Owed a citation, not a test',
+  'UC-G1.5':
+      'a live test exists and this row names none — apsk_server_side_test.dart. Owed a citation, not a test',
+  'UC-G1.6':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-G1.7':
+      'a live test exists and this row names none — enroll_update_live_test.dart. Owed a citation, not a test',
+  'UC-G1.8':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-G1.9':
+      'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
+  'UC-G1.9a':
+      'a live test exists and this row names none — apsk_server_side_test.dart. Owed a citation, not a test',
+};
+
 /// A use case as the catalogue defines it — by a heading, not by a mention.
 class UseCase {
   const UseCase(this.id, this.title);
@@ -133,6 +249,14 @@ final _anyScenario = RegExp(r'\btest\(');
 /// A scenario skipped against a named blocker constant.
 final _skip = RegExp(r'skip: (\w+)\)');
 
+/// The path a `provenIn` citation names, wherever that path sits.
+///
+/// ⚠️ **Spans newlines deliberately.** `provenIn(` is routinely formatted with
+/// its path on the following line, so a line-anchored matcher sees a minority
+/// of the corpus and reads as though it saw all of it — one reported 62
+/// citations over 18 files where the true figure was 161.
+final _citationPath = RegExp("provenIn\\(\\s*'([^']+)'");
+
 /// Walk up from the working directory until the catalogue is in reach, so
 /// everything here runs the same from the package root, the workspace root, or
 /// an IDE.
@@ -196,6 +320,193 @@ Set<String> scenarioUseCaseIds() {
     ids.addAll(_scenarioName.allMatches(_read(file)).map((m) => m[1]!));
   }
   return ids;
+}
+
+/// Where each scenario's citations point, keyed by the use case that made
+/// them.
+///
+/// Read from the sources rather than from a run, because the citations a
+/// scenario makes are a property of the file. Recording them at run time would
+/// tie every guard over them to `ACCEPTANCE_LEDGER` being set, and a guard
+/// that mostly does not run is worse than none — it reads as coverage.
+///
+/// Sliced at each `test(` for the reason [skippedUseCases] is: a citation
+/// belongs to the scenario whose body encloses it, not to whichever scenario
+/// name sits nearest it in the file.
+///
+/// A scenario with no use-case id contributes nothing here. That is not a
+/// gap — section 13's cross-cutting invariants are deliberately unnumbered,
+/// so they have no catalogue row for a citation to attach to.
+///
+/// A scenario that cites nothing still gets an entry, holding an empty list.
+/// "Proves itself inline" and "is not a scenario at all" are different states
+/// and a caller needs to tell them apart: five rows are in the first, and
+/// reading them as the second would drop them from every count here.
+Map<String, List<String>> citationsByUseCase() {
+  final out = <String, List<String>>{};
+  for (final file in scenarioFiles) {
+    final text = _read(file);
+    final starts = _anyScenario.allMatches(text).map((m) => m.start).toList();
+    for (var i = 0; i < starts.length; i++) {
+      final end = i + 1 < starts.length ? starts[i + 1] : text.length;
+      final chunk = text.substring(starts[i], end);
+      final named = _scenarioName.firstMatch(chunk);
+      if (named == null) continue;
+      out
+          .putIfAbsent(named.group(1)!, () => <String>[])
+          .addAll(_citationPath.allMatches(chunk).map((m) => m.group(1)!));
+    }
+  }
+  return out;
+}
+
+/// Whether [path] names a test that runs against a real atServer.
+bool isLiveProof(String path) => livePackPaths.any(path.startsWith);
+
+/// One citation as the source states it: where the proof lives, and which
+/// clauses of the row it claims.
+class SourceCitation {
+  const SourceCitation(this.path, this.pins);
+
+  /// Repo-relative path of the test cited.
+  final String path;
+
+  /// The `clauses:` fragments, verbatim. Empty means the citation claims the
+  /// row as a whole rather than any clause of it.
+  final List<String> pins;
+
+  bool get isLive => isLiveProof(path);
+}
+
+/// Every citation each scenario makes, with its clause pins, keyed by use
+/// case.
+///
+/// Read from source rather than from a run for the reason
+/// [citationsByUseCase] is — and here there is a second reason. `provenIn`
+/// resolves its fragments while the scenario executes, and test files run in
+/// separate isolates, so no single process ever sees every pin. A guard over
+/// the whole catalogue has to read the sources or it cannot exist.
+Map<String, List<SourceCitation>> citationDetailsByUseCase() {
+  final out = <String, List<SourceCitation>>{};
+  for (final file in scenarioFiles) {
+    final text = _read(file);
+    final starts = _anyScenario.allMatches(text).map((m) => m.start).toList();
+    for (var i = 0; i < starts.length; i++) {
+      final end = i + 1 < starts.length ? starts[i + 1] : text.length;
+      final chunk = text.substring(starts[i], end);
+      final named = _scenarioName.firstMatch(chunk);
+      if (named == null) continue;
+      final list = out.putIfAbsent(named.group(1)!, () => <SourceCitation>[]);
+
+      // One slice per call, so a citation's pins cannot be read off the call
+      // that follows it.
+      final calls = _citationPath.allMatches(chunk).toList();
+      for (var j = 0; j < calls.length; j++) {
+        final callEnd =
+            j + 1 < calls.length ? calls[j + 1].start : chunk.length;
+        list.add(SourceCitation(calls[j].group(1)!,
+            _pinsIn(chunk.substring(calls[j].start, callEnd))));
+      }
+    }
+  }
+  return out;
+}
+
+/// The `clauses:` fragments in one `provenIn(...)` call.
+///
+/// Scanned rather than split on commas. A fragment is a sentence of the
+/// catalogue and sentences contain commas, so splitting first would silently
+/// drop every pin that has one — an undercount that reads exactly like a
+/// citation which never pinned anything. Adjacent literals are joined,
+/// because Dart concatenates them and a fragment distinctive enough to
+/// resolve is usually long enough to wrap.
+List<String> _pinsIn(String call) {
+  final at = call.indexOf('clauses:');
+  if (at < 0) return const [];
+  final open = call.indexOf('[', at);
+  if (open < 0) return const [];
+
+  final fragments = <String>[];
+  final buf = StringBuffer();
+  var started = false;
+  var i = open + 1;
+  while (i < call.length) {
+    final ch = call[i];
+    if (ch == ']') break;
+    if (ch == "'") {
+      started = true;
+      i++;
+      while (i < call.length) {
+        if (call[i] == r'\' && i + 1 < call.length) {
+          buf.write(call[i + 1]);
+          i += 2;
+          continue;
+        }
+        if (call[i] == "'") {
+          i++;
+          break;
+        }
+        buf.write(call[i]);
+        i++;
+      }
+      continue;
+    }
+    if (ch == ',') {
+      if (started) {
+        fragments.add(buf.toString());
+        buf.clear();
+        started = false;
+      }
+    }
+    i++;
+  }
+  if (started) fragments.add(buf.toString());
+  return fragments;
+}
+
+/// Which clause indexes of [useCase] the fragment [pin] names.
+///
+/// Mirrors `provenIn`'s own rule: exactly one, or the pin is meaningless. A
+/// pin resolving to nothing claims nothing while reading as coverage, and one
+/// resolving to two says which of them nobody can tell.
+List<int> resolvePin(String useCase, String pin) => clausesOf(useCase)
+    .where((c) => c.text.contains(pin))
+    .map((c) => c.index)
+    .toList();
+
+/// Clause indexes of [useCase] that some citation pins, and whether any of
+/// those citations is live.
+///
+/// The two numbers the burn-down is read from: a clause in [proven] is
+/// claimed by something, and a clause in [serverProven] is claimed by
+/// something that drove a real atServer.
+({Set<int> proven, Set<int> serverProven}) clauseCoverageOf(String useCase) {
+  final proven = <int>{};
+  final serverProven = <int>{};
+  for (final citation in citationDetailsByUseCase()[useCase] ??
+      const <SourceCitation>[]) {
+    for (final pin in citation.pins) {
+      final hits = resolvePin(useCase, pin);
+      if (hits.length != 1) continue;
+      proven.add(hits.single);
+      if (citation.isLive) serverProven.add(hits.single);
+    }
+  }
+  return (proven: proven, serverProven: serverProven);
+}
+
+/// Use cases whose every citation runs in-process, plus those citing nothing
+/// at all — the rows with no live evidence behind them.
+///
+/// A withdrawn row is not one of these: it owes no scenario, so it owes no
+/// proof of any kind.
+Set<String> useCasesWithoutLiveProof() {
+  final cited = citationsByUseCase();
+  return catalogueUseCases()
+      .where((u) => !u.isWithdrawn)
+      .map((u) => u.id)
+      .where((id) => !(cited[id] ?? const <String>[]).any(isLiveProof))
+      .toSet();
 }
 
 /// Blocker constants `blockers.dart` declares, if the file exists.

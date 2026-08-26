@@ -23,6 +23,9 @@ void main() {
         'a pq enrollment reaches the atServer with no RSA-wrapped key',
         proves:
             'the enrol request carries no RSA-wrapped apkamSymmetricKey, and the companion test has the approver mint it and the enrollee recover it',
+          clauses: [
+            'Nothing in the conveyance path is RSA-wrapped',
+          ]
       );
     });
 

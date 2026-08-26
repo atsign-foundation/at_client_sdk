@@ -38,6 +38,10 @@ void main() {
             'enroll:listns, and the legacy encryption keypair, '
             'selfEncryptionKey and public:publickey are all present by '
             'default.',
+          clauses: [
+            'and it authenticates via PQ APKAM',
+            'registered in E1\'s record (not published',
+          ]
       );
     });
   });

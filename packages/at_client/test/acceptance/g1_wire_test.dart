@@ -30,7 +30,10 @@ void main() {
         'a bare value reads as exactly ONE active rsa2048 entry',
         proves: 'the "single entry" clause, which nothing asserted: a reader '
             'producing two, or one marked retired, would satisfy the verbatim '
-            'test while changing what a verifier selects on');
+            'test while changing what a verifier selects on',
+        clauses: [
+          'it succeeds, reading the record as a single `rsa2048` entry',
+        ]);
     provenIn('packages/at_client/test/apsk_formats_test.dart',
         'one active rsa2048 key is spelled bare, not as the array',
         proves: 'the writer arm, in the direction the row had inverted');
@@ -60,7 +63,11 @@ void main() {
             'a shape that DOES parse. It asserts the message names "null" '
             'specifically, so a reader that learned to default a missing '
             'version to 1 would not satisfy it, and it checks the fixture '
-            'really omitted the field before asserting the refusal');
+            'really omitted the field before asserting the refusal',
+        clauses: [
+          '(a) is refused at parse, and (b) is refused at verify naming the '
+          'version it read',
+        ]);
   });
 
   test('UC-G1.7 · the verifier takes the strongest and does not fall back', () {
@@ -74,7 +81,10 @@ void main() {
         'a valid RSA signature does NOT rescue a corrupt ML-DSA one',
         proves: 'the refusal itself. Cited to the test rather than to the '
             'group named for this row: a group is a container and asserts '
-            'nothing on its own');
+            'nothing on its own',
+        clauses: [
+          'it must not fall through to the valid RSA signature',
+        ]);
     provenIn('packages/at_client/test/jws_envelope_test.dart',
         'the control arm: both signatures valid, and it verifies',
         proves: 'that the refusal above is about the corruption rather than '
@@ -97,7 +107,10 @@ void main() {
         'an envelope signed by the retained key still verifies',
         proves: 'the retained entry is tried, not just the active one — two '
             'keys under one algorithm, which is the case a first-wins lookup '
-            'would get wrong');
+            'would get wrong',
+        clauses: [
+          'a retained entry names the **same algorithm** as an active one',
+        ]);
     provenIn('packages/at_client/test/jws_envelope_test.dart',
         'a signature under neither key is still refused',
         proves: 'the control: trying every advertised key is not trying every '
@@ -105,7 +118,11 @@ void main() {
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'an envelope signed before the withdrawal still verifies',
         proves: 'the same property across a real stage transition rather than '
-            'a hand-built advertisement');
+            'a hand-built advertisement',
+        clauses: [
+          'the stored envelope still verifies, against the RSA key\'s '
+          '`retired` entry',
+        ]);
   });
 
   test('UC-G1.9 · a retired algorithm still verifies history', () {
@@ -150,7 +167,11 @@ void main() {
         proves: 'the ordering, which is the whole point: filing first makes '
             'the client sign under a key its advertisement does not name, and '
             'every envelope written in that window is permanently '
-            'unverifiable');
+            'unverifiable',
+        clauses: [
+          'so no envelope is ever signed under a key the advertisement does '
+          'not name',
+        ]);
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'the advertisement names the minted key and drops the auth key',
         proves: 'the first branch, which nothing cited until 2026-08-26: an '

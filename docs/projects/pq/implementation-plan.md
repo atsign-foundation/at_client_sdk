@@ -77,7 +77,7 @@ And what no rail checks at all is whether the cited test really *establishes*
 the clause; that judgement is the citation's, written in `proves:`. Reading
 those is the [acceptance audit](#the-acceptance-audit), which is finished —
 the reading it describes was done on 2026-08-26 and what it found is
-[a row of its own](#what-the-citation-audit-left-owed).
+[a row of its own](#the-clause-burn-down-every-then-clause-proven).
 
 ---
 
@@ -143,6 +143,7 @@ record working. Do not "tidy" one to match the other.
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
+| [the clause burn-down: every THEN clause proven](#the-clause-burn-down-every-then-clause-proven) | **The definition of done, and the campaign to reach it** (gkc, 2026-08-27). **Objective 1:** every one of the **135** THEN clauses proven by some test. **Objective 2:** every clause proven only in-process gains a proof against a real atServer wherever feasible. Read the meter by running the acceptance suite: it prints `BURN-DOWN  clauses proven: N of 135   server-proven: M of 135`. ⚠️ **A pin is a claim, not a run** — `tool/acceptance_ledger.dart` is what says the cited test passed. This row **absorbs the old "what the citation audit left owed"**, whose five findings (F16, F15, F8, F1, F3) are clause gaps by another name | Nothing |
 | [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | **Reproduce it in this tree, then fix it.** A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. Three in-tree reproduction attempts failed; the row says how |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **gkc publishes at_auth 4.0.0-rc1**, then carve at_client (stacked) → at_client_flutter → at_onboarding_cli. Six of the eight positions are through by merge; what is left is publishes | gkc. ⚠️ **Merged is not published, and only the publishes gate anything now** |
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
@@ -151,7 +152,6 @@ record working. Do not "tidy" one to match the other.
 
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
-| [what the citation audit left owed](#what-the-citation-audit-left-owed) | **Five open findings.** F16 is the one that matters: the nskey mint lock's live refusal is proven for `_rootlock` and only modelled by a mock for `_nskeylock`, which is the same measurement the seeding P0 is missing, so one live test discharges both. F15 and F8 are unasserted clauses; F1 and F3 are ledger-precision work. ⚠️ **F11, F12 and F18 closed 2026-08-26** — the `enroll:update` refusals are now asserted by the atServer's own messages, and UC-G1.12 turned out to be green for a refusal that was not the guard it names | Nothing |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
 | **advertisement fetch volume, ttr and client caching** | Three questions, one subject, raised by gkc 2026-08-26 after a wire capture showed **110 `_apsk` lookups in a single short client run** — more than either control atSign made. (1) Why are there so many? Establish what re-fetches, and whether anything is re-reading per operation what it could hold. (2) Should an advertisement carry a `ttr`, and if so how long — it is a public record that peers must not read stale after a rotation, and rotation is the revocation lever. (3) How should a client cache advertisements it has fetched, and for how long? ⛔ **These interact**: a client-side cache with no server-side `ttr` is a rotation that does not take effect, and a `ttr` shorter than a session is the fetch volume in (1) by design | Nothing. It needs a measurement, then a ruling |
 | [the at_client carve stack](#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
@@ -160,7 +160,7 @@ record working. Do not "tidy" one to match the other.
 | [content keys per scope](#content-keys-per-scope) | **A ruling from gkc** on whether one content key per writing enrollment per scope is the intent. If not: `CurrentCkPointer` needs a remote-first write through an atomic verb, and rotation needs to supersede every CK in scope | gkc's ruling, then the fix |
 | [the late-arriving nskey private](#the-late-arriving-nskey-private) | File a late-arriving nskey private **only for a generation this client actually asked for**. The reverted attempt filed any arrival, which breached the seeding guarantee | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Add the `pending` enrollment status value and build the rotation arm against its own dedicated CRAM atSign. ⛔ There is **no** fleet-adoption wait — see the standing premise | The at_auth publish, and a dedicated CRAM atSign |
-| **CI at head** | Dispatch both workflows at head and read them. "Every rail green" is half of D1's definition, and **nothing fires on push on this branch** — the workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only, so the newest run is only ever as new as the last manual dispatch. ⚠️ **Dispatch matters beyond staleness**: CI's at_client job runs a **bare** `dart analyze` that reads `benchmark/`, which the routine `dart analyze lib test` never opens — that hid five errors for six days. ⛔ **And docs are build inputs here**, so a plan edit alone can redden the acceptance rail. Re-derive, never quote:<br>`gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName --jq '.[] \| [.headSha[0:9], .workflowName, .conclusion] \| @tsv'`<br>`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike` | A head worth dispatching |
+| **CI at head** | Dispatch both workflows at head and read them. "Every rail green" is half of D1's definition, and **nothing fires on push on this branch** — the workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only, so the newest run is only ever as new as the last manual dispatch. ⚠️ **Dispatch matters beyond staleness**: CI's at_client job runs a **bare** `dart analyze` that reads `benchmark/`, which the routine `dart analyze lib test` never opens — that hid five errors for six days. ⛔ **And docs are build inputs here**, so a plan edit alone can redden the acceptance rail. Re-derive, never quote:<br>`gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName --jq '.[] \| [.headSha[0:9], .workflowName, .conclusion] \| @tsv'`<br>`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike` | A head worth dispatching | ⚠️ **A format-gate risk found 2026-08-27, and it predates any current work.** `packages/at_client/test/acceptance/manifest.dart` and `a3_self_data_test.dart` **as committed at `762a91c38`** fail `dart format . -o none --set-exit-if-changed` under local Dart **3.12.2 stable**, while three untouched neighbours pass — the diverging constructs are an empty-condition `for (;;)` and a wrapped ternary, both places the formatter changed style between versions. CI installs `sdk: stable` **unpinned** (`actions/setup-flutter-and-dart/action.yaml:41`), so whether the gate is red at head depends on what stable is on the day. ⛔ **Do not "fix" this with a write-format** — that churns committed code to whichever style the local SDK happens to hold, which is the trap the toolchain rules already name. Dispatch CI and read the gate before touching a byte.
 
 ### P2 — should be done if there is time
 
@@ -242,7 +242,7 @@ was built. An audit organised by the ids in a catalogue cannot see work that has
 no id. It held the largest legibility gap in the corpus.
 
 **What is left is the fixing**, and it is a row of its own:
-[what the citation audit left owed](#what-the-citation-audit-left-owed).
+[the clause burn-down](#the-clause-burn-down-every-then-clause-proven).
 
 **The running record, the method and every finding** are in
 [detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26)
@@ -305,7 +305,55 @@ of UC-A1.1.
 68 have no live proof" when what it had measured was 27 with no live proof *cited
 from their acceptance scenario*. Do not restate it as coverage.
 
-### What the citation audit left owed
+### The clause burn-down: every THEN clause proven
+
+**What done means** (gkc, 2026-08-27), and the reason every earlier audit
+failed to answer it. Done is *every THEN clause proven*, and every instrument
+this catalogue had measured **rows**. A row reads `PROVEN` on a single
+citation however many separate things its THEN states, so the row-level
+verdict could not come out badly and could not reassure anybody — which is
+what weeks of measuring produced.
+
+Two columns, tracked separately, both printed by the acceptance suite on every
+run:
+
+```
+BURN-DOWN  clauses proven: 17 of 135   server-proven: 10 of 135
+```
+
+- **proven** — some citation pins the clause. Objective 1 is 135 of 135.
+- **server-proven** — the citation pinning it drove a real atServer.
+  Objective 2 is to raise this wherever a live test is feasible, which
+  [the evidence standard](acceptance.md#0-purpose-scope--how-to-read-this-doc)
+  says is everywhere it is not impossible.
+
+⚠️ **Pins are strict.** A clause is pinned only when the cited test
+establishes it *as written*. Clauses routinely carry several arms in one
+sentence — a value and a refusal, a shape and its control — and a test proving
+two arms of three leaves the clause unpinned with the missing arm recorded.
+Pinning generously would make 135 of 135 worth nothing.
+
+⚠️ **A pin is a claim, not a run**, and the two guards say different things.
+`catalogue_test.dart` checks that every pin resolves to exactly one clause and
+that the recorded counts match the tree, failing in **both** directions so a
+landed pin and its count move in one diff. `tool/acceptance_ledger.dart` is
+what says the cited test actually ran and passed.
+
+**Where the remaining work is enumerated**, measured 2026-08-27 by reading every
+clause against the tree:
+
+| List | Size | What it is |
+| ---- | ---: | ---------- |
+| [the partial clauses](detail/acceptance.md#the-44-partial-clauses--objective-1s-remaining-work) | 44 | a test exercises the clause and does not establish it as written. The fix is an assertion plus a `reason:` on the test named, not a new test |
+| [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 33 | proven, but no citation names the proof. 33 clauses across 33 new `provenIn` calls |
+| [pinned but partial](detail/acceptance.md#three-clauses-pinned-in-the-tree-that-the-map-calls-partial) | 3 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls |
+
+⛔ **Nothing is untested.** All 135 clauses have something exercising them; the
+single absence the mapping found was refuted. The gap is the precision of
+assertions, not the absence of tests.
+
+The five findings below are clause gaps under another name, and are counted
+here rather than in a list of their own.
 
 Five open findings, recorded in full in
 [detail — the citation audit](detail/acceptance.md#the-citation-audit--cluster-a-2026-08-26)
@@ -733,7 +781,7 @@ needs to receive.
 
 ⚠️ **One live probe discharges part of this row and part of another.** The
 interlock arm below is reasoned from the code rather than measured, and
-[F16](#what-the-citation-audit-left-owed) needs the same measurement from the
+[F16](#the-clause-burn-down-every-then-clause-proven) needs the same measurement from the
 other direction: whether the atServer refuses a second `_nskeylock` create the
 way it demonstrably refuses a second `_rootlock` one. `_nskeylock` is covered
 today by a raw-literal pin of the client's intent and by a mock that models the

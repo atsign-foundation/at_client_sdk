@@ -33,6 +33,10 @@ void main() {
             'sibling test in that file holds the retention knob\'s other '
             'position: rotating WITHOUT the delete leaves the era readable, '
             'which is the default.',
+          clauses: [
+            'old-CK-era data becomes undecryptable (the nskey private cannot '
+            'help',
+          ]
       );
     });
 
@@ -86,6 +90,9 @@ void main() {
             'test/pairwise_secret_sharing_test.dart, where a holder refuses a '
             'requester the roster no longer lists and serves the same request '
             'while it is still listed.',
+          clauses: [
+            'E2\'s one APKAM keypair can no longer authenticate',
+          ]
       );
     });
 
@@ -105,6 +112,9 @@ void main() {
             'superseded private. The revoke-before-rotate ORDER — which is '
             'what makes the exclusion enforceable rather than advisory — is '
             'asserted directly in test/nskey_rotation_test.dart.',
+          clauses: [
+            'E2\'s APKAM keypair is cut at auth',
+          ]
       );
     });
   });

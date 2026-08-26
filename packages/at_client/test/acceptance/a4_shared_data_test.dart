@@ -27,6 +27,9 @@ void main() {
         'alice shares with bob, and bob reads it with his own nskey private',
         proves:
             'bob opens the CK with HIS nskey private on an alice-owned record, and the same test asserts alice cannot decapsulate the CK she sealed to him',
+          clauses: [
+            'decapsulate bob\'s CK record with bob\'s nskey private and read',
+          ]
       );
     });
 
@@ -53,6 +56,10 @@ void main() {
             'and the namespace, the readiness query answers false BEFORE '
             'anything is composed, and the same query answers true for a '
             'namespace @bob has enabled, so the "no" carries information',
+          clauses: [
+            'pre-flight capability query** answers the same question before '
+            'the user composes anything',
+          ]
       );
     });
 
@@ -131,6 +138,12 @@ void main() {
             'x-wing nskey, which at/nskey/MLKEM1024/AES/GCM cannot seal to", '
             'i.e. exactly the "refusing would protect nothing" outcome this '
             'row rejects.',
+          clauses: [
+            'refusing would protect nothing.** It would leave two atSigns '
+            'unable to communicate',
+            'the CK is sealed **under X-Wing**, to bob\'s key, at the '
+            'strongest construction both sides list',
+          ]
       );
       provenIn(
         'packages/at_client/test/pairwise_secret_sharing_test.dart',
@@ -142,6 +155,10 @@ void main() {
             'RECIPIENT\'s advertised alg is what selects the KEM: the same '
             'sender code reaches a different construction purely by who it is '
             'sealing to.',
+          clauses: [
+            'symmetrically, a hybrid-configured `@bob` seals to an '
+            'ML-KEM-1024 `@alice` at `ver 0x03`',
+          ]
       );
       provenIn(
         'packages/at_client/test/kem_selection_test.dart',
@@ -229,6 +246,9 @@ void main() {
             '"pushSecretToNamespaceMembers skips it and still reaches the '
             'rest" holds the fan-out arm, where one unusable advertisement '
             'must not cost the rest of the roster theirs.',
+          clauses: [
+            'the operation is **refused** and nothing is written',
+          ]
       );
       provenIn(
         'packages/at_client/test/key_package_registration_test.dart',

@@ -23,7 +23,10 @@ void main() {
         proves: 'the released reader\'s own verdict, with two positive '
             'controls: rollout 1 must publish a DIFFERENT key from now, and '
             'rollout 2 must fail the same parse — without which the row '
-            'passes for a harness where no stage does anything');
+            'passes for a harness where no stage does anything',
+        clauses: [
+          'returns a String which base64-decodes as an RSA public key',
+        ]);
   });
 
   test('UC-G1.15 · every rollout stage verifies every other stage\'s envelope',

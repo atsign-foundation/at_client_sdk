@@ -58,7 +58,10 @@ void main() {
           proves: 'the outbound half, in both arms: a post-quantum app on the '
               'PQ-native atSign is REFUSED by name toward a peer with no '
               'namespace key, and with allowLegacyCryptoFallback set the same '
-              'write goes out stamped legacy and the legacy peer reads it');
+              'write goes out stamped legacy and the legacy peer reads it',
+          clauses: [
+            'because legacy material outlives the atSign\'s own migration',
+          ]);
       provenIn('tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
           'UC-B4.2 opt-out',
           proves: 'the only atSign that refuses is the one that asked to: '

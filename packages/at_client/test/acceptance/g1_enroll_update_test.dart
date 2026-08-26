@@ -49,7 +49,10 @@ void main() {
             'is signed by the production helper with the wrong private half, '
             'so it is a well-formed proof over the right bytes that the key '
             'being installed did not make — which a presence check would '
-            'wave through');
+            'wave through',
+        clauses: [
+          'the atServer refuses and the record is unchanged. Both arms run',
+        ]);
   });
 
   test('UC-G1.12 · namespaces stay out of reach', () {
@@ -63,7 +66,10 @@ void main() {
         proves: 'both halves — the built command carries no namespace, and a '
             'raw request that does carry one is refused with the record '
             'unchanged afterwards. The row used to pair this with an approval '
-            'state, which has no wire representation to refuse');
+            'state, which has no wire representation to refuse',
+        clauses: [
+          'the atServer refuses it by its own named error, not by',
+        ]);
   });
 
   test('UC-G1.13 · self-only', () {
@@ -78,6 +84,9 @@ void main() {
             'its own connection — so both refusals are about who asked rather '
             'than about the request being malformed. The row also promised an '
             'approved-only guard its Given can never reach: the self-only '
-            'check runs before the target record is fetched');
+            'check runs before the target record is fetched',
+        clauses: [
+          'each is refused, by the self-only check',
+        ]);
   });
 }

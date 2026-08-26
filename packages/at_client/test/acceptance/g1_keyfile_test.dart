@@ -84,7 +84,10 @@ void main() {
         'a legacy document round-trips field-for-field through a new build',
         proves: 'no upgrade markers are added. This test was named '
             '"byte-identically" until 2026-08-18 while comparing two Maps, '
-            'which is why the row claimed a guarantee nothing asserted');
+            'which is why the row claimed a guarantee nothing asserted',
+        clauses: [
+          'the re-emitted document holds the same fields with the same values',
+        ]);
     provenIn('packages/at_auth/test/at_keys_test.dart',
         'an atsign alone does not stamp a legacy file with a version',
         proves: 'the no-version half, with its own positive control');

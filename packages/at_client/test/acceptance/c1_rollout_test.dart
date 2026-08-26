@@ -25,7 +25,10 @@ void main() {
     //       app-named config still beats both.
     provenIn('packages/at_client/test/at_client_impl_test.dart',
         'the pqActive posture makes PQ writes the adopted era default',
-        proves: 'the 4.0 arm: era default flips to the nskey data path');
+        proves: 'the 4.0 arm: era default flips to the nskey data path',
+        clauses: [
+          'new writes default to the nskey data path (the AES-GCM provider)',
+        ]);
     provenIn('packages/at_client/test/at_client_impl_test.dart',
         'the legacy posture keeps writes legacy in the adopted era set',
         proves: 'the 3.x arm: same provider set, writes stay legacy');
@@ -67,7 +70,10 @@ void main() {
         'UC-C1.2 · pqActive refuses a legacy write that the earlier stages take',
         proves: 'the refusal on a real constructed client, with the two '
             'earlier stages taking the identical write as controls — so the '
-            'refusal is caused by the stage and not by the key');
+            'refusal is caused by the stage and not by the key',
+        clauses: [
+          'because the posture set the flag',
+        ]);
     provenIn('tests/at_functional_test/test/pq_stage_arm_test.dart',
         'UC-C1.2 · the refusal fires through a real put, not only at selection',
         proves: 'the guarantee holds through the put pipeline, not merely at '
@@ -106,7 +112,10 @@ void main() {
         proves: 'the posture carries EnrollmentKeyExchangeMode.pq');
     provenIn('packages/at_auth/test/enrollment_test.dart',
         'pq mode sends no RSA-wrapped symmetric key',
-        proves: 'what the mode does on the wire');
+        proves: 'what the mode does on the wire',
+        clauses: [
+          'rides the wire; the approver mints and conveys instead',
+        ]);
     provenIn('packages/at_auth/test/enrollment_test.dart',
         'the default mode is legacy',
         proves: 'the 3.x wire stays byte-identical until a posture or the '
@@ -171,7 +180,11 @@ void main() {
     // The two below are in that file's "the data signing set" group.
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'follows the posture, and an explicit set beats it both ways',
-        proves: 'the per-axis override contract, in both directions');
+        proves: 'the per-axis override contract, in both directions',
+        clauses: [
+          'an enrollment that mints no signing key of its own keeps signing '
+          'with its APKAM authentication key',
+        ]);
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'refuses an algorithm this build cannot sign an envelope under',
         proves: 'the refusal is at construction, where the algorithm is named');
