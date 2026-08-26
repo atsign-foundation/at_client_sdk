@@ -58,24 +58,29 @@ some_package:
       because: the filesystem code it exists to quarantine
 ```
 
+Every barrel in a stanza must belong to that stanza's package, and every stanza must
+declare at least one control. Both are parse errors, for the same reason: offenders are
+filtered by the stanza name, so a barrel from another package walks a graph the gate never
+examines, and a gate with no control cannot tell a clean package from a stalled walk.
+
 ## The three keys
 
-| Key        | Catches                                                             |
-| ---------- | ------------------------------------------------------------------- |
+| Key        | Catches                                                              |
+| ---------- | -------------------------------------------------------------------- |
 | `ratchets` | `dart:io`, and anything else forbidden, reachable from a barrel      |
 | `probe`    | the libraries dart2wasm rejects outright                             |
-| `controls` | the ratchet above having quietly stopped proving anything            |
+| `controls` | the ratchet above having quietly stopped proving anything (required) |
 
 `ratchets` and `probe` do not cover each other: the walk sees what the compiler waves
 through, the compile sees hard rejections.
 
-`controls` are the one that's easy to skip. Every ratchet check is about what the walk
-did *not* find, and a walk that found nothing satisfies all of them — so a control
-walks the other side of the platform seam and asserts the walk still *reaches*
-something known to be there. Without one, `at_chops_ffi.dart` could be emptied and the
-gate would still read green. Two axes, each weak alone: `reaches_library` pins that a
-forbidden library is still reached but not where, `reaches_file` pins which package
-source directly imports a forbidden library. Controls resolve with io semantics;
+`controls` are the one that's easy to skip, which is why the parser insists on one. Every
+ratchet check is about what the walk did *not* find, and a walk that found nothing satisfies
+all of them — so a control walks the other side of the platform seam and asserts the walk
+still *reaches* something known to be there. Without one, `at_chops_ffi.dart` could be
+emptied and the gate would still read green. Two axes, each weak alone: `reaches_library`
+pins that a forbidden library is still reached but not where, `reaches_file` pins which
+package source directly imports a forbidden library. Controls resolve with io semantics;
 `environment: web` pins the other branch of a conditional export.
 
 The walk crosses package boundaries via `.dart_tool/package_config.json` and resolves

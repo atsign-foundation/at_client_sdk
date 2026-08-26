@@ -28,10 +28,9 @@ at_chops:
     - package:at_chops/types.dart
   controls:
     - barrel: package:at_chops/at_chops_ffi.dart
+      reaches_file: lib/src/algorithm/ffi/openssl_ffi_bindings.dart
       reaches_library: dart:ffi
       because: the FFI algorithms it exists to quarantine
-      # Tighten when convenient: add reaches_file, so moving the algorithms
-      # between files cannot keep this green.
 
 at_auth:
   # Gated since the 4.0.0 barrel split (#2179). at_auth.dart holds key material,

@@ -39,6 +39,20 @@ void main() {
     expect(result.stderr, isNot(contains('Unhandled exception')));
   });
 
+  test('a syntax error in the config is a clean usage error', () async {
+    final temp = Directory.systemTemp.createTempSync('wasm_shakedown_cli_');
+    addTearDown(() => temp.deleteSync(recursive: true));
+    final config = File('${temp.path}/gates.yaml')
+      ..writeAsStringSync('at_chops:\n  ratchets:\n   - barrel: "unclosed\n');
+
+    final result =
+        await run(['run', 'wasm_shakedown', '--config', config.path]);
+
+    expect(result.exitCode, 2);
+    expect(result.stderr, contains(config.path));
+    expect(result.stderr, isNot(contains('Unhandled exception')));
+  });
+
   test('package narrowing scopes barrel validation and marks failed ratchets',
       () async {
     final temp = Directory.systemTemp.createTempSync('wasm_shakedown_cli_');
@@ -65,6 +79,10 @@ at_auth:
       min_files_walked: 850
   probe:
     - package:at_auth/at_auth.dart
+  controls:
+    - barrel: package:at_auth/at_auth_io.dart
+      reaches_library: dart:io
+      because: the filesystem code it exists to quarantine
 ''');
 
     final result = await run([

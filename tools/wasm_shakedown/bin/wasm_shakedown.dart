@@ -59,6 +59,10 @@ Future<void> main(List<String> args) async {
     config = GateConfig.load(path: configPath);
   } on GateConfigException catch (e) {
     _die('$e');
+  } on FormatException catch (e) {
+    // YamlException, i.e. the config is not YAML at all. A syntax error is a
+    // config error like any other here, not a crash.
+    _die('${configPath ?? gateConfigPath}: $e');
   } on StateError catch (e) {
     _die(e.message);
   }

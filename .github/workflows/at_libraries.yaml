@@ -193,7 +193,6 @@ jobs:
 
       - run: dart pub get
 
-
       - name: WASM gates
         run: dart run wasm_shakedown --config .github/wasm_gates.yaml
 

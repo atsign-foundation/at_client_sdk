@@ -3,7 +3,8 @@
 ///
 /// Parsing is strict because there is no Dart call site for an IDE to check — a
 /// typo has to fail loudly here rather than quietly narrowing a gate. Unknown
-/// keys, missing fields and unresolvable barrels are all errors naming the line.
+/// keys, missing fields, unresolvable barrels and barrels belonging to another
+/// package are all errors naming the line.
 library;
 
 import 'dart:io';
@@ -173,7 +174,7 @@ class GateConfig {
 
     final probe = _expectList(path, map, 'probe', name).map((n) {
       final uri = _scalar<String>(path, n, 'a probe barrel');
-      return _barrel(path, n, uri);
+      return _barrel(path, n, uri, name);
     }).toList();
     if (probe.isEmpty) {
       throw GateConfigException(_at(
@@ -183,11 +184,18 @@ class GateConfig {
           'clean forever, which is a green that says nothing'));
     }
 
-    final controls = (map.nodes['controls'] == null
-            ? const <YamlNode>[]
-            : _expectList(path, map, 'controls', name))
+    final controls = _expectList(path, map, 'controls', name)
         .map((n) => _control(path, n, name))
         .toList();
+    if (controls.isEmpty) {
+      throw GateConfigException(_at(
+          path,
+          map,
+          '$name lists no controls. Every ratchet check is about what the '
+          'walk did not find, and a walk that found nothing satisfies all '
+          'of them, so without a positive control this gate cannot tell a '
+          'clean package from a stalled walk'));
+    }
 
     return PackageGate(
         package: name, ratchets: ratchets, probe: probe, controls: controls);
@@ -209,7 +217,7 @@ class GateConfig {
     final barrelNode = _required(path, map, 'barrel', name);
     return RatchetSpec(
       barrel: _barrel(
-          path, barrelNode, _scalar<String>(path, barrelNode, 'barrel')),
+          path, barrelNode, _scalar<String>(path, barrelNode, 'barrel'), name),
       allowedOffenders: {
         for (final n in map.nodes['allowed_offenders'] == null
             ? const <YamlNode>[]
@@ -261,7 +269,7 @@ class GateConfig {
 
     return ControlSpec(
       barrel: _barrel(
-          path, barrelNode, _scalar<String>(path, barrelNode, 'barrel')),
+          path, barrelNode, _scalar<String>(path, barrelNode, 'barrel'), name),
       reachesFile:
           file == null ? null : _scalar<String>(path, file, 'reaches_file'),
       reachesLibrary: library == null
@@ -298,10 +306,21 @@ class GateConfig {
     return bad;
   }
 
-  static String _barrel(String path, YamlNode node, String uri) {
+  static String _barrel(
+      String path, YamlNode node, String uri, String package) {
     if (!uri.startsWith('package:') || !uri.contains('/')) {
       throw GateConfigException(
           _at(path, node, 'a barrel must be a package: URI, got "$uri"'));
+    }
+    final authority = uri.substring('package:'.length, uri.indexOf('/'));
+    if (authority != package) {
+      throw GateConfigException(_at(
+          path,
+          node,
+          'barrel "$uri" belongs to $authority, not $package. Offenders are '
+          'filtered by the stanza name, so a barrel from another package '
+          'walks a graph this gate never examines and reports a clean '
+          'result'));
     }
     return uri;
   }

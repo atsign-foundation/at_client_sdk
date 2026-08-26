@@ -13,8 +13,17 @@ GateConfig _parse(String source) => GateConfig.parse(source,
     path: '.github/wasm_gates.yaml',
     knownPackages: const ['at_auth', 'at_chops', 'at_utils']);
 
-/// A minimal valid stanza, for mutating one field at a time.
-const _valid = '''
+/// A minimal valid stanza, for mutating one field at a time. Controls are
+/// required, so [control] carries the one this stanza declares — the tests
+/// about controls pass their own rather than appending a second `controls:`,
+/// which YAML reads as a duplicate key.
+String _valid(
+        [String control = '''
+    - barrel: package:at_auth/at_auth_io.dart
+      reaches_library: dart:io
+      because: the filesystem code
+''']) =>
+    '''
 at_auth:
   ratchets:
     - barrel: package:at_auth/at_auth.dart
@@ -22,7 +31,8 @@ at_auth:
       min_files_walked: 850
   probe:
     - package:at_auth/at_auth.dart
-''';
+  controls:
+$control''';
 
 void main() {
   group('the real .github/wasm_gates.yaml', () {
@@ -64,15 +74,6 @@ void main() {
         expect(gate.probe, isNotEmpty, reason: gate.package);
       }
     });
-
-    test('every gated package has a positive control', () {
-      // Not enforced by the parser — a package might have no platform seam.
-      // Every package gated so far has one, and losing it would make an empty
-      // offender set unfalsifiable.
-      for (final gate in config.gates) {
-        expect(gate.controls, isNotEmpty, reason: gate.package);
-      }
-    });
   });
 
   group('load', () {
@@ -111,17 +112,16 @@ void main() {
 
     test('an unknown key, naming the line and what is allowed', () {
       expect(
-          () => _parse('$_valid  contorls: []\n'),
+          () => _parse('${_valid()}  contorls: []\n'),
           throwsA(isA<GateConfigException>()
               .having((e) => e.message, 'message', contains('contorls'))));
     });
 
     test('a control naming neither axis', () {
       expect(
-          () => _parse('''$_valid  controls:
-    - barrel: package:at_auth/at_auth_io.dart
+          () => _parse(_valid('''    - barrel: package:at_auth/at_auth_io.dart
       because: nothing in particular
-'''),
+''')),
           throwsA(isA<GateConfigException>().having((e) => e.message, 'message',
               contains('control asserting nothing'))));
     });
@@ -158,6 +158,39 @@ void main() {
               .having((e) => e.message, 'message', contains('package: URI'))));
     });
 
+    test('a gate with no controls', () {
+      // The only positive check: every ratchet check is an absence, and a walk
+      // that found nothing satisfies all of them.
+      expect(
+          () => _parse('at_auth:\n'
+              '  ratchets:\n'
+              '    - barrel: package:at_auth/at_auth.dart\n'
+              '      max_blocked_packages: 4\n'
+              '      min_files_walked: 850\n'
+              '  probe: [package:at_auth/at_auth.dart]\n'
+              '  controls: []\n'),
+          throwsA(isA<GateConfigException>()
+              .having((e) => e.message, 'message', contains('stalled walk'))));
+    });
+
+    test('a barrel belonging to another package', () {
+      // Offenders are filtered by the stanza name, so a barrel from elsewhere
+      // walks a graph this gate never examines and comes out clean.
+      expect(
+          () => _parse('at_auth:\n'
+              '  ratchets:\n'
+              '    - barrel: package:at_chops/at_chops.dart\n'
+              '      max_blocked_packages: 4\n'
+              '      min_files_walked: 850\n'
+              '  probe: [package:at_auth/at_auth.dart]\n'
+              '  controls:\n'
+              '    - barrel: package:at_auth/at_auth_io.dart\n'
+              '      reaches_library: dart:io\n'
+              '      because: the filesystem code\n'),
+          throwsA(isA<GateConfigException>().having((e) => e.message, 'message',
+              contains('belongs to at_chops, not at_auth'))));
+    });
+
     test('a missing baseline field', () {
       expect(
           () => _parse('at_auth:\n'
@@ -183,12 +216,11 @@ void main() {
 
     test('an unknown control environment', () {
       expect(
-          () => _parse('''$_valid  controls:
-    - barrel: package:at_auth/at_auth_io.dart
+          () => _parse(_valid('''    - barrel: package:at_auth/at_auth_io.dart
       reaches_library: dart:io
       because: the filesystem code
       environment: node
-'''),
+''')),
           throwsA(isA<GateConfigException>()
               .having((e) => e.message, 'message', contains('"io" or "web"'))));
     });
@@ -196,35 +228,26 @@ void main() {
 
   group('parsing accepts', () {
     test('a control defaults to io semantics', () {
-      final config = _parse('''$_valid  controls:
-    - barrel: package:at_auth/at_auth_io.dart
-      reaches_library: dart:io
-      because: the filesystem code
-''');
-      expect(config['at_auth']!.controls.single.environment, ioEnvironment);
+      expect(_parse(_valid())['at_auth']!.controls.single.environment,
+          ioEnvironment);
     });
 
     test('a control with both axes, and an explicit web environment', () {
-      final config = _parse('''$_valid  controls:
-    - barrel: package:at_auth/at_auth.dart
+      final config = _parse(_valid('''    - barrel: package:at_auth/at_auth.dart
       reaches_file: lib/src/auth/socket_probe_io.dart
       reaches_library: dart:io
       because: the conditional seam
       environment: web
-''');
+'''));
       final control = config['at_auth']!.controls.single;
       expect(control.reachesFile, 'lib/src/auth/socket_probe_io.dart');
       expect(control.reachesLibrary, 'dart:io');
       expect(control.environment, webEnvironment);
     });
 
-    test('a gate with no controls at all', () {
-      expect(_parse(_valid)['at_auth']!.controls, isEmpty);
-    });
-
     test('allowed_offenders omitted, meaning none', () {
-      expect(
-          _parse(_valid)['at_auth']!.ratchets.single.allowedOffenders, isEmpty);
+      expect(_parse(_valid())['at_auth']!.ratchets.single.allowedOffenders,
+          isEmpty);
     });
 
     test(
@@ -235,7 +258,11 @@ void main() {
           '    - barrel: package:at_auth/renamed.dart\n'
           '      max_blocked_packages: 4\n'
           '      min_files_walked: 850\n'
-          '  probe: [package:at_auth/at_auth.dart]\n');
+          '  probe: [package:at_auth/at_auth.dart]\n'
+          '  controls:\n'
+          '    - barrel: package:at_auth/at_auth_io.dart\n'
+          '      reaches_library: dart:io\n'
+          '      because: the filesystem code\n');
       expect(config.unresolvableBarrels(resolvePackageRoots()),
           contains('package:at_auth/renamed.dart'));
     });
