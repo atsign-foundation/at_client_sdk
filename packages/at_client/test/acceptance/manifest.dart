@@ -113,10 +113,10 @@ const liveProofExempt = <String, String>{};
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 105;
+const provenClauseCount = 106;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 52;
+const serverProvenClauseCount = 53;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
@@ -125,10 +125,6 @@ const serverProvenClauseCount = 52;
 /// deleted. Collapsing them into one map would make a permanent waiver and an
 /// unpaid debt indistinguishable, which is the state this rail exists to end.
 const liveProofOwed = <String, String>{
-  'UC-A2.4': 'key_package_amendment_live_test.dart reaches this row live, but its '
-      'version assertion compares the stamped byte against the function that '
-      'generates it, so the ver 0x03 clause needs a raw-literal pin before a '
-      'citation can claim it',
   'UC-A3.1':
       'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
   'UC-A3.5':

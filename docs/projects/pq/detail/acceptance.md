@@ -1056,12 +1056,23 @@ These are also the only route that raises **server-proven**.
 
 ### The proven clauses still owed a citation
 
-⚠️ **32 of these were written on 2026-08-27 and one remains, deliberately.**
-This read "**33 clauses** … needing **33 new `provenIn` calls**" when the table
-below was generated, and the table is left as it was so the work is legible.
-What is left is **UC-A2.4 c3**: it is refused a pin because the live test
-asserts the `pqSeal` version byte against the function that generates it, which
-pins nothing. It belongs with the partials until something pins the literal.
+✅ **All 33 are written, and this list is empty.** It read "**33 clauses** …
+needing **33 new `provenIn` calls**" when the table below was generated, and the
+table is left as it was so the work is legible.
+
+⚠️ **The last one — UC-A2.4 c3 — was withheld for a day rather than forgotten**,
+and what it was waiting for is worth keeping. The live test asserted the `pqSeal`
+version byte against `sealVersionFor()`, the function that puts the byte there,
+so the two sides moved together and the assertion pinned nothing. It was pinned
+on 2026-08-27 by replacing that with the raw literal `0x03` (and `0x02` on the
+X-Wing arm), and the discrimination was **measured rather than argued**: under a
+mutation that renumbers the wire consistently — swapping the cases in both
+`algo_ids.dart`'s `sealVersionFor` and at_chops' `_versions` table, so sealing
+still works end to end — the old assertions pass with **exit 0** while the
+literals redden quoting their own reason. ⛔ **The obvious one-sided mutation
+does not prove this**: swapping only `sealVersionFor` makes `pqSeal` itself throw
+`version 0x3 is KEM 0x42 … this KEM produced 1120` during enrollment, so the
+suite goes red for a reason that has nothing to do with the assertion.
 
 Three of the citations below named a test proving a *different arm* of the
 clause than the pin claims; each was written against the right test instead.

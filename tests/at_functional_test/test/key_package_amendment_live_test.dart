@@ -564,10 +564,25 @@ void main() {
     // And the stamped version matches the suite each arm negotiated. A
     // mismatch here opens on the far side as an AEAD failure naming neither
     // party, which is why the byte is asserted rather than the suite alone.
-    expect(prefersXWing.version,
-        SecretSharingAlgos.sealVersionFor(SecretSharingAlgos.xWingRfc9180));
-    expect(prefersMlKem.version,
-        SecretSharingAlgos.sealVersionFor(SecretSharingAlgos.mlKem1024Rfc9180));
+    //
+    // ⚠️ RAW LITERALS, deliberately. These read
+    // `sealVersionFor(xWingRfc9180)` and `sealVersionFor(mlKem1024Rfc9180)`,
+    // which compares the byte on the wire against the very function that put
+    // it there — swap the two cases in that switch and both sides move
+    // together, so the assertions stay green while every peer built against
+    // the published numbering fails to open what this client sends. The
+    // version byte names the whole suite on the wire and is frozen: 0x02 is
+    // RFC 9180 over X-Wing, 0x03 is RFC 9180 over ML-KEM-1024. Changing
+    // either is a wire break, and editing these two numbers is what a
+    // reviewer of that change reads.
+    expect(prefersXWing.version, 0x02,
+        reason: 'a peer sealing to an X-Wing key stamps pqSeal version 0x02. '
+            'This is a raw literal because the wire numbering is frozen: '
+            'asserting it against sealVersionFor() would compare the byte '
+            'with the function that generated it and pin nothing');
+    expect(prefersMlKem.version, 0x03,
+        reason: 'a peer sealing to an ML-KEM-1024 key stamps pqSeal version '
+            '0x03 — same reason as above, and the arm UC-A2.4 states');
     expect(prefersXWing.version, isNot(prefersMlKem.version),
         reason: 'if both stamped the same byte the version assertion above '
             'would pass for a build that ignores the negotiation entirely');

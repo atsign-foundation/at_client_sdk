@@ -608,8 +608,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   UC-A2.4; **KE-2** for UC-A2.5 / UC-A2.6, which need the live verb and therefore
   `tests/at_functional_test` against the locally built virtualenv image; harness
   `tests/at_functional_test` runLocal.sh (enroll/approve round-trip, `__ssenv` delivery).
-  UC-A2.4 is a unit row — the shapes it asserts are decided entirely client-side, before
-  anything reaches an atServer.
+  UC-A2.4 is a unit row for its **shapes**, which are decided entirely client-side before
+  anything reaches an atServer. ⚠️ **It said "UC-A2.4 is a unit row" without that
+  qualifier until 2026-08-27**, and one clause is not: "a peer sealing to it uses `pqSeal
+  ver 0x03`" is a claim about what a *sender* stamps, which only a real peer and a real
+  atServer can show. It is now cited to
+  `key_package_amendment_live_test.dart`.
 
 ## 4. A3 · E2EE within one atSign (self data) + self notification
 

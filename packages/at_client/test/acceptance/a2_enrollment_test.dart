@@ -226,6 +226,28 @@ void main() {
             'no suite" hold the failing-closed direction.',
         clauses: ['`keys[].alg = ml-kem-1024`'],
       );
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        // Cited up to the literal boundary: provenIn matches raw source, and
+        // the test's name is split across two adjacent string literals, so the
+        // concatenated name appears nowhere in the file.
+        'UC-A2.5 · a sender picks by its own order and stamps the matching',
+        proves: 'the version byte a real peer stamps when it seals to an '
+            'ML-KEM-1024 key, read off the envelope the atServer is holding '
+            'rather than computed. It is pinned as the RAW LITERAL 0x03 — it '
+            'read sealVersionFor(mlKem1024Rfc9180) until 2026-08-27, which '
+            'compares the byte on the wire against the function that put it '
+            'there and pins nothing. Measured, not argued: under a mutation '
+            'that renumbers the wire consistently in both algo_ids.dart and '
+            "at_chops' version table, the old assertions stay green (exit 0) "
+            'and the literal reddens quoting its own reason. ⚠️ The recipient '
+            'here advertises BOTH KEMs and the sender\'s order selects the '
+            'ML-KEM key, where this row\'s Given advertises ML-KEM alone; the '
+            'seal target is an ML-KEM-1024 encapsulation key either way, '
+            'which is what fixes the byte, and no live test anywhere '
+            'advertises ML-KEM on its own',
+        clauses: ['pqSeal ver 0x03'],
+      );
     });
 
     test('UC-A2.5 · an enrollment amends its own key package', () {

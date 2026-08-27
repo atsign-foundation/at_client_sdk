@@ -363,7 +363,7 @@ clause against the tree:
 | List | Size | What it is |
 | ---- | ---: | ---------- |
 | [the partial clauses](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work) | 29 | a test exercises the clause and does not establish it as written. **The in-process ones are all closed**; all 29 that remain are live and are the only route that raises server-proven. ⚠️ **Read the array-shape warning above before writing a test for any of them** — three of the six examined on 2026-08-27 were superseded clauses rather than test gaps |
-| [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 1 | proven, but no citation names the proof. ⚠️ **Was 33; 32 were written 2026-08-27 and the last is deliberate** — UC-A2.4's `pqSeal ver 0x03` is refused a pin because the live test asserts the byte against the function that generates it |
+| [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 0 | proven, but no citation names the proof. ⚠️ **Was 33, then 1, and is now empty** — the last, UC-A2.4's `pqSeal ver 0x03`, was withheld until the live test stopped asserting the byte against the function that generates it. Pinned to the raw literal 2026-08-27, with the discrimination measured against a consistent wire renumbering rather than reasoned about |
 | [pinned but partial](detail/acceptance.md#two-clauses-pinned-in-the-tree-that-the-map-calls-partial) | 2 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls |
 
 ⛔ **Nothing is untested.** All 135 clauses have something exercising them; the
