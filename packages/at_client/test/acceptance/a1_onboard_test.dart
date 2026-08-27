@@ -44,6 +44,23 @@ void main() {
           ]
       );
       provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'nothing can encapsulate to the root — its algorithm has no KEM',
+        proves: 'the reader-side half of an ABSENCE clause, which the wire pin '
+            'beside it cannot reach: that pin asserts the record SAYS '
+            'use=sign, and a sender is free to ignore what a record says. '
+            'This takes the published root, parses it as the same key-entry '
+            'vocabulary a sealable advertisement uses, and shows a sender '
+            'cannot act on it — kemFor answers null for its algorithm '
+            '(against a non-null control), the algorithm is not offered for '
+            'key establishment, and the selector every sealing path uses '
+            'returns nothing even when asked for the root\'s own algorithm, '
+            'which isolates use=enc as the reason. Mutation-proven twice: '
+            'giving kemFor an answer for mldsa65 reddens the first, and '
+            'emitting use=enc reddens the second, each quoting its own reason',
+        clauses: ['Nothing encapsulates to it, at onboarding or ever'],
+      );
+      provenIn(
         'tests/at_functional_test/test/pq_signing_root_mint_lock_test.dart',
         'a second signing-root mint lock create is refused',
         proves: 'the half of this clause that is a refusal by the other side: '

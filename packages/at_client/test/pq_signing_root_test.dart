@@ -7,6 +7,8 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show pqSigningRootMintLockRecordName;
+import 'package:at_client/src/secret_sharing/key_package.dart'
+    show KeyPackage, PackageKey;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_commons/at_builders.dart';
@@ -245,6 +247,55 @@ void main() {
             'WHICH root signed it');
     expect(base64Decode(entry['pub'] as String), hasLength(1952),
         reason: 'a raw ML-DSA-65 public key, not PEM');
+  });
+
+  test('nothing can encapsulate to the root — its algorithm has no KEM',
+      () async {
+    // The reader-side half of "the root is a signing key; nothing encapsulates
+    // to it, at onboarding or ever". The wire pin above asserts what the
+    // WRITER says (`use: sign`), which a sender is free to ignore. This asserts
+    // the sender CANNOT act on the record as a sealing target even handed it
+    // directly: there is no KEM behind its algorithm, the algorithm is not
+    // offered for key establishment, and the selector every sealing path uses
+    // returns nothing for its entry.
+    final c = client();
+
+    await PqSigningRoot(c.client, keysIo: await keysIo())
+        .mintIfAbsent(isFullyPrivileged: true);
+
+    final body = jsonDecode(c.published.single.value!) as Map<String, dynamic>;
+    final entries = (body['keys'] as List)
+        .map(PackageKey.fromJson)
+        .whereType<PackageKey>()
+        .toList();
+    expect(entries, hasLength(1),
+        reason: 'the control: the root record parses as the same key-entry '
+            'vocabulary a sealable advertisement uses, so the nulls below mean '
+            '"cannot be sealed to" rather than "could not be read at all"');
+
+    expect(SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing), isNotNull,
+        reason: 'positive control for kemFor — the null below has to be about '
+            'the root\'s algorithm and not about the lookup answering null '
+            'for everything');
+    expect(SecretSharingAlgos.kemFor(entries.single.alg), isNull,
+        reason: 'the root advertises "${entries.single.alg}", and this build '
+            'has no KEM for it: a sender handed the published root has '
+            'nothing to encapsulate with, whatever the record claims');
+    expect(SecretSharingAlgos.keyAlgos, isNot(contains(entries.single.alg)),
+        reason: 'and it is not offered for key establishment, so no '
+            'negotiation reaches it in the first place');
+
+    final asIfSealable = KeyPackage(
+        enrollmentId: 'E1', createdAt: DateTime.now().toUtc(), keys: entries);
+    expect(asIfSealable.bestKeyFor([entries.single.alg]), isNull,
+        reason: 'asked for the root\'s OWN algorithm — so the only thing '
+            'making this null is that every sealing path asks for use=enc '
+            'while the root says use=sign. Asking for keyAlgos here would '
+            'pass for the wrong reason, since that list does not name the '
+            'root algorithm either');
+    expect(asIfSealable.suites, isEmpty,
+        reason: 'and it claims no sealing construction, because a signing key '
+            'opens none');
   });
 
   test('a restricted enrollment mints nothing', () async {

@@ -963,7 +963,7 @@ recorded counts drift from the tree.
 
 ### The partial clauses — objective 1's remaining work
 
-**35 clauses**, each one a test already exercises that does **not**
+**34 clauses**, each one a test already exercises that does **not**
 establish the clause as written. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 
@@ -1005,16 +1005,27 @@ deployment that set `ml-kem-1024` and got X-Wing must notice for itself. An
 explicit warning naming both was proposed and left for when the logging surface
 is looked at as a whole.
 
-**The standard a closed clause meets**, set by the two closed on 2026-08-27:
+**Closed so far, and what each cost.** `UC-A1.1` c3 — "nothing encapsulates to
+the root, at onboarding or ever" — closed 2026-08-27 by
+`pq_signing_root_test.dart`'s `nothing can encapsulate to the root — its
+algorithm has no KEM`. It is worth reading before closing another ABSENCE
+clause: the wire pin next to it already asserted the record *says* `use: sign`,
+and that is a claim about the writer, which a sender is free to ignore. The arm
+that was missing is the reader-side one — no KEM behind the algorithm, the
+algorithm not offered for key establishment, and the sealing selector returning
+nothing when asked for the root's *own* algorithm, which is what isolates
+`use: enc` as the reason rather than letting two conditions cover for each
+other.
+
+**The standard a closed clause meets**, set by the three closed on 2026-08-27:
 write the missing arm *with a control*, then **mutate the production code and
 confirm the failure quotes your own assertion's reason**, revert, and pin. A
 green test that has not been shown to discriminate proves nothing.
 
-#### In-process — 6 closable with no virtualenv
+#### In-process — 5 closable with no virtualenv
 
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
-| **UC-A1.1** c3 | Nothing encapsulates to it, at onboarding or ever. | `pq_signing_root_test.dart` |
 | **UC-A2.2** c2 | Nothing anywhere makes a copy of a keyfile that HOLDS `pq_signing_root@alice⁻¹` and then shows the second host resolving or signing with it… | `at_keys_test.dart` |
 | **UC-A5.1** c3 | "an enrollment approved *after* the rotation is pushed the current generation only" and "...and opens it" — no test enrols a joiner after a… | `nskey_self_heal_test.dart` |
 | **UC-B3.1** c1 | "(Applies to **put and notify** alike; a notification an old install cannot decrypt is as lost as a record it cannot read.)" — nothing anyw… | `b3_mixed_intra_test.dart` |

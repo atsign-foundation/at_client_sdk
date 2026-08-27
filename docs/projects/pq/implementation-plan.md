@@ -350,7 +350,7 @@ clause against the tree:
 
 | List | Size | What it is |
 | ---- | ---: | ---------- |
-| [the partial clauses](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work) | 35 | a test exercises the clause and does not establish it as written. **6 are in-process and need no virtualenv**; 29 are live and are the only route that raises server-proven. ⚠️ **Read the array-shape warning above before writing a test for any of them** — three of the six examined on 2026-08-27 were superseded clauses rather than test gaps |
+| [the partial clauses](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work) | 34 | a test exercises the clause and does not establish it as written. **5 are in-process and need no virtualenv**; 29 are live and are the only route that raises server-proven. ⚠️ **Read the array-shape warning above before writing a test for any of them** — three of the six examined on 2026-08-27 were superseded clauses rather than test gaps |
 | [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 1 | proven, but no citation names the proof. ⚠️ **Was 33; 32 were written 2026-08-27 and the last is deliberate** — UC-A2.4's `pqSeal ver 0x03` is refused a pin because the live test asserts the byte against the function that generates it |
 | [pinned but partial](detail/acceptance.md#two-clauses-pinned-in-the-tree-that-the-map-calls-partial) | 2 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls |
 
@@ -401,9 +401,11 @@ in `acceptance.md` itself, each stale sentence replaced in place with a dated
 | ~~**UC-A1.1** Then, "no RSA-wrapped (`apkamSymmetricKey` rides X-Wing)"~~ | — | **Mis-cited.** The phrase occurs once in the document and it is in **UC-A2.1**'s Then, not UC-A1.1's. Corrected there |
 | ~~**UC-C1.7**, the two signing-set axes "overridable per preference"~~ | — | **False alarm — the sentence is TRUE.** `AtClientPreference` resolves both `authenticationKeyAlgorithm` and `dataSigningKeyAlgorithms` as `?? posture.<axis>`, so an explicit argument beats the posture on each. UC-C1.6's exception was `disallowLegacyEncryption`, which has no constructor argument at all; the two are not the same sentence |
 
-**What the corrections cost the burn-down: nothing.** It read
-`99 of 135 / 52 of 135` before and after. Every stale sentence but two lived in
-a **Steps** block or in Section 1, and only **Then** clauses are counted; the
+**What the corrections cost the burn-down: nothing** — the figure was
+unchanged across that commit, in both columns. (Read the current one by running
+the suite; it has moved since for unrelated reasons.) Every stale sentence but
+two lived in a **Steps** block or in Section 1, and only **Then** clauses are
+counted; the
 two that were clauses kept their pins, UC-A4.5's by re-pointing them at four
 tests and UC-A2.1's because its fragments were short enough to survive the edit.
 
@@ -414,9 +416,10 @@ be cited, and the failure read as "no test there starts with that name", which
 sends a reader looking for a rename. It now tries both source spellings, and a
 citation naming a genuinely absent test still goes red quoting the name.
 
-⚠️ **Six of the 29 live partials and one of the six in-process partials sit under
-use cases in that table**, so the clause a test would be written to has just
-moved. Re-read the clause in `acceptance.md` before writing its test — the
+⚠️ **Six of the 29 live partials sit under use cases in that table**, so the
+clause a test would be written to has just moved. (The one in-process partial
+that did — `UC-A1.1` c3 — is closed.) Re-read the clause in `acceptance.md`
+before writing its test — the
 partial-clause table in [detail](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work)
 quotes the wording as it stood on 2026-08-27, which for those seven is no longer
 what the catalogue says.
