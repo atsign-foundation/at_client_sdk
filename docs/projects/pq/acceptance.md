@@ -973,10 +973,20 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - on parse, entries this build does not recognise are **kept**. The list is the
     holder's statement about itself, and a newer holder may name a construction we do not
     implement yet.
-- **Then (this is what moves the wire without a flag day):** two clients that both
-  advertise RFC 9180 exchanged `0x02` where they had exchanged `0x01`, with no
-  readers-upgrade-first migration — and that is what later made it safe to drop `0x01`
-  outright. That is the whole reason the field exists.
+- **Then (this is what moves the wire without a flag day):** the version byte a sender
+  stamps is chosen from the **intersection** at seal time rather than from the sender's
+  own build, so the wire moves to a construction the moment both sides advertise it —
+  no readers-upgrade-first migration, and no flag day. That is the whole reason the
+  field exists.
+
+  ⚠️ **This asserted a historical instance until 2026-08-27**, naming what two clients
+  "had exchanged" under the version retired on 2026-08-18. **A clause about what
+  clients *had* exchanged is a claim about history, and no test of a tree that no
+  longer contains that version can establish it** — which every instrument here
+  reports as a coverage gap rather than as an unprovable sentence. The mechanism it
+  was illustrating is intact and is what the clause now states; the retired version's
+  own story has one home, and it is
+  [`seal-spec.md`](seal-spec.md#version-0x01-retired).
 - **Verification note:** both arms must be asserted against the **same** key, so the only
   thing differing between them is what the record claims. Two arms that differ in key
   *and* claim prove nothing about the claim.
@@ -2547,9 +2557,20 @@ on failure.
 - **Given:** a legacy atSign and a preference carrying
   `PqPosture.pqActive`.
 - **When:** `selfRetrofit` runs with no `signingAlgo` argument.
-- **Then:** the minted enrollment is ML-DSA. Under the legacy posture the
-  same call mints RSA — the two postures resolve into different per-algorithm
-  idempotence pools, which is what tells them apart live.
+- **Then:** the minted enrollment is ML-DSA, and under the legacy posture the same
+  argless call mints RSA. What tells them apart is the **authentication algorithm
+  the resulting client resolves from its keyfile** — `selfRetrofit` reads
+  `signingAlgo ?? preference.authenticationKeyAlgorithm`, and the posture is what
+  supplies that preference when nothing else does, so a run that named no
+  algorithm and came back ML-DSA can only have got it from the posture.
+
+  ⚠️ **This said the two postures "resolve into different per-algorithm idempotence
+  pools, which is what tells them apart live" until 2026-08-27.** The pools are real
+  — the retrofit is idempotent per keyfile *per algorithm*, so a keyfile already
+  carrying an enrollment of the requested algorithm reuses it rather than minting —
+  but that is what stops two retrofits colliding, not what distinguishes the
+  postures. A false *reason* beside a true assertion is the harder half to notice,
+  because the behaviour it describes is correct.
 
 ### 15.6 UC-C1.6 — The grouped posture: one value sets every axis
 

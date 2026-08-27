@@ -974,19 +974,24 @@ returned **12 specification defects** against 17 gaps; an adversarial pass over
 every one of the 12 upheld 11 and refuted one (**UC-A4.1 c3**, which is an
 ordinary gap).
 
-**Seven of the 11 have since been discharged** — three by fixing the code rather
-than the document, four by correcting the clause — leaving the ones in the table
-below, and 29 minus them as ordinary gaps. ⛔ **Neither number is written out
-here**, because both have moved twice in a day: count the table.
+✅ **All 11 are discharged** (2026-08-27) — four by fixing the code, seven by
+correcting the clause — so every one of the 29 is now an ordinary gap and the
+table below is empty. ⛔ **No count is written out here**; the table is the
+count, because it moved four times in a day.
 
-⛔ **Write a test for one of these and it will fail confusingly, and the
-tempting repair is to weaken the assertion until it passes** — which enshrines
-the wrong behaviour as the specification. Open the production path first.
+⛔ **The lesson outlives the list, and it is the reusable part.** Write a test
+for a clause the tree contradicts and it fails confusingly; the tempting repair
+is to weaken the assertion until it passes, which enshrines the wrong behaviour
+as the specification. **Open the production path a clause describes before
+writing its test.** And keep three verdicts available, not two — "no test
+asserts this", "the code contradicts this", and the one that catches the rest:
+**"the assertion is true and the REASON beside it is false"**, which is the
+hardest to see because the behaviour it describes is correct. Two of the eleven
+were that shape, and one more (UC-A4.6 c5) was a claim about *history*, which no
+test of the current tree can settle in either direction.
 
 | Clause | What the tree does instead |
 |---|---|
-| **UC-A4.6** c5 | A claim about **history** — what two clients "had exchanged" under `0x01` — which no current test can establish, `0x01` having been retired and removed. The cited test's "two clients" are also two `AtClientSecretSharing` instances over one client of one atSign |
-| **UC-C1.5** c1 | Arm 1 is true *and already proven live*. It is the **justification** that is false: the two postures do not tell themselves apart by resolving into different per-algorithm idempotence pools |
 
 ✅ **UC-A4.4 c2 was fixed in the code, 2026-08-27.** It said a notification's
 scheme decision is the sending app's "exactly as a put's", and it was not: the
