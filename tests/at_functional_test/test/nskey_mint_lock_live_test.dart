@@ -61,8 +61,8 @@ void main() {
   AtKey lockKey() =>
       nskeyMintLockKey(atSign, namespace, ttl: const Duration(minutes: 2));
 
-  Future<void> release() async => atClient.getRemoteSecondary()!.executeVerb(
-      DeleteVerbBuilder()
+  Future<void> release() async =>
+      atClient.getRemoteSecondary()!.executeVerb(DeleteVerbBuilder()
         ..atKey = lockKey()
         ..force = true);
 
