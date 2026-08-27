@@ -85,8 +85,10 @@ void main() {
             'material reddens it, quoting this assertion. Without it '
             '"retirement frees the slot" reads as though it freed the '
             'identifier too',
-        clauses: ['A replacement re-using the retired key\'s keyId is still '
-            'refused — that check is status-blind']);
+        clauses: [
+          'A replacement re-using the retired key\'s keyId is still '
+              'refused — that check is status-blind'
+        ]);
   });
 
   test('UC-G1.4 · opening a legacy keyfile does not upgrade it', () {

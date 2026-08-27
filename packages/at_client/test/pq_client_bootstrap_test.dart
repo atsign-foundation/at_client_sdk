@@ -13,8 +13,7 @@ import 'package:at_client/src/preference/at_client_preference.dart'
     show AtClientPreference;
 import 'package:at_client/src/response/enrollment.dart' show Enrollment;
 import 'package:at_commons/atsign.dart' show AtsignString;
-import 'package:at_utils/at_utils.dart'
-    show AtSignLogger, LoggingHandler;
+import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
@@ -40,8 +39,8 @@ class _RecordedLogs implements LoggingHandler {
   final List<({String level, String message})> records = [];
 
   @override
-  void call(dynamic record) => records.add(
-      (level: '${record.level.name}', message: '${record.message}'));
+  void call(dynamic record) => records
+      .add((level: '${record.level.name}', message: '${record.message}'));
 
   Iterable<String> at(String level) =>
       records.where((r) => r.level == level).map((r) => r.message);

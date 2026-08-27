@@ -165,5 +165,6 @@ List<int> _resolveClauses(List<String> pins) {
 /// atServer in the loop.
 void provenHere({required String proves, List<String> clauses = const []}) {
   final pinned = _resolveClauses(clauses);
-  _record('(inline)', Invoker.current?.liveTest.test.name ?? '', proves, pinned);
+  _record(
+      '(inline)', Invoker.current?.liveTest.test.name ?? '', proves, pinned);
 }

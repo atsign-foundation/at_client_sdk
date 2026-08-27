@@ -151,8 +151,7 @@ class AtClientImpl implements AtClient {
   Future<AtReachabilityResult> ensureReachable(String namespace,
           {Duration timeout = const Duration(seconds: 30)}) =>
       _ensureReachable(namespace).timeout(timeout,
-          onTimeout: () =>
-              const AtReachabilityResult(AtReachability.timedOut));
+          onTimeout: () => const AtReachabilityResult(AtReachability.timedOut));
 
   Future<AtReachabilityResult> _ensureReachable(String namespace) async {
     final atSign = getCurrentAtSign();
@@ -194,8 +193,7 @@ class AtClientImpl implements AtClient {
       await bootstrap.seeding.seedNamespace(atSign, namespace);
       return const AtReachabilityResult(AtReachability.published);
     } catch (e) {
-      _logger.warning(
-          'Could not make $atSign reachable for $namespace: $e');
+      _logger.warning('Could not make $atSign reachable for $namespace: $e');
       return AtReachabilityResult(AtReachability.failed, error: e);
     }
   }

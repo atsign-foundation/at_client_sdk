@@ -19,14 +19,13 @@ void main() {
       //       app_1.my_apps self data; an app_2 key request is refused; E2's
       //       APKAM key is a distinct, individually-revocable record.
       provenIn(
-        'tests/at_functional_test/test/enrollment_pq_key_exchange_live_test.dart',
-        'a pq enrollment reaches the atServer with no RSA-wrapped key',
-        proves:
-            'the enrol request carries no RSA-wrapped apkamSymmetricKey, and the companion test has the approver mint it and the enrollee recover it',
+          'tests/at_functional_test/test/enrollment_pq_key_exchange_live_test.dart',
+          'a pq enrollment reaches the atServer with no RSA-wrapped key',
+          proves:
+              'the enrol request carries no RSA-wrapped apkamSymmetricKey, and the companion test has the approver mint it and the enrollee recover it',
           clauses: [
             'Nothing in the conveyance path is RSA-wrapped',
-          ]
-      );
+          ]);
       provenIn(
         'tests/at_functional_test/test/enrollment_chain_link_live_test.dart',
         'the root private reaches a privileged enrollment and no other',
@@ -48,8 +47,10 @@ void main() {
             'root — which is what stops anchored being the only reachable '
             'answer. No atServer is in this loop: the input is a document and '
             'the output is a verdict over it',
-        clauses: ['carries a chain link that `verifyChain` walks to the '
-            'signing root'],
+        clauses: [
+          'carries a chain link that `verifyChain` walks to the '
+              'signing root'
+        ],
       );
       provenIn(
         'tests/at_functional_test/test/nskey_rotation_live_test.dart',
@@ -321,8 +322,10 @@ void main() {
             'redden for the mock rather than for a conveyance. '
             'Mutation-proven — making the amendment write one reddens it, '
             'quoting this assertion',
-        clauses: ['nothing already sealed is re-sealed, and no conveyance '
-            'fires'],
+        clauses: [
+          'nothing already sealed is re-sealed, and no conveyance '
+              'fires'
+        ],
       );
     });
 

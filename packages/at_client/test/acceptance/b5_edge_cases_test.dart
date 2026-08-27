@@ -161,17 +161,15 @@ void main() {
             'against local storage where a sibling publication lags sync — '
             'reading that absence as a cold start is what mints a second key',
       );
-      provenIn(
-        'packages/at_client/test/nskey_minting_test.dart',
-        'a winner that published while this client took the lock is adopted',
-        proves: 'the winner re-reads under the lock and adopts, so a sibling '
-            'that published between the first read and the take is not '
-            'overwritten',
+      provenIn('packages/at_client/test/nskey_minting_test.dart',
+          'a winner that published while this client took the lock is adopted',
+          proves: 'the winner re-reads under the lock and adopts, so a sibling '
+              'that published between the first read and the take is not '
+              'overwritten',
           clauses: [
             'It **re-reads under the lock**, because a sibling may have '
-            'published',
-          ]
-      );
+                'published',
+          ]);
       provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'a loser with nothing published fails rather than minting',
@@ -186,15 +184,14 @@ void main() {
       // WHEN  it completes.
       // THEN  it does not delete the lock; the ttl is the only release, and a
       //       lock key with no ttl is refused outright.
-      provenIn(
-        'packages/at_client/test/nskey_minting_test.dart',
-        'the winner does not release the lock — the ttl does',
-        proves: 'no delete means no stolen release, so a holder that overruns '
-            "cannot free a successor's lock",
+      provenIn('packages/at_client/test/nskey_minting_test.dart',
+          'the winner does not release the lock — the ttl does',
+          proves:
+              'no delete means no stolen release, so a holder that overruns '
+              "cannot free a successor's lock",
           clauses: [
             'The ttl is the only release, which is what makes the record an',
-          ]
-      );
+          ]);
       provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'a lock key with no ttl is refused outright',
@@ -272,17 +269,15 @@ void main() {
             'named none, so an app that never mentions crypto is not silently '
             'excluded from PQ',
       );
-      provenIn(
-        'tests/at_end2end_test/test/pq/era_default_read_test.dart',
-        'bob, given no CryptoConfig at all, opens what alice sealed to him',
-        proves: 'the other half, and the one that makes it a product claim '
-            'rather than a resolver detail — cross-atSign, on the wire, with '
-            'the receiving side configured with nothing',
+      provenIn('tests/at_end2end_test/test/pq/era_default_read_test.dart',
+          'bob, given no CryptoConfig at all, opens what alice sealed to him',
+          proves: 'the other half, and the one that makes it a product claim '
+              'rather than a resolver detail — cross-atSign, on the wire, with '
+              'the receiving side configured with nothing',
           clauses: [
             'the era default supplies the nskey providers, and the client '
-            'opens what the peer sealed',
-          ]
-      );
+                'opens what the peer sealed',
+          ]);
     });
 
     test('UC-B5.9 · a conveyed private is filed only if addressed here', () {
@@ -296,33 +291,31 @@ void main() {
             'pass by the sweep simply not working',
       );
       provenIn(
-        'tests/at_functional_test/test/conveyed_key_collection_test.dart',
-        'a private addressed to another key package is not filed',
-        proves: 'the channel is a shared surface, so "it arrived" can never be '
-            'the test for "it is mine" — this is what stops one enrollment '
-            "collecting another's material by being first to look",
+          'tests/at_functional_test/test/conveyed_key_collection_test.dart',
+          'a private addressed to another key package is not filed',
+          proves:
+              'the channel is a shared surface, so "it arrived" can never be '
+              'the test for "it is mine" — this is what stops one enrollment '
+              "collecting another's material by being first to look",
           clauses: [
             'Sweeping is not the same as accepting: the channel is a shared '
-            'surface',
-          ]
-      );
+                'surface',
+          ]);
     });
 
     test('UC-B5.10 · an unentitled enrollment does not ask for the root', () {
       // GIVEN an enrollment whose grants do not entitle it to the signing root.
       // WHEN  it reaches the point an entitled one would request it.
       // THEN  it does not ask — the check is on the seeker, before the request.
-      provenIn(
-        'tests/at_functional_test/test/signing_root_pull_test.dart',
-        'an enrollment not entitled to the root does not ask for it',
-        proves: 'the refusal half of UC-B5.1. A pull path that asks '
-            "unconditionally leaves the holder's answer as the only thing "
-            'standing between an enrollment and material it may not hold',
+      provenIn('tests/at_functional_test/test/signing_root_pull_test.dart',
+          'an enrollment not entitled to the root does not ask for it',
+          proves: 'the refusal half of UC-B5.1. A pull path that asks '
+              "unconditionally leaves the holder's answer as the only thing "
+              'standing between an enrollment and material it may not hold',
           clauses: [
             'The check is on the seeker, before the request, not only on the '
-            'holder',
-          ]
-      );
+                'holder',
+          ]);
     });
 
     test('UC-B5.11 · an enrollment that missed the mint heals from a holder',
@@ -331,18 +324,16 @@ void main() {
       // WHEN  it next starts.
       // THEN  it requests the private from a holder rather than minting a
       //       rival generation.
-      provenIn(
-        'tests/at_functional_test/test/nskey_self_heal_live_test.dart',
-        'an enrollment that missed the mint pulls the private from a holder',
-        proves: 'this is what makes an absent or losing enrollment inert '
-            'rather than divergent, and why the nskey path needs no retire: a '
-            'generation nobody advertises is never selected, because selection '
-            'is by the kid in the envelope being opened',
+      provenIn('tests/at_functional_test/test/nskey_self_heal_live_test.dart',
+          'an enrollment that missed the mint pulls the private from a holder',
+          proves: 'this is what makes an absent or losing enrollment inert '
+              'rather than divergent, and why the nskey path needs no retire: a '
+              'generation nobody advertises is never selected, because selection '
+              'is by the kid in the envelope being opened',
           clauses: [
             'it **requests the private from a holder** and files it, rather '
-            'than minting a rival generation',
-          ]
-      );
+                'than minting a rival generation',
+          ]);
     });
 
     test('UC-B5.12 · the owner verifies her own advertisement as a peer would',
@@ -351,16 +342,14 @@ void main() {
       // WHEN  alice herself resolves and verifies it.
       // THEN  she takes the same path a peer takes; an unminted namespace
       //       resolves to nothing rather than to an error or a guess.
-      provenIn(
-        'tests/at_functional_test/test/nskey_published_ring_test.dart',
-        'the owner verifies her own advertisement the same way a peer would',
-        proves: 'one verify path means a defect in verification cannot hide '
-            'behind the common case — it is what makes "same-atSign and '
-            'cross-atSign are the same code" tested rather than aspirational',
+      provenIn('tests/at_functional_test/test/nskey_published_ring_test.dart',
+          'the owner verifies her own advertisement the same way a peer would',
+          proves: 'one verify path means a defect in verification cannot hide '
+              'behind the common case — it is what makes "same-atSign and '
+              'cross-atSign are the same code" tested rather than aspirational',
           clauses: [
             'she takes the **same verify path a peer takes**',
-          ]
-      );
+          ]);
       provenIn(
         'tests/at_functional_test/test/nskey_published_ring_test.dart',
         'a namespace nobody minted for resolves to nothing',

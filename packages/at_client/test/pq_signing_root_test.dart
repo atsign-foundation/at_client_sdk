@@ -320,17 +320,17 @@ void main() {
 
     final rootBody =
         jsonDecode(a.published.single.value!) as Map<String, dynamic>;
-    final rootPublic = base64Decode(
-        ((rootBody['keys'] as List).single as Map<String, dynamic>)['pub']
-            as String);
+    final rootPublic = base64Decode(((rootBody['keys'] as List).single
+        as Map<String, dynamic>)['pub'] as String);
 
     // The copy: through the JSON a .atKeys file holds, which is the whole of
     // what copying one does. Nothing is re-minted and nothing is conveyed.
     final ioB = InMemoryAtKeysIo();
     await ioB.write(
         atSign,
-        AtKeys.fromJson(jsonDecode(jsonEncode((await ioA.read(atSign)).toJson()))
-            as Map<String, dynamic>));
+        AtKeys.fromJson(
+            jsonDecode(jsonEncode((await ioA.read(atSign)).toJson()))
+                as Map<String, dynamic>));
 
     final hostB = await PqSigningRoot(client(publishedRoot: rootPublic).client,
             keysIo: ioB)

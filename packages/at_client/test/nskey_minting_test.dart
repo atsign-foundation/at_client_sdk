@@ -63,12 +63,12 @@ void main() {
     Map<String, DateTime> verbTimes,
     Map<String, String> advertised,
     List<GetRequestOptions?> advertisementReads,
-  /// [takeDelay] makes the lock's own take slow, which is the only way to
-  /// tell a lease stamped BEFORE the request from one stamped after it:
-  /// with an instant take the two are indistinguishable.
+
+    /// [takeDelay] makes the lock's own take slow, which is the only way to
+    /// tell a lease stamped BEFORE the request from one stamped after it:
+    /// with an instant take the two are indistinguishable.
   }) client(
-      {bool lockAlreadyHeld = false,
-      Duration takeDelay = Duration.zero}) {
+      {bool lockAlreadyHeld = false, Duration takeDelay = Duration.zero}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookUp();
@@ -388,15 +388,15 @@ void main() {
 
     final before = DateTime.now();
     late DateTime deadline;
-    final result = await MintLock(c.client).withLock(
-        nskeyMintLockKey(atSign, namespace, ttl: ttl),
-        (lease) async {
+    final result = await MintLock(c.client)
+        .withLock(nskeyMintLockKey(atSign, namespace, ttl: ttl), (lease) async {
       deadline = lease.expiresAt;
       return 'minted';
     });
 
-    expect(result, 'minted', reason: 'the take succeeded, so the lease under '
-        'test is a real one rather than a refusal path');
+    expect(result, 'minted',
+        reason: 'the take succeeded, so the lease under '
+            'test is a real one rather than a refusal path');
     expect(c.verbs.where((k) => k.key == '_nskeylock'), hasLength(1),
         reason: 'the control that the delay was actually paid: the take is '
             'the verb it was attached to, and it went out exactly once');

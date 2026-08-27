@@ -66,7 +66,7 @@ void main() {
             'really omitted the field before asserting the refusal',
         clauses: [
           '(a) is refused at parse, and (b) is refused at verify naming the '
-          'version it read',
+              'version it read',
         ]);
   });
 
@@ -121,7 +121,7 @@ void main() {
             'a hand-built advertisement',
         clauses: [
           'the stored envelope still verifies, against the RSA key\'s '
-          '`retired` entry',
+              '`retired` entry',
         ]);
   });
 
@@ -135,19 +135,20 @@ void main() {
         proves: 'the transition itself, read off the held key SET — which is '
             'what this client COULD sign with, and a proxy for what a '
             'composed envelope carries');
-    provenIn('packages/at_client/test/signing_key_minting_test.dart',
-        'an envelope written AFTER the withdrawal carries no signature of it',
-        proves: 'the clause as written, without the proxy: an envelope is '
-            'composed from what the PRODUCTION selector offers after the '
-            'move, and its signature set is exactly [ML-DSA-65] — one entry, '
-            'not two. The same envelope built before the move carries '
-            '[RS256], which is the control that keeps "no RS256 entry" from '
-            'being satisfied by an envelope with no entries at all. Mutation-'
-            'proven: letting retired material through signingKeysFor gives '
-            '[ML-DSA-65, RS256], which is the exact failure the clause exists '
-            'to prevent — a verifier free to accept the weaker signature',
-        clauses: ['new envelopes carry no signature of it'],
-      );
+    provenIn(
+      'packages/at_client/test/signing_key_minting_test.dart',
+      'an envelope written AFTER the withdrawal carries no signature of it',
+      proves: 'the clause as written, without the proxy: an envelope is '
+          'composed from what the PRODUCTION selector offers after the '
+          'move, and its signature set is exactly [ML-DSA-65] — one entry, '
+          'not two. The same envelope built before the move carries '
+          '[RS256], which is the control that keeps "no RS256 entry" from '
+          'being satisfied by an envelope with no entries at all. Mutation-'
+          'proven: letting retired material through signingKeysFor gives '
+          '[ML-DSA-65, RS256], which is the exact failure the clause exists '
+          'to prevent — a verifier free to accept the weaker signature',
+      clauses: ['new envelopes carry no signature of it'],
+    );
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'advertises the retired key beside the new one',
         proves: 'the entry remains rather than being withdrawn — withdrawing '
@@ -184,7 +185,7 @@ void main() {
             'unverifiable',
         clauses: [
           'so no envelope is ever signed under a key the advertisement does '
-          'not name',
+              'not name',
         ]);
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'the advertisement names the minted key and drops the auth key',

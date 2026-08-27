@@ -24,20 +24,19 @@ void main() {
       //       old conveyance instead = history access (the per-namespace FS
       //       retention knob).
       provenIn(
-        'tests/at_functional_test/test/content_key_rotation_live_test.dart',
-        'deleting the superseded conveyance makes its era undecryptable',
-        proves: 'a value written under the first CK reads back (the control '
-            'arm), the rotation deletes its conveyance from the atServer, and '
-            'the same read then fails with the nskey private untouched — '
-            'while a value written under the successor round-trips. The '
-            'sibling test in that file holds the retention knob\'s other '
-            'position: rotating WITHOUT the delete leaves the era readable, '
-            'which is the default.',
+          'tests/at_functional_test/test/content_key_rotation_live_test.dart',
+          'deleting the superseded conveyance makes its era undecryptable',
+          proves: 'a value written under the first CK reads back (the control '
+              'arm), the rotation deletes its conveyance from the atServer, and '
+              'the same read then fails with the nskey private untouched — '
+              'while a value written under the successor round-trips. The '
+              'sibling test in that file holds the retention knob\'s other '
+              'position: rotating WITHOUT the delete leaves the era readable, '
+              'which is the default.',
           clauses: [
             'old-CK-era data becomes undecryptable (the nskey private cannot '
-            'help',
-          ]
-      );
+                'help',
+          ]);
     });
 
     test('UC-A5.1(b) · revocation + PCS by rotating the nskey keypair', () {
@@ -97,22 +96,21 @@ void main() {
       // THEN  E2's one APKAM keypair can no longer authenticate; alice1 is
       //       unaffected; E2 gets no new secrets — excluded at BOTH
       //       discovery+push and the requestSecret pull serve.
-      provenIn(
-        'tests/at_functional_test/test/nskey_rotation_live_test.dart',
-        'UC-A5.2/A5.3 · a revoked enrollment cannot authenticate',
-        proves: 'the revoked enrollment\'s own APKAM keypair authenticates on '
-            'a fresh connection before the revoke and is refused after it, '
-            'while a sibling enrollment still authenticates; and it disappears '
-            'from the enroll:listns roster that both the push and the serve '
-            'enumerate. The pull-serve half of "excluded at both" is pinned '
-            'deterministically at unit level by the revocation-guard group in '
-            'test/pairwise_secret_sharing_test.dart, where a holder refuses a '
-            'requester the roster no longer lists and serves the same request '
-            'while it is still listed.',
+      provenIn('tests/at_functional_test/test/nskey_rotation_live_test.dart',
+          'UC-A5.2/A5.3 · a revoked enrollment cannot authenticate',
+          proves:
+              'the revoked enrollment\'s own APKAM keypair authenticates on '
+              'a fresh connection before the revoke and is refused after it, '
+              'while a sibling enrollment still authenticates; and it disappears '
+              'from the enroll:listns roster that both the push and the serve '
+              'enumerate. The pull-serve half of "excluded at both" is pinned '
+              'deterministically at unit level by the revocation-guard group in '
+              'test/pairwise_secret_sharing_test.dart, where a holder refuses a '
+              'requester the roster no longer lists and serves the same request '
+              'while it is still listed.',
           clauses: [
             'E2\'s one APKAM keypair can no longer authenticate',
-          ]
-      );
+          ]);
     });
 
     test('UC-A5.3 · enrollment revocation composes with keypair rotation', () {
@@ -120,21 +118,19 @@ void main() {
       // WHEN  the operator revokes E2.
       // THEN  E2's APKAM keypair is cut at auth; paired with nskey-keypair
       //       rotation excluding E2 (UC-A5.1b) to deny new-data keys.
-      provenIn(
-        'tests/at_functional_test/test/nskey_rotation_live_test.dart',
-        'UC-A5.3 · revokeEnrollmentAndRotate revokes first',
-        proves: 'the composition run against a live atServer by a privileged '
-            'operator enrollment: revoke, then rotate every namespace the '
-            'target could read, excluding it. The successor is published, the '
-            'revoked enrollment does not hold it even after the sweep that '
-            'would have carried a pull\'s answer, and the owner retains the '
-            'superseded private. The revoke-before-rotate ORDER — which is '
-            'what makes the exclusion enforceable rather than advisory — is '
-            'asserted directly in test/nskey_rotation_test.dart.',
+      provenIn('tests/at_functional_test/test/nskey_rotation_live_test.dart',
+          'UC-A5.3 · revokeEnrollmentAndRotate revokes first',
+          proves: 'the composition run against a live atServer by a privileged '
+              'operator enrollment: revoke, then rotate every namespace the '
+              'target could read, excluding it. The successor is published, the '
+              'revoked enrollment does not hold it even after the sweep that '
+              'would have carried a pull\'s answer, and the owner retains the '
+              'superseded private. The revoke-before-rotate ORDER — which is '
+              'what makes the exclusion enforceable rather than advisory — is '
+              'asserted directly in test/nskey_rotation_test.dart.',
           clauses: [
             'E2\'s APKAM keypair is cut at auth',
-          ]
-      );
+          ]);
     });
   });
 }

@@ -513,8 +513,8 @@ void main() {
       // satisfied by an envelope carrying no entries at all.
       final atRollout1Envelope = signEnvelope('written at rollout 1',
           keys: await minter().signingKeys, type: EnvelopeType.app);
-      expect(atRollout1Envelope.signatures.map((s) => s.alg).toList(),
-          ['RS256'],
+      expect(
+          atRollout1Envelope.signatures.map((s) => s.alg).toList(), ['RS256'],
           reason: 'the control: while rsa2048 is in use, the composed '
               'envelope is signed under it');
 
@@ -528,7 +528,8 @@ void main() {
               'no longer offered for new operations, so nothing signs with '
               'it. An envelope carrying both would leave a verifier free to '
               'accept the weaker one');
-      expect(afterTheMove.signatures.map((s) => s.alg), isNot(contains('RS256')),
+      expect(
+          afterTheMove.signatures.map((s) => s.alg), isNot(contains('RS256')),
           reason: 'stated the way the row states it — no signature OF the '
               'retired algorithm — so a future build that emitted several '
               'entries would still have to leave this one out');

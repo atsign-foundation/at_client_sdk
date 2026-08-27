@@ -25,31 +25,28 @@ void main() {
       //       min(now + grace, expiry) and ages out — not deleted-by-key; the
       //       legacy encryption key is retained so history stays readable. No
       //       re-onboarding.
-      provenIn(
-        'tests/at_end2end_test/test/pq/retrofit_e2e_test.dart',
-        'UC-B1.1: a privileged retrofit mints the signing root in-flow',
-        proves:
-            'the retrofit publishes public:pq_signing_root in-flow (nothing in '
-            'the test calls mintIfAbsent), files the matching private in the '
-            'same keyfile, and anchors the new enrollment — verified as '
-            'ChainVerdict.anchored against the published record',
+      provenIn('tests/at_end2end_test/test/pq/retrofit_e2e_test.dart',
+          'UC-B1.1: a privileged retrofit mints the signing root in-flow',
+          proves:
+              'the retrofit publishes public:pq_signing_root in-flow (nothing in '
+              'the test calls mintIfAbsent), files the matching private in the '
+              'same keyfile, and anchors the new enrollment — verified as '
+              'ChainVerdict.anchored against the published record',
           clauses: [
             'serves the private to other fully privileged enrollments on '
-            'request',
-          ]
-      );
+                'request',
+          ]);
       provenIn(
-        'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
-        'the full retrofit: no-OTP submit auto-approves, the keyfile holds',
-        proves:
-            'the submit half: auto-approved with no OTP, a NEW enrollment id, '
-            'the keyfile carrying both enrollments, and immediate ML-DSA PKAM '
-            'under the new id (record-authoritative, so an RSA signature would '
-            'be refused)',
+          'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
+          'the full retrofit: no-OTP submit auto-approves, the keyfile holds',
+          proves:
+              'the submit half: auto-approved with no OTP, a NEW enrollment id, '
+              'the keyfile carrying both enrollments, and immediate ML-DSA PKAM '
+              'under the new id (record-authoritative, so an RSA signature would '
+              'be refused)',
           clauses: [
             'on the fresh auto-approved enrollment; PQ auth works',
-          ]
-      );
+          ]);
       provenIn(
         'tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart',
         'UC-B2.1/B2.2: the retrofit caps its parent',
@@ -66,8 +63,10 @@ void main() {
             'at each earlier rung afterwards. A build that retired the '
             'encryption key alongside the signing key would pass every '
             'write-side assertion and fail only here',
-        clauses: ['Legacy *encryption* key retained (history still '
-            'readable)'],
+        clauses: [
+          'Legacy *encryption* key retained (history still '
+              'readable)'
+        ],
       );
     });
 
@@ -126,21 +125,19 @@ void main() {
       // own connection, before the client exists, and every verb afterwards
       // runs over a different one. Both retrofit ROUTES are cited, because the
       // property is per-route and was proven for one while false for the other.
-      provenIn(
-        'tests/at_functional_test/test/pq_retrofitted_scope_test.dart',
-        'UC-B1.4 · a retrofitted scoped enrollment runs an authenticated verb',
-        proves:
-            'the STARTUP route - the one at_activate and every SDK consumer '
-            'take. The client leaves its enrolled id during construction, '
-            'resolves mldsa65 from key material, and answers an authenticated '
-            'verb; the id inequality is asserted first, so a run in which no '
-            'retrofit happened fails rather than measuring an ordinary '
-            'enrollment',
+      provenIn('tests/at_functional_test/test/pq_retrofitted_scope_test.dart',
+          'UC-B1.4 · a retrofitted scoped enrollment runs an authenticated verb',
+          proves:
+              'the STARTUP route - the one at_activate and every SDK consumer '
+              'take. The client leaves its enrolled id during construction, '
+              'resolves mldsa65 from key material, and answers an authenticated '
+              'verb; the id inequality is asserted first, so a run in which no '
+              'retrofit happened fails rather than measuring an ordinary '
+              'enrollment',
           clauses: [
             'an authenticated verb over its own connection',
             'from that enrollment\'s typed key material',
-          ]
-      );
+          ]);
       provenIn(
         'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
         'selfRetrofit switches to a working client: verb connection, monitor,',
@@ -196,18 +193,17 @@ void main() {
       // An escalation is silent where a loss is loud: a retrofit that dropped a
       // grant fails the next thing the app does, one that widened them fails
       // nothing at all.
-      provenIn(
-        'tests/at_functional_test/test/pq_retrofitted_scope_test.dart',
-        'UC-B1.6 · it is refused outside its authorised namespace',
-        proves: 'the refusal AND its control in one arm - the same client, the '
-            'same operation, one namespace over. Granting the second namespace '
-            'as a mutation turns the refusal into a successful write, so the '
-            'arm measures the grant boundary rather than the client\'s ability '
-            'to write at all',
+      provenIn('tests/at_functional_test/test/pq_retrofitted_scope_test.dart',
+          'UC-B1.6 · it is refused outside its authorised namespace',
+          proves:
+              'the refusal AND its control in one arm - the same client, the '
+              'same operation, one namespace over. Granting the second namespace '
+              'as a mutation turns the refusal into a successful write, so the '
+              'arm measures the grant boundary rather than the client\'s ability '
+              'to write at all',
           clauses: [
             'refused, naming insufficient privilege',
-          ]
-      );
+          ]);
     });
 
     test('UC-B1.7 · it holds the parent enrollment\'s grants, verbatim', () {
@@ -222,20 +218,18 @@ void main() {
       // _settleEnrollmentIdentity reads the grants off the record, while
       // selfRetrofit takes them as a caller-supplied parameter and reads no
       // record at all.
-      provenIn(
-        'tests/at_functional_test/test/pq_retrofitted_scope_test.dart',
-        'UC-B1.7 · its grants are the parent enrollment',
-        proves:
-            'both records read off the atServer rather than off the request '
-            'the client sent - what was asked for and what was recorded are '
-            'different facts. The literal grant is asserted beside the '
-            'comparison, so a retrofit that emptied both maps goes red rather '
-            'than satisfying the equality',
+      provenIn('tests/at_functional_test/test/pq_retrofitted_scope_test.dart',
+          'UC-B1.7 · its grants are the parent enrollment',
+          proves:
+              'both records read off the atServer rather than off the request '
+              'the client sent - what was asked for and what was recorded are '
+              'different facts. The literal grant is asserted beside the '
+              'comparison, so a retrofit that emptied both maps goes red rather '
+              'than satisfying the equality',
           clauses: [
             'and equals the literal grant that was enrolled',
             'returns its own record and nothing else',
-          ]
-      );
+          ]);
     });
   });
 }

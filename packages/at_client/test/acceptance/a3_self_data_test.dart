@@ -94,8 +94,10 @@ void main() {
             'its ckKid, then the value resolves that same ckKid and '
             'AES-GCM-decrypts. The hops are driven separately, so a build '
             'that opened the value some other way would not satisfy it',
-        clauses: ['the `at/nskey` provider decapsulates the CK with the nskey '
-            'private and caches it by `ckKid`'],
+        clauses: [
+          'the `at/nskey` provider decapsulates the CK with the nskey '
+              'private and caches it by `ckKid`'
+        ],
       );
       provenIn(
         'packages/at_client/test/nskey_data_path_test.dart',
@@ -105,8 +107,10 @@ void main() {
             'private fails to open the conveyance and therefore cannot read '
             'the value. Without it the row is satisfied by a build that '
             'ignores the nskey entirely',
-        clauses: ['a client lacking the nskey private cannot decapsulate the '
-            'CK and so cannot read'],
+        clauses: [
+          'a client lacking the nskey private cannot decapsulate the '
+              'CK and so cannot read'
+        ],
       );
     });
 
@@ -130,16 +134,15 @@ void main() {
       // code was right — a put that minted would hide a lock, a keygen, a
       // publish and a conveyance behind one write — and acceptance.md 4.2 was
       // amended. See decisions.md 29.
-      provenIn(
-        'tests/at_functional_test/test/nskey_seeding_live_test.dart',
-        'seeding publishes an advertisement the owner can then resolve',
-        proves: 'against a namespace nothing has minted for, seed() reports '
-            'minting it, the advertisement then resolves by the exact lookup a '
-            'sender uses, the client holds the private for that generation, '
-            'and a second seed is a no-op rather than a rotation',
+      provenIn('tests/at_functional_test/test/nskey_seeding_live_test.dart',
+          'seeding publishes an advertisement the owner can then resolve',
+          proves: 'against a namespace nothing has minted for, seed() reports '
+              'minting it, the advertisement then resolves by the exact lookup a '
+              'sender uses, the client holds the private for that generation, '
+              'and a second seed is a no-op rather than a rotation',
           clauses: [
             'a later start adopts the published advertisement rather than '
-            'minting over it',
+                'minting over it',
           ]);
       provenIn(
         'tests/at_functional_test/test/underscore_public_key_hiding_test.dart',
@@ -149,8 +152,10 @@ void main() {
             'always fetch it — while an unauthenticated scan does not list '
             'it, with and without showhidden. Both halves are needed; a '
             'record that were merely unreachable would fail the first',
-        clauses: ['an unauthenticated `scan` of `@alice`, with and without '
-            '`showhidden`, returns no'],
+        clauses: [
+          'an unauthenticated `scan` of `@alice`, with and without '
+              '`showhidden`, returns no'
+        ],
       );
       provenIn(
         'tests/at_functional_test/test/enrollment_namespace_gate_test.dart',
@@ -161,8 +166,10 @@ void main() {
             'the same enrollment still receives envelopes in the namespace it '
             'was granted and the approver can read the withheld one. A mocked '
             'lookup cannot produce this refusal at all',
-        clauses: ['client is refused the `app_1.my_apps` nskey private '
-            '(server-gated on the `__ssenv` channel)'],
+        clauses: [
+          'client is refused the `app_1.my_apps` nskey private '
+              '(server-gated on the `__ssenv` channel)'
+        ],
       );
       provenIn(
         'tests/at_functional_test/test/nskey_self_heal_live_test.dart',
@@ -173,8 +180,10 @@ void main() {
             'observed going out, and the private arrives in the seeker\'s '
             'keyfile byte-exact under the generation already advertised — so '
             'it healed rather than minting a rival',
-        clauses: ['`requestSecret` is the pull backstop for an enrollment '
-            'offline during the push'],
+        clauses: [
+          '`requestSecret` is the pull backstop for an enrollment '
+              'offline during the push'
+        ],
       );
       provenIn(
         'tests/at_functional_test/test/nskey_data_path_live_test.dart',
@@ -184,8 +193,10 @@ void main() {
             'ckKid as the first and cuts no new conveyance record. A build '
             'that re-minted per write would still round-trip, so the reuse '
             'has to be asserted rather than inferred from success',
-        clauses: ['A subsequent `put` into the namespace uses the key that '
-            'already exists; it does not mint'],
+        clauses: [
+          'A subsequent `put` into the namespace uses the key that '
+              'already exists; it does not mint'
+        ],
       );
     });
 
@@ -219,8 +230,10 @@ void main() {
             'so the namespaces it is entitled to write already hold a key by '
             'the time a put arrives. The rarity is a property of what seeding '
             'covers, not a hope',
-        clauses: ['In practice this case is rare, because a client mints for '
-            'its preference namespace'],
+        clauses: [
+          'In practice this case is rare, because a client mints for '
+              'its preference namespace'
+        ],
       );
       provenIn(
         'packages/at_client/test/cold_start_test.dart',
@@ -230,8 +243,10 @@ void main() {
             'refusal is NamespaceKeyUnavailableException carrying the atSign '
             'and namespace, and it comes from the CK-manager pre-pass rather '
             'than from a provider failing mid-encrypt',
-        clauses: ['the exception is `NamespaceKeyUnavailableException(atSign, '
-            'namespace)`, raised by the CK-manager pre-pass'],
+        clauses: [
+          'the exception is `NamespaceKeyUnavailableException(atSign, '
+              'namespace)`, raised by the CK-manager pre-pass'
+        ],
       );
     });
 
@@ -319,8 +334,7 @@ void main() {
       // they show what the receive path does with a frame rather than that a
       // real atServer produces one. The live test carries the two clauses that
       // difference matters for.
-      provenIn(
-          'tests/at_functional_test/test/nskey_self_notify_live_test.dart',
+      provenIn('tests/at_functional_test/test/nskey_self_notify_live_test.dart',
           'a self notification reaches a second enrollment and decrypts',
           proves: 'both clauses against a real atServer and a genuinely '
               'second enrollment: the delivered frame carries providerId in '
@@ -338,8 +352,10 @@ void main() {
             'signal notification would be attempting to decrypt nothing — '
             'which fails quietly rather than loudly, so the count is the only '
             'thing that shows it',
-        clauses: ['A signal-only notification (no value) needs no decryption '
-            'and is unaffected'],
+        clauses: [
+          'A signal-only notification (no value) needs no decryption '
+              'and is unaffected'
+        ],
       );
     });
 
@@ -365,20 +381,20 @@ void main() {
       //       conveyance VERSION negotiated: 0x02 for an owner that lists RFC
       //       9180, 0x01 for one whose advertisement predates the field, 0x03
       //       for ML-KEM-1024, and a refusal when nothing overlaps.
-      provenIn(
-        'packages/at_client/test/nskey_kem_selection_test.dart',
-        'ML-KEM-1024 conveys under its own provider id at ver 0x03',
-        proves: 'the write side end to end — the destination\'s advertised alg '
-            'selects the provider id and the seal version, asserted on the '
-            'envelope\'s first byte rather than on a label. Its siblings carry '
-            'the negotiation arms ("the hybrid negotiates RFC 9180 with an '
-            'owner that advertises it" against "and refuses an owner that '
-            'only opens the retired construction", both against the same key) '
-            'and the refusals ("no shared construction is a refusal, not a '
-            'guess"; "a provider will not seal to the other KEM").',
+      provenIn('packages/at_client/test/nskey_kem_selection_test.dart',
+          'ML-KEM-1024 conveys under its own provider id at ver 0x03',
+          proves:
+              'the write side end to end — the destination\'s advertised alg '
+              'selects the provider id and the seal version, asserted on the '
+              'envelope\'s first byte rather than on a label. Its siblings carry '
+              'the negotiation arms ("the hybrid negotiates RFC 9180 with an '
+              'owner that advertises it" against "and refuses an owner that '
+              'only opens the retired construction", both against the same key) '
+              'and the refusals ("no shared construction is a refusal, not a '
+              'guess"; "a provider will not seal to the other KEM").',
           clauses: [
             'a CK conveyance into that namespace is sealed under the KEM '
-            '`alg` names and stamped',
+                '`alg` names and stamped',
           ]);
       provenIn(
         'packages/at_client/test/nskey_kem_selection_test.dart',
@@ -397,8 +413,10 @@ void main() {
             'so suites sits beside each entry\'s alg in the shape senders '
             'parse. A round-trip through the writer\'s own reader would stay '
             'green for a shape no other build could read',
-        clauses: ['the APKAM-signed advertisement carries **`suites`** beside '
-            'each entry\'s **`alg`**'],
+        clauses: [
+          'the APKAM-signed advertisement carries **`suites`** beside '
+              'each entry\'s **`alg`**'
+        ],
       );
       provenIn(
         'packages/at_client/test/nskey_kem_selection_test.dart',
@@ -407,8 +425,10 @@ void main() {
             'rather than the sender\'s preference, and that an owner sharing '
             'no live construction is refused instead of being guessed at. The '
             'refusal arm is what stops the selection reading as a default',
-        clauses: ['An X-Wing owner therefore receives `ver 0x02` and an '
-            'ML-KEM-1024 owner `ver 0x03`'],
+        clauses: [
+          'An X-Wing owner therefore receives `ver 0x02` and an '
+              'ML-KEM-1024 owner `ver 0x03`'
+        ],
       );
       provenIn(
         'packages/at_client/test/published_nskey_key_ring_test.dart',
@@ -433,8 +453,10 @@ void main() {
             'and REFUSES a private that corresponds exactly. Mutation-proven '
             '— pinning the algorithm to X-Wing reddens it, quoting this '
             'assertion',
-        clauses: ['re-derives the public half **through the advertised KEM** '
-            'rather than assuming X-Wing'],
+        clauses: [
+          're-derives the public half **through the advertised KEM** '
+              'rather than assuming X-Wing'
+        ],
       );
     });
   });

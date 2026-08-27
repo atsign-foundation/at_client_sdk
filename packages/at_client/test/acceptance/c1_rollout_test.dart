@@ -159,8 +159,7 @@ void main() {
         proves: 'what an app that names nothing gets, pinned as a literal, so '
             'moving the shipped default is an edit to that test and the edit '
             'is the review');
-    provenIn(
-        'packages/at_client/test/pq_posture_test.dart',
+    provenIn('packages/at_client/test/pq_posture_test.dart',
         'disallowLegacyEncryption has no per-preference override',
         proves: 'the one axis the posture alone moves, which is what this row '
             'used to deny: the flag is false by default and under pqReady, '
@@ -195,7 +194,7 @@ void main() {
         proves: 'the per-axis override contract, in both directions',
         clauses: [
           'an enrollment that mints no signing key of its own keeps signing '
-          'with its APKAM authentication key',
+              'with its APKAM authentication key',
         ]);
     provenIn('packages/at_client/test/pq_posture_test.dart',
         'refuses an algorithm this build cannot sign an envelope under',

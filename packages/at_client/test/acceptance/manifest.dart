@@ -125,8 +125,7 @@ const serverProvenClauseCount = 52;
 /// deleted. Collapsing them into one map would make a permanent waiver and an
 /// unpaid debt indistinguishable, which is the state this rail exists to end.
 const liveProofOwed = <String, String>{
-  'UC-A2.4':
-      'key_package_amendment_live_test.dart reaches this row live, but its '
+  'UC-A2.4': 'key_package_amendment_live_test.dart reaches this row live, but its '
       'version assertion compares the stamped byte against the function that '
       'generates it, so the ver 0x03 clause needs a raw-literal pin before a '
       'citation can claim it',
@@ -410,7 +409,8 @@ Map<String, List<SourceCitation>> citationDetailsByUseCase() {
         // A `provenHere` names no path because the proof is this file. It is
         // recorded as this file, which is in-process by construction — an
         // inline proof runs in at_client's unit suite with no atServer.
-        final path = calls[j].group(1) ?? 'packages/at_client/test/acceptance/$file';
+        final path =
+            calls[j].group(1) ?? 'packages/at_client/test/acceptance/$file';
         list.add(SourceCitation(
             path, _pinsIn(chunk.substring(calls[j].start, callEnd))));
       }
@@ -490,8 +490,8 @@ List<int> resolvePin(String useCase, String pin) => clausesOf(useCase)
 ({Set<int> proven, Set<int> serverProven}) clauseCoverageOf(String useCase) {
   final proven = <int>{};
   final serverProven = <int>{};
-  for (final citation in citationDetailsByUseCase()[useCase] ??
-      const <SourceCitation>[]) {
+  for (final citation
+      in citationDetailsByUseCase()[useCase] ?? const <SourceCitation>[]) {
     for (final pin in citation.pins) {
       final hits = resolvePin(useCase, pin);
       if (hits.length != 1) continue;

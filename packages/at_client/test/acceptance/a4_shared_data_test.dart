@@ -22,15 +22,13 @@ void main() {
       //       alice's nskey private. PQ end to end — no RSA on any path. An
       //       unauthorised @bob enrollment can neither fetch the ciphertext
       //       (server-gated) nor decrypt it.
-      provenIn(
-        'tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
-        'alice shares with bob, and bob reads it with his own nskey private',
-        proves:
-            'bob opens the CK with HIS nskey private on an alice-owned record, and the same test asserts alice cannot decapsulate the CK she sealed to him',
+      provenIn('tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
+          'alice shares with bob, and bob reads it with his own nskey private',
+          proves:
+              'bob opens the CK with HIS nskey private on an alice-owned record, and the same test asserts alice cannot decapsulate the CK she sealed to him',
           clauses: [
             'decapsulate bob\'s CK record with bob\'s nskey private and read',
-          ]
-      );
+          ]);
       provenIn(
         'packages/at_client/test/acceptance/cross_cutting_test.dart',
         'no RSA in any confidentiality path for a fully-PQ interaction',
@@ -40,8 +38,10 @@ void main() {
             'RSA on it. The live tests either side pin the positive routing — '
             'the value stamped at/symmetric/AES/GCM and the conveyance to the '
             'nskey — but neither can say nothing else was reached for',
-        clauses: ['data values `providerId = at/symmetric/AES/GCM`, CK '
-            'conveyances'],
+        clauses: [
+          'data values `providerId = at/symmetric/AES/GCM`, CK '
+              'conveyances'
+        ],
       );
     });
 
@@ -61,18 +61,18 @@ void main() {
       //       uses or authorises the namespace his nskey is published and
       //       alice's next ensureCurrent picks it up by plookup.
       provenIn(
-        'tests/at_end2end_test/test/pq/nskey_recipient_not_ready_test.dart',
-        'UC-A4.2: a share to a recipient with no namespace key fails, naming',
-        proves: 'against a namespace unique to the run — so @bob has genuinely '
-            'never used it — the send fails with an exception naming both @bob '
-            'and the namespace, the readiness query answers false BEFORE '
-            'anything is composed, and the same query answers true for a '
-            'namespace @bob has enabled, so the "no" carries information',
+          'tests/at_end2end_test/test/pq/nskey_recipient_not_ready_test.dart',
+          'UC-A4.2: a share to a recipient with no namespace key fails, naming',
+          proves:
+              'against a namespace unique to the run — so @bob has genuinely '
+              'never used it — the send fails with an exception naming both @bob '
+              'and the namespace, the readiness query answers false BEFORE '
+              'anything is composed, and the same query answers true for a '
+              'namespace @bob has enabled, so the "no" carries information',
           clauses: [
             'pre-flight capability query** answers the same question before '
-            'the user composes anything',
-          ]
-      );
+                'the user composes anything',
+          ]);
       provenIn(
         'tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
         'UC-B4.2 outbound · a PQ app on @bob reaches a legacy @alice throu',
@@ -81,8 +81,10 @@ void main() {
             'failing, and the record says so. Without the flag the same send '
             'refuses, which is the sibling arm and what stops this reading as '
             'the default',
-        clauses: ['With the legacy fallback opted in (final 3.x only), the '
-            'share proceeds under'],
+        clauses: [
+          'With the legacy fallback opted in (final 3.x only), the '
+              'share proceeds under'
+        ],
       );
       provenIn(
         'tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
@@ -93,8 +95,10 @@ void main() {
             'isReadyFor is false, bob mints and publishes, and a FRESH alice '
             'sender then reads true — so the answer comes off the atServer '
             'rather than out of a cache alice already held',
-        clauses: ['Once bob uses or authorises the namespace, his nskey is '
-            'published'],
+        clauses: [
+          'Once bob uses or authorises the namespace, his nskey is '
+              'published'
+        ],
       );
     });
 
@@ -144,8 +148,10 @@ void main() {
             'value leaves the decrypt count unchanged. The self scenario '
             'drives the same receive path, so the arm is established there '
             'rather than duplicated here',
-        clauses: ['is present on the notification frame; signal-only '
-            'notifications are unaffected'],
+        clauses: [
+          'is present on the notification frame; signal-only '
+              'notifications are unaffected'
+        ],
       );
     });
 
@@ -171,41 +177,38 @@ void main() {
       // recipient's — both-X-Wing in one arm, both-ML-KEM in the other — so
       // neither isolates "the recipient decides", and a regression routing by
       // the sender's own algorithm would leave both green.
-      provenIn(
-        'packages/at_client/test/nskey_kem_selection_test.dart',
-        'the RECIPIENT advertisement decides the conveyance provider',
-        proves: 'the differential the clause names, with the sender held '
-            'fixed: the same ml-kem-1024-configured sender stamps the X-Wing '
-            'conveyance provider for a recipient advertising X-Wing and the '
-            'ML-KEM one for a recipient advertising ML-KEM, so the routing '
-            'follows the advertisement and not the configuration. Mutating '
-            'CkManager to pass the sender\'s own algorithm reddens it, and the '
-            'failure is the production symptom — "@bob:myapp advertises a '
-            'x-wing nskey, which at/nskey/MLKEM1024/AES/GCM cannot seal to", '
-            'i.e. exactly the "refusing would protect nothing" outcome this '
-            'row rejects.',
+      provenIn('packages/at_client/test/nskey_kem_selection_test.dart',
+          'the RECIPIENT advertisement decides the conveyance provider',
+          proves: 'the differential the clause names, with the sender held '
+              'fixed: the same ml-kem-1024-configured sender stamps the X-Wing '
+              'conveyance provider for a recipient advertising X-Wing and the '
+              'ML-KEM one for a recipient advertising ML-KEM, so the routing '
+              'follows the advertisement and not the configuration. Mutating '
+              'CkManager to pass the sender\'s own algorithm reddens it, and the '
+              'failure is the production symptom — "@bob:myapp advertises a '
+              'x-wing nskey, which at/nskey/MLKEM1024/AES/GCM cannot seal to", '
+              'i.e. exactly the "refusing would protect nothing" outcome this '
+              'row rejects.',
           clauses: [
             'refusing would protect nothing.** It would leave two atSigns '
-            'unable to communicate',
+                'unable to communicate',
             'the CK is sealed **under X-Wing**, to bob\'s key, at the '
-            'strongest construction both sides list',
-          ]
-      );
-      provenIn(
-        'packages/at_client/test/pairwise_secret_sharing_test.dart',
-        'two ML-KEM-1024 clients exchange the no-hybrid construction',
-        proves: 'the whole chain under the second KEM — two clients configured '
-            'for ml-kem-1024 mint, advertise, negotiate, seal and open at ver '
-            '0x03. Paired with the negotiation arms in the same group, which '
-            'run against an X-Wing recipient, it establishes that the '
-            'RECIPIENT\'s advertised alg is what selects the KEM: the same '
-            'sender code reaches a different construction purely by who it is '
-            'sealing to.',
+                'strongest construction both sides list',
+          ]);
+      provenIn('packages/at_client/test/pairwise_secret_sharing_test.dart',
+          'two ML-KEM-1024 clients exchange the no-hybrid construction',
+          proves:
+              'the whole chain under the second KEM — two clients configured '
+              'for ml-kem-1024 mint, advertise, negotiate, seal and open at ver '
+              '0x03. Paired with the negotiation arms in the same group, which '
+              'run against an X-Wing recipient, it establishes that the '
+              'RECIPIENT\'s advertised alg is what selects the KEM: the same '
+              'sender code reaches a different construction purely by who it is '
+              'sealing to.',
           clauses: [
             'symmetrically, a hybrid-configured `@bob` seals to an '
-            'ML-KEM-1024 `@alice` at `ver 0x03`',
-          ]
-      );
+                'ML-KEM-1024 `@alice` at `ver 0x03`',
+          ]);
       provenIn(
         'packages/at_client/test/kem_selection_test.dart',
         'the two KEMs are not interchangeable',
@@ -324,8 +327,10 @@ void main() {
             'something it cannot open. Its pair asserts the accepting arm '
             'reads back as suite x-wing-rfc9180 at version 0x02, so the two '
             'together show the choice is made rather than defaulted',
-        clauses: ['the peer that lists RFC 9180 receives `pqSeal ver 0x02`; '
-            'the peer that lists only'],
+        clauses: [
+          'the peer that lists RFC 9180 receives `pqSeal ver 0x02`; '
+              'the peer that lists only'
+        ],
       );
       provenIn(
         'packages/at_chops/test/pq_hpke_test.dart',
@@ -334,8 +339,10 @@ void main() {
             'apart: a payload naming a KEM the version byte does not match is '
             'rejected at the seal layer. The agreement is asserted where it '
             'is decided, rather than inferred from a successful round trip',
-        clauses: ['the payload\'s declared suite and the envelope\'s version '
-            'byte **agree**'],
+        clauses: [
+          'the payload\'s declared suite and the envelope\'s version '
+              'byte **agree**'
+        ],
       );
       provenIn(
         'packages/at_client/test/key_package_registration_test.dart',
@@ -345,8 +352,10 @@ void main() {
             'dropping them, so a newer holder is not silently narrowed to '
             'what this build understands. The fixture deliberately mixes an '
             'unknown name with a non-string entry',
-        clauses: ['on parse, entries this build does not recognise are '
-            '**kept**'],
+        clauses: [
+          'on parse, entries this build does not recognise are '
+              '**kept**'
+        ],
       );
       provenIn(
         'tests/at_functional_test/test/key_package_amendment_live_test.dart',
@@ -358,8 +367,10 @@ void main() {
             'before narrowing to the chosen key\'s KEM could produce a suite '
             'that key cannot open, and both arms would still look like a '
             'success at the point of sending',
-        clauses: ['the candidate suites are narrowed to the **chosen key\'s '
-            'own KEM** before the intersection'],
+        clauses: [
+          'the candidate suites are narrowed to the **chosen key\'s '
+              'own KEM** before the intersection'
+        ],
       );
     });
 
@@ -376,18 +387,16 @@ void main() {
       //       per member rather than per write, the same rule reads as
       //       skipped-not-fatal: a member with no mutually supported key is
       //       skipped and every other member still receives its copy.
-      provenIn(
-        'packages/at_client/test/pairwise_secret_sharing_test.dart',
-        'refuses rather than guessing when nothing is mutually supported',
-        proves: 'the per-write arm — no overlap raises rather than falling '
-            'back to the sender\'s own suite, and nothing is written. '
-            '"pushSecretToNamespaceMembers skips it and still reaches the '
-            'rest" holds the fan-out arm, where one unusable advertisement '
-            'must not cost the rest of the roster theirs.',
+      provenIn('packages/at_client/test/pairwise_secret_sharing_test.dart',
+          'refuses rather than guessing when nothing is mutually supported',
+          proves: 'the per-write arm — no overlap raises rather than falling '
+              'back to the sender\'s own suite, and nothing is written. '
+              '"pushSecretToNamespaceMembers skips it and still reaches the '
+              'rest" holds the fan-out arm, where one unusable advertisement '
+              'must not cost the rest of the roster theirs.',
           clauses: [
             'the operation is **refused** and nothing is written',
-          ]
-      );
+          ]);
       provenIn(
         'packages/at_client/test/key_package_registration_test.dart',
         'no overlap is null rather than a guess',
@@ -406,8 +415,10 @@ void main() {
             'encapsulate to is skipped, and the remaining members still '
             'receive. The rest-still-reached half is what distinguishes a '
             'skip from a swallowed failure',
-        clauses: ['in a namespace fan-out a member with no mutually supported '
-            'key is **skipped, not fatal**'],
+        clauses: [
+          'in a namespace fan-out a member with no mutually supported '
+              'key is **skipped, not fatal**'
+        ],
       );
     });
   });
