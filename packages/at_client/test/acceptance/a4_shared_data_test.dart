@@ -141,7 +141,7 @@ void main() {
             'providerId is read off the notification frame bob\'s monitor delivered, and the value decrypts through the nskey route',
       );
       provenIn(
-        'tests/at_end2end_test/test/pq/pq_cold_start_recovery_test.dart',
+        'tests/at_end2end_test/test/pq/pq_notify_fallback_test.dart',
         'UC-A4.4: the opted-in fallback governs a NOTIFY as well as a put',
         proves: 'the scheme-decision clause on both of its arms, against one '
             'client with one preference: with allowLegacyCryptoFallback set, '
@@ -157,7 +157,12 @@ void main() {
             'notification, the exception telling the app to opt into the path '
             'it had already opted into. Mutation-proven: making the '
             'transformer refuse to fall back reddens this, quoting its own '
-            'reason, with the put control green',
+            'reason, with the put control green. ⚠️ It lives in its OWN file: notify '
+            'folds a key outside the client app namespace into the key name and '
+            'substitutes the client\'s, and AtClientManager caches a client per '
+            '(atSign, enrollmentId) — so a second test in one file inherits the '
+            'first test\'s namespace and every notify is silently redirected '
+            'there',
         clauses: [
           'the write fails cold start or takes the explicit legacy fallback'
         ],

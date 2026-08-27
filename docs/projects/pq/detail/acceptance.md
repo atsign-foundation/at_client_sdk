@@ -202,13 +202,13 @@ pass locally.
 
 ## A link sweep that reported 7 breaks, and there were none
 
-Run 2026-08-23 over all `](target)` links in `docs/projects/pq/`. The naive
+Run 2026-08-23 over every Markdown link in `docs/projects/pq/`. The naive
 version reported **7 broken**; a code-span-aware one reports **0**.
 
 Every one of the 7 sat inside backticks, in prose *about* link syntax — and 6
 of them were in the passage of `detail/implementation-plan.md` that exists to
 explain this exact failure, one of which reads "the literal
-`](target#anchor)` that appears in prose". A checker that strips fenced blocks
+any inline link target that appears in prose". A checker that strips fenced blocks
 but not inline code spans reads that as a link and reports it broken, and
 "fixing" it corrupts the sentence.
 
@@ -965,7 +965,7 @@ recorded counts drift from the tree.
 
 Each is a clause a test already exercises that does **not** establish it as
 written. ⛔ **No total is written here — count the table below**, which is the
-only place the number lives. It read "29 clauses" until 2026-08-28, by which
+only place the number lives. It read "29 clauses" until 2026-08-27, by which
 time five had closed and the sentence had outlived two of its own corrections. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 

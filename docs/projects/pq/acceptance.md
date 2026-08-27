@@ -2328,7 +2328,7 @@ first version scored 28 rather than 62 and looked entirely plausible
 directions, mutation-proven, because a defect in it does not look like a defect
 — it looks like a coverage report.
 
-**The cross-cutting invariants get their own table**, so all 135 citations are
+**The cross-cutting invariants get their own table**, so every citation is
 accounted for and none is dropped. [Section
 13](#13-cross-cutting-acceptance-applies-to-all-flows)'s rows apply to every
 flow and are deliberately unnumbered, so they are keyed by their own wording

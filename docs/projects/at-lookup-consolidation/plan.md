@@ -602,11 +602,27 @@ step 5, so the deletion has somewhere for those callers to go.
 
 ### BLOCKS THE MAJOR (partly) — at_onboarding_cli had no local functional harness
 
-`tests/at_onboarding_cli_functional_tests` has **no `runLocal.sh`**, and its
-`docker-compose.yaml` defaults to `atsigncompany/virtualenv:vip` - the
-published image, not the local PQ-capable build the rest of this work is
-verified against. So there is no local path to functionally verify anything
-in at_onboarding_cli, and `tests/at_functional_test` does not exercise the CLI.
+⛔ **The harness half of this is DISCHARGED, and this section said otherwise
+until 2026-08-27 — while a passage later in this same
+file said the opposite.** It read: *"`tests/at_onboarding_cli_functional_tests` has
+**no `runLocal.sh`**, and its `docker-compose.yaml` defaults to
+`atsigncompany/virtualenv:vip` … So there is no local path to functionally
+verify anything in at_onboarding_cli."* All three clauses are false.
+`runLocal.sh` **exists** (dated 2026-08-25), and its line 47 exports
+`VIRTUALENV_IMAGE="${VIRTUALENV_IMAGE:-at_virtual_env:local}"` — the compose
+file's `vip` is only the fallback when the runner is bypassed. The pack runs
+locally and passes: **19 tests, exit 0**, verified 2026-08-27 on both
+`at_virtual_env:local` and CI's own `atsigncompany/virtualenv:dev_env`.
+
+⚠️ **It cost something, which is why the correction is here rather than a
+deletion.** On 2026-08-27 this paragraph was copied into the PQ plan's `## TODO`
+as a live P2 row, unverified — an absence claim one `ls` from being settled. The
+copy was then corrected on 2026-08-27 with the provenance blamed on `MEMORY.md`,
+which was **also wrong**: memory had recorded *"now has a `runLocal.sh`(I wrote
+it; there was none)"* correctly all along. A file that disagrees with itself 223
+lines apart will hand out whichever half a reader reaches first.
+
+What remains true: `tests/at_functional_test` does not exercise the CLI.
 
 The consequence for this project: the CLI's authenticator install is
 **unit-green only** (54 tests), and its six remaining construction sites
