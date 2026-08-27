@@ -298,6 +298,94 @@ void main() {
             'opens none');
   });
 
+  test('a copied keyfile signs with the root private on the second host',
+      () async {
+    // UC-A2.2: a second host running against a COPY of E1's keyfile is the
+    // same enrollment, not a second one. Nothing anywhere copied a keyfile
+    // that HOLDS the root private and then drove a second client from it, so
+    // the clause rested on the copy being conveyed nothing — which is exactly
+    // the case that has to work.
+    final a = client();
+    final ioA = await keysIo();
+    // The flat enrollment id is what a copy carries to the atServer, and so
+    // what makes the second host present as E1 rather than as a new
+    // enrollment. It is why the namespace authorisations follow the copy. The
+    // atsign is set for the same reason a real keyfile has one: typed material
+    // will not serialize without it, and a copy is made of the serialized form.
+    (await ioA.read(atSign))
+      ..enrollmentId = 'enrollment-1'
+      ..atsign = atSign.toAtsign();
+    await PqSigningRoot(a.client, keysIo: ioA)
+        .mintIfAbsent(isFullyPrivileged: true);
+
+    final rootBody =
+        jsonDecode(a.published.single.value!) as Map<String, dynamic>;
+    final rootPublic = base64Decode(
+        ((rootBody['keys'] as List).single as Map<String, dynamic>)['pub']
+            as String);
+
+    // The copy: through the JSON a .atKeys file holds, which is the whole of
+    // what copying one does. Nothing is re-minted and nothing is conveyed.
+    final ioB = InMemoryAtKeysIo();
+    await ioB.write(
+        atSign,
+        AtKeys.fromJson(jsonDecode(jsonEncode((await ioA.read(atSign)).toJson()))
+            as Map<String, dynamic>));
+
+    final hostB = await PqSigningRoot(client(publishedRoot: rootPublic).client,
+            keysIo: ioB)
+        .signingKey(atSign);
+    final hostA = await PqSigningRoot(a.client, keysIo: ioA).signingKey(atSign);
+
+    expect(hostA, isNotNull, reason: 'the minting host holds its own root');
+    expect(hostB, isNotNull,
+        reason: 'and so does the copy, without being conveyed anything');
+    expect(hostB!.private, hostA!.private,
+        reason: 'the SAME private — one root, two hosts, one enrollment');
+    expect(hostB.kid, hostA.kid,
+        reason: 'naming the same advertised entry, so a link either host '
+            'signs points at the same published key');
+
+    // Resolving is not signing. This is the arm the row asked for: the copy
+    // produces a signature the atSign's PUBLISHED root verifies, so a
+    // verifier cannot tell the two hosts apart — which is what "share the
+    // root" has to mean to be worth stating.
+    final message = Uint8List.fromList(utf8.encode('a link signed on host B'));
+    final signature = await MlDsa65PureDartAlgo()
+        .signBytes(message, secretKey: hostB.private);
+    expect(
+        await MlDsa65PureDartAlgo()
+            .verifyBytes(message, signature: signature, publicKey: rootPublic),
+        isTrue,
+        reason: 'host B signed with the copied private and the published root '
+            'verifies it');
+    expect(
+        await MlDsa65PureDartAlgo().verifyBytes(
+            Uint8List.fromList(utf8.encode('a different link')),
+            signature: signature,
+            publicKey: rootPublic),
+        isFalse,
+        reason: 'the control: the verify above is checking THIS message, not '
+            'answering true for anything put in front of it');
+
+    expect((await ioB.read(atSign)).enrollmentId, 'enrollment-1',
+        reason: 'and the copy carries E1\'s enrollment id, which is what '
+            'makes the second host present as E1 to the atServer and so pick '
+            'up its namespace authorisations rather than a fresh grant');
+
+    final fresh = InMemoryAtKeysIo();
+    await fresh.write(atSign, AtKeys());
+    expect(
+        await PqSigningRoot(client(publishedRoot: rootPublic).client,
+                keysIo: fresh)
+            .signingKey(atSign),
+        isNull,
+        reason: 'the control: an UNCOPIED keyfile for the same atSign, reading '
+            'the same published record, resolves nothing — so everything '
+            'above is about the copy and not about the resolver answering for '
+            'any keyfile');
+  });
+
   test('a restricted enrollment mints nothing', () async {
     final c = client();
     final io = await keysIo();

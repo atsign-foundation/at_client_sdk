@@ -963,7 +963,7 @@ recorded counts drift from the tree.
 
 ### The partial clauses — objective 1's remaining work
 
-**34 clauses**, each one a test already exercises that does **not**
+**33 clauses**, each one a test already exercises that does **not**
 establish the clause as written. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 
@@ -1017,16 +1017,15 @@ nothing when asked for the root's *own* algorithm, which is what isolates
 `use: enc` as the reason rather than letting two conditions cover for each
 other.
 
-**The standard a closed clause meets**, set by the three closed on 2026-08-27:
+**The standard a closed clause meets**, set by the four closed on 2026-08-27:
 write the missing arm *with a control*, then **mutate the production code and
 confirm the failure quotes your own assertion's reason**, revert, and pin. A
 green test that has not been shown to discriminate proves nothing.
 
-#### In-process — 5 closable with no virtualenv
+#### In-process — 4 closable with no virtualenv
 
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
-| **UC-A2.2** c2 | Nothing anywhere makes a copy of a keyfile that HOLDS `pq_signing_root@alice⁻¹` and then shows the second host resolving or signing with it… | `at_keys_test.dart` |
 | **UC-A5.1** c3 | "an enrollment approved *after* the rotation is pushed the current generation only" and "...and opens it" — no test enrols a joiner after a… | `nskey_self_heal_test.dart` |
 | **UC-B3.1** c1 | "(Applies to **put and notify** alike; a notification an old install cannot decrypt is as lost as a record it cannot read.)" — nothing anyw… | `b3_mixed_intra_test.dart` |
 | **UC-B5.7** c1 | "The holder carries a lease stamped *before* the take goes out — so \"unspent by my clock\" implies the atServer has not expired it either,… | `nskey_minting_test.dart` |

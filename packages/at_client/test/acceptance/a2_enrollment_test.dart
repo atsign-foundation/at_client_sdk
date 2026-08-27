@@ -83,6 +83,25 @@ void main() {
             'id. One enrollment and one recipient, so there is a single thing '
             'to revoke and an operator cannot miss the second host',
       );
+      provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'a copied keyfile signs with the root private on the second host',
+        proves: 'the signing-root half, which the live test above does not '
+            'reach: nothing anywhere copied a keyfile that HOLDS the root '
+            'private and then drove a second client from it, so the clause '
+            'rested on the case where the copy is conveyed nothing. The copy '
+            'resolves the SAME private under the SAME kid, and — the part '
+            'that makes it worth stating — produces a signature the atSign\'s '
+            'PUBLISHED root verifies, so a verifier cannot tell the two hosts '
+            'apart. An uncopied keyfile reading the same record resolves '
+            'nothing, which is the control. The enrollment-id assertion is '
+            'the mechanism for the authorisations half: the copy presents as '
+            'E1, and what E1 may reach is the atServer\'s decision, gated '
+            'live by UC-A2.3. Mutation-proven twice — dropping the atSign '
+            'material from a serialized keyfile reddens the resolve, and '
+            'dropping the flat enrollment id reddens the identity',
+        clauses: ['Both hosts share `pq_signing_root@alice⁻¹`'],
+      );
     });
 
     test('UC-A2.3 · namespace-restricted enrollment', () {

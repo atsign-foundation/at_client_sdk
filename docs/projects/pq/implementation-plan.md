@@ -350,7 +350,7 @@ clause against the tree:
 
 | List | Size | What it is |
 | ---- | ---: | ---------- |
-| [the partial clauses](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work) | 34 | a test exercises the clause and does not establish it as written. **5 are in-process and need no virtualenv**; 29 are live and are the only route that raises server-proven. ⚠️ **Read the array-shape warning above before writing a test for any of them** — three of the six examined on 2026-08-27 were superseded clauses rather than test gaps |
+| [the partial clauses](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work) | 33 | a test exercises the clause and does not establish it as written. **4 are in-process and need no virtualenv**; 29 are live and are the only route that raises server-proven. ⚠️ **Read the array-shape warning above before writing a test for any of them** — three of the six examined on 2026-08-27 were superseded clauses rather than test gaps |
 | [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 1 | proven, but no citation names the proof. ⚠️ **Was 33; 32 were written 2026-08-27 and the last is deliberate** — UC-A2.4's `pqSeal ver 0x03` is refused a pin because the live test asserts the byte against the function that generates it |
 | [pinned but partial](detail/acceptance.md#two-clauses-pinned-in-the-tree-that-the-map-calls-partial) | 2 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls |
 
