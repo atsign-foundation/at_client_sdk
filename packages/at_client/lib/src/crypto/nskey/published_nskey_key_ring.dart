@@ -1,5 +1,6 @@
 import 'dart:async' show unawaited;
 import 'dart:convert' show jsonDecode;
+import 'dart:typed_data' show Uint8List;
 
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/crypto.dart'
@@ -409,9 +410,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// difference is the one that matters.
   Future<NskeyAdvertisement> mintAndPublish(String namespace) async {
     final owner = _atClient.getCurrentAtSign()!;
+    // Before the lock, not inside it — see [_prepareMint].
+    final prepared = await _prepareMint(owner, namespace);
     final minted = await mintLock.withLock(
         nskeyMintLockKey(owner, namespace, ttl: lockTtl),
-        (lease) => _mintUnlessPublished(owner, namespace, lease),
+        (lease) => _mintUnlessPublished(owner, namespace, lease, prepared),
         // Safe here and nowhere else in this file: the critical section reads
         // what is published and adopts it, so an enrollment meeting the lock
         // it took a moment ago re-reads rather than minting a second key.
@@ -491,9 +494,18 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   }
 
   Future<NskeyAdvertisement> _mintUnlessPublished(
-      String owner, String namespace, MintLease lease) async {
+      String owner,
+      String namespace,
+      MintLease lease,
+      ({
+        String keyAlgo,
+        NskeySeed seed,
+        ({Uint8List publicKey, Uint8List secretKey}) pair,
+        NskeyAdvertisement advertisement,
+        String signedPayload,
+      }) prepared) async {
     final published = await publishedAdvertisement(owner, namespace);
-    if (published == null) return _mint(owner, namespace, lease);
+    if (published == null) return _mint(owner, namespace, lease, prepared);
     _logger.info(
         'Not minting an nskey for $owner:$namespace: ${published.nskeyKid} was '
         'published between the decision to mint and this client taking the '
@@ -539,9 +551,13 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           'there, so this is a cold-start mint rather than a rotation');
     }
 
+    // Before the lock, not inside it — see [_prepareMint]. A rotation that
+    // loses the lock throws and discards this, which is the same trade the
+    // cold-start mint makes.
+    final prepared = await _prepareMint(owner, namespace);
     final rotated = await mintLock.withLock(
         nskeyMintLockKey(owner, namespace, ttl: lockTtl),
-        (lease) => _mint(owner, namespace, lease));
+        (lease) => _mint(owner, namespace, lease, prepared));
     if (rotated == null) {
       throw StateError(
           'another enrollment holds the mint lock for $owner:$namespace, so '
@@ -555,8 +571,30 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return (rotated: rotated, superseded: superseded);
   }
 
-  Future<NskeyAdvertisement> _mint(
-      String owner, String namespace, MintLease lease) async {
+  /// Everything a mint can compute **before** it holds the lock: the keypair,
+  /// the advertisement built from it, and the signature over that
+  /// advertisement.
+  ///
+  /// Hoisted out of the critical section deliberately. A mint lock is a window
+  /// bounded by a ttl, and everything done while holding it is time in which
+  /// another enrollment cannot mint and this one can still lose its lease —
+  /// so the section should contain the writes that have to be serialised and
+  /// as little else as possible. A KEM keygen and an ML-DSA signature are the
+  /// two expensive things here and neither needs the lock: they touch nothing
+  /// shared and the material never leaves this process until the write.
+  ///
+  /// The cost of preparing first is that a client which then loses the
+  /// election, or finds a sibling published while it was racing, throws this
+  /// away. That is the right trade: the work is local and cheap, while the
+  /// lock window it removes is remote and bounded.
+  Future<
+      ({
+        String keyAlgo,
+        NskeySeed seed,
+        ({Uint8List publicKey, Uint8List secretKey}) pair,
+        NskeyAdvertisement advertisement,
+        String signedPayload,
+      })> _prepareMint(String owner, String namespace) async {
     // The primary, because an nskey is one key: only the enrollment's own key
     // package advertises the whole configured list.
     final String keyAlgo =
@@ -583,6 +621,42 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       // this generation can open is fixed by the KEM it is a key for.
       suites: SecretSharingAlgos.openableSuitesFor(keyAlgo),
     );
+
+    // One codec, both directions. Each entry carries its own `alg`, without
+    // which a sender has an opaque byte string and no way to tell which KEM it
+    // belongs to; `suites` says which *construction* the owner can unwrap,
+    // without which a new one could only ever arrive by upgrading every reader
+    // first — release-ordering agility rather than negotiated agility.
+    final signedPayload = await _signer.wrapAndSignAndJsonEncode(
+        advertisement.toPayload(),
+        type: EnvelopeType.nskeyRing);
+
+    return (
+      keyAlgo: keyAlgo,
+      seed: seed,
+      pair: pair,
+      advertisement: advertisement,
+      signedPayload: signedPayload,
+    );
+  }
+
+  Future<NskeyAdvertisement> _mint(
+    String owner,
+    String namespace,
+    MintLease lease,
+    ({
+      String keyAlgo,
+      NskeySeed seed,
+      ({Uint8List publicKey, Uint8List secretKey}) pair,
+      NskeyAdvertisement advertisement,
+      String signedPayload,
+    }) prepared,
+  ) async {
+    final keyAlgo = prepared.keyAlgo;
+    final seed = prepared.seed;
+    final pair = prepared.pair;
+    final advertisement = prepared.advertisement;
+    final payload = prepared.signedPayload;
 
     final advertisementKey = nskeyAdvertisementKey(owner, namespace);
     // Signed with this client's APKAM keypair, so a peer can tell the key came
@@ -621,15 +695,11 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
           'unreadable when this process ends');
     }
 
+    // The verification key a peer checks the (already computed) signature
+    // against. Still inside the lock: it is a network write, not the CPU work
+    // this section was trimmed of, and it must land before the advertisement
+    // that depends on it.
     await _signer.publishPublicSigningKey();
-    // One codec, both directions. Each entry carries its own `alg`, without
-    // which a sender has an opaque byte string and no way to tell which KEM it
-    // belongs to; `suites` says which *construction* the owner can unwrap,
-    // without which a new one could only ever arrive by upgrading every reader
-    // first — release-ordering agility rather than negotiated agility.
-    final payload = await _signer.wrapAndSignAndJsonEncode(
-        advertisement.toPayload(),
-        type: EnvelopeType.nskeyRing);
 
     // The last thing before the write, and deliberately not earlier: what
     // matters is whether the lease is still good at the moment of publishing,

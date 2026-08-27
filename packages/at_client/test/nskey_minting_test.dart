@@ -60,6 +60,7 @@ void main() {
     List<AtKey> verbs,
     List<Object> builders,
     Map<String, String?> values,
+    Map<String, DateTime> verbTimes,
     Map<String, String> advertised,
     List<GetRequestOptions?> advertisementReads,
   /// [takeDelay] makes the lock's own take slow, which is the only way to
@@ -77,6 +78,10 @@ void main() {
     // updates cannot tell an absent delete from an unrecorded one.
     final builders = <Object>[];
     final values = <String, String?>{};
+    // When each remote write arrived. The mint lock's window is the gap
+    // between the lock take and the advertisement, and nothing else can
+    // measure it from outside.
+    final verbTimes = <String, DateTime>{};
     // The atServer's copy of `public:__nskey.<ns>@alice`, by namespace. A test
     // writes into it to stand for another enrollment having published.
     final advertised = <String, String>{};
@@ -120,6 +125,7 @@ void main() {
       builders.add(builder);
       if (builder is UpdateVerbBuilder) {
         verbs.add(builder.atKey);
+        verbTimes[builder.atKey.key] = DateTime.now();
         values[builder.atKey.key] = builder.value;
         if (builder.atKey.key == '_nskeylock' && takeDelay > Duration.zero) {
           await Future<void>.delayed(takeDelay);
@@ -140,6 +146,7 @@ void main() {
       verbs: verbs,
       builders: builders,
       values: values,
+      verbTimes: verbTimes,
       advertised: advertised,
       advertisementReads: advertisementReads,
     );
@@ -406,6 +413,47 @@ void main() {
         reason: 'and it is not trivially early either: it is a full ttl from '
             'the send, so the assertion above is about WHERE the stamp was '
             'taken and not about the lease being short');
+  });
+
+  test('the keygen and the signature happen BEFORE the lock is taken',
+      () async {
+    // A mint lock is a window bounded by a ttl. Everything done while holding
+    // it is time in which no other enrollment of this atSign can mint and this
+    // one can still lose its lease — so the section should hold the writes
+    // that must be serialised and as little else as possible.
+    //
+    // Measured on 2026-08-27, same fixture, only the hoist differing:
+    //
+    //   before  before-lock 2.6ms   in-lock 53.1ms
+    //   after   before-lock 43.7ms  in-lock  5.6ms
+    //
+    // The ~47ms that left the critical section is the KEM keygen plus the
+    // ML-DSA signature, which is what the hoist moved and matches the cost of
+    // the two operations.
+    final c = client();
+    final ring = PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+    final startedAt = DateTime.now();
+    await ring.mintAndPublish(namespace);
+
+    final lockTakenAt = c.verbTimes['_nskeylock'];
+    final advertisedAt = c.verbTimes['__nskey'];
+    expect(lockTakenAt, isNotNull,
+        reason: 'the control: the lock take and the advertisement are the two '
+            'verbs this measures between, so a fixture that recorded neither '
+            'would make the comparison below vacuous');
+    expect(advertisedAt, isNotNull);
+
+    final beforeLock = lockTakenAt!.difference(startedAt);
+    final inLock = advertisedAt!.difference(lockTakenAt);
+
+    expect(inLock, lessThan(beforeLock),
+        reason: 'more work happens before the lock than inside it. Under the '
+            'previous arrangement the ratio is the other way round and by a '
+            'wide margin — 53ms in the lock against 2.6ms before it — so this '
+            'discriminates by roughly 20x in one direction and 8x in the '
+            'other, which is far more than a loaded machine moves it. '
+            'Reverting the hoist reddens this');
   });
 
   test('a mint that overruns its lease publishes nothing', () async {
