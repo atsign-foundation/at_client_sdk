@@ -7,10 +7,10 @@ import 'package:wasm_shakedown/wasm_shakedown.dart';
 
 /// Unit tests for the walk itself.
 ///
-/// Every `test/wasm/dep_tree_test.dart` in the repo rests on this code being
-/// right: if the traversal stops early, or a package boundary resolves to the
-/// wrong root, the baselines all record a comfortable fiction. So the pieces are
-/// tested directly rather than only through the ratchets that consume them.
+/// Every gate in `.github/wasm_gates.yaml` rests on this code being right: if
+/// the traversal stops early, or a package boundary resolves to the wrong root,
+/// the baselines all record a comfortable fiction. So the pieces are tested
+/// directly rather than only through the gates that consume them.
 void main() {
   group('selectUri', () {
     test('takes the first branch whose condition holds', () {
@@ -110,8 +110,8 @@ void main() {
   group('the walk, against the real workspace', () {
     test('at_commons is neutral, and the walk proves it by traversing', () {
       // at_commons is the one package beneath at_client with no platform import
-      // anywhere, which makes it the honest positive control: a green result
-      // here is a real green, not a stalled walk.
+      // anywhere, which makes it the negative control: a known-clean specimen,
+      // so a green result here is a real green rather than a stalled walk.
       final result = shakedown('package:at_commons/at_commons.dart');
 
       expect(result.offenders, isEmpty, reason: result.report());
@@ -123,9 +123,11 @@ void main() {
     });
 
     test('a platform library in the graph is reported', () {
-      // The negative control. at_utils.dart exports app_config.dart and
-      // pseudo_server_socket.dart, both dart:io, so a walk that reports nothing
-      // here is broken regardless of what it says elsewhere.
+      // The positive control: this assay detects forbidden imports, so the
+      // specimen known to test positive is the one that has them. at_utils.dart
+      // exports app_config.dart and pseudo_server_socket.dart, both dart:io, so
+      // a walk that reports nothing here is broken regardless of what it says
+      // elsewhere. `controls:` in the gate config are the same idea per gate.
       final result = shakedown('package:at_utils/at_utils.dart');
       expect(result.offendersIn('at_utils'), isNotEmpty,
           reason: 'the walk found no dart:io under at_utils.dart, which is '
@@ -140,8 +142,9 @@ void main() {
     test('a barrel that no longer exists shows up in missingFiles', () {
       // The other way a gate can be silently defanged: the package resolves, the
       // file does not, and the walk has nothing to report. `missingFiles` is why
-      // every dep_tree_test.dart asserts it is empty — without that assertion, a
-      // renamed barrel reads as a clean bill of health.
+      // every ratchet asserts it is empty — without that check, a renamed
+      // barrel reads as a clean bill of health. `unresolvableBarrels` in
+      // config.dart is the earlier, louder guard on the same hazard.
       final result = shakedown('package:at_client/does_not_exist.dart');
       expect(result.offenders, isEmpty);
       expect(result.missingFiles, hasLength(1));

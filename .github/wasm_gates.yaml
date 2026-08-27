@@ -1,0 +1,65 @@
+# Which packages are gated for WASM. Run with `dart run wasm_shakedown`.
+#
+# Adding a package is one stanza — nothing in the package, nothing in CI. Gate a
+# package only once it is web-safe, so a gate holds a line rather than recording
+# a backlog: at_utils, at_lookup and at_client own 3, 6 and 7 offenders today,
+# which is why they are not here.
+#
+# `ratchets` walk the import graph, `probe` compiles, `controls` keep the walk
+# honest. Baselines are one-way. See tools/wasm_shakedown/README.md for why.
+
+at_chops:
+  # Web-safe first: every OpenSSL and FFI algorithm lives behind
+  # at_chops_ffi.dart, so at_chops.dart is pure Dart.
+  #
+  # `cryptography` is absent from the blocked count because under web
+  # resolution its configurable imports select the pure-Dart implementation,
+  # not the dart:html Web Crypto path. Structural only — not evidence it
+  # computes the right answers under WasmGC.
+  ratchets:
+    - barrel: package:at_chops/at_chops.dart
+      allowed_offenders: []
+      max_blocked_packages: 2 # at_utils + chalkdart, via the logger
+      min_files_walked: 500
+  probe:
+    # at_chops_ffi.dart is absent on purpose: it is the FFI island and does not
+    # compile to wasm. The control below asserts it still holds what it isolates.
+    - package:at_chops/at_chops.dart
+    - package:at_chops/types.dart
+  controls:
+    - barrel: package:at_chops/at_chops_ffi.dart
+      reaches_file: lib/src/algorithm/ffi/openssl_ffi_bindings.dart
+      reaches_library: dart:ffi
+      because: the FFI algorithms it exists to quarantine
+
+at_auth:
+  # Gated since the 4.0.0 barrel split (#2179). at_auth.dart holds key material,
+  # the stores' interfaces and the auth flows; anything needing a filesystem, a
+  # raw socket or the dart:io HTTP stack moved to at_auth_io.dart.
+  #
+  # All four blocked packages are inherited: at_lookup (sockets), at_utils and
+  # chalkdart (the logger), at_server_status. They come off as each is ported.
+  ratchets:
+    - barrel: package:at_auth/at_auth.dart
+      allowed_offenders: []
+      max_blocked_packages: 4
+      min_files_walked: 850
+  probe:
+    - package:at_auth/at_auth.dart
+  controls:
+    - barrel: package:at_auth/at_auth_io.dart
+      reaches_file: lib/src/keys/io/file_io.dart
+      because: the filesystem code it exists to quarantine
+
+    # Not an island — the conditional seam. probe_default.dart exports
+    # probe_default_web.dart, or probe_default_io.dart if (dart.library.io).
+    # The web half is the empty allowed_offenders above; this is the other half,
+    # the web barrel walked with io semantics, which must come out down the
+    # native branch. Without it the ratchet passes just as well when the
+    # conditional was skipped and neither branch was seen.
+    #
+    # File axis, not library: at_auth.dart under io resolution reaches dart:io
+    # through half a dozen files, so reaches_library would prove nothing here.
+    - barrel: package:at_auth/at_auth.dart
+      reaches_file: lib/src/auth/socket_probe_io.dart
+      because: the conditional export in probe_default.dart
