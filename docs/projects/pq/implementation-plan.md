@@ -790,10 +790,11 @@ published whose every later client was short-lived.
 2. **A self-perpetuating interlock.** A client that dies *after* the lock lands
    rather than before leaves an immutable `_nskeylock.<ns>@<atSign>` with a
    120-second ttl that nothing deletes, and a successor that finds it held with
-   nothing published throws rather than minting. A short-lived client relaunched
-   in a loop could in principle never get through. Not observed — the reported
-   run's frame never left the process — so this one is reasoned from the code,
-   not measured.
+   nothing published throws rather than minting. ✅ **Both of those are measured
+   as of 2026-08-27** — see `nskey_mint_lock_live_test.dart`. What is still
+   reasoned is only the loop: whether a short-lived client relaunched
+   repeatedly could never get through. The reported run's lock frame never left
+   the process, so that end has never been observed.
 
 **And `startupComplete` cannot be the answer as it stands.** It is the only
 signal a caller has, and `stop()` breaks the step loop and completes it anyway,
@@ -887,12 +888,27 @@ the two are now guarded separately. The original `seed()` counted the namespace
 as minted *before* conveying, so this also restores behaviour the extraction
 had changed.
 
-⚠️ **Still owed on this row: the interlock arm.** Failure mode 2 — a client
-that dies *after* the lock lands, leaving an immutable `_nskeylock` nothing
-deletes — remains **reasoned from the code and not measured**. The reproduction
-above stops the tail at a step boundary before seeding starts, so no lock is
-taken. [The `batch` P2 row](#p2--should-be-done-if-there-is-time) would close
-that window structurally rather than by shortening it.
+✅ **Failure mode 2's two mechanisms are now MEASURED**, in
+`nskey_mint_lock_live_test.dart` against a live atServer, each with its own
+control and each mutation-proven:
+
+- **The atServer refuses a second create of `_nskeylock.<ns>@<atSign>`**, on
+  its own message — so the refusal is the interlock and not an unrelated write
+  failure. Control: the same write is accepted once the lock is released.
+  Mutation: skip the first take and the second write succeeds.
+- **A client meeting a lock held by another enrollment, with nothing
+  published, refuses to mint and publishes nothing.** Control: the same call
+  succeeds once the lock is gone. Mutation: give the lock **this** client's own
+  holder id and it mints instead of refusing — which is `ownLockIsNotContention`
+  working as documented, and is what makes the sibling case the thing under
+  test rather than "a lock exists".
+
+⚠️ **What is still reasoned rather than measured is the LOOP**, and only that:
+whether a short-lived client relaunched repeatedly could in principle never get
+through. Both ingredients are now observed; the rate claim is not, and "could in
+principle" is where it should stay until something counts it.
+[The `batch` P2 row](#p2--should-be-done-if-there-is-time) would remove the
+window structurally rather than shortening it.
 
 ⚠️ **The three earlier reproduction attempts**, recorded so they are not
 repeated:
@@ -952,15 +968,13 @@ it is unawaited is good — construction must not block on the network — and
 blocking it would trade this problem for a worse one in every app that never
 needs to receive.
 
-⚠️ **One live probe discharges part of this row and part of another.** The
-interlock arm below is reasoned from the code rather than measured, and
-[F16](#the-clause-burn-down-every-then-clause-proven) needs the same measurement from the
-other direction: whether the atServer refuses a second `_nskeylock` create the
-way it demonstrably refuses a second `_rootlock` one. `_nskeylock` is covered
-today by a raw-literal pin of the client's intent and by a mock that models the
-refusal, and a mock cannot test a refusal it does not model.
-`pq_signing_root_mint_lock_test.dart` already takes, releases and re-takes a
-lock live; the same shape against `nskeyMintLockKey` answers both.
+✅ **That live probe is built and green: `nskey_mint_lock_live_test.dart`**,
+and it discharged both directions at once. It was owed because `_nskeylock` was
+covered only by a raw-literal pin of the client's *intent* and by a mock that
+models the refusal — and a mock cannot test a refusal it does not model, so the
+interlock's presence and its absence were indistinguishable. It now takes,
+releases and re-takes the lock live, exactly as
+`pq_signing_root_mint_lock_test.dart` does for `_rootlock`.
 
 ⚠️ **And the interlock half is the sharper one**: if the lock cannot be made
 self-healing, a client that takes it should release it on shutdown, and one that
