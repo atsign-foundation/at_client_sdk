@@ -121,6 +121,18 @@ void main() {
     expect(after.apkamPublicKey.toString(), legacyApkamPub);
     expect(after.apkamPrivateKey.toString(), legacyApkamPriv);
     expect(after.defaultSelfEncryptionKey.toString(), selfKey);
+
+    // The two answers the document now gives, and they differ on purpose.
+    // The flat field says legacy-1 because that enrollment goes on
+    // authenticating; the resolver says new-123 because the typed material is
+    // the only ACTIVE privateAuthentication. Asserting only the first would
+    // leave the document's own account of which enrollment is live untested.
+    expect(after.resolveAuthenticatingEnrollment(), 'new-123',
+        reason: 'the retrofit leaves exactly one active privateAuthentication '
+            'and it belongs to the new enrollment, so the resolver has one '
+            'candidate and names it. A retrofit that left the legacy material '
+            'active as well would make this ambiguous and the resolver would '
+            'refuse rather than answer');
   });
 
   group('the retrofit signing-algo selector', () {

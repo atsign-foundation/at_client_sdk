@@ -52,7 +52,14 @@ void main() {
         'the keyfile after: typed materials under the new id, flat fields',
         proves: 'the flat legacy keypair comes back byte-identical — the row '
             'used to say it was RETIRED, and a test written to that would '
-            'have prompted clearing fields the legacy round-trip depends on');
+            'have prompted clearing fields the legacy round-trip depends on. '
+            'It now also asserts the resolver names the NEW enrollment, so '
+            'the document\'s two answers are both pinned: the flat field '
+            'still says legacy because that enrollment goes on '
+            'authenticating, while the only ACTIVE privateAuthentication is '
+            'the new one. Mutation-proven — pointing the resolver at retired '
+            'material reddens it, quoting this assertion',
+        clauses: ['and UC-G1.1\'s resolver returns the new enrollment id']);
   });
 
   test('UC-G1.3 · retirement frees the slot', () {
