@@ -28,6 +28,13 @@ void main() {
   late String atSign;
   const namespace = 'wavi';
 
+  /// Hoisted out of [setUpAll] so a test can make a namespace gain a key
+  /// mid-life — the transition UC-A3.3's second arm is about. The negative
+  /// cache that used to hide it sits in `NskeyResolver`, above this ring, so
+  /// seeding here is exactly what a recipient publishing looks like from the
+  /// resolver's side.
+  late InMemoryNskeyKeyRing ring;
+
   setUpAll(() async {
     atSign = ConfigUtil.getYaml()['atSign']['firstAtSign'];
 
@@ -35,7 +42,7 @@ void main() {
     // for real. Everything above it is the production path.
     final nskeyPair = await XWingKeyPair.generate();
     final appNsPair = await XWingKeyPair.generate();
-    final ring = InMemoryNskeyKeyRing()
+    ring = InMemoryNskeyKeyRing()
       ..seedKeypair(atSign, namespace,
           publicKey: nskeyPair.publicKeyBytes,
           privateKey: nskeyPair.privateKeyBytes)
@@ -337,6 +344,61 @@ void main() {
           reason: 'the fallback is legacy and says so on the record — a '
               'downgrade nobody can see afterwards is the thing being guarded '
               'against');
+    });
+
+    test(
+        'a namespace that gains a key takes over, and what the fallback wrote '
+        'stays legacy', () async {
+      // UC-A3.3's second and third arms, which no test reached. The second was
+      // FALSE until 2026-08-27, not merely untested: the fallback write warmed
+      // a remembered miss in `NskeyResolver`, so the namespace gaining a key
+      // changed nothing for the rest of that window and later writes went on
+      // falling back. Self data, no peer involved.
+      final atClient = atClientManager.atClient;
+      final ns = 'latecomer${DateTime.now().microsecondsSinceEpoch}';
+      AtKey k(String name) => AtKey()
+        ..key = name
+        ..namespace = ns
+        ..sharedBy = atSign;
+
+      atClient.getPreferences()!.allowLegacyCryptoFallback = true;
+      addTearDown(
+          () => atClient.getPreferences()!.allowLegacyCryptoFallback = false);
+
+      expect(await atClient.put(k('early'), 'before the key existed'), isTrue);
+      expect((await atClient.get(k('early'))).metadata?.appMetadata?.providerId,
+          legacyCryptoProviderId,
+          reason: 'the premise: with no nskey for this namespace and the '
+              'escape hatch open, the write goes out legacy');
+
+      // CONTROL. A second write, still before the key exists, is still legacy.
+      // It can stay green while the assertion below goes red, and that is what
+      // says the flip is caused by the key APPEARING rather than by this being
+      // the second write to the namespace.
+      expect(await atClient.put(k('control'), 'also before'), isTrue);
+      expect(
+          (await atClient.get(k('control'))).metadata?.appMetadata?.providerId,
+          legacyCryptoProviderId,
+          reason: 'control: writing again changes nothing on its own');
+
+      final pair = await XWingKeyPair.generate();
+      ring.seedKeypair(atSign, ns,
+          publicKey: pair.publicKeyBytes, privateKey: pair.privateKeyBytes);
+
+      expect(await atClient.put(k('later'), 'after the key existed'), isTrue);
+      expect((await atClient.get(k('later'))).metadata?.appMetadata?.providerId,
+          symmetricAesGcmCryptoProviderId,
+          reason: 'once the namespace has an nskey, every SUBSEQUENT write '
+              'uses it — the app does not opt back in and there is no flag to '
+              'flip. A build that answered from a remembered miss would still '
+              'be writing legacy here, with the control above green');
+
+      final early = await atClient.get(k('early'));
+      expect(early.value, 'before the key existed');
+      expect(early.metadata?.appMetadata?.providerId, legacyCryptoProviderId,
+          reason: 'and what the fallback already wrote stays legacy and stays '
+              'readable. Re-encrypting it is an explicit migration, never a '
+              'side effect of a later put to the same namespace');
     });
 
     test('the fallback does not leak into the next write', () async {
