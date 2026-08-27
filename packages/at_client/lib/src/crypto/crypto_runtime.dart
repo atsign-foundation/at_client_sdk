@@ -1,6 +1,7 @@
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/crypto/legacy/legacy_crypto_provider.dart';
+import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
@@ -10,6 +11,24 @@ final AtSignLogger _logger = AtSignLogger('CryptoRuntime');
 /// `appMetadata.providerId`.
 class CryptoRuntime {
   static const String legacyProviderId = legacyCryptoProviderId;
+
+  /// Whether this client may route a write to legacy when the destination has
+  /// no post-quantum key.
+  ///
+  /// Two preferences, and they can disagree: `allowLegacyCryptoFallback` says
+  /// "reach them somehow", `disallowLegacyEncryption` says "never write
+  /// legacy". The second wins.
+  ///
+  /// It lives here rather than beside its first caller because it governs
+  /// **every** write path, not the `put` one it was built for. Until
+  /// 2026-08-27 a notification could not fall back at all — measured live, a
+  /// client with the preference set had its `put` succeed under legacy and its
+  /// `notify` come back `undelivered` for the same recipient and namespace,
+  /// carrying an exception that told the app to opt into the legacy path it
+  /// had already opted into.
+  static bool mayFallBackToLegacy(AtClientPreference? preference) =>
+      (preference?.allowLegacyCryptoFallback ?? false) &&
+      preference?.disallowLegacyEncryption != true;
 
   final AtClient _atClient;
 

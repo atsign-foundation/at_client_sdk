@@ -11,6 +11,8 @@ import 'package:at_client/src/crypto/crypto.dart'
         NskeyPrivateUnavailableException,
         SignalsPrivateFiling;
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
+    show NamespaceKeyUnavailableException;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
     show NskeyPrivateFiling;
 import 'package:at_client/src/preference/at_client_preference.dart';
@@ -671,8 +673,27 @@ class NotificationServiceImpl extends NotificationService {
     final String notifPayload;
     body = body.trim();
     if (body.isNotEmpty && shouldEncrypt) {
-      await CryptoRuntime(atClient).prepareWrite(atKey,
-          requestedProviderId: cryptoProviderId, useRemoteAtServer: true);
+      // Same fallback as the put pre-pass and as notify(NotificationParams):
+      // an app that opted into reaching a recipient under legacy meant its
+      // data, not one verb. Stamped only once the routing is settled.
+      String providerId;
+      try {
+        providerId = await CryptoRuntime(atClient).prepareWrite(atKey,
+            requestedProviderId: cryptoProviderId,
+            useRemoteAtServer: true,
+            stampProviderId: false);
+      } on NamespaceKeyUnavailableException catch (e) {
+        if (!CryptoRuntime.mayFallBackToLegacy(atClient.getPreferences())) {
+          rethrow;
+        }
+        logger.warning('falling back to legacy encryption for the '
+            'notification of $name: ${e.message}');
+        providerId = await CryptoRuntime(atClient).prepareWrite(atKey,
+            requestedProviderId: CryptoRuntime.legacyProviderId,
+            useRemoteAtServer: true,
+            stampProviderId: false);
+      }
+      atKey.metadata.appMetadata ??= AppMetadata(providerId: providerId);
       notifPayload =
           await CryptoRuntime(atClient).encryptForNotification(atKey, body);
       atKey.metadata.isEncrypted = true;

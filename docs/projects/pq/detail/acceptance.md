@@ -985,9 +985,18 @@ the wrong behaviour as the specification. Open the production path first.
 
 | Clause | What the tree does instead |
 |---|---|
-| **UC-A4.4** c2 | Says a notification's scheme decision follows a put's. The legacy fallback exists on `put` and nowhere else: the tree's only `on NamespaceKeyUnavailableException catch` is in `_putInternal`, and both notify entry points call `CryptoRuntime.prepareWrite` with no catch at all |
 | **UC-A4.6** c5 | A claim about **history** — what two clients "had exchanged" under `0x01` — which no current test can establish, `0x01` having been retired and removed. The cited test's "two clients" are also two `AtClientSecretSharing` instances over one client of one atSign |
 | **UC-C1.5** c1 | Arm 1 is true *and already proven live*. It is the **justification** that is false: the two postures do not tell themselves apart by resolving into different per-algorithm idempotence pools |
+
+✅ **UC-A4.4 c2 was fixed in the code, 2026-08-27.** It said a notification's
+scheme decision is the sending app's "exactly as a put's", and it was not: the
+legacy fallback lived in `_putInternal` and nowhere else, so one preference
+produced a legacy `put` and an `undelivered` notification for the same
+recipient — with an exception telling the app to opt into the path it had
+already opted into. **Ruled by gkc: extend the fallback to notify.** Both entry
+points now catch, the predicate moved to `CryptoRuntime.mayFallBackToLegacy`
+because it governs every write path rather than the one it was built for, and
+the clause is pinned live on both arms.
 
 ✅ **Four were corrected in `acceptance.md` on 2026-08-27 and are now ordinary
 gaps**, each with a dated ⚠️ in place saying what it used to claim. Two were the
@@ -1092,7 +1101,6 @@ These are also the only route that raises **server-proven**.
 | **UC-A4.1** c3 | an unauthorised `@bob` enrollment cannot fetch the ciphertext (server-gated) nor decrypt | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.3** c1 | all of alice's authorised enrollments read the self-copy | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.4** c1 | on **every** authorised bob enrollment — the live cross-atSign notify delivers to a single bob client | `nskey_notify_test.dart` |
-| **UC-A4.4** c2 | toward a bob with no published nskey the write fails cold start or takes the explicit legacy fallback | `nskey_cross_atsign_test.dart` |
 | **UC-A4.4** c3 | Offline-then-online **bob** (a cross-atSign recipient on the nskey path) ... or pulled if it arrived meanwhile | `monitor_reconnect_live_test.dart` |
 | **UC-A4.6** c5 | where they had exchanged `0x01`, with no readers-upgrade-first migration — and that is what later made it safe to drop `0x01` outright | `secret_sharing_delivery_test.dart` |
 | **UC-A5.1** c2 | "new CKs are sealed to the successor nskey and their conveyances carry the new `nskeyKid`" — nothing asserts that a conveyance written AFTE… | `nskey_rotation_live_test.dart` |

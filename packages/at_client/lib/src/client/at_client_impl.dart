@@ -1889,8 +1889,7 @@ class AtClientImpl implements AtClient {
   /// instead of a refusal that names a scheme the caller never chose.
   @visibleForTesting
   static bool mayFallBackToLegacy(AtClientPreference? preference) =>
-      (preference?.allowLegacyCryptoFallback ?? false) &&
-      preference?.disallowLegacyEncryption != true;
+      CryptoRuntime.mayFallBackToLegacy(preference);
 
   /// [options] with the crypto provider pinned to legacy, leaving the caller's
   /// object untouched — it may be a shared instance, and one write's fallback

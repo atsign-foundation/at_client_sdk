@@ -263,4 +263,86 @@ void main() {
         reason: 'records written under the fallback stay legacy; the flip is '
             'forward-only and re-encrypting is an explicit migration');
   }, timeout: Timeout(Duration(minutes: 5)));
+
+  test('UC-A4.4: the opted-in fallback governs a NOTIFY as well as a put',
+      () async {
+    // The scheme decision is the sending app's, "exactly as a put's" — and
+    // until 2026-08-27 that was false. The fallback was implemented on `put`
+    // and nowhere else: the tree's only catch of NamespaceKeyUnavailableException
+    // was in _putInternal, and both notify entry points called prepareWrite
+    // with none. Measured live before the fix, on one client with one
+    // preference: the put went out stamped legacy while the notify came back
+    // `undelivered`, carrying an exception that told the app to opt into the
+    // legacy path it had already opted into.
+    //
+    // ⚠️ The namespace is UNDER the app namespace on purpose. `notify` folds a
+    // key outside it into the key name and substitutes the client's — correct,
+    // and it means a probe using an unrelated namespace compares two arms that
+    // differ in the namespace as well as the verb.
+    final ns = 'nfb${DateTime.now().microsecondsSinceEpoch}.'
+        '${TestConstants.namespace}';
+
+    final clients = await ConcurrentClients.open(
+        writer, recipient, TestConstants.namespace, authType,
+        posture: PqPosture.legacy);
+    addTearDown(clients.close);
+    final writerClient = clients.first;
+
+    final writerRing = PublishedNskeyKeyRing(writerClient);
+    writerClient.getPreferences()!.crypto =
+        CryptoConfig.nskey(keyRing: writerRing);
+    writerClient.getPreferences()!.allowLegacyCryptoFallback = true;
+    addTearDown(
+        () => writerClient.getPreferences()!.allowLegacyCryptoFallback = false);
+    await writerRing.mintAndPublish(ns);
+
+    expect(await writerRing.currentPublic(recipient, ns), isNull,
+        reason: 'the premise: the recipient has published nothing here, so '
+            'both verbs below meet a cold start');
+
+    AtKey toRecipient(String name) => AtKey()
+      ..key = name
+      ..namespace = ns
+      ..sharedWith = recipient
+      ..sharedBy = writer;
+
+    // CONTROL — the put path, same client, same preference, same recipient,
+    // same namespace. It can stay green while the assertion below goes red,
+    // which is what makes the comparison about the VERB and nothing else.
+    expect(await writerClient.put(toRecipient('viaPut'), 'v'), isTrue);
+    expect(
+        (await writerClient.get(toRecipient('viaPut')))
+            .metadata
+            ?.appMetadata
+            ?.providerId,
+        legacyCryptoProviderId,
+        reason: 'control: the fallback reaches a put with this exact fixture');
+
+    final notifyKey = toRecipient('viaNotify');
+    final result = await writerClient.notificationService
+        .notify(NotificationParams.forUpdate(notifyKey, value: 'v'));
+
+    expect(result.atClientException, isNull,
+        reason: 'an app that opened the escape hatch meant its DATA, not one '
+            'verb. Before this the same preference produced a legacy put and '
+            'an undelivered notification for the same recipient, and the '
+            'exception told the app to opt into what it had already opted '
+            'into');
+    expect(notifyKey.metadata.appMetadata?.providerId, legacyCryptoProviderId,
+        reason: 'and it went out under legacy explicitly, stamped on the key '
+            'the notification carried — never a silent downgrade');
+
+    // The other half of the clause's "fails cold start OR takes the explicit
+    // legacy fallback", and the sharpest control available: the same verb, the
+    // same recipient, the same namespace, with only the preference changed.
+    // A build that had simply stopped refusing would pass everything above and
+    // fail here.
+    writerClient.getPreferences()!.allowLegacyCryptoFallback = false;
+    final refused = await writerClient.notificationService.notify(
+        NotificationParams.forUpdate(toRecipient('viaNotifyShut'), value: 'v'));
+    expect(refused.atClientException, isNotNull,
+        reason: 'with the hatch shut the notification must fail cold start '
+            'rather than downgrade. The fallback is the app opting in, so an '
+            'app that said nothing must not get legacy by accident');
+  }, timeout: Timeout(Duration(minutes: 5)));
 }

@@ -4,12 +4,17 @@ import 'dart:async';
 
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto_runtime.dart';
+import 'package:at_client/src/crypto/nskey/nskey_provider.dart'
+    show NamespaceKeyUnavailableException;
 import 'package:at_client/src/preference/at_client_preference.dart';
 import 'package:at_client/src/service/notification_service.dart';
 import 'package:at_client/src/transformer/at_transformer.dart';
 import 'package:at_client/src/util/at_client_util.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
+import 'package:at_utils/at_logger.dart';
+
+final AtSignLogger _logger = AtSignLogger('NotificationRequestTransformer');
 
 /// Class is responsible for taking the [NotificationParams] and converting into [NotifyVerbBuilder]
 class NotificationRequestTransformer
@@ -32,9 +37,36 @@ class NotificationRequestTransformer
     _resolveNamespace(notificationParams);
 
     if (_shouldRouteThroughProvider(notificationParams)) {
-      await CryptoRuntime(_atClient).prepareWrite(notificationParams.atKey,
-          requestedProviderId: notificationParams.cryptoProviderId,
-          useRemoteAtServer: true);
+      // Not stamped until the routing is settled, exactly as the put pre-pass
+      // does it: the catch below may re-route this notification to legacy, and
+      // a key already stamped with the provider that then declined would claim
+      // a scheme its value was never sealed under.
+      String providerId;
+      try {
+        providerId = await CryptoRuntime(_atClient).prepareWrite(
+            notificationParams.atKey,
+            requestedProviderId: notificationParams.cryptoProviderId,
+            useRemoteAtServer: true,
+            stampProviderId: false);
+      } on NamespaceKeyUnavailableException catch (e) {
+        if (!CryptoRuntime.mayFallBackToLegacy(atClientPreference)) rethrow;
+        // The app said it would rather reach this recipient under legacy than
+        // not at all, and that is a statement about its data rather than about
+        // which verb it happened to use. ⚠️ Until 2026-08-27 the fallback
+        // existed on `put` and nowhere else, so the same preference produced a
+        // legacy put and an `undelivered` notification for the same recipient
+        // and namespace — with an exception telling the app to opt into the
+        // path it had already opted into.
+        _logger.warning('falling back to legacy encryption for the '
+            'notification of ${notificationParams.atKey.key}: ${e.message}');
+        providerId = await CryptoRuntime(_atClient).prepareWrite(
+            notificationParams.atKey,
+            requestedProviderId: CryptoRuntime.legacyProviderId,
+            useRemoteAtServer: true,
+            stampProviderId: false);
+      }
+      notificationParams.atKey.metadata.appMetadata ??=
+          AppMetadata(providerId: providerId);
     }
     // prepares notification builder
     NotifyVerbBuilder builder = await _prepareNotificationBuilder(

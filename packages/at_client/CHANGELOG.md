@@ -23,6 +23,15 @@
     `AtReachabilityResult` — read `isReachable`, or the `outcome` for
     `alreadyReachable` / `published` / `postureDoesNotSeed` / `notAuthorised` /
     `timedOut` / `failed`.
+- fix: **`allowLegacyCryptoFallback` now governs a notification as well as a
+  put.** It was implemented on `put` and nowhere else, so an app that opened
+  the escape hatch got a legacy `put` and an `undelivered` **notification** for
+  the same recipient and the same namespace — and the exception it was handed
+  told it to opt into the legacy path it had already opted into. Both notify
+  entry points — `notify(NotificationParams)` and the ergonomic
+  `send({to: …})` — now fall back the way `put` does, stamping the record
+  legacy so the downgrade stays visible. With the preference unset a
+  notification still refuses rather than downgrading; that has not changed.
 - fix: **a sender is no longer blind to a recipient who has just become
   reachable.** Writing to an atSign that had not yet published a namespace key
   left that answer cached for fifteen minutes, so the *next* write kept

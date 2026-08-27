@@ -141,6 +141,28 @@ void main() {
             'providerId is read off the notification frame bob\'s monitor delivered, and the value decrypts through the nskey route',
       );
       provenIn(
+        'tests/at_end2end_test/test/pq/pq_cold_start_recovery_test.dart',
+        'UC-A4.4: the opted-in fallback governs a NOTIFY as well as a put',
+        proves: 'the scheme-decision clause on both of its arms, against one '
+            'client with one preference: with allowLegacyCryptoFallback set, '
+            'a notification toward a recipient who has published nothing goes '
+            'out stamped legacy rather than failing; with it unset, the same '
+            'notification to the same recipient in the same namespace fails '
+            'instead of downgrading. The control is the PUT path with the '
+            'identical fixture, so the comparison is about the verb and '
+            'nothing else. ⚠️ It was FALSE until 2026-08-27, not untested: '
+            'the fallback lived in _putInternal and nowhere else, and both '
+            'notify entry points called prepareWrite with no catch — so the '
+            'same preference produced a legacy put and an undelivered '
+            'notification, the exception telling the app to opt into the path '
+            'it had already opted into. Mutation-proven: making the '
+            'transformer refuse to fall back reddens this, quoting its own '
+            'reason, with the put control green',
+        clauses: [
+          'the write fails cold start or takes the explicit legacy fallback'
+        ],
+      );
+      provenIn(
         'packages/at_client/test/acceptance/a3_self_data_test.dart',
         'UC-A3.4 · self notification carrying an encrypted value',
         proves: 'the signal-only half of this clause, which the live '
