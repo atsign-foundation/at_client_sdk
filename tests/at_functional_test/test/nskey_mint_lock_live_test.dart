@@ -106,6 +106,59 @@ void main() {
     await release();
   }, timeout: Timeout(Duration(minutes: 2)));
 
+  test('two CONCURRENT mints by one enrolment publish one advertisement',
+      () async {
+    // The width-2 case. `ownLockIsNotContention` exists so an enrolment
+    // re-entering its own cooldown LATER adopts rather than failing — but the
+    // lock's holder token is the enrolment id, an identity rather than an
+    // instance, so two racers of the SAME enrolment both read it back, both
+    // see their own id, and both conclude they hold it.
+    //
+    // Reported by the at_talk demo session from a live wire capture: two
+    // advertisements 7.5ms apart, different kid, the second overwriting the
+    // first, both conveyed. A peer that fetched in that window holds a
+    // generation the owner may no longer be able to open.
+    //
+    // ⚠️ It has to be LIVE. The unit fixture accepts every lock write, so the
+    // refusal that triggers this never happens there — a mock cannot test a
+    // refusal it does not model, and faking it would be testing the fake.
+    //
+    // Its own namespace: the arms above leave this file's namespace with a
+    // published advertisement, which this one must not find.
+    final raceNs = 'mintrace${DateTime.now().microsecondsSinceEpoch}';
+    final raceLock =
+        nskeyMintLockKey(atSign, raceNs, ttl: const Duration(minutes: 2));
+    await atClient.getRemoteSecondary()!.executeVerb(DeleteVerbBuilder()
+      ..atKey = raceLock
+      ..force = true);
+
+    // ONE ring, so ONE MintLock — which is what a client has: the PQ startup
+    // step and `ensureReachable` both reach the bootstrap's single ring.
+    final ring = PublishedNskeyKeyRing(atClient);
+    expect(await ring.publishedAdvertisement(atSign, raceNs), isNull,
+        reason: 'the precondition: nothing published, so both racers have '
+            'real work and neither can adopt its way out');
+
+    final both = await Future.wait(
+        [ring.mintAndPublish(raceNs), ring.mintAndPublish(raceNs)]);
+
+    try {
+      expect(both[0].nskeyKid, both[1].nskeyKid,
+          reason: 'both callers must end on ONE generation. Two different '
+              'kids means two keypairs were minted and published, the second '
+              'overwriting the first — and a peer that fetched between them '
+              'is sealing to a generation whose private may be gone');
+      final published = await ring.publishedAdvertisement(atSign, raceNs);
+      expect(published!.nskeyKid, both[0].nskeyKid,
+          reason: 'and what is on the atServer is that same generation, not a '
+              'third thing');
+    } finally {
+      await atClient.getRemoteSecondary()!.executeVerb(DeleteVerbBuilder()
+        ..atKey = raceLock
+        ..force = true);
+    }
+  }, timeout: Timeout(Duration(minutes: 3)));
+
   test('a client that meets another holder\'s lock refuses to mint', () async {
     // Failure mode 2 of the abandoned-startup row, which was reasoned from the
     // code and never measured: a client that dies after its lock lands leaves

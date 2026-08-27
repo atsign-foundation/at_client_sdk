@@ -1,3 +1,5 @@
+import 'dart:async' show Completer;
+
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_commons/at_commons.dart' show AtKey;
 import 'package:at_commons/at_builders.dart' show UpdateVerbBuilder;
@@ -64,7 +66,27 @@ class MintLease {
 class MintLock {
   final AtClient atClient;
 
-  const MintLock(this.atClient);
+  /// Mints for `(owner, namespace)` that are running **in this process right
+  /// now**, keyed by lock record.
+  ///
+  /// The wire lock cannot express this. Its value is the enrolment id — an
+  /// identity, not an instance — so two racers of the SAME enrolment each read
+  /// it back, each see their own id, and each conclude they hold it. Measured
+  /// live 2026-08-27: two advertisements 7.5ms apart carrying different key
+  /// material, the second overwriting the first, both conveyed. A peer that
+  /// fetched between them holds a generation whose private the owner may have
+  /// replaced.
+  ///
+  /// ⚠️ **Deliberately NOT fixed by making the wire token per-instance.** That
+  /// would break the case [_isOwnLock] exists for: a client restarting inside
+  /// the cooldown is a *new* instance and would no longer recognise the lock
+  /// it took two minutes ago, so it would take the loser path and refuse to
+  /// mint for the rest of the ttl. The distinction that matters is not "which
+  /// instance" but "is one already in flight here", and only this process can
+  /// answer that.
+  final Map<String, Future<void>> _inFlight = {};
+
+  MintLock(this.atClient);
 
   /// Runs [mint] holding [lockKey], and returns its result.
   ///
@@ -103,6 +125,20 @@ class MintLock {
   Future<T?> withLock<T>(
       AtKey lockKey, Future<T> Function(MintLease lease) mint,
       {bool ownLockIsNotContention = false}) async {
+    // A mint for this key is already running HERE. Wait for it and then
+    // decline, so the caller takes its ordinary loser path: it re-reads what
+    // is published and adopts. Declining rather than returning the winner's
+    // result keeps one meaning for a null — "you did not mint" — and the
+    // re-read is what every caller already does.
+    final inFlightKey = lockKey.toString();
+    final running = _inFlight[inFlightKey];
+    if (running != null) {
+      _logger.info('A mint for $lockKey is already in flight in this process; '
+          'waiting for it rather than racing it, then re-reading');
+      await running;
+      return null;
+    }
+
     final ttlMillis = lockKey.metadata.ttl;
     if (ttlMillis == null || ttlMillis <= 0) {
       // Refused rather than defaulted. Nothing deletes this record now, so a
@@ -114,14 +150,26 @@ class MintLock {
           'a mint lock needs a ttl: it is released by expiry and by nothing '
               'else, so without one $lockKey would block minting permanently');
     }
-    // Stamped before the request goes out — see [MintLease.expiresAt].
-    final leaseFrom = DateTime.now();
-    if (!await _take(lockKey, ownLockIsNotContention: ownLockIsNotContention)) {
-      _logger.info('Another enrollment holds $lockKey; re-reading rather than '
-          'waiting for it');
-      return null;
+    final done = Completer<void>();
+    _inFlight[inFlightKey] = done.future;
+    try {
+      // Stamped before the request goes out — see [MintLease.expiresAt].
+      final leaseFrom = DateTime.now();
+      if (!await _take(lockKey,
+          ownLockIsNotContention: ownLockIsNotContention)) {
+        _logger.info('Another enrollment holds $lockKey; re-reading rather '
+            'than waiting for it');
+        return null;
+      }
+      return await mint(
+          MintLease(leaseFrom.add(Duration(milliseconds: ttlMillis))));
+    } finally {
+      // Released only once the mint has finished — including its publish — so
+      // a waiter that wakes here re-reads an advertisement that is already on
+      // the atServer rather than the absence that made it race.
+      _inFlight.remove(inFlightKey);
+      done.complete();
     }
-    return mint(MintLease(leaseFrom.add(Duration(milliseconds: ttlMillis))));
   }
 
   /// This client's identity in a lock record.

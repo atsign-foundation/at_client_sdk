@@ -25,7 +25,9 @@ class MockAtClient extends Mock implements AtClient {}
 /// the ring's constructor: the lease is what the mint is supposed to honour,
 /// and this hands it one it cannot.
 class _SpentLeaseLock extends MintLock {
-  const _SpentLeaseLock(super.atClient);
+  // Not const: MintLock stopped being a const class when it gained the
+  // in-flight map that stops an enrolment racing itself.
+  _SpentLeaseLock(super.atClient);
 
   @override
   Future<T?> withLock<T>(
