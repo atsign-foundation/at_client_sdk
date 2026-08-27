@@ -238,8 +238,8 @@ per keyfile/install):
 | `enr`     | the enrollment id (`E1`, `E2`, …) — one APKAM keypair                                                      |
 | `APKAM`   | auth keypair held: `rsa` (legacy) · `pq` (ML-DSA / `mldsa65`) · `both`                                     |
 | `root⁻¹`  | holds the atSign-level **signing root** private half? Only fully privileged (`rw *` + `__manage`) enrollments do |
-| `nskey⁻¹` | holds the namespace's **one** nskey private; it **decapsulates content keys (CKs)** for both the owner's own data and inbound shares — it does not decrypt application data |
-| `KP`      | its X-Wing **key package** (`kid` = `kpid`) is registered in the enrollment record? (**one key package per enrollment**, never published) |
+| `nskey⁻¹` | holds the namespace's **live** nskey private, and every superseded generation's alongside it (filed per `nskeyKid`; a rotation retains rather than replaces). It **decapsulates content keys (CKs)** for both the owner's own data and inbound shares — it does not decrypt application data |
+| `KP`      | its **key package** is registered in the enrollment record? (**one key package per enrollment**, never published — but it may advertise a key per configured KEM, and `kpid` names whichever is active) |
 
 **Per-atSign / server state:**
 
@@ -270,8 +270,15 @@ per keyfile/install):
   [`decisions.md` section 18](detail/decisions.md#18-pqpublickey-becomes-the-user-owned-signing-root-2026-08-03).
 - **PQ APKAM keypair** — ML-DSA (`mldsa65`) signing key for auth; one per
   enrollment; its public half is the enrollment record's single `apkamPublicKey`.
-- **Namespace key (`nskey`)** — **one** X-Wing KEM keypair per
-  `(atSign, namespace)`, wrapping symmetric content keys (never encrypting
+- **Namespace key (`nskey`)** — **one** KEM keypair per
+  `(atSign, namespace)` generation, under the **first** algorithm
+  `AtClientPreference.keyEstablishmentAlgorithms` names (`x-wing` by default,
+  `ml-kem-1024` where the deployment configured it). The advertisement carries a
+  `keys` **list**, so a newer or foreign writer may offer a second algorithm
+  beside the first and every reader here skips what it does not recognise; what
+  makes it one key is what a *mint* writes, not the format. Only an enrollment's
+  own key package advertises the whole configured list. It wraps symmetric
+  content keys (never encrypting
   application data directly). It is the recipient key for **both** directions:
   Alice encapsulates her **own** CKs to it for self data, **and** external senders
   encapsulate CKs to it when sharing with her. Its private half is minted fresh
@@ -287,8 +294,13 @@ per keyfile/install):
     stay live on the private side, named by `nskeyKid` on each conveyance.
   - There is no owner-only stage and no promotion step
     ([`decisions.md`](decisions.md) section 13).
-- **X-Wing key package** — the per-enrollment X-Wing recipient keypair a sender
-  `pqSeal`s to (`kpid` = the kid of its X-Wing public half). Registered in the
+- **Key package** — the per-enrollment KEM recipient key**s** a sender
+  `pqSeal`s to: one for **every** algorithm
+  `AtClientPreference.keyEstablishmentAlgorithms` names, minted beside the ones
+  the enrollment already holds and republished by `enroll:update`
+  ([UC-A2.4](#34-uc-a24--the-key-package-advertises-the-kem-the-deployment-configured)).
+  `kpid` is the kid of the **active** entry a sender's own preference order picks,
+  not of any one algorithm's key. Registered in the
   enrollment record alongside the ML-DSA public key; **never published**;
   discovered only via `enroll:listns`. Private half never leaves the
   keyfile.
@@ -297,8 +309,12 @@ per keyfile/install):
   ([decisions.md section 19](detail/decisions.md#19-nested-namespaces-the-nskey-is-resolved-by-walking-up-2026-08-03)),
   because `AtKey.fromString` splits at the last dot and a multi-segment namespace
   cannot be recovered from the wire string:
-  - `at/nskey/XWING/AES/GCM` → `{providerId, recipientKind, ckKid, nskeyKid, ns}` — a
-    CK-conveyance record: a CK X-Wing-sealed to the nskey. `recipientKind` is
+  - `at/nskey/XWING/AES/GCM` **or** `at/nskey/MLKEM1024/AES/GCM` →
+    `{providerId, recipientKind, ckKid, nskeyKid, ns}` — a CK-conveyance record: a CK
+    sealed to the nskey under the KEM that nskey's advertisement names, the id naming
+    which. **Both are registered on every client**
+    ([UC-A3.5](#45-uc-a35--the-published-nskey-advertisement-names-its-kem-and-what-it-can-open)),
+    because the KEM is the *recipient's* choice. `recipientKind` is
     `nskey` and nothing else; self and inbound both seal to the one nskey. The
     `root-pqpublickey` variant is withdrawn along with the cold-start KEM. `ns` is the
     resolved namespace the conveyance lives at.
@@ -349,8 +365,11 @@ once in `design.md`; UCs below reference them by name.
      `{"v": 1, "keys": [{"kid": "…", "use": "sign", "alg": "mldsa65", "pub": "…"}]}`;
      hold the private half locally. E1 is a first enrollment and so fully
      privileged, which is what entitles it to create the root at all.
-  4. Mint E1's **X-Wing key package** and register it in E1's enrollment record
-     (private half stays in the keyfile; **not** published).
+  4. Mint E1's **key package** — a keypair under the first algorithm
+     `AtClientPreference.keyEstablishmentAlgorithms` names — and register it in E1's
+     enrollment record (private half stays in the keyfile; **not** published). A
+     deployment naming more than one algorithm gains the rest at the next client start
+     ([UC-A2.4](#34-uc-a24--the-key-package-advertises-the-kem-the-deployment-configured)).
   5. Persist AtKeys (PQ APKAM private + signing-root private + key-package private).
   6. **Verify**: re-authenticate using the PQ APKAM key (proves the server accepts PQ auth).
   7. **Legacy material is still cut and published, by default**
@@ -396,23 +415,28 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **Given:** `@alice` pq-native; `pq_signing_root` published; `alice1` enrolled (E1), fully privileged & online.
 - **When:** `alice2` requests a new enrollment (E2) for namespaces `[app_1.my_apps]`; `alice1` approves.
 - **Steps:**
-  1. `alice2` mints its own **PQ APKAM** keypair; it puts its X-Wing
-     **key-package** public half and any descriptive `EnrollParams.metadata` on the
-     `enroll:request` JSON tail (single keypair, single key package), and sends
-     `enroll:request`.
+  1. `alice2` mints its own **PQ APKAM** keypair; it puts its **key-package** public
+     half — under the first algorithm `AtClientPreference.keyEstablishmentAlgorithms`
+     names — and any descriptive `EnrollParams.metadata` on the `enroll:request` JSON
+     tail (single keypair, single key package), and sends `enroll:request`.
   2. `alice1` (approver) generates the `apkamSymmetricKey` and **encapsulates it to
-     `alice2`'s key-package public half** taken from the request tail (X-Wing) —
-     **not** RSA, and **not** to any atSign-level key. The direction is
+     `alice2`'s key-package public half** taken from the request tail, under the KEM
+     that package's entry names — **not** RSA, and **not** to any atSign-level key. The direction is
      approver → enrollee precisely so that no atSign-level KEM has to exist; the
      approver is encapsulating to a key that arrived unauthenticated, which is
      trust-on-first-use gated by a person approving a named device.
   3. `alice1` approves E2; the server records `alice2`'s single `apkamPublicKey` +
      `signingAlgo` + key package + metadata for E2, and populates E2's `_apsk` from
-     the enrollment record — the **bare key value, exactly as today**
+     the enrollment record, **unwrapped** — no signed envelope around it, because apps
+     parse the value
      ([`decisions.md` 39](detail/decisions.md#39-_apsk-rides-the-same-two-stage-ladder-2026-08-05)).
-     What chains it to the root is the **approval-chain link** `alice1` signs and
-     conveys, which E2 stamps onto its own `_apsk` metadata at first run — the
-     value itself is untouched, because apps parse it.
+     Its *shape* follows what E2 advertises: a **bare** public key only when that is a
+     single active `rsa2048` entry, and the `{v, keys:[…]}` **array** otherwise — which
+     a pq-native E2 is, since it advertises `mldsa65`
+     ([section 16](#16-g1--signature-agility-and-the-rollout-matrix) tabulates the three
+     postures). What chains it to the root is the **approval-chain link** `alice1` signs
+     and conveys, which E2 stamps onto its own `_apsk` **metadata** at first run — the
+     value itself is untouched either way.
   4. `alice1` conveys the secrets E2 is authorised for:
      - the **signing-root private** rides the approval bundle (wrapped under
        `apkamSymmetricKey`) **only if E2 is itself fully privileged**; a
@@ -424,15 +448,16 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   5. `alice2` consumes the envelope + bundle, decapsulates, verifies, persists AtKeys.
   6. `alice2` verifies PQ APKAM auth.
 - **Then:**
-  - Nothing in the conveyance path is RSA-wrapped (`apkamSymmetricKey` rides X-Wing),
-    so the enrollment conveyance is not harvestable-now.
+  - Nothing in the conveyance path is RSA-wrapped — the `apkamSymmetricKey` rides the
+    KEM E2's key package advertises — so the enrollment conveyance is not
+    harvestable-now.
   - `alice2.APKAM = pq`, `nskey.app_1.my_apps@alice⁻¹ = ✓`,
     `nskey.app_2.my_apps@alice⁻¹ = ✗`, key package registered. `root⁻¹ = ✗` for a
     namespace-scoped E2 — the root is held only by fully privileged enrollments.
   - E2's `_apsk` carries a chain link that `verifyChain` walks to the signing
     root, so a reader can chain an advertised key back to the atSign's own
-    anchor rather than to whatever the atServer served — the `_apsk` **value**
-    stays the bare key apps already parse.
+    anchor rather than to whatever the atServer served — the link rides the record's
+    **metadata**, leaving the `_apsk` **value** exactly what apps already parse.
   - `alice2` authenticates PQ and decrypts `@alice`'s `app_1.my_apps` self data; an
     `app_2.my_apps` key request is refused.
   - E2's APKAM key is a distinct, individually-revocable record.
@@ -595,9 +620,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 - **When:** `alice1` does `put <k>.app_1.my_apps@alice` (shouldEncrypt).
 - **Steps:**
   1. Cut a symmetric **content key (CK)**; encrypt the value with it (AES-256-GCM under the CK).
-  2. **Convey the CK once** (`at/nskey`): X-Wing-seal the CK to @alice's **nskey**
-     and write it as its own CK-conveyance record, stamping
-     `appMetadata = {providerId: at/nskey/XWING/AES/GCM, recipientKind: nskey, ckKid, nskeyKid}`.
+  2. **Convey the CK once** (`at/nskey`): seal the CK to @alice's **nskey** under the
+     KEM that nskey's own advertisement names, and write it as its own CK-conveyance
+     record, stamping `appMetadata = {providerId: at/nskey/XWING/AES/GCM, recipientKind:
+     nskey, ckKid, nskeyKid}` — or `at/nskey/MLKEM1024/AES/GCM` where the advertised
+     `alg` is `ml-kem-1024`.
      (Skip if the CK is already conveyed to that generation.)
   3. Write the **data** value (`at/symmetric/AES/GCM`): stamp
      `appMetadata = {providerId: at/symmetric/AES/GCM, ckKid, iv}`; the value carries
@@ -632,7 +659,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   1. `alice1` takes the `_nskeylock.app_1.my_apps@alice` lock (short-ttl, immutable
      create — so a concurrent enrollment loses and re-reads), **re-reads the
      advertisement under the lock** in case a sibling published while it was
-     racing, mints the **one** `app_1.my_apps` nskey X-Wing keypair, publishes its
+     racing, mints the **one** `app_1.my_apps` nskey keypair — under the first
+     algorithm `AtClientPreference.keyEstablishmentAlgorithms` names — publishes its
      public half **immediately** as the APKAM-signed
      `public:__nskey.app_1.my_apps@alice` carrying `{v, createdAt, keys:[…],
      suites}`, and holds the private. It does **not** release the lock: the ttl
@@ -775,9 +803,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      the advertised `nskeyKid`. Cut a symmetric **CK for @bob** — CKs are per
      recipient — or reuse the current one if it was conveyed to that same generation.
      Encrypt the value with it (AES-256-GCM under the CK).
-  2. **Convey the CK once** (`at/nskey`, `recipientKind: nskey`): X-Wing-seal it to
-     **bob's published nskey**, as a discrete CK-conveyance record stamping `ckKid`
-     and the `nskeyKid` it was sealed to.
+  2. **Convey the CK once** (`at/nskey`, `recipientKind: nskey`): seal it to **bob's
+     published nskey** under the KEM *bob's* advertisement names — never alice's own
+     configured one ([UC-A4.5](#55-uc-a45--a-sender-follows-the-recipients-advertised-algorithm-not-its-own-preference))
+     — as a discrete CK-conveyance record stamping `ckKid` and the `nskeyKid` it was
+     sealed to.
   3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
   4. Write the **self-copy** for alice's own clients, in her **own** scope: a
      **second** CK, conveyed via an `at/nskey` record sealed to alice's own
@@ -862,12 +892,32 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - **refusing would protect nothing.** It would leave two atSigns unable to communicate
     while the peer's key stayed exactly as strong as it was — the peer's key is the
     peer's decision.
-- **Then (the KEM is configured, never negotiated):** each atSign advertises **one** KEM
-  per generation, and rotation is the only moment that can change. There is no
-  per-message KEM negotiation to attack, which is what SP 800-227 section 4.6.3 warns
-  about when a protocol introduces additional choices ("could also introduce
-  vulnerabilities (e.g. in the form of downgrade attacks)"). What *is* negotiated is the
-  construction over that KEM — [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-no-shared-entry-is-a-refusal).
+- **Then (the KEM is configured, never negotiated):** a holder may advertise **more than
+  one** KEM. An enrollment's key package carries a key for **every** algorithm
+  `AtClientPreference.keyEstablishmentAlgorithms` names, minted beside the ones it already
+  holds ([UC-A2.4](#34-uc-a24--the-key-package-advertises-the-kem-the-deployment-configured)),
+  while an nskey generation carries the **first** of that list, because a mint writes one
+  key. What is absent is a *negotiation*: nothing is exchanged at seal time. A sender walks
+  its own fixed strongest-first `sealsToKeyAlgorithms` across the recipient's
+  **APKAM-signed** advertised set and takes the first match, so an owner offering both is
+  sealed to under the better one without either side stating a preference, and an attacker
+  can neither add a weak entry nor strip a strong one. That — an authenticated offer read
+  under an order neither party can move — is what answers SP 800-227 section 4.6.3's
+  warning that additional choices "could also introduce vulnerabilities (e.g. in the form
+  of downgrade attacks)". What *is* negotiated is the construction over the chosen KEM —
+  [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-no-shared-entry-is-a-refusal).
+
+  ⚠️ **Until 2026-08-27 this clause read "each atSign advertises one KEM per
+  generation, and rotation is the only moment that can change", and rested the SP 800-227
+  argument on it.** Both halves were false. `KeyPackageMinting` mints a keypair for every
+  configured algorithm and republishes the package by `enroll:update`, and the
+  `reconcileKeyPackage` startup step adds one after a preference edit with no rotation
+  involved. It also contradicted
+  [UC-A4.6](#56-uc-a46--the-construction-is-negotiated-from-suites-and-no-shared-entry-is-a-refusal),
+  whose clause on narrowing candidates says outright that a holder may advertise more than
+  one KEM — and that one is proven against a live atServer. The conclusion survives its
+  premise: the property was never that only one KEM is on offer, but that the offer is
+  authenticated and the order reading it is fixed.
 
 ### 5.6 UC-A4.6 — The construction is negotiated from `suites`, and no shared entry is a refusal
 
@@ -1065,7 +1115,9 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 - **When:** `alice1` runs the retrofit.
 - **Steps:**
   1. Authenticate legacy (RSA APKAM).
-  2. Mint its PQ APKAM keypair + X-Wing key package locally (both privates stay in the keyfile).
+  2. Mint its PQ APKAM keypair + key package locally, the latter under the first
+     algorithm `AtClientPreference.keyEstablishmentAlgorithms` names (both privates stay
+     in the keyfile).
   3. Submit `enroll:request` with a **new enrollmentId**, its single
      `apkamPublicKey` + `signingAlgo = mldsa65` + key package + `EnrollParams.metadata`,
      on the authenticated connection. The server validates the namespace subset,

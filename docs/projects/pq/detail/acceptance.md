@@ -971,6 +971,17 @@ establish the clause as written. The fix is normally an assertion plus a
 one over-call found. Verify a row against the test before acting on it; the
 untested arm is a claim, not a measurement.
 
+⛔ **The clause wordings quoted below are as they stood on 2026-08-27, and the
+array-shape sweep has since moved some of them.** The use cases it corrected
+that have rows here are **UC-A1.1, UC-A2.1, UC-A3.1, UC-A3.2, UC-A4.1, UC-A4.5
+and UC-B1.1** — re-derive with
+`grep -oP 'UC-[A-G]\d+\.\d+' on this section rather than trusting the list.
+Most of the sweep's edits landed in **Steps** blocks, which no clause is drawn
+from, so a row's wording may be untouched; do not assume either way. Re-read the
+clause in `acceptance.md` before writing its test — a test written to the
+quotation here would be written to a superseded specification, which is the
+exact failure the sweep exists to prevent. The rows are still the right work.
+
 ⚠️ **Two rows below were examined on 2026-08-27 and deliberately left**, so
 nobody re-derives the same answer:
 

@@ -70,7 +70,16 @@ void provenIn(String path, String testName,
           'either restore it or the row is no longer proven');
 
   final source = file.readAsStringSync();
-  expect(source.contains("'$testName"), isTrue,
+  // Matched against the SOURCE, so the name has to be spelled the way the
+  // source spells it: Dart escapes whichever quote encloses the literal. A
+  // single spelling misses every test whose name contains an apostrophe — 22
+  // files in this package alone — and the failure reads as a rename, which is
+  // the one diagnosis that sends a reader looking in the wrong place.
+  final spellings = [
+    "'${testName.replaceAll("'", "\\'")}",
+    '"${testName.replaceAll('"', '\\"')}',
+  ];
+  expect(spellings.any(source.contains), isTrue,
       reason: 'this row cites "$testName" in $path, and no test there starts '
           'with that name. A renamed test is the same loss of evidence as a '
           'deleted one — re-point the citation or re-open the row. '

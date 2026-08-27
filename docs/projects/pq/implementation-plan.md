@@ -381,26 +381,45 @@ any of them.** Writing a test for a superseded clause fails confusingly, and the
 tempting fix is to weaken the assertion until it passes, which enshrines the
 wrong behaviour as the specification.
 
-**The instances, found by a cold read on 2026-08-27 and NOT yet corrected.** All
-in `acceptance.md`. Verify each against the tree before editing — this list is a
-reading, not a measurement.
+**The instances, found by a cold read on 2026-08-27 and CORRECTED the same day.**
+All were in `acceptance.md`; each was verified against the tree before editing,
+and two of the cold read's rows did not survive that check. The corrections are
+in `acceptance.md` itself, each stale sentence replaced in place with a dated
+⚠️ note saying what it used to claim.
 
-| Where | What it assumes | Why it matters |
-| ----- | --------------- | -------------- |
-| **UC-A4.5**, "the KEM is configured, never negotiated" | "each atSign advertises **one** KEM per generation, and rotation is the only moment that can change" | **The strongest one.** Falsified twice in the same document — UC-A2.4 now says a new KEM is advertised *beside* the existing key at the next start, and UC-A4.6 says outright that a holder may advertise more than one. It is also a **security argument** citing SP 800-227, so a test written to it would assert an invariant the tree deliberately broke |
-| **Section 1**, key objects | the nskey is "**one** X-Wing KEM keypair"; the key package is "the per-enrollment **X-Wing** recipient keypair" | The shared vocabulary every row draws on, so each row inherits the single-KEM shape. Contradicted five lines later by its own `keys:[…]` wire shape |
-| **Section 1**, state table | "its **X-Wing** key package"; "the namespace's **one** nskey private" | 1:1:1 makes "one key package per enrollment" right; naming the algorithm is what is stale |
-| **Section 1**, `appMetadata` | only `at/nskey/XWING/AES/GCM` | UC-A3.5 states it is that **or** `at/nskey/MLKEM1024/AES/GCM` |
-| **UC-A3.2** mint step | mints "the **one** … X-Wing keypair" and publishes it into `keys:[…]` in one sentence | ⚠️ **UC-A3.2 c1 is on the live partial list now** |
-| **UC-A3.1** / **UC-A4.1** data paths | "**X-Wing-seal** the CK" | ⚠️ **UC-A3.1 c1 and c2 are on the owed-citation list**; pinning them against a hardcoded provider id enshrines it |
-| **UC-A2.1** steps 1–2 | "**X-Wing** key package", "**the** public half" | Under UC-A2.4 a configured deployment produces an ML-KEM package here |
-| **UC-A2.1** Then | E2's `_apsk` is "the **bare** key value, exactly as today", unqualified | Section 15.7 says bare only at `legacy`/`pqReady`; at **pqActive it is the array**, and UC-G1.8 has it republished as one |
-| **UC-A1.1** step 4, **UC-B1.1** step 2 | onboarding and retrofit mint an "**X-Wing** key package" | ⚠️ **UC-A1.1 c3 is on the in-process partial list now** |
-| **UC-A1.1** Then | "no RSA-wrapped (`apkamSymmetricKey` rides **X-Wing**)" | The claim survives; the reason given does not |
-| **UC-C1.7** *(adjacent, unverified)* | the two signing-set axes are "**overridable per preference**" | The same sentence that was found false next door in UC-C1.6. Check against `pq_posture.dart` rather than reasoning about it |
+| Where | What it assumed | What the tree says |
+| ----- | --------------- | ------------------ |
+| **UC-A4.5**, "the KEM is configured, never negotiated" | "each atSign advertises **one** KEM per generation, and rotation is the only moment that can change" | **Both halves false**, and the clause was pinned. `KeyPackageMinting` mints a keypair for *every* configured algorithm; `reconcileKeyPackage` adds one at the next start after a preference edit, no rotation. The SP 800-227 conclusion survives on a different mechanism — the offer is APKAM-signed and the sender's order is fixed — so the clause was rewritten and re-pinned to four tests that establish *that* |
+| **Section 1**, key objects | the nskey is "**one** X-Wing KEM keypair"; the key package is "the per-enrollment **X-Wing** recipient keypair" | The nskey's *cardinality* holds — a mint writes one key, under `keyEstablishmentAlgorithms.first` — but naming the algorithm is stale. The key package's is false outright: it carries a key per configured algorithm, and `kpid` names whichever entry is active |
+| **Section 1**, state table | "its **X-Wing** key package"; "the namespace's **one** nskey private" | Same algorithm staleness; and an enrollment holds every superseded generation's private too, filed per `nskeyKid` — `rotate` retains rather than replaces, which Section 1's own nskey bullet already said |
+| **Section 1**, `appMetadata` | only `at/nskey/XWING/AES/GCM` | Both ids are in the tree (`nskey_records.dart`) and both are registered on every client |
+| **UC-A3.2** mint step | mints "the **one** … X-Wing keypair" | The "one" is right, the algorithm is not |
+| **UC-A3.1** / **UC-A4.1** data paths | "**X-Wing-seal** the CK" | The seal follows the *destination's* advertised `alg` — which is UC-A4.5's own subject |
+| **UC-A2.1** steps 1–2 | "**X-Wing** key package", "(X-Wing)" | Under UC-A2.4 a configured deployment produces an ML-KEM package here |
+| **UC-A2.1** step 3 and Then | E2's `_apsk` is "the **bare** key value, exactly as today" | **False for UC-A2.1's own Given.** `bareApskValueOf` returns bare only for a single *active `rsa2048`* entry; a pq-native E2 advertises `mldsa65`, so it gets the array. The point the sentence was making — the value is not wrapped in an envelope, and the chain link rides the *metadata* — survives and now says so. ⚠️ The cold read guessed the condition was the posture and cited "section 15.7"; the condition is the entry's algorithm, and the table is in section 16 |
+| **UC-A1.1** step 4, **UC-B1.1** step 2 | onboarding and retrofit mint an "**X-Wing** key package" | Both mint under `keyEstablishmentAlgorithms.first`; the rest arrive at the next start |
+| ~~**UC-A1.1** Then, "no RSA-wrapped (`apkamSymmetricKey` rides X-Wing)"~~ | — | **Mis-cited.** The phrase occurs once in the document and it is in **UC-A2.1**'s Then, not UC-A1.1's. Corrected there |
+| ~~**UC-C1.7**, the two signing-set axes "overridable per preference"~~ | — | **False alarm — the sentence is TRUE.** `AtClientPreference` resolves both `authenticationKeyAlgorithm` and `dataSigningKeyAlgorithms` as `?? posture.<axis>`, so an explicit argument beats the posture on each. UC-C1.6's exception was `disallowLegacyEncryption`, which has no constructor argument at all; the two are not the same sentence |
+
+**What the corrections cost the burn-down: nothing.** It read
+`99 of 135 / 52 of 135` before and after. Every stale sentence but two lived in
+a **Steps** block or in Section 1, and only **Then** clauses are counted; the
+two that were clauses kept their pins, UC-A4.5's by re-pointing them at four
+tests and UC-A2.1's because its fragments were short enough to survive the edit.
+
+⚠️ **The sweep also found a defect in the citation rail itself.** `provenIn`
+matched a cited test name against the raw source with one spelling, so a test
+whose name contains an apostrophe — 22 files in `at_client` alone — could never
+be cited, and the failure read as "no test there starts with that name", which
+sends a reader looking for a rename. It now tries both source spellings, and a
+citation naming a genuinely absent test still goes red quoting the name.
 
 ⚠️ **Six of the 29 live partials and one of the six in-process partials sit under
-use cases in that table.** Correct the clause before writing the test.
+use cases in that table**, so the clause a test would be written to has just
+moved. Re-read the clause in `acceptance.md` before writing its test — the
+partial-clause table in [detail](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work)
+quotes the wording as it stood on 2026-08-27, which for those seven is no longer
+what the catalogue says.
 
 ⚠️ **Check the production path before writing the test.** Of the six clauses
 examined closely on 2026-08-27, **three were false rather than untested**. The

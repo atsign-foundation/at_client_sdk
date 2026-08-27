@@ -216,16 +216,52 @@ void main() {
             'recipient can never open. "defaults to the hybrid" and "takes the '
             'no-hybrid option, and it resolves" pin the knob itself.',
       );
+      // The four below carry the corrected clause: a holder may offer several
+      // KEMs, and what removes the downgrade surface is that the offer is
+      // signed and the order reading it is fixed. Until 2026-08-27 this clause
+      // asserted the opposite — one KEM per generation — and rested the
+      // SP 800-227 argument on it.
+      provenIn(
+        'packages/at_client/test/key_package_minting_test.dart',
+        'a second algorithm is minted, filed and advertised beside the first',
+        proves: 'the half the old clause denied: one enrollment advertising '
+            'two KEMs at once. The package gains the newly configured '
+            'algorithm\'s key without losing the one peers are already sealing '
+            'to, which is what makes "more than one" a state the protocol '
+            'reaches rather than a shape the format merely permits',
+        clauses: ['a holder may advertise **more than one** KEM'],
+      );
       provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'the published advertisement emits its exact wire shape — raw literals',
-        proves: 'that a generation advertises exactly one KEM: the emitted '
-            'payload is pinned against hand-written literals and its keys '
-            'list has length one. The list exists so a rotation can carry a '
-            'second entry, so "one per generation" is a property of what a '
-            'mint writes rather than of the format',
-        clauses: ['each atSign advertises **one** KEM per generation, and '
-            'rotation is the only moment that can change'],
+        proves: 'the other half, and the reason the two substrates differ: the '
+            'emitted nskey payload is pinned against hand-written literals and '
+            'its keys list has length one, because the mint takes the FIRST '
+            'configured algorithm. The list is there for a reader, not for '
+            'this writer',
+        clauses: ['an nskey generation carries the **first** of that list'],
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'a tampered advertisement is rejected',
+        proves: 'why the offer cannot be edited on the way past: the sender '
+            'verifies the APKAM signature before it reads a single key out of '
+            'the advertisement, so an attacker can neither add a weak entry '
+            'nor strip a strong one. This is what the security argument '
+            'actually rests on, and nothing pinned it while the clause claimed '
+            'the argument came from there being only one KEM to choose',
+        clauses: ['the recipient\'s **APKAM-signed** advertised set'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_kem_selection_test.dart',
+        'the SENDER\'s order decides, not the recipient\'s',
+        proves: 'the other leg: the selection order is the sender\'s own and '
+            'the recipient cannot move it. Both lists hold both entries in '
+            'OPPOSITE orders, so a walk driven by the wrong side returns the '
+            'other answer — the two arms cannot collapse into each other, '
+            'which is what makes this a proof about whose order it is rather '
+            'than about which entry wins',
+        clauses: ['its own fixed strongest-first `sealsToKeyAlgorithms`'],
       );
     });
 
