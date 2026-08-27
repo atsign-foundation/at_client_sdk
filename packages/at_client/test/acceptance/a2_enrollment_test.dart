@@ -281,6 +281,19 @@ void main() {
             'genuinely differ in the varied thing.',
         clauses: ['negotiates to whichever key its own'],
       );
+      provenIn(
+        'packages/at_client/test/key_package_minting_test.dart',
+        'an amendment conveys nothing over the wire',
+        proves: 'that amending sends nothing: the amendment is driven with a '
+            'control asserting it really happened, and no record is written. '
+            '`put` is stubbed to RECORD rather than left unstubbed, because '
+            'an unstubbed call on a mock throws and the test would then '
+            'redden for the mock rather than for a conveyance. '
+            'Mutation-proven — making the amendment write one reddens it, '
+            'quoting this assertion',
+        clauses: ['nothing already sealed is re-sealed, and no conveyance '
+            'fires'],
+      );
     });
 
     test('UC-A2.6 · only the enrollment itself may amend its metadata', () {

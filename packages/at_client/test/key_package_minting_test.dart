@@ -243,6 +243,35 @@ void main() {
       expect(await heldKpids(), hasLength(2));
     });
 
+    test('an amendment conveys nothing over the wire', () async {
+      // The updater already holds the plaintext of everything sealed to its
+      // own key package, so amending it re-files locally and sends nothing.
+      // Re-sealing here would hand the same secret back to the same holder
+      // over the wire for no reason.
+      //
+      // `put` is stubbed to RECORD rather than left unstubbed: an unstubbed
+      // call on a mock throws, so the test would redden either way and the
+      // failure would be about the mock rather than about a conveyance.
+      final written = <String>[];
+      when(() => atClient.put(any(), any())).thenAnswer((i) async {
+        written.add((i.positionalArguments[0] as AtKey).toString());
+        return true;
+      });
+
+      await fileHeldKey(SecretSharingAlgos.xWing);
+      configure(const [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+
+      final reconciled = await minter().reconcileKeyPackage();
+
+      expect(reconciled.minted, [SecretSharingAlgos.mlKem1024],
+          reason: 'the control: the amendment must actually have happened, or '
+              'writing nothing is not evidence of anything');
+      expect(written, isEmpty,
+          reason: 'an amendment files locally and advertises through '
+              'enroll:update — it must not write a record. A conveyance here '
+              'would re-seal to a holder that already has the plaintext');
+    });
+
     test('the private half is filed BEFORE the advertisement goes out',
         () async {
       // The property this whole class is ordered around. Publishing first
