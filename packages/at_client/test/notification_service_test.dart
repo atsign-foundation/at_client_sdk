@@ -1690,6 +1690,44 @@ void main() {
           NotificationListenerState.notConnected);
     });
   });
+  group('monitor outbound connection factory seam', () {
+    late MockAtClientImpl mockAtClientImpl;
+    late MockSecondaryAddressFinder mockSecondaryAddressFinder;
+
+    setUp(() {
+      mockAtClientImpl = MockAtClientImpl();
+      mockSecondaryAddressFinder = MockSecondaryAddressFinder();
+      when(() => mockAtClientImpl.getPreferences())
+          .thenReturn(AtClientPreference()..namespace = 'wavi');
+      when(() => mockAtClientImpl.atChops).thenReturn(null);
+      when(() => mockAtClientImpl.enrollmentId).thenReturn(null);
+    });
+
+    test('an injected factory reaches the Monitor create builds', () async {
+      final factory = _StubMonitorOutboundConnectionFactory();
+
+      final notificationService = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        secondaryAddressFinder: mockSecondaryAddressFinder,
+        monitorOutboundConnectionFactory: factory,
+      ) as NotificationServiceImpl;
+
+      expect(notificationService.monitor.monitorOutboundConnectionFactory,
+          same(factory));
+    });
+
+    test('omitting it leaves the dart:io default in place', () async {
+      final notificationService = await NotificationServiceImpl.create(
+        mockAtClientImpl,
+        secondaryAddressFinder: mockSecondaryAddressFinder,
+      ) as NotificationServiceImpl;
+
+      expect(notificationService.monitor.monitorOutboundConnectionFactory,
+          isNotNull);
+      expect(notificationService.monitor.monitorOutboundConnectionFactory,
+          isNot(isA<_StubMonitorOutboundConnectionFactory>()));
+    });
+  });
 }
 
 class StatsAtKeyMatcher extends Matcher {
@@ -1712,3 +1750,9 @@ class StatsAtKeyMatcher extends Matcher {
     return false;
   }
 }
+
+/// Identity-compared only — createConnection is never called, because the
+/// seam under test is construction-time wiring rather than connection
+/// behaviour.
+class _StubMonitorOutboundConnectionFactory
+    extends MonitorOutboundConnectionFactory {}

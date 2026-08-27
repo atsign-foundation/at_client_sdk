@@ -32,11 +32,22 @@ class RemoteSecondary implements Secondary {
     atLookUp.atChops = value;
   }
 
+  /// The three socket factories are forwarded to the [AtLookupImpl] this
+  /// constructor builds. They exist so a caller can supply its own transport
+  /// without subclassing anything — the default of each is the `dart:io`
+  /// implementation, so omitting them keeps today's behaviour exactly.
+  ///
+  /// They are ignored when [atLookUp] is supplied: that branch adopts the
+  /// caller's lookup rather than building one, so there is nothing to
+  /// configure.
   RemoteSecondary(String atSign, AtClientPreference preference,
       {String? privateKey,
       AtChops? atChops,
       AtLookUp? atLookUp,
-      String? enrollmentId}) {
+      String? enrollmentId,
+      AtLookupSecureSocketFactory? secureSocketFactory,
+      AtLookupSecureSocketListenerFactory? socketListenerFactory,
+      AtLookupOutboundConnectionFactory? outboundConnectionFactory}) {
     _atSign = AtUtils.fixAtSign(atSign);
     logger = AtSignLogger('RemoteSecondary ($_atSign)');
     _preference = preference;
@@ -53,7 +64,10 @@ class RemoteSecondary implements Secondary {
             secondaryAddressFinder:
                 AtClientManager.getInstance().secondaryAddressFinder,
             secureSocketConfig: secureSocketConfig,
-            clientConfig: _getClientConfig());
+            clientConfig: _getClientConfig(),
+            secureSocketFactory: secureSocketFactory,
+            socketListenerFactory: socketListenerFactory,
+            outboundConnectionFactory: outboundConnectionFactory);
     this.atLookUp.enrollmentId = enrollmentId;
     logger.finer(
         'signingAlgoType: ${preference.signingAlgoType} hashingAlgoType: ${preference.hashingAlgoType}');
