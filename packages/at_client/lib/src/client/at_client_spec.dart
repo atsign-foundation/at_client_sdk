@@ -85,9 +85,19 @@ abstract class AtClient {
   ///
   /// Idempotent and cheap when there is nothing to do: it checks what is
   /// published before it mints anything, and it is safe to call on every
-  /// start and safe to call while the startup step is running — both re-read
-  /// under the same mint lock, so the loser adopts rather than publishing a
-  /// second key.
+  /// start.
+  ///
+  /// ⚠️ **Do NOT call it concurrently with this client's own PQ startup, or
+  /// with itself.** This said the opposite until 2026-08-27 — that both would
+  /// re-read under the mint lock and the loser would adopt — and that is false
+  /// for two racers of the **same enrolment**. The lock's holder token is the
+  /// enrolment id, so a second concurrent mint is refused the lock, reads it
+  /// back, sees its *own* id, concludes it holds it, and mints: measured on a
+  /// live atServer as two advertisements 7.5ms apart carrying different key
+  /// material, the second overwriting the first. A peer that fetched in that
+  /// window holds a generation the owner may no longer be able to open. The
+  /// lock excludes a different enrolment, which is what it was built for; it
+  /// does not exclude this.
   ///
   /// Answers rather than throws for the two cases that are configuration and
   /// not failure — a posture that does not seed, and a namespace this

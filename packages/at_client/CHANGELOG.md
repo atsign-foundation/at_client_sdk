@@ -16,8 +16,10 @@
     job, a one-shot notifier, anything driven from a script with piped stdin.
     **Not a default and nothing calls it for you** — an app that only sends
     should not pay for a mint it will never use.
-  - Idempotent and cheap when there is nothing to do; safe on every start and
-    safe alongside the startup step doing the same thing. Returns
+  - Idempotent and cheap when there is nothing to do, and safe on every start.
+    ⚠️ **Do not call it concurrently with the PQ startup or with itself** — the
+    mint lock's holder token is the enrolment id, so two racers of the same
+    enrolment both proceed and publish two generations. Returns
     `AtReachabilityResult` — read `isReachable`, or the `outcome` for
     `alreadyReachable` / `published` / `postureDoesNotSeed` / `notAuthorised` /
     `timedOut` / `failed`.
