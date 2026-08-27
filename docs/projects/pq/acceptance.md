@@ -172,6 +172,32 @@ comes last because it asserts the *mechanism that drives* Parts A and B into
 production — each of the five rollout flag axes in isolation, and the grouped
 `PqPosture` — rather than any crypto behaviour of its own.
 
+**Naming a sealing construction: use its suite id, not its version byte**
+(gkc, 2026-08-27). Write `x-wing-rfc9180-v1` or `ml-kem-1024-rfc9180-v1` — those
+are what an advertisement's `suites` field actually carries, and they say which
+KEM, KDF and AEAD are meant. `0x02` and `0x03` are shorthand for those whole
+suites and tell a reader nothing they have not memorised, so a bare byte belongs
+only where the **wire value itself** is the subject: `seal-spec.md`, which
+specifies the bytes, and the raw-literal pins in the live tests, which exist
+precisely to freeze them.
+
+⛔ **A retired construction is named in `seal-spec.md` and nowhere else.** It no
+longer exists in this tree, so a use case that mentions one is describing
+something no test can exercise in either direction. ⚠️ Two deliberate exceptions
+live outside that rule and should stay: the `decisions.md` ruling that retired
+`0x01` (a decision's title is its record, and a rail checks index-to-body
+correspondence), and [`implementation-plan.md` 14.44](implementation-plan.md#1444-residuals-from-the-at_chops-pr-review),
+which owes a consumer-facing CHANGELOG sentence about a real skew — **released
+at_chops 3.5.0 and older hardcode `0x01`**, so it is gone from this tree and
+present in the wild, and a consumer diagnosing it will search for the number.
+
+**A use case for `put` or `notify` — or for the receiving side, `get` or
+notification receipt — is about self→self *or* self→other, never both at once**
+(gkc, 2026-08-27), and where one direction has a row the other should too. It
+also does not assert the behaviour of **consumers** of this API: `AtCollection`
+writes a self copy of what it shares, by its own separate `put`, and that is
+AtCollection's row to have, not `AtClient.put`'s.
+
 **Lane discipline — what this doc does NOT do.** This doc states *what must be
 true* and *how to test it*; it does not re-explain *how the mechanism works*.
 
@@ -2326,6 +2352,16 @@ clause does not re-point the pins after it — and editing a clause's wording
 test that proves it. A fragment matching nothing and a fragment matching two
 clauses are both errors, because a pin that resolves to nothing claims nothing
 while reading as coverage.
+
+⚠️ **A pin must be the clause's COLLAPSED form — one line, single spaces.**
+`catalogueClauses` joins a clause's wrapped lines with a single space before
+anything matches against it, so a fragment copied verbatim out of the Markdown
+across a line break matches nothing, however exactly it reproduces what is on
+the page. Rewording a clause that wraps therefore needs the pin rewritten to
+span the join, not re-copied. Measured 2026-08-27: two of four pins moved in one
+commit broke this way, and the ratchet named both and refused the count — which
+is what it is for, and why the count and the pins have to move in the same
+diff.
 
 ⛔ **It did NOT need `manifest.dart` moved to `lib/`**, which this paragraph
 gave as its prerequisite. `tool/acceptance_ledger.dart` imports
