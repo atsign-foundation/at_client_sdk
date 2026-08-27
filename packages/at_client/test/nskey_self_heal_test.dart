@@ -5,6 +5,8 @@ import 'package:at_auth/at_auth.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
+import 'package:at_client/src/secret_sharing/key_package.dart'
+    show KeyPackage, PackageKey;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart';
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:mocktail/mocktail.dart';
@@ -51,6 +53,19 @@ void main() {
         .thenReturn(AtClientPreference()..namespace = namespace);
     return atClient;
   }
+
+  /// The newly approved enrollment's advertised key package — the address
+  /// its approver conveys to.
+  KeyPackage joinerPackage() => KeyPackage(
+        enrollmentId: 'the-joiner',
+        createdAt: DateTime.utc(2026),
+        keys: [
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.xWing,
+              pub: pair.publicKeyBytes),
+        ],
+      );
 
   Future<NskeyPrivateFiling> filing() async {
     final io = InMemoryAtKeysIo();
@@ -309,6 +324,82 @@ void main() {
     });
   });
 
+  group('the late joiner (NskeySeeding.conveyHeldPrivatesTo)', () {
+    test('is pushed EVERY generation its approver holds, not just the live one',
+        () async {
+      // UC-A5.1's late-joiner clause said "the current generation only" until
+      // 2026-08-27, and the approval path has never done that. The code is the
+      // specification here: forward secrecy for a namespace's past is the CK
+      // lever — deleting the superseded CK's conveyance record — so once that
+      // record is gone an old nskey private opens nothing, and withholding it
+      // from a joiner would cost a round trip and buy no secrecy.
+      final rotated = await XWingKeyPair.generate();
+      final superseded = nskeyKidOf(pair.publicKeyBytes);
+      final live = nskeyKidOf(rotated.publicKeyBytes);
+      expect(superseded, isNot(live),
+          reason: 'the control: two DISTINCT generations, or "both were sent" '
+              'is satisfied by one');
+
+      final held = await filing();
+      await held.store(
+          namespace: namespace,
+          nskeyKid: superseded,
+          seed: NskeySeed(pair.privateKeyBytes));
+      await held.store(
+          namespace: namespace,
+          nskeyKid: live,
+          seed: NskeySeed(rotated.privateKeyBytes));
+
+      final atClient = client();
+      final sharing = _RecordingShares();
+      final sent = await NskeySeeding(
+              atClient: atClient,
+              ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
+              sharing: sharing,
+              privateFiling: held)
+          .conveyHeldPrivatesTo(joinerPackage(), [namespace]);
+
+      expect(sent, 2,
+          reason: 'one conveyance per held generation — an approver that sent '
+              'only the live one would strand the joiner on every retained '
+              '__ck naming the superseded kid until a holder answered a pull');
+      expect(
+          sharing.sharedNames,
+          containsAll([
+            '${NskeyPrivateFiling.secretNamePrefix}$superseded',
+            '${NskeyPrivateFiling.secretNamePrefix}$live',
+          ]),
+          reason: 'and each is addressed by its own nskeyKid, which is what a '
+              'retained conveyance names');
+    });
+
+    test('a namespace the joiner was not approved for is not conveyed',
+        () async {
+      // The other side of "every generation": every is bounded by the
+      // approval, not by what the approver happens to hold.
+      final held = await filing();
+      await held.store(
+          namespace: namespace,
+          nskeyKid: nskeyKidOf(pair.publicKeyBytes),
+          seed: NskeySeed(pair.privateKeyBytes));
+
+      final atClient = client();
+      final sharing = _RecordingShares();
+      final sent = await NskeySeeding(
+              atClient: atClient,
+              ring: PublishedNskeyKeyRing(atClient, privateFiling: held),
+              sharing: sharing,
+              privateFiling: held)
+          .conveyHeldPrivatesTo(joinerPackage(), const ['app_2.my_apps']);
+
+      expect(sent, 0);
+      expect(sharing.sharedNames, isEmpty,
+          reason: 'the approver holds a private it must not hand over — so '
+              '"every generation" is scoped by the approval and the test '
+              'above is not simply sending whatever is in the keyfile');
+    });
+  });
+
   group('the on-miss pull (PublishedNskeyKeyRing)', () {
     test('a miss on an own generation fires the injected ask, once', () async {
       final atClient = client();
@@ -452,4 +543,20 @@ void main() {
 class _RecordingStoreSharing extends Fake implements PairwiseSecretSharing {
   @override
   final SecretStore secretStore = SecretStore();
+}
+
+/// Records which secrets were conveyed, by name — the question
+/// `conveyHeldPrivatesTo` is asked is *what did the joiner receive*, and a
+/// store-only double cannot answer it.
+class _RecordingShares extends Fake implements PairwiseSecretSharing {
+  final List<String> sharedNames = [];
+
+  @override
+  final SecretStore secretStore = SecretStore();
+
+  @override
+  Future<void> shareSecretWith(KeyPackage to, Secret secret,
+      {required String inReplyTo}) async {
+    sharedNames.add(secret.name);
+  }
 }

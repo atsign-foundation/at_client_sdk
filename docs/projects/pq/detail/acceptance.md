@@ -963,7 +963,7 @@ recorded counts drift from the tree.
 
 ### The partial clauses — objective 1's remaining work
 
-**30 clauses**, each one a test already exercises that does **not**
+**29 clauses**, each one a test already exercises that does **not**
 establish the clause as written. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 
@@ -1006,16 +1006,17 @@ nothing when asked for the root's *own* algorithm, which is what isolates
 `use: enc` as the reason rather than letting two conditions cover for each
 other.
 
-**The standard a closed clause meets**, set by the seven closed on 2026-08-27:
+**The standard a closed clause meets**, set by the eight closed on 2026-08-27:
 write the missing arm *with a control*, then **mutate the production code and
 confirm the failure quotes your own assertion's reason**, revert, and pin. A
 green test that has not been shown to discriminate proves nothing.
 
-#### In-process — 1 closable with no virtualenv
+#### In-process — none left
 
-| Clause | The arm nothing establishes | Test |
-|---|---|---|
-| **UC-A5.1** c3 | "an enrollment approved *after* the rotation is pushed the current generation only" and "...and opens it" — no test enrols a joiner after a… | `nskey_self_heal_test.dart` |
+⛔ **All six are closed** (2026-08-27). Every remaining partial needs a
+virtualenv run, and is therefore also the only route that raises
+**server-proven**.
+
 
 #### Live — 29, each needing a virtualenv run to verify
 

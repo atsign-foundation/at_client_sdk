@@ -1010,9 +1010,21 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   bounded-exposure assertion is part of this case, not an optimisation. This is the
   heavier, O(n)-per-enrollment revocation + post-compromise-security lever — **not
   cheap**, and **distinct** from CK rotation.
-- **Then (b), late joiner:** an enrollment approved *after* the rotation is pushed the
-  current generation only; on meeting a retained `__ck` naming an earlier `nskeyKid` it
-  pulls that generation via `requestSecret` and opens it.
+- **Then (b), late joiner:** an enrollment approved *after* the rotation is pushed
+  **every generation its approver holds** for the namespaces it was approved for, not
+  only the live one — so retained history opens immediately, with no pull round trip and
+  no dependence on a holder being online at that moment. `requestSecret` remains the
+  backstop for a joiner the push missed: on meeting a retained `__ck` naming an
+  `nskeyKid` it does not hold, it pulls that generation and opens it.
+
+  ⚠️ **Until 2026-08-27 this clause said the joiner is pushed "the current generation
+  only", with the pull as the normal route to history.** The approval path has never
+  done that: `conveyHeldPrivatesTo` reads `NskeyPrivateFiling.readAllFor(namespace)` and
+  sends each entry. **The code is the specification here** (gkc, 2026-08-27) — forward
+  secrecy for a namespace's past is the **CK** lever in *When (a)* above, where deleting
+  the old conveyance record is what makes old-CK-era data unreadable. Once that record
+  is gone an old nskey private opens nothing, so withholding it from a joiner would cost
+  a round trip and buy no secrecy.
 
 ### 6.2 UC-A5.2 — Per-enrollment auth revocation
 

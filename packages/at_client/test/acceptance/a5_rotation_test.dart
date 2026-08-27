@@ -52,9 +52,10 @@ void main() {
       //       ensureCurrent re-plookup — WITHOUT that the revocation does not
       //       hold, since a peer still sealing to the superseded generation
       //       hands the revoked enrollment a key it can open. A joiner approved
-      //       after the rotation gets the current generation and pulls older
-      //       ones on demand. Heavy, O(n)-per-enrollment, DISTINCT from CK
-      //       rotation.
+      //       after the rotation is pushed EVERY generation its approver holds
+      //       for the namespaces it was approved for, with requestSecret as
+      //       the backstop for one the push missed. Heavy,
+      //       O(n)-per-enrollment, DISTINCT from CK rotation.
       provenIn(
         'tests/at_functional_test/test/nskey_rotation_live_test.dart',
         'UC-A5.1(b) · a rotation publishes a successor',
@@ -66,6 +67,24 @@ void main() {
             'unexcluded control arm), and retains the superseded private so '
             'records sealed to it still open.',
       );
+      provenIn(
+        'packages/at_client/test/nskey_self_heal_test.dart',
+        'is pushed EVERY generation its approver holds, not just the live one',
+        proves: 'the late-joiner clause, which said "the current generation '
+            'only" until 2026-08-27 and which the approval path has never '
+            'done. `conveyHeldPrivatesTo` reads every held generation for the '
+            'approved namespaces and conveys each under its own nskeyKid, '
+            'which is what a retained conveyance names — so retained history '
+            'opens without a pull round trip. Two DISTINCT generations are '
+            'asserted distinct first, or "both were sent" is satisfied by '
+            'one. Its pair, "a namespace the joiner was not approved for is '
+            'not conveyed", is what keeps "every" bounded by the approval '
+            'rather than by what the keyfile happens to hold. Mutation-proven '
+            'twice: conveying only the first generation reddens the count, '
+            'and dropping the approval filter reddens the pair',
+        clauses: ['pushed **every generation its approver holds**'],
+      );
+
       // The sender-side half — a peer re-plookups and cuts a fresh CK when the
       // advertised nskeyKid changes — is `ensureCurrent`'s rotation check,
       // covered by ck_manager_test.dart's generation tests and exercised live
