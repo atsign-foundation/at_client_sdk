@@ -159,6 +159,18 @@ void main() {
         proves: 'what an app that names nothing gets, pinned as a literal, so '
             'moving the shipped default is an edit to that test and the edit '
             'is the review');
+    provenIn(
+        'packages/at_client/test/pq_posture_test.dart',
+        'disallowLegacyEncryption has no per-preference override',
+        proves: 'the one axis the posture alone moves, which is what this row '
+            'used to deny: the flag is false by default and under pqReady, '
+            'true under pqActive, and naming the other axes explicitly '
+            'alongside pqActive does not move it. There is no constructor '
+            'argument to try, so what is asserted is that no combination of '
+            'the arguments that DO exist changes it',
+        clauses: [
+          'except `disallowLegacyEncryption`, which the posture alone moves'
+        ]);
   });
 
   test('UC-C1.7 · the signing-set axis: which keys an enrollment holds', () {

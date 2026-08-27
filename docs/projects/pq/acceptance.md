@@ -2425,8 +2425,17 @@ on failure.
   retrofits are built from that one preference.
 - **Then:** every axis runs the last stage's values — the pinned columns of the
   `decisions.md` 56.4 table — and each remains individually overridable
+  **except `disallowLegacyEncryption`, which the posture alone moves**
   (UC-C1.1, C1.2, C1.4, C1.5 and C1.7 prove the arms; C1.3 is withdrawn and
-  its axis no longer exists).
+  its axis no longer exists). ⚠️ **This said "each remains individually
+  overridable" until 2026-08-27 and overstated the tree**, which asserts the
+  opposite for that one axis: there is no constructor argument for it, naming
+  the other axes explicitly does not move it, and the posture is the only
+  thing that does. The asymmetry is deliberate
+  ([113](detail/decisions.md#113-pqposture-three-postures-and-the-rollout-they-drive-2026-08-18))
+  — the algorithm lists keep an escape hatch and a safety flag does not,
+  because an override that defeats the flag's purpose is not the same kind of
+  thing as deployment policy.
 
 ⚠️ **This row said "all seven axes" until 2026-08-26, in four places, and the
 number was never re-derived after it stopped being true.** It was correct when
