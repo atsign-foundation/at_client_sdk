@@ -410,6 +410,18 @@ void main() {
         clauses: ['An X-Wing owner therefore receives `ver 0x02` and an '
             'ML-KEM-1024 owner `ver 0x03`'],
       );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'an advertisement missing any required field is refused',
+        proves: 'that an entry with no `alg` is dropped rather than defaulted: '
+            'the loop removes each of use, alg, pub and kid from the entry in '
+            'turn and the reader refuses what is left, with the control — the '
+            'same payload intact — resolving, so the loop fails on the '
+            'removal and not on the fixture. The sibling "an advertisement of '
+            'only unusable entries is refused" covers the algorithm this '
+            'build cannot encapsulate to',
+        clauses: ['an entry with **no `alg`** is **dropped, not defaulted**'],
+      );
     });
   });
 }

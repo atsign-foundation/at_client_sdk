@@ -717,10 +717,15 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     choice; writes route by the destination's advertised algorithm and reads route by the
     id the record already carries, so conveyances written under either keep opening and
     there is no flag day;
-  - an advertisement with **no `alg`** reads as the hybrid — which is what every one
-    published before the field existed was, by construction, since no other KEM existed.
-    One naming an algorithm this build cannot encapsulate to is **refused, not guessed
-    at**;
+  - an entry with **no `alg`** is **dropped, not defaulted**, and an advertisement left
+    with no usable entry is **refused**. One naming an algorithm this build cannot
+    encapsulate to is refused the same way — not guessed at. ⚠️ **This clause said "no
+    `alg` reads as the hybrid — which is what every one published before the field
+    existed was" until 2026-08-27, and asserted the opposite of the tree.** The
+    absent-means-the-old-shape hatch was removed deliberately: `PackageKey.fromJson`
+    returns null unless `alg` is a string, and the reader refuses what is left. The old
+    reasoning only held while advertisements predating the field existed to be read, and
+    nothing PQ is released for one to have come from;
   - the correspondence check on an arriving private re-derives the public half **through
     the advertised KEM** rather than assuming X-Wing. A seed arrives as bare bytes, and 32
     or 64 of them are valid for one KEM or the other, so the bytes alone cannot say which.
