@@ -527,6 +527,14 @@ deleted**, and burying required work under a heading that says otherwise is how
 it gets skipped. Those are marked **BLOCKS THE MAJOR**. The genuinely filed
 items are at the end, under [Actually filed](#actually-filed).
 
+✅ **The three open ones are now ROWS in the PQ plan's `## TODO`** (2026-08-27),
+which is the one list: the at_onboarding_cli harness in **P2**, and the two
+that gate the at_lookup major in **P3**. They were reachable only from
+`~/.claude/` memory before that, so a session reading this repo and applying
+the PQ plan's own "there is ONE list" sentence concluded they were not owed —
+which had already happened once. **What stays here is the evidence**: the
+measurements, the tables and the reasoning the rows summarise and link back to.
+
 ⛔ **Count them by reading, not by grepping the marker — THREE are open.** This
 paragraph said "four", and the fourth (the approver's crypto) has been done
 since 2026-08-19 while its heading went on carrying the marker beside the word
