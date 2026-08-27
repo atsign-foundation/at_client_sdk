@@ -492,12 +492,24 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     re-derives the same kpid after a restart. Filing the 3168-byte expanded decapsulation
     key instead leaves the enrollment unopenable at the next start, with no error at the
     moment the mistake is made.
-- **Then (an existing key keeps its own algorithm):** a client whose keyfile already
-  holds a key package **does not re-mint** under a newly configured KEM. The kpid is the
-  address peers seal to, and moving it takes a deliberate `enroll:update` that no
-  client sends yet, so re-minting would move the client to an address nobody writes
-  to — it would scan for envelopes being sent somewhere else. The mismatch is **logged**, not
-  silently resolved, and the new preference takes effect on the next enrollment.
+- **Then (an existing key keeps its own algorithm, and a new KEM is advertised beside
+  it):** a client whose keyfile already holds a key package **does not re-mint** it under
+  a newly configured KEM. The kpid is the address peers seal to, and moving it would
+  strand every envelope already in flight to the old one. The newly configured KEM is
+  instead **minted and advertised beside** the existing key at the **next client start**,
+  by the `reconcileKeyPackage` startup step, and a sender negotiates to whichever
+  construction both sides can open. The algorithm adopted from the keyfile is logged.
+
+  ⚠️ **Until 2026-08-27 this clause said the change "takes effect on the next
+  enrollment", and that moving the kpid takes "a deliberate `enroll:update` that no
+  client sends yet".** Both were falsified by `reconcileKeyPackage`, which is step 5 of
+  `PqClientBootstrap`'s startup, defaults to enabled, and sends exactly that verb. **Add
+  beside is the ruling** (gkc, 2026-08-27) rather than an accident of what got built:
+  the alternative — treating a configured KEM change as a rotation — moves the address
+  peers seal to, and that is a deliberate operation rather than something a preference
+  edit should trigger at the next start. ⚠️ The step runs inside the **unawaited startup
+  tail**, so a client that exits early abandons it; "at the next client start" means a
+  start that lives long enough.
 - **Then (an unimplemented algorithm fails the mint):** it does not quietly mint the
   other one. This is the only moment an enrollment's encapsulation target can be set
   without the enrollment later sending `enroll:update` for itself.

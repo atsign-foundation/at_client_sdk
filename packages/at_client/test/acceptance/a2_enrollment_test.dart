@@ -177,6 +177,17 @@ void main() {
         clauses: ['an existing key keeps its own algorithm'],
       );
       provenIn(
+        'packages/at_client/test/key_package_minting_test.dart',
+        'a second algorithm is minted, filed and advertised beside the first',
+        proves: 'the other half of the same clause, which the load path '
+            'cannot show: a newly configured KEM is minted and advertised '
+            'BESIDE the existing key rather than replacing it. The key '
+            'already advertised keeps its kid — asserted, because an '
+            'enrollment that gained a key has not moved — and both entries '
+            'come back active, so a sender can negotiate to either',
+        clauses: ['an existing key keeps its own algorithm'],
+      );
+      provenIn(
         'packages/at_client/test/key_package_registration_test.dart',
         'an unimplemented algorithm fails rather than minting something else',
         proves: 'the failing-closed arm — the mint throws rather than quietly '
