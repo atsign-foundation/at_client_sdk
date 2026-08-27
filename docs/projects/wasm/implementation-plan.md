@@ -1,6 +1,7 @@
 # implementation-plan.md — Build sequence & task backlog
 
-**Status:** working execution plan (prescriptive).
+**Status:** working execution plan (prescriptive). Task status as of 2026-08-27,
+against `trunk` at `9d9e5f7d7`.
 **Scope:** the phase sequence and the task backlog for the implementation-neutral
 `AtClient` work, across `at_client_sdk` and `at_server`'s
 `at_persistence_secondary_server`.
@@ -47,19 +48,19 @@ Two sequencing principles:
 ## 1. Dependency graph
 
 ```
-R1 R2 R3 (ratchet, baselined)
+R1 R3 R4 (ratchet — R1/R4 landed, R3 unimplemented; R2 and R5 withdrawn)
   │
   ├──────────────┬───────────────┬──────────────┐
   ▼              ▼               ▼              ▼
-S1..S5        T1..T4          P1..P5         C1..C3
-(cheap,       (transport)     (persistence)  (crypto verify)
- no break)         │               │              │
+S1..S6        T1..T8          P1..P5         C1..C4
+(in review)   (transport)     (persistence)  (crypto verify)
+  │                │               │              │
   │                ▼               ▼              │
   │           at_lookup 4.0.0   web SQLite        │
   │                │               │              │
   └────────────────┴───────┬───────┴──────────────┘
                            ▼
-                     I1..I8 (sweep)
+                    I1..I11 (sweep)
                            │
                            ▼
                     at_client 4.0.0 · at_utils 4.0.0
@@ -86,24 +87,41 @@ parallel. The sweep integrates them.
 
 Advances [`acceptance.md`](acceptance.md) T0. No behaviour change; no break.
 
-- **R1 — Generalise the dependency-tree walk.** Lift
-  `packages/at_auth/test/wasm/dep_tree_test.dart` from the
-  `at_client_sdk-atauth-wasm` worktree into a shared test utility, parameterised by
-  barrel. It already implements the web-resolution walk (`dart.library.io` false,
-  `dart.library.js_interop` true) and a two-way ratchet on the blocked-package set.
-  Apply to `at_client`, `at_lookup`, `at_utils`, `at_chops`. **Baseline against today's
-  violations** so it can be enabled before the sweep is done, and shrink it as each
-  phase lands. → T0.1, T0.2
-- **R2 — No-conditionals gate.** Assert no neutral-package `lib/` file contains
-  `if (dart.library.`. The main tree currently has **zero** anywhere in `packages/`, so
-  this can be turned on immediately, ahead of everything else. → T0.3
-- **R3 — No-throwing-stub gate.** Assert no neutral-package source throws
-  `UnsupportedError` from a platform-capability fallback, with a reasoned allow-list. → T0.4
-- **R4 — Wire R1–R3 into CI.** Add to `.github/workflows/at_libraries.yaml` alongside
-  the existing analyze/test matrix.
-- **R5 — Add the T2 matrix dimension.** `dart test -p node -c dart2wasm` per package,
-  starting allowed-to-fail and flipping to required as each package goes green. Verified
-  working ([`decisions.md`](decisions.md) §2.3); no browser infrastructure needed. → T2
+> **Status: landed, with two tasks withdrawn and one not done.**
+> [#2149](https://github.com/atsign-foundation/at_client_sdk/pull/2149) (2026-08-24) and
+> [#2183](https://github.com/atsign-foundation/at_client_sdk/pull/2183) (2026-08-27).
+> The gate ships as `tools/wasm_shakedown` — a standalone CLI with its own suite, run by
+> the `wasm_shakedown` and `wasm_ratchet` jobs, hard rather than allowed-to-fail. The
+> gated set lives in `.github/wasm_gates.yaml` and holds **`at_chops` and `at_auth`
+> only**: `at_utils`, `at_lookup` and `at_client` own 3, 6 and 7 offenders and are absent
+> deliberately, so a declared gate means "web-safe" and not "here is the backlog". They
+> join with Phases 2 and 4.
+
+- **R1 — Generalise the dependency-tree walk. ✅ Done**, as
+  `tools/wasm_shakedown`. Shipped as a standalone CLI rather than the shared *test*
+  utility this task specified — the walk needed its own tests, and a gate that is itself
+  untested is the thing it is supposed to prevent. It implements the web-resolution walk
+  (`dart.library.io` false, `dart.library.js_interop` true), a one-way baseline per barrel
+  (`allowed_offenders` + `max_blocked_packages`), a `min_files_walked` floor against a
+  stalled walk, and mandatory `controls` that assert the walk still reaches what a barrel
+  exists to quarantine. → T0.1, T0.2
+- **R2 — No-conditionals gate. ⛔ Withdrawn.** at_auth 4.0.0-rc1 ships one deliberate
+  conditional export with both branches real; the gate would have had to allow-list its
+  only subject. Replaced by the audit requirement in
+  [`acceptance.md`](acceptance.md) T0.3 — both branches of a conditional must be walked,
+  the native one by a `control`, which resolves with io semantics. See
+  [`decisions.md`](decisions.md) D-1 as amended, and OQ-1.
+- **R3 — No-throwing-stub gate. ❌ Not done.** `wasm_shakedown` has no such key. D-2 is
+  upheld by review only. Worth landing before Phase 4, where removing the native defaults
+  makes a hand-written stub the tempting substitute — and a stub passes T0.1 cleanly. → T0.4
+- **R4 — Wire R1–R3 into CI. ✅ Done** (R1 only, per the above). Two jobs in
+  `.github/workflows/at_libraries.yaml`: `wasm_shakedown` for the tool's own tests, and
+  `wasm_ratchet` for the gates, which `needs` it so a broken walk reports once rather than
+  as a failure in every gated package.
+- **R5 — Add the T2 matrix dimension. ⛔ Withdrawn.** Not a scheduling deferral: on the
+  hosted runner every suite fails to load before any test body runs, so an
+  allowed-to-fail job would never once have passed. Waits on a pinned Dart/Node pair —
+  [`decisions.md`](decisions.md) §2.7, [`acceptance.md`](acceptance.md) §4. → T2
 
 ---
 
@@ -111,29 +129,51 @@ Advances [`acceptance.md`](acceptance.md) T0. No behaviour change; no break.
 
 Preparation. Changes no public interface, breaks nothing, and shrinks every later diff.
 
-- **S1 — Plumb the at_lookup socket factories.**
+> **Status: all six written, none merged.** Tracked as
+> [#2158](https://github.com/atsign-foundation/at_client_sdk/issues/2158), open as a
+> three-PR stack, each based on the one below it:
+>
+> | PR                                                                    | Base    | Tasks  | State                                                   |
+> | --------------------------------------------------------------------- | ------- | ------ | ------------------------------------------------------- |
+> | [#2162](https://github.com/atsign-foundation/at_client_sdk/pull/2162) | `trunk` | S4–S6  | Ready, checks green, review required                    |
+> | [#2163](https://github.com/atsign-foundation/at_client_sdk/pull/2163) | #2162   | S1, S2 | **Draft.** `functional_tests_at_onboarding_cli` failing |
+> | [#2164](https://github.com/atsign-foundation/at_client_sdk/pull/2164) | #2163   | S3     | **Draft. Conflicting.** `end2end_test_14` failing       |
+>
+> **The gate shrink is already demonstrated.** #2162 takes `dart:io` out of
+> `at_server_status` and tightens at_auth's `max_blocked_packages` from 4 to 3 in the same
+> PR — which is exactly the "T0 shrinks" the phase promises, and the first evidence that
+> the one-way baseline is tightened when convenient rather than ignored.
+>
+> **Scope creep to resolve before merge.** #2163's tip commit moves at_client onto
+> `at_lookup 3.7.0-rc1` and reworks `RemoteSecondary` around its constructor, which is
+> more than S1 and S2 describe. Either it belongs to Phase 2, or S1's scope should be
+> restated to include the uptake — but it should not merge as an unnamed rider on a phase
+> whose whole premise is that it changes no interface.
+
+- **S1 — Plumb the at_lookup socket factories.** ✅ Written, #2163 (draft).
   `at_client/lib/src/client/remote_secondary.dart:44-56` constructs `AtLookupImpl`
   without passing `secureSocketFactory`, `socketListenerFactory` or
   `outboundConnectionFactory`, all of which are constructor params at
   `at_lookup_impl.dart:108-131`. Pass them through. Also make the second, non-injectable
   `RemoteSecondary` construction at `at_client_impl.dart:1225` injectable.
-- **S2 — Plumb `MonitorOutboundConnectionFactory`.** `Monitor` accepts it at
-  `monitor.dart:93`; `NotificationServiceImpl._` (`notification_service_impl.dart:76-84`)
+- **S2 — Plumb `MonitorOutboundConnectionFactory`.** ✅ Written, #2163 (draft).
+  `Monitor` accepts it at `monitor.dart:93`; `NotificationServiceImpl._` (`notification_service_impl.dart:76-84`)
   never passes it, and `create` does not expose it. Expose and pass.
-- **S3 — Plumb the `AtSyncQueue` box seam.** `open({Box<String>? injectedBox})` at
-  `at_sync_queue.dart:116` is not reachable from `AtClientImpl.create`. Make it so —
+- **S3 — Plumb the `AtSyncQueue` box seam.** ✅ Written, #2164 (draft, conflicting).
+  `open({Box<String>? injectedBox})` at `at_sync_queue.dart:116` is not reachable from `AtClientImpl.create`. Make it so —
   this is the intermediate step toward S-token-free storage in P5.
-- **S4 — Delete `sync_isolate_manager.dart`.** `@Deprecated`, `// coverage:ignore-file`,
-  zero references anywhere in `packages/` outside itself, and the only `dart:isolate`
+- **S4 — Delete `sync_isolate_manager.dart`.** ✅ Written, #2162.
+  `@Deprecated`, `// coverage:ignore-file`, zero references anywhere in `packages/`
+  outside itself, and the only `dart:isolate`
   file in any `lib/`. Note T1 would never have flagged it.
-- **S5 — Fix `at_server_status`.** Replace `HttpStatus.found` / `notFound` /
-  `serviceUnavailable` / `internalServerError` / `ok` in
+- **S5 — Fix `at_server_status`.** ✅ Written, #2162.
+  Replace `HttpStatus.found` / `notFound` / `serviceUnavailable` / `internalServerError` / `ok` in
   `at_server_status/lib/src/model/at_status.dart` (eight call sites in
   `_rootHttpStatus()` and `_serverHttpStatus()`) with integer literals or a local
   constant class, then drop the `dart:io` import. **Not the one-line delete the
   predecessor doc described** — [`decisions.md`](decisions.md) §4.
-- **S6 — Move `dart_periphery` to `dev_dependencies:`** in at_chops. FFI-based, used
-  only under `example/`.
+- **S6 — Move `dart_periphery` to `dev_dependencies:`** in at_chops. ✅ Written, #2162.
+  FFI-based, used only under `example/`.
 
 ---
 
@@ -359,16 +399,16 @@ a flat ~25-method surface; that surface is removed, not extended. `AtCollection<
 
 Dependency order, one major per package:
 
-| #   | Package            | Version   | Phase    | Break                                                                           |
-| --- | ------------------ | --------- | -------- | ------------------------------------------------------------------------------- |
-| 1   | `at_chops`         | minor     | C, S6    | none — dependency move only                                                     |
-| 2   | `at_auth`          | **4.0.0** | *PQ S-5* | `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http` |
-| 3   | `at_utils`         | **4.0.0** | I1–I4    | barrel split; native handlers → `at_utils_io.dart`                              |
-| 4   | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped                                 |
-| 5   | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals                                                  |
-| 6   | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected          |
-| 7   | `at_client_web`    | 1.0.0     | W        | new                                                                             |
-| 8   | consumers          | —         | —        | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages  |
+| # | Package            | Version   | Phase    | Break                                                                                                             |
+| - | ------------------ | --------- | -------- | ----------------------------------------------------------------------------------------------------------------- |
+| 1 | `at_chops`         | minor     | C, S6    | none — dependency move only. **3.6.1 on trunk; S6 pending in #2162**                                              |
+| 2 | `at_auth`          | **4.0.0** | *PQ S-5* | `FileAtKeysIo` → `at_auth_io.dart`; default removed; registrar → `package:http`. **✅ 4.0.0-rc1 on trunk (#2179)** |
+| 3 | `at_utils`         | **4.0.0** | I1–I4    | barrel split; native handlers → `at_utils_io.dart`                                                                |
+| 4 | `at_lookup`        | **4.0.0** | T        | `Socket getSocket()` removed; factories retyped. **3.7.0-rc1 on trunk**                                           |
+| 5 | `at_server_status` | minor     | S5       | none — `HttpStatus` → literals. **1.1.2-rc1 on trunk; S5 pending in #2162**                                       |
+| 6 | `at_client`        | **4.0.0** | I        | `File` off the spec; storage backend selectable; connectivity injected                                            |
+| 7 | `at_client_web`    | 1.0.0     | W        | new                                                                                                               |
+| 8 | consumers          | —         | —        | `at_onboarding_cli`, `at_cli_commons`, `at_client_flutter`, both test packages                                    |
 
 **Coordinate step 8 with the PQ program's S-6**, which bumps the same consumers for
 `at_auth ^4.0.0`. Doing them separately means two breaking sweeps through the same
@@ -378,13 +418,15 @@ files.
 
 ## 11. Dependencies on the PQ program
 
-| This project needs                                                                                                                                                  | From                                                                                | Status                                         |
-| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ---------------------------------------------- |
-| `at_auth.dart` free of `dart:io`; `FileAtKeysIo` in `at_auth_io.dart`; the `atKeysIo ??=` default removed; registrar on `package:http`; `_defaultProbeSocket` moved | **PQ S-5** ([`../pq/implementation-plan.md`](../pq/implementation-plan.md):312-326) | Planned, parallel, off the PQ GA critical path |
-| Consumer bumps onto `at_auth ^4.0.0`                                                                                                                                | **PQ S-6** (:328-339)                                                               | Follows S-5                                    |
-| A ruling on conditional-default vs removed-default in at_auth                                                                                                       | OQ-1                                                                                | Open                                           |
+| This project needs                                                                                                                                                  | From                                                                                | Status                                                                                                                                                       |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `at_auth.dart` free of `dart:io`; `FileAtKeysIo` in `at_auth_io.dart`; the `atKeysIo ??=` default removed; registrar on `package:http`; `_defaultProbeSocket` moved | **PQ S-5** ([`../pq/implementation-plan.md`](../pq/implementation-plan.md):312-326) | **✅ Landed** — 4.0.0-rc1, [#2179](https://github.com/atsign-foundation/at_client_sdk/pull/2179), 2026-08-25. `at_auth` is gated in `.github/wasm_gates.yaml` |
+| Consumer bumps onto `at_auth ^4.0.0`                                                                                                                                | **PQ S-6** (:328-339)                                                               | Follows S-5. Still to come; coordinate with ladder step 8                                                                                                    |
+| A ruling on conditional-default vs removed-default in at_auth                                                                                                       | OQ-1                                                                                | **✅ Resolved** 2026-08-27 — removed default *and* one conditional probe. [`decisions.md`](decisions.md) D-1, OQ-1                                            |
 
 This project does **not** touch `at_auth`. The predecessor doc's tasks I4–I8 are
 removed for that reason ([`decisions.md`](decisions.md) §3). If S-5 slips, the sweep
 proceeds without it — `at_auth` simply remains a blocked package in R1's ratchet until
-it lands.
+it lands. It landed, so this contingency is spent: `at_auth` is now a gated package, and
+its four remaining blocked packages (`at_lookup`, `at_utils`, `chalkdart`,
+`at_server_status`) are all inherited and come off as each is ported.
