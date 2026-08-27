@@ -31,6 +31,18 @@ void main() {
             'decapsulate bob\'s CK record with bob\'s nskey private and read',
           ]
       );
+      provenIn(
+        'packages/at_client/test/acceptance/cross_cutting_test.dart',
+        'no RSA in any confidentiality path for a fully-PQ interaction',
+        proves: 'the "PQ end to end" half, which is an absence and so cannot '
+            'be shown by any single successful exchange: the invariant walks '
+            'the confidentiality path of a fully-PQ interaction and finds no '
+            'RSA on it. The live tests either side pin the positive routing — '
+            'the value stamped at/symmetric/AES/GCM and the conveyance to the '
+            'nskey — but neither can say nothing else was reached for',
+        clauses: ['data values `providerId = at/symmetric/AES/GCM`, CK '
+            'conveyances'],
+      );
     });
 
     test('UC-A4.2 · alice to bob where bob has no namespace key, share fails',
@@ -123,6 +135,17 @@ void main() {
         'UC-A4.4: providerId travels on the frame and bob decrypts by it',
         proves:
             'providerId is read off the notification frame bob\'s monitor delivered, and the value decrypts through the nskey route',
+      );
+      provenIn(
+        'packages/at_client/test/acceptance/a3_self_data_test.dart',
+        'UC-A3.4 · self notification carrying an encrypted value',
+        proves: 'the signal-only half of this clause, which the live '
+            'cross-atSign test does not exercise: a notification with no '
+            'value leaves the decrypt count unchanged. The self scenario '
+            'drives the same receive path, so the arm is established there '
+            'rather than duplicated here',
+        clauses: ['is present on the notification frame; signal-only '
+            'notifications are unaffected'],
       );
     });
 

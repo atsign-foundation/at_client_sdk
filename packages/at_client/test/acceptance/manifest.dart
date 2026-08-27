@@ -113,7 +113,7 @@ const liveProofExempt = <String, String>{};
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 89;
+const provenClauseCount = 93;
 
 /// See [provenClauseCount].
 const serverProvenClauseCount = 52;
@@ -254,6 +254,11 @@ final _skip = RegExp(r'skip: (\w+)\)');
 /// of the corpus and reads as though it saw all of it — one reported 62
 /// citations over 18 files where the true figure was 161.
 final _citationPath = RegExp("provenIn\\(\\s*'([^']+)'");
+
+/// A citation of either kind: `provenIn(` with its path, or `provenHere(`
+/// with none. One pattern rather than two passes, so a call's pins can never
+/// be read off the call that follows it.
+final _anyCitation = RegExp("proven(?:In\\(\\s*'([^']+)'|Here\\()");
 
 /// Walk up from the working directory until the catalogue is in reach, so
 /// everything here runs the same from the package root, the workspace root, or
@@ -398,12 +403,16 @@ Map<String, List<SourceCitation>> citationDetailsByUseCase() {
 
       // One slice per call, so a citation's pins cannot be read off the call
       // that follows it.
-      final calls = _citationPath.allMatches(chunk).toList();
+      final calls = _anyCitation.allMatches(chunk).toList();
       for (var j = 0; j < calls.length; j++) {
         final callEnd =
             j + 1 < calls.length ? calls[j + 1].start : chunk.length;
-        list.add(SourceCitation(calls[j].group(1)!,
-            _pinsIn(chunk.substring(calls[j].start, callEnd))));
+        // A `provenHere` names no path because the proof is this file. It is
+        // recorded as this file, which is in-process by construction — an
+        // inline proof runs in at_client's unit suite with no atServer.
+        final path = calls[j].group(1) ?? 'packages/at_client/test/acceptance/$file';
+        list.add(SourceCitation(
+            path, _pinsIn(chunk.substring(calls[j].start, callEnd))));
       }
     }
   }

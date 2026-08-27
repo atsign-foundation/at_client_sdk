@@ -109,6 +109,15 @@ void main() {
       expect(CryptoRuntime.providerIdFor(client, null, atKey: fresh),
           symmetricAesGcmCryptoProviderId,
           reason: 'reads stay universal; writes move forward');
+
+      provenHere(
+        proves: 'both halves above: a value written before the retrofit still '
+            'opens through the legacy provider, and a value written after it '
+            'is stamped with the PQ one. Routing is per value rather than per '
+            'client, which is what stops a retrofit making old data '
+            'unreadable',
+        clauses: ['decrypts via the legacy provider (reads are universal)'],
+      );
     });
 
     test('UC-B5.3 · two enrollments race to create the signing root', () {

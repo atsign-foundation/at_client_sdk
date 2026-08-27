@@ -332,6 +332,15 @@ void main() {
             'same provider routing as a put',
             'on the notification frame',
           ]);
+      provenHere(
+        proves: 'the signal-only arm, asserted above: a notification carrying '
+            'no value leaves the decrypt count unchanged. If it rose, every '
+            'signal notification would be attempting to decrypt nothing — '
+            'which fails quietly rather than loudly, so the count is the only '
+            'thing that shows it',
+        clauses: ['A signal-only notification (no value) needs no decryption '
+            'and is unaffected'],
+      );
     });
 
     test('UC-A3.5 · the nskey advertisement names its KEM and what it opens',

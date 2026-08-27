@@ -140,3 +140,21 @@ List<int> _resolveClauses(List<String> pins) {
   }
   return resolved;
 }
+
+/// Claiming clauses a scenario proves **in its own body**.
+///
+/// Some rows assert inline rather than citing anything: the mechanism is a
+/// transform over a document or a frame, so the whole proof fits in the
+/// scenario. Before this they could pin nothing — [provenIn] takes a path, and
+/// there is no other file to name — which meant the burn-down could never
+/// count them and the clause total was unreachable however complete those
+/// rows were.
+///
+/// An inline proof runs inside `at_client`'s unit suite, so it is in-process
+/// by construction and never counts toward the server-proven column. That is
+/// the honest reading and not a limitation of the recording: there is no
+/// atServer in the loop.
+void provenHere({required String proves, List<String> clauses = const []}) {
+  final pinned = _resolveClauses(clauses);
+  _record('(inline)', Invoker.current?.liveTest.test.name ?? '', proves, pinned);
+}
