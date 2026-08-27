@@ -108,6 +108,33 @@ void main() {
           proves: 'with bob\'s key published, alice\'s write is discovered by '
               'plookup, sealed to bob\'s advertised generation, and bob opens '
               'it with his own private — the post-flip steady state, live');
+      provenIn('tests/at_end2end_test/test/pq/pq_cold_start_recovery_test.dart',
+          'UC-B4.4: the recipient publishing is the whole trigger',
+          proves: 'the clause as written, including the transition itself, '
+              'which the steady-state citation above cannot reach. The sender '
+              'is REFUSED first, so what follows is about a client that has '
+              'already asked and been told no; the recipient then publishes '
+              'and the very next write goes out on the nskey data path, with '
+              'the CK conveyed as its own record — recipientKind nskey, so '
+              'addressed to the namespace rather than a device — carrying the '
+              'generation the recipient actually advertised, and with no '
+              'sealedKey inline. Control: a key ring that never probed sees '
+              'the recipient over the same connection at the same moment, '
+              'separating "they published" from "the sender can see it". '
+              'Mutation-proven four times, one per assertion',
+          clauses: ['the recipient\'s key appearing is the whole trigger']);
+      provenIn('tests/at_end2end_test/test/pq/pq_cold_start_recovery_test.dart',
+          'UC-B4.1: with the fallback opted in, the cold write goes legacy',
+          proves: 'the parenthetical the citation above does not cover — "or '
+              'the fallback, if opted-in". An app that opened the escape hatch '
+              'never sees a refusal, so nothing tells it the recipient has '
+              'arrived and the write simply has to start going out PQ. It '
+              'does, on the first write after the key appears, with the '
+              'control (a second write taken BEFORE the key exists, which '
+              'stays legacy) green — so the flip is the key appearing rather '
+              'than the second write. What the fallback already wrote stays '
+              'legacy',
+          clauses: ['the recipient\'s key appearing is the whole trigger']);
       provenIn('packages/at_client/test/cold_start_test.dart',
           'says yes once the destination has published a key',
           proves: 'that the readiness query answers yes for a destination that '

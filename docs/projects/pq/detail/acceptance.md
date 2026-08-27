@@ -1005,9 +1005,16 @@ gaps** — UC-A3.3 c1, UC-B4.1 c1 and UC-B4.4 c1 shared one cause, a negative
 cache that left a sender blind to a recipient for fifteen minutes after they
 became reachable. The defect, the ruling and the mutation proofs are in
 [the plan](../implementation-plan.md#how-the-negative-cache-falsified-three-clauses).
-What each still owes is narrower than it was: UC-B4.1 c1 the `allowLegacyCryptoFallback`
-leg's record shape, UC-B4.4 c1 the same parenthetical, UC-A3.3 c1 only its third
-arm, that records already written under the fallback stay legacy.
+✅ **Two of the three are now closed** (2026-08-27), both by tests that make the
+transition happen rather than observing a steady state — the sender is refused
+*first*, so what follows is about a client that has already asked and been told
+no. **UC-A3.3 c1** is `nskey_data_path_live_test.dart`'s *a namespace that gains
+a key takes over*; **UC-B4.4 c1** is `pq_cold_start_recovery_test.dart`, cited
+twice because the clause's parenthetical (the opted-in fallback) is a second
+test. ⚠️ **UC-B4.1 c1 is deliberately NOT pinned**: the same two tests establish
+most of it, but nothing anywhere asserts "a PQ self-copy for alice's own scope
+proceeds **independently** either way", and pinning generously is what would make
+135 of 135 worth nothing.
 
 ⚠️ **These are the mapping agents' judgements**, spot-checked at 7 of 91 with
 one over-call found. Verify a row against the test before acting on it; the
@@ -1060,7 +1067,7 @@ virtualenv run, and is therefore also the only route that raises
 **server-proven**.
 
 
-#### Live — 29, each needing a virtualenv run to verify
+#### Live — each needing a virtualenv run to verify
 
 ⚠️ **Some of these rows are the specification defects listed above, not test
 gaps** — read that verdict table first. This one is left whole because a row
@@ -1075,7 +1082,6 @@ These are also the only route that raises **server-proven**.
 | **UC-A2.2** c3 | so revoking E1 cuts every host sharing the copy at once | `nskey_rotation_live_test.dart` |
 | **UC-A2.3** c1 | `alice3` gets `pq_signing_root@alice⁻¹` (root — universal) | `enrollment_namespace_gate_test.dart` |
 | **UC-A3.2** c1 | `alice2` obtains the nskey private and reads | `nskey_seeding_live_test.dart` |
-| **UC-A3.3** c1 | once the namespace's nskey exists every **subsequent** write uses it. Records already written under the fallback stay legacy | `nskey_data_path_live_test.dart` |
 | **UC-A3.4** c3 | Offline `alice2`: … (key still held) | `monitor_reconnect_live_test.dart` |
 | **UC-A4.1** c3 | an unauthorised `@bob` enrollment cannot fetch the ciphertext (server-gated) nor decrypt | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.3** c1 | all of alice's authorised enrollments read the self-copy | `nskey_multi_enrollment_test.dart` |
@@ -1092,7 +1098,6 @@ These are also the only route that raises **server-proven**.
 | **UC-B2.2** c1 | legacy auth survives until `min(now + grace, expiry)` | `retrofit_retirement_e2e_test.dart` |
 | **UC-B4.1** c1 | Two arms are unestablished. (a) "the *first write after bob's key appears* is PQ with no flag to flip" — no test anywhere performs a write… | `nskey_recipient_not_ready_test.dart` |
 | **UC-B4.3** c1 | "which `alice2` cannot read" — nothing establishes that a pre-capability (legacy-only) install FAILS to read a record stamped `at/symmetric… | `nskey_cross_atsign_test.dart` |
-| **UC-B4.4** c1 | "Cold start (**or the fallback, if opted-in**) ends for bob without any action from alice" — the parenthetical arm is unestablished: no tes… | `nskey_cross_atsign_test.dart` |
 | **UC-B5.1** c1 | "`pq_signing_root` is root (no namespace), so it has **no** `enroll:listns` push" — and, within the second arm, "(persists until one answer… | `signing_root_pull_two_enrollments_test.dart` |
 | **UC-B5.6** c1 | "and saying the retry must wait the ttl out — the one thing the caller can act on" (and, in the tail, "logs `severe`") | `nskey_rotation_live_test.dart` |
 | **UC-C1.5** c1 | the two postures resolve into different per-algorithm idempotence pools, which is what tells them apart live | `self_enrollment_retrofit_live_test.dart` |

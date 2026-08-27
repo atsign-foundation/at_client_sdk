@@ -5,6 +5,8 @@
 @Tags(['pq'])
 library;
 
+import 'dart:convert';
+
 import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/concurrent_clients.dart';
@@ -121,14 +123,144 @@ void main() {
             'writer took no action between the refusal and this call except '
             'to try again, which is what an app does');
 
+    final written = await writerClient.get(toRecipient('warm'));
+    expect(written.metadata?.appMetadata?.providerId,
+        symmetricAesGcmCryptoProviderId,
+        reason: 'and it went out on the nskey data path rather than quietly '
+            'downgrading — a legacy write would have "succeeded" too, so the '
+            'assertion above alone does not distinguish the two');
+
+    // The row's shape arms. The CK is conveyed ONCE as its own record rather
+    // than riding inline on the value, which is the whole difference from the
+    // monolithic legacy model.
+    final ckKid = written.metadata?.appMetadata?.additional?['ckKid'];
+    expect(ckKid, isNotNull,
+        reason: 'the value cites a content key it does not carry');
+    expect(written.metadata?.appMetadata?.additional?.containsKey('sealedKey'),
+        isFalse,
+        reason: 'and does not carry it inline: at/symmetric/AES/GCM encrypts '
+            'the data, at/nskey conveys the key, and those are two records');
+
+    // Sync first: `put` is local-first, so the conveyance record exists on the
+    // device before it exists on the atServer, and the lookup below asks the
+    // atServer. Without this the row fails as "does not exist in keystore",
+    // which reads like the conveyance was never written.
+    await E2ESyncService.getInstance()
+        .syncData(writerClient.syncService, atSign: writer);
+
+    // Read off the wire rather than through get(), which decrypts — the writer
+    // cannot open a conveyance sealed to the recipient, correctly. The
+    // metadata is atServer-visible plaintext by design.
+    final metaResponse = await writerClient
+        .getRemoteSecondary()!
+        .executeCommand('llookup:meta:$recipient:$ckKid.__ck.$ns$writer\n',
+            auth: true);
+    expect(metaResponse, isNotNull);
+    final appMetadataRaw = jsonDecode(
+        metaResponse!.replaceFirst('data:', '').trim())['appMetadata'];
+    expect(appMetadataRaw, isNotNull,
+        reason: 'the conveyance must carry its routing metadata on the '
+            'atServer, or no reader can tell what it was sealed to');
+    final envelope = (appMetadataRaw is String
+        ? jsonDecode(utf8.decode(base64Decode(appMetadataRaw)))
+        : appMetadataRaw) as Map<String, dynamic>;
+    expect(envelope['recipientKind'], 'nskey',
+        reason: 'sealed to the NAMESPACE, not to a device — which is what '
+            'lets an enrollment approved later read what came before it');
+    final advertised =
+        await PublishedNskeyKeyRing(writerClient).currentPublic(recipient, ns);
+    expect(envelope['nskeyKid'], advertised!.nskeyKid,
+        reason: 'and to the generation the recipient actually advertised, '
+            'which is the half that says the re-plookup found the current one '
+            'rather than any key at all');
+  }, timeout: Timeout(Duration(minutes: 5)));
+
+  test(
+      'UC-B4.1: with the fallback opted in, the cold write goes legacy and the '
+      'first write after the key appears is PQ', () async {
+    // The clause's parenthetical, and the arm that made both rows read as
+    // specification defects rather than gaps. "Cold start OR THE FALLBACK, IF
+    // OPTED-IN, ends for bob without any action from alice" — an app that
+    // opened the escape hatch never sees a refusal, so nothing tells it the
+    // recipient has arrived. The write simply has to start going out PQ.
+    final ns = 'fallback${DateTime.now().microsecondsSinceEpoch}';
+
+    final clients = await ConcurrentClients.open(
+        writer, recipient, TestConstants.namespace, authType,
+        posture: PqPosture.legacy);
+    addTearDown(clients.close);
+    final writerClient = clients.first;
+    final recipientClient = clients.second;
+
+    final writerRing = PublishedNskeyKeyRing(writerClient);
+    writerClient.getPreferences()!.crypto =
+        CryptoConfig.nskey(keyRing: writerRing);
+    writerClient.getPreferences()!.allowLegacyCryptoFallback = true;
+    addTearDown(
+        () => writerClient.getPreferences()!.allowLegacyCryptoFallback = false);
+    await writerRing.mintAndPublish(ns);
+
+    AtKey toRecipient(String name) => AtKey()
+      ..key = name
+      ..namespace = ns
+      ..sharedWith = recipient
+      ..sharedBy = writer;
+
+    expect(await writerRing.currentPublic(recipient, ns), isNull,
+        reason: 'the premise: the recipient has published nothing here');
+
+    // No refusal — the app opted out of being told. This is also the write
+    // that warms the remembered miss.
+    expect(await writerClient.put(toRecipient('cold'), 'before'), isTrue);
+    final cold = await writerClient.get(toRecipient('cold'));
+    expect(cold.metadata?.appMetadata?.providerId, legacyCryptoProviderId,
+        reason: 'the fallback is legacy and says so on the record — a '
+            'downgrade nobody can see afterwards is the thing being guarded '
+            'against');
+    expect(cold.metadata?.appMetadata?.additional?['ckKid'], isNull,
+        reason: 'and it is the monolithic model: the per-value key rides with '
+            'the value rather than being conveyed as its own record');
+
+    // CONTROL. A second write, still before the recipient publishes, is still
+    // legacy — so the flip below is the key appearing, not the second write.
+    expect(
+        await writerClient.put(toRecipient('control'), 'also before'), isTrue);
+    expect(
+        (await writerClient.get(toRecipient('control')))
+            .metadata
+            ?.appMetadata
+            ?.providerId,
+        legacyCryptoProviderId,
+        reason: 'control: writing again changes nothing on its own');
+
+    final recipientRing = PublishedNskeyKeyRing(recipientClient);
+    recipientClient.getPreferences()!.crypto =
+        CryptoConfig.nskey(keyRing: recipientRing);
+    await recipientRing.mintAndPublish(ns);
+    await E2ESyncService.getInstance()
+        .syncData(recipientClient.syncService, atSign: recipient);
+
+    expect(await writerClient.put(toRecipient('warm'), 'after'), isTrue);
     expect(
         (await writerClient.get(toRecipient('warm')))
             .metadata
             ?.appMetadata
             ?.providerId,
         symmetricAesGcmCryptoProviderId,
-        reason: 'and it went out on the nskey data path rather than quietly '
-            'downgrading — a legacy write would have "succeeded" too, so the '
-            'assertion above alone does not distinguish the two');
+        reason: 'the first write after the recipient\'s key appears is PQ '
+            'with no flag to flip. The app never touched '
+            'allowLegacyCryptoFallback again and saw no refusal to react to, '
+            'so if this stayed legacy it would stay legacy forever without '
+            'anything saying so');
+
+    // And what the fallback already wrote is untouched.
+    expect(
+        (await writerClient.get(toRecipient('cold')))
+            .metadata
+            ?.appMetadata
+            ?.providerId,
+        legacyCryptoProviderId,
+        reason: 'records written under the fallback stay legacy; the flip is '
+            'forward-only and re-encrypting is an explicit migration');
   }, timeout: Timeout(Duration(minutes: 5)));
 }
