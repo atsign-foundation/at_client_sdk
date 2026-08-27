@@ -1120,25 +1120,38 @@ reading the test.
 | **UC-B5.2** | c1 | `b5_edge_cases_test.dart` — UC-B5.2 · reading legacy history after retrofit *(in-process)* |
 | **UC-B5.3** | c1 | `pq_signing_root_test.dart` — losing the mint lock generates nothing and files nothing *(in-process)* |
 
-### Two clauses pinned in the tree that the map calls partial
+### Clauses pinned in the tree that the map calls partial
 
 Pins that predate this mapping, where a clause carries an arm the cited test
 does not reach. Each is a candidate over-claim: the burn-down counts them, so if
 they do not survive review the recorded figure falls.
 
-⚠️ **Nine rows are pinned-and-partial and only these two mean anything.** The
-other seven — UC-G1.2 c1, UC-G1.3 c1, UC-A3.5 c3, UC-A3.5 c4, UC-C1.6 c1,
-UC-A2.5 c5, UC-A2.4 c5 — were closed or corrected on 2026-08-27, so the map's
-PARTIAL verdict for them is a stale snapshot rather than an over-claim. A count
-taken from the map alone would say nine; two is the number that means anything.
+⚠️ **Nine rows are pinned-and-partial and only the one in the table below means
+anything.** Eight — UC-G1.2 c1, UC-G1.3 c1, UC-A3.5 c3, UC-A3.5 c4, UC-C1.6 c1,
+UC-A2.5 c5, UC-A2.4 c5 and UC-G1.1 c2 — were closed or corrected on 2026-08-27,
+so the map's PARTIAL verdict for them is a stale snapshot rather than an
+over-claim. A count taken from the map alone would say nine.
+
+⛔ **The heading above carried the count until 2026-08-27** ("Two clauses pinned
+…"), which put the number in a third home *and* in a linked anchor, so
+correcting it meant editing a pointer in another file. It does not carry one now.
 
 | Clause | The arm the cited test does not reach |
 |---|---|
 | **UC-A2.6** c2 | an enrollment revoked while it holds an already open, already authenticated connection |
-| **UC-G1.1** c2 | on a retrofitted file deliberately the legacy enrollment, not the active typed material's |
 
-⚠️ **UC-G1.1 c2 was reached independently.** Reading that test by hand found
-the same defect before the map was consulted: the no-id `authenticate` it
-compares against runs *before* the retrofit, when the keyfile held no typed
-material, so it cannot discriminate "authentication used the flat field" from
-"the resolver had one candidate". Two instruments, same verdict.
+✅ **UC-G1.1 c2 was the second row here and is closed** (2026-08-27). It was
+reached independently: reading that test by hand found the same defect before
+the map was consulted, and the hand read found it worse than the map did. The
+cited test's fixture is legacy-only, so the resolver answers **null** — which
+makes "authentication read the flat field" and "the resolver had nothing to
+offer" the same observation — and neither of its two assertions calls
+`authenticate` at all; both are about the document. What closed it is a second
+test on a **retrofitted** keyfile, the one shape where both sources answer and
+they differ (flat `legacy-1`, resolver `new-123`), asserting on the id that
+reached `PkamAuthenticator`. Mutation-proven with its control kept **separate**:
+making `authenticate` consult the resolver reddens the assertion quoting its own
+reason and leaves the explicit-id test green (`+1 -1`). ⚠️ **As two assertions
+in one body the control could not have shown that** — the second never runs once
+the first fails, so a control after the assertion it guards is untested by
+construction.

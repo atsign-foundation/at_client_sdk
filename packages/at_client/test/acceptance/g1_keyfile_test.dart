@@ -32,11 +32,24 @@ void main() {
             'against',
         clauses: ['with none it returns null']);
     provenIn('packages/at_auth/test/at_auth_test.dart',
-        'with no enrollment id supplied, the FLAT stored one is used',
-        proves: 'the second clause, and the one the row got backwards: the '
-            'resolver is not what authentication falls back to. The fixture '
-            'is legacy-only, so the resolver returns null while the stored id '
-            'is real — which is what makes the assertion discriminate',
+        'on a RETROFITTED keyfile a no-id request authenticates as the LEGACY',
+        proves: 'the second clause AS WRITTEN, on the retrofitted file it '
+            'names. It retrofits a legacy keyfile for real, checks the '
+            'premise that the two sources then give different non-null '
+            'answers (flat legacy-1, resolver new-123), calls '
+            'AtAuthImpl.authenticate with no enrollment id, and asserts on '
+            'the id that reached PkamAuthenticator — legacy-1. '
+            'Mutation-proven: making authenticate consult the resolver '
+            'reddens it quoting this reason, while the separate '
+            'explicitly-supplied-id test stays green, so the control is not '
+            'entangled with the property under test. ⚠️ This cited "with no '
+            'enrollment id supplied, the FLAT stored one is used" until '
+            '2026-08-27, saying its legacy-only fixture "is what makes the '
+            'assertion discriminate". It is the opposite: with the resolver '
+            'answering null there, "authentication read the flat field" and '
+            '"the resolver had nothing to offer" are the same observation — '
+            'and that test never calls authenticate at all, asserting only '
+            'two properties of the document',
         clauses: ['authentication does **not** apply it']);
   });
 
