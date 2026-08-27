@@ -69,6 +69,17 @@ void main() {
         'only one enrollment may hold an active authentication key',
         proves: 'the contrast arm, without which the first assertion is '
             'satisfied by invariants that refuse nothing');
+    provenIn('packages/at_auth/test/at_keys_test.dart',
+        'a retired key does not free its keyId for reuse',
+        proves: 'that the id check is status-blind while the slot check is '
+            'not: after retiring, a replacement under the SAME keyId is still '
+            'refused, and the same add under a new id is accepted as the '
+            'control. Mutation-proven — making the id check skip retired '
+            'material reddens it, quoting this assertion. Without it '
+            '"retirement frees the slot" reads as though it freed the '
+            'identifier too',
+        clauses: ['A replacement re-using the retired key\'s keyId is still '
+            'refused — that check is status-blind']);
   });
 
   test('UC-G1.4 · opening a legacy keyfile does not upgrade it', () {

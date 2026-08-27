@@ -847,6 +847,36 @@ void main() {
       expect(atKeys.resolveAuthenticatingEnrollment(), 'E1');
     });
 
+    test('a retired key does not free its keyId for reuse', () {
+      // The invariants are status-AWARE about the slot — that is what the
+      // test above establishes — and status-BLIND about the id. Retiring is
+      // what lets a replacement exist; it is not what lets it take the old
+      // name. Without this, "retirement frees the slot" reads as though it
+      // freed the identifier too.
+      final atKeys = AtKeys(
+          atsign: '@alice'.toAtsign(),
+          keysList: [authKey('auth:rsa2048:1', enrollmentId: 'E1')]);
+
+      atKeys.retireKey('E1', 'auth:rsa2048:1');
+
+      expect(() => atKeys.addKey(authKey('auth:rsa2048:1', enrollmentId: 'E1')),
+          throwsArgumentError,
+          reason: 'a replacement re-using the retired keyId must still be '
+              'refused: identity is (enrollment, keyId), so a document '
+              'holding two materials under one has no way to say which a '
+              'reader means');
+
+      // The control, without which the refusal above could be about the
+      // retire rather than the id: the same add under a NEW id is accepted.
+      atKeys.addKey(authKey('auth:rsa2048:2', enrollmentId: 'E1'));
+      expect(
+          atKeys
+              .getKey('E1', 'auth:rsa2048:2',
+                  CryptographicMaterialRole.privateAuthentication)!
+              .status,
+          CryptographicMaterialStatus.active);
+    });
+
     test('only one enrollment may hold an active authentication key', () {
       final atKeys = AtKeys(
           atsign: '@alice'.toAtsign(),
