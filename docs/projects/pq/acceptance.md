@@ -487,12 +487,26 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Given:** `@alice` pq-native; `alice1` (E1, `*`) approves `alice3` for namespace `app_1.my_apps` only (E3).
 - **When:** `alice3` enrolls (as A2.1).
-- **Then:** `alice3` gets `pq_signing_root@alice⁻¹` (root — universal) and, by
-  **approval-time push** (sealed to E3's key package via `__ssenv`), only `nskey⁻¹`
+- **Then:** `alice3` gets **no** `pq_signing_root@alice⁻¹`, and by
+  **approval-time push** (sealed to E3's key package via `__ssenv`) only `nskey⁻¹`
   for the granted `app_1.my_apps`; the `app_2.my_apps` nskey is never delivered. The
   boundary is enforced at the atServer `__ssenv` namespace-delivery gate (it will not
   deliver an `…__ssenv.app_2.my_apps` key to an enrollment lacking `r` on it), not by
   a client-side refusal alone. `alice3` can read/write `app_1.my_apps` but not `app_2.my_apps`.
+
+  ⚠️ **This read "`alice3` gets `pq_signing_root@alice⁻¹` (root — universal)" until
+  2026-08-27, and the tree says the opposite on both routes to that key.** The
+  approval-time conveyance is gated on `isFullyPrivileged`
+  (`envelope_enrollment_conveyance.dart`), whose comment gives the reason — the root
+  vouches for every enrollment on the atSign, and a namespace-scoped one has no
+  business holding it. The pull is gated the same way
+  (`PqSigningRoot.requestPrivateIfAbsent`), and its dartdoc states it as a security
+  property: asking would be refused, and asking anyway would tell every holder that
+  something unentitled is looking for it. **"Universal" was the wrong word for a key
+  that is universal in what it VOUCHES FOR, not in who holds it.** A scoped
+  enrollment verifies against the root's public half, which is published; it never
+  holds the private. See also [UC-B1.3](#83-uc-b13--third-client-different-enrollment-alice3-e2),
+  which stated the same thing from the requesting side.
 - **Cross-ref:** `decisions.md` ([Decision #4](detail/decisions.md#numbered-rulings-14) push-at-approve + pull backstop);
   `design.md` (the substrate enroll flow, `__ssenv` envelope, `shareAllSecretsWithEnrollment`).
 
@@ -1150,7 +1164,10 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 - **Then:**
   - `alice1.APKAM = pq` on the fresh auto-approved enrollment; PQ auth works.
   - `public:pq_signing_root@alice` created; `alice1.root⁻¹ = ✓`; `alice1` serves the private to other fully privileged enrollments on request.
-  - The legacy enrollment is **capped** to `min(now + grace, expiry)` and ages out — **not** deleted-by-key.
+  - The legacy enrollment is **capped** to `min(now + grace, its own remaining lifetime)`
+    and ages out — **not** deleted-by-key. The cap is **re-applied on every self-enrollment**,
+    so `now` is the latest retrofit rather than the first; see
+    [UC-B2.2](#92-uc-b22--grace-period-variant), where that is what the row turns on.
   - Legacy *encryption* key retained (history still readable). No re-onboarding.
 
 ### 8.2 UC-B1.2 — Second install on a copied keyfile (`alice1c`)
@@ -1168,8 +1185,14 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
 - **Given:** after B1.1; `alice3` on E2 (its own legacy RSA APKAM); `pq_signing_root` exists.
 - **When:** `alice3` runs the retrofit.
 - **Then:** identical to B1.2 for the bootstrap (mints its own PQ APKAM keypair + key
-  package, self-spawns a fresh auto-approved enrollment, requests root
-  `pq_signing_root@alice⁻¹`). The distinction appears only for **namespaced** secrets — a
+  package, self-spawns a fresh auto-approved enrollment) **except that a scoped E2 does
+  not request the root at all** — `PqSigningRoot.requestPrivateIfAbsent` returns without
+  asking when the enrollment is not fully privileged, logging that it is not entitled to
+  hold it. ⚠️ **This said it "requests root `pq_signing_root@alice⁻¹`" and that the
+  distinction appears "only for namespaced secrets", until 2026-08-27; both were false,
+  and the same sentence in [UC-A2.3](#33-uc-a23--namespace-restricted-enrollment) was
+  corrected in the same commit.** The root is the first distinction, not an exception to
+  it. The rest still holds: for **namespaced** secrets — a
   restricted E2 receives only its authorised subset of `nskey` keys.
 
 ⚠️ **That last clause is stated here and established by nothing.** The row's
@@ -1289,11 +1312,26 @@ stopping a widening.
 
 ### 9.2 UC-B2.2 — Grace-period variant
 
-- **Given:** deployment configured a server-config grace; the cap **is** the grace window.
-- **When:** `alice1` retrofits.
-- **Then:** legacy auth survives until `min(now + grace, expiry)`; sibling clones may
-  still retrofit (each to its own fresh enrollment) until the cap elapses; after the cap,
-  UC-B2.1 applies. (Bypass open during the window — explicit trade-off.)
+- **Given:** deployment configured a server-config grace.
+- **When:** `alice1` retrofits, and later a sibling clone of the same pre-PQ keyfile does.
+- **Then:** legacy auth survives until `min(now + grace, its own remaining lifetime)`,
+  where **`now` is the most recent retrofit** — the cap **re-arms** on each one. Sibling
+  clones may still retrofit (each to its own fresh enrollment) for as long as legacy auth
+  holds; once it lapses, UC-B2.1 applies. **So the bypass window is not a fixed deadline:
+  each sibling that retrofits extends it by a full grace period**, and a deployment with
+  laggard devices keeps it open as long as they keep arriving.
+
+  ⚠️ **This said the cap "is the grace window" and that clones may retrofit "until the cap
+  elapses" — a fixed deadline set by the first sibling — until 2026-08-27.** Read from
+  at_server `origin/trunk` rather than from a sibling checkout on its own branch:
+  `_capEnrollmentExpiry` writes a *full* grace from now on every self-enrollment and mins
+  it only against `apkamKeysExpiryDuration` re-derived from the record's `createdAt`,
+  never against the cap a previous sibling wrote. Its dartdoc says why, and the reason is
+  good: a deadline fixed by the first sibling's upgrade would strand every laggard whose
+  next run fell outside that window. **The behaviour is deliberate and the row's account
+  of it was wrong**; what the row understated is the consequence, which is that
+  "(Bypass open during the window — explicit trade-off)" describes a window with no fixed
+  end.
 
 - **Cross-ref:** `decisions.md` (retirement ruling); `design.md` (expiry copy/cap).
 - **Impl/verify:** **RF-SRV** + **RF-2c**. **Both green 2026-08-05** —
