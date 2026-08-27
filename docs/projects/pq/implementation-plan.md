@@ -149,6 +149,29 @@ record working. Do not "tidy" one to match the other.
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
 | **an enrolment could race itself and publish two namespace keys** | ✅ **FIXED 2026-08-27** (`9b51265a5`), recorded because the shape recurs. **Found by the at_talk demo session**, live: `@alpha` published two advertisements **7.5ms apart** with different key material, the second overwriting the first, both conveyed — a peer fetching in that window holds a generation whose private the owner may have replaced. **The cause:** the wire lock's value is the enrolment id, an *identity* rather than an *instance*, so a second concurrent mint by the same enrolment is refused the lock, reads it back, sees its own id, concludes it holds it, and mints. `ownLockIsNotContention` was built so an enrolment re-entering its own **cooldown** adopts; it also admitted this. ⛔ **Deliberately NOT fixed with a per-instance wire token** — the winner never releases the lock, the ttl does, so a client restarting inside the two-minute cooldown meets its own lock and must adopt; a per-instance token would make it refuse to mint for the rest of the ttl, and an ordinary restart falls inside that window. `MintLock` now keeps an **in-flight map keyed by lock record**: the second caller waits, then declines to its ordinary re-read-and-adopt path. ⚠️ **Two lessons worth more than the fix.** (1) The claim it falsified was in a shipped dartdoc and CHANGELOG — *"safe to call while the startup step is running… the loser adopts"* — corrected before the fix was written. (2) The test that should have caught it, `ensure_reachable_live_test.dart`, calls `stop()` **before** `ensureReachable`, so the two never race: **a probe that has to disable the very thing the claim is about in order to run at all** (at_talk's phrasing, and a better tell than the fan-out one). | Nothing |
 
+✅ **Confirmed live by the reporting session, 2026-08-27, on the pinned fix**
+(`9b51265a5`), and the confirmation is worth more than the count:
+
+| | unfixed | fixed |
+| --- | ---: | ---: |
+| advertisement writes for one atSign | **2** (different kids, 7.5ms apart) | **1** |
+| `_nskeylock` write attempts | **2** (second refused `AT0032`) | **1** |
+
+The second lock attempt is gone entirely — the loser never reaches the wire,
+which is a better outcome than one advertisement.
+
+⚠️ **A 1 on its own would have been a claim about timing, not about the fix**,
+so they proved the race *occurred*: the in-flight log line captured with a
+negative control (50 INFO lines in that run) and a positive control (the line
+itself). ⛔ **Their first attempt nearly reported "the race did not occur"** —
+they grepped a log that carried **zero** INFO lines because `at_talk` pins
+`AtSignLogger.root_level = 'SHOUT'`. A filtered stream, and the absence was a
+fact about the log level. Re-run with `-v` on a second fresh environment.
+
+**Scope, stated by them and kept here:** one observation per arm. It bounds no
+rate, and "the race occurred in the run I have the log line for" is the whole
+claim.
+
 ### P1 — must do before D1 closes
 
 | Item | What is owed | Blocked on |
