@@ -94,6 +94,16 @@ abstract class AtClient {
   /// enrollment cannot hold a key for. Read
   /// [AtReachabilityResult.isReachable] rather than comparing the outcome.
   ///
+  /// ⛔ **The process may exit the moment this returns
+  /// [AtReachability.published] — nothing is left in flight.** That is the
+  /// whole point, given what it exists to fix. The advertisement is written
+  /// straight to the atServer with an awaited remote write, deliberately not a
+  /// local-first put that would leave it unpublished until the next sync, so
+  /// when this returns, a peer's `plookup` finds it. Conveying the private
+  /// half to this atSign's *other* enrollments is awaited too, and a failure
+  /// there is logged rather than fatal: those enrollments pull at their next
+  /// start, and it does not affect whether peers can seal here.
+  ///
   /// [timeout] bounds the whole operation, which may take several round
   /// trips. On [AtReachability.timedOut] nothing is known about whether the
   /// work eventually lands.
