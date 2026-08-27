@@ -62,6 +62,27 @@ void main() {
               'covers both: a notification an old install cannot decrypt is '
               'as lost as a record it cannot read');
 
+      provenIn(
+        'packages/at_client/test/crypto_era_default_test.dart',
+        'a NOTIFICATION at the era default reaches the legacy provider too',
+        proves: 'the "applies to put and notify alike" half. The two '
+            'assertions above are `providerIdFor` asked twice under two key '
+            'names — the same call answered the same way, which is a claim '
+            'about put restated rather than anything about notify. The notify '
+            'entry point has its own refusal check and its own stamp, so that '
+            'test drives it: put and notify both reach the LEGACY provider '
+            '(read off its call count, not inferred), the post-quantum '
+            'provider is registered and reached zero times, and the '
+            'notification is stamped legacy so a sibling on the previous '
+            'build reads it by the id it already knows. It is also the arm '
+            'saying the capability stage does NOT refuse the notification — '
+            'the pqActive contrast is in disallow_legacy_encryption_test.dart, '
+            'where the identical call is refused. Mutation-proven twice: '
+            'routing notify away from the put decision reddens the first, and '
+            'dropping the stamp reddens the last',
+        clauses: ['Applies to **put and notify** alike'],
+      );
+
       // The "reads PQ" half, stated as the registered set rather than assumed:
       // both PQ providers resolve, so a record arriving stamped with either id
       // routes. The decrypt itself is proven by the data-path suites.

@@ -963,7 +963,7 @@ recorded counts drift from the tree.
 
 ### The partial clauses — objective 1's remaining work
 
-**33 clauses**, each one a test already exercises that does **not**
+**32 clauses**, each one a test already exercises that does **not**
 establish the clause as written. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 
@@ -982,17 +982,11 @@ clause in `acceptance.md` before writing its test — a test written to the
 quotation here would be written to a superseded specification, which is the
 exact failure the sweep exists to prevent. The rows are still the right work.
 
-⚠️ **Two rows below were examined on 2026-08-27 and deliberately left**, so
-nobody re-derives the same answer:
+⚠️ **One row below was examined on 2026-08-27 and deliberately left**, so
+nobody re-derives the same answer. (`UC-B3.1` c1 was the other, and it is now
+closed — the capability-stage notification it wanted is in
+`crypto_era_default_test.dart`.)
 
-- **UC-B3.1 c1** — "applies to put and notify alike". The symmetry IS proven, by
-  the pair `a write that reaches encryption still routed to legacy` and `a
-  notification that reaches encryption routed to legacy` in
-  `disallow_legacy_encryption_test.dart` — but both run at **pqActive**, where
-  the outcome is a refusal. This row is about **pqReady** writing legacy, so what
-  is owed is a capability-stage notification asserted to route to the legacy
-  provider and NOT be refused. Both paths go through `CryptoRuntime`
-  (`notification_service_impl.dart:674`), so the arm is true by construction.
 - **UC-G1.9 c1** — "new envelopes carry no signature of it". The cited test
   asserts the held key SET (`heldKeyIds()` after a retirement), which is a proxy:
   it shows what the client could sign with, not what a composed envelope carries.
@@ -1017,17 +1011,16 @@ nothing when asked for the root's *own* algorithm, which is what isolates
 `use: enc` as the reason rather than letting two conditions cover for each
 other.
 
-**The standard a closed clause meets**, set by the four closed on 2026-08-27:
+**The standard a closed clause meets**, set by the five closed on 2026-08-27:
 write the missing arm *with a control*, then **mutate the production code and
 confirm the failure quotes your own assertion's reason**, revert, and pin. A
 green test that has not been shown to discriminate proves nothing.
 
-#### In-process — 4 closable with no virtualenv
+#### In-process — 3 closable with no virtualenv
 
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
 | **UC-A5.1** c3 | "an enrollment approved *after* the rotation is pushed the current generation only" and "...and opens it" — no test enrols a joiner after a… | `nskey_self_heal_test.dart` |
-| **UC-B3.1** c1 | "(Applies to **put and notify** alike; a notification an old install cannot decrypt is as lost as a record it cannot read.)" — nothing anyw… | `b3_mixed_intra_test.dart` |
 | **UC-B5.7** c1 | "The holder carries a lease stamped *before* the take goes out — so \"unspent by my clock\" implies the atServer has not expired it either,… | `nskey_minting_test.dart` |
 | **UC-G1.9** c1 | new envelopes carry no signature of it | `signing_key_minting_test.dart` |
 

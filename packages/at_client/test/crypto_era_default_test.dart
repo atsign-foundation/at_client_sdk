@@ -37,6 +37,52 @@ void main() {
             'cannot resolve it fails on data already sent to it');
   });
 
+  test('a NOTIFICATION at the era default reaches the legacy provider too',
+      () async {
+    // UC-B3.1 says the capability stage writes legacy and adds "(applies to
+    // put and notify alike)". Every arm asserting that asked
+    // `providerIdFor` twice under two key names, which is the same call
+    // answered the same way — a claim about put, restated. The notify entry
+    // point has its own refusal check and its own stamp, so this drives it.
+    //
+    // The pqActive contrast is in `disallow_legacy_encryption_test.dart`,
+    // where the identical notification is REFUSED. This is the arm that says
+    // the capability stage does not refuse it — which is the whole reason the
+    // capability build is safe to roll out everywhere first.
+    final legacy = _Recorder(legacyCryptoProviderId);
+    final pq = _Recorder(symmetricAesGcmCryptoProviderId);
+    client.getPreferences().crypto = CryptoConfig(
+        defaultProviderId: legacyCryptoProviderId, providers: [legacy, pq]);
+
+    final notified = AtKey()..metadata = Metadata();
+    final put = AtKey()..metadata = Metadata();
+
+    final runtime = CryptoRuntime(client);
+    expect(await runtime.encryptForNotification(notified, 'hi'),
+        '${legacyCryptoProviderId} encrypted hi',
+        reason: 'the notification was encrypted rather than refused — the '
+            'refusal is pqActive\'s, and a capability build that refused '
+            'here could not be rolled out ahead of the active one');
+    expect(await runtime.encryptForPut(put, 'hi'),
+        '${legacyCryptoProviderId} encrypted hi');
+
+    expect(legacy.encryptCalls, 2,
+        reason: 'BOTH paths reached the legacy provider — put and notify '
+            'alike, which is what the row claims and what asking '
+            'providerIdFor twice cannot show');
+    expect(pq.encryptCalls, 0,
+        reason: 'the control: the post-quantum provider is registered and '
+            'resolvable here, so routing legacy is a decision and not the '
+            'absence of an alternative');
+    expect(notified.metadata.appMetadata?.providerId, legacyCryptoProviderId,
+        reason: 'and the notification is STAMPED legacy, so a sibling install '
+            'on the previous build reads it by the id it already knows');
+    expect(notified.metadata.appMetadata?.providerId,
+        put.metadata.appMetadata?.providerId,
+        reason: 'the two paths stamp the same thing; a notification an old '
+            'install cannot decrypt is as lost as a record it cannot read');
+  });
+
   test('the untouched preference holds the eraDefault marker', () {
     expect(
         client.getPreferences().crypto, same(const CryptoConfig.eraDefault()),
@@ -125,4 +171,29 @@ void main() {
         reason: 'the two factories differ only in the write default, and that '
             'difference is the whole 3.x-to-4.x step');
   });
+}
+
+/// Records which provider a path reached, so the routing decision can be read
+/// off the call counts rather than inferred from a provider id resolved in
+/// isolation.
+class _Recorder extends CryptoProvider {
+  @override
+  final String id;
+  int encryptCalls = 0;
+
+  _Recorder(this.id);
+
+  @override
+  Future<String> encrypt(
+      CryptoContext context, AtKey atKey, String value) async {
+    encryptCalls++;
+    atKey.metadata.appMetadata = AppMetadata(providerId: id);
+    atKey.metadata.isEncrypted = true;
+    return '$id encrypted $value';
+  }
+
+  @override
+  Future<String> decrypt(
+          CryptoContext context, AtKey atKey, String value) async =>
+      '$id decrypted $value';
 }
