@@ -165,7 +165,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [105] | The nskey mint elects a winner                                                              | 2026-08-16 | LIVE                      |
 | [106] | A notification that outruns its key is dropped, not parked                                  | 2026-08-16 | AMENDED 2026-08-17        |
 | [107] | A `local:` record is not encrypted, and the legacy refusal exempts it                       | 2026-08-17 | AMENDED 2026-08-17        |
-| [108] | The signing rollout swaps algorithms; it never overlaps them                                | 2026-08-18 | LIVE                      |
+| [108] | The signing rollout swaps algorithms; it never overlaps them                                | 2026-08-18 | AMENDED 2026-08-27        |
 | [109] | at_chops 3.6.0 stays a minor; no major bump for this release                                | 2026-08-18 | AMENDED 2026-08-18        |
 | [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | AMENDED 2026-08-20        |
 | [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
@@ -176,6 +176,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [116] | Proposals rejected on evidence                                                              | 2026-08-23 | LIVE                      |
 | [117] | Measurements that closed a question                                                         | 2026-08-23 | LIVE                      |
 | [118] | The retrofit cap is armed by the child, not by the retrofit                                  | 2026-08-27 | LIVE                      |
+| [119] | Crypto agility: each advertisement adds, and the signer chooses                              | 2026-08-27 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -296,3 +297,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [116]: detail/decisions.md#116-proposals-rejected-on-evidence-2026-08-23
 [117]: detail/decisions.md#117-measurements-that-closed-a-question-2026-08-23
 [118]: detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27
+[119]: detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27

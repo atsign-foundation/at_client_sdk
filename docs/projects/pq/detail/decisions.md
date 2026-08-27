@@ -10568,6 +10568,16 @@ multi-signature writer stays a capability an application opts into by passing
 an explicit two-member `AtClientPreference.dataSigningKeyAlgorithms`, which the
 constructor accepts; it is not a position on the ladder.
 
+⚠️ **AMENDED 2026-08-27 by
+[119](#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27):
+this is TRANSITION-SPECIFIC, not a general rule.** The safety argument below
+holds because every build in this tree knows both `rsa2048` and `mldsa65`. It
+would not hold of an algorithm that arrives later, whose verifier gap is real —
+and a transition with a verifier gap gets an overlap. Which of the two a
+deployment takes is the developer's choice, through
+`AtClientPreference.dataSigningKeyAlgorithms`: sign twice for one release, or
+stage the rollouts carefully. The SDK provides the hook, not the policy.
+
 **Why a swap is safe where an overlap would be needed.** The staging exists so
 a build never *writes* something the fleet cannot *read*, and reading is not
 staged: this tree's verifier is ungated, so a client sitting at `rollout1` —
@@ -12059,3 +12069,123 @@ Two adjacent items are **not** part of it and are plan rows instead. The upgrade
 guide, because a document can never be a THEN clause. And **carrying the record's
 expiry on the enroll responses that return details, which gkc banded post-D1 on
 2026-08-27: it does not gate D1**, so it must not appear in the catalogue.
+
+## 119. Crypto agility: each advertisement adds, and the signer chooses (2026-08-27)
+
+**In brief:** *the nskey stops being the exception; `_apsk`'s swap is
+transition-specific; key packages already did it*
+
+**The property, as gkc states it.** All three advertisements — enrollment key
+packages, nskeys and `_apsk` — converged on an array so that an algorithm
+upgrade is an **ADD by the advertiser**. Nobody coordinates a flag day; apps
+upgrade through successive rollouts and the wire moves when both ends happen to
+be ready.
+
+**Why it is worth building rather than merely tidy: the rollout count.** With a
+singular advertisement, a deployment moving from one algorithm to another needs
+two releases — one that can *read* the new algorithm, and a later one that
+switches to it. The second cannot ship until every peer has the first, and the
+peers are other people's apps, so **nothing tells the developer when that is**.
+It is not two rollouts; it is two rollouts separated by an unbounded wait with no
+signal. With an array there is one: the new build advertises both, an old peer
+goes on picking the entry it understands, and a new peer prefers the new one the
+moment it sees it.
+
+**The asymmetry that makes the signature case different, and it is the whole of
+why this is three rulings rather than one.** For **encryption** the *sender*
+picks from the recipient's advertised set, so an advertiser offering two costs
+nothing at send time and each peer takes what it understands. For a **signature**
+the *signer* picks and the verifier must cope with whatever arrives, so an
+advertisement offering two protects no verifier that lacks the algorithm used.
+The only cover across a verifier gap is a plural **signature**, which costs every
+envelope twice.
+
+### 1. Enrollment key packages — nothing to rule, nothing to build
+
+`KeyPackageMinting` mints across the whole
+`AtClientPreference.keyEstablishmentAlgorithms` list, and `reconcileKeyPackage`
+adds one at the next start after a preference edit, with no rotation. Proven live
+by `key_package_amendment_live_test.dart`: a package created with one key gains a
+second, **the original kid stays `active`**, `suites` widens, and an envelope
+already sealed to the old kid still opens. What is owed here is coverage — the
+rest of the matrix and the self→self direction — not a decision.
+
+### 2. The nskey — a generation, holding a key for every configured algorithm
+
+`PublishedNskeyKeyRing._prepareMint` takes `keyEstablishmentAlgorithms.first`,
+and the code says why: *"an nskey is one key"*. **That is now wrong in one
+respect only.** A namespace key is still a **generation** — rotation is still
+what retires one and still what carries revocation — but a generation holds a key
+per configured algorithm.
+
+Three things make it cheaper than it looks, each read rather than assumed:
+
+- **The reader already does its half.** `NskeyAdvertisement.usableFor` walks
+  `keys[]`, and `fromPayload` skips malformed entries deliberately — *"a newer
+  writer may advertise entries spelled with fields this version does not know"*.
+- **The shape is already supported and documented as intended.**
+  `NskeyAdvertisement.single`'s dartdoc: the list *"exists so that an atSign can
+  advertise a second algorithm's key beside the first, not because it usually
+  does"*. Only the mint is singular.
+- **The generation already has a name that is not a key's kid.** `createdAt` is a
+  **mandatory** wire field — `fromPayload` throws *"carries no mint time"*
+  without it — so no format change is needed.
+
+**The order is part of the ruling.** The identity move comes first, and is safe
+alone because one key is one kid today, so the two comparisons agree:
+
+1. **`CkManager.ensureCurrent` compares GENERATIONS, not kids.** Today it returns
+   early when `cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid`, with
+   `_resumeCurrent` and `_cutAndConvey` keyed the same way. `ResolvedNskey`'s
+   `nskeyKid` is **preference-narrowed** — built from
+   `hit.usableFor(sealsToKeyAlgorithms)` — so with two keys one generation would
+   answer to a different kid depending on which algorithm the *asking* client
+   prefers. ⛔ **That comparison is also how a peer learns of a rotation**:
+   `ensureCurrent`'s dartdoc says the re-fetch is *"the only way it learns"*,
+   because a sender never sees a recipient's decapsulation fail. Left on the kid,
+   revocation and algorithm choice become the same event. Moved onto the
+   generation the signal is strictly better, because a generation id cannot move
+   for an algorithm reason.
+2. **`_prepareMint` mints the whole configured list.** Its keygen-and-sign hoist
+   before the lock is the right place and stays; it becomes N keygens in that
+   pre-lock window. One signature covers the document however many entries, and
+   the mint lock is per `(owner, namespace)` regardless.
+3. **Conveyance carries EVERY private in the generation to every authorised
+   enrollment.** The alternative — conveying only what the receiving enrollment
+   can currently use — creates a state nothing has a trigger to resolve: *this
+   enrollment holds part of a generation*, needing a back-fill path that notices
+   a build upgrade. Conveying all of it means an enrollment that upgrades needs
+   nothing. The cost is linear volume in a place already under watch, and it is
+   accepted knowingly.
+
+### 3. `_apsk` — 108's swap is transition-specific, and the developer chooses
+
+[108](#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)
+ruled that no shipped posture emits an envelope carrying two signatures, on the
+grounds that *"reading is not staged: this tree's verifier is ungated"*. **That
+holds because every build knows both `rsa2048` and `mldsa65`. It would not hold
+of an algorithm that arrives later.** So 108 stands for the transition it was
+made for, and is **not** a general rule: a transition introducing an algorithm
+some verifier in the fleet may lack gets an **overlap**.
+
+**Which of the two a deployment takes is the developer's choice, and the SDK
+provides the hook rather than the policy** (gkc, 2026-08-27): sign twice for one
+release, or stage the rollouts carefully. The lever is
+`AtClientPreference.dataSigningKeyAlgorithms`, a `Set` that is final at
+construction and refuses an algorithm this build cannot sign under. ⚠️ **Its
+dartdoc does not say this is what a two-member set is for**, which is owed.
+
+**The verifier already copes, and this was read rather than assumed.**
+`verifyEnvelope` intersects the algorithms the `_apsk` advertises with those the
+envelope carries, takes `SigningAlgoType.strongestOf(shared)`, refuses with a
+message naming both sides when there is none, and then walks **every** key
+advertised under the resolved algorithm in published order — which is what keeps
+envelopes signed before a swap verifiable. Its own dartdoc records the inversion:
+*"This used to take the one advertised key and require the envelope to match it,
+whose diagnostic ... states the singular assumption outright."*
+
+**Status:** ruled; item 1 needs only tests, items 2 and 3 are unbuilt.
+⚠️ **It falsifies a clause already in the catalogue** — UC-A4.5's *"an nskey
+generation carries the **first** of that list, because a mint writes one key"* —
+rewritten to the ruled behaviour on 2026-08-27 and unproven until the mint
+changes.

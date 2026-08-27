@@ -952,8 +952,9 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   one** KEM. An enrollment's key package carries a key for **every** algorithm
   `AtClientPreference.keyEstablishmentAlgorithms` names, minted beside the ones it already
   holds ([UC-A2.4](#34-uc-a24--the-key-package-advertises-the-kem-the-deployment-configured)),
-  while an nskey generation carries the **first** of that list, because a mint writes one
-  key. What is absent is a *negotiation*: nothing is exchanged at seal time. A sender walks
+  and an **nskey generation carries a key for every algorithm on that list too** — a
+  generation is the unit that rotates, not the unit that holds one key. What is absent is
+  a *negotiation*: nothing is exchanged at seal time. A sender walks
   its own fixed strongest-first `sealsToKeyAlgorithms` across the recipient's
   **APKAM-signed** advertised set and takes the first match, so an owner offering both is
   sealed to under the better one without either side stating a preference, and an attacker
@@ -974,6 +975,15 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   one KEM — and that one is proven against a live atServer. The conclusion survives its
   premise: the property was never that only one KEM is on offer, but that the offer is
   authenticated and the order reading it is fixed.
+
+  ⚠️ **Rewritten AGAIN on 2026-08-27.** It then read *"while an nskey generation carries
+  the **first** of that list, because a mint writes one key"*, which was true of the tree
+  and is no longer the specification:
+  [decisions.md 119](detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27)
+  rules that a generation holds a key per configured algorithm, so that a deployment
+  changing KEM needs **one** app rollout rather than two separated by an unbounded wait.
+  `PublishedNskeyKeyRing._prepareMint` still takes `.first`, so this half of the clause is
+  unproven until the mint changes.
 
 ### 5.6 UC-A4.6 — The construction is negotiated from `suites`, and no shared entry is a refusal
 

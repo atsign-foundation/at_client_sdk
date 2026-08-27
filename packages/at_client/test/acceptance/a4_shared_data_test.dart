@@ -261,16 +261,15 @@ void main() {
             'reaches rather than a shape the format merely permits',
         clauses: ['a holder may advertise **more than one** KEM'],
       );
-      provenIn(
-        'packages/at_client/test/nskey_minting_test.dart',
-        'the published advertisement emits its exact wire shape — raw literals',
-        proves: 'the other half, and the reason the two substrates differ: the '
-            'emitted nskey payload is pinned against hand-written literals and '
-            'its keys list has length one, because the mint takes the FIRST '
-            'configured algorithm. The list is there for a reader, not for '
-            'this writer',
-        clauses: ['an nskey generation carries the **first** of that list'],
-      );
+      // ⛔ A citation was WITHDRAWN here on 2026-08-27, and must not be
+      // restored. It pinned the clause's old half — "an nskey generation
+      // carries the FIRST of that list, because a mint writes one key" — to
+      // nskey_minting_test.dart's raw-literal wire pin, whose keys list has
+      // length one. The clause now says a generation carries a key for every
+      // configured algorithm, so the same test proves the opposite of what the
+      // catalogue states. That test is untouched and is the right place for it:
+      // it goes red the day the mint stops taking the first algorithm, which is
+      // exactly the signal wanted.
       provenIn(
         'packages/at_client/test/published_nskey_key_ring_test.dart',
         'a tampered advertisement is rejected',
