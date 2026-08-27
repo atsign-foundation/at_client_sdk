@@ -1,4 +1,4 @@
-## 1.16.1
+## 1.16.1-rc1
 - fix: pass passPhrase to FileAtKeysIo during onboarding so password-protected atKeys files are written correctly
 
 ## 1.16.0
