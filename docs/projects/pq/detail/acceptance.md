@@ -963,7 +963,7 @@ recorded counts drift from the tree.
 
 ### The partial clauses — objective 1's remaining work
 
-**32 clauses**, each one a test already exercises that does **not**
+**31 clauses**, each one a test already exercises that does **not**
 establish the clause as written. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 
@@ -1011,17 +1011,16 @@ nothing when asked for the root's *own* algorithm, which is what isolates
 `use: enc` as the reason rather than letting two conditions cover for each
 other.
 
-**The standard a closed clause meets**, set by the five closed on 2026-08-27:
+**The standard a closed clause meets**, set by the six closed on 2026-08-27:
 write the missing arm *with a control*, then **mutate the production code and
 confirm the failure quotes your own assertion's reason**, revert, and pin. A
 green test that has not been shown to discriminate proves nothing.
 
-#### In-process — 3 closable with no virtualenv
+#### In-process — 2 closable with no virtualenv
 
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
 | **UC-A5.1** c3 | "an enrollment approved *after* the rotation is pushed the current generation only" and "...and opens it" — no test enrols a joiner after a… | `nskey_self_heal_test.dart` |
-| **UC-B5.7** c1 | "The holder carries a lease stamped *before* the take goes out — so \"unspent by my clock\" implies the atServer has not expired it either,… | `nskey_minting_test.dart` |
 | **UC-G1.9** c1 | new envelopes carry no signature of it | `signing_key_minting_test.dart` |
 
 #### Live — 29, each needing a virtualenv run to verify

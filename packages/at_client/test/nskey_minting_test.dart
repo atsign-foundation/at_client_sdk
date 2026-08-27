@@ -6,6 +6,8 @@ import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart' show AtClientEnvelopeSigner;
 import 'package:at_client/src/crypto/nskey/mint_lock.dart'
     show MintLease, MintLock;
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show nskeyMintLockKey;
 import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_commons/at_builders.dart';
@@ -60,7 +62,12 @@ void main() {
     Map<String, String?> values,
     Map<String, String> advertised,
     List<GetRequestOptions?> advertisementReads,
-  }) client({bool lockAlreadyHeld = false}) {
+  /// [takeDelay] makes the lock's own take slow, which is the only way to
+  /// tell a lease stamped BEFORE the request from one stamped after it:
+  /// with an instant take the two are indistinguishable.
+  }) client(
+      {bool lockAlreadyHeld = false,
+      Duration takeDelay = Duration.zero}) {
     final atClient = MockAtClient();
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookUp();
@@ -114,6 +121,9 @@ void main() {
       if (builder is UpdateVerbBuilder) {
         verbs.add(builder.atKey);
         values[builder.atKey.key] = builder.value;
+        if (builder.atKey.key == '_nskeylock' && takeDelay > Duration.zero) {
+          await Future<void>.delayed(takeDelay);
+        }
         if (builder.atKey.key == '_nskeylock' && lockAlreadyHeld) {
           // What the atServer says to the loser of the race.
           throw AtLookUpException(
@@ -354,6 +364,48 @@ void main() {
         reason: 'a put waiting on a namespace key fails loudly rather than '
             'hanging on another device that may have crashed mid-mint');
     expect(c.verbs.where((k) => k.key.startsWith('__nskey') == true), isEmpty);
+  });
+
+  test('the lease is stamped BEFORE the take goes out, not after', () async {
+    // UC-B5.7 rests its safety on the DIRECTION of the error: the atServer
+    // starts the ttl when it stores the record, at or after the moment this
+    // client sent the request, so a deadline taken from the send makes the
+    // client give up slightly EARLY. One taken from the reply would have it
+    // believe it still held a lock the atServer had already released — and
+    // publish over the enrollment that legitimately won the next election.
+    // The sibling test proves a SPENT lease refuses; nothing proved where the
+    // deadline came from, and with an instant take the two are identical.
+    const ttl = Duration(seconds: 20);
+    const takeDelay = Duration(milliseconds: 400);
+    final c = client(takeDelay: takeDelay);
+
+    final before = DateTime.now();
+    late DateTime deadline;
+    final result = await MintLock(c.client).withLock(
+        nskeyMintLockKey(atSign, namespace, ttl: ttl),
+        (lease) async {
+      deadline = lease.expiresAt;
+      return 'minted';
+    });
+
+    expect(result, 'minted', reason: 'the take succeeded, so the lease under '
+        'test is a real one rather than a refusal path');
+    expect(c.verbs.where((k) => k.key == '_nskeylock'), hasLength(1),
+        reason: 'the control that the delay was actually paid: the take is '
+            'the verb it was attached to, and it went out exactly once');
+
+    // The discriminator. A deadline stamped from before the send is at most
+    // `before + ttl`; one stamped from the reply is at least
+    // `before + takeDelay + ttl`. The delay is what separates them, so the
+    // bound sits between the two.
+    expect(deadline.isBefore(before.add(ttl + takeDelay ~/ 2)), isTrue,
+        reason: 'the deadline does NOT include the ${takeDelay.inMilliseconds}'
+            'ms the take spent in flight — it was stamped before the request '
+            'went out, which is the direction that errs early');
+    expect(deadline.isAfter(before.add(ttl - takeDelay)), isTrue,
+        reason: 'and it is not trivially early either: it is a full ttl from '
+            'the send, so the assertion above is about WHERE the stamp was '
+            'taken and not about the lease being short');
   });
 
   test('a mint that overruns its lease publishes nothing', () async {

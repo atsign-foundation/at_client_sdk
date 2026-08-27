@@ -234,9 +234,29 @@ void main() {
       provenIn(
         'packages/at_client/test/nskey_minting_test.dart',
         'a mint that overruns its lease publishes nothing',
-        proves: 'the lease is stamped before the take goes out, so the client '
-            'errs early rather than late, and the election window bounding '
-            'when the three attempt does not bound how long the winner takes',
+        proves: 'the abandon itself: a holder whose lease has run out throws '
+            'rather than publishing, and no advertisement verb goes out — so '
+            'the election window bounding when the three ATTEMPT does not '
+            'have to bound how long the winner TAKES. ⚠️ This citation used '
+            'to claim it also proved WHERE the deadline came from; it does '
+            'not. Its fake hands out an already-spent lease, so the stamp is '
+            'the fixture\'s rather than the production path\'s',
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'the lease is stamped BEFORE the take goes out, not after',
+        proves: 'the half the row rests its SAFETY on, which is a direction '
+            'rather than a behaviour. The atServer starts the ttl when it '
+            'stores the record, at or after the send, so a deadline taken '
+            'from the send makes the client give up slightly EARLY while one '
+            'taken from the reply would have it believe it still held a lock '
+            'the atServer had released — and publish over the enrollment that '
+            'legitimately won the next election. With an instant take the two '
+            'are indistinguishable, so the take is delayed and the deadline '
+            'asserted to fall between them: it excludes the time in flight, '
+            'and is still a full ttl from the send. Mutation-proven — moving '
+            'the stamp after the take reddens it, quoting this assertion',
+        clauses: ['a lease stamped *before* the take goes out'],
       );
     });
 
