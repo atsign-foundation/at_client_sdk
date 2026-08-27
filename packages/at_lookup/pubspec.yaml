@@ -17,7 +17,6 @@ dependencies:
   at_chops: ^3.6.0
 
 dev_dependencies:
-  wasm_shakedown: ^1.0.0 # tools/wasm_shakedown — test/wasm/ dep-tree shakedown
   mocktail: ^1.0.4
   lints: ^6.0.0
   test: ^1.25.0
