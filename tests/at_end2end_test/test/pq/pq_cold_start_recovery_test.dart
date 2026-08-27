@@ -309,14 +309,21 @@ void main() {
     // CONTROL — the put path, same client, same preference, same recipient,
     // same namespace. It can stay green while the assertion below goes red,
     // which is what makes the comparison about the VERB and nothing else.
-    expect(await writerClient.put(toRecipient('viaPut'), 'v'), isTrue);
-    expect(
-        (await writerClient.get(toRecipient('viaPut')))
-            .metadata
-            ?.appMetadata
-            ?.providerId,
-        legacyCryptoProviderId,
-        reason: 'control: the fallback reaches a put with this exact fixture');
+    //
+    // ⚠️ It asserts the put SUCCEEDS and deliberately does not read it back.
+    // Without the fallback this put throws, so success alone discriminates;
+    // and that the fallback stamps the record legacy is already established by
+    // the UC-B4.1 arm above. The read-back that used to be here cost a CI red
+    // on 2026-08-27 and earned nothing: a legacy shared write resolves a
+    // `shared_key` scoped to `(sender, recipient)` — NOT to the namespace — so
+    // it is the one piece of state this file's three tests and their
+    // successive clients all share, and reading it back races whichever client
+    // last synced one. The failure was `AES-256-GCM authentication failed`, in
+    // the control rather than the assertion, which is the control saying it
+    // was entangled with something.
+    expect(await writerClient.put(toRecipient('viaPut'), 'v'), isTrue,
+        reason: 'control: the fallback reaches a put with this exact fixture — '
+            'without it this call throws rather than returning false');
 
     final notifyKey = toRecipient('viaNotify');
     final result = await writerClient.notificationService
