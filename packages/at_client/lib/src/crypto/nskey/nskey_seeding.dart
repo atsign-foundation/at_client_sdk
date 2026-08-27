@@ -141,10 +141,17 @@ class NskeySeeding {
   /// namespace cannot stop the others, while a caller asking about one
   /// namespace wants the reason.
   ///
-  /// Safe to call concurrently with [seed] and with another client's mint. The
-  /// published check below and the mint lock inside [PublishedNskeyKeyRing.mintAndPublish]
-  /// both re-read under the lock, so the loser adopts rather than minting a
-  /// second generation.
+  /// Safe to call concurrently with **another enrolment's** mint: that one the
+  /// wire lock excludes, and the published check below plus the re-read inside
+  /// [PublishedNskeyKeyRing.mintAndPublish] make the loser adopt.
+  ///
+  /// ⚠️ **NOT safe against a concurrent mint by the SAME enrolment**, which is
+  /// what this said until 2026-08-27. The lock's value is the enrolment id, so
+  /// two racers of one enrolment each read it back, each see their own id, and
+  /// each mint — measured live as two advertisements 7.5ms apart with
+  /// different key material. What makes concurrent callers safe is the
+  /// in-flight guard on the [MintLock] instance they share, so callers that do
+  /// **not** share a ring are still racing.
   Future<bool> seedNamespace(String owner, String namespace) async {
     // The atServer, not local storage: a namespace another enrollment minted a
     // moment ago is absent locally until sync catches up, and reading that

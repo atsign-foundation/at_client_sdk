@@ -66,8 +66,17 @@ class MintLease {
 class MintLock {
   final AtClient atClient;
 
-  /// Mints for `(owner, namespace)` that are running **in this process right
-  /// now**, keyed by lock record.
+  /// Mints for `(owner, namespace)` running **against this `MintLock` instance
+  /// right now**, keyed by lock record.
+  ///
+  /// ⚠️ **Instance, not process** — this said "in this process" until
+  /// 2026-08-27 and that is wider than the code. A `MintLock` is built per
+  /// [PublishedNskeyKeyRing], and rings are constructed in several places, two
+  /// of them inline per call. Callers that do not share a ring are not guarded
+  /// against each other. It covers the case it was built for because a
+  /// client's PQ startup and `AtClient.ensureReachable` both reach the
+  /// bootstrap's single ring — which is a fact about that wiring, not a
+  /// property of this map, and worth re-checking if either moves.
   ///
   /// The wire lock cannot express this. Its value is the enrolment id — an
   /// identity, not an instance — so two racers of the SAME enrolment each read

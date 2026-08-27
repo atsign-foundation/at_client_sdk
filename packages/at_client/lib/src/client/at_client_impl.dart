@@ -187,9 +187,13 @@ class AtClientImpl implements AtClient {
         return const AtReachabilityResult(AtReachability.notAuthorised);
       }
 
-      // Safe alongside the startup step doing the same thing: both re-read
-      // under the mint lock, so whichever loses adopts what the winner
-      // published rather than minting a second generation.
+      // ⚠️ Do NOT call this concurrently with the PQ startup step or with
+      // itself. This comment claimed the opposite until 2026-08-27 — that both
+      // would re-read under the mint lock and the loser would adopt. The lock
+      // excludes a different enrolment; two racers of the SAME one both read
+      // the lock back, both see their own id, and both mint. `MintLock` now
+      // holds an in-flight guard for the ring this client uses, which is what
+      // makes the call safe HERE — not the lock, and not the re-read.
       await bootstrap.seeding.seedNamespace(atSign, namespace);
       return const AtReachabilityResult(AtReachability.published);
     } catch (e) {

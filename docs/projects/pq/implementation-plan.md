@@ -148,47 +148,9 @@ record working. Do not "tidy" one to match the other.
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
 | [the clause burn-down: every THEN clause proven](#the-clause-burn-down-every-then-clause-proven) | **The definition of done, and the campaign to reach it** (gkc, 2026-08-27). **Objective 1:** every one of the **135** THEN clauses proven by some test. **Objective 2:** every clause proven only in-process gains a proof against a real atServer wherever feasible. Read the meter by running the acceptance suite: it prints `BURN-DOWN  clauses proven: N of 135   server-proven: M of 135`. ⚠️ **A pin is a claim, not a run** — `tool/acceptance_ledger.dart` is what says the cited test passed. This row **absorbs the old "what the citation audit left owed"**, whose five findings (F16, F15, F8, F1, F3) are clause gaps by another name | Nothing |
-| [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | ✅ **Reproduced 2026-08-27** — `seeding_tail_runs_live_test.dart` and `seeding_tail_abandoned_live_test.dart`, a two-file differential. ✅ **FIXED 2026-08-27** — the abandonment logs at `warning` naming what it skipped, and `AtClient.ensureReachable(namespace)` is the supported way to wait for reachability, on the interface rather than on `@experimental` `pqBootstrap` (gkc's ruling). ⚠️ **What is left is the LOOP RATE only**: whether a short-lived client relaunched repeatedly could be starved by the lock's cooldown. Both of failure mode 2's mechanisms were **measured 2026-08-27** (`nskey_mint_lock_live_test.dart`); do not rebuild them. A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. Three in-tree reproduction attempts failed; the row says how |
+| [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | ✅ **Reproduced 2026-08-27** — `seeding_tail_runs_live_test.dart` and `seeding_tail_abandoned_live_test.dart`, a two-file differential. ✅ **FIXED 2026-08-27** — the abandonment logs at `warning` naming what it skipped, and `AtClient.ensureReachable(namespace)` is the supported way to wait for reachability, on the interface rather than on `@experimental` `pqBootstrap` (gkc's ruling). ⚠️ **What is left is the LOOP RATE only**: whether a short-lived client relaunched repeatedly could be starved by the lock's cooldown. Both of failure mode 2's mechanisms were **measured 2026-08-27** (`nskey_mint_lock_live_test.dart`); do not rebuild them. A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. ⚠️ **The reproduction is DONE** (2026-08-27) — this cell said "three in-tree attempts failed" until then, one cell away from the sentence that superseded it. What is left is the loop rate |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **gkc publishes at_auth 4.0.0-rc1**, then carve at_client (stacked) → at_client_flutter → at_onboarding_cli. Six of the eight positions are through by merge; what is left is publishes | gkc. ⚠️ **Merged is not published, and only the publishes gate anything now** |
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
-| **an enrolment could race itself and publish two namespace keys** | ✅ **FIXED 2026-08-27** (`9b51265a5`), recorded because the shape recurs. **Found by the at_talk demo session**, live: `@alpha` published two advertisements **7.5ms apart** with different key material, the second overwriting the first, both conveyed — a peer fetching in that window holds a generation whose private the owner may have replaced. **The cause:** the wire lock's value is the enrolment id, an *identity* rather than an *instance*, so a second concurrent mint by the same enrolment is refused the lock, reads it back, sees its own id, concludes it holds it, and mints. `ownLockIsNotContention` was built so an enrolment re-entering its own **cooldown** adopts; it also admitted this. ⛔ **Deliberately NOT fixed with a per-instance wire token** — the winner never releases the lock, the ttl does, so a client restarting inside the two-minute cooldown meets its own lock and must adopt; a per-instance token would make it refuse to mint for the rest of the ttl, and an ordinary restart falls inside that window. `MintLock` now keeps an **in-flight map keyed by lock record**: the second caller waits, then declines to its ordinary re-read-and-adopt path. ⚠️ **Two lessons worth more than the fix.** (1) The claim it falsified was in a shipped dartdoc and CHANGELOG — *"safe to call while the startup step is running… the loser adopts"* — corrected before the fix was written. (2) The test that should have caught it, `ensure_reachable_live_test.dart`, calls `stop()` **before** `ensureReachable`, so the two never race: **a probe that has to disable the very thing the claim is about in order to run at all** (at_talk's phrasing, and a better tell than the fan-out one). | Nothing |
-
-**The app author's verdict on the API itself, 2026-08-27: "good enough, and
-I'd ship it."** Recorded because the request came from them and a verdict is
-what closes it. What they measured: the workaround block in their retrofit
-script — a FIFO, a 60-iteration advertisement poll, a bounded shutdown and a
-`pkill`, 3383 characters — collapsed to one call; **320ms** from connect to
-advertisement on loopback; and a probe run **after the client process exited**
-confirming the "you may exit the moment it returns" contract in the real
-piped-stdin shape. `postureDoesNotSeed` answered in 35ms and reads as a fact
-rather than a failure — they asked for the name to be kept. ⚠️ **Two arms of
-their report are gaps rather than passes, and they said so**: `timedOut` never
-fired, so it is untested; and nothing was abandoned in any of their runs, so
-the `warning` this session added has never been seen to fire outside a unit
-test.
-
-✅ **Confirmed live by the reporting session, 2026-08-27, on the pinned fix**
-(`9b51265a5`), and the confirmation is worth more than the count:
-
-| | unfixed | fixed |
-| --- | ---: | ---: |
-| advertisement writes for one atSign | **2** (different kids, 7.5ms apart) | **1** |
-| `_nskeylock` write attempts | **2** (second refused `AT0032`) | **1** |
-
-The second lock attempt is gone entirely — the loser never reaches the wire,
-which is a better outcome than one advertisement.
-
-⚠️ **A 1 on its own would have been a claim about timing, not about the fix**,
-so they proved the race *occurred*: the in-flight log line captured with a
-negative control (50 INFO lines in that run) and a positive control (the line
-itself). ⛔ **Their first attempt nearly reported "the race did not occur"** —
-they grepped a log that carried **zero** INFO lines because `at_talk` pins
-`AtSignLogger.root_level = 'SHOUT'`. A filtered stream, and the absence was a
-fact about the log level. Re-run with `-v` on a second fresh environment.
-
-**Scope, stated by them and kept here:** one observation per arm. It bounds no
-rate, and "the race occurred in the run I have the log line for" is the whole
-claim.
 
 ### P1 — must do before D1 closes
 
@@ -202,7 +164,7 @@ claim.
 | [content keys per scope](#content-keys-per-scope) | **A ruling from gkc** on whether one content key per writing enrollment per scope is the intent. If not: `CurrentCkPointer` needs a remote-first write through an atomic verb, and rotation needs to supersede every CK in scope | gkc's ruling, then the fix |
 | [the late-arriving nskey private](#the-late-arriving-nskey-private) | File a late-arriving nskey private **only for a generation this client actually asked for**. The reverted attempt filed any arrival, which breached the seeding guarantee | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Add the `pending` enrollment status value and build the rotation arm against its own dedicated CRAM atSign. ⛔ There is **no** fleet-adoption wait — see the standing premise | The at_auth publish, and a dedicated CRAM atSign |
-| **CI at head** | Dispatch both workflows at head and read them. "Every rail green" is half of D1's definition, and **nothing fires on push on this branch** — the workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only, so the newest run is only ever as new as the last manual dispatch. ⚠️ **Dispatch matters beyond staleness**: CI's at_client job runs a **bare** `dart analyze` that reads `benchmark/`, which the routine `dart analyze lib test` never opens — that hid five errors for six days. ⛔ **And docs are build inputs here**, so a plan edit alone can redden the acceptance rail. Re-derive, never quote:<br>`gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName --jq '.[] \| [.headSha[0:9], .workflowName, .conclusion] \| @tsv'`<br>`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike` ⚠️ **A format-gate risk found 2026-08-27, and it predates any current work.** `packages/at_client/test/acceptance/manifest.dart` and `a3_self_data_test.dart` **as committed at `762a91c38`** fail `dart format . -o none --set-exit-if-changed` under local Dart **3.12.2 stable**, while three untouched neighbours pass — the diverging constructs are an empty-condition `for (;;)` and a wrapped ternary, both places the formatter changed style between versions. CI installs `sdk: stable` **unpinned** (`actions/setup-flutter-and-dart/action.yaml:41`), so whether the gate is red at head depends on what stable is on the day. ⛔ **Do not "fix" this with a write-format** — that churns committed code to whichever style the local SDK happens to hold, which is the trap the toolchain rules already name. Dispatch CI and read the gate before touching a byte. ⚠️ **A rail gap found by a cold read 2026-08-27: `docs_structure_test.dart` does NOT check that a link RESOLVES.** Its group is *no LINKED heading is duplicated* — it collects slugs without resolving the target, so a **renamed heading breaks every link to it silently**. That happened the same day: renaming `### Three clauses pinned…` to `### Two clauses pinned…` left a dead anchor in the plan and the suite stayed green. The edit-time hook catches this on files it sees; a heading renamed in one file and linked from another is the hole. Worth a rail that resolves each `](target#anchor)` across the doc set. | Nothing. ✅ **Dispatched and read 2026-08-27**: green, 11 of 11 jobs, at `44617edb6`. The format gate above **fired and was fixed** — 17 files, all of them ones we had edited since the previous green, so `stable` moving was ruled out rather than assumed. ⚠️ **CI runs Dart 3.13.2 and this machine has 3.12.2**, so formatting locally is a guess CI judges; it happened to be right. ⚠️ The run is two doc commits behind the head |
+| **CI at head** | Dispatch both workflows at head and read them. "Every rail green" is half of D1's definition, and **nothing fires on push on this branch** — the workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only, so the newest run is only ever as new as the last manual dispatch. ⚠️ **Dispatch matters beyond staleness**: CI's at_client job runs a **bare** `dart analyze` that reads `benchmark/`, which the routine `dart analyze lib test` never opens — that hid five errors for six days. ⛔ **And docs are build inputs here**, so a plan edit alone can redden the acceptance rail. Re-derive, never quote:<br>`gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName --jq '.[] \| [.headSha[0:9], .workflowName, .conclusion] \| @tsv'`<br>`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike` ⚠️ **A format-gate risk found 2026-08-27, and it predates any current work.** `packages/at_client/test/acceptance/manifest.dart` and `a3_self_data_test.dart` **as committed at `762a91c38`** fail `dart format . -o none --set-exit-if-changed` under local Dart **3.12.2 stable**, while three untouched neighbours pass — the diverging constructs are an empty-condition `for (;;)` and a wrapped ternary, both places the formatter changed style between versions. CI installs `sdk: stable` **unpinned** (`actions/setup-flutter-and-dart/action.yaml:41`), so whether the gate is red at head depends on what stable is on the day. ⛔ **Do not "fix" this with a write-format** — that churns committed code to whichever style the local SDK happens to hold, which is the trap the toolchain rules already name. Dispatch CI and read the gate before touching a byte. ⚠️ **A rail gap found by a cold read 2026-08-27: `docs_structure_test.dart` does NOT check that a link RESOLVES.** Its group is *no LINKED heading is duplicated* — it collects slugs without resolving the target, so a **renamed heading breaks every link to it silently**. That happened the same day: renaming `### Three clauses pinned…` to `### Two clauses pinned…` left a dead anchor in the plan and the suite stayed green. The edit-time hook catches this on files it sees; a heading renamed in one file and linked from another is the hole. Worth a rail that resolves each `](target#anchor)` across the doc set. | Nothing. ✅ **Dispatched and read 2026-08-27**: green, 11 of 11 jobs, at `44617edb6`. The format gate above **fired and was fixed** — 17 files, all of them ones we had edited since the previous green, so `stable` moving was ruled out rather than assumed. ⚠️ **CI runs Dart 3.13.2 and this machine has 3.12.2**, so formatting locally is a guess CI judges; it happened to be right. ⚠️ The run is behind the head by however many doc commits have landed since — re-derive with `git rev-list --count 44617edb6..HEAD` rather than reading a number here. It said "two" and was falsified by the commit that introduced it |
 | **rotation frequency: defaults and levers** | **A design task, raised by gkc 2026-08-27.** The two rotation levers exist and are proven — the CK lever ([UC-A5.1](acceptance.md#61-uc-a51--rotate-a-namespace-key-post-compromise) *When (a)*, cut a new CK and delete the old conveyance) and the nskey-keypair lever (*When (b)*, mint a successor excluding an enrollment) — but **nothing decides when either should fire, and no default says so.** Both are caller-invoked today: `NskeyRotation.rotate` and the CK cut have no scheduler, no age input and no policy object, so an app that never calls them never rotates and nothing tells it that is a choice. What is owed is the design, not the code: what a sensible default cadence is for each lever and whether they differ (they cost very different amounts — the CK lever is O(1), the nskey lever is O(n) per enrollment); whether cadence is expressed as age, as write volume, or as neither; which of `AtClientPreference`, `CryptoConfig` or a per-namespace record carries it; what an app that wants *never* says, and what the SDK does when it says nothing. ⚠️ **The forward-secrecy meaning of each lever is already settled and must not be re-opened here** — the CK lever is what governs access to a namespace's past, which is why a late joiner is handed every held generation ([UC-A5.1](acceptance.md#61-uc-a51--rotate-a-namespace-key-post-compromise) late joiner, ruled 2026-08-27). Cadence is a separate question from what rotation *means* | Nothing. It is a design decision before it is an implementation |
 
 ### P2 — should be done if there is time
@@ -1029,6 +991,53 @@ self-healing, a client that takes it should release it on shutdown, and one that
 finds it held with nothing published should say so at warning rather than
 throwing something the caller cannot interpret. A cron-driven notifier is
 precisely a short-lived client relaunched in a loop.
+
+### An enrolment could race itself and publish two namespace keys
+
+⛔ **FIXED 2026-08-27 (`9b51265a5`), and nothing is owed here.** Kept
+because the shape recurs and because how it was caught matters more than
+the fix. Out of `## TODO` deliberately: a row leaves that table when it is
+done rather than gaining a ✅, and this one sat there with **Blocked on:
+Nothing**, which is the exact signature of a pickable item.
+
+✅ **FIXED 2026-08-27** (`9b51265a5`), recorded because the shape recurs. **Found by the at_talk demo session**, live: `@alpha` published two advertisements **7.5ms apart** with different key material, the second overwriting the first, both conveyed — a peer fetching in that window holds a generation whose private the owner may have replaced. **The cause:** the wire lock's value is the enrolment id, an *identity* rather than an *instance*, so a second concurrent mint by the same enrolment is refused the lock, reads it back, sees its own id, concludes it holds it, and mints. `ownLockIsNotContention` was built so an enrolment re-entering its own **cooldown** adopts; it also admitted this. ⛔ **Deliberately NOT fixed with a per-instance wire token** — the winner never releases the lock, the ttl does, so a client restarting inside the two-minute cooldown meets its own lock and must adopt; a per-instance token would make it refuse to mint for the rest of the ttl, and an ordinary restart falls inside that window. `MintLock` now keeps an **in-flight map keyed by lock record**: the second caller waits, then declines to its ordinary re-read-and-adopt path. ⚠️ **Two lessons worth more than the fix.** (1) The claim it falsified was in a shipped dartdoc and CHANGELOG — *"safe to call while the startup step is running… the loser adopts"* — corrected before the fix was written. (2) The test that should have caught it, `ensure_reachable_live_test.dart`, calls `stop()` **before** `ensureReachable`, so the two never race: **a probe that has to disable the very thing the claim is about in order to run at all** (at_talk's phrasing, and a better tell than the fan-out one).
+
+**The app author's verdict on the API itself, 2026-08-27: "good enough, and
+I'd ship it."** Recorded because the request came from them and a verdict is
+what closes it. What they measured: the workaround block in their retrofit
+script — a FIFO, a 60-iteration advertisement poll, a bounded shutdown and a
+`pkill`, 3383 characters — collapsed to one call; **320ms** from connect to
+advertisement on loopback; and a probe run **after the client process exited**
+confirming the "you may exit the moment it returns" contract in the real
+piped-stdin shape. `postureDoesNotSeed` answered in 35ms and reads as a fact
+rather than a failure — they asked for the name to be kept. ⚠️ **Two arms of
+their report are gaps rather than passes, and they said so**: `timedOut` never
+fired, so it is untested; and nothing was abandoned in any of their runs, so
+the `warning` this session added has never been seen to fire outside a unit
+test.
+
+✅ **Confirmed live by the reporting session, 2026-08-27, on the pinned fix**
+(`9b51265a5`), and the confirmation is worth more than the count:
+
+| | unfixed | fixed |
+| --- | ---: | ---: |
+| advertisement writes for one atSign | **2** (different kids, 7.5ms apart) | **1** |
+| `_nskeylock` write attempts | **2** (second refused `AT0032`) | **1** |
+
+The second lock attempt is gone entirely — the loser never reaches the wire,
+which is a better outcome than one advertisement.
+
+⚠️ **A 1 on its own would have been a claim about timing, not about the fix**,
+so they proved the race *occurred*: the in-flight log line captured with a
+negative control (50 INFO lines in that run) and a positive control (the line
+itself). ⛔ **Their first attempt nearly reported "the race did not occur"** —
+they grepped a log that carried **zero** INFO lines because `at_talk` pins
+`AtSignLogger.root_level = 'SHOUT'`. A filtered stream, and the absence was a
+fact about the log level. Re-run with `-v` on a second fresh environment.
+
+**Scope, stated by them and kept here:** one observation per arm. It bounds no
+rate, and "the race occurred in the run I have the log line for" is the whole
+claim.
 
 ### A retrofitted enrolment cannot run an authenticated verb
 
