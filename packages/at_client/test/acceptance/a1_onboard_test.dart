@@ -43,6 +43,41 @@ void main() {
             'registered in E1\'s record (not published',
           ]
       );
+      provenIn(
+        'tests/at_functional_test/test/pq_signing_root_mint_lock_test.dart',
+        'a second signing-root mint lock create is refused',
+        proves: 'the half of this clause that is a refusal by the other side: '
+            'the second create of the lock record throws, and the assertion '
+            'names the atServer\'s own message rather than accepting any '
+            'throw, so a write that failed for an unrelated reason does not '
+            'satisfy it. The lock is then released and re-taken as the '
+            'control. Nothing in-process can establish this — a mocked '
+            'executeVerb accepts the second take, which makes the interlock\'s '
+            'presence and its absence identical',
+        clauses: ['whose second create the atServer rejects'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_data_path_live_test.dart',
+        'a self value round-trips through the nskey data path',
+        proves: 'that the self-data path does not reach for the atSign-level '
+            'self key: the stored value carries providerId '
+            'at/symmetric/AES/GCM with a ckKid and an iv and NO sealedKey, '
+            'and the content key arrives in a separate conveyance routed to '
+            'the nskey provider. A value encrypted under selfEncryptionKey '
+            'would carry neither',
+        clauses: ['the PQ data path never touches it'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
+        'UC-B4.2 opt-out · an atSign that refused legacy material is not ',
+        proves: 'the opt-out arm, by value and against a control: an atSign '
+            'activated with the flag holds no defaultEncryptionPublicKey and '
+            'plookup of its publickey returns nothing, while a sibling '
+            'activated without the flag has both. The control is what makes '
+            'the absence mean something here, since the virtualenv '
+            'pre-provisions a publickey for every demo atSign',
+        clauses: ['with the opt-out flag set it is absent'],
+      );
     });
   });
 }

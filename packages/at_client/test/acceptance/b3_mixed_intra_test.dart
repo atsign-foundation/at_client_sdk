@@ -11,6 +11,8 @@ import 'package:at_client/at_client.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
+import 'proven_elsewhere.dart';
+
 import '../test_utils/mocks.dart';
 
 void main() {
@@ -105,6 +107,17 @@ void main() {
       // `nskey_data_path_live_test.dart` (functional) and
       // `era_default_read_test.dart` (e2e) — a client with no config at all
       // opens what an active client sealed.
+      provenIn(
+        'tests/at_functional_test/test/nskey_data_path_live_test.dart',
+        'a self value round-trips through the nskey data path',
+        proves: 'the routing this row asserts, against a live atServer: the '
+            'content key travels in its own conveyance sealed to the nskey '
+            'and the value is encrypted symmetrically citing that key by '
+            'ckKid. The value record carries no sealedKey, which is what '
+            'rules out the data having been encapsulated to the nskey '
+            'directly',
+        clauses: ['the data is never encapsulated directly to the nskey'],
+      );
     });
   });
 }

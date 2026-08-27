@@ -113,10 +113,10 @@ const liveProofExempt = <String, String>{};
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 61;
+const provenClauseCount = 89;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 37;
+const serverProvenClauseCount = 52;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
@@ -140,8 +140,6 @@ const liveProofOwed = <String, String>{
       'no live test covers this row and one is feasible; nothing here was judged impossible to prove live',
   'UC-B3.1':
       'a live test exists and this row names none — pq_posture_grid_test.dart. Owed a citation, not a test',
-  'UC-B3.2':
-      'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
   'UC-B5.2':
       'a live test exists and this row names none — pq_advance_ladder_test.dart. Owed a citation, not a test',
   'UC-B5.4':

@@ -85,6 +85,29 @@ void main() {
       expect(await alice2.data.decrypt(context, synced, ciphertext), plaintext);
       expect(valueKey.metadata.appMetadata!.providerId,
           symmetricAesGcmCryptoProviderId);
+
+      provenIn(
+        'packages/at_client/test/nskey_data_path_test.dart',
+        'alice1 writes, alice2 syncs both records and round-trips plaintext',
+        proves: 'the two-hop routing as the clause states it — the conveyance '
+            'opens with the nskey private and the content key is cached under '
+            'its ckKid, then the value resolves that same ckKid and '
+            'AES-GCM-decrypts. The hops are driven separately, so a build '
+            'that opened the value some other way would not satisfy it',
+        clauses: ['the `at/nskey` provider decapsulates the CK with the nskey '
+            'private and caches it by `ckKid`'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_data_path_test.dart',
+        'a client lacking the nskey private cannot decapsulate the CK',
+        proves: 'the exclusion arm, which is the half that makes the rest '
+            'mean anything: a client holding everything except the nskey '
+            'private fails to open the conveyance and therefore cannot read '
+            'the value. Without it the row is satisfied by a build that '
+            'ignores the nskey entirely',
+        clauses: ['a client lacking the nskey private cannot decapsulate the '
+            'CK and so cannot read'],
+      );
     });
 
     test('UC-A3.2 · a client mints the nskey for each authorised namespace',
@@ -118,6 +141,52 @@ void main() {
             'a later start adopts the published advertisement rather than '
             'minting over it',
           ]);
+      provenIn(
+        'tests/at_functional_test/test/underscore_public_key_hiding_test.dart',
+        'a public:__ key syncs, is served by plookup, and is not enumerable',
+        proves: 'what makes eager publication safe, against the atServer that '
+            'decides it: the record answers a plookup — so a sender can '
+            'always fetch it — while an unauthenticated scan does not list '
+            'it, with and without showhidden. Both halves are needed; a '
+            'record that were merely unreachable would fail the first',
+        clauses: ['an unauthenticated `scan` of `@alice`, with and without '
+            '`showhidden`, returns no'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/enrollment_namespace_gate_test.dart',
+        'a scoped enrollment cannot read the envelope channel of a namespace ',
+        proves: 'the server-side gate, with both controls: the atServer '
+            'refuses the scoped enrollment\'s read of the withheld '
+            'namespace\'s channel and the refusal names that namespace, while '
+            'the same enrollment still receives envelopes in the namespace it '
+            'was granted and the approver can read the withheld one. A mocked '
+            'lookup cannot produce this refusal at all',
+        clauses: ['client is refused the `app_1.my_apps` nskey private '
+            '(server-gated on the `__ssenv` channel)'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_self_heal_live_test.dart',
+        'an enrollment that missed the mint pulls the private from a holder',
+        proves: 'the pull backstop end to end against a live atServer: the '
+            'seeker is shown to genuinely lack the private and to see the '
+            'published generation, the holder is primed, the request is '
+            'observed going out, and the private arrives in the seeker\'s '
+            'keyfile byte-exact under the generation already advertised — so '
+            'it healed rather than minting a rival',
+        clauses: ['`requestSecret` is the pull backstop for an enrollment '
+            'offline during the push'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_data_path_live_test.dart',
+        'a second write reuses the content key rather than cutting a new one',
+        proves: 'that a later write into a namespace that already has a key '
+            'uses it rather than minting: the second put carries the same '
+            'ckKid as the first and cuts no new conveyance record. A build '
+            'that re-minted per write would still round-trip, so the reuse '
+            'has to be asserted rather than inferred from success',
+        clauses: ['A subsequent `put` into the namespace uses the key that '
+            'already exists; it does not mint'],
+      );
     });
 
     test('UC-A3.3 · self write with no namespace key has no PQ fallback', () {
@@ -141,6 +210,28 @@ void main() {
         'a write to a namespace with no nskey fails, saying which',
         proves:
             'cold start throws NamespaceKeyUnavailableException naming the atSign and namespace, with the readiness query and the opt-in legacy fallback covered alongside it',
+      );
+      provenIn(
+        'packages/at_client/test/nskey_seeding_test.dart',
+        'an enrolled client seeds the namespaces its enrollment grants',
+        proves: 'why the cold-start case is rare rather than routine: a '
+            'client seeds each namespace its own enrollment grants at start, '
+            'so the namespaces it is entitled to write already hold a key by '
+            'the time a put arrives. The rarity is a property of what seeding '
+            'covers, not a hope',
+        clauses: ['In practice this case is rare, because a client mints for '
+            'its preference namespace'],
+      );
+      provenIn(
+        'packages/at_client/test/cold_start_test.dart',
+        'a self write to an unminted namespace refuses the same way',
+        proves: 'the exception TYPE and where it is raised, which the live '
+            'test cannot separate from any other failure of the same put: the '
+            'refusal is NamespaceKeyUnavailableException carrying the atSign '
+            'and namespace, and it comes from the CK-manager pre-pass rather '
+            'than from a provider failing mid-encrypt',
+        clauses: ['the exception is `NamespaceKeyUnavailableException(atSign, '
+            'namespace)`, raised by the CK-manager pre-pass'],
       );
     });
 
@@ -288,6 +379,27 @@ void main() {
             'are distinct so reads route apart while sharing one content-key '
             'cache. Without this a recipient choosing the other KEM would be '
             'unreachable from anyone who had not also switched.',
+      );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'the published advertisement emits its exact wire shape — raw literals',
+        proves: 'the advertised document as bytes rather than as a round '
+            'trip: the emitted body is pinned against hand-written literals, '
+            'so suites sits beside each entry\'s alg in the shape senders '
+            'parse. A round-trip through the writer\'s own reader would stay '
+            'green for a shape no other build could read',
+        clauses: ['the APKAM-signed advertisement carries **`suites`** beside '
+            'each entry\'s **`alg`**'],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_kem_selection_test.dart',
+        'and refuses an owner that only opens the retired construction',
+        proves: 'that the seal version follows the owner\'s advertised KEM '
+            'rather than the sender\'s preference, and that an owner sharing '
+            'no live construction is refused instead of being guessed at. The '
+            'refusal arm is what stops the selection reading as a default',
+        clauses: ['An X-Wing owner therefore receives `ver 0x02` and an '
+            'ML-KEM-1024 owner `ver 0x03`'],
       );
     });
   });

@@ -61,6 +61,29 @@ void main() {
             'the user composes anything',
           ]
       );
+      provenIn(
+        'tests/at_functional_test/test/pq_legacy_interop_live_test.dart',
+        'UC-B4.2 outbound · a PQ app on @bob reaches a legacy @alice throu',
+        proves: 'the opted-in fallback arm against a real legacy recipient: '
+            'with the flag set the share goes out under legacy rather than '
+            'failing, and the record says so. Without the flag the same send '
+            'refuses, which is the sibling arm and what stops this reading as '
+            'the default',
+        clauses: ['With the legacy fallback opted in (final 3.x only), the '
+            'share proceeds under'],
+      );
+      provenIn(
+        'tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
+        'isReadyFor goes from false to true when bob mints',
+        proves: 'the transition itself, across two atSigns: the namespace is '
+            'run-unique and TOP-LEVEL on purpose, because a child namespace '
+            'would resolve by walking up and the question would answer itself. '
+            'isReadyFor is false, bob mints and publishes, and a FRESH alice '
+            'sender then reads true — so the answer comes off the atServer '
+            'rather than out of a cache alice already held',
+        clauses: ['Once bob uses or authorises the namespace, his nskey is '
+            'published'],
+      );
     });
 
     test('UC-A4.3 · multi-enrollment both ends', () {
@@ -170,6 +193,17 @@ void main() {
             'recipient can never open. "defaults to the hybrid" and "takes the '
             'no-hybrid option, and it resolves" pin the knob itself.',
       );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'the published advertisement emits its exact wire shape — raw literals',
+        proves: 'that a generation advertises exactly one KEM: the emitted '
+            'payload is pinned against hand-written literals and its keys '
+            'list has length one. The list exists so a rotation can carry a '
+            'second entry, so "one per generation" is a property of what a '
+            'mint writes rather than of the format',
+        clauses: ['each atSign advertises **one** KEM per generation, and '
+            'rotation is the only moment that can change'],
+      );
     });
 
     test('UC-A4.6 · the construction is negotiated from suites', () {
@@ -223,6 +257,51 @@ void main() {
             'itself, so a newer holder may name a suite this build has never '
             'heard of.',
       );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'refuses a peer that only opens the retired construction',
+        proves: 'the refusal half of the negotiation: a peer listing only the '
+            'retired construction is turned away rather than sealed to at '
+            'something it cannot open. Its pair asserts the accepting arm '
+            'reads back as suite x-wing-rfc9180 at version 0x02, so the two '
+            'together show the choice is made rather than defaulted',
+        clauses: ['the peer that lists RFC 9180 receives `pqSeal ver 0x02`; '
+            'the peer that lists only'],
+      );
+      provenIn(
+        'packages/at_chops/test/pq_hpke_test.dart',
+        'a KEM that is not the version',
+        proves: 'that the declared suite and the version byte cannot drift '
+            'apart: a payload naming a KEM the version byte does not match is '
+            'rejected at the seal layer. The agreement is asserted where it '
+            'is decided, rather than inferred from a successful round trip',
+        clauses: ['the payload\'s declared suite and the envelope\'s version '
+            'byte **agree**'],
+      );
+      provenIn(
+        'packages/at_client/test/key_package_registration_test.dart',
+        'a declared suites list is what the sender negotiates against',
+        proves: 'the forward-compatibility rule at parse: a package declaring '
+            'suites this build has never heard of keeps them rather than '
+            'dropping them, so a newer holder is not silently narrowed to '
+            'what this build understands. The fixture deliberately mixes an '
+            'unknown name with a non-string entry',
+        clauses: ['on parse, entries this build does not recognise are '
+            '**kept**'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/key_package_amendment_live_test.dart',
+        'UC-A2.5 · a sender picks by its own order and stamps the matching ',
+        proves: 'the narrowing, as a differential over ONE recipient offering '
+            'both KEMs: the only thing that varies is the sender\'s own '
+            'preference order, and the two arms come back with different '
+            'suites and different version bytes. A sender that intersected '
+            'before narrowing to the chosen key\'s KEM could produce a suite '
+            'that key cannot open, and both arms would still look like a '
+            'success at the point of sending',
+        clauses: ['the candidate suites are narrowed to the **chosen key\'s '
+            'own KEM** before the intersection'],
+      );
     });
 
     test('UC-A4.7 · no mutually supported construction is a refusal', () {
@@ -259,6 +338,17 @@ void main() {
             'fallback. "an id this build does not implement is null, not a '
             'guess" in kem_selection_test.dart is the same rule one layer '
             'down, at the algorithm id.',
+      );
+      provenIn(
+        'packages/at_client/test/pairwise_secret_sharing_test.dart',
+        'pushSecretToNamespaceMembers skips it and still reaches the rest',
+        proves: 'that one unreachable member does not take the fan-out down: '
+            'a peer whose only key names an algorithm this build cannot '
+            'encapsulate to is skipped, and the remaining members still '
+            'receive. The rest-still-reached half is what distinguishes a '
+            'skip from a swallowed failure',
+        clauses: ['in a namespace fan-out a member with no mutually supported '
+            'key is **skipped, not fatal**'],
       );
     });
   });

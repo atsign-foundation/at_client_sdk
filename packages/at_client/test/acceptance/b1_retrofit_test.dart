@@ -57,6 +57,18 @@ void main() {
             'the legacy enrollment is capped and ages out rather than being '
             'deleted by key — the THEN clause this row shares with B2',
       );
+      provenIn(
+        'tests/at_functional_test/test/pq_advance_ladder_test.dart',
+        'one enrollment walks legacy to pqReady to pqActive, and nothing ',
+        proves: 'that the legacy ENCRYPTION key survives the advance, which '
+            'is what keeps already-written history readable: the ladder walks '
+            'one enrollment through every rung and re-reads what was written '
+            'at each earlier rung afterwards. A build that retired the '
+            'encryption key alongside the signing key would pass every '
+            'write-side assertion and fail only here',
+        clauses: ['Legacy *encryption* key retained (history still '
+            'readable)'],
+      );
     });
 
     test('UC-B1.2 · second install on a copied keyfile (alice1c)', () {
@@ -162,6 +174,16 @@ void main() {
             'atServer. The client-side authorisation gate reads the enrollment '
             'record the atServer holds for the id this client RUNS as, so a '
             'retrofit that lost its grants fails the write',
+      );
+      provenIn(
+        'tests/at_functional_test/test/pq_advance_ladder_test.dart',
+        'one enrollment walks legacy to pqReady to pqActive, and nothing ',
+        proves: 'the encryption side of the same walk: a value written at a '
+            'legacy rung is encrypted under the atSign-wide self key and '
+            'stays readable after the advance. The row\'s other citation '
+            'covers only the authorised-namespace half, so this is the arm '
+            'that would otherwise rest on nothing',
+        clauses: ['The value is encrypted with the atSign-wide self key'],
       );
     });
 

@@ -27,6 +27,41 @@ void main() {
             'Nothing in the conveyance path is RSA-wrapped',
           ]
       );
+      provenIn(
+        'tests/at_functional_test/test/enrollment_chain_link_live_test.dart',
+        'the root private reaches a privileged enrollment and no other',
+        proves: 'the entitlement, as a differential rather than an assertion '
+            'about one enrollment: a fully privileged and a scoped enrollment '
+            'are approved in the same run, and the privileged one receives '
+            'exactly one envelope more than the scoped one. A test that only '
+            'watched the privileged enrollment could not tell a root that is '
+            'withheld from a root that is sent to everybody',
+        clauses: ['the root is held only by fully privileged enrollments'],
+      );
+      provenIn(
+        'packages/at_client/test/pq_signing_chain_test.dart',
+        'climbs a chain link to an anchored parent',
+        proves: 'the walk itself: verifyChain returns anchored and states the '
+            'path it took, so the chain is self-describing rather than '
+            'trusted. The siblings pin the other two verdicts — unsigned '
+            'during the changeover, and chained where the parent is not the '
+            'root — which is what stops anchored being the only reachable '
+            'answer. No atServer is in this loop: the input is a document and '
+            'the output is a verdict over it',
+        clauses: ['carries a chain link that `verifyChain` walks to the '
+            'signing root'],
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_rotation_live_test.dart',
+        'UC-A5.2/A5.3 · a revoked enrollment cannot authenticate',
+        proves: 'that the APKAM record is per-enrollment and revocable on its '
+            'own: three enrollments are established with three distinct APKAM '
+            'keypairs — asserted, because three sharing one keypair would '
+            'make the revocation meaningless — the atServer is confirmed to '
+            'be serving the doomed enrollment\'s own key, and authentication '
+            'is accepted before the revocation as the control',
+        clauses: ['distinct, individually-revocable record'],
+      );
     });
 
     test('UC-A2.2 · second host using the same (copied) keyfile', () {

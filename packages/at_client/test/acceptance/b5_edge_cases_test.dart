@@ -126,6 +126,16 @@ void main() {
             'check rather than the atServer refusing it — and a '
             'namespace-scoped enrollment declines to attempt the mint at all',
       );
+      provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'losing the mint lock generates nothing and files nothing',
+        proves: 'that the loser does no work rather than doing work it then '
+            'discards: with the lock held elsewhere, mintIfAbsent returns '
+            'null, nothing is published and nothing is filed. A loser that '
+            'generated a keypair and dropped it would satisfy any assertion '
+            'about the published record alone',
+        clauses: ['The loser is refused the lock and falls through to'],
+      );
     });
 
     test('UC-B5.4 · two enrollments race to mint a namespace nskey', () {
