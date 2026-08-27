@@ -47,8 +47,13 @@ class EnrollmentServiceImpl implements EnrollmentService {
   @override
   Future<AtEnrollmentResponse> approve(
       EnrollmentRequestDecision enrollmentRequestDecision) async {
+    // approverChops explicitly, rather than letting at_auth fall back to
+    // `atLookUp.atChops`: the approving client's crypto is not the
+    // connection's credential, and RemoteSecondary no longer hands its
+    // AtChops to the lookup.
     return _atEnrollmentImpl.approve(
-        enrollmentRequestDecision, _atClient.getRemoteSecondary()!.atLookUp);
+        enrollmentRequestDecision, _atClient.getRemoteSecondary()!.atLookUp,
+        approverChops: _atClient.atChops);
   }
 
   @override

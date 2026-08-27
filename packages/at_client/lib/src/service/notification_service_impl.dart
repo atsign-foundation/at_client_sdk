@@ -47,22 +47,15 @@ class NotificationServiceImpl extends NotificationService {
   late SecondaryAddressFinder secondaryAddressFinder;
 
   /// - [monitor] is providable for unit test purposes
-  /// - [monitorOutboundConnectionFactory] is forwarded to the [Monitor] this
-  ///   builds, so a caller can supply its own transport for the notification
-  ///   connection. Ignored when [monitor] is supplied, which brings its own.
-  ///   Null means the `dart:io` default, i.e. today's behaviour.
   static Future<NotificationService> create(AtClient atClient,
       {@Deprecated('will be removed in a future version')
       AtClientManager? atClientManager,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder,
-      MonitorOutboundConnectionFactory?
-          monitorOutboundConnectionFactory}) async {
+      SecondaryAddressFinder? secondaryAddressFinder}) async {
     return NotificationServiceImpl._(
         atClient: atClient,
         monitor: monitor,
-        secondaryAddressFinder: secondaryAddressFinder,
-        monitorOutboundConnectionFactory: monitorOutboundConnectionFactory);
+        secondaryAddressFinder: secondaryAddressFinder);
   }
 
   final String myStatsNotifKey;
@@ -70,8 +63,7 @@ class NotificationServiceImpl extends NotificationService {
   NotificationServiceImpl._(
       {required this.atClient,
       Monitor? monitor,
-      SecondaryAddressFinder? secondaryAddressFinder,
-      MonitorOutboundConnectionFactory? monitorOutboundConnectionFactory})
+      SecondaryAddressFinder? secondaryAddressFinder})
       : myStatsNotifKey = 'statsNotification.${atClient.atSign}' {
     logger = AtSignLogger(
         'NotificationServiceImpl (${atClient.getCurrentAtSign()})');
@@ -89,7 +81,6 @@ class NotificationServiceImpl extends NotificationService {
           handleNotification: handleNotificationReceipt,
           getLastNotificationTime: getLastNotificationTime,
           secondaryAddressFinder: this.secondaryAddressFinder,
-          monitorOutboundConnectionFactory: monitorOutboundConnectionFactory,
         );
 
     lastReceivedNotificationAtKey = AtKey.local(

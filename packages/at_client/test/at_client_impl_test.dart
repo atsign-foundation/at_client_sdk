@@ -563,7 +563,7 @@ void main() {
       expect(identical(ac2.atKeysIo, firstKeysIo), true);
     });
   });
-  group('socket factory seam through AtClientImpl.create', () {
+  group('transport seam through AtClientImpl.create', () {
     final String seamAtSign = '@alice';
     setUp(() async {
       AtClientImpl.atClientInstanceMap.remove(seamAtSign);
@@ -574,7 +574,7 @@ void main() {
       AtClientManager.getInstance().removeAllChangeListeners();
     });
 
-    test('injected factories reach the RemoteSecondary that create builds',
+    test('an injected transport reaches the RemoteSecondary create builds',
         () async {
       final socketFactory = _StubSecureSocketFactory();
       final listenerFactory = _StubSocketListenerFactory();
@@ -585,9 +585,12 @@ void main() {
         seamAtSign,
         'wavi',
         preference,
-        secureSocketFactory: socketFactory,
-        socketListenerFactory: listenerFactory,
-        outboundConnectionFactory: connectionFactory,
+        transport: AtLookupTransport(
+          secureSocketConfig: SecureSocketConfig(),
+          socketFactory: socketFactory,
+          listenerFactory: listenerFactory,
+          connectionFactory: connectionFactory,
+        ),
       );
 
       final atLookUp = atClient.getRemoteSecondary()!.atLookUp as AtLookupImpl;
@@ -596,8 +599,7 @@ void main() {
       expect(atLookUp.outboundConnectionFactory, same(connectionFactory));
     });
 
-    test('omitting them leaves at_lookup\'s dart:io defaults in place',
-        () async {
+    test('omitting it leaves the native transport in place', () async {
       final preference = AtClientPreference()..isLocalStoreRequired = false;
 
       final atClient =
