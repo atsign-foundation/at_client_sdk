@@ -1234,11 +1234,14 @@ Constraints beyond the ruling above:
   name ([`decisions.md` 42](detail/decisions.md#42-the-to-define-list-ruled-2026-08-05)
   item 1). Distinctness is what lets an owner tell one device's enrollment
   from another's in `enroll:list`.
-- **The expiry cap is ruled and landed**: it RE-ARMS on every sibling
-  retrofit (one grace period after the *last* clone upgrades, never past the
-  enrollment's own posture), grace ratified at 720h
+- **The expiry cap RE-ARMS**, one grace period after the *last* clone upgrades and
+  never past the enrollment's own posture, grace ratified at 720h
   ([`decisions.md` 42](detail/decisions.md#42-the-to-define-list-ruled-2026-08-05)
-  item 3).
+  item 3). ⚠️ **What arms it is ruled and NOT landed**: the built atServer caps at
+  the retrofit submission and exempts the atSign's first enrollment;
+  [`decisions.md` 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27)
+  moves the trigger to the child's first authentication on its own connection and
+  retires the exemption. This bullet read "ruled and landed" until 2026-08-27.
 - **Step 4's pull is the *normal* path, not a backstop**, whenever the approver is
   the legacy parent enrollment (which holds nothing to push). Store-and-forward in
   both directions, so "heals when each device next runs" is latency, not

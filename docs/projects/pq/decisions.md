@@ -96,7 +96,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [37]  | Legacy key material is retained until the ecosystem is PQ, not the atSign                   | 2026-08-05 | LIVE                      |
 | [38]  | Key material self-heals: mint-if-absent, else pull                                          | 2026-08-05 | LIVE                      |
 | [39]  | `_apsk` rides the same two-stage ladder                                                     | 2026-08-05 | LIVE                      |
-| [40]  | RF-SRV is the mechanism the whole model stands on                                           | 2026-08-05 | LIVE                      |
+| [40]  | RF-SRV is the mechanism the whole model stands on                                           | 2026-08-05 | AMENDED 2026-08-27        |
 | [41]  | The to-define list                                                                          | 2026-08-05 | LIVE                      |
 | [42]  | The to-define list, ruled                                                                   | 2026-08-05 | AMENDED 2026-08-12        |
 | [43]  | RF-2b lands, and what the first genuine ML-DSA PKAM found                                   | 2026-08-05 | LIVE                      |
@@ -170,11 +170,12 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | AMENDED 2026-08-20        |
 | [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
 | [112] | An unreadable key source is not an empty one                                                | 2026-08-18 | LIVE                      |
-| [113] | PqPosture: three postures, and the rollout they drive                                       | 2026-08-18 | AMENDED 2026-08-19        |
+| [113] | PqPosture: three postures, and the rollout they drive                                       | 2026-08-18 | AMENDED 2026-08-27        |
 | [114] | A signer waits for its own mint; the mint alone does not                                    | 2026-08-21 | LIVE                      |
 | [115] | The acceptance suite is 4 arms and a ledger, not one grid                                   | 2026-08-23 | 3 ARMS AMENDED 2026-08-24 |
 | [116] | Proposals rejected on evidence                                                              | 2026-08-23 | LIVE                      |
 | [117] | Measurements that closed a question                                                         | 2026-08-23 | LIVE                      |
+| [118] | The retrofit cap is armed by the child, not by the retrofit                                  | 2026-08-27 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -294,3 +295,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [115]: detail/decisions.md#115-the-acceptance-suite-is-4-arms-and-a-ledger-not-one-grid-2026-08-23
 [116]: detail/decisions.md#116-proposals-rejected-on-evidence-2026-08-23
 [117]: detail/decisions.md#117-measurements-that-closed-a-question-2026-08-23
+[118]: detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27

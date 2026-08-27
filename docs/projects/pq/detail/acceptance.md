@@ -1012,8 +1012,14 @@ gets `pq_signing_root`") and **UC-B1.3 c1** ("requests root") — where a scoped
 enrollment is neither pushed the private nor permitted to ask, on a rule the
 production code states as a security property. Two were the retrofit cap —
 **UC-B1.1 c3** and **UC-B2.2 c1** — whose formula the clauses had right and whose
-**re-arming** they missed; the correction is that the bypass window has no fixed
-end, since each sibling that retrofits extends it by a full grace period.
+**re-arming** they missed; the correction was that the window has no fixed end,
+since each sibling that retrofits extends it by a full grace period. ⚠️ **Both
+clauses were rewritten AGAIN on 2026-08-27**, once gkc ruled the guarantee is
+per-device and the cap is armed by the child's first authentication rather than by
+the retrofit
+([decisions.md 118](decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27)).
+They now state ruled behaviour the atServer does not yet have, and cannot be
+proven until it does.
 
 ✅ **Three were fixed in the code instead, on 2026-08-27, and are now ordinary
 gaps** — UC-A3.3 c1, UC-B4.1 c1 and UC-B4.4 c1 shared one cause, a negative

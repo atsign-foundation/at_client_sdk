@@ -1179,7 +1179,8 @@ existing enrollment. The authenticated pre-PQ client submits `enroll:request` wi
 (RF-SRV) validates the requested namespaces are a **subset** of the authenticating
 enrollment's, **auto-approves**, **copies** the old enrollment's expiry (or `null`) to
 the new one, and **caps** the old enrollment to `min(now + server-config grace, its
-existing expiry)` **without removing it**. There is **no per-APKAM-key delete**; legacy
+existing expiry)` **without removing it** — armed by the new enrollment's first
+authentication on its own connection, not by the submission. There is **no per-APKAM-key delete**; legacy
 retirement is the expiry cap + `enroll:revoke`. Each cloned pre-PQ keyfile retrofits to
 its **own distinct enrollmentId** — never a second keypair under an existing enrollment.
 ML-DSA APKAM auth is verified after the new keypair is recorded (see `design.md` for the
@@ -1197,7 +1198,8 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   3. Submit `enroll:request` with a **new enrollmentId**, its single
      `apkamPublicKey` + `signingAlgo = mldsa65` + key package + `EnrollParams.metadata`,
      on the authenticated connection. The server validates the namespace subset,
-     **auto-approves**, copies the old expiry, and caps the old (legacy) enrollment.
+     **auto-approves** and copies the old expiry. The old (legacy) enrollment is
+     capped when the new one first authenticates, not here.
   4. **Verify** PQ APKAM auth succeeds (record-authoritative `signingAlgo`).
   5. If this enrollment is **fully privileged** (`rw` on `*` and `__manage`), take
      `_rootlock@alice`, generate the ML-DSA-65 root keypair and publish
@@ -1211,8 +1213,11 @@ authenticated self-retrofit flow + expiry copy/cap and the `enroll:request` meta
   - `alice1.APKAM = pq` on the fresh auto-approved enrollment; PQ auth works.
   - `public:pq_signing_root@alice` created; `alice1.root⁻¹ = ✓`; `alice1` serves the private to other fully privileged enrollments on request.
   - The legacy enrollment is **capped** to `min(now + grace, its own remaining lifetime)`
-    and ages out — **not** deleted-by-key. The cap is **re-applied on every self-enrollment**,
-    so `now` is the latest retrofit rather than the first; see
+    and ages out — **not** deleted-by-key. The cap is armed by the new enrollment's
+    **first authentication on a connection it opened itself**, never by the retrofit
+    submission — a retrofit whose child never authenticates caps nothing — and it re-arms
+    on each sibling's first such authentication, so `now` is the latest one. **No
+    enrollment is exempt, the atSign's first included.** See
     [UC-B2.2](#92-uc-b22--grace-period-variant), where that is what the row turns on.
   - Legacy *encryption* key retained (history still readable). No re-onboarding.
 
@@ -1361,25 +1366,24 @@ stopping a widening.
 - **Given:** deployment configured a server-config grace.
 - **When:** `alice1` retrofits, and later a sibling clone of the same pre-PQ keyfile does.
 - **Then:** legacy auth survives until `min(now + grace, its own remaining lifetime)`,
-  where **`now` is the most recent retrofit** — the cap **re-arms** on each one. Sibling
-  clones may still retrofit (each to its own fresh enrollment) for as long as legacy auth
-  holds; once it lapses, UC-B2.1 applies. **So the bypass window is not a fixed deadline:
-  each sibling that retrofits extends it by a full grace period**, and a deployment with
-  laggard devices keeps it open as long as they keep arriving.
+  where **`now` is the most recent child enrollment's first authentication on a connection
+  it opened itself** — the cap **re-arms** on each one, and a retrofit whose child never
+  authenticates arms nothing. Sibling clones may still retrofit (each to its own fresh
+  enrollment) for as long as legacy auth holds; once it lapses, UC-B2.1 applies. **So the
+  window is not a fixed deadline: each sibling that upgrades and authenticates extends it
+  by a full grace period**, and a deployment with laggard devices keeps it open as long as
+  they keep arriving.
 
-  ⚠️ **This said the cap "is the grace window" and that clones may retrofit "until the cap
-  elapses" — a fixed deadline set by the first sibling — until 2026-08-27.** Read from
-  at_server `origin/trunk` rather than from a sibling checkout on its own branch:
-  `_capEnrollmentExpiry` writes a *full* grace from now on every self-enrollment and mins
-  it only against `apkamKeysExpiryDuration` re-derived from the record's `createdAt`,
-  never against the cap a previous sibling wrote. Its dartdoc says why, and the reason is
-  good: a deadline fixed by the first sibling's upgrade would strand every laggard whose
-  next run fell outside that window. **The behaviour is deliberate and the row's account
-  of it was wrong**; what the row understated is the consequence, which is that
-  "(Bypass open during the window — explicit trade-off)" describes a window with no fixed
-  end.
+  ⚠️ **The clause above states the RULED behaviour, not the built one, and is unproven
+  until the atServer changes.** On at_server `origin/trunk` the cap is written by the
+  retrofit submission itself, and the atSign's first enrollment is exempt from it
+  entirely — so for an owner holding one keyfile it never fires at all. ⚠️ **This row
+  also said the cap "is the grace window" and that clones may retrofit "until the cap
+  elapses" — a fixed deadline set by the first sibling — until 2026-08-27**, which was
+  wrong in the other direction: the re-arm is deliberate, because a deadline fixed by the
+  first sibling's upgrade would strand every laggard whose next run fell outside it.
 
-- **Cross-ref:** `decisions.md` (retirement ruling); `design.md` (expiry copy/cap).
+- **Cross-ref:** `decisions.md` (retirement ruling, and [118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27) for the trigger); `design.md` (expiry copy/cap).
 - **Impl/verify:** **RF-SRV** + **RF-2c**. **Both green 2026-08-05** —
   `tests/at_end2end_test/test/pq/retrofit_retirement_e2e_test.dart`, on the one
   atSign whose atServer `runLocal.sh` gives a zero-hour

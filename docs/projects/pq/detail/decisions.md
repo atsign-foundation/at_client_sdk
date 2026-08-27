@@ -3246,8 +3246,13 @@ ruling, each with a differential test.
    would kill the legitimate children each clone spawned. No authorisation delta:
    subset grants mean the parent's revoker is authorised for every descendant
    (record that property in the implementing commit's body). `parentEnrollmentId`
-   is also exposed in `enroll:fetch` and `enroll:list`, so an owner can see what a
-   stolen keyfile spawned.
+   rides `enroll:list`, which returns the record whole, so an owner can see what a
+   stolen keyfile spawned. ⚠️ **This said `enroll:fetch` carries it too, until
+   2026-08-27; it does not.** That verb returns exactly `appName`, `deviceName`,
+   `namespace`, `encryptedAPKAMSymmetricKey` and `status`. ⛔ **And the cascade
+   itself is unbuilt**: `parentEnrollmentId` is written by the retrofit and read by
+   nothing on at_server `origin/trunk`, so `enroll:revoke` does not cascade today
+   and the non-cascading `retire` mode does not exist either.
 
 3. **The cap slides.** [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s
    formula — min(now + grace, the enrollment's own expiry) — is applied on every
@@ -3269,6 +3274,15 @@ ruling, each with a differential test.
    not the enrollment's own posture. Landed on the spike; the min-fold, the
    posture bound, and both item-1 deltas are each pinned by a test proven red
    against the pre-fix handler.
+
+   ⚠️ **AMENDED 2026-08-27 by
+   [118](#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27):
+   the formula and the re-arm stand, the TRIGGER moves.** The cap is armed by the
+   new enrollment's first authentication on a connection it opened itself, not by
+   the retrofit submission — capping at submission is a write made on the strength
+   of a record the server wrote itself, while the private half it attests to is
+   persisted client-side. The atSign's first enrollment stops being exempt in the
+   same change.
 
 4. **The chain sweep's runner is whichever fully privileged client next starts** —
    exactly what is built — and there is deliberately no dedicated sweep actor. On
@@ -3309,7 +3323,14 @@ ruling, each with a differential test.
    legacy material
    ([37](#37-legacy-key-material-is-retained-until-the-ecosystem-is-pq-not-the-atsign-2026-08-05)),
    and the upgraded file becomes the backup. Timing: nothing to do; the grace cap
-   retires it one window after the last retrofit (item 3). Never `enroll:revoke`
+   retires it one window after the last retrofit (item 3). ⚠️ **"Nothing to do" was
+   false between 2026-08-18 and
+   [118](#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27),
+   and nothing here recorded it**: `preserveFirstEnrollmentOnRetrofit` landed
+   thirteen days after this item was written and exempts the CRAM-minted root from
+   the cap entirely, so for the owner holding one keyfile the credential is
+   permanent rather than ageing out. 118 retires that exemption, which makes the
+   sentence true again — by decision rather than by luck. Never `enroll:revoke`
    as cleanup, since revocation cascades to every retrofitted child — this narrows
    [section 5](#5-retrofit-ruling--fresh-self-spawned-auto-approved-enrollment)'s "(or an
    explicit enroll:revoke)" aside to the compromise case, where cascading is the
@@ -11087,25 +11108,29 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
    laggard stranded past the window recovers by ordinary OTP enrollment. That
    much is **on at_server trunk**, verified 2026-08-18.
 
-   ⚠️ **The first-enrollment exemption is MERGED BUT UNRELEASED.**
+   ⚠️ **The first-enrollment exemption is RELEASED, and is now being retired.**
    `preserveFirstEnrollmentOnRetrofit` — which keeps the atSign's CRAM-minted
    root enrollment out of the cap, so retiring it stays an explicit
    `enroll:revoke` — merged as at_server **PR #2755** on 2026-08-18
-   (`c2260e640`) and is on at_server `trunk`. It is in **no release**:
-   at_server's newest tag is `c3.16.1` of 2026-08-13, five days older than the
-   merge.
+   (`c2260e640`), and is carried by tags **`c3.16.2` and `c3.16.3`** (tagged
+   2026-08-25). ⚠️ **This paragraph said it was in "no release" against a newest
+   tag of `c3.16.1`, until 2026-08-27**; that was true when written and the tags
+   moved. A merge and a published artefact are still different events —
+   `atsigncompany/virtualenv:vip` need not carry it, so anything exercising
+   retrofit capping runs against a freshly built `at_virtual_env:local` and a
+   green against the published image says nothing about it.
 
-   So the design gate is lifted and the *testing* one is not. A merge and a
-   published artefact are different events: `atsigncompany/virtualenv:vip`
-   cannot contain this, so anything exercising retrofit capping runs against a
-   freshly built `at_virtual_env:local` and a green against the published image
-   says nothing about it. Without the exemption an auto-retrofit caps the
-   atSign's own root, and the copied-keyfile lockout applies to the very
-   keyfile most users hold — which is what the release, not the merge, finally
-   settles for real deployments.
+   ⛔ **And the exemption itself is superseded by
+   [118](#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27),
+   which retires it.** What it protected against — an atSign left with no
+   enrollment able to approve a replacement — is answered instead by arming the
+   cap on the child's own authentication, and the answer covers every parent
+   rather than only the first. The exemption's cost, unrecorded here until
+   2026-08-27, is that for the owner holding one keyfile the cap never fires at
+   all and the legacy credential is permanent.
 
-   The grace default is also code-only, absent from `config.yaml`, so an
-   operator reading that file will not find it.
+   The grace default is code-only, absent from `config.yaml`, so an operator
+   reading that file will not find it — unlike the exemption, which is in it.
 4. **`disallowLegacyEncryption` is posture-only.** The `AtClientPreference`
    override is removed, which **overturns [70](#70-workstream-a-capstone-pqposture-the-five-flags-as-one-value-2026-08-10)'s
    "individual flags still win"** for this flag, and **redefines R-2**
@@ -11938,3 +11963,99 @@ it.
    the argument had already been removed; nothing in the diff or the tests
    records the question that run answered. Inherited from the section rather
    than re-run by me.
+
+## 118. The retrofit cap is armed by the child, not by the retrofit (2026-08-27)
+
+**In brief:** *retrofit is a per-device claim; the cap fires on proof, and the
+first-enrollment exemption goes*
+
+**What a successful retrofit entitles the SDK to claim is that THIS enrollment
+is PQ-authenticated — nothing about the atSign.** Siblings are untouched, the
+parent survives, and the atSign is PQ-authenticated only once the owner has
+retired the last legacy enrollment. So a legacy credential that outlives the
+retrofit is not a defect; it is the absence of a claim never made. Ruled by gkc
+2026-08-27 after the catalogue was found describing a fixed retirement deadline
+that the atServer does not implement.
+
+**The cap is a migration safety net, not a security control.** Its formula is
+unchanged — `min(now + grace, the enrollment's own remaining lifetime)`, an
+`apkamSelfEnrollmentGraceHours` of 720 — and its purpose is to stop a migration
+going wrong, not to bound an attacker. Retrofit is a one-time operation for the
+legacy fleet: an enrollment created under `pqReady` holds ML-DSA APKAM from
+birth and never climbs out of `legacy`, so this whole mechanism retires with the
+fleet it exists for.
+
+**What changes is WHEN the cap is armed.** Today the atServer caps the parent at
+the moment it stores the child. That is a write made on the strength of a record
+the server wrote itself: the child's ML-DSA private half is persisted
+client-side, so if the keyfile write fails, or the file is read-only, or the
+process dies between `enroll:request` and the flush, the child exists on the
+server and nowhere else — and the server has just started a clock on the only
+working credential. **The cap is instead armed by the child's first PKAM
+authentication on a connection the child opened**, which is what proves the
+private half survived and is usable.
+
+The client already does this and needs no change. `selfRetrofit` calls
+`AtAuth.create().authenticate(...)` with the new enrollment id immediately after
+the submission — *"the retrofit response's session is the legacy one, and only
+`authenticate()` mints a session carrying the new id"* — and throws if it fails.
+⚠️ **The auth proves the material is present and usable in the process, not that
+it reached disk**; disk persistence is proven by `FileAtKeysIo.update` having
+returned. Together they cover the hazard, and the authentication alone does not.
+
+**The rule is universal, and `preserveFirstEnrollmentOnRetrofit` is retired.**
+One rule for every parent, the CRAM-minted root included: `_isFirstEnrollment`,
+`disqualifiesAsFirst` and the config key go, with a release note for operators
+who set it. The exemption's stated reason is that capping the root can leave an
+atSign with no enrollment able to approve a replacement — and arming on the
+child's authentication answers that directly, because an authenticated child
+inheriting `*` and `__manage` verbatim IS such an enrollment. Retiring the
+exemption also removes the same stranding case for every non-root parent, which
+the exemption never covered.
+
+**Cleanup is instructions, not tooling** (gkc, 2026-08-27). No column on
+`auth list`, no fields on `Enrollment`, no new verb. The content the guide owes:
+retirement is automatic and there is nothing to do; archive the upgraded
+`.atKeys` and destroy pre-PQ copies, which hold the legacy encryption private
+and, until the cap elapses, a live credential; a device stranded past the window
+recovers by an ordinary OTP enrollment; and `enroll:revoke` is for compromise,
+never for cleanup.
+
+**Measurements this rests on**, taken from at_server `origin/trunk` rather than
+from a sibling checkout on its own branch:
+
+- `_capEnrollmentExpiry` writes a *full* grace from `now` on every
+  self-enrollment and mins it only against `apkamKeysExpiryDuration` re-derived
+  from the record's `createdAt` — never against the cap a previous sibling
+  wrote. Each sibling that retrofits therefore extends the window by a full
+  grace period.
+- `preserveFirstEnrollmentOnRetrofit` defaults **true** and is in
+  `config.yaml`; `apkamSelfEnrollmentGraceHours` is in no config file at all.
+  So for the owner holding one keyfile — whose enrollment is the CRAM-minted
+  root — the cap never fires and the legacy credential is permanent.
+- The revocation cascade of [40](#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05)
+  item 2 is **unbuilt**: `parentEnrollmentId` is written by the retrofit and
+  read by nothing. So `enroll:revoke` does not cascade today, and 40 item 7's
+  prohibition on using it as cleanup guards a hazard that does not yet exist —
+  it becomes real the day the cascade lands. The non-cascading `retire` mode is
+  unbuilt too, so there is currently no verb meaning "retire this, keep its
+  children".
+- `enroll:list` returns `toJsonExtended()` — the whole record plus `status` —
+  so `signingAlgo` and `parentEnrollmentId` are already on the wire.
+  `enroll:fetch` returns exactly `appName`, `deviceName`, `namespace`,
+  `encryptedAPKAMSymmetricKey` and `status`. **Neither carries the record's
+  expiry**, which lives in `AtMetaData`, so no caller can be told when a capped
+  credential dies. gkc ruled 2026-08-27 that the enroll responses returning
+  details should carry the expiration time; it is banded post-D1.
+
+**Status:** ruled, unimplemented. The whole change is the atServer's; at_client
+and at_auth need nothing. ⛔ **It is part of D1** (gkc, 2026-08-27), and **what
+tracks it is the catalogue, not a plan row**: `acceptance.md`'s UC-B1.1 c3 and
+UC-B2.2 c1 were rewritten to this behaviour on 2026-08-27, neither can be proven
+until the atServer has it, and the catalogue is D1's burn-down target — so an
+unproven clause there IS the D1 gate.
+
+Two adjacent items are **not** part of it and are plan rows instead. The upgrade
+guide, because a document can never be a THEN clause. And **carrying the record's
+expiry on the enroll responses that return details, which gkc banded post-D1 on
+2026-08-27: it does not gate D1**, so it must not appear in the catalogue.
