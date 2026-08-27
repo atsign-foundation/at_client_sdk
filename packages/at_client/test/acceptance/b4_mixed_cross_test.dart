@@ -34,6 +34,21 @@ void main() {
           proves: 'the explicit opt-in arm: with allowLegacyCryptoFallback set '
               'the same cold-start write proceeds under legacy and the record '
               'is stamped legacy — the downgrade is visible, never silent');
+      provenIn('tests/at_end2end_test/test/pq/pq_cold_start_recovery_test.dart',
+          'UC-B4.1: with the fallback opted in, the cold write goes legacy',
+          proves: 'the rest of the clause, cross-atSign and in one run: with '
+              'the hatch open the cold write goes out stamped legacy and '
+              'carries NO ckKid, which is the monolithic model — the '
+              'per-value key rides with the value instead of being conveyed '
+              'as its own record; and the first write after the recipient\'s '
+              'key appears is PQ with no flag to flip, the app having never '
+              'touched the preference again and seen no refusal to react to. '
+              'Control: a second write taken before the key exists stays '
+              'legacy, so the flip is the key appearing. ⚠️ This row is '
+              'pinnable only since 2026-08-27, when the clause stopped '
+              'requiring "a PQ self-copy for alice\'s own scope" — a record '
+              'put does not write, AtCollection being where that lives',
+          clauses: ['the *first write after bob\'s key appears* is PQ']);
     });
 
     test('UC-B4.2 · legacy @alice receives from PQ @bob (the interop question)',

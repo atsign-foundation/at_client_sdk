@@ -827,17 +827,24 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
      — as a discrete CK-conveyance record stamping `ckKid` and the `nskeyKid` it was
      sealed to.
   3. Write the **data** value (`at/symmetric/AES/GCM`, citing `ckKid`); sync (delivered to `@bob`).
-  4. Write the **self-copy** for alice's own clients, in her **own** scope: a
-     **second** CK, conveyed via an `at/nskey` record sealed to alice's own
-     `app_1.my_apps` nskey (`recipientKind: nskey`), plus its own data value under
-     `at/symmetric/AES/GCM`. It is a different CK and therefore a different
-     ciphertext — bob's CK never enters alice's own scope
-     ([`decisions.md`](decisions.md) section 14).
+
+  ⚠️ **A fourth step described a "self-copy" written into alice's own scope by this
+  same `put`, and it was removed on 2026-08-27.** `AtClient.put` writes one value and
+  one CK conveyance, and that conveyance is sealed to **bob** — `nskey_cross_atsign_test`
+  asserts alice cannot open it, on the grounds that if she could, her own scope would
+  have been handed bob's content key. Writing a second copy for the sender is
+  **AtCollection's** behaviour, a separate earlier `put` to a plain self key, and
+  AtCollection is a *consumer* of this API whose behaviour these rows do not assert
+  (gkc, 2026-08-27). A row about `put` or `notify` is about **self→self or
+  self→other**, never both at once.
 - **Then:**
-  - `bob1`, `bob2` decapsulate bob's CK record with bob's nskey private and read;
-    alice's clients decapsulate the self-copy's CK with alice's nskey private and read.
-    The same nskey private opens every CK record sealed to that nskey — the two reads
-    differ by record-owner, not by key.
+  - `bob1`, `bob2` decapsulate bob's CK record with bob's nskey private and read. The
+    same nskey private opens every CK record sealed to that nskey, so which of bob's
+    enrollments reads is immaterial — the reads differ by record-owner, not by key.
+    ⚠️ This clause also asserted that "alice's clients decapsulate the self-copy's CK"
+    until 2026-08-27; the self-copy is not this API's, and alice's own reading of her
+    own data is [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists),
+    the self→self mirror of this row.
   - PQ end to end; data values `providerId = at/symmetric/AES/GCM`, CK conveyances
     `at/nskey`; no RSA on any path.
   - Every authorised reader on both atSigns decrypts; an unauthorised `@bob`
@@ -861,8 +868,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Given:** alice (E:aE1, aE2) and bob (E:bE1, bE2) all PQ; bob has `public:__nskey.app_1.my_apps@bob`.
 - **When:** `alice2` shares with `@bob`.
-- **Then:** all of bob's authorised enrollments read; all of alice's authorised
-  enrollments read the self-copy; no authorised enrollment is left unable to decrypt.
+- **Then:** all of bob's authorised enrollments read the shared record, whichever of
+  alice's enrollments wrote it; no authorised enrollment on the receiving side is left
+  unable to decrypt. ⚠️ **This also required "all of alice's authorised enrollments read
+  the self-copy" until 2026-08-27** — a record `put` does not write. The self→self
+  mirror, alice's own enrollments reading alice's own data, is
+  [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists).
 
 | enr | APKAM | root⁻¹ | nskey⁻¹ | KP |
 |-----|-------|--------|---------|----|
@@ -1415,9 +1426,12 @@ stopping a widening.
   into `allowLegacyCryptoFallback` — in which case it goes out **legacy** to bob's
   `publickey` (per-value symmetric key RSA-wrapped inline, the monolithic legacy
   model), and the *first write after bob's key appears* is PQ with no flag to
-  flip. A PQ self-copy for alice's own scope proceeds **independently** either
-  way. Never a silent downgrade: the app chose the fallback or the app sees the
-  refusal.
+  flip. Never a silent downgrade: the app chose the fallback or the app sees the
+  refusal. ⚠️ **This also said "a PQ self-copy for alice's own scope proceeds
+  independently either way" until 2026-08-27** — `put` writes no such record, and
+  whether alice can write in her own scope while bob is unreachable is
+  [UC-A3.1](#41-uc-a31--self-writeread-namespace-key-already-exists)'s question, not
+  this row's.
 
 ### 11.2 UC-B4.2 — Legacy `@alice` receives from PQ `@bob` (the interop question)
 
@@ -1454,8 +1468,10 @@ stopping a widening.
 - **Given:** alice's app is mid-rollout: `alice1` runs the active build, `alice2`
   an old pre-capability build; bob's side holds the namespace key.
 - **When:** `alice1` shares/notifies `@bob`.
-- **Then:** the write toward `@bob` takes the **nskey data path**, and alice's
-  **self-copy** does too — which `alice2` cannot read. That is the
+- **Then:** the write toward `@bob` takes the **nskey data path** — which `alice2`
+  cannot read. ⚠️ **This said "and alice's self-copy does too" until 2026-08-27**; `put`
+  writes no self-copy, and the point survives without it, since the record alice1 wrote
+  is on alice's own atServer where alice2 can see it and not open it. That is the
   release-ordering discipline violated (`active` shipped before the capability
   build reached every install), and it is the **app developer's** failure mode,
   not the SDK's to detect: the remedy is updating `alice2`, and everything

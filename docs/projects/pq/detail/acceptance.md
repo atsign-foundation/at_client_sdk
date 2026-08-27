@@ -986,7 +986,6 @@ the wrong behaviour as the specification. Open the production path first.
 | Clause | What the tree does instead |
 |---|---|
 | **UC-A4.4** c2 | Says a notification's scheme decision follows a put's. The legacy fallback exists on `put` and nowhere else: the tree's only `on NamespaceKeyUnavailableException catch` is in `_putInternal`, and both notify entry points call `CryptoRuntime.prepareWrite` with no catch at all |
-| **UC-A4.3** c1 | "all of alice's authorised enrollments read the self-copy" — the self-copy the definite article points at is produced by UC-A4.1's `put`, not by the share this row's WHEN describes |
 | **UC-A4.6** c5 | A claim about **history** — what two clients "had exchanged" under `0x01` — which no current test can establish, `0x01` having been retired and removed. The cited test's "two clients" are also two `AtClientSecretSharing` instances over one client of one atSign |
 | **UC-C1.5** c1 | Arm 1 is true *and already proven live*. It is the **justification** that is false: the two postures do not tell themselves apart by resolving into different per-algorithm idempotence pools |
 
@@ -1011,10 +1010,17 @@ transition happen rather than observing a steady state — the sender is refused
 no. **UC-A3.3 c1** is `nskey_data_path_live_test.dart`'s *a namespace that gains
 a key takes over*; **UC-B4.4 c1** is `pq_cold_start_recovery_test.dart`, cited
 twice because the clause's parenthetical (the opted-in fallback) is a second
-test. ⚠️ **UC-B4.1 c1 is deliberately NOT pinned**: the same two tests establish
-most of it, but nothing anywhere asserts "a PQ self-copy for alice's own scope
-proceeds **independently** either way", and pinning generously is what would make
-135 of 135 worth nothing.
+test. ✅ **UC-B4.1 c1 closed too, once the clause stopped asking for something `put`
+does not do.** It had one arm left — "a PQ self-copy for alice's own scope
+proceeds **independently** either way" — which turned out to describe
+**AtCollection**, whose self-copy is its own earlier `put` to a plain self key.
+`AtClient.put` writes one value and one *recipient-scoped* conveyance, and
+`nskey_cross_atsign_test` already asserted the sender cannot open that
+conveyance. **Ruled 2026-08-27 (gkc): AtCollection is a consumer and these rows
+do not assert its behaviour** — a row about `put` or `notify` is about self→self
+**or** self→other, never both — so the reference came out of UC-A4.1's steps,
+UC-A4.1's Then, UC-A4.3 c1, UC-B4.1 c1 and UC-B4.3 c1. UC-A4.3 c1 stops being a
+specification defect in the same edit and is an ordinary gap.
 
 ⚠️ **These are the mapping agents' judgements**, spot-checked at 7 of 91 with
 one over-call found. Verify a row against the test before acting on it; the
@@ -1096,7 +1102,6 @@ These are also the only route that raises **server-proven**.
 | **UC-B1.3** c1 | a restricted E2 receives only its authorised subset of `nskey` keys | `retrofit_e2e_test.dart` |
 | **UC-B2.1** c1 | `alice1b` must re-enroll | `retrofit_retirement_e2e_test.dart` |
 | **UC-B2.2** c1 | legacy auth survives until `min(now + grace, expiry)` | `retrofit_retirement_e2e_test.dart` |
-| **UC-B4.1** c1 | Two arms are unestablished. (a) "the *first write after bob's key appears* is PQ with no flag to flip" — no test anywhere performs a write… | `nskey_recipient_not_ready_test.dart` |
 | **UC-B4.3** c1 | "which `alice2` cannot read" — nothing establishes that a pre-capability (legacy-only) install FAILS to read a record stamped `at/symmetric… | `nskey_cross_atsign_test.dart` |
 | **UC-B5.1** c1 | "`pq_signing_root` is root (no namespace), so it has **no** `enroll:listns` push" — and, within the second arm, "(persists until one answer… | `signing_root_pull_two_enrollments_test.dart` |
 | **UC-B5.6** c1 | "and saying the retry must wait the ttl out — the one thing the caller can act on" (and, in the tail, "logs `severe`") | `nskey_rotation_live_test.dart` |
