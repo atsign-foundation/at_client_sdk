@@ -144,7 +144,7 @@ record working. Do not "tidy" one to match the other.
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
 | [the clause burn-down: every THEN clause proven](#the-clause-burn-down-every-then-clause-proven) | **The definition of done, and the campaign to reach it** (gkc, 2026-08-27). **Objective 1:** every one of the **135** THEN clauses proven by some test. **Objective 2:** every clause proven only in-process gains a proof against a real atServer wherever feasible. Read the meter by running the acceptance suite: it prints `BURN-DOWN  clauses proven: N of 135   server-proven: M of 135`. ⚠️ **A pin is a claim, not a run** — `tool/acceptance_ledger.dart` is what says the cited test passed. This row **absorbs the old "what the citation audit left owed"**, whose five findings (F16, F15, F8, F1, F3) are clause gaps by another name | Nothing |
-| [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | **Reproduce it in this tree, then fix it.** A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. Three in-tree reproduction attempts failed; the row says how |
+| [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | ✅ **Reproduced 2026-08-27** — `seeding_tail_runs_live_test.dart` and `seeding_tail_abandoned_live_test.dart`, a two-file differential. **What is left is the FIX**, and its shape needs a ruling: the app author's stated minimum is an *outcome* to await and a *loud* abandonment, and `pqBootstrap` is `@experimental` and documented as not for app authors. A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. Three in-tree reproduction attempts failed; the row says how |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **gkc publishes at_auth 4.0.0-rc1**, then carve at_client (stacked) → at_client_flutter → at_onboarding_cli. Six of the eight positions are through by merge; what is left is publishes | gkc. ⚠️ **Merged is not published, and only the publishes gate anything now** |
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
 
@@ -799,8 +799,63 @@ signal a caller has, and `stop()` breaks the step loop and completes it anyway,
 so it resolves identically whether the work ran or was skipped. A caller that
 waits for it still cannot tell.
 
-⚠️ **What is owed is a reliable in-tree reproduction, and three attempts have
-failed.** Recorded so they are not repeated:
+✅ **REPRODUCED IN-TREE 2026-08-27**, as a two-file differential against the
+local virtualenv. Same atSign, same posture, same construction, same minute,
+run-unique namespace each — the only variable is whether the tail was stopped:
+
+| arm | file | advertisement | `startupComplete` |
+| --- | --- | ---: | --- |
+| left alive | `seeding_tail_runs_live_test.dart` | **published in ~1s** | — |
+| stopped as the client was returned | `seeding_tail_abandoned_live_test.dart` | **nothing after 15s** | **resolved at 185 ms** |
+
+⚠️ **Two files because `AtClientManager` is a per-isolate singleton** that
+re-serves the client it already built — two arms in one file share one
+bootstrap, and whichever ran second measures nothing. Break-it checked:
+removing the `stop()` reddens the second arm, so it measures the stop and not
+the environment.
+
+⛔ **Why the earlier attempts failed, now that a control exists.** They were
+lost on the rig, not on the hypothesis, and attempt 3's diagnosis was wrong:
+it concluded "the rig could not seed for those namespaces at all" when a
+living client at a **seeding posture** publishes in about a second. The trap
+is that `seedNamespaceKeys` is **false** at `PqPosture.legacy`, so a client
+built there correctly publishes nothing and the red says nothing about
+stopping.
+
+⚠️ **And `nskey_seeding_live_test.dart` is blind to this defect**, though its
+own doc comment says it exists to catch "whether the path runs at all — a
+client whose seeding silently never fired". It builds at `PqPosture.legacy`
+and calls `NskeySeeding.seed()` by hand, so a client whose tail never fires
+passes it. Nothing else covered it either: `pq_posture_grid_test.dart` builds
+cells at seeding postures and depends on the tail having run, but only
+indirectly — its writes would fail otherwise. That is the hole this shipped
+through.
+
+**Item 3 measured.** The abandonment is not silent, but it is not loud either:
+`AtSignLogger`'s default `_root_level` is `info`, so the line *is* emitted in
+production —
+
+    INFO|…|PqClientBootstrap (@alice)|PQ startup stopped for @alice; the
+    remaining steps will not run (the next start retries them)
+
+— at `info`, among 31 other `info` lines in a 15-second run, naming neither
+which steps were skipped nor the consequence (this atSign is now unreachable
+as a recipient). ⚠️ **And "the next start retries them" is reassuring in a way
+that is false for the shape that hits this**: a cron job or a piped-stdin CLI
+does have a next start, and it abandons too.
+
+⚠️ **The tree already contradicts itself about whether `startupComplete` is
+for callers.** `at_client_impl.dart:308` says "tests do; production code must
+not"; `:696` says "Awaitable via `pqBootstrap`'s `startupComplete` for callers
+that need the tail to have run". That is request item 5 made concrete, and it
+is a defect in the tree today.
+
+**What remains of this row is the FIX**, and its shape is a design decision —
+`pqBootstrap` is `@experimental` and documented as not for app authors, so an
+outcome surfaced there does not reach the caller who reported this.
+
+⚠️ **The three earlier reproduction attempts**, recorded so they are not
+repeated:
 
 1. **Stop the client the enrolment handed back.** Vacuous green — that client
    was built seconds earlier inside the enrolment dance and its tail had long
