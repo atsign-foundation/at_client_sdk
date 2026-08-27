@@ -12,7 +12,7 @@ import 'package:at_client/src/secret_sharing/envelope_addressing.dart'
 import 'package:at_client/src/secret_sharing/key_package.dart' show KeyPackage;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
 import 'package:at_utils/at_logger.dart' show AtSignLogger;
-import 'package:meta/meta.dart' show experimental, visibleForTesting;
+import 'package:meta/meta.dart' show experimental;
 
 final _logger = AtSignLogger('NskeySeeding');
 
@@ -78,7 +78,13 @@ class NskeySeeding {
   /// namespace. Whether that is reachable in practice depends on what the
   /// atServer grants a first enrollment, which is not this package's to
   /// assert.
-  @visibleForTesting
+  ///
+  /// No longer test-only: `AtClient.ensureReachable` asks this to tell "this
+  /// enrollment cannot hold a key for that namespace" apart from "the mint
+  /// failed". Without the distinction a wildcard-only enrollment — which is
+  /// what a first CRAM onboard produces — reports an error for a namespace it
+  /// was never going to seed, which is the wrong thing to hand an app author
+  /// hunting a failure.
   Future<Set<String>> authorisedNamespaces() async {
     final enrollmentId = atClient.getRemoteSecondary()?.atLookUp.enrollmentId;
     if (enrollmentId == null || enrollmentId.isEmpty) {
@@ -112,16 +118,7 @@ class NskeySeeding {
     final minted = <String>{};
     for (final namespace in await authorisedNamespaces()) {
       try {
-        // The atServer, not local storage: a namespace another enrollment
-        // minted a moment ago is absent locally until sync catches up, and
-        // reading that absence as a cold start is what publishes a second key
-        // over the first.
-        if (await ring.publishedAdvertisement(owner, namespace) != null) {
-          continue;
-        }
-        final advertisement = await ring.mintAndPublish(namespace);
-        minted.add(namespace);
-        await _convey(namespace, advertisement.nskeyKid);
+        if (await seedNamespace(owner, namespace)) minted.add(namespace);
       } catch (e) {
         // One namespace failing must not stop the others: a partly seeded
         // atSign is strictly better than an unseeded one, and the next start
@@ -130,6 +127,54 @@ class NskeySeeding {
       }
     }
     return minted;
+  }
+
+  /// Mints, publishes and conveys the key for **one** namespace, unless one is
+  /// already published. Returns whether this call minted.
+  ///
+  /// Split out of [seed] so a caller that wants a single namespace ready —
+  /// `AtClient.ensureReachable` — does not have to seed every other namespace
+  /// this enrollment happens to be authorised for as a side effect of asking
+  /// about one.
+  ///
+  /// Throws rather than logging: [seed] contains a failure so that one
+  /// namespace cannot stop the others, while a caller asking about one
+  /// namespace wants the reason.
+  ///
+  /// Safe to call concurrently with [seed] and with another client's mint. The
+  /// published check below and the mint lock inside [PublishedNskeyKeyRing.mintAndPublish]
+  /// both re-read under the lock, so the loser adopts rather than minting a
+  /// second generation.
+  Future<bool> seedNamespace(String owner, String namespace) async {
+    // The atServer, not local storage: a namespace another enrollment minted a
+    // moment ago is absent locally until sync catches up, and reading that
+    // absence as a cold start is what publishes a second key over the first.
+    if (await ring.publishedAdvertisement(owner, namespace) != null) {
+      return false;
+    }
+    final advertisement = await ring.mintAndPublish(namespace);
+
+    // ⚠️ **The conveyance is guarded separately, and the boundary is the
+    // point.** Publishing is what makes this atSign reachable — a peer seals
+    // to the advertisement and needs nothing else. Conveying is what gives
+    // this atSign's OTHER enrollments the private half, and an enrollment that
+    // misses the push pulls at its next start. So a conveyance failure is not
+    // a failure to seed, and reporting it as one tells a caller its atSign is
+    // unreachable when it is reachable.
+    //
+    // Not hypothetical: a legacy PKAM client has no APKAM keypair, the
+    // conveyance enumerates members with `enroll:listns`, and the atServer
+    // refuses that without APKAM authentication. Measured 2026-08-27, where it
+    // turned a successful publish into a reported failure.
+    try {
+      await _convey(namespace, advertisement.nskeyKid);
+    } catch (e) {
+      _logger.warning(
+          'Published the nskey for $owner:$namespace, but could not convey '
+          'its private to this atSign\'s other enrollments — they will pull '
+          'it at their next start. Peers can seal here either way: $e');
+    }
+    return true;
   }
 
   /// Primes the in-memory secret store with the nskey privates this client

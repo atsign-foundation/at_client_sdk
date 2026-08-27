@@ -1,3 +1,4 @@
+import 'package:at_client/src/client/at_reachability.dart';
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart' show AtKeysIo;
@@ -62,6 +63,42 @@ abstract class AtClient {
   /// Returns `Future.value()` immediately when there are no in-flight
   /// emits.
   Future<void> get pendingEmissions;
+
+  /// Waits until other atSigns can seal data to [namespace] for this atSign,
+  /// doing whatever is missing, and reports **what happened**.
+  ///
+  /// Sending and receiving are not symmetric, and the difference is not
+  /// obvious: a client can send the moment it is up, because sending needs the
+  /// *recipient's* published key. Receiving needs this atSign's own key to be
+  /// published, and that happens in a startup step that is deliberately not
+  /// awaited — construction must not block on a network round trip. A process
+  /// that finishes its work and exits takes that step down wherever it had got
+  /// to, and nothing in this client sees a problem: the symptom appears on a
+  /// *peer*, which reports this atSign as having no published key. Diagnosed
+  /// from that end it names the wrong party.
+  ///
+  /// So this exists for the caller that must not exit until it is reachable —
+  /// a CLI tool, a cron job, a one-shot notifier, anything driven from a
+  /// script with piped stdin. **It is not a default and nothing calls it for
+  /// you**: an app that only ever sends should not pay for a mint it will
+  /// never use.
+  ///
+  /// Idempotent and cheap when there is nothing to do: it checks what is
+  /// published before it mints anything, and it is safe to call on every
+  /// start and safe to call while the startup step is running — both re-read
+  /// under the same mint lock, so the loser adopts rather than publishing a
+  /// second key.
+  ///
+  /// Answers rather than throws for the two cases that are configuration and
+  /// not failure — a posture that does not seed, and a namespace this
+  /// enrollment cannot hold a key for. Read
+  /// [AtReachabilityResult.isReachable] rather than comparing the outcome.
+  ///
+  /// [timeout] bounds the whole operation, which may take several round
+  /// trips. On [AtReachability.timedOut] nothing is known about whether the
+  /// work eventually lands.
+  Future<AtReachabilityResult> ensureReachable(String namespace,
+      {Duration timeout = const Duration(seconds: 30)});
 
   /// Set an instance of [AtChops] for data encryption and signing operations
   set atChops(AtChops? atChops);

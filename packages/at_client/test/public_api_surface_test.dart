@@ -128,6 +128,10 @@ void main() {
 const Set<String> _atClientBarrelExports = {
   'package:at_client/src/client/at_client_impl.dart',
   'package:at_client/src/client/at_client_spec.dart',
+  // Added 2026-08-27 for AtClient.ensureReachable's result type. An app
+  // asking whether peers can seal to it needs the outcome vocabulary,
+  // so the enum and its result travel with the method.
+  'package:at_client/src/client/at_reachability.dart',
   'package:at_client/src/client/data_event.dart',
   'package:at_client/src/client/local_secondary.dart',
   'package:at_client/src/client/remote_secondary.dart',

@@ -1,5 +1,34 @@
 ## 3.15.0-rc1
 
+- feat: **`AtClient.ensureReachable(namespace)`** — wait until other atSigns
+  can seal data to you, doing whatever is missing, and get back **what
+  happened** rather than "startup finished".
+  - **Sending and receiving are not symmetric**, and the difference is not
+    obvious. A client can send the moment it is up, because sending needs the
+    *recipient's* published key. Receiving needs your own key published, and
+    that happens in a startup step that is deliberately not awaited —
+    construction must not block on a network round trip. A process that does
+    its work and exits takes that step down wherever it had got to.
+  - **Nothing in the exiting client sees a problem.** The symptom appears on a
+    *peer*, which reports your atSign as having no published key — so it names
+    the wrong party, and that is where the time goes.
+  - For the caller that must not exit until it can receive: a CLI tool, a cron
+    job, a one-shot notifier, anything driven from a script with piped stdin.
+    **Not a default and nothing calls it for you** — an app that only sends
+    should not pay for a mint it will never use.
+  - Idempotent and cheap when there is nothing to do; safe on every start and
+    safe alongside the startup step doing the same thing. Returns
+    `AtReachabilityResult` — read `isReachable`, or the `outcome` for
+    `alreadyReachable` / `published` / `postureDoesNotSeed` / `notAuthorised` /
+    `timedOut` / `failed`.
+- fix: an **abandoned PQ startup now logs at `warning`**, naming the steps that
+  did not run and saying that peers cannot seal here. It logged at `info`
+  among every other startup line, which is why an abandoned tail read as a
+  problem at the far end.
+- perf: the namespace-key mint does its **keygen and signature before taking
+  the mint lock** rather than inside it, shortening the window in which no
+  other enrollment of the atSign can mint by roughly 9.5x.
+
 - feat: **`AtClientPreference.posture` now defaults to `PqPosture.pqReady`**,
   where it defaulted to `PqPosture.legacy`. An app that names no posture moves
   four axes at once: it authenticates with ML-DSA-65, keeps an active classical

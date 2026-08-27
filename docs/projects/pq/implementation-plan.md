@@ -144,7 +144,7 @@ record working. Do not "tidy" one to match the other.
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
 | [the clause burn-down: every THEN clause proven](#the-clause-burn-down-every-then-clause-proven) | **The definition of done, and the campaign to reach it** (gkc, 2026-08-27). **Objective 1:** every one of the **135** THEN clauses proven by some test. **Objective 2:** every clause proven only in-process gains a proof against a real atServer wherever feasible. Read the meter by running the acceptance suite: it prints `BURN-DOWN  clauses proven: N of 135   server-proven: M of 135`. ⚠️ **A pin is a claim, not a run** — `tool/acceptance_ledger.dart` is what says the cited test passed. This row **absorbs the old "what the citation audit left owed"**, whose five findings (F16, F15, F8, F1, F3) are clause gaps by another name | Nothing |
-| [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | ✅ **Reproduced 2026-08-27** — `seeding_tail_runs_live_test.dart` and `seeding_tail_abandoned_live_test.dart`, a two-file differential. **What is left is the FIX**, and its shape needs a ruling: the app author's stated minimum is an *outcome* to await and a *loud* abandonment, and `pqBootstrap` is `@experimental` and documented as not for app authors. A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. Three in-tree reproduction attempts failed; the row says how |
+| [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | ✅ **Reproduced 2026-08-27** — `seeding_tail_runs_live_test.dart` and `seeding_tail_abandoned_live_test.dart`, a two-file differential. ✅ **FIXED 2026-08-27** — the abandonment logs at `warning` naming what it skipped, and `AtClient.ensureReachable(namespace)` is the supported way to wait for reachability, on the interface rather than on `@experimental` `pqBootstrap` (gkc's ruling). ⚠️ **What is left is the interlock arm**: a client dying *after* the lock lands is still reasoned from the code rather than measured. A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. Three in-tree reproduction attempts failed; the row says how |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **gkc publishes at_auth 4.0.0-rc1**, then carve at_client (stacked) → at_client_flutter → at_onboarding_cli. Six of the eight positions are through by merge; what is left is publishes | gkc. ⚠️ **Merged is not published, and only the publishes gate anything now** |
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
 
@@ -851,9 +851,48 @@ not"; `:696` says "Awaitable via `pqBootstrap`'s `startupComplete` for callers
 that need the tail to have run". That is request item 5 made concrete, and it
 is a defect in the tree today.
 
-**What remains of this row is the FIX**, and its shape is a design decision —
-`pqBootstrap` is `@experimental` and documented as not for app authors, so an
-outcome surfaced there does not reach the caller who reported this.
+✅ **FIXED 2026-08-27.** Both halves of the app author's stated minimum:
+
+- **Item 3** — the abandonment logs at `warning`, naming each skipped step and
+  saying that peers cannot seal here, and deliberately dropping "the next start
+  retries them".
+- **Item 1** — **`AtClient.ensureReachable(namespace)`**, on the **interface**
+  rather than on `pqBootstrap`. ⛔ **Ruled by gkc 2026-08-27**, and the
+  deciding argument was not cost: a perfectly typed outcome on the bootstrap
+  still answers a question about *our* twelve internal steps, and the app's
+  question is "can peers send to me". `pqBootstrap` is also `@experimental` and
+  documented as not for app authors, so an outcome surfaced there does not
+  reach the caller who reported this. Returns `AtReachabilityResult` —
+  `alreadyReachable` / `published` / `postureDoesNotSeed` / `notAuthorised` /
+  `timedOut` / `failed`. Item 2 is folded in: it *is* the "do not exit until I
+  am reachable" call. Items 4 and 5 (the asymmetry, and pointing
+  `startupComplete` at the alternative) are covered by the new dartdoc, which
+  states the send/receive asymmetry where an app author meets it.
+
+**Proven by a three-file live differential**, each file its own isolate because
+`AtClientManager` is a per-isolate singleton: `seeding_tail_runs_live_test.dart`
+(alive → publishes), `seeding_tail_abandoned_live_test.dart` (stopped →
+nothing), `ensure_reachable_live_test.dart` (stopped, then rescued → published,
+and a second call reports `alreadyReachable` rather than minting again).
+
+⚠️ **What the live arm caught that a mock could not.** Extracting a
+per-namespace `NskeySeeding.seedNamespace` initially let a **conveyance**
+failure sink the whole seed, so `ensureReachable` reported `failed` for an
+atSign whose advertisement had just been published. A legacy PKAM client has
+no APKAM keypair, the conveyance enumerates members with `enroll:listns`, and
+the atServer refuses that without APKAM authentication. Publishing is what
+makes an atSign reachable; conveying is what gives its *other* enrollments the
+private, and an enrollment that misses the push pulls at its next start — so
+the two are now guarded separately. The original `seed()` counted the namespace
+as minted *before* conveying, so this also restores behaviour the extraction
+had changed.
+
+⚠️ **Still owed on this row: the interlock arm.** Failure mode 2 — a client
+that dies *after* the lock lands, leaving an immutable `_nskeylock` nothing
+deletes — remains **reasoned from the code and not measured**. The reproduction
+above stops the tail at a step boundary before seeding starts, so no lock is
+taken. [The `batch` P2 row](#p2--should-be-done-if-there-is-time) would close
+that window structurally rather than by shortening it.
 
 ⚠️ **The three earlier reproduction attempts**, recorded so they are not
 repeated:

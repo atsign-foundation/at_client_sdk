@@ -2,6 +2,7 @@ import 'package:meta/meta.dart';
 
 export 'package:at_client/src/client/at_client_impl.dart';
 export 'package:at_client/src/client/at_client_spec.dart';
+export 'package:at_client/src/client/at_reachability.dart';
 export 'package:at_client/src/client/data_event.dart';
 export 'package:at_client/src/client/local_secondary.dart';
 export 'package:at_client/src/client/remote_secondary.dart';

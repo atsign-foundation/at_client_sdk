@@ -8,6 +8,7 @@ import 'package:at_client/src/enroll/self_retrofit.dart' show retrofitIdentity;
 import 'package:at_base2e15/at_base2e15.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/client/at_reachability.dart';
 import 'package:at_client/src/client/data_event.dart';
 import 'package:at_client/src/client/local_secondary.dart';
 import 'package:at_client/src/client/remote_secondary.dart';
@@ -144,6 +145,59 @@ class AtClientImpl implements AtClient {
     final c = Completer<void>();
     _drainWaiters.add(c);
     return c.future;
+  }
+
+  @override
+  Future<AtReachabilityResult> ensureReachable(String namespace,
+          {Duration timeout = const Duration(seconds: 30)}) =>
+      _ensureReachable(namespace).timeout(timeout,
+          onTimeout: () =>
+              const AtReachabilityResult(AtReachability.timedOut));
+
+  Future<AtReachabilityResult> _ensureReachable(String namespace) async {
+    final atSign = getCurrentAtSign();
+    final bootstrap = _pqBootstrap;
+    if (atSign == null || bootstrap == null) {
+      return AtReachabilityResult(AtReachability.failed,
+          error: StateError('this client has not finished initialising, so it '
+              'has no key ring to publish with'));
+    }
+
+    try {
+      // Cheapest first, and it is the common case on every start after the
+      // one that minted: the atServer's copy, not local storage, because a
+      // key another enrollment published a moment ago is absent locally until
+      // sync catches up and reading that absence as a cold start is what
+      // publishes a second key over the first.
+      if (await bootstrap.ring.publishedAdvertisement(atSign, namespace) !=
+          null) {
+        return const AtReachabilityResult(AtReachability.alreadyReachable);
+      }
+
+      // Answered before the authorisation lookup, which costs a round trip on
+      // an APKAM client: an app that chose a posture which does not seed is
+      // not waiting for something that is coming, and telling it so promptly
+      // is more useful than telling it accurately why it also would not have
+      // been authorised.
+      if (_preference?.seedNamespaceKeys != true) {
+        return const AtReachabilityResult(AtReachability.postureDoesNotSeed);
+      }
+
+      if (!(await bootstrap.seeding.authorisedNamespaces())
+          .contains(namespace)) {
+        return const AtReachabilityResult(AtReachability.notAuthorised);
+      }
+
+      // Safe alongside the startup step doing the same thing: both re-read
+      // under the mint lock, so whichever loses adopts what the winner
+      // published rather than minting a second generation.
+      await bootstrap.seeding.seedNamespace(atSign, namespace);
+      return const AtReachabilityResult(AtReachability.published);
+    } catch (e) {
+      _logger.warning(
+          'Could not make $atSign reachable for $namespace: $e');
+      return AtReachabilityResult(AtReachability.failed, error: e);
+    }
   }
 
   /// Pushes [e] onto [dataEvents] asynchronously (microtask-scheduled).
