@@ -954,73 +954,71 @@ Measured 2026-08-27 by reading every clause against the tree. **Every clause has
 something exercising it; none is untested.** 91 are established as written, 44
 are partial. The suite prints the running figure on each run.
 
-### The 44 partial clauses — objective 1's remaining work
+### The partial clauses — objective 1's remaining work
 
-Each row is a clause a test already exercises and does **not** establish as
-written. The fix is almost always an assertion plus a `reason:` on the test
-named, then a `clauses:` pin on the citation — not a new test.
+**39 clauses**, each one a test already exercises that does **not**
+establish the clause as written. The fix is normally an assertion plus a
+`reason:` on the test named, then a `clauses:` pin — not a new test.
 
-⚠️ **These are the mapping agents' judgements**, spot-checked at a rate of 7
-of 91 with one over-call found. Verify a row against the test before acting
-on it; the untested arm is a claim, not a measurement.
+⚠️ **These are the mapping agents' judgements**, spot-checked at 7 of 91 with
+one over-call found. Verify a row against the test before acting on it; the
+untested arm is a claim, not a measurement.
 
-| Clause | The arm nothing establishes | Test that covers the rest |
+**The standard a closed clause meets**, set by the two closed on 2026-08-27:
+write the missing arm *with a control*, then **mutate the production code and
+confirm the failure quotes your own assertion's reason**, revert, and pin. A
+green test that has not been shown to discriminate proves nothing.
+
+#### In-process — 10 closable with no virtualenv
+
+| Clause | The arm nothing establishes | Test |
 |---|---|---|
 | **UC-A1.1** c3 | Nothing encapsulates to it, at onboarding or ever. | `pq_signing_root_test.dart` |
+| **UC-A2.2** c2 | Nothing anywhere makes a copy of a keyfile that HOLDS `pq_signing_root@alice⁻¹` and then shows the second host resolving or signing with it… | `at_keys_test.dart` |
+| **UC-A2.5** c5 | nothing already sealed is re-sealed, and no conveyance fires | `key_package_minting_test.dart` |
+| **UC-A3.5** c3 | an advertisement with **no `alg`** reads as the hybrid — which is what every one published before the field existed was, by construction | `published_nskey_key_ring_test.dart` |
+| **UC-A3.5** c4 | re-derives the public half **through the advertised KEM** rather than assuming X-Wing | `nskey_private_filing_test.dart` |
+| **UC-A5.1** c3 | "an enrollment approved *after* the rotation is pushed the current generation only" and "...and opens it" — no test enrols a joiner after a… | `nskey_self_heal_test.dart` |
+| **UC-B3.1** c1 | "(Applies to **put and notify** alike; a notification an old install cannot decrypt is as lost as a record it cannot read.)" — nothing anyw… | `b3_mixed_intra_test.dart` |
+| **UC-B5.7** c1 | "The holder carries a lease stamped *before* the take goes out — so \"unspent by my clock\" implies the atServer has not expired it either,… | `nskey_minting_test.dart` |
+| **UC-C1.6** c1 | each remains individually overridable — disallowLegacyEncryption has no per-preference override at all, and pq_posture_test.dart 'disallowL… | `pq_posture_test.dart` |
+| **UC-G1.9** c1 | new envelopes carry no signature of it | `signing_key_minting_test.dart` |
+
+#### Live — 29, each needing a virtualenv run to verify
+
+These are also the only route that raises **server-proven**.
+
+| Clause | The arm nothing establishes | Test |
+|---|---|---|
 | **UC-A2.1** c4 | decrypts `@alice`'s `app_1.my_apps` self data | `enrollment_namespace_gate_test.dart` |
 | **UC-A2.2** c1 | Secrets already sealed to that key package are openable on both. | `copied_keyfile_test.dart` |
-| **UC-A2.2** c2 | Nothing anywhere makes a copy of a keyfile that HOLDS `pq_signing_root@alice⁻¹` and then shows the second host resolving or signing with it, and noth… | `at_keys_test.dart` |
 | **UC-A2.2** c3 | so revoking E1 cuts every host sharing the copy at once | `nskey_rotation_live_test.dart` |
 | **UC-A2.3** c1 | `alice3` gets `pq_signing_root@alice⁻¹` (root — universal) | `enrollment_namespace_gate_test.dart` |
-| **UC-A2.4** c5 | The mismatch is **logged**, not silently resolved, and the new preference takes effect on the next enrollment. | `key_package_registration_test.dart` |
-| **UC-A2.5** c5 | nothing already sealed is re-sealed, and no conveyance fires | `key_package_minting_test.dart` |
-| **UC-A2.6** c2 | an enrollment revoked while it holds an already open, already authenticated connection | `key_package_amendment_live_test.dart` |
 | **UC-A3.2** c1 | `alice2` obtains the nskey private and reads | `nskey_seeding_live_test.dart` |
 | **UC-A3.3** c1 | once the namespace's nskey exists every **subsequent** write uses it. Records already written under the fallback stay legacy | `nskey_data_path_live_test.dart` |
 | **UC-A3.4** c3 | Offline `alice2`: … (key still held) | `monitor_reconnect_live_test.dart` |
-| **UC-A3.5** c3 | an advertisement with **no `alg`** reads as the hybrid — which is what every one published before the field existed was, by construction | `published_nskey_key_ring_test.dart` |
-| **UC-A3.5** c4 | re-derives the public half **through the advertised KEM** rather than assuming X-Wing | `nskey_private_filing_test.dart` |
 | **UC-A4.1** c3 | an unauthorised `@bob` enrollment cannot fetch the ciphertext (server-gated) nor decrypt | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.3** c1 | all of alice's authorised enrollments read the self-copy | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.4** c1 | on **every** authorised bob enrollment — the live cross-atSign notify delivers to a single bob client | `nskey_notify_test.dart` |
 | **UC-A4.4** c2 | toward a bob with no published nskey the write fails cold start or takes the explicit legacy fallback | `nskey_cross_atsign_test.dart` |
 | **UC-A4.4** c3 | Offline-then-online **bob** (a cross-atSign recipient on the nskey path) ... or pulled if it arrived meanwhile | `monitor_reconnect_live_test.dart` |
 | **UC-A4.6** c5 | where they had exchanged `0x01`, with no readers-upgrade-first migration — and that is what later made it safe to drop `0x01` outright | `secret_sharing_delivery_test.dart` |
-| **UC-A5.1** c2 | "new CKs are sealed to the successor nskey and their conveyances carry the new `nskeyKid`" — nothing asserts that a conveyance written AFTER an nskey… | `nskey_rotation_live_test.dart` |
-| **UC-A5.1** c3 | "an enrollment approved *after* the rotation is pushed the current generation only" and "...and opens it" — no test enrols a joiner after a rotation,… | `nskey_self_heal_test.dart` |
-| **UC-B0.1** c1 | "(The atServer's immutable write is long-standing and present even here — it is **not** a PQ-only verb.)" — nothing exercises an immutable create aga… | `legacy_server_abort_test.dart` |
+| **UC-A5.1** c2 | "new CKs are sealed to the successor nskey and their conveyances carry the new `nskeyKid`" — nothing asserts that a conveyance written AFTE… | `nskey_rotation_live_test.dart` |
+| **UC-B0.1** c1 | "(The atServer's immutable write is long-standing and present even here — it is **not** a PQ-only verb.)" — nothing exercises an immutable… | `legacy_server_abort_test.dart` |
 | **UC-B1.1** c3 | **capped** to `min(now + grace, expiry)` | `retrofit_retirement_e2e_test.dart` |
 | **UC-B1.2** c1 | it mints its **own** PQ APKAM keypair | `retrofit_e2e_test.dart` |
 | **UC-B1.3** c1 | a restricted E2 receives only its authorised subset of `nskey` keys | `retrofit_e2e_test.dart` |
 | **UC-B2.1** c1 | `alice1b` must re-enroll | `retrofit_retirement_e2e_test.dart` |
 | **UC-B2.2** c1 | legacy auth survives until `min(now + grace, expiry)` | `retrofit_retirement_e2e_test.dart` |
-| **UC-B3.1** c1 | "(Applies to **put and notify** alike; a notification an old install cannot decrypt is as lost as a record it cannot read.)" — nothing anywhere drive… | `b3_mixed_intra_test.dart` |
-| **UC-B4.1** c1 | Two arms are unestablished. (a) "the *first write after bob's key appears* is PQ with no flag to flip" — no test anywhere performs a write with `allo… | `nskey_recipient_not_ready_test.dart` |
-| **UC-B4.3** c1 | "which `alice2` cannot read" — nothing establishes that a pre-capability (legacy-only) install FAILS to read a record stamped `at/symmetric/AES/GCM`.… | `nskey_cross_atsign_test.dart` |
-| **UC-B4.4** c1 | "Cold start (**or the fallback, if opted-in**) ends for bob without any action from alice" — the parenthetical arm is unestablished: no test performs… | `nskey_cross_atsign_test.dart` |
-| **UC-B5.1** c1 | "`pq_signing_root` is root (no namespace), so it has **no** `enroll:listns` push" — and, within the second arm, "(persists until one answers)" | `signing_root_pull_two_enrollments_test.dart` |
+| **UC-B4.1** c1 | Two arms are unestablished. (a) "the *first write after bob's key appears* is PQ with no flag to flip" — no test anywhere performs a write… | `nskey_recipient_not_ready_test.dart` |
+| **UC-B4.3** c1 | "which `alice2` cannot read" — nothing establishes that a pre-capability (legacy-only) install FAILS to read a record stamped `at/symmetric… | `nskey_cross_atsign_test.dart` |
+| **UC-B4.4** c1 | "Cold start (**or the fallback, if opted-in**) ends for bob without any action from alice" — the parenthetical arm is unestablished: no tes… | `nskey_cross_atsign_test.dart` |
+| **UC-B5.1** c1 | "`pq_signing_root` is root (no namespace), so it has **no** `enroll:listns` push" — and, within the second arm, "(persists until one answer… | `signing_root_pull_two_enrollments_test.dart` |
 | **UC-B5.6** c1 | "and saying the retry must wait the ttl out — the one thing the caller can act on" (and, in the tail, "logs `severe`") | `nskey_rotation_live_test.dart` |
-| **UC-B5.7** c1 | "The holder carries a lease stamped *before* the take goes out — so \"unspent by my clock\" implies the atServer has not expired it either, and the c… | `nskey_minting_test.dart` |
 | **UC-C1.5** c1 | the two postures resolve into different per-algorithm idempotence pools, which is what tells them apart live | `self_enrollment_retrofit_live_test.dart` |
-| **UC-C1.6** c1 | each remains individually overridable — disallowLegacyEncryption has no per-preference override at all, and pq_posture_test.dart 'disallowLegacyEncry… | `pq_posture_test.dart` |
-| **UC-G1.1** c2 | on a retrofitted file deliberately the legacy enrollment, not the active typed material's | `at_auth_test.dart` |
 | **UC-G1.10** c1 | `_apsk` is **not** rewritten: … so the client sends none and the atServer leaves the record's own value alone | `enroll_update_live_test.dart` |
 | **UC-G1.12** c2 | or approval state at all — i.e. that the update request carries no field for the APPROVAL STATE | `enroll_update_live_test.dart` |
 | **UC-G1.15** c1 | the algorithms the receiver saw are the ones the sender emitted | `pq_posture_grid_test.dart` |
-| **UC-G1.2** c1 | and UC-G1.1's resolver returns the new enrollment id | `at_self_enrollment_test.dart` |
-| **UC-G1.3** c1 | A replacement re-using the retired key's keyId is still refused — that check is status-blind | `at_keys_test.dart` |
-| **UC-G1.9** c1 | new envelopes carry no signature of it | `signing_key_minting_test.dart` |
-
-**44 clauses across 32 test files.** The files carrying the most:
-
-- `nskey_rotation_live_test.dart` — 3
-- `nskey_cross_atsign_test.dart` — 3
-- `retrofit_retirement_e2e_test.dart` — 3
-- `enrollment_namespace_gate_test.dart` — 2
-- `at_keys_test.dart` — 2
-- `monitor_reconnect_live_test.dart` — 2
-- `nskey_multi_enrollment_test.dart` — 2
-- `retrofit_e2e_test.dart` — 2
 
 ### The proven clauses still owed a citation
 
@@ -1082,6 +1080,12 @@ reading the test.
 Pins that predate this mapping, where a clause carries an arm the cited test
 does not reach. Each is a candidate over-claim: the burn-down counts them, so
 if they do not survive review the recorded figure falls.
+
+⚠️ **Two others are pinned-and-partial for the opposite reason and are NOT
+here.** UC-G1.2 c1 and UC-G1.3 c1 were closed on 2026-08-27 — the missing arm
+was written and mutation-proven — so the map's PARTIAL verdict for them is a
+stale snapshot rather than an over-claim. A count taken from the map alone
+would put five rows in this section; three is the number that means anything.
 
 | Clause | The arm the cited test does not reach |
 |---|---|

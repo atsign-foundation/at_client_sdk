@@ -318,7 +318,7 @@ Two columns, tracked separately, both printed by the acceptance suite on every
 run:
 
 ```
-BURN-DOWN  clauses proven: 93 of 135   server-proven: 52 of 135
+BURN-DOWN  clauses proven: 95 of 135   server-proven: 52 of 135
 ```
 
 - **proven** — some citation pins the clause. Objective 1 is 135 of 135.
@@ -344,7 +344,7 @@ clause against the tree:
 
 | List | Size | What it is |
 | ---- | ---: | ---------- |
-| [the partial clauses](detail/acceptance.md#the-44-partial-clauses--objective-1s-remaining-work) | 44 | a test exercises the clause and does not establish it as written. The fix is an assertion plus a `reason:` on the test named, not a new test |
+| [the partial clauses](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work) | 39 | a test exercises the clause and does not establish it as written. **10 are in-process and need no virtualenv**; 29 are live and are the only route that raises server-proven. ⚠️ **Was 44** — two were closed 2026-08-27 and three are pinned (see the over-claim row) |
 | [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 1 | proven, but no citation names the proof. ⚠️ **Was 33; 32 were written 2026-08-27 and the last is deliberate** — UC-A2.4's `pqSeal ver 0x03` is refused a pin because the live test asserts the byte against the function that generates it |
 | [pinned but partial](detail/acceptance.md#three-clauses-pinned-in-the-tree-that-the-map-calls-partial) | 3 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls |
 
@@ -1536,6 +1536,19 @@ the reason is the point of the row.
 
 
 Run these rather than trusting the table. Each answers one row.
+
+**The clause burn-down first** — it is the measure of how close the acceptance
+suite is to done, and it prints on every run of the suite:
+
+```bash
+cd packages/at_client && dart test test/acceptance --concurrency=1 \
+  | grep BURN-DOWN
+```
+
+⛔ **The clause map behind the remaining-work tables was a one-off** and lives
+in no file here. Do not try to re-derive the tables from it; re-derive the
+*counts* with the command above and read the tables as the judgements they are.
+Verify any row against its test before acting on it.
 
 ```bash
 # the functional suite's convergence-race rate. It has been written five
