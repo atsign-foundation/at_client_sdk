@@ -963,8 +963,10 @@ recorded counts drift from the tree.
 
 ### The partial clauses — objective 1's remaining work
 
-**29 clauses**, each one a test already exercises that does **not**
-establish the clause as written. The fix is normally an assertion plus a
+Each is a clause a test already exercises that does **not** establish it as
+written. ⛔ **No total is written here — count the table below**, which is the
+only place the number lives. It read "29 clauses" until 2026-08-28, by which
+time five had closed and the sentence had outlived two of its own corrections. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 
 ⛔ **Except that for eight of them it is not, because the clause is FALSE.**
@@ -975,8 +977,8 @@ every one of the 12 upheld 11 and refuted one (**UC-A4.1 c3**, which is an
 ordinary gap).
 
 ✅ **All 11 are discharged** (2026-08-27) — four by fixing the code, seven by
-correcting the clause — so every one of the 29 is now an ordinary gap and the
-table below is empty. ⛔ **No count is written out here**; the table is the
+correcting the clause — so every remaining partial is now an ordinary gap and
+the table below is empty. ⛔ **No count is written out here**; the table is the
 count, because it moved four times in a day.
 
 ⛔ **The lesson outlives the list, and it is the reusable part.** Write a test
@@ -1082,7 +1084,7 @@ green test that has not been shown to discriminate proves nothing.
 
 #### In-process — none left
 
-⛔ **All six are closed** (2026-08-27). Every remaining partial needs a
+⛔ **The in-process ones were all closed on 2026-08-27.** Every remaining partial needs a
 virtualenv run, and is therefore also the only route that raises
 **server-proven**.
 

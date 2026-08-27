@@ -1886,8 +1886,10 @@ the one test in the corpus that activates a post-quantum atSign.
 
 ### Where the catalogue actually stands
 
-Coverage was never the gap. Of the 68 live use cases, 59 have live proof of some
-kind and 9 have none:
+Coverage was never the gap. ⛔ **The figures below are a SNAPSHOT taken on
+2026-08-23 against the 68 live rows there were then, and the catalogue has grown
+since** — they are kept because the *shape* is the point, not the totals. Of
+those 68, 59 had live proof of some kind and 9 had none:
 
 | Verdict | Rows | Means |
 |-----------------|-----:|--------------------------------------------------|
@@ -1896,8 +1898,8 @@ kind and 9 have none:
 | LIVE_INCIDENTAL | 4 | the mechanism runs, nothing asserts the row |
 | NO_LIVE_PROOF | 9 | nothing live exercises it |
 
-⚠️ **Those verdicts were measured on 2026-08-23 against 68 live rows and have
-not been re-measured since; the catalogue now has 72.** They are also a
+⚠️ **They have not been re-measured, and the row count has moved twice since**
+— re-derive it rather than reading one here. They are also a
 *coverage* judgement — one agent per family searching the packs — and must not
 be restated as a citation figure. The two answer different questions and
 diverge widely: on 2026-08-27 the citation figure for rows with no live proof
