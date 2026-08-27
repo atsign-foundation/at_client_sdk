@@ -422,6 +422,20 @@ void main() {
             'build cannot encapsulate to',
         clauses: ['an entry with **no `alg`** is **dropped, not defaulted**'],
       );
+      provenIn(
+        'packages/at_client/test/nskey_private_filing_test.dart',
+        'the correspondence check follows the advertised KEM, not X-Wing',
+        proves: 'that the re-derivation follows the advertisement rather than '
+            'assuming X-Wing. Every other arm of this check advertises '
+            'X-Wing, where following and assuming are the same computation '
+            'and so indistinguishable; this one advertises ML-KEM-1024, where '
+            'a build assuming X-Wing derives a different-length public half '
+            'and REFUSES a private that corresponds exactly. Mutation-proven '
+            '— pinning the algorithm to X-Wing reddens it, quoting this '
+            'assertion',
+        clauses: ['re-derives the public half **through the advertised KEM** '
+            'rather than assuming X-Wing'],
+      );
     });
   });
 }

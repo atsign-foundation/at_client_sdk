@@ -153,6 +153,43 @@ void main() {
             'from it exactly — the check is precise, not heuristic');
   });
 
+  test('the correspondence check follows the advertised KEM, not X-Wing',
+      () async {
+    // Every arm above advertises X-Wing, where "derived through the
+    // advertised KEM" and "derived through X-Wing" are the same computation —
+    // so none of them can tell the two apart. Here they diverge: the public
+    // halves are different lengths (1216 against 1568), so a build that
+    // assumed X-Wing would compute the wrong bytes and REFUSE a private that
+    // corresponds exactly. The acceptance is the discriminating outcome.
+    final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+    final seed = mlKem.newSeed();
+    final pair = await mlKem.keyPairFromSeed(seed);
+
+    final io = InMemoryAtKeysIo();
+    await io.write(atSign, AtKeys());
+    final filer = NskeyPrivateFiling(
+      keysIo: io,
+      atSign: atSign,
+      publishedGeneration: (_, __) async => NskeyAdvertisement.single(
+        publicKey: pair.publicKey,
+        alg: SecretSharingAlgos.mlKem1024,
+        suites:
+            SecretSharingAlgos.openableSuitesFor(SecretSharingAlgos.mlKem1024),
+      ),
+    );
+
+    expect(
+        await filer.file(Secret(
+            namespace: namespace,
+            name: '${NskeyPrivateFiling.secretNamePrefix}kid-mlkem',
+            value: base64Encode(seed))),
+        isTrue,
+        reason: 'the advertisement names ml-kem-1024, so the arriving seed '
+            'must be re-derived through THAT KEM. A seed carries no algorithm '
+            'of its own, so the advertisement is the only thing that can say '
+            'which one, and assuming X-Wing would reject a correct private');
+  });
+
   test('only nskey privates are filed; other secrets pass through', () async {
     final (io, filer) = await filing();
 
