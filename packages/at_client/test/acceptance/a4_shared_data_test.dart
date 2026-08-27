@@ -229,7 +229,7 @@ void main() {
               'sealing to.',
           clauses: [
             'symmetrically, a hybrid-configured `@bob` seals to an '
-                'ML-KEM-1024 `@alice` at `ver 0x03`',
+                'ML-KEM-1024 `@alice` under `ml-kem-1024-rfc9180-v1`',
           ]);
       provenIn(
         'packages/at_client/test/kem_selection_test.dart',
@@ -298,9 +298,7 @@ void main() {
       // THEN  the peer that lists RFC 9180 receives ver 0x02, and the peer
       //       that lists only the retired x-wing-hpke-v1 is REFUSED — there is
       //       no shared construction, and sealing this client's preference
-      //       anyway would hand it a record it cannot open. (Until 0x01 was
-      //       retired this arm received 0x01 instead; the negotiation is the
-      //       same, only its outcome for a narrow peer changed.) The payload's
+      //       anyway would hand it a record it cannot open. The payload's
       //       declared suite and the envelope's version
       //       byte agree — the declared suite is what a receiver accepts on and
       //       the version byte is what it dispatches the KEM on, and a
@@ -309,8 +307,8 @@ void main() {
       //       intersection, so a suite the key cannot decapsulate can never be
       //       selected. Unrecognised entries survive a parse, because the list
       //       is the holder's statement about itself. This is what moved the
-      //       wire from 0x01 to 0x02 with no readers-upgrade-first migration,
-      //       and then let 0x01 be dropped outright.
+      //       wire to a new construction with no readers-upgrade-first
+      //       migration.
       provenIn(
         'packages/at_client/test/pairwise_secret_sharing_test.dart',
         'negotiates RFC 9180 with a peer whose package says it opens it',
@@ -350,7 +348,7 @@ void main() {
             'reads back as suite x-wing-rfc9180 at version 0x02, so the two '
             'together show the choice is made rather than defaulted',
         clauses: [
-          'the peer that lists RFC 9180 receives `pqSeal ver 0x02`; '
+          'the peer that lists RFC 9180 receives `x-wing-rfc9180-v1`; '
               'the peer that lists only'
         ],
       );

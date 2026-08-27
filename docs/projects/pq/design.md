@@ -254,10 +254,10 @@ sealing **constructions the owner can open**, which `alg` does not determine —
 opens every construction built on that KEM, and which of those the holder implements
 depends on its build. The sender takes the strongest entry both sides list and derives
 the `pqSeal` version from it, so the conveyance version is negotiated rather than
-fixed: an X-Wing owner receives `0x02`, ML-KEM-1024 receives `0x03`, and no overlap is
-a refusal. ⚠️ This sentence also gave "one whose advertisement predates the field
-receives `0x01`" until 2026-08-18, when `0x01` was retired: such an owner now shares no
-construction and is refused like any other no-overlap peer. The published list is
+fixed: an X-Wing owner receives `x-wing-rfc9180-v1`, an ML-KEM-1024 owner receives
+`ml-kem-1024-rfc9180-v1`, and no overlap is a refusal — including for an owner whose
+advertisement predates the `suites` field, which shares no construction and is refused
+like any other no-overlap peer. The published list is
 derived from **the generation's own KEM**, never from what this build supports, and an
 advertisement carrying no list at all is refused at the parse rather than defaulted —
 unlike a key package, an advertisement is fetched by *senders*, who act on the claim
@@ -1348,7 +1348,8 @@ been written from assumption. Re-derive none of this without a primary source:
   the forgery rather than on further algorithm churn.
 
 Two consequences the rest of this document depends on. **No HPKE-based option
-can be described as standards-finalized**, so `pqSeal`'s `ver 0x02` and `0x03`
+can be described as standards-finalized**, so `x-wing-rfc9180-v1` and
+`ml-kem-1024-rfc9180-v1`
 are "RFC 9180 Base mode at a suite whose KEM code point is registered but
 draft-specified", never "standard HPKE". And **FIPS is closed to us by CMVP
 rather than by algorithm choice**, so adopting ML-KEM-1024 alone buys an

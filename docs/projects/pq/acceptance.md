@@ -526,7 +526,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - `keys[].alg = ml-kem-1024` and `suites = [ml-kem-1024-rfc9180-v1]` **only**. A
     package never claims a construction its own key cannot decapsulate; a sender acts on
     the claim, so an overstatement surfaces on the holder's side as an opaque AEAD error;
-  - a peer sealing to it uses `pqSeal ver 0x03`;
+  - a peer sealing to it seals under `ml-kem-1024-rfc9180-v1` — RFC 9180 HPKE over
+    ML-KEM-1024, HKDF-SHA384, AES-256-GCM — whose wire version byte is `0x03`;
   - the private is filed as its **64-byte seed** with the algorithm alongside, and
     re-derives the same kpid after a restart. Filing the 3168-byte expanded decapsulation
     key instead leaves the enrollment unopenable at the next start, with no error at the
@@ -624,8 +625,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   `tests/at_functional_test` runLocal.sh (enroll/approve round-trip, `__ssenv` delivery).
   UC-A2.4 is a unit row for its **shapes**, which are decided entirely client-side before
   anything reaches an atServer. ⚠️ **It said "UC-A2.4 is a unit row" without that
-  qualifier until 2026-08-27**, and one clause is not: "a peer sealing to it uses `pqSeal
-  ver 0x03`" is a claim about what a *sender* stamps, which only a real peer and a real
+  qualifier until 2026-08-27**, and one clause is not: which construction a peer seals
+  under is a claim about what a *sender* stamps, which only a real peer and a real
   atServer can show. It is now cited to
   `key_package_amendment_live_test.dart`.
 
@@ -789,10 +790,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
     or 64 of them are valid for one KEM or the other, so the bytes alone cannot say which.
 - **Then (the version is negotiated, not fixed):** `suites` says which sealing
   constructions the owner can **open**, which `alg` does not determine — a KEM key opens
-  every construction built on that KEM. An X-Wing owner therefore receives `ver 0x02`
-  and an ML-KEM-1024 owner `ver 0x03`, while an owner advertising only the retired
-  `x-wing-hpke-v1` shares no construction and is **refused**. ⚠️ This paragraph said such
-  an owner "keeps receiving `ver 0x01`" until 2026-08-18, when that version was retired.
+  every construction built on that KEM. An X-Wing owner therefore receives
+  `x-wing-rfc9180-v1` and an ML-KEM-1024 owner `ml-kem-1024-rfc9180-v1` — wire version
+  bytes `0x02` and `0x03` respectively — while an owner advertising only the retired
+  `x-wing-hpke-v1` shares no construction and is **refused**.
   An advertisement carrying **no** `suites` field is refused at the parse rather than
   defaulted: unlike a key package, an advertisement is fetched by *senders*, who act on
   the claim immediately, so nothing may be assumed on the owner's behalf.
@@ -916,8 +917,8 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   - the CK is sealed **under X-Wing**, to bob's key, at the strongest construction both
     sides list. Alice's configuration decides what `@alice` is a *recipient* for and
     nothing about who she can send to;
-  - symmetrically, a hybrid-configured `@bob` seals to an ML-KEM-1024 `@alice` at
-    `ver 0x03`. Every build produces and opens both;
+  - symmetrically, a hybrid-configured `@bob` seals to an ML-KEM-1024 `@alice` under
+    `ml-kem-1024-rfc9180-v1`. Every build produces and opens both;
   - **refusing would protect nothing.** It would leave two atSigns unable to communicate
     while the peer's key stayed exactly as strong as it was — the peer's key is the
     peer's decision.
@@ -955,11 +956,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   retired `x-wing-hpke-v1`.
 - **When:** `alice1` seals to each.
 - **Then:**
-  - the peer that lists RFC 9180 receives `pqSeal ver 0x02`; the peer that lists only
-    the retired construction is **refused**, because the two share no entry and sealing
-    this client's own preference anyway would hand that peer a record it cannot open.
-    ⚠️ Until `0x01` was retired this arm received `ver 0x01` instead — the negotiation
-    is unchanged, only its outcome for a narrow peer. An advertisement carrying **no**
+  - the peer that lists RFC 9180 receives `x-wing-rfc9180-v1`; the peer that lists only
+    the retired `x-wing-hpke-v1` is **refused**, because the two share no entry and
+    sealing this client's own preference anyway would hand that peer a record it cannot
+    open. An advertisement carrying **no**
     `suites` field at all is refused at the parse, and always has been on this branch;
   - the payload's declared suite and the envelope's version byte **agree**. Both matter,
     and separately — the declared suite is what a receiver accepts on, and the version
@@ -980,13 +980,12 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   field exists.
 
   ⚠️ **This asserted a historical instance until 2026-08-27**, naming what two clients
-  "had exchanged" under the version retired on 2026-08-18. **A clause about what
-  clients *had* exchanged is a claim about history, and no test of a tree that no
-  longer contains that version can establish it** — which every instrument here
-  reports as a coverage gap rather than as an unprovable sentence. The mechanism it
-  was illustrating is intact and is what the clause now states; the retired version's
-  own story has one home, and it is
-  [`seal-spec.md`](seal-spec.md#version-0x01-retired).
+  "had exchanged" under a construction since retired and removed. **A clause about what
+  clients *had* exchanged is a claim about history, and no test of a tree that no longer
+  contains that construction can establish it** — which every instrument here reports as
+  a coverage gap rather than as an unprovable sentence. The mechanism it was
+  illustrating is intact and is what the clause now states. Retired constructions are
+  documented in `seal-spec.md` and nowhere else.
 - **Verification note:** both arms must be asserted against the **same** key, so the only
   thing differing between them is what the record claims. Two arms that differ in key
   *and* claim prove nothing about the claim.
@@ -2318,8 +2317,8 @@ clause level".** A citation now pins which of its row's THEN clauses it claims,
 with `clauses:` on `provenIn`, and the ledger renders a per-row checklist and a
 catalogue total. "UC-A2.5 has 3 unproven clauses" is computed rather than found
 by reading. Measured on the first render: **129 clauses across the 68 live
-rows**, and UC-A2.4 reads **5 of 6** with the `pqSeal ver 0x03` clause the one
-nothing reaches.
+rows**, with UC-A2.4 one clause short. ⚠️ Both figures are that first render and
+neither is current — run the suite for today's. That clause was pinned 2026-08-27.
 
 A pin is a distinctive fragment of the clause, never its index, so inserting a
 clause does not re-point the pins after it — and editing a clause's wording

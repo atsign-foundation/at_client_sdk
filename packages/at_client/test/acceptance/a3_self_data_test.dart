@@ -397,8 +397,9 @@ void main() {
       //       hybrid, which is what every one published before the field was by
       //       construction; one naming an algorithm this build cannot
       //       encapsulate to is refused, not guessed at. suites then makes the
-      //       conveyance VERSION negotiated: 0x02 for an owner that lists RFC
-      //       9180, 0x01 for one whose advertisement predates the field, 0x03
+      //       conveyance CONSTRUCTION negotiated: x-wing-rfc9180-v1 for an
+      //       owner that lists RFC 9180, a refusal for one whose
+      //       advertisement predates the field, ml-kem-1024-rfc9180-v1
       //       for ML-KEM-1024, and a refusal when nothing overlaps.
       provenIn('packages/at_client/test/nskey_kem_selection_test.dart',
           'ML-KEM-1024 conveys under its own provider id at ver 0x03',
@@ -444,10 +445,7 @@ void main() {
             'rather than the sender\'s preference, and that an owner sharing '
             'no live construction is refused instead of being guessed at. The '
             'refusal arm is what stops the selection reading as a default',
-        clauses: [
-          'An X-Wing owner therefore receives `ver 0x02` and an '
-              'ML-KEM-1024 owner `ver 0x03`'
-        ],
+        clauses: ['An X-Wing owner therefore receives `x-wing-rfc9180-v1`'],
       );
       provenIn(
         'packages/at_client/test/published_nskey_key_ring_test.dart',

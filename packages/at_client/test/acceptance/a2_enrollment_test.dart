@@ -234,7 +234,7 @@ void main() {
         'UC-A2.5 · a sender picks by its own order and stamps the matching',
         proves: 'the version byte a real peer stamps when it seals to an '
             'ML-KEM-1024 key, read off the envelope the atServer is holding '
-            'rather than computed. It is pinned as the RAW LITERAL 0x03 — it '
+            'rather than computed. The byte is pinned as a RAW LITERAL — it '
             'read sealVersionFor(mlKem1024Rfc9180) until 2026-08-27, which '
             'compares the byte on the wire against the function that put it '
             'there and pins nothing. Measured, not argued: under a mutation '
@@ -246,7 +246,7 @@ void main() {
             'seal target is an ML-KEM-1024 encapsulation key either way, '
             'which is what fixes the byte, and no live test anywhere '
             'advertises ML-KEM on its own',
-        clauses: ['pqSeal ver 0x03'],
+        clauses: ['seals under `ml-kem-1024-rfc9180-v1`'],
       );
     });
 
