@@ -318,7 +318,7 @@ Two columns, tracked separately, both printed by the acceptance suite on every
 run:
 
 ```
-BURN-DOWN  clauses proven: 17 of 135   server-proven: 10 of 135
+BURN-DOWN  clauses proven: 93 of 135   server-proven: 52 of 135
 ```
 
 - **proven** — some citation pins the clause. Objective 1 is 135 of 135.
@@ -345,7 +345,7 @@ clause against the tree:
 | List | Size | What it is |
 | ---- | ---: | ---------- |
 | [the partial clauses](detail/acceptance.md#the-44-partial-clauses--objective-1s-remaining-work) | 44 | a test exercises the clause and does not establish it as written. The fix is an assertion plus a `reason:` on the test named, not a new test |
-| [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 33 | proven, but no citation names the proof. 33 clauses across 33 new `provenIn` calls |
+| [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 1 | proven, but no citation names the proof. ⚠️ **Was 33; 32 were written 2026-08-27 and the last is deliberate** — UC-A2.4's `pqSeal ver 0x03` is refused a pin because the live test asserts the byte against the function that generates it |
 | [pinned but partial](detail/acceptance.md#three-clauses-pinned-in-the-tree-that-the-map-calls-partial) | 3 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls |
 
 ⛔ **Nothing is untested.** All 135 clauses have something exercising them; the

@@ -1742,7 +1742,7 @@ and the burn-down below now do.
 acceptance suite:**
 
 ```
-BURN-DOWN  clauses proven: 17 of 135   server-proven: 10 of 135
+BURN-DOWN  clauses proven: 93 of 135   server-proven: 52 of 135
 ```
 
 A row-level verdict cannot express what *done* means here, because a row reads

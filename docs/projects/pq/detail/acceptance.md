@@ -1024,9 +1024,15 @@ on it; the untested arm is a claim, not a measurement.
 
 ### The proven clauses still owed a citation
 
-**33 clauses** the map judges proven that no citation pins, needing
-**33 new `provenIn` calls**. Different work from the table above: the
-proof exists and the row simply does not name it.
+⚠️ **32 of these were written on 2026-08-27 and one remains, deliberately.**
+This read "**33 clauses** … needing **33 new `provenIn` calls**" when the table
+below was generated, and the table is left as it was so the work is legible.
+What is left is **UC-A2.4 c3**: it is refused a pin because the live test
+asserts the `pqSeal` version byte against the function that generates it, which
+pins nothing. It belongs with the partials until something pins the literal.
+
+Three of the citations below named a test proving a *different arm* of the
+clause than the pin claims; each was written against the right test instead.
 
 ⛔ **Do not generate these mechanically.** It was tried and reverted. A
 mapper's evidence for one clause spans several files, so collapsing it into a
