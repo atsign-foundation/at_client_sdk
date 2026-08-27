@@ -76,8 +76,15 @@ class SymmetricAesGcmProvider
   /// [atSign] published an nskey for [namespace]?
   ///
   /// The lookup is the same one a write makes and shares its cache, so asking
-  /// before writing costs nothing extra — and the freshness window means a
-  /// "yes" here is as current as the write's own would be.
+  /// before writing costs nothing extra.
+  ///
+  /// ⚠️ This said the shared cache meant a "yes" here was "as current as the
+  /// write's own would be". That was true and read as a freshness guarantee,
+  /// when in fact both were stale together: until 2026-08-27 a remembered miss
+  /// could make this answer **false** for the rest of its window after the
+  /// recipient had published. `NskeyResolver.resolve` no longer answers null on
+  /// the strength of a remembered miss, so a "no" here means one this client
+  /// has just confirmed — and so does the write's.
   ///
   /// Without a [ckManager] this provider does not resolve keys at all; the
   /// caller conveys content keys itself and is the one that knows.

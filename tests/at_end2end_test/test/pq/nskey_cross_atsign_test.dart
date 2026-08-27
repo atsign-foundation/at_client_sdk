@@ -402,12 +402,20 @@ void main() {
             posture: PqPosture.legacy));
     await bobSide.ring.mintAndPublish(unusedNs);
 
-    // A fresh sender, so the answer comes from bob's atServer rather than a
-    // remembered miss.
+    // A fresh sender. ⚠️ This said it was so the answer came "from bob's
+    // atServer rather than a remembered miss" — which was a workaround for a
+    // defect fixed 2026-08-27, and the cost of it is that a *new* client
+    // cannot show the same question answering differently, however the reason
+    // below is worded. `resolve` no longer answers null on the strength of a
+    // remembered miss, so the same-client transition is the real assertion and
+    // `pq_cold_start_recovery_test.dart` makes it, warming the miss on purpose
+    // first. This arm is kept as the cross-atSign readiness check it actually
+    // is.
     final aliceAgain = await nskeyClient(alice);
     expect(await CryptoRuntime(aliceAgain.client).isReadyFor(bob, unusedNs),
         isTrue,
-        reason: 'once bob publishes, the same question answers differently');
+        reason: 'a sender asking about a namespace bob has now published must '
+            'be told yes');
   }, timeout: Timeout(const Duration(minutes: 2)));
 
   /// The negative alongside the per-recipient CK test: distinct keys are only

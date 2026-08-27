@@ -967,6 +967,39 @@ recorded counts drift from the tree.
 establish the clause as written. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 
+⛔ **Except that for eight of them it is not, because the clause is FALSE.**
+All 29 were read against the tree on 2026-08-27, each verdict allowed to be
+*"the code contradicts this"* rather than only *"no test asserts this"*. That
+returned **12 specification defects** against 17 gaps; an adversarial pass over
+every one of the 12 upheld 11 and refuted one (**UC-A4.1 c3**, which is an
+ordinary gap). Three of the 11 have since been fixed in the code rather than the
+document — see below — leaving **8 clauses that say the opposite of the tree and
+21 ordinary gaps.**
+
+⛔ **Write a test for one of the 8 and it will fail confusingly, and the
+tempting repair is to weaken the assertion until it passes** — which enshrines
+the wrong behaviour as the specification. Open the production path first.
+
+| Clause | What the tree does instead |
+|---|---|
+| **UC-A2.3** c1 | Says a namespace-scoped enrollment is pushed `pq_signing_root`. `envelope_enrollment_conveyance.dart` gates approval-time conveyance on `isFullyPrivileged`, so it never runs for a scoped one — and says why: the root vouches for every enrollment on the atSign |
+| **UC-B1.3** c1 | The same gate from the other side: says a restricted E2 *requests* the root. `PqSigningRoot.requestPrivateIfAbsent` returns without asking when the enrollment is not fully privileged, and its dartdoc states that as a security property — asking anyway would tell every holder that something unentitled is looking |
+| **UC-B1.1** c3 | The `min(now + grace, expiry)` **formula** is right; what the clause misses is that it **re-arms**. Read from at_server `origin/trunk` rather than the sibling checkout: `_capEnrollmentExpiry` writes a *full* grace from now on every self-enrollment and mins only against the record's own remaining lifetime, never against a previous sibling's cap |
+| **UC-B2.2** c1 | The same re-arming, and here it changes the meaning: "until the cap elapses" and the GIVEN's "the cap **is** the grace window" both describe a fixed deadline. It is not fixed, so the legacy bypass window extends with each sibling clone that retrofits — which the row's "(Bypass open during the window — explicit trade-off)" understates |
+| **UC-A4.4** c2 | Says a notification's scheme decision follows a put's. The legacy fallback exists on `put` and nowhere else: the tree's only `on NamespaceKeyUnavailableException catch` is in `_putInternal`, and both notify entry points call `CryptoRuntime.prepareWrite` with no catch at all |
+| **UC-A4.3** c1 | "all of alice's authorised enrollments read the self-copy" — the self-copy the definite article points at is produced by UC-A4.1's `put`, not by the share this row's WHEN describes |
+| **UC-A4.6** c5 | A claim about **history** — what two clients "had exchanged" under `0x01` — which no current test can establish, `0x01` having been retired and removed. The cited test's "two clients" are also two `AtClientSecretSharing` instances over one client of one atSign |
+| **UC-C1.5** c1 | Arm 1 is true *and already proven live*. It is the **justification** that is false: the two postures do not tell themselves apart by resolving into different per-algorithm idempotence pools |
+
+✅ **Three were fixed in the code instead, on 2026-08-27, and are now ordinary
+gaps** — UC-A3.3 c1, UC-B4.1 c1 and UC-B4.4 c1 shared one cause, a negative
+cache that left a sender blind to a recipient for fifteen minutes after they
+became reachable. The defect, the ruling and the mutation proofs are in
+[the plan](../implementation-plan.md#how-the-negative-cache-falsified-three-clauses).
+What each still owes is narrower than it was: UC-B4.1 c1 the `allowLegacyCryptoFallback`
+leg's record shape, UC-B4.4 c1 the same parenthetical, UC-A3.3 c1 only its third
+arm, that records already written under the fallback stay legacy.
+
 ⚠️ **These are the mapping agents' judgements**, spot-checked at 7 of 91 with
 one over-call found. Verify a row against the test before acting on it; the
 untested arm is a claim, not a measurement.
@@ -1019,6 +1052,10 @@ virtualenv run, and is therefore also the only route that raises
 
 
 #### Live — 29, each needing a virtualenv run to verify
+
+⚠️ **Eight of these rows are the specification defects listed above, not test
+gaps.** The table is left whole because the row still names the test a corrected
+clause would be proven by; read the verdict table first.
 
 These are also the only route that raises **server-proven**.
 

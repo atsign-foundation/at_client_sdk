@@ -184,6 +184,63 @@ void main() {
               'per item rather than once per write');
     });
 
+    test('a key published after a miss is found on the very next resolve',
+        () async {
+      // The memory may make a resolution CHEAPER; it may never make one WRONG.
+      // At the production default this fixture is fifteen minutes from
+      // lapsing, so if the remembered miss were allowed to decide the outcome
+      // this would answer null.
+      //
+      // Measured live before the second walk existed: a client that had tried
+      // to write to a recipient went on refusing for the rest of the window
+      // after that recipient published, and the readiness query and the
+      // exception text were wrong with it. Nothing in the write path asks a
+      // pre-flight question, so there was no caller placed to notice.
+      final c = resolver(); // production default missMemory
+      expect(await c.resolver.resolve(alice, 'x.todos'), isNull,
+          reason: 'the premise: nothing is published yet, and this is the '
+              'call that stamps the miss');
+
+      c.ring.seedPublicOnly(alice, 'todos', publicKey: todosKey.publicKeyBytes);
+
+      expect((await c.resolver.resolve(alice, 'x.todos'))?.namespace, 'todos',
+          reason: 'a namespace that gains a key is reachable at once. The '
+              'memory is a hint that saves work when some other level '
+              'resolves; when nothing does, the skipped levels are asked for '
+              'real before null is returned');
+    });
+
+    test('a resolution that skips nothing probes each level once', () async {
+      // The second walk must not double the cost of an ordinary cold write.
+      // It runs only when the memory actually suppressed something, and on a
+      // first resolve it has suppressed nothing.
+      final c = resolver();
+
+      expect(await c.resolver.resolve(alice, 'x.todos'), isNull);
+
+      expect(c.lookups, ['x.todos', 'todos'],
+          reason: 'each level asked once and no more: nothing was skipped, so '
+              'the answer was already trustworthy and there is nothing to '
+              're-ask');
+    });
+
+    test('a repeated cold resolve pays the walk again, deliberately', () async {
+      // The cost of never answering from memory, stated rather than hidden.
+      // It falls only on a resolution that is about to return null — for a
+      // write, one about to throw — and never on one that resolves.
+      final c = resolver();
+      await c.resolver.resolve(alice, 'x.todos');
+      c.lookups.clear();
+
+      await c.resolver.resolve(alice, 'x.todos');
+
+      expect(c.lookups, ['x.todos', 'todos'],
+          reason: 'every level was a remembered miss, so the first walk asked '
+              'nothing and the second asked them all. This is the price of a '
+              'null that is never stale, and it is charged only to callers '
+              'about to be told no');
+    });
+
     test('a miss is forgotten once its memory lapses', () async {
       final c = resolver(missMemory: const Duration(milliseconds: 1));
       expect(await c.resolver.resolve(alice, 'x.todos'), isNull);

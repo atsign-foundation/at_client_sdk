@@ -110,9 +110,16 @@ void main() {
               'it with his own private — the post-flip steady state, live');
       provenIn('packages/at_client/test/cold_start_test.dart',
           'says yes once the destination has published a key',
-          proves: 'the flip\'s mechanism: the same query that said no answers '
-              'yes the moment the key exists, with no state held on alice\'s '
-              'side to invalidate');
+          proves: 'that the readiness query answers yes for a destination that '
+              'has published. ⚠️ It does NOT observe the flip: its client '
+              'never asked before the key existed, so nothing about a '
+              'transition is exercised here. This said the flip needed "no '
+              'state held on alice\'s side to invalidate", and that sentence '
+              'was false when it was written — the resolver remembered the '
+              'miss, so a client that HAD asked went on refusing. Fixed '
+              '2026-08-27; the transition itself is pinned live by '
+              'pq_cold_start_recovery_test.dart, whose first write is the one '
+              'that warms the miss');
     });
   });
 }

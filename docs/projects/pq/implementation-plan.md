@@ -317,6 +317,104 @@ of UC-A1.1.
 68 have no live proof" when what it had measured was 27 with no live proof *cited
 from their acceptance scenario*. Do not restate it as coverage.
 
+### How the negative cache falsified three clauses
+
+**Found by the clause sweep on 2026-08-27 and then measured**, because three
+separate clauses turned out to contradict the tree in the same way and one cause
+is likelier than three coincidences.
+
+**What the tree does.** `NskeyResolver` remembers *misses*
+(`nskey_resolver.dart` — `missMemory`, defaulting to `const Duration(minutes:
+15)`; `_missedAt`, keyed `owner|namespace`; `_recentlyMissed`, which makes
+`resolve` **skip the probe entirely**). The resolver is not per write: a client
+builds one `CkManager` and therefore one resolver, and `crypto.dart` says so in
+as many words — *built once per client*. So the first write toward a recipient
+who has not published stamps a miss, and every later probe of that recipient is
+skipped for the rest of the window.
+
+**Measured live** (an e2e probe against the local virtualenv, since a claim
+about mechanism is a hypothesis until something names it):
+
+| step | result |
+| ---- | ------ |
+| bob has no key for the namespace | `false` — the premise |
+| `isReadyFor(bob, ns)` before | `false` |
+| alice's first `put` toward bob | throws — **and this is what warms the miss** |
+| bob mints and publishes; **control**: a *fresh* key ring on alice's own client asks for bob's key | **`true`** — bob is genuinely reachable |
+| `isReadyFor(bob, ns)` on the same client | **`false`** |
+| alice's second `put` on the same client | **throws** |
+
+The control is what makes it a measurement rather than a guess: a ring that never
+probed sees bob's key over the same connection at the same moment the client that
+did probe cannot.
+
+**Why it matters beyond the clauses.**
+
+- **It is app-visible through the pre-flight query.** `CryptoRuntime.isReadyFor`
+  resolves through the *same* resolver
+  (`symmetric_aes_gcm_provider.dart`), so an app that asks "can I reach bob yet?"
+  is told no for up to fifteen minutes after the answer became yes. Its dartdoc
+  — *"'yes' here is as current as the write's own would be"* — is true and
+  reads as a freshness guarantee; both are stale together.
+- **The refusal an app is shown asserts something false.** It says the namespace
+  "has never been used or authorised there", which was true when the miss was
+  stamped and is not true when the message is produced.
+- **Nothing can clear it.** `NskeyKeyRing.forget` and
+  `PublishedNskeyKeyRing.forgetRemote` invalidate the *ring*; the resolver's
+  negative cache has no equivalent, and the resolver skips the probe **before**
+  the ring is consulted, so forgetting the ring entry changes nothing. The only
+  reset is a new client.
+- **It sits against `ensureCurrent`'s own stated purpose.** That method's dartdoc
+  says *"the re-fetch is the point, not an optimisation … the only way it learns
+  of a rotation"*. Rotations are safe, because only misses are remembered and a
+  rotation is a changing hit. Cold starts are not.
+
+⚠️ **The cache's own justification never mentions the owner.** It reasons about
+not re-probing the *levels* of a composed namespace on a repeated write — a real
+cost, and the unit tests that cover it measure exactly that. But the key includes
+`owner`, so the optimisation reaches a dimension its reasoning does not.
+
+**The ruling** (gkc, 2026-08-27): **a remembered miss may make a resolution
+cheaper, never wrong.** `NskeyResolver.resolve` walks with the memory as before;
+if it *hits*, nothing changes. If it finds nothing **and** the memory made it
+skip a level, it re-walks the skipped levels for real before answering null.
+
+⚠️ **A narrower fix was ruled and then withdrawn the same hour, and why is worth
+keeping.** The first ruling was to make `CryptoRuntime.isReadyFor` bypass the
+cache — appealing because a *query* means "now", and because a hit already clears
+the remembered miss, so an app that pre-flighted would unblock its own next write
+too. gkc asked when an app would *not* pre-flight. The answer settled it:
+`isReadyFor` has **zero production callers**, so "an app that pre-flights" was no
+app at all. It would have left every ordinary `put`, every `notify`, the natural
+catch-and-retry, every background write, and all self data exactly as broken.
+**The lesson is general** — a fix routed through an API nobody calls is a fix
+nobody gets.
+
+**Where the cost lands.** A repeated write that resolves walks no further than it
+did before, which is the case the optimisation was built for. The extra probes
+fall only on a resolution about to return null — for a write, one about to throw
+— so a caller already in its error path pays them.
+
+**Proven both ways.** Unit (`nskey_resolver_test.dart`): a key published after a
+miss is found on the very next resolve; a resolution that skips nothing probes
+each level once, so the second walk does not double an ordinary cold write; and
+a repeated cold resolve pays the walk again, deliberately. Reverting `resolve` to
+the single walk reddens the first and third while the pre-existing
+*a level already found empty is not re-probed* guard and the no-waste test both
+stay green — so the optimisation is not entangled with the fix. Live
+(`pq_cold_start_recovery_test.dart`): mutated once per assertion, the readiness
+arm and the write arm each redden on their own, with the control — a key ring
+that never probed, on the same client over the same connection — green in both.
+
+⛔ **That live file is separate from `nskey_recipient_not_ready_test.dart` and
+uses `thirdAtSign`, and it has to be.** A successful nskey write publishes the
+writer's signing root, and `retrofit_e2e_test.dart` asserts `firstAtSign` has
+none — that row is about the root being *created* by the retrofit. Written as a
+second test inside the sibling file it took two unrelated rows down with it, and
+the failure it produced blamed a virtualenv that had in fact been recycled: the
+e2e compose file declares no volumes, so every run starts clean. **The
+precondition was the destructive write**, exactly as the tree's own rule says.
+
 ### The clause burn-down: every THEN clause proven
 
 **What done means** (gkc, 2026-08-27), and the reason every earlier audit
@@ -369,6 +467,21 @@ clause against the tree:
 ⛔ **Nothing is untested.** All 135 clauses have something exercising them; the
 single absence the mapping found was refuted. The gap is the precision of
 assertions, not the absence of tests.
+
+⛔ **And a clause can be FALSE rather than imprecise, which no instrument here
+reports as anything but a test gap.** A sweep of the 29 partials on 2026-08-27
+classified **11 of them as specification defects** — the tree contradicts what
+they say — against 18 ordinary gaps. They are not 11 coincidences: three shared
+one cause, [the negative cache](#how-the-negative-cache-falsified-three-clauses),
+which was ruled on and fixed the same day and is written up there because the way
+it was found generalises. Two more are the privilege gate on the signing root,
+which the tree refuses deliberately and both clauses say it grants; two more are
+the retrofit cap, whose formula the clauses state correctly and whose *re-arming*
+they miss. **Open the production path a clause describes before writing its
+test** — a test written to a false clause fails confusingly, and the tempting fix
+is to weaken the assertion until it passes, which enshrines the wrong behaviour
+as the specification. The live proof of the fixed one is
+`pq_cold_start_recovery_test.dart`.
 
 ⛔ **Why the catalogue drifted, named by gkc 2026-08-27 — and the reason to
 expect more of it.** The use cases were never updated after the agility decision

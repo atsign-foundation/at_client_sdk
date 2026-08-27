@@ -23,6 +23,23 @@
     `AtReachabilityResult` — read `isReachable`, or the `outcome` for
     `alreadyReachable` / `published` / `postureDoesNotSeed` / `notAuthorised` /
     `timedOut` / `failed`.
+- fix: **a sender is no longer blind to a recipient who has just become
+  reachable.** Writing to an atSign that had not yet published a namespace key
+  left that answer cached for fifteen minutes, so the *next* write kept
+  refusing even after the recipient published — and there was no way to clear
+  it short of building a new client.
+  - It reached everything: the write, `CryptoRuntime.isReadyFor` (which shares
+    the same resolver, so the pre-flight query returned a stale "not ready"),
+    and the exception text, which said the namespace "has never been used or
+    authorised there" when it had been, seconds earlier.
+  - **Self data was affected too** — an app writing to its own namespace before
+    its own startup had minted the key stayed blocked the same way, with no
+    peer involved.
+  - The rule is now: a remembered miss may make a resolution *cheaper*, never
+    *wrong*. When nothing resolves, the levels the memory skipped are asked for
+    real before the caller is told no. A repeated write that resolves is
+    unchanged; the extra probes fall only where a caller is about to be told no,
+    which for a write means one about to throw.
 - fix: an **abandoned PQ startup now logs at `warning`**, naming the steps that
   did not run and saying that peers cannot seal here. It logged at `info`
   among every other startup line, which is why an abandoned tail read as a

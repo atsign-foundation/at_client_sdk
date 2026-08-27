@@ -64,9 +64,42 @@ class NskeyResolver {
 
   /// The nskey to seal to for a value in [namespace] owned by [owner], or null
   /// if no level has one.
+  ///
+  /// ⛔ **A remembered miss is never the reason this answers null.** The memory
+  /// can only ever save work when some *other* level resolves; when nothing
+  /// does, the skipped levels are asked for real before the caller is told no.
+  ///
+  /// Without that second walk the memory decides an outcome on stale
+  /// information, and there is no caller for whom that is acceptable. Measured
+  /// live 2026-08-27, before this was here: after a recipient published, a
+  /// client that had already tried to write to them went on refusing for the
+  /// rest of the window — the refusal, the readiness query and the exception
+  /// text all wrong together — while a key ring that had never probed saw the
+  /// new key over the same connection at the same moment. A pre-flight query
+  /// was considered as the fix and rejected: nothing in the write path calls
+  /// one, so it would have left every ordinary `put`, every `notify`, every
+  /// catch-and-retry and all self data exactly as broken.
+  ///
+  /// The cost lands where it does not matter. A repeated write that resolves
+  /// walks no further than it did before; the extra probes fall only on a call
+  /// that is about to answer null, which for a write means one about to throw.
   Future<ResolvedNskey?> resolve(String owner, String namespace) async {
+    final first = await _walk(owner, namespace, useMemory: true);
+    if (first.hit != null || !first.skipped) return first.hit;
+    return (await _walk(owner, namespace, useMemory: false)).hit;
+  }
+
+  /// One most-specific-first pass, reporting whether [missMemory] made it skip
+  /// anything — which is what tells [resolve] a null is not yet trustworthy.
+  Future<({ResolvedNskey? hit, bool skipped})> _walk(
+      String owner, String namespace,
+      {required bool useMemory}) async {
+    var skipped = false;
     for (final candidate in candidates(namespace)) {
-      if (_recentlyMissed(owner, candidate)) continue;
+      if (useMemory && _recentlyMissed(owner, candidate)) {
+        skipped = true;
+        continue;
+      }
 
       final hit = await keyRing.currentPublic(owner, candidate);
       if (hit != null) {
@@ -86,15 +119,18 @@ class NskeyResolver {
               'AtClientPreference.sealsToKeyAlgorithms to reach this owner');
         }
         return (
-          namespace: candidate,
-          nskeyKid: key.kid,
-          publicKey: key.pubBytes,
-          alg: key.alg,
+          hit: (
+            namespace: candidate,
+            nskeyKid: key.kid,
+            publicKey: key.pubBytes,
+            alg: key.alg,
+          ),
+          skipped: skipped,
         );
       }
       _missedAt[_scope(owner, candidate)] = DateTime.now();
     }
-    return null;
+    return (hit: null, skipped: skipped);
   }
 
   /// Every level of [namespace], most specific first:

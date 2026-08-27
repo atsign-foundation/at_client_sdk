@@ -38,11 +38,18 @@ class NskeyRecipientKind {
 /// it under the post-quantum path.
 ///
 /// Distinct from every other encryption failure because it is not one: nothing
-/// went wrong, the recipient simply has not used or authorised this namespace.
-/// An app that catches this can tell its user *"@bob hasn't enabled this yet"*
-/// instead of surfacing an encryption error for a situation neither side has
-/// done anything wrong in. [CryptoRuntime.isReadyFor] answers the same question
-/// before a user composes anything.
+/// went wrong, this client found no nskey published for the namespace. An app
+/// that catches this can tell its user *"@bob hasn't enabled this yet"* instead
+/// of surfacing an encryption error for a situation neither side has done
+/// anything wrong in.
+///
+/// ⚠️ **It means "not found now", not "never published".** The distinction
+/// used to matter a great deal: the resolver remembered misses, and a recipient
+/// who published after this client last looked went on raising this for the
+/// rest of that window. `NskeyResolver.resolve` no longer answers null on the
+/// strength of a remembered miss, so this is now raised only after a probe that
+/// found nothing. [CryptoRuntime.isReadyFor] asks the same question ahead of
+/// composing anything, and is as current as this is.
 ///
 /// There is no post-quantum fallback to offer: the only atSign-level key is a
 /// signing root, which cannot receive an encapsulation. The escape hatch is the
@@ -58,7 +65,7 @@ class NamespaceKeyUnavailableException extends AtEncryptionException {
 
   NamespaceKeyUnavailableException(this.atSign, this.namespace)
       : super('$atSign has no published nskey for "$namespace" — that '
-            'namespace has never been used or authorised there, so there is no '
+            'namespace has not been used or authorised there, so there is no '
             'post-quantum key to seal a content key to. Reaching it needs the '
             'legacy path, which must be opted into explicitly.');
 }
