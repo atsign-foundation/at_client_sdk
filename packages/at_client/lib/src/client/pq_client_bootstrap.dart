@@ -288,14 +288,14 @@ class PqClientBootstrap {
   Future<void> startup() async {
     if (_started) return startupComplete;
     _started = true;
+    final steps = _steps;
     try {
-      for (final step in _steps) {
+      for (var i = 0; i < steps.length; i++) {
         if (_stopped) {
-          _logger.info('PQ startup stopped for $_atSign; the remaining '
-              'steps will not run (the next start retries them)');
+          _warnAbandoned(steps.sublist(i).map((step) => step.name).toList());
           break;
         }
-        await step.run();
+        await steps[i].run();
       }
     } finally {
       // A startup that stopped or failed before the mint step still settles
@@ -305,6 +305,40 @@ class PqClientBootstrap {
       if (!_mintSettled.isCompleted) _mintSettled.complete();
       _startupComplete.complete();
     }
+  }
+
+  /// Says what a stopped startup did not do, at **warning**.
+  ///
+  /// `warning` rather than `info` because the cost of an abandoned tail is
+  /// paid by a *different principal in a different process*: this atSign goes
+  /// on sending — sending needs the recipient's key, not its own — while no
+  /// peer can seal to it, so the only symptom surfaces at the far end, where
+  /// a different atSign reports this one as having no published key. Diagnosed
+  /// from that end it names the wrong party, which is where a day went on
+  /// 2026-08-26. The same reasoning as an event dropped in a delivery loop:
+  /// silence here is indistinguishable from the work never having been needed.
+  ///
+  /// The skipped steps are named individually because "the remaining steps" is
+  /// not something a reader can act on, and which ones were missed decides
+  /// what is now untrue about this client.
+  ///
+  /// ⚠️ **Deliberately does not say "the next start retries them."** It is
+  /// true and it reads as reassurance, and the process shape that reaches this
+  /// line — a CLI tool, a cron job, a one-shot notifier with piped stdin — is
+  /// precisely the one whose next start is just as short-lived. Saying it
+  /// invites a reader to stop looking.
+  void _warnAbandoned(List<String> skipped) {
+    final seedingSkipped = skipped.contains('seedNamespaceKeys') &&
+        _atClient.getPreferences()?.seedNamespaceKeys == true;
+    _logger.warning(
+        'PQ startup for $_atSign was stopped with ${skipped.length} of '
+        '${_steps.length} steps still to run, so these did not happen: '
+        '${skipped.join(', ')}. A later start runs them again, but a process '
+        'that exits this quickly may not have a later start that lives any '
+        'longer.'
+        '${seedingSkipped ? ' In particular seedNamespaceKeys did not run, so '
+            'this atSign may have no published namespace key — it can still '
+            'send, and no peer can seal to it.' : ''}');
   }
 
   /// The ordered startup steps, each with the name [stepNamesInOrder]

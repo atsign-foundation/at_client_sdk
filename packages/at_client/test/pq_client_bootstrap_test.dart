@@ -9,8 +9,12 @@ import 'package:at_auth/at_auth.dart'
         WrittenAtKeysIo;
 import 'package:at_client/src/client/pq_client_bootstrap.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
+import 'package:at_client/src/preference/at_client_preference.dart'
+    show AtClientPreference;
 import 'package:at_client/src/response/enrollment.dart' show Enrollment;
 import 'package:at_commons/atsign.dart' show AtsignString;
+import 'package:at_utils/at_utils.dart'
+    show AtSignLogger, LoggingHandler;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
@@ -20,6 +24,28 @@ import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
 
 class MockAtClient extends Mock implements AtClient {}
+
+/// Captures what the bootstrap logs, so a claim about a log LEVEL can be
+/// asserted rather than eyeballed.
+///
+/// `AtSignLogger.defaultLoggingHandler` is a settable static and each
+/// `AtSignLogger` binds its handler at construction, so this must be installed
+/// **before** the bootstrap under test is built.
+///
+/// The parameter is `dynamic` rather than `LogRecord` on purpose: overriding
+/// with a supertype is legal, and it keeps `package:logging` — which at_client
+/// does not depend on and imports nowhere — out of the dependency list for the
+/// sake of one test.
+class _RecordedLogs implements LoggingHandler {
+  final List<({String level, String message})> records = [];
+
+  @override
+  void call(dynamic record) => records.add(
+      (level: '${record.level.name}', message: '${record.message}'));
+
+  Iterable<String> at(String level) =>
+      records.where((r) => r.level == level).map((r) => r.message);
+}
 
 // AtKeysIo itself is sealed; its abstract written flavour is the mockable
 // face.
@@ -169,6 +195,79 @@ void main() {
       expect(swept, 0, reason: 'a stopped client must not sweep');
       expect(privilege.calls, 0,
           reason: 'no step after the stop may run at all');
+    });
+
+    test('an abandoned startup says so at WARNING, naming what it skipped',
+        () async {
+      // The cost of an abandoned tail is paid by a DIFFERENT principal in a
+      // different process: this atSign goes on sending while no peer can seal
+      // to it, so the only symptom appears at the far end naming the wrong
+      // party. That is the same reason a dropped delivery-loop event logs at
+      // warning, and this line logged at `info` until 2026-08-27 — among 31
+      // other info lines in a 15-second run, measured.
+      final logs = _RecordedLogs();
+      final previousHandler = AtSignLogger.defaultLoggingHandler;
+      final previousLevel = AtSignLogger.root_level;
+      AtSignLogger.defaultLoggingHandler = logs;
+      AtSignLogger.root_level = 'info';
+      addTearDown(() {
+        AtSignLogger.defaultLoggingHandler = previousHandler;
+        AtSignLogger.root_level = previousLevel;
+      });
+
+      // The default fixture answers null here; the consequence sentence is
+      // conditional on this client actually being one that seeds, so a null
+      // preference would make the test assert the absence of the sentence it
+      // is about.
+      when(() => client.getPreferences())
+          .thenReturn(AtClientPreference()..seedNamespaceKeys = true);
+
+      // Built AFTER the handler is installed — AtSignLogger binds its handler
+      // at construction, so a bootstrap built earlier would log elsewhere and
+      // this test would assert against an empty recorder.
+      final keysIo = MockAtKeysIo();
+      final readGate = Completer<Never>();
+      when(() => keysIo.read(any())).thenAnswer((_) => readGate.future);
+      final bootstrap = PqClientBootstrap(
+        client,
+        keysIo: keysIo,
+        privilege: _FakePrivilege(true),
+        sweepUnanchoredEnrollments: () async => 0,
+      );
+
+      final startup = bootstrap.startup();
+      bootstrap.stop();
+      readGate.completeError(Exception('the test releases the parked read'));
+      await startup;
+
+      // The POSITIVE CONTROL for the recorder, and it has to be independent
+      // of the level under test: the parked read this fixture arranges makes
+      // the hydrate step log at SEVERE, which arrives whatever level the
+      // abandonment uses. Controlling on WARNING instead would go red under
+      // the very mutation this test exists to catch, so an empty recorder and
+      // a wrongly-levelled line would be indistinguishable.
+      expect(logs.records, isNotEmpty,
+          reason: 'the recorder is installed and capturing; without this an '
+              'empty capture satisfies every absence assertion below while '
+              'measuring nothing');
+
+      final warnings = logs.at('WARNING').toList();
+
+      final abandoned =
+          warnings.where((m) => m.contains('was stopped with')).toList();
+      expect(abandoned, hasLength(1),
+          reason: 'the abandonment is reported once, at warning');
+      expect(abandoned.single, contains('seedNamespaceKeys'),
+          reason: 'and it NAMES the step that did not run — "the remaining '
+              'steps" is not something a reader can act on, and which ones '
+              'were missed is what decides what is now untrue');
+      expect(abandoned.single, contains('no peer can seal to it'),
+          reason: 'and states the consequence, because the symptom surfaces '
+              'at a different atSign that names this one as the problem');
+      expect(logs.at('INFO').where((m) => m.contains('PQ startup stopped')),
+          isEmpty,
+          reason: 'and it is no longer only an info line, which is what let '
+              'it sit unread beside every other startup line');
     });
 
     test('mintSettled settles once the mint step has run', () async {
