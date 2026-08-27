@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 
 import 'package:at_auth/src/registrar/registrar.dart';
 import 'package:at_auth/src/at_auth.dart';
@@ -7,7 +6,6 @@ import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
 
 import 'package:http/http.dart' as http;
-import 'package:http/io_client.dart';
 
 const apiBase = '/api/app/v4';
 
@@ -28,14 +26,12 @@ class RegistrarService implements Registrar {
     if (apiKey.trim().isEmpty) {
       throw AtException('Registrar API key is required and cannot be empty.');
     }
-    if (httpClient != null) {
-      _http = httpClient;
-    } else {
-      var innerClient = HttpClient();
-      innerClient.badCertificateCallback =
-          (X509Certificate cert, String host, int port) => true;
-      _http = IOClient(innerClient);
-    }
+    // A plain `package:http` client: it validates certificates, and it works
+    // under WASM because it reaches the network without `dart:io`. A caller
+    // needing the `dart:io` stack — to talk to a registrar whose certificate
+    // does not validate, for instance — passes `RegistrarIoClient.create()`
+    // from `package:at_auth/at_auth_io.dart` as [httpClient].
+    _http = httpClient ?? http.Client();
   }
 
   @override

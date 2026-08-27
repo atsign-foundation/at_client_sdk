@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -5,6 +6,7 @@ import 'package:at_auth/src/auth_constants.dart' as auth_constants;
 import 'package:at_auth/src/exception/at_auth_exceptions.dart';
 import 'package:at_auth/src/keys/at_keys.dart';
 import 'package:at_auth/src/keys/io/at_keys_io.dart';
+import 'package:at_auth/src/keys/io/file_lock.dart';
 import 'package:at_chops/at_chops.dart';
 import 'package:at_commons/at_commons.dart';
 
@@ -22,7 +24,10 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   Future<AtKeys> read(String atsign) async {
     final file = File(filePath!(atsign));
     if (!file.existsSync()) {
-      throw AtException(
+      // Typed, so a caller can tell "no keyfile yet" from "a keyfile this
+      // process cannot read". Both used to arrive as a bare AtException and
+      // the only way to separate them was the message text.
+      throw AtKeysSourceAbsentException(
           'provided keys file does not exist. Please check whether the file path ${file.path} is valid');
     }
 
@@ -34,17 +39,55 @@ class FileAtKeysIo extends WrittenAtKeysIo {
   @override
   Future write(String atsign, AtKeys atKeys) async {
     final file = File(filePath!(atsign));
-    if (file.existsSync()) {
-      throw AtKeysFileOverwriteException(
-          'Tried writing ${file.path}, but failed since it already exists');
-    }
+    await AtKeysFileLock(file.path).synchronized(() async {
+      if (file.existsSync()) {
+        throw AtKeysFileOverwriteException(
+            'Tried writing ${file.path}, but failed since it already exists');
+      }
 
-    await _writeAtRestDocument(file, await _encodeAtRest(atKeys, atsign));
+      await _writeAtRestDocument(file, await _encodeAtRest(atKeys, atsign));
+    });
   }
 
   @override
   Future<void> flush(Atsign atsign, AtKeys atKeys) async {
     final file = File(filePath!(atsign));
+    // The whole read-validate-write under one inter-process lock. The rename
+    // inside is already atomic and `validateMapUpdate` already DETECTS a
+    // candidate that drops material — but two processes that both read before
+    // either writes both pass validation, and the second rename silently
+    // discards the first's addition. Several CLI apps sharing one keyfile is
+    // the ordinary deployment, not an edge.
+    await AtKeysFileLock(file.path)
+        .synchronized(() => _writeValidated(file, atsign, atKeys));
+  }
+
+  /// Read, mutate and write inside **one** hold of the lock.
+  ///
+  /// [flush] alone cannot close the window this closes: a caller that reads
+  /// outside the lock and flushes inside it has already taken its snapshot by
+  /// the time the lock is acquired, so a sibling that flushed in between is
+  /// missing from its candidate and assurance refuses the write. Holding the
+  /// lock across the read is what makes the mutation see the state it is
+  /// about to replace. The lock is a lock file, so this serialises coroutines
+  /// within one process as well as separate processes — which is the case
+  /// that bites, since a client fires the namespace-key seeding and the
+  /// conveyed-key filing as sibling unawaited tasks.
+  @override
+  Future<void> update(
+      Atsign atsign, FutureOr<bool> Function(AtKeys keys) mutate) async {
+    final file = File(filePath!(atsign));
+    await AtKeysFileLock(file.path).synchronized(() async {
+      final keys = await read(atsign.toString());
+      if (await mutate(keys) == false) return;
+      await _writeValidated(file, atsign, keys);
+    });
+  }
+
+  /// The flush body, without the lock — so [update] can hold the lock across
+  /// its own read as well. `AtKeysFileLock` is not reentrant: calling [flush]
+  /// from inside [update] would wait on a lock this call already holds.
+  Future<void> _writeValidated(File file, Atsign atsign, AtKeys atKeys) async {
     final document = await _encodeAtRest(atKeys, atsign);
 
     if (!file.existsSync()) {

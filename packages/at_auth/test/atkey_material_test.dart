@@ -1,7 +1,7 @@
 import 'package:at_auth/src/keys/serialization/atkey_material.dart';
 import 'package:test/test.dart';
 
-/// Tripwire tests: [KeyAlgorithmType] and [CryptographicKeyType] values are
+/// Tripwire tests: [CryptographicMaterialAlgorithm] and [CryptographicMaterialRole] values are
 /// persisted in `.atKeys` files and enrollment payloads already on disk and
 /// on the wire across the Atsign Protocol ecosystem. These tests pin the exact
 /// string literal for every existing token so an accidental rename, re-case,
@@ -10,22 +10,23 @@ import 'package:test/test.dart';
 /// make a failing test pass here — if this test fails, the source change is
 /// the bug, not the test.
 void main() {
-  group('KeyAlgorithmType tripwire', () {
+  group('CryptographicMaterialAlgorithm tripwire', () {
     test('existing token values never change', () {
-      expect(KeyAlgorithmType.aes256, 'aes256');
-      expect(KeyAlgorithmType.rsa2048, 'rsa2048');
-      expect(KeyAlgorithmType.eccSecp256r1, 'ecc_secp256r1');
-      expect(KeyAlgorithmType.ed25519, 'ed25519');
-      expect(KeyAlgorithmType.x25519, 'x25519');
-      expect(KeyAlgorithmType.mlKem768, 'mlkem768');
-      expect(KeyAlgorithmType.mlDsa65, 'mldsa65');
-      expect(KeyAlgorithmType.xWing, 'xwing');
+      expect(CryptographicMaterialAlgorithm.aes256, 'aes256');
+      expect(CryptographicMaterialAlgorithm.rsa2048, 'rsa2048');
+      expect(CryptographicMaterialAlgorithm.eccSecp256r1, 'ecc_secp256r1');
+      expect(CryptographicMaterialAlgorithm.ed25519, 'ed25519');
+      expect(CryptographicMaterialAlgorithm.x25519, 'x25519');
+      expect(CryptographicMaterialAlgorithm.mlKem768, 'mlkem768');
+      expect(CryptographicMaterialAlgorithm.mlKem1024, 'mlkem1024');
+      expect(CryptographicMaterialAlgorithm.mlDsa65, 'mldsa65');
+      expect(CryptographicMaterialAlgorithm.xWing, 'xwing');
     });
 
     test('known contains exactly the declared tokens, nothing more or less',
         () {
       expect(
-        KeyAlgorithmType.known,
+        CryptographicMaterialAlgorithm.known,
         equals({
           'aes256',
           'rsa2048',
@@ -33,6 +34,7 @@ void main() {
           'ed25519',
           'x25519',
           'mlkem768',
+          'mlkem1024',
           'mldsa65',
           'xwing',
         }),
@@ -40,25 +42,35 @@ void main() {
     });
   });
 
-  group('CryptographicKeyType tripwire', () {
+  group('CryptographicMaterialRole tripwire', () {
     test('existing token values never change', () {
-      expect(CryptographicKeyType.symmetricEncryption, 'symmetricEncryption');
-      expect(CryptographicKeyType.symmetricAuthentication,
+      expect(
+          CryptographicMaterialRole.symmetricEncryption, 'symmetricEncryption');
+      expect(CryptographicMaterialRole.symmetricAuthentication,
           'symmetricAuthentication');
-      expect(CryptographicKeyType.publicEncryption, 'publicEncryption');
-      expect(CryptographicKeyType.privateDecryption, 'privateDecryption');
-      expect(CryptographicKeyType.publicVerification, 'publicVerification');
-      expect(CryptographicKeyType.privateSigning, 'privateSigning');
-      expect(CryptographicKeyType.publicEncapsulation, 'publicEncapsulation');
-      expect(CryptographicKeyType.privateDecapsulation, 'privateDecapsulation');
-      expect(CryptographicKeyType.publicKeyAgreement, 'publicKeyAgreement');
-      expect(CryptographicKeyType.privateKeyAgreement, 'privateKeyAgreement');
+      expect(CryptographicMaterialRole.publicEncryption, 'publicEncryption');
+      expect(CryptographicMaterialRole.privateDecryption, 'privateDecryption');
+      expect(
+          CryptographicMaterialRole.publicVerification, 'publicVerification');
+      expect(CryptographicMaterialRole.privateSigning, 'privateSigning');
+      expect(
+          CryptographicMaterialRole.publicEncapsulation, 'publicEncapsulation');
+      expect(CryptographicMaterialRole.privateDecapsulation,
+          'privateDecapsulation');
+      expect(
+          CryptographicMaterialRole.publicKeyAgreement, 'publicKeyAgreement');
+      expect(
+          CryptographicMaterialRole.privateKeyAgreement, 'privateKeyAgreement');
+      expect(CryptographicMaterialRole.privateAuthentication,
+          'privateAuthentication');
+      expect(CryptographicMaterialRole.publicAuthentication,
+          'publicAuthentication');
     });
 
     test('known contains exactly the declared tokens, nothing more or less',
         () {
       expect(
-        CryptographicKeyType.known,
+        CryptographicMaterialRole.known,
         equals({
           'symmetricEncryption',
           'symmetricAuthentication',
@@ -70,6 +82,8 @@ void main() {
           'privateDecapsulation',
           'publicKeyAgreement',
           'privateKeyAgreement',
+          'privateAuthentication',
+          'publicAuthentication',
         }),
       );
     });

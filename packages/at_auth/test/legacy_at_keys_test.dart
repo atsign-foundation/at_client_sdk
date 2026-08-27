@@ -1,6 +1,7 @@
 import 'dart:io';
 
 import 'package:at_auth/at_auth.dart';
+import 'package:at_auth/at_auth_io.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:test/test.dart';
 
@@ -80,7 +81,7 @@ void main() {
 
         final readKeys = await fileAtKeysIo.read('@alice');
         expectLegacyAtKeys(readKeys, legacyKeys);
-        expect(readKeys.keysForKeyId('appended'), isNotEmpty);
+        expect(readKeys.atSignKeysForKeyId('appended'), isNotEmpty);
       });
     }
   });

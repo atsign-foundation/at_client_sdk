@@ -44,6 +44,7 @@ class EnrollmentRequestDecision {
   late final String _enrollmentId;
   late final String _atSign;
   late final String _encryptedAPKAMSymmetricKey;
+  String? _mintedApkamSymmetricKey;
   late final EnrollOperationEnum _enrollOperationEnum;
   bool force = false;
 
@@ -52,6 +53,15 @@ class EnrollmentRequestDecision {
   String get atSign => _atSign;
 
   String get encryptedAPKAMSymmetricKey => _encryptedAPKAMSymmetricKey;
+
+  /// The plaintext symmetric key this approver minted for an enrollment that
+  /// advertised a key package, or null for the RSA path.
+  ///
+  /// When set, the approver generated the key rather than unwrapping one the
+  /// enrollee sent, and delivers it by encapsulating it to the advertised
+  /// public half — so [encryptedAPKAMSymmetricKey] is empty and there is
+  /// nothing to RSA-decrypt.
+  String? get mintedApkamSymmetricKey => _mintedApkamSymmetricKey;
 
   EnrollOperationEnum get enrollOperationEnum => _enrollOperationEnum;
 
@@ -88,6 +98,27 @@ class EnrollmentRequestDecision {
           .._enrollOperationEnum = EnrollOperationEnum.approve;
 
     return enrollmentRequestDecision;
+  }
+
+  /// Approves an enrollment that advertised a key package, with a symmetric
+  /// key this approver minted.
+  ///
+  /// The enrollee sent none — its request carried no RSA-wrapped secret at all
+  /// — so the key travels the other way, encapsulated to the public half the
+  /// request advertised. The approver still wraps the encryption private key
+  /// and the self-encryption key under it exactly as on the RSA path; only the
+  /// key's origin and its route to the enrollee differ.
+  static EnrollmentRequestDecision approvedWithMintedKey({
+    required String enrollmentId,
+    required String apkamSymmetricKey,
+    required String atSign,
+  }) {
+    return EnrollmentRequestDecision._()
+      .._enrollmentId = enrollmentId
+      .._atSign = atSign
+      .._encryptedAPKAMSymmetricKey = ''
+      .._mintedApkamSymmetricKey = apkamSymmetricKey
+      .._enrollOperationEnum = EnrollOperationEnum.approve;
   }
 
   /// If the request is denied, the requester application is prevented from authenticating to the atServer.

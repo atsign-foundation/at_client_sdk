@@ -13,7 +13,7 @@ dependencies:
   crypto: ^3.0.5
   crypton: ^2.2.1
   at_client: ^3.10.0
-  at_auth: ^3.0.0
+  at_auth: ^4.0.0-rc1
   at_lookup: ^3.4.2
   at_utils: ^3.2.0
   at_chops: ^3.0.0
