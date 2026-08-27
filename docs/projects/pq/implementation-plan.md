@@ -158,6 +158,7 @@ record working. Do not "tidy" one to match the other.
 | ---- | ------------ | ---------- |
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
 | **advertisement fetch volume, ttr and client caching** | Three questions, one subject, raised by gkc 2026-08-26 after a wire capture showed **110 `_apsk` lookups in a single short client run** — more than either control atSign made. (1) Why are there so many? Establish what re-fetches, and whether anything is re-reading per operation what it could hold. (2) Should an advertisement carry a `ttr`, and if so how long — it is a public record that peers must not read stale after a rotation, and rotation is the revocation lever. (3) How should a client cache advertisements it has fetched, and for how long? ⛔ **These interact**: a client-side cache with no server-side `ttr` is a rotation that does not take effect, and a `ttr` shorter than a session is the fetch volume in (1) by design | Nothing. It needs a measurement, then a ruling |
+| [the four missing self-to-self mirrors](#the-four-missing-self-to-self-mirrors) | **A ruling from gkc on which become catalogue rows**, then the rows and their scenarios. He set the rule 2026-08-27: a `put`/`notify` row — or a `get`/notification-receipt row — is about self→self **or** self→other, never both, and where one direction has a row so should the other. Five pairs already hold; **four self→other rows have no self→self mirror** and they are not equally worth having. The section ranks them with what each would assert and whether the tree can tell it apart: UC-A4.5's and UC-A4.7's mirrors both have live production paths that nothing exercises for self, and UC-A4.7's is *commented for exactly that case*. ⛔ **Landing any of them raises the denominator above 135** and the burn-down percentage falls, which is correct — the clauses were always owed and their absence flattered the figure | gkc's ruling |
 | **the legacy fallback exists on `put` and nowhere else** | **A ruling from gkc**, then either the code or the clause. Found by the clause sweep 2026-08-27 and verified here rather than inherited: the tree's only `on NamespaceKeyUnavailableException catch` is in `_putInternal` (`at_client_impl.dart`), `mayFallBackToLegacy` and `_copyOptionsForLegacyFallback` have one caller each, and **both** notify entry points — `notification_service_impl.dart` and `notify_request_transformer.dart` — call `CryptoRuntime.prepareWrite` with no catch at all. So an app that set `allowLegacyCryptoFallback` gets it on a `put` and not on a `notify`, and nothing says so. ⚠️ **This is what UC-A4.4 c2 asserts** — that a notification's scheme decision is the sending app's "exactly as a put's" — so the clause is one of the eight the tree contradicts, and it cannot be closed either way without this ruling. Two defensible answers: extend the fallback to notify, or rule that a notify refuses by design (it is remote-only by construction and a silent downgrade on an announcement is worse than a refusal) and correct the clause | gkc's ruling |
 | [the at_client carve stack](#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
 | [arm 1 vs arm 3 bucketing](#arm-1-vs-arm-3-bucketing) | **A ruling from gkc** — the measuring is done. Arm 3 cannot be scoped and the catalogue's count table stays wrong until it is settled | gkc's ruling. Nothing else |
@@ -317,6 +318,36 @@ of UC-A1.1.
 ⚠️ **A citation count is not a coverage count.** An earlier pass reported "27 of
 68 have no live proof" when what it had measured was 27 with no live proof *cited
 from their acceptance scenario*. Do not restate it as coverage.
+
+### The four missing self-to-self mirrors
+
+**A ruling gkc asked for, drafted 2026-08-27 and deliberately not landed.**
+Nothing in `acceptance.md` changes until it is settled, because adding a row
+raises the burn-down's denominator and every new row owes a scenario.
+
+**The rule this comes from** (gkc, 2026-08-27): a use case for `put` or `notify`
+— or for the receiving side, `get` or notification receipt — is about **self to
+self** *or* **self to other**, never both at once. And where one direction has a
+row, so should the other.
+
+Auditing every put/notify/read row against that, five pairs already hold:
+UC-A3.1↔UC-A4.1, UC-A3.3↔UC-A4.2 (with UC-B4.1 carrying the fallback),
+UC-A3.4↔UC-A4.4, UC-B3.1↔UC-B4.3 and UC-B3.2↔UC-B4.4. Nothing in the self
+cluster lacks an other-side mirror — UC-A3.2 is seeding and UC-A3.5 is the
+advertisement's shape, neither being a write row. **Four self→other rows have no
+self→self mirror**, and they are not equally worth having:
+
+| Would mirror | What the self row would assert | Can the tree tell it apart? |
+| ------------ | ------------------------------ | --------------------------- |
+| **UC-A4.5** — a sender follows the recipient's advertised algorithm, not its own preference | A self write seals under the algorithm **this atSign's own published nskey advertises**, even when `keyEstablishmentAlgorithms` names a different one. Fixture: a published X-Wing nskey and a preference configured for `ml-kem-1024` | **Yes, and this is the sharpest of the four.** `NskeyResolver.resolve` reads the published advertisement and then filters by `sealsToKeyAlgorithms`; a build that consulted the *minting* preference instead would be wrong. ⚠️ For a self write both values belong to the same atSign, so **a client reading the wrong one is invisible** — which is exactly the shape a bug hides in, and there is no row for it |
+| **UC-A4.7** — no mutually supported construction is a refusal, not a guess | A client whose `sealsToKeyAlgorithms` has been narrowed past what its **own** advertisement offers is refused, and the refusal says so rather than reporting a cold start | **Yes, and the production code already names this exact case.** `NskeyResolver` throws `AtEncryptionException` rather than walking on, and its comment says why: *"a deployment that narrowed the list reads its own configuration as the recipient having published nothing."* The path exists, is commented for the self case, and nothing exercises it |
+| **UC-A4.6** — the construction is negotiated from `suites` | A self write against this atSign's own advertisement listing only a retired construction is refused, and one listing the current construction gets the matching version byte | **Yes, but narrower.** `NskeyProvider._sealVersionFor` intersects what the build can open with the advertisement's `suites`, and for self that advertisement is one this atSign wrote — so a mismatch means an advertisement older than the build. A real upgrade scenario rather than a hypothetical, but less likely to be got wrong than the two above |
+| **UC-A4.3** — multi-enrollment both ends | Every authorised enrollment of this atSign reads this atSign's own self data | **Weakest.** Largely covered already: UC-A3.1's Given has `alice1, alice2` both holding the private, approval-time conveyance is UC-A2.3, and an enrollment that missed the mint healing from a holder is UC-B5.11. A row would restate rather than add |
+
+⛔ **The denominator moves and that is the honest direction.** Landing any of
+these raises the total above 135 with the new clauses unproven, so the burn-down
+percentage falls. That is what it should do: the clauses were always owed and
+their absence was flattering the figure.
 
 ### How the negative cache falsified three clauses
 
