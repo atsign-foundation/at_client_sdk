@@ -951,12 +951,19 @@ this whole gate exists to produce — counts none of it.
 ## The clause burn-down — what each of the 135 clauses needs
 
 Measured 2026-08-27 by reading every clause against the tree. **Every clause has
-something exercising it; none is untested.** 91 are established as written, 44
-are partial. The suite prints the running figure on each run.
+something exercising it; none is untested** — the single absence the mapping
+found was refuted.
+
+⛔ **No totals here.** This paragraph carried "91 are established as written, 44
+are partial" while the tables four lines below said 35 and the tree said 99
+proven of 135 — three figures for one quantity, in one file, and a wrap-up sweep
+walked past two of them. The live figures come from the suite, which prints
+`BURN-DOWN` on every run and has a guard that fails in both directions if the
+recorded counts drift from the tree.
 
 ### The partial clauses — objective 1's remaining work
 
-**39 clauses**, each one a test already exercises that does **not**
+**35 clauses**, each one a test already exercises that does **not**
 establish the clause as written. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 
@@ -964,24 +971,43 @@ establish the clause as written. The fix is normally an assertion plus a
 one over-call found. Verify a row against the test before acting on it; the
 untested arm is a claim, not a measurement.
 
+⚠️ **Two rows below were examined on 2026-08-27 and deliberately left**, so
+nobody re-derives the same answer:
+
+- **UC-B3.1 c1** — "applies to put and notify alike". The symmetry IS proven, by
+  the pair `a write that reaches encryption still routed to legacy` and `a
+  notification that reaches encryption routed to legacy` in
+  `disallow_legacy_encryption_test.dart` — but both run at **pqActive**, where
+  the outcome is a refusal. This row is about **pqReady** writing legacy, so what
+  is owed is a capability-stage notification asserted to route to the legacy
+  provider and NOT be refused. Both paths go through `CryptoRuntime`
+  (`notification_service_impl.dart:674`), so the arm is true by construction.
+- **UC-G1.9 c1** — "new envelopes carry no signature of it". The cited test
+  asserts the held key SET (`heldKeyIds()` after a retirement), which is a proxy:
+  it shows what the client could sign with, not what a composed envelope carries.
+  Closing it means composing an envelope after the retirement and asserting its
+  signature set, which is more than an added assertion.
+
+**Deferred, not rejected:** UC-A2.4's log names the algorithm adopted from the
+keyfile and never names the DIVERGENCE from a configured preference, so a
+deployment that set `ml-kem-1024` and got X-Wing must notice for itself. An
+explicit warning naming both was proposed and left for when the logging surface
+is looked at as a whole.
+
 **The standard a closed clause meets**, set by the two closed on 2026-08-27:
 write the missing arm *with a control*, then **mutate the production code and
 confirm the failure quotes your own assertion's reason**, revert, and pin. A
 green test that has not been shown to discriminate proves nothing.
 
-#### In-process — 10 closable with no virtualenv
+#### In-process — 6 closable with no virtualenv
 
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
 | **UC-A1.1** c3 | Nothing encapsulates to it, at onboarding or ever. | `pq_signing_root_test.dart` |
 | **UC-A2.2** c2 | Nothing anywhere makes a copy of a keyfile that HOLDS `pq_signing_root@alice⁻¹` and then shows the second host resolving or signing with it… | `at_keys_test.dart` |
-| **UC-A2.5** c5 | nothing already sealed is re-sealed, and no conveyance fires | `key_package_minting_test.dart` |
-| **UC-A3.5** c3 | an advertisement with **no `alg`** reads as the hybrid — which is what every one published before the field existed was, by construction | `published_nskey_key_ring_test.dart` |
-| **UC-A3.5** c4 | re-derives the public half **through the advertised KEM** rather than assuming X-Wing | `nskey_private_filing_test.dart` |
 | **UC-A5.1** c3 | "an enrollment approved *after* the rotation is pushed the current generation only" and "...and opens it" — no test enrols a joiner after a… | `nskey_self_heal_test.dart` |
 | **UC-B3.1** c1 | "(Applies to **put and notify** alike; a notification an old install cannot decrypt is as lost as a record it cannot read.)" — nothing anyw… | `b3_mixed_intra_test.dart` |
 | **UC-B5.7** c1 | "The holder carries a lease stamped *before* the take goes out — so \"unspent by my clock\" implies the atServer has not expired it either,… | `nskey_minting_test.dart` |
-| **UC-C1.6** c1 | each remains individually overridable — disallowLegacyEncryption has no per-preference override at all, and pq_posture_test.dart 'disallowL… | `pq_posture_test.dart` |
 | **UC-G1.9** c1 | new envelopes carry no signature of it | `signing_key_minting_test.dart` |
 
 #### Live — 29, each needing a virtualenv run to verify
@@ -1075,21 +1101,20 @@ reading the test.
 | **UC-B5.2** | c1 | `b5_edge_cases_test.dart` — UC-B5.2 · reading legacy history after retrofit *(in-process)* |
 | **UC-B5.3** | c1 | `pq_signing_root_test.dart` — losing the mint lock generates nothing and files nothing *(in-process)* |
 
-### Three clauses pinned in the tree that the map calls partial
+### Two clauses pinned in the tree that the map calls partial
 
 Pins that predate this mapping, where a clause carries an arm the cited test
-does not reach. Each is a candidate over-claim: the burn-down counts them, so
-if they do not survive review the recorded figure falls.
+does not reach. Each is a candidate over-claim: the burn-down counts them, so if
+they do not survive review the recorded figure falls.
 
-⚠️ **Two others are pinned-and-partial for the opposite reason and are NOT
-here.** UC-G1.2 c1 and UC-G1.3 c1 were closed on 2026-08-27 — the missing arm
-was written and mutation-proven — so the map's PARTIAL verdict for them is a
-stale snapshot rather than an over-claim. A count taken from the map alone
-would put five rows in this section; three is the number that means anything.
+⚠️ **Nine rows are pinned-and-partial and only these two mean anything.** The
+other seven — UC-G1.2 c1, UC-G1.3 c1, UC-A3.5 c3, UC-A3.5 c4, UC-C1.6 c1,
+UC-A2.5 c5, UC-A2.4 c5 — were closed or corrected on 2026-08-27, so the map's
+PARTIAL verdict for them is a stale snapshot rather than an over-claim. A count
+taken from the map alone would say nine; two is the number that means anything.
 
 | Clause | The arm the cited test does not reach |
 |---|---|
-| **UC-A2.4** c5 | The mismatch is **logged**, not silently resolved, and the new preference takes effect on the next enrollment. |
 | **UC-A2.6** c2 | an enrollment revoked while it holds an already open, already authenticated connection |
 | **UC-G1.1** c2 | on a retrofitted file deliberately the legacy enrollment, not the active typed material's |
 

@@ -160,7 +160,7 @@ record working. Do not "tidy" one to match the other.
 | [content keys per scope](#content-keys-per-scope) | **A ruling from gkc** on whether one content key per writing enrollment per scope is the intent. If not: `CurrentCkPointer` needs a remote-first write through an atomic verb, and rotation needs to supersede every CK in scope | gkc's ruling, then the fix |
 | [the late-arriving nskey private](#the-late-arriving-nskey-private) | File a late-arriving nskey private **only for a generation this client actually asked for**. The reverted attempt filed any arrival, which breached the seeding guarantee | Nothing |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **step 20's rotation arm** | Add the `pending` enrollment status value and build the rotation arm against its own dedicated CRAM atSign. ⛔ There is **no** fleet-adoption wait — see the standing premise | The at_auth publish, and a dedicated CRAM atSign |
-| **CI at head** | Dispatch both workflows at head and read them. "Every rail green" is half of D1's definition, and **nothing fires on push on this branch** — the workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only, so the newest run is only ever as new as the last manual dispatch. ⚠️ **Dispatch matters beyond staleness**: CI's at_client job runs a **bare** `dart analyze` that reads `benchmark/`, which the routine `dart analyze lib test` never opens — that hid five errors for six days. ⛔ **And docs are build inputs here**, so a plan edit alone can redden the acceptance rail. Re-derive, never quote:<br>`gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName --jq '.[] \| [.headSha[0:9], .workflowName, .conclusion] \| @tsv'`<br>`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike` | A head worth dispatching | ⚠️ **A format-gate risk found 2026-08-27, and it predates any current work.** `packages/at_client/test/acceptance/manifest.dart` and `a3_self_data_test.dart` **as committed at `762a91c38`** fail `dart format . -o none --set-exit-if-changed` under local Dart **3.12.2 stable**, while three untouched neighbours pass — the diverging constructs are an empty-condition `for (;;)` and a wrapped ternary, both places the formatter changed style between versions. CI installs `sdk: stable` **unpinned** (`actions/setup-flutter-and-dart/action.yaml:41`), so whether the gate is red at head depends on what stable is on the day. ⛔ **Do not "fix" this with a write-format** — that churns committed code to whichever style the local SDK happens to hold, which is the trap the toolchain rules already name. Dispatch CI and read the gate before touching a byte.
+| **CI at head** | Dispatch both workflows at head and read them. "Every rail green" is half of D1's definition, and **nothing fires on push on this branch** — the workflows are `workflow_dispatch` plus `push`/`pull_request` on `trunk` only, so the newest run is only ever as new as the last manual dispatch. ⚠️ **Dispatch matters beyond staleness**: CI's at_client job runs a **bare** `dart analyze` that reads `benchmark/`, which the routine `dart analyze lib test` never opens — that hid five errors for six days. ⛔ **And docs are build inputs here**, so a plan edit alone can redden the acceptance rail. Re-derive, never quote:<br>`gh run list --branch gkc-pq-d1-spike --limit 4 --json headSha,conclusion,workflowName --jq '.[] \| [.headSha[0:9], .workflowName, .conclusion] \| @tsv'`<br>`gh workflow run at_client_sdk.yaml --ref gkc-pq-d1-spike` | A head worth dispatching | ⚠️ **A format-gate risk found 2026-08-27, and it predates any current work.** `packages/at_client/test/acceptance/manifest.dart` and `a3_self_data_test.dart` **as committed at `762a91c38`** fail `dart format . -o none --set-exit-if-changed` under local Dart **3.12.2 stable**, while three untouched neighbours pass — the diverging constructs are an empty-condition `for (;;)` and a wrapped ternary, both places the formatter changed style between versions. CI installs `sdk: stable` **unpinned** (`actions/setup-flutter-and-dart/action.yaml:41`), so whether the gate is red at head depends on what stable is on the day. ⛔ **Do not "fix" this with a write-format** — that churns committed code to whichever style the local SDK happens to hold, which is the trap the toolchain rules already name. Dispatch CI and read the gate before touching a byte. ⚠️ **A rail gap found by a cold read 2026-08-27: `docs_structure_test.dart` does NOT check that a link RESOLVES.** Its group is *no LINKED heading is duplicated* — it collects slugs without resolving the target, so a **renamed heading breaks every link to it silently**. That happened the same day: renaming `### Three clauses pinned…` to `### Two clauses pinned…` left a dead anchor in the plan and the suite stayed green. The edit-time hook catches this on files it sees; a heading renamed in one file and linked from another is the hole. Worth a rail that resolves each `](target#anchor)` across the doc set.
 
 ### P2 — should be done if there is time
 
@@ -318,8 +318,14 @@ Two columns, tracked separately, both printed by the acceptance suite on every
 run:
 
 ```
-BURN-DOWN  clauses proven: 95 of 135   server-proven: 52 of 135
+BURN-DOWN  clauses proven: <N> of 135   server-proven: <M> of 135
 ```
+
+⚠️ **`<N>` and `<M>` are deliberate.** Both figures were written out here and in
+`acceptance.md` on 2026-08-27 and were stale within the hour — and disagreed with
+each other, 95 against 93, while the tree said 99. A number with two homes and no
+rail over either is a number that lies; the live figures are in `manifest.dart`,
+where a guard fails in both directions if they drift from the tree.
 
 - **proven** — some citation pins the clause. Objective 1 is 135 of 135.
 - **server-proven** — the citation pinning it drove a real atServer.
@@ -344,13 +350,62 @@ clause against the tree:
 
 | List | Size | What it is |
 | ---- | ---: | ---------- |
-| [the partial clauses](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work) | 39 | a test exercises the clause and does not establish it as written. **10 are in-process and need no virtualenv**; 29 are live and are the only route that raises server-proven. ⚠️ **Was 44** — two were closed 2026-08-27 and three are pinned (see the over-claim row) |
+| [the partial clauses](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work) | 35 | a test exercises the clause and does not establish it as written. **6 are in-process and need no virtualenv**; 29 are live and are the only route that raises server-proven. ⚠️ **Read the array-shape warning above before writing a test for any of them** — three of the six examined on 2026-08-27 were superseded clauses rather than test gaps |
 | [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 1 | proven, but no citation names the proof. ⚠️ **Was 33; 32 were written 2026-08-27 and the last is deliberate** — UC-A2.4's `pqSeal ver 0x03` is refused a pin because the live test asserts the byte against the function that generates it |
-| [pinned but partial](detail/acceptance.md#three-clauses-pinned-in-the-tree-that-the-map-calls-partial) | 3 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls |
+| [pinned but partial](detail/acceptance.md#two-clauses-pinned-in-the-tree-that-the-map-calls-partial) | 2 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls |
 
 ⛔ **Nothing is untested.** All 135 clauses have something exercising them; the
 single absence the mapping found was refuted. The gap is the precision of
 assertions, not the absence of tests.
+
+⛔ **Why the catalogue drifted, named by gkc 2026-08-27 — and the reason to
+expect more of it.** The use cases were never updated after the agility decision
+that **all advertisements must hold ARRAYS** — enrollment key packages, nskeys,
+and `_apsk` at the pqActive posture. Every stale clause found on 2026-08-27 is a
+pre-array single-key assumption, and they were found one at a time by tripping
+over them:
+
+| Clause | What it assumed |
+| ------ | --------------- |
+| UC-A3.5 c3 | a bare shape where an absent `alg` could only mean the one KEM that existed |
+| UC-A2.4 c5 | that no client sends `enroll:update`, so a second key could never be advertised |
+| UC-C1.6 c1 | every posture axis is individually overridable |
+
+**So this is one uncorrected consequence, not three coincidences, and the
+remaining partials have not been searched for it.** A clause written against the
+single-key shape reads as a test gap rather than as a specification defect, which
+is exactly how the mapping classified all three. ⚠️ **Sweep the catalogue for
+clauses reasoning from "there is only one KEM", from a flat or bare
+advertisement, or from an entry rather than a list — before writing a test for
+any of them.** Writing a test for a superseded clause fails confusingly, and the
+tempting fix is to weaken the assertion until it passes, which enshrines the
+wrong behaviour as the specification.
+
+**The instances, found by a cold read on 2026-08-27 and NOT yet corrected.** All
+in `acceptance.md`. Verify each against the tree before editing — this list is a
+reading, not a measurement.
+
+| Where | What it assumes | Why it matters |
+| ----- | --------------- | -------------- |
+| **UC-A4.5**, "the KEM is configured, never negotiated" | "each atSign advertises **one** KEM per generation, and rotation is the only moment that can change" | **The strongest one.** Falsified twice in the same document — UC-A2.4 now says a new KEM is advertised *beside* the existing key at the next start, and UC-A4.6 says outright that a holder may advertise more than one. It is also a **security argument** citing SP 800-227, so a test written to it would assert an invariant the tree deliberately broke |
+| **Section 1**, key objects | the nskey is "**one** X-Wing KEM keypair"; the key package is "the per-enrollment **X-Wing** recipient keypair" | The shared vocabulary every row draws on, so each row inherits the single-KEM shape. Contradicted five lines later by its own `keys:[…]` wire shape |
+| **Section 1**, state table | "its **X-Wing** key package"; "the namespace's **one** nskey private" | 1:1:1 makes "one key package per enrollment" right; naming the algorithm is what is stale |
+| **Section 1**, `appMetadata` | only `at/nskey/XWING/AES/GCM` | UC-A3.5 states it is that **or** `at/nskey/MLKEM1024/AES/GCM` |
+| **UC-A3.2** mint step | mints "the **one** … X-Wing keypair" and publishes it into `keys:[…]` in one sentence | ⚠️ **UC-A3.2 c1 is on the live partial list now** |
+| **UC-A3.1** / **UC-A4.1** data paths | "**X-Wing-seal** the CK" | ⚠️ **UC-A3.1 c1 and c2 are on the owed-citation list**; pinning them against a hardcoded provider id enshrines it |
+| **UC-A2.1** steps 1–2 | "**X-Wing** key package", "**the** public half" | Under UC-A2.4 a configured deployment produces an ML-KEM package here |
+| **UC-A2.1** Then | E2's `_apsk` is "the **bare** key value, exactly as today", unqualified | Section 15.7 says bare only at `legacy`/`pqReady`; at **pqActive it is the array**, and UC-G1.8 has it republished as one |
+| **UC-A1.1** step 4, **UC-B1.1** step 2 | onboarding and retrofit mint an "**X-Wing** key package" | ⚠️ **UC-A1.1 c3 is on the in-process partial list now** |
+| **UC-A1.1** Then | "no RSA-wrapped (`apkamSymmetricKey` rides **X-Wing**)" | The claim survives; the reason given does not |
+| **UC-C1.7** *(adjacent, unverified)* | the two signing-set axes are "**overridable per preference**" | The same sentence that was found false next door in UC-C1.6. Check against `pq_posture.dart` rather than reasoning about it |
+
+⚠️ **Six of the 29 live partials and one of the six in-process partials sit under
+use cases in that table.** Correct the clause before writing the test.
+
+⚠️ **Check the production path before writing the test.** Of the six clauses
+examined closely on 2026-08-27, **three were false rather than untested**. The
+check is cheap — open the code the clause describes — and it is the only thing
+that separates the two.
 
 The five findings below are clause gaps under another name, and are counted
 here rather than in a list of their own.
