@@ -499,6 +499,52 @@ void main() {
     /// to the atServer, so a test there would have to reconstruct the wire
     /// form, and a pin fed a reconstruction proves what the test can build
     /// rather than what the client published.
+    test('an envelope written AFTER the withdrawal carries no signature of it',
+        () async {
+      // The row's first clause is "new envelopes carry no signature of it".
+      // Every arm asserting it read the held key SET — what this client COULD
+      // sign with — which is a proxy for what a composed envelope actually
+      // carries. This composes one, from what the production selector offers
+      // rather than from a key picked by hand.
+      await atRollout1();
+
+      // The control, taken BEFORE the move: an envelope built the same way
+      // does carry the RSA signature. Without it, "no RS256 entry" would be
+      // satisfied by an envelope carrying no entries at all.
+      final atRollout1Envelope = signEnvelope('written at rollout 1',
+          keys: await minter().signingKeys, type: EnvelopeType.app);
+      expect(atRollout1Envelope.signatures.map((s) => s.alg).toList(),
+          ['RS256'],
+          reason: 'the control: while rsa2048 is in use, the composed '
+              'envelope is signed under it');
+
+      inUse({SigningAlgoType.mldsa65});
+      await minter().reconcileSigningKeys();
+
+      final afterTheMove = signEnvelope('written after the move',
+          keys: await minter().signingKeys, type: EnvelopeType.app);
+      expect(afterTheMove.signatures.map((s) => s.alg).toList(), ['ML-DSA-65'],
+          reason: 'ONE entry, under the new algorithm: the withdrawn key is '
+              'no longer offered for new operations, so nothing signs with '
+              'it. An envelope carrying both would leave a verifier free to '
+              'accept the weaker one');
+      expect(afterTheMove.signatures.map((s) => s.alg), isNot(contains('RS256')),
+          reason: 'stated the way the row states it — no signature OF the '
+              'retired algorithm — so a future build that emitted several '
+              'entries would still have to leave this one out');
+
+      // The row's other two clauses, so the three are read together: the key
+      // is retired rather than dropped, which is what keeps the envelope
+      // above's predecessor verifiable.
+      final withdrawn =
+          (await keyfile()).withdrawnSigningKeysFor(enrollmentId).single;
+      expect(withdrawn.algorithm, SigningAlgoType.rsa2048,
+          reason: 'retained as retired, not deleted — the keys an enrollment '
+              'has withdrawn are exactly the ones its stored envelopes were '
+              'signed with, so dropping the entry would strand the envelope '
+              'this one signed a moment ago');
+    });
+
     test('an envelope signed before the withdrawal still verifies', () async {
       when(() => atLookUp.enrollmentId).thenReturn(null);
       final published = <String>[];

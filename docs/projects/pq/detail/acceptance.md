@@ -963,7 +963,7 @@ recorded counts drift from the tree.
 
 ### The partial clauses — objective 1's remaining work
 
-**31 clauses**, each one a test already exercises that does **not**
+**30 clauses**, each one a test already exercises that does **not**
 establish the clause as written. The fix is normally an assertion plus a
 `reason:` on the test named, then a `clauses:` pin — not a new test.
 
@@ -982,16 +982,11 @@ clause in `acceptance.md` before writing its test — a test written to the
 quotation here would be written to a superseded specification, which is the
 exact failure the sweep exists to prevent. The rows are still the right work.
 
-⚠️ **One row below was examined on 2026-08-27 and deliberately left**, so
-nobody re-derives the same answer. (`UC-B3.1` c1 was the other, and it is now
-closed — the capability-stage notification it wanted is in
-`crypto_era_default_test.dart`.)
-
-- **UC-G1.9 c1** — "new envelopes carry no signature of it". The cited test
-  asserts the held key SET (`heldKeyIds()` after a retirement), which is a proxy:
-  it shows what the client could sign with, not what a composed envelope carries.
-  Closing it means composing an envelope after the retirement and asserting its
-  signature set, which is more than an added assertion.
+⛔ **Both rows examined and deliberately left on 2026-08-27 are now closed.**
+`UC-B3.1` c1 wanted a capability-stage notification and got one in
+`crypto_era_default_test.dart`; `UC-G1.9` c1 wanted an envelope composed after
+a retirement rather than the held key set, and got one in
+`signing_key_minting_test.dart`. Neither cost what the note estimated.
 
 **Deferred, not rejected:** UC-A2.4's log names the algorithm adopted from the
 keyfile and never names the DIVERGENCE from a configured preference, so a
@@ -1011,17 +1006,16 @@ nothing when asked for the root's *own* algorithm, which is what isolates
 `use: enc` as the reason rather than letting two conditions cover for each
 other.
 
-**The standard a closed clause meets**, set by the six closed on 2026-08-27:
+**The standard a closed clause meets**, set by the seven closed on 2026-08-27:
 write the missing arm *with a control*, then **mutate the production code and
 confirm the failure quotes your own assertion's reason**, revert, and pin. A
 green test that has not been shown to discriminate proves nothing.
 
-#### In-process — 2 closable with no virtualenv
+#### In-process — 1 closable with no virtualenv
 
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
 | **UC-A5.1** c3 | "an enrollment approved *after* the rotation is pushed the current generation only" and "...and opens it" — no test enrols a joiner after a… | `nskey_self_heal_test.dart` |
-| **UC-G1.9** c1 | new envelopes carry no signature of it | `signing_key_minting_test.dart` |
 
 #### Live — 29, each needing a virtualenv run to verify
 

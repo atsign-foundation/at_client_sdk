@@ -132,8 +132,22 @@ void main() {
     //       drop still verifies.
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'retires the superseded key and mints its replacement',
-        proves: 'the transition itself: what leaves the in-use set stops '
-            'signing');
+        proves: 'the transition itself, read off the held key SET — which is '
+            'what this client COULD sign with, and a proxy for what a '
+            'composed envelope carries');
+    provenIn('packages/at_client/test/signing_key_minting_test.dart',
+        'an envelope written AFTER the withdrawal carries no signature of it',
+        proves: 'the clause as written, without the proxy: an envelope is '
+            'composed from what the PRODUCTION selector offers after the '
+            'move, and its signature set is exactly [ML-DSA-65] — one entry, '
+            'not two. The same envelope built before the move carries '
+            '[RS256], which is the control that keeps "no RS256 entry" from '
+            'being satisfied by an envelope with no entries at all. Mutation-'
+            'proven: letting retired material through signingKeysFor gives '
+            '[ML-DSA-65, RS256], which is the exact failure the clause exists '
+            'to prevent — a verifier free to accept the weaker signature',
+        clauses: ['new envelopes carry no signature of it'],
+      );
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'advertises the retired key beside the new one',
         proves: 'the entry remains rather than being withdrawn — withdrawing '
