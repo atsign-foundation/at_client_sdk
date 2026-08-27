@@ -64,6 +64,11 @@ class LocalSecondary implements Secondary {
   AtSyncQueue? _syncQueue;
   Future<AtSyncQueue>? _syncQueueOpenInflight;
 
+  /// A queue supplied by the caller, adopted by [_ensureSyncQueueOpen] instead
+  /// of constructing one. Null for every caller that does not inject, which
+  /// keeps the lazy Hive-backed open below as the default.
+  final AtSyncQueue? _injectedSyncQueue;
+
   /// Tracks atKeys with a currently-executing [_update] / [_delete] —
   /// i.e. a write that has entered the keystore mutation phase but
   /// hasn't yet enqueued for sync. The sync service's pull-side
@@ -96,11 +101,17 @@ class LocalSecondary implements Secondary {
   Set<String> get writesInProgressForTest =>
       Set<String>.unmodifiable(_writesInProgress);
 
+  /// [syncQueue], when supplied, is used instead of the Hive-backed queue this
+  /// class would otherwise open for itself. It is opened if it is not already
+  /// — so supply an already-open queue (see `AtSyncQueue.open`'s `injectedBox`
+  /// seam) to keep Hive out of the path entirely.
   LocalSecondary(
     this._atClient, {
     this.keyStore,
     void Function(DataEvent)? onEvent,
-  }) : _onEvent = onEvent {
+    AtSyncQueue? syncQueue,
+  })  : _onEvent = onEvent,
+        _injectedSyncQueue = syncQueue {
     _logger = AtSignLogger('LocalSecondary (${_atClient.getCurrentAtSign()})');
     keyStore ??= _atClient.persistenceBundle?.keyValueStore;
   }
@@ -109,24 +120,32 @@ class LocalSecondary implements Secondary {
   /// the open; concurrent callers await the same in-flight future so
   /// we never call `Hive.openBox` twice for the same atSign.
   ///
-  /// Must run AFTER the at_persistence_secondary_server's
+  /// The Hive-backed path must run AFTER the
+  /// at_persistence_secondary_server's
   /// `HiveAtPersistenceFactory.initialize(...)` has called
   /// `Hive.init(...)`, which is guaranteed by the
   /// [StorageManager] init ordering during AtClient init. We
   /// intentionally do not call `Hive.init` here — rerunning it with a
-  /// different path would silently misroute the box.
+  /// different path would silently misroute the box. An injected queue
+  /// sidesteps that global ordering contract, which is the point of the seam.
   Future<AtSyncQueue> _ensureSyncQueueOpen() {
     final existing = _syncQueue;
     if (existing != null) return Future.value(existing);
     return _syncQueueOpenInflight ??= () async {
-      final atSign = _atClient.getCurrentAtSign();
-      if (atSign == null) {
-        throw StateError(
-          'LocalSecondary.syncQueue accessed before currentAtSign was '
-          'set; AtClientManager.setCurrentAtSign must run first',
-        );
+      final AtSyncQueue q;
+      final injected = _injectedSyncQueue;
+      if (injected != null) {
+        q = injected;
+      } else {
+        final atSign = _atClient.getCurrentAtSign();
+        if (atSign == null) {
+          throw StateError(
+            'LocalSecondary.syncQueue accessed before currentAtSign was '
+            'set; AtClientManager.setCurrentAtSign must run first',
+          );
+        }
+        q = AtSyncQueue(atSign: atSign);
       }
-      final q = AtSyncQueue(atSign: atSign);
       await q.open();
       _syncQueue = q;
       return q;

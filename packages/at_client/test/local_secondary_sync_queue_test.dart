@@ -310,4 +310,46 @@ void main() {
       );
     });
   });
+  group('injected sync queue', () {
+    tearDown(() async {
+      await Hive.close();
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+    });
+
+    test('AtClientImpl.create hands the injected queue to LocalSecondary',
+        () async {
+      // An in-memory box via the AtSyncQueue test seam: this queue is open
+      // before it is ever handed over, so nothing on this path calls
+      // Hive.init or Hive.openBox.
+      Hive.init('$storageDir/injected');
+      final box =
+          await Hive.openBox<String>('injected_queue_${atSign.hashCode}');
+      final injected = AtSyncQueue(atSign: atSign);
+      await injected.open(injectedBox: box);
+
+      AtClientImpl.atClientInstanceMap.remove(atSign);
+      final preference = AtClientPreference()
+        ..isLocalStoreRequired = true
+        ..syncRegex = ''
+        ..hiveStoragePath = '$storageDir/injected'
+        ..commitLogPath = '$storageDir/injected/commit';
+      final atClient = await AtClientImpl.create(
+        atSign,
+        'wavi',
+        preference,
+        syncQueue: injected,
+      );
+
+      final localSecondary = atClient.getLocalSecondary()!;
+      expect(await localSecondary.syncQueueForTest, same(injected));
+    });
+
+    test('omitting it leaves LocalSecondary opening its own queue', () async {
+      final localSecondary = await setUpLocalSecondary();
+
+      final queue = await localSecondary.syncQueueForTest;
+      expect(queue, isNotNull);
+      expect(queue, isA<AtSyncQueue>());
+    });
+  });
 }
