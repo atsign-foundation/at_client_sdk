@@ -348,6 +348,51 @@ happen to be ready. **Add, never replace** is the whole design.
 | **`_apsk`** | ✅ **Structurally yes** — `apskAdvertisement({required List<ApskSigningKey> keys})`, and `bareApskValueOf` collapses to a bare string only for a single active `rsa2048` entry, so the array is the general case | ⚠️ **Untested as an agility property.** Three producers write it (`enrollment_submitter`, `enrollment_updater`, `pq_signing_root`); nothing asserts that adding an entry leaves the existing one verifying, or that a one-algorithm reader accepts a two-entry advertisement |
 | **nskey** | ⛔ **NO.** `PublishedNskeyKeyRing._prepareMint` takes `keyEstablishmentAlgorithms.**first**`, and the code says why in as many words: *"an nskey is one key: only the enrollment's own key package advertises the whole configured list"* | The **reader** already handles many (`NskeyAdvertisement.usableFor` walks `keys[]`) — reader-ships-first, correctly. No writer produces one |
 
+**What a multi-key nskey would cost** (investigated 2026-08-27 at gkc's ask, by
+reading; nothing was built). ⛔ **The expensive part is not the mint — it is that
+`nskeyKid` stops being a generation's identity.**
+
+A `kid` is a SHA-256 prefix of the **public half** (`nskeyKidOf` → at_auth's
+`publicKeyKid`), so one key is one kid, and two keys in a generation are two.
+`NskeyAdvertisement.nskeyKid` is a *singular* getter returning `_usable.kid` —
+the entry a reader can use — so with two keys **the same generation answers to a
+different kid depending on which algorithm the asking client prefers.** Four
+things use that kid as a proxy for "which generation", and each stops meaning
+what it says:
+
+1. **The CK currency check.** `CkManager.ensureCurrent` returns early when
+   `cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid`. Two clients with
+   different `sealsToKeyAlgorithms`, or one client whose preference changed,
+   would disagree about the current kid and cut fresh content keys against an
+   unchanged generation. Churn rather than breakage — but silent.
+2. **Rotation detection, which is the sharp one.** That same comparison *is* how
+   a peer learns of a rotation: `ensureCurrent`'s dartdoc says the re-fetch is
+   "the only way it learns", because a sender never sees a recipient's
+   decapsulation fail. If a kid can change without a rotation — because the
+   *sender's* preference changed — then "the kid moved" no longer means "rotate",
+   and the signal that carries revocation is conflated with algorithm choice.
+   **A multi-key nskey therefore needs a generation identity separate from any
+   key's kid** (`createdAt` is the only existing candidate) before it is safe.
+3. **Conveyance volume doubles.** A private is filed and conveyed per
+   `nskeyKid` (`nskey_private_filing.dart` alone reads it 42 times), and a
+   namespace key is pushed to **every** authorised enrollment. Two algorithms
+   means two privates per generation per enrollment, so the `__ssenv` traffic
+   this design already watches — see the advertisement-fetch-volume row — grows
+   with the square of nothing, but linearly in a place that is already a concern.
+4. **The mint's CPU hoist doubles.** `_prepareMint` does keygen and signature
+   before taking the lock, deliberately; two algorithms is two keygens in that
+   pre-lock window. That is the *right* place for it and no interlock changes.
+
+**What does NOT cost anything:** the reader (`usableFor` already walks `keys[]`),
+the advertisement's signature (one signature covers the document however many
+entries), and the mint lock itself (one lock per `(owner, namespace)` regardless).
+
+**So the ruling is narrower than "should nskeys carry two keys".** It is:
+*is a namespace's key a generation, or a set?* If a generation, rotation is
+correctly its upgrade path and the catalogue should say so plainly. If a set,
+the kid must stop being the generation's name first — and that is the change,
+not the mint.
+
 **So for a namespace the upgrade path is a ROTATION, not an add** — and the two
 are not interchangeable. A rotation is O(n) per enrollment, it moves the
 `nskeyKid` that peers address, and a peer that has not re-`plookup`ed is still
