@@ -249,11 +249,14 @@ makes the enumeration trustworthy.
 
 ### Cluster B — started 2026-08-26, the enumeration and the first two findings
 
-**Re-derived, both ways, after the enumeration moved.** The corpus is now
-**153** citations, not 147: UC-B1.4 to UC-B1.7 landed the same day and brought
-six with them. The recorder and the regex agree — 153 records, and
-`git grep -c 'provenIn(' -- test/acceptance` sums to 155 minus the two
-declarations in `proven_elsewhere.dart`.
+**Re-derived, both ways, after the enumeration moved.** The corpus stood at
+**153** citations on 2026-08-26, not 147: UC-B1.4 to UC-B1.7 landed the same day
+and brought six with them. The recorder and the regex agreed — 153 records, and
+`git grep -c 'provenIn(' -- test/acceptance` summing to 155 minus the two
+declarations in `proven_elsewhere.dart`. ⚠️ **Both figures are that day's, and
+the corpus has grown a long way past them since** — every clause closed adds a
+citation. Re-derive it rather than reading it here; this paragraph records how
+the audit's enumeration was checked, not how many citations there are.
 
 | cluster | citations | rows | audited |
 | --- | --- | --- | --- |
@@ -1181,7 +1184,6 @@ Rows that genuinely need the wire are also the only route that raises
 | **UC-B2.2** c1 | legacy auth survives until `min(now + grace, expiry)` | `retrofit_retirement_e2e_test.dart` |
 | **UC-B4.3** c1 | "which `alice2` cannot read" — nothing establishes that a pre-capability (legacy-only) install FAILS to read a record stamped `at/symmetric… | `nskey_cross_atsign_test.dart` |
 | **UC-B5.1** c1 | "`pq_signing_root` is root (no namespace), so it has **no** `enroll:listns` push" — and, within the second arm, "(persists until one answer… | `signing_root_pull_two_enrollments_test.dart` |
-| **UC-B5.6** c1 | "and saying the retry must wait the ttl out — the one thing the caller can act on" (and, in the tail, "logs `severe`") | `nskey_rotation_live_test.dart` |
 | **UC-G1.10** c1 | `_apsk` is **not** rewritten: … so the client sends none and the atServer leaves the record's own value alone | `enroll_update_live_test.dart` |
 
 #### Section 17 — the crypto-agility clauses, and what each waits on

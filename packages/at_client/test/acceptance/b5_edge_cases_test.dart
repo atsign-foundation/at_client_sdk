@@ -220,6 +220,36 @@ void main() {
             'ttl out, and the same call from the same client for the same '
             'namespace is accepted once it lapses — the control without which '
             'the refusal would prove nothing',
+        clauses: [
+          'an error naming the cooldown and saying the retry must wait the '
+              'ttl out'
+        ],
+      );
+
+      // The same clause's other half, and it is a different act: the two
+      // above are what `rotate` does, these are what
+      // `revokeEnrollmentAndRotate` does around a rotate that refused. It
+      // belongs in a unit test rather than beside them because the failing
+      // namespace has to be one that CANNOT rotate on demand, and driving a
+      // second namespace into that state live would mean minting it and then
+      // waiting the cooldown out a second time to prove nothing extra.
+      provenIn(
+        'packages/at_client/test/nskey_rotation_test.dart',
+        'one namespace failing to rotate does not abandon the rest',
+        proves: 'the revoke lands first and the loop then catches per '
+            'namespace and carries on — the remaining namespaces are still '
+            'rotated — and the one it could not rotate is named at SEVERE, '
+            'which is the only thing that tells an operator the revoked '
+            'enrollment still holds that generation. A namespace that failed '
+            'is simply absent from the returned outcomes, so without the '
+            'record the omission reads as success. The log assertion carries '
+            'its own control: an INFO line the same call emits regardless, so '
+            'an unbound recorder is reported as such instead of passing every '
+            'level assertion by matching nothing',
+        clauses: [
+          'It catches per namespace, logs `severe`, and carries on to the '
+              'others'
+        ],
       );
     });
 

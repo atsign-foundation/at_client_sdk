@@ -12,6 +12,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -26,17 +27,46 @@ class FakeSecret extends Fake implements Secret {}
 class FakeEnrollmentRequestDecision extends Fake
     implements EnrollmentRequestDecision {}
 
+/// Captures what this library logs, so a claim about a log LEVEL is asserted
+/// rather than eyeballed.
+///
+/// `NskeyRotation`'s logger is a top-level `final`, so it is built the first
+/// time anything in that library logs and binds whatever
+/// `AtSignLogger.defaultLoggingHandler` is *then*. Installing this from
+/// `setUpAll` — before any test body runs — is what makes it the one that
+/// binds. `root_level` is pinned here too rather than inherited, so a level
+/// set elsewhere cannot silently empty the recorder and turn every absence
+/// assertion below into a pass.
+///
+/// `dynamic` rather than `LogRecord`: overriding with a supertype is legal,
+/// and it keeps `package:logging` — which at_client depends on nowhere — out
+/// of the dependency list for the sake of one test.
+class _RecordedLogs implements LoggingHandler {
+  final List<({String level, String message})> records = [];
+
+  @override
+  void call(dynamic record) => records
+      .add((level: '${record.level.name}', message: '${record.message}'));
+
+  Iterable<String> at(String level) =>
+      records.where((r) => r.level == level).map((r) => r.message);
+}
+
 /// The nskey-keypair rotation lever (design.md §1.7 B5b) and the revocation it
 /// composes with (B6).
 void main() {
   const atSign = '@alice';
   const namespace = 'app_1.my_apps';
 
+  final logs = _RecordedLogs();
+
   setUpAll(() {
     registerFallbackValue(AtKey());
     registerFallbackValue(FakeUpdateVerbBuilder());
     registerFallbackValue(FakeSecret());
     registerFallbackValue(FakeEnrollmentRequestDecision());
+    AtSignLogger.defaultLoggingHandler = logs;
+    AtSignLogger.root_level = 'info';
   });
 
   /// A client whose remote verbs succeed, recording an ordered trace of what
@@ -771,12 +801,41 @@ void main() {
           privateFiling: filer,
           sharing: s.sharing);
 
+      logs.records.clear();
       final outcomes = await rotation.revokeEnrollmentAndRotate('enroll-b');
 
       expect(outcomes.map((o) => o.namespace), [namespace],
           reason: 'the revoke has already landed, so abandoning the remainder '
               'would leave the atSign with an enrollment cut off from the '
               'server but still holding every live namespace key it had');
+
+      // The control, and it is deliberately NOT drawn from the property under
+      // test: this line is emitted by the same call whatever the rotations
+      // do. It stays green when the severe record below is downgraded — the
+      // failure that assertion exists to catch — and goes red when the
+      // handler never bound, which is the failure that would otherwise let an
+      // empty recorder satisfy every level assertion by matching nothing.
+      // First, so an unbound recorder is reported as an unbound recorder
+      // rather than as a missing SEVERE record.
+      expect(
+          logs
+              .at('INFO')
+              .where((m) => m.startsWith('Revoked enrollment enroll-b')),
+          hasLength(1),
+          reason: 'if this is empty the recorder is not bound and the SEVERE '
+              'assertion below measured nothing');
+
+      // The LEVEL is the contract here, not decoration. A namespace that
+      // failed to rotate is simply absent from `outcomes` — indistinguishable
+      // from one that needed nothing — so this record is the only thing that
+      // tells an operator an enrollment they just revoked still holds a live
+      // generation and can open data written under it. Logged at `finer` it
+      // would not reach a default deployment's log at all, and the omission
+      // would read as success.
+      expect(logs.at('SEVERE').where((m) => m.contains(unminted)), hasLength(1),
+          reason: 'the namespace this call could not rotate has to be named, '
+              'at a level an operator sees, or the caller is told nothing at '
+              'all about the one thing it must now do by hand');
     });
 
     test('an unknown enrollment revokes nothing and rotates nothing', () async {

@@ -253,8 +253,18 @@ void main() {
 
     await expectLater(
         owner.ring.rotate(ns),
-        throwsA(isA<StateError>().having((e) => e.message, 'message',
-            contains('holds the mint lock'))),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'names the cooldown',
+                contains('holds the mint lock'))
+            // The half a caller can act on, and the reason this is two
+            // assertions rather than one. "Refused" tells an operator only
+            // that something is wrong; nothing releases a mint lock but its
+            // ttl, so an error that does not say to wait sends them looking
+            // for a stuck lock to clear, and there is none to find. A message
+            // that keeps the first phrase and loses this one still reads as a
+            // good error.
+            .having((e) => e.message, 'says the retry waits the ttl out',
+                contains('retry once its ttl elapses'))),
         reason: 'the ttl is the only release, so an election held moments ago '
             'is still in its cooldown. A rotation must fail here rather than '
             'adopt: adopting would have rotated nothing while reporting '
