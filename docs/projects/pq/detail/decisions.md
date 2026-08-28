@@ -12372,8 +12372,33 @@ replaces it.** ⛔ Whether the multi-signature *writer* is removed from the code
 a separate question, pending a blast-radius measurement: the signing root and the
 chain links may emit multi-signature envelopes for reasons of their own.
 
+**Blast radius of removing the multi-signature writer, measured 2026-08-28.**
+Contained, and the enumeration was cross-checked by two instruments agreeing on
+37 `signEnvelope(` call sites:
+
+- **Only the data-signing keys make an envelope plural.** The PQ signing **root**
+  cannot — `_rootLinkOver` returns a bare map carrying one ML-DSA signature and
+  never touches the envelope shape at all. The APKAM authentication **fallback**
+  cannot — it returns a one-element list literal. A **chain link** can, but only
+  by borrowing the data-signing keys. So `heldSigningKeys.length ==
+  dataSigningKeyAlgorithms.length`, and plurality has exactly one source.
+- **No library code produces a plural envelope.** Three production call sites,
+  one of them the funnel every `wrapAndSign` routes through; every two-member set
+  in the tree is in `packages/at_client/test`. No posture sets one.
+- Four tests emit two signatures and would go red; the separate test packages
+  under `tests/` contain none, established with positive controls.
+
+⛔ **But the multi-signature READER must stay, and this is the asymmetry to get
+right.** `SignedEnvelope.fromJson` refuses an envelope whose signature entries
+carry differing `kid`s or differing `typ`s. Those refusals exist to stop an
+attacker **appending** an entry to an envelope in flight — and nothing about a
+single-key *writer* makes an appended second entry impossible. **The writer can
+lose plurality; the parser cannot.** A change that removed both because "we no
+longer sign twice" would open exactly the hole those guards close.
+
 **Status:** ruled, unbuilt. Step 3's lever does not exist; steps 1 and 2 are
-expressible today.
+expressible today. Removing the writer is contained but is **not** part of this
+ruling — it is a separate change with its own row.
 
 ## 121. A revocation publishes what it obliges (2026-08-28)
 

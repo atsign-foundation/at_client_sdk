@@ -108,20 +108,29 @@ class AtClientPreference {
   /// membership is the whole of the meaning — the order signatures are emitted
   /// in is the strongest-first order the keyfile is read in, never this one.
   ///
-  /// **A two-member set is the migration lever, and it is the only one.** An
-  /// envelope carries one signature per active signing key, so naming two
-  /// algorithms here makes every envelope this client writes verifiable by a
-  /// peer that implements either — which is what a migration to an algorithm
-  /// some verifier may not have needs, and what a swap cannot give it. It costs
-  /// every envelope a second signature, so it is a transition state rather than
-  /// a resting one.
+  /// **This is what a signing migration moves, and it moves once, in the middle
+  /// of three releases.** Ship a build that can *verify* the new algorithm
+  /// first — that is a property of the build, not of this field, and there is
+  /// nothing to configure for it. Then move this field to the new algorithm.
+  /// Then, in a third release, stop *accepting* the old one.
   ///
-  /// The pairing is with [sealsToKeyAlgorithms] on the encryption side, and the
-  /// two move in **different releases**: publish the capability first — mint
-  /// both algorithms while still sealing and verifying against the old — and
-  /// change what is sent only once the material is everywhere. No posture on
-  /// the rollout ladder sets two members; it is an application's deliberate
-  /// choice for the length of a transition.
+  /// The third release is separate because a release may relax what it accepts,
+  /// or tighten what it produces, but tightening what it **accepts** has to be
+  /// its own: doing both at once is only sound after the first has finished on
+  /// every install, which is a fleet-wide flip nobody can perform.
+  ///
+  /// ⚠️ **A two-member set is NOT the migration lever, though this said it was.**
+  /// An envelope carries one signature per active signing key, so two members
+  /// means every envelope is signed twice — and that buys nothing a verifier can
+  /// rely on, because an attacker can strip the stronger signature and the
+  /// verifier will accept the weaker one. Nothing lets a verifier insist. Use
+  /// the three releases above; no posture on the rollout ladder sets two
+  /// members.
+  ///
+  /// The encryption-side counterpart is [sealsToKeyAlgorithms], whose migration
+  /// needs only two releases — you stop being sealed to under an old algorithm
+  /// by not advertising it, and no peer can force you, where anyone can present
+  /// an old-algorithm signature.
   final Set<SigningAlgoType> dataSigningKeyAlgorithms;
 
   /// The algorithm this client's APKAM **authentication** key is minted under
