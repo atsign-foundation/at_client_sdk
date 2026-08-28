@@ -114,10 +114,10 @@ const liveProofExempt = <String, String>{};
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 153;
+const provenClauseCount = 155;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 68;
+const serverProvenClauseCount = 70;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
@@ -140,8 +140,6 @@ const liveProofOwed = <String, String>{
       'every citation is in-process and a live test is feasible; the multi-key _apsk is assembled in the test rather than published by a real rotation and fetched back',
   'UC-G2.9':
       'nothing proves this row, live or in-process, and nothing can: it asserts that a verifier CANNOT decline an algorithm it implements, and the lever that would let it does not exist. The citations here pin the multi-signature writer that decisions.md 120 retired, so they go red when it is removed rather than proving any clause above',
-  'UC-G2.11':
-      'no pack runs two enrollments of one atSign at different algorithm configurations, which is the whole of what this row asserts. The rollout-2 half needs the same pair with the sender at the new posture, and would assert a refusal rather than a success',
   'UC-A3.1':
       'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
   'UC-A3.5':

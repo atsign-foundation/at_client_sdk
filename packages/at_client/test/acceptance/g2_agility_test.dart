@@ -701,13 +701,33 @@ void main() {
             'that a NARROWED list refuses with a message naming both sides — so '
             'the refusal is attributable rather than a silent miss',
       );
-      // ⛔ The row is otherwise UNPINNED, and it is the direction the plan
-      // already calls the one a bug hides in. With one atSign the configured
-      // keyEstablishmentAlgorithms and the published advertisement both belong
-      // to it, so a client consulting its own configuration where it should
-      // consult the advertisement is invisible in every other row. Nothing in
-      // any pack runs two enrollments of one atSign at different algorithm
-      // configurations.
+      // ⚠️ This said the row was otherwise UNPINNED because "nothing in any
+      // pack runs two enrollments of one atSign at different algorithm
+      // configurations". That stopped being true on 2026-08-28 — the citation
+      // below is exactly that, and the reason it mattered is unchanged: with
+      // one atSign the configured keyEstablishmentAlgorithms and the published
+      // advertisement both belong to it, so a client consulting its own
+      // configuration where it should consult the advertisement is invisible
+      // in every other row.
+      provenIn(
+        'tests/at_functional_test/test/nskey_rollout_ladder_live_test.dart',
+        'rollout 1 goes one install at a time, and both directions keep working',
+        proves: 'two REAL enrollments of one atSign at different algorithm '
+            'configurations, against a live atServer: the older build mints '
+            'and seals to the old algorithm alone, the rollout-1 build mints '
+            'both and seals only to the old. After the newer install adds, the '
+            'shared generation carries both algorithms, the older install\'s '
+            'own entry and createdAt are untouched, and self records written '
+            'by each are read by the other. The guards make the arms real — '
+            'distinct enrollments, distinct clients, and each client\'s '
+            'configured list read back off the client rather than off what was '
+            'passed in, so a cached client handing back one build twice would '
+            'go red rather than pass',
+        clauses: [
+          'both directions succeed',
+          'one install at a time, in any order',
+        ],
+      );
     });
   });
 }
