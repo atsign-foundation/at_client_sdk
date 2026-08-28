@@ -74,6 +74,14 @@ still reads what it advertises.
   retry budget as consecutive failures, and opens key records written without
   an `iv`.
 - An aborted self-retrofit denies the pending enrollment it created.
+- **`FileAtKeysIo.update` no longer recreates a keyfile deleted while the
+  update was in flight**, and throws `AtKeysSourceAbsentException` instead.
+  `update` is a read-modify-write of material that must already be there —
+  its own read throws when the file is absent at the start — so writing a
+  file that is absent at the end contradicted the call it began. Deleting a
+  `.atKeys` file is how a device is decommissioned, and a background task
+  mid-update would silently put it back. `flush` is unchanged and still
+  creates the file, which is its job.
 
 ## 3.3.0
 - feat: add `AtAuthSession` (exported) — the explicit auth→client hand-off artifact: the confirmed subset of an auth request that client creation actually needs (`atSign`, `rootDomain`, `namespace`, `atKeysIo`, `enrollmentId`), promoted to its own type so "request" no longer doubles as "session". Keys cross the boundary as an `AtKeysIo` *source*, not as live crypto state: the client derives its own `AtKeys` via `atKeysIo.read(atSign)` rather than adopting auth's `AtChops`/`AtLookUp`. The session also carries auth's already-authenticated `atLookUp` so a caller can *opt in* to reusing that connection (`AtClientManager.fromAuthSession(session, reuse: true)`) and skip a second PKAM handshake; the default hand-off rebuilds a fresh connection.
