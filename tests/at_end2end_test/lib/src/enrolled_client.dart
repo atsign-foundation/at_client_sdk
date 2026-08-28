@@ -41,7 +41,36 @@ class EnrolledClient {
   /// The enrolled client, authenticated as [enrollmentId].
   final AtClient client;
 
-  /// The atServer-assigned id for this enrollment.
+  /// The id this enrollment was **submitted** as — and not necessarily the one
+  /// its [client] authenticates and signs as.
+  ///
+  /// ⛔ **A self-retrofit supersedes it.** This copy submits every enrollment
+  /// under a hard-coded `rsa2048` APKAM keypair — it has no `signingAlgo`
+  /// parameter, unlike `at_functional_test`'s copy — so a client whose posture
+  /// wants a stronger authentication key ALWAYS retrofits itself during
+  /// `_init` and comes up on a **new** enrollment id, with no way to opt out. This field keeps the submitted one. The
+  /// atServer caps the old enrollment rather than deleting it, so both ids are
+  /// real: this one is what the roster shows and what an approver approved,
+  /// while `client.enrollmentId` is what authenticates the connection, what
+  /// `_apsk` is published under, and what signs.
+  ///
+  /// **Both are needed, and the difference is asserted on purpose.**
+  /// `pq_retrofitted_scope_test.dart` requires them to DIFFER — "equal ids mean
+  /// no retrofit ran" is the precondition for that whole file — and requires
+  /// them to MATCH in its cold-keyfile arm, where a retrofit would leave
+  /// nothing varying. `nskey_self_notify_live_test.dart` requires them to match
+  /// because the receiving client's id is what the atServer authorizes the
+  /// monitor connection against. Making this field mirror `client.enrollmentId`
+  /// would redden the first pair and turn the rest into tautologies —
+  /// preconditions that are green whatever happens.
+  ///
+  /// ⚠️ **So compare this against another `EnrolledClient`'s id or against the
+  /// enrollment roster; never against anything the CLIENT produced.** A
+  /// signature's `kid`, an `_apsk` address or a kpid on the wire all carry the
+  /// settled id, and comparing them to this passes only when no retrofit ran.
+  /// A test needing an enrollment that is post-quantum from birth cannot get
+  /// one from this copy; `at_functional_test`'s takes `signingAlgo: mldsa65`
+  /// for that, and porting the parameter here is owed.
   final String enrollmentId;
 
   /// The key package id this enrollment advertised, which is the address
@@ -138,8 +167,7 @@ Future<EnrolledClient> enrolAndAuthenticate({
     ),
   );
 
-  await approver.enrollmentService!
-      .approve(EnrollmentRequestDecision.approved(
+  await approver.enrollmentService!.approve(EnrollmentRequestDecision.approved(
     atSign: atSign,
     enrollmentId: response.enrollmentId,
     // Empty: pq mode means the approver mints it rather than unwrapping one
@@ -154,11 +182,11 @@ Future<EnrolledClient> enrolAndAuthenticate({
   // one. It is necessary but NOT sufficient, and on its own changes nothing
   // observable — see the class doc: while AtClientImpl hands back a cached
   // client for this atSign, none of these arguments are applied at all.
-  final manager = await AtClientManager(atSign).fromAuthSession(
-      response.session ?? session, preference,
-      reuse: true);
+  final manager = await AtClientManager(atSign)
+      .fromAuthSession(response.session ?? session, preference, reuse: true);
 
-  final payload = SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
+  final payload =
+      SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload as Map;
   return EnrolledClient(
     client: manager.atClient,
     enrollmentId: response.enrollmentId,

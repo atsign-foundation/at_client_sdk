@@ -36,7 +36,34 @@ class EnrolledClient {
   /// The enrolled client, authenticated as [enrollmentId].
   final AtClient client;
 
-  /// The atServer-assigned id for this enrollment.
+  /// The id this enrollment was **submitted** as — and not necessarily the one
+  /// its [client] authenticates and signs as.
+  ///
+  /// ⛔ **A self-retrofit supersedes it.** `enrolAndAuthenticate` submits under
+  /// [signingAlgo], which defaults to `rsa2048`; a client whose posture wants a
+  /// stronger authentication key retrofits itself during `_init` and comes up
+  /// on a **new** enrollment id. This field keeps the submitted one. The
+  /// atServer caps the old enrollment rather than deleting it, so both ids are
+  /// real: this one is what the roster shows and what an approver approved,
+  /// while `client.enrollmentId` is what authenticates the connection, what
+  /// `_apsk` is published under, and what signs.
+  ///
+  /// **Both are needed, and the difference is asserted on purpose.**
+  /// `pq_retrofitted_scope_test.dart` requires them to DIFFER — "equal ids mean
+  /// no retrofit ran" is the precondition for that whole file — and requires
+  /// them to MATCH in its cold-keyfile arm, where a retrofit would leave
+  /// nothing varying. `nskey_self_notify_live_test.dart` requires them to match
+  /// because the receiving client's id is what the atServer authorizes the
+  /// monitor connection against. Making this field mirror `client.enrollmentId`
+  /// would redden the first pair and turn the rest into tautologies —
+  /// preconditions that are green whatever happens.
+  ///
+  /// ⚠️ **So compare this against another `EnrolledClient`'s id or against the
+  /// enrollment roster; never against anything the CLIENT produced.** A
+  /// signature's `kid`, an `_apsk` address or a kpid on the wire all carry the
+  /// settled id, and comparing them to this passes only when no retrofit ran.
+  /// Pass `signingAlgo: mldsa65` for an enrollment that is post-quantum from
+  /// birth and therefore never retrofits, if that is what the test wants.
   final String enrollmentId;
 
   /// The key package id this enrollment advertised, which is the address
@@ -221,16 +248,14 @@ Future<EnrolledClient> enrolAndAuthenticate({
   if (legacyMode) {
     final record = (await approver.enrollmentService!.fetchEnrollmentRequests())
         .firstWhere((e) => e.enrollmentId == response.enrollmentId);
-    apkamSymmetricKey =
-        AtBytes.fromString(record.encryptedAPKAMSymmetricKey!);
+    apkamSymmetricKey = AtBytes.fromString(record.encryptedAPKAMSymmetricKey!);
   } else {
     // Empty: pq mode means the approver mints it rather than unwrapping one
     // the enrollee sent.
     apkamSymmetricKey = AtBytes.fromString('');
   }
 
-  await approver.enrollmentService!
-      .approve(EnrollmentRequestDecision.approved(
+  await approver.enrollmentService!.approve(EnrollmentRequestDecision.approved(
     atSign: atSign,
     enrollmentId: response.enrollmentId,
     apkamSymmetricKey: apkamSymmetricKey,
@@ -243,17 +268,16 @@ Future<EnrolledClient> enrolAndAuthenticate({
   // one. It is necessary but NOT sufficient, and on its own changes nothing
   // observable — see the class doc: while AtClientImpl hands back a cached
   // client for this atSign, none of these arguments are applied at all.
-  final manager = await AtClientManager(atSign).fromAuthSession(
-      response.session ?? session, preference,
-      reuse: true);
+  final manager = await AtClientManager(atSign)
+      .fromAuthSession(response.session ?? session, preference, reuse: true);
 
   // Null in legacy mode: `built` is only populated by the pq metadataBuilder,
   // and there is no key package to read a kid out of.
   final String? kpid = built == null
       ? null
       : ((SignedEnvelope.fromJson(built!['keyPackage'] as Map).payload
-                  as Map)['keys'] as List)
-              .single['kid'] as String;
+              as Map)['keys'] as List)
+          .single['kid'] as String;
   return EnrolledClient(
     client: manager.atClient,
     enrollmentId: response.enrollmentId,
