@@ -247,7 +247,14 @@ void main() {
               'same operation, one namespace over. Granting the second namespace '
               'as a mutation turns the refusal into a successful write, so the '
               'arm measures the grant boundary rather than the client\'s ability '
-              'to write at all',
+              'to write at all. ⚠️ It is the CLIENT-side refusal, and only that: '
+              'the message it matches, "insufficient privilege", is raised in '
+              'at_client\'s own local_secondary.dart, so this arm would stay '
+              'green with the atServer\'s gate removed entirely and any client '
+              'not going through at_client would sail past. The atServer half - '
+              'AT0009, "not authorized to <verb> key", per verb - is asserted '
+              'live under UC-A2.3 in enrollment_namespace_gate_test.dart. '
+              'Neither layer alone is the guarantee',
           clauses: [
             'refused, naming insufficient privilege',
           ]);
