@@ -1,5 +1,25 @@
 ## 3.15.0-rc1
 
+- fix: **an nskey advertisement carrying more than one key is now addressable
+  entry by entry.** `NskeyProvider` asked the *advertisement* which algorithm
+  it was, and `NskeyAdvertisement.alg`, `.publicKey` and `.nskeyKid` all answer
+  for the single entry a sender with no preference would take. So on an
+  advertisement carrying two, a sender routed to the other one was refused
+  outright — *"advertises a x-wing nskey, which at/nskey/MLKEM1024/AES/GCM
+  cannot seal to"* — and a seal that got past that guard would have
+  encapsulated to the wrong key and stamped the wrong `nskeyKid`, producing a
+  record the owner never looks for. The provider now selects the entry under
+  the algorithm it was routed to, seals to that key and stamps that kid.
+  - `NskeyPrivateFiling` and the conveyance collector chose the same way, so a
+    private conveyed for the non-default entry was refused as not deriving the
+    published public half, or filed under the wrong algorithm with no
+    complaint. Both now select by `kid`, via a new
+    `NskeyAdvertisement.entryWithKid` — the counterpart of `usableFor` for a
+    party holding a kid rather than an algorithm.
+  - ⚠️ **Latent until now**: the mint writes one key, so nothing has published
+    a widened advertisement. Fixing the reader first is what lets the writer
+    ever be turned on.
+
 - feat: **`AtClient.ensureReachable(namespace)`** — wait until other atSigns
   can seal data to you, doing whatever is missing, and get back **what
   happened** rather than "startup finished".

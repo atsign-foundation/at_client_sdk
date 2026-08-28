@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 
@@ -252,6 +253,107 @@ void main() {
     });
   });
 
+  group('a widened advertisement is addressable entry by entry', () {
+    /// An advertisement carrying BOTH algorithms, with the privates for each.
+    ///
+    /// What a recipient publishes after rollout 1. Built by hand because the
+    /// mint writes one key: the reader has to understand the shape before any
+    /// writer produces it, or the capability can never be turned on without
+    /// breaking every peer that has not upgraded.
+    Future<_WidenedRing> widened() async {
+      final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final xPair = await xWing.keyPairFromSeed(xWing.newSeed());
+      final mPair = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final advertised = NskeyAdvertisement(
+        v: nskeyAdvertisementVersion,
+        createdAt: DateTime.now().toUtc(),
+        keys: [
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.mlKem1024,
+              pub: mPair.publicKey),
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.xWing,
+              pub: xPair.publicKey),
+        ],
+      );
+      return _WidenedRing(advertised, {
+        advertised.keys[0].kid: mPair.secretKey,
+        advertised.keys[1].kid: xPair.secretKey,
+      });
+    }
+
+    test('either entry seals and opens, and each stamps its OWN kid', () async {
+      // ⛔ Both arms REFUSED before 2026-08-28, one of them silently wrong.
+      // The provider asked the advertisement which algorithm it was, and
+      // `NskeyAdvertisement.alg` answers for the single entry a sender with no
+      // preference would take — so over an advertisement carrying two it named
+      // x-wing, refused the ml-kem provider outright, and would have sealed
+      // the x-wing arm to the right key for the wrong reason.
+      final ring = await widened();
+      final byAlgo = {
+        for (final k in ring.advertised.keys) k.alg: k,
+      };
+
+      for (final algo in SecretSharingAlgos.keyAlgos) {
+        final provider = NskeyProvider(
+            keyRing: ring, cache: ContentKeyCache(), keyAlgo: algo);
+        final ck = ContentKey(
+            Uint8List.fromList(List<int>.generate(32, (i) => i + 7)));
+        final atKey = conveyanceKey();
+
+        final wire = await provider.encrypt(context, atKey, ck.toBase64());
+
+        // Asserted BEFORE the round trip, or it never fails on its own terms:
+        // a wrong kid fetches the wrong private, so the decrypt below would
+        // redden first and quote a decapsulation error instead of this.
+        expect(atKey.metadata.appMetadata?.additional?['nskeyKid'],
+            byAlgo[algo]!.kid,
+            reason: '$algo must stamp the kid of the entry it sealed to. The '
+                'advertisement\'s own nskeyKid names one of the two, so a '
+                'record stamped with it addresses the wrong generation and '
+                'the owner looks for a private it never conveyed');
+
+        expect(await provider.decrypt(context, atKey, wire), ck.toBase64(),
+            reason: '$algo must seal to the entry advertised under IT, or the '
+                'owner holds a private that does not open what arrived');
+      }
+
+      // The kids are different, which is what makes the assertion above
+      // discriminate: were both entries to share one, stamping either would
+      // satisfy it.
+      expect(ring.advertised.keys[0].kid, isNot(ring.advertised.keys[1].kid));
+    });
+
+    test('an algorithm the advertisement does not carry is still refused',
+        () async {
+      // The guard the fix must not remove. Its message now names every
+      // algorithm on offer rather than the single one the document's own
+      // getter picked, because with two entries that answer is arbitrary.
+      final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+      final pair = await xWing.keyPairFromSeed(xWing.newSeed());
+      final ring = _FixedRing(
+          NskeyAdvertisement.single(
+              publicKey: pair.publicKey, alg: SecretSharingAlgos.xWing),
+          pair.secretKey);
+      final provider = NskeyProvider(
+          keyRing: ring,
+          cache: ContentKeyCache(),
+          keyAlgo: SecretSharingAlgos.mlKem1024);
+
+      await expectLater(
+          provider.encrypt(
+              context, conveyanceKey(), ContentKey(Uint8List(32)).toBase64()),
+          throwsA(isA<AtEncryptionException>().having(
+              (e) => e.message,
+              'message',
+              allOf(contains(SecretSharingAlgos.xWing),
+                  contains(SecretSharingAlgos.mlKem1024)))));
+    });
+  });
+
   group('the provider id maps both ways', () {
     test('every offered algorithm has a conveyance provider', () {
       for (final keyAlgo in SecretSharingAlgos.keyAlgos) {
@@ -374,4 +476,25 @@ class _FixedRing implements NskeyKeyRing {
       nskeyKid == _advertised.nskeyKid
           ? NskeyDecapsulationKey(_secretKey)
           : null;
+}
+
+/// A ring serving one advertisement carrying MORE THAN ONE key, plus the
+/// private for each — a recipient that has taken rollout 1.
+class _WidenedRing implements NskeyKeyRing {
+  _WidenedRing(this.advertised, this._privates);
+
+  final NskeyAdvertisement advertised;
+  final Map<String, Uint8List> _privates;
+
+  @override
+  Future<NskeyAdvertisement?> currentPublic(
+          String owner, String namespace) async =>
+      advertised;
+
+  @override
+  Future<NskeyDecapsulationKey?> privateHalf(
+      String owner, String namespace, String nskeyKid) async {
+    final secret = _privates[nskeyKid];
+    return secret == null ? null : NskeyDecapsulationKey(secret);
+  }
 }

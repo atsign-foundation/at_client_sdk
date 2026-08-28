@@ -1222,16 +1222,94 @@ production paths named:
   `keyEstablishmentAlgorithms` — and only the last is an accept side, on the
   encryption half. So **UC-G2.9** c4, and c1 and c2 which state the consequence.
 
-**What is left really is a test gap**, and the mechanism each needs is already
-in the tree:
+**Six were ordinary test gaps and are closed** (2026-08-28). Each is named
+below with the test that closed it, because a test no document names is work
+the next reader rebuilds:
 
-- **UC-G2.8** c1 — `verifyEnvelope` resolves `SigningAlgoType.strongestOf` over
-  the intersection (`envelope_signature.dart:709`), so "the strongest shared,
-  not the first match" is assertable now.
-- **UC-G2.5** c3 and c5, and **UC-G2.9** c3 — the excluded enrollment keeping
-  only the previous generation, every `kid` changing on a rotation, and the
-  refusal message naming both sides of an empty intersection.
-- **UC-G2.10** c1, c3 and c4 — the cross-atSign ladder either side of rollout 2.
+- **UC-G2.8** c1 — `jws_envelope_test.dart`, *and however the ADVERTISEMENT is
+  ordered*. Its sibling varies the envelope's signature order; every arm of
+  that group published `_apsk` **RSA-first**, so nothing said the
+  advertisement's order does not decide either. Mutation-proven against
+  `shared.first`.
+- **UC-G2.9** c3 — `jws_envelope_test.dart`, *no shared algorithm names BOTH
+  documents, and does not fall back*. UC-G2.9's own case rather than a
+  relabelling: an ML-DSA envelope against an RSA-only advertisement.
+- **UC-G2.5** c3 — `nskey_rotation_test.dart`, two arms: *publishes a fresh
+  generation and keeps the superseded private* now compares the advertised
+  **keys** rather than the kids (a kid is derived from its key, so the kid
+  assertion was about the derivation), and *does not push to an excluded
+  enrollment* shows the exclusion reaching the roster query.
+- **UC-G2.5** c5 — `ck_manager_test.dart`, *cuts a fresh CK when the
+  destination has rotated its nskey*, which already existed and was unpinned.
+- **UC-G2.10** c4 — `nskey_resolver_test.dart`, *a narrowed list refuses, and
+  the message names both sides*, which also already existed.
+- **UC-G2.10** c1 — closed too, but only after fixing the code; see below.
+
+⛔ **UC-G2.10 c1 was not a test gap — the tree contradicted it, and this list
+said otherwise until 2026-08-28.** A sender could not reach the second entry of
+a widened nskey advertisement at all. **Fixed the same day**, and the account is
+kept because the shape recurs. Measured first with a throwaway probe over an
+advertisement carrying an ML-KEM entry and an X-Wing one:
+
+```
+advertisement.alg = x-wing        keys = [ml-kem-1024/dfeab4…, x-wing/02f6b4…]
+x-wing      : SEALED and OPENED ok
+ml-kem-1024 : REFUSED -> @alice:myapp advertises a x-wing nskey,
+                         which at/nskey/MLKEM1024/AES/GCM cannot seal to
+```
+
+**The two layers disagree about which entry is in play.** `NskeyResolver` was
+widened and selects per entry, honouring the sender's `sealsToKeyAlgorithms` —
+which `nskey_resolver_test.dart`'s *a widened advertisement serves each sender
+the entry IT understands* now pins, as a differential over one advertisement so
+that neither narrowing could be satisfied by a constant. `CkManager` then routes
+to the provider for that entry's algorithm — and `NskeyProvider` re-derives the
+algorithm from `NskeyAdvertisement.alg`, the **single-key compat getter**
+(`_usable`, the best key over everything the *build* supports), and refuses on
+the mismatch. `advertised.publicKey` and `advertised.nskeyKid` beside it are the
+same getter, so even a passing seal would address the wrong entry.
+
+That guard is right for a single-key advertisement — `a provider will not seal
+to the other KEM's advertisement` pins it, and encapsulating under the wrong KEM
+produces a record the owner can never open. It is wrong for a multi-key one: it
+has to compare against the **entry being sealed to**, not against the document.
+`NskeyPrivateFiling` (`advertised?.alg`, `advertised.publicKey`) and
+`ConveyedKeyCollection` (`advertised.nskeyKid`) read the same getters.
+
+It was **latent, not live**: the mint is singular, so no atSign publishes a
+widened advertisement yet. It would have become reachable the day one did —
+which is the plural mint the plan tracks — and that is exactly why *the reader
+ships first*.
+
+**The fix.** `NskeyAdvertisement` gained `entryWithKid(kid)`, the counterpart of
+`usableFor(algos)` for a party holding a kid rather than an algorithm.
+`NskeyProvider.encrypt` now selects `usableFor([keyAlgo])` — the entry it was
+routed to — and seals to *that* key and stamps *that* kid; its refusal names
+every algorithm on offer rather than the one the document's getter picked.
+`NskeyPrivateFiling` selects by kid for both the algorithm it expands the seed
+under and the public half it compares against; `ConveyedKeyCollection` asks
+whether **any** entry carries the kid rather than comparing `nskeyKid`.
+
+⚠️ **The filer's fix broke a real refusal on its first attempt, and the suite
+caught it.** Reading "no entry under this kid" as *no opinion* let through the
+case that arm exists for — a private that is genuinely this atSign's and
+genuinely an nskey private, for a generation peers are not sealing to. It falls
+back to the document's own single-key answer when no entry matches, which is the
+old behaviour exactly; the widened case never reaches the fallback, because
+there the entry is found.
+
+**What proves it**, both mutation-checked separately:
+`nskey_kem_selection_test.dart`'s *either entry seals and opens, and each stamps
+its OWN kid* (reverting the provider reddens it with the probe's own refusal),
+and `nskey_resolver_test.dart`'s *a widened advertisement serves each sender the
+entry IT understands* (making `usableFor` ignore its argument reddens it). The
+stamped kid is asserted **before** the round trip: a wrong kid fetches the wrong
+private, so otherwise it reddens as a decapsulation error and proves nothing
+about the stamp.
+
+**Still owed on this row:** **UC-G2.10** c3, "the recipient does nothing
+further". It is an absence — no re-seal, no conveyance fired — and a test that
+merely succeeds at reading is satisfied either way, so it needs its own arm.
 
 ⚠️ **UC-G2.7** c4 and c5, **UC-G2.9** c2, **UC-G2.10** c5 and c6 and
 **UC-G2.11** c3 have **not** been read against the tree. They are commentary

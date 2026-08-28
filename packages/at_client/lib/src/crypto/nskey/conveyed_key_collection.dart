@@ -85,7 +85,13 @@ Future<int> collectConveyedKeyMaterial(AtClient atClient, AtKeysIo keysIo,
         atSign,
         namespace,
       );
-      if (advertised == null || advertised.nskeyKid != nskeyKid) return null;
+      // Asked of every ENTRY, not of `nskeyKid` — that getter names whichever
+      // entry a sender with no preference would take, so on an advertisement
+      // carrying two it answers "not published" for the other one and the
+      // filer files it with no opinion, under the default algorithm.
+      if (advertised == null || advertised.entryWithKid(nskeyKid) == null) {
+        return null;
+      }
       return advertised;
     },
   ).filePending(held);

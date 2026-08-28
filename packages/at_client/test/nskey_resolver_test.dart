@@ -1,5 +1,6 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart';
 import 'package:test/test.dart';
 
 /// Which level of a nested namespace holds the nskey a sender seals to.
@@ -62,6 +63,60 @@ void main() {
                   contains(SecretSharingAlgos.xWing),
                   contains(SecretSharingAlgos.mlKem1024),
                   contains('sealsToKeyAlgorithms')))));
+    });
+
+    test('a widened advertisement serves each sender the entry IT understands',
+        () async {
+      // UC-G2.10's rollout-1 case, and the whole reason "one rollout" works:
+      // the recipient has published a second algorithm beside the first, and
+      // a sender that cannot use one of them still seals under the other.
+      // Nothing fails, nothing is refused, and the sender is never asked to
+      // upgrade first.
+      //
+      // Run as a differential over ONE advertisement, because either
+      // narrowing on its own proves nothing: a build that always sealed to
+      // x-wing would satisfy the x-wing arm, and one that always sealed to
+      // ml-kem would satisfy the other. Only the pair shows the recipient's
+      // list and the sender's list are both being read.
+      //
+      // Every other arm over this selection varies the sender's ORDER across
+      // algorithms both builds hold. These hand it a list of ONE, which is
+      // what a build that cannot use the other entry looks like from here.
+      final mlKem = SecretSharingAlgos.kemFor(SecretSharingAlgos.mlKem1024)!;
+      final second = await mlKem.keyPairFromSeed(mlKem.newSeed());
+      final ring = _WidenedRing(NskeyAdvertisement(
+        v: nskeyAdvertisementVersion,
+        createdAt: DateTime.now().toUtc(),
+        keys: [
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.mlKem1024,
+              pub: second.publicKey),
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: SecretSharingAlgos.xWing,
+              pub: todosKey.publicKeyBytes),
+        ],
+      ));
+
+      final xWingOnly = await NskeyResolver(ring,
+              sealsToKeyAlgorithms: const [SecretSharingAlgos.xWing])
+          .resolve(alice, 'todos');
+      final mlKemOnly = await NskeyResolver(ring,
+              sealsToKeyAlgorithms: const [SecretSharingAlgos.mlKem1024])
+          .resolve(alice, 'todos');
+
+      expect(xWingOnly?.alg, SecretSharingAlgos.xWing);
+      expect(mlKemOnly?.alg, SecretSharingAlgos.mlKem1024);
+
+      // Asserted at the KEY, not at the algorithm name: an advertisement that
+      // named an algorithm and handed back the wrong entry's key would seal to
+      // something the recipient cannot open, and the name alone cannot tell.
+      expect(xWingOnly?.publicKey, todosKey.publicKeyBytes);
+      expect(mlKemOnly?.publicKey, second.publicKey,
+          reason: 'each sender is served the entry its own list names, off '
+              'one advertisement that carries both — which is what lets the '
+              'two ends move independently');
     });
 
     test('it refuses rather than walking up to a broader namespace', () async {
@@ -283,4 +338,18 @@ class _CountingRing extends InMemoryNskeyKeyRing {
     lookups.add(namespace);
     return super.currentPublic(owner, namespace);
   }
+}
+
+/// A ring serving one advertisement that carries MORE THAN ONE key — what a
+/// recipient publishes after rollout 1. [InMemoryNskeyKeyRing] seeds only
+/// single-key generations, which is what the mint produces today.
+class _WidenedRing extends InMemoryNskeyKeyRing {
+  _WidenedRing(this._advertised);
+
+  final NskeyAdvertisement _advertised;
+
+  @override
+  Future<NskeyAdvertisement?> currentPublic(
+          String owner, String namespace) async =>
+      namespace == 'todos' ? _advertised : null;
 }

@@ -249,6 +249,48 @@ void main() {
             'which is the signal this row waits for - not as evidence for any '
             'clause above',
       );
+      provenIn(
+        'packages/at_client/test/nskey_rotation_test.dart',
+        'publishes a fresh generation and keeps the superseded private',
+        proves: 'that no key in the successor is one the predecessor carried '
+            '- compared at the advertised keys themselves rather than at the '
+            'kids, which are derived from those keys and so say something '
+            'about the derivation instead. The predecessor is asserted '
+            'non-empty first, because two empty lists intersect emptily and '
+            'would read as a clean rotation. Mutation-proven: carrying the '
+            'superseded keys into the successor reddens it. ⚠️ It is one key '
+            'per generation today, so this is the single-algorithm case of '
+            'the clause and will need re-reading when the mint goes plural',
+        clauses: [
+          'a revoked enrollment gains nothing from the rotation',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/ck_manager_test.dart',
+        'cuts a fresh CK when the destination has rotated its nskey',
+        proves: 'the peer half, at the mechanism CkManager.ensureCurrent uses: '
+            'the cached CK is kept beside the generation kid it was sealed to, '
+            'the advertised kid changes, and the next ensureCurrent cuts and '
+            'conveys a second CK rather than reusing the first. That is the '
+            'only signal a sender gets - it never sees a recipient fail to '
+            'decapsulate - and the first ensureCurrent runs as the control, '
+            'so a build that cut a fresh CK on every call would fail the '
+            'already-current arm beside it',
+        clauses: [
+          'every peer\'s cached content key is superseded',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_rotation_test.dart',
+        'does not push to an excluded enrollment',
+        proves: 'the other half of the same clause: the exclusion reaches the '
+            'ROSTER QUERY rather than being remembered by the caller, so the '
+            'excluded enrollment is never sealed the successor and is left '
+            'holding the previous generation only',
+        clauses: [
+          'a revoked enrollment gains nothing from the rotation',
+        ],
+      );
     });
 
     test('UC-G2.6 · a client adds its own missing algorithm to the generation',
@@ -375,6 +417,20 @@ void main() {
             'distinguishes walking from guessing',
         clauses: ['names how many were tried'],
       );
+      provenIn(
+        'packages/at_client/test/jws_envelope_test.dart',
+        'and however the ADVERTISEMENT is ordered',
+        proves: 'that NEITHER document\'s ordering decides. Its sibling arm '
+            'varies the envelope\'s signature order; this one varies the '
+            '_apsk\'s, which every arm of that group had published RSA-first. '
+            'A corrupt RSA signature beside an intact ML-DSA one verifies '
+            'under both orderings, because the stronger shared algorithm is '
+            'what gets checked and the corrupt entry is never reached. '
+            'Mutation-proven: resolving by the advertisement\'s order instead '
+            'of by strength reddens it, quoting "the envelope\'s rsa2048 '
+            'signature does not verify"',
+        clauses: ['the algorithm is identified, never guessed'],
+      );
     });
 
     test('UC-G2.9 · step 3 has no lever, so a retired key verifies forever',
@@ -427,9 +483,25 @@ void main() {
             'signature does not rescue a corrupt ML-DSA one, so "pick one that '
             'verifies" is not the rule — the strongest shared is',
       );
-      // ⛔ This row's clauses are UNPINNED because the lever they describe does
-      // not exist: there is no accepted-algorithms set anywhere in
-      // AtClientPreference, so a verifier cannot decline an algorithm it
+      provenIn(
+        'packages/at_client/test/jws_envelope_test.dart',
+        'no shared algorithm names BOTH documents, and does not fall back',
+        proves: 'the refusal names what the envelope carries AND what the '
+            '_apsk advertises, over UC-G2.9\'s own case rather than a '
+            'relabelling: an ML-DSA envelope against an RSA-only '
+            'advertisement, which is what a peer that has not taken the '
+            'transition sees. Its control is the same envelope verifying '
+            'against an _apsk that does advertise ML-DSA, so a build refusing '
+            'every ML-DSA envelope would satisfy the refusal and fail the '
+            'control. Mutation-proven: dropping the envelope\'s side from the '
+            'message reddens it',
+        clauses: [
+          'a verifier sharing **no** algorithm with the envelope is refused',
+        ],
+      );
+      // ⛔ The rest of this row's clauses are UNPINNED because the lever they
+      // describe does not exist: there is no accepted-algorithms set anywhere
+      // in AtClientPreference, so a verifier cannot decline an algorithm it
       // implements and nothing can assert that it does. See decisions.md 120.
       //
       // The citations above are kept deliberately. They pin the multi-signature
@@ -470,18 +542,55 @@ void main() {
             'swapping the arguments swaps the answer. An un-upgraded sender '
             'therefore takes what it knows without the recipient being asked',
       );
-      // ⛔ Two clauses are UNPINNED, and they are the same gap seen twice.
-      //
-      // Every live arm above varies the sender's preference ORDER over
-      // algorithms BOTH builds implement. None runs a sender that cannot use
-      // the recipient's newer entry at all - which is the case the row is
-      // about, and why the row now states outright that omitting an algorithm
-      // and not implementing one are different routes to one refusal.
-      //
-      // "The recipient does nothing further" is unpinned too: the amendment
-      // test proves an envelope sealed BEFORE still opens after, which is the
-      // consequence, but nothing asserts the absence - no re-seal, no
-      // conveyance fired. An absence needs its own arm, and a test that merely
+      provenIn(
+        'packages/at_client/test/nskey_resolver_test.dart',
+        'a narrowed list refuses, and the message names both sides',
+        proves: 'the rollout-2 refusal: a sender whose sealsToKeyAlgorithms '
+            'names only the algorithm the recipient never added is refused '
+            'BEFORE anything is written, with a message naming what it will '
+            'seal to, what the recipient advertises, and the preference that '
+            'decided. Its sibling arm - the same owner resolving under the '
+            'default list - is the control, so the refusal is the narrowing '
+            'and not a cold start',
+        clauses: [
+          'is refused before anything is written',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_resolver_test.dart',
+        'a widened advertisement serves each sender the entry IT understands',
+        proves: 'the SELECTION half, as a differential over one advertisement '
+            'carrying both algorithms: a sender narrowed to either one is '
+            'served that entry and its key. Run as a pair because neither '
+            'narrowing proves anything alone - a build that always chose '
+            'x-wing satisfies the first arm and one that always chose ml-kem '
+            'satisfies the second. Every other arm on this row varies the '
+            'sender\'s ORDER across algorithms both builds hold; these give '
+            'it a list of ONE, which is what a build that cannot use the '
+            'other entry looks like from here',
+        clauses: [
+          'seals under the entry it understands',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_kem_selection_test.dart',
+        'either entry seals and opens, and each stamps its OWN kid',
+        proves: 'the other half - that the recipient opens it - over the same '
+            'widened advertisement, both directions, with the private for '
+            'each entry. ⛔ BOTH ARMS REFUSED until 2026-08-28: NskeyProvider '
+            'asked the advertisement which algorithm it was, and that getter '
+            'answers for the single entry a sender with no preference would '
+            'take. The stamped kid is asserted BEFORE the round trip, or a '
+            'wrong kid reddens as a decapsulation error instead of on its own '
+            'terms; mutation-proven separately on each',
+        clauses: [
+          'seals under the entry it understands',
+        ],
+      );
+      // ⛔ One clause is UNPINNED. "The recipient does nothing further" is an
+      // absence - no re-seal, no conveyance fired - and the amendment test
+      // proves only the consequence, that an envelope sealed BEFORE still
+      // opens after. An absence needs its own arm, and a test that merely
       // succeeds at reading is satisfied either way.
     });
 

@@ -204,6 +204,24 @@ class NskeyAdvertisement {
   /// arriving, not a broken advertisement.
   PackageKey? usableFor(List<String> sealsTo) => bestKeyFor(sealsTo);
 
+  /// The entry this advertisement carries under [kid], or null if it carries
+  /// none.
+  ///
+  /// What a party holding a *kid* must ask, and the counterpart of
+  /// [usableFor] for a party holding an *algorithm*. Neither is [nskeyKid]:
+  /// that getter answers for the one entry a sender with no preference would
+  /// pick, so on an advertisement carrying two it is right about one of them
+  /// and silently wrong about the other. A conveyed private names the
+  /// generation it opens by kid, and a filer that compared it against
+  /// [publicKey] instead would refuse the entry that is not the default and
+  /// file it under the wrong algorithm.
+  PackageKey? entryWithKid(String kid) {
+    for (final key in keys) {
+      if (key.kid == kid) return key;
+    }
+    return null;
+  }
+
   /// [usableFor] over everything this build can encapsulate to.
   ///
   /// The read-side answer, and the one the getters below give: what this

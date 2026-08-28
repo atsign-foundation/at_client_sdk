@@ -138,6 +138,29 @@ void main() {
               'message', contains('no algorithm in common'))));
     });
 
+    test('no shared algorithm names BOTH documents, and does not fall back',
+        () async {
+      // UC-G2.9's case rather than a relabelling: an `_apsk` advertising only
+      // RSA, handed an envelope signed under ML-DSA — what a peer that has not
+      // taken the transition sees. "No algorithm in common" on its own leaves
+      // a reader unable to tell which side is behind, so the message has to
+      // name what the envelope carries AND what the advertisement offers.
+      await expectLater(
+          () => verifyEnvelope(mlDsaEnvelope(),
+              signerPublicKey: rsaPair.atPublicKey.publicKey,
+              expecting: EnvelopeType.app),
+          throwsA(isA<AtSigningVerificationException>()
+              .having((e) => e.message, 'message', contains('"ML-DSA-65"'))
+              .having((e) => e.message, 'message', contains('"rsa2048"'))));
+
+      // The control, and it is what makes the refusal attributable: the same
+      // envelope against an `_apsk` that does advertise ML-DSA verifies. A
+      // build that refused every ML-DSA envelope would satisfy the arm above
+      // and fail here.
+      await verifyEnvelope(mlDsaEnvelope(),
+          signerPublicKey: mlDsaApsk(), expecting: EnvelopeType.app);
+    });
+
     test('a corrupted signature fails', () async {
       final original = rsaEnvelope();
       final s = original.signature.signature;
@@ -285,6 +308,47 @@ void main() {
             }),
             signerPublicKey: bothApsk(),
             expecting: EnvelopeType.app);
+      }
+    });
+
+    test('and however the ADVERTISEMENT is ordered', () async {
+      // The other half of "neither side's ordering alone decides", and the one
+      // this group never varied: every arm above publishes `_apsk` with RSA
+      // first, so a verifier resolving by the advertisement's order rather
+      // than by strength passes all of them.
+      String reversedApsk() => jsonEncode({
+            'v': 1,
+            'keys': ((jsonDecode(bothApsk()) as Map)['keys'] as List)
+                .reversed
+                .toList(),
+          });
+
+      // Control: the untouched envelope verifies under the reversed
+      // advertisement at all, so a refusal below is about which algorithm was
+      // chosen rather than about the reordering having broken the fixture.
+      await verifyEnvelope(bothSigned(),
+          signerPublicKey: reversedApsk(), expecting: EnvelopeType.app);
+
+      // Corrupt the RSA entry and leave ML-DSA intact. ML-DSA is the stronger,
+      // so it is what gets checked and the corrupt entry is never reached —
+      // under BOTH advertisement orderings. Resolving by the advertisement's
+      // order instead would refuse the RSA-first one and accept the other.
+      final both = bothSigned();
+      final rsa = both.signatures.firstWhere((s) => s.alg == 'RS256');
+      final corruptRsa = SignedEnvelope.fromJson({
+        'payload': both.payloadB64,
+        'signatures': [
+          {
+            'protected': rsa.protected,
+            'signature': rsa.signature
+                .replaceRange(0, 1, rsa.signature[0] == 'A' ? 'B' : 'A'),
+          },
+          both.signatures.firstWhere((s) => s.alg != 'RS256').toJson(),
+        ],
+      });
+      for (final apsk in [reversedApsk(), bothApsk()]) {
+        await verifyEnvelope(corruptRsa,
+            signerPublicKey: apsk, expecting: EnvelopeType.app);
       }
     });
 

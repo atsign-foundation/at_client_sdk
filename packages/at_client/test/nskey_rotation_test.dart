@@ -203,6 +203,27 @@ void main() {
           isA<NskeyAdvertisement>()
               .having((a) => a.nskeyKid, 'nskeyKid', second.nskeyKid),
           reason: 'and new writes must seal to the successor');
+
+      // Fresh MATERIAL, not merely a fresh id. Differing kids already follow
+      // from differing keys, because a kid is derived from the key it names —
+      // so the kid assertion above says something about that derivation
+      // rather than about what an enrollment cut out of the rotation ends up
+      // holding. This compares the advertised keys themselves.
+      expect(
+          second.keys
+              .map((k) => k.pub)
+              .toSet()
+              .intersection(first.keys.map((k) => k.pub).toSet()),
+          isEmpty,
+          reason: 'a rotation mints and carries nothing forward. That is what '
+              'makes the previous generation worth nothing to an enrollment '
+              'excluded from the push: no key in the successor is one it has '
+              'ever held, so there is nothing to suppress and no special '
+              'revocation path to write');
+      expect(first.keys, isNotEmpty,
+          reason: 'the positive control for the intersection above — two '
+              'empty key lists intersect emptily, and would read as a clean '
+              'rotation');
     });
 
     test('a rotation that loses the mint lock fails instead of adopting',

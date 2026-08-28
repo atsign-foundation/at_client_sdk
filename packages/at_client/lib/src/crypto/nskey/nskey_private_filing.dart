@@ -17,6 +17,7 @@ import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show nskeyKeyfileIdFor, nskeyKeyfileIdPrefix, nskeySecretNamePrefix;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
+import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
 import 'package:at_client/src/secret_sharing/secret_store.dart' show Secret;
@@ -159,11 +160,26 @@ class NskeyPrivateFiling {
     final seed = NskeySeed(Uint8List.fromList(base64Decode(secret.value)));
     final advertised = await _publishedFor(secret.namespace, nskeyKid);
     // An arriving seed carries no algorithm of its own, so the advertisement
-    // is what names it. With no advertisement to consult, the hybrid is the
-    // only thing it could be: nothing else was ever conveyed.
-    final keyAlgo = advertised?.alg ?? SecretSharingAlgos.xWing;
-    if (!await _corresponds(
-        secret.namespace, nskeyKid, seed, keyAlgo, advertised)) {
+    // is what names it — but the ENTRY under this kid, never the document's
+    // own `alg`. That getter answers for whichever entry a sender with no
+    // preference would take, so on an advertisement carrying two it names the
+    // wrong algorithm for one of them: the seed would be expanded under the
+    // wrong KEM, fail to derive the published public half, and be refused as
+    // corrupt. With no advertisement to consult, the hybrid is the only thing
+    // it could be: nothing else was ever conveyed.
+    //
+    // Falling back to the document's own single-key answer when it carries no
+    // entry under this kid is deliberate and is the OLD behaviour: a supplier
+    // handing back a generation that does not contain this kid is claiming
+    // this private is the one peers are sealing to, and comparing against the
+    // key they actually seal to is what refuses it. Reading the absence as "no
+    // opinion" instead would file it.
+    final entry = advertised == null
+        ? null
+        : (advertised.entryWithKid(nskeyKid) ??
+            advertised.usableFor(SecretSharingAlgos.keyAlgos));
+    final keyAlgo = entry?.alg ?? SecretSharingAlgos.xWing;
+    if (!await _corresponds(secret.namespace, nskeyKid, seed, keyAlgo, entry)) {
       return false;
     }
 
@@ -195,7 +211,7 @@ class NskeyPrivateFiling {
   /// against — the check is secondary, and refusing everything for want of it
   /// would be worse than not making it.
   Future<bool> _corresponds(String namespace, String nskeyKid, NskeySeed seed,
-      String keyAlgo, NskeyAdvertisement? advertised) async {
+      String keyAlgo, PackageKey? advertised) async {
     if (advertised == null) return true;
 
     final kem = SecretSharingAlgos.kemFor(keyAlgo);
@@ -215,7 +231,7 @@ class NskeyPrivateFiling {
           'not a valid $keyAlgo seed: $e');
       return false;
     }
-    if (_sameBytes(derived, advertised.publicKey)) return true;
+    if (_sameBytes(derived, advertised.pubBytes)) return true;
 
     _logger.severe('Refusing the nskey private for $namespace:$nskeyKid — it '
         'does not derive the published public half, so filing it would leave '

@@ -157,19 +157,32 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     }
 
     final ck = ContentKey.fromBase64(plaintext);
-    if (advertised.alg != keyAlgo) {
-      // The destination advertises the other KEM, so its conveyance belongs to
-      // the other provider. CkManager routes by the advertised algorithm, so
-      // reaching here means a conveyance was addressed directly to the wrong
-      // one — sealing anyway would produce a record nobody can open.
-      throw AtEncryptionException(
-          '$nskeyOwner:$namespace advertises a ${advertised.alg} nskey, '
-          'which $id cannot seal to');
+
+    // The ENTRY this provider seals to, not the advertisement's own `alg`.
+    //
+    // `NskeyAdvertisement.alg`, `.publicKey` and `.nskeyKid` are all the same
+    // single-key answer — the best entry over everything the *build* supports
+    // — and an advertisement carrying two gives them for one of the two. So
+    // asking the document which algorithm it is silently disagrees with
+    // whichever entry `CkManager` routed here, and the disagreement is
+    // invisible: the guard below would refuse a perfectly good destination,
+    // and a seal that got past it would encapsulate to the wrong entry's key
+    // and stamp the wrong kid, producing a record the owner never looks for.
+    final entry = advertised.usableFor([keyAlgo]);
+    if (entry == null) {
+      // The destination offers nothing under this KEM, so its conveyance
+      // belongs to another provider. CkManager routes by the algorithm the
+      // resolver picked, so reaching here means a conveyance was addressed
+      // directly to the wrong one — sealing anyway would produce a record
+      // nobody can open.
+      throw AtEncryptionException('$nskeyOwner:$namespace advertises '
+          '${advertised.keys.map((k) => k.alg).toSet().join(', ')}, '
+          'and $id can only seal to $keyAlgo');
     }
     final int? version = _sealVersionFor(advertised);
     if (version == null) {
       throw AtEncryptionException(
-          '$nskeyOwner:$namespace advertises a ${advertised.alg} nskey opening '
+          '$nskeyOwner:$namespace advertises a ${entry.alg} nskey opening '
           '${advertised.suites}, and $id produces '
           '${SecretSharingAlgos.openableSuitesFor(keyAlgo)} — no shared '
           'construction, so nothing is sealed rather than sealing something '
@@ -180,7 +193,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
     // other's.
     final String envelope = await pqSealToBase64(
       _kem,
-      advertised.publicKey,
+      entry.pubBytes,
       ck.bytes,
       info: _info(_recordOwnerOf(atKey), namespace),
       version: version,
@@ -191,7 +204,7 @@ class NskeyProvider implements CryptoProvider, HandlesSelectively {
       additional: {
         'recipientKind': NskeyRecipientKind.nskey,
         'ckKid': ck.ckKid,
-        'nskeyKid': advertised.nskeyKid,
+        'nskeyKid': entry.kid,
         // A conveyance lives at the namespace the nskey resolved to, and no
         // reader can recover that from the wire string — AtKey.fromString cuts
         // at the last dot, so `<ckKid>.__ck.app_1.my_apps` parses back with
