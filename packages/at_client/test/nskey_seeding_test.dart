@@ -1,6 +1,9 @@
 import 'dart:typed_data';
 
+import 'package:at_auth/at_auth.dart';
 import 'package:at_client/at_client.dart';
+import 'package:at_client/at_client_mixins.dart';
+import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
 import 'package:at_client/src/crypto/nskey/nskey_seeding.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
@@ -179,6 +182,116 @@ void main() {
             'wildcard mints on demand instead; __manage is not an app '
             'namespace either');
   });
+
+  group('an add conveys only what it newly minted — UC-G2.6 c4', () {
+    Future<NskeyAdvertisement> advertisement(List<String> algos,
+        {DateTime? createdAt}) async {
+      final keys = <PackageKey>[];
+      for (final algo in algos) {
+        final kem = SecretSharingAlgos.kemFor(algo)!;
+        final pair = await kem.keyPairFromSeed(kem.newSeed());
+        keys.add(PackageKey.fromBytes(
+            use: SecretSharingAlgos.useEnc, alg: algo, pub: pair.publicKey));
+      }
+      return NskeyAdvertisement(
+          v: nskeyAdvertisementVersion,
+          createdAt: createdAt ?? DateTime.now().toUtc(),
+          keys: keys);
+    }
+
+    test('exactly the new kid, and not the one already there', () async {
+      final current = await advertisement([SecretSharingAlgos.xWing]);
+      final widened = NskeyAdvertisement(
+          v: nskeyAdvertisementVersion,
+          // An add joins the CURRENT generation, so createdAt is carried.
+          createdAt: current.createdAt,
+          keys: [
+            ...current.keys,
+            (await advertisement([SecretSharingAlgos.mlKem1024])).keys.single,
+          ]);
+
+      final base =
+          seeding(enrollmentId: 'enroll-a', preferenceNamespace: 'my_apps');
+      final filing =
+          _CountingFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign);
+      await NskeySeeding(
+        atClient: base.atClient,
+        ring: _RingAdding(base.atClient, current, widened),
+        privateFiling: filing,
+      ).seedNamespace(atSign, 'my_apps');
+
+      final newKid = widened.keys
+          .firstWhere((k) => k.alg == SecretSharingAlgos.mlKem1024)
+          .kid;
+      expect(filing.readFor, [newKid],
+          reason: 'ONE conveyance, for the kid this add minted. The other '
+              'entry was in the generation before the add, so every '
+              'authorised enrollment was conveyed it when it was minted — '
+              're-sending it is work and noise, and the clause says neither '
+              'more nor fewer');
+    });
+
+    test('and nothing at all when the add added nothing', () async {
+      // ⚠️ NOT a control for the arm above — measured: a mutation removing
+      // the "skip what was already there" filter reddens BOTH, because both
+      // turn on that filter. This is the ZERO case of the same property: an
+      // add with nothing to add must send nothing, where the arm above says
+      // an add with one thing to add sends exactly that one.
+      final current = await advertisement([SecretSharingAlgos.xWing]);
+      final base =
+          seeding(enrollmentId: 'enroll-a', preferenceNamespace: 'my_apps');
+      final filing =
+          _CountingFiling(keysIo: InMemoryAtKeysIo(), atSign: atSign);
+
+      await NskeySeeding(
+        atClient: base.atClient,
+        ring: _RingAdding(base.atClient, current, current),
+        privateFiling: filing,
+      ).seedNamespace(atSign, 'my_apps');
+
+      expect(filing.readFor, isEmpty,
+          reason: 'an add that found nothing missing returns the generation '
+              'unchanged, and conveying then would re-send what the fleet '
+              'already holds');
+    });
+  });
+}
+
+/// A ring whose published generation and add-result are both dictated, so the
+/// test decides exactly what [NskeySeeding] sees before and after the add.
+class _RingAdding extends PublishedNskeyKeyRing {
+  _RingAdding(super.atClient, this._current, this._widened);
+
+  final NskeyAdvertisement _current;
+  final NskeyAdvertisement _widened;
+
+  @override
+  Future<NskeyAdvertisement?> publishedAdvertisement(
+          String owner, String namespace,
+          {bool useCache = true}) async =>
+      _current;
+
+  @override
+  Future<NskeyAdvertisement?> add(String namespace) async => _widened;
+}
+
+/// Records which generation ids a conveyance was attempted for.
+///
+/// `_convey` reads the seed for a kid before anything else, so the kids that
+/// arrive here are exactly the ones it set out to send — which is what "only
+/// the newly minted private is conveyed" is a claim about. The COUNT is the
+/// point: a test that merely checked the new kid was among them would pass
+/// just as well if every kid in the generation were re-sent.
+class _CountingFiling extends NskeyPrivateFiling {
+  _CountingFiling({required super.keysIo, required super.atSign});
+
+  final List<String> readFor = [];
+
+  @override
+  Future<NskeySeed?> readSeed(String namespace, String nskeyKid) async {
+    readFor.add(nskeyKid);
+    return null;
+  }
 }
 
 /// A ring that answers [_published] for every namespace, so a test can put the

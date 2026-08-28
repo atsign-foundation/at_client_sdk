@@ -398,6 +398,22 @@ void main() {
             'than proceeding, which is what makes "fails the lock, backs off '
             'and re-reads" a behaviour rather than an intention',
       );
+      provenIn(
+        'packages/at_client/test/nskey_seeding_test.dart',
+        'exactly the new kid, and not the one already there',
+        proves:
+            'the conveyance selection, measured as a COUNT rather than as a '
+            'membership: `_addMissing` is driven over a generation carrying '
+            'one algorithm and an add that returns it carrying two, and the '
+            'kids it attempts to convey are recorded. It attempts exactly one '
+            '— the kid the add minted — so a re-send of what the fleet '
+            'already holds would show as a second entry rather than being '
+            'invisible. Its zero-case sibling drives an add that added '
+            'nothing and asserts no conveyance at all; a mutation removing '
+            'the "skip what was already there" filter reddens both, naming '
+            'the extra kid',
+        clauses: ['private is conveyed to authorised enrollments'],
+      );
     });
 
     test(
