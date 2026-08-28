@@ -12168,8 +12168,9 @@ rest of the matrix and the self→self direction — not a decision.
 
 ### 2. The nskey — a rotation mints fresh, and a client ADDS what it needs
 
-`PublishedNskeyKeyRing._prepareMint` takes `keyEstablishmentAlgorithms.first`,
-and the code says why: *"an nskey is one key"*. **A generation holds a key per
+`PublishedNskeyKeyRing._prepareMint` took `keyEstablishmentAlgorithms.first`
+when this was ruled, and the code said why: *"an nskey is one key"*. It takes
+the whole list from 2026-08-28. **A generation holds a key per
 algorithm the fleet needs, and it gets there in two separate steps.**
 
 1. **A rotation mints only NEW material**, never carrying anything forward. What
@@ -12245,13 +12246,20 @@ there is not one.
 entries deliberately — *"a newer writer may advertise entries spelled with fields
 this version does not know"*. And `NskeyAdvertisement.single`'s dartdoc already
 says the list *"exists so that an atSign can advertise a second algorithm's key
-beside the first, not because it usually does"*. Only the mint is singular.
+beside the first, not because it usually does"*. ⚠️ **"Only the mint is
+singular" was true when this was written and stopped being so on 2026-08-28.**
 
-**What is owed:** the `add` operation, which does not exist; a mint that produces
-more than one key where the client configures more than one; and — because two
-clients adding concurrently is a read-mutate-write on shared durable state — the
-add taking the mint lock, whose cooldown then paces population at one algorithm
-per cooldown.
+✅ **What this owed is built** (2026-08-28). The mint produces a key for every
+configured algorithm and files each private under its own kid;
+`PublishedNskeyKeyRing.add` puts one client's newly minted material into the
+**current** generation in place, taking the same mint lock and re-reading inside
+it, so the cooldown paces population at one algorithm per cooldown as this
+predicted. ⚠️ **What it did not predict is that the READER was not ready
+either**: `NskeyProvider` read the advertisement's single-key `alg`,
+`publicKey` and `nskeyKid` getters, so a sender routed to a second entry was
+refused outright and a seal past that guard would have addressed the wrong key.
+Fixed the same day and before the writer landed, which is the order this ruling
+argues for and the reason the defect was never reachable.
 
 ### 3. `_apsk` — 108's swap is transition-specific, and the developer chooses
 
@@ -12584,7 +12592,11 @@ waived**, and it comes out because the hazard is covered elsewhere:
 
 ⛔ **One thing neither covers, and it is not c7's.** A revoked enrollment's
 self-spawned children keep `approved` — `parentEnrollmentId` is written by the
-retrofit and read by nothing — so they stay on the roster, and `NskeySeeding`'s
+retrofit and read by nothing. **Re-measured 2026-08-28 against at_server
+`origin/trunk` at `33e99af1`**, rather than carried across: the field is set in
+`enroll_verb_handler.dart` and read only by two tests, and its own dartdoc says
+*"The cascade itself is the revoke path's to implement."* So they stay on the
+roster, and `NskeySeeding`'s
 conveyance calls `pushSecretToNamespaceMembers` with **no exclusion set at all**.
 An add therefore hands the attacker's surviving child freshly minted material.
 That is UC-G2.5 c4's subtree gap by another route, and c4 now names the add as

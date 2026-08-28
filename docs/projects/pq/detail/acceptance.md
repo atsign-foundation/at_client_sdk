@@ -1280,10 +1280,12 @@ has to compare against the **entry being sealed to**, not against the document.
 `NskeyPrivateFiling` (`advertised?.alg`, `advertised.publicKey`) and
 `ConveyedKeyCollection` (`advertised.nskeyKid`) read the same getters.
 
-It was **latent, not live**: the mint is singular, so no atSign publishes a
-widened advertisement yet. It would have become reachable the day one did —
-which is the plural mint the plan tracks — and that is exactly why *the reader
-ships first*.
+It was **latent, not live**: the mint was singular, so no atSign published a
+widened advertisement. It would have become reachable the day one did — and it
+did, hours later on the same day, when the plural mint landed. That ordering is
+the whole of *the reader ships first*, and it was luck rather than method that
+the two happened in the right order: the reader defect was found by writing a
+test for a clause the worklist had called a test gap.
 
 **The fix.** `NskeyAdvertisement` gained `entryWithKid(kid)`, the counterpart of
 `usableFor(algos)` for a party holding a kid rather than an algorithm.
