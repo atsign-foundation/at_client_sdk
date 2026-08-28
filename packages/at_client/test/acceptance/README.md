@@ -83,13 +83,17 @@ catalogue executable-but-skipped turns an 800-line document into a count.
 
 ## How to work with it
 
-- **Two rows are blocked; the rest are done.** `blockers.dart` names the project
-  each skipped scenario waits on, and `catalogue_test.dart` cross-checks the
+- **NO rows are blocked today, and that is the correct state.** ⚠️ This said
+  "two rows are blocked" until 2026-08-28, in a live how-to section, while the
+  status table said `0 BLOCKED` and no scenario carried a `skip:` at all.
+  `blockers.dart` names the project each skipped scenario waits on, and `catalogue_test.dart` cross-checks the
   declared constants against the `skip:` uses in both directions — a bare
   `skip:` with nothing declaring it hides a row from the count with nobody
   recorded as owing it, and a constant guarding nothing tells whoever greps it
-  that the project owes no scenarios. When the last blocker goes, delete the
-  file and restore the stays-retired guard with it.
+  that the project owes no scenarios. ⛔ **Do not delete `blockers.dart` when the last blocker
+  goes** — this said to, and the file itself records why that was wrong: it was
+  deleted on 2026-08-08 when the burn-down first reached zero, and had to come
+  back three days later. It is kept empty deliberately.
 - **A scenario is green** when its `fail('not implemented')` is replaced by real
   assertions and its `skip:` is gone. Nothing else counts as done.
 - Some scenarios finally belong in `tests/at_functional_test` or

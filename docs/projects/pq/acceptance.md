@@ -66,8 +66,11 @@ the scenarios and cannot drift, and this line is prose that nothing checked. It
 is checked now — `docs_structure_test.dart` derives all four numbers from the
 table and from `manifest.dart`, and fails when they disagree.
 
-⚠️ **That correction is itself dated — the scenario figure is 83 today**, and
-this paragraph is kept for the mistake it records rather than for its number.
+⚠️ **That correction is itself dated, and so was its replacement — this said the
+scenario figure was 83 until 2026-08-28, when the headline ten lines above said
+94.** Read the headline, never this paragraph; it is kept for the mistake it
+records and its numbers have now rotted twice. ⛔ **The rail parses only the
+headline sentence, so nothing catches a figure written down here.**
 The figure was **79, not 70**: my first correction inferred it from
 the old sentence's own arithmetic (`53 use cases and 53 scenarios — UC-A5.1 has
 two`), which is the same mistake in the other direction. It comes from
@@ -999,8 +1002,11 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   the **first** of that list, because a mint writes one key"*, which was true of the tree
   and is no longer the specification:
   [decisions.md 119](detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27)
-  rules that a generation holds a key per configured algorithm, so that a deployment
-  changing KEM needs **one** app rollout rather than two separated by an unbounded wait.
+  rules that a generation holds a key per configured algorithm. ⚠️ **This said that
+  made a KEM change need "one app rollout rather than two", until 2026-08-28; that
+  contradicted [section 17](#17-g2--crypto-agility--add-never-replace) in this same
+  file.** A migration is always two rollouts. What the array removes is not the
+  second rollout but the *unbounded wait with no signal* between them.
   `PublishedNskeyKeyRing._prepareMint` still takes `.first`, so this half of the clause is
   unproven until the mint changes.
 
@@ -3198,12 +3204,20 @@ what it *produces* moves second. Encryption and signing differ only in the verbs
 | **what it can handle** | **add the new** — mint its key, and ship the build that reads or verifies it | unchanged |
 | **what it produces** | unchanged — still the old | **move to the new** |
 
-For encryption that reads *mint both, seal only to the old*, then *mint only the
-new, seal only to the new*; the levers are `keyEstablishmentAlgorithms` and
-`sealsToKeyAlgorithms`. For signing it reads *mint both and verify both, sign
-only with the old*, then *sign with the new*; the levers are the same shape, one
-of them `dataSigningKeyAlgorithms`. **In both cases the two levers move in
-different releases, and that is the whole recipe.**
+For **encryption** that reads *mint both, seal only to the old*, then *mint only
+the new, seal only to the new*. Two configuration levers,
+`keyEstablishmentAlgorithms` and `sealsToKeyAlgorithms`, moving in different
+releases — and that is the whole recipe.
+
+⚠️ **Signing is the same ladder with a different first lever, and it has a THIRD
+step.** This passage claimed *"mint both and verify both, sign only with the
+old"* and that signing had two levers of the same shape, until 2026-08-28. Both
+were false. **A signing key cannot be minted without being signed with**: an
+envelope carries one signature per *active* signing key, and
+`reconcileSigningKeys` mints exactly what `dataSigningKeyAlgorithms` names — so
+there is no state "holds `mldsa65`, signs `rsa2048` only". Signing's *can handle*
+half is the **verifier**, which is a property of the **build** rather than a
+configuration field, and there is exactly one configuration lever.
 
 Rollout 1 changes nothing anyone observes, so it can be deployed in any order and
 cannot strand anybody. Rollout 2 changes what is produced once the capability is
@@ -3338,23 +3352,37 @@ across its fleet, not an alternative pattern:
     the previous generation only, and no key in the new one is one it has ever
     held. This is why fresh-only needs no special revocation path — there is
     nothing to suppress;
+  - ⛔ **but the rotation must exclude the revoked enrollment's DESCENDANTS too,
+    not only the enrollment named.** Revoking a parent does not revoke what it
+    self-spawned: on at_server `origin/trunk` the child keeps `approved`, keeps
+    authenticating, and keeps its grants — so a rotation excluding only the named
+    id **conveys the new private straight to the attacker's surviving child**.
+    The exclusion set is the whole subtree, walked over `parentEnrollmentId`;
   - every peer's cached content key is superseded, because every `kid` in the
     advertisement has changed. That is how a peer learns a rotation happened at
     all: a sender never sees a recipient's decapsulation fail;
-  - **a client decides a rotation is due from the current advertisement alone** —
-    its age against the application's own policy, and its `createdAt` against the
-    last revocation. No client coordinates with another to reach the same answer,
-    which is what lets any of them act;
+  - **a client decides a rotation is due without coordinating with another
+    client**, which is what lets any of them act. The *age* half it settles from
+    the advertisement alone, comparing `createdAt` against the application's own
+    policy. The *revocation* half it settles from **the durable record the
+    revoker wrote** — naming the namespace, the moment, and the enrollments to
+    exclude. ⚠️ **This clause said the advertisement alone answered both, until
+    2026-08-28**; it cannot, because nothing anywhere carries a revocation
+    timestamp;
   - **a client that fails to take the mint lock does not queue and does not retry
     blindly.** It backs off, re-reads after the cooldown and re-decides — finding
     either that another client has done what was needed or that it still must.
     That is what makes several clients converge rather than storm.
 
-  ⚠️ **The revocation half of the trigger is not computable today.** Nothing
-  carries a revocation timestamp: `EnrollDataStoreValue` has no time field at
-  all, `EnrollApproval` is `{state}` alone, and `enroll:list` serialises the
-  value plus status without the record's metadata — so a client cannot ask when
-  a revocation happened. The age half is computable now, from `createdAt`.
+  ⚠️ **Why the revoker writes the record rather than a client deriving it.**
+  Nothing server-side carries a revocation timestamp — `EnrollDataStoreValue` has
+  no time field, `EnrollApproval` is `{state}` alone, and `enroll:list`
+  serialises the value plus status without the record's metadata. So the fact has
+  to be *published* by the party that knows it. The revoker is the only actor that
+  does: the atServer refuses `revoke` unless the caller is authorised for **every**
+  namespace the target holds, so a revoker holds a superset of what it revokes and
+  can name every namespace affected. ⛔ **Both halves are unbuilt** — neither the
+  record nor the subtree walk exists.
 
 ### 17.6 UC-G2.6 — A client adds its own missing algorithm to the current generation
 
