@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:at_auth/at_auth.dart'
     show AtKeys, AtKeysEnrollment, AtKeysIo, WrittenAtKeysIo;
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
+import 'package:at_client/src/crypto/crypto.dart' show CryptoConfig;
 import 'package:at_client/src/crypto/nskey/conveyed_key_collection.dart'
     show collectConveyedKeyMaterial;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart'
@@ -197,6 +198,12 @@ class PqClientBootstrap {
       ring: ring,
       privateFiling: filing,
       sharing: sharing,
+      // Resolved at the moment the question is asked, not here. This runs
+      // during client construction, and an application that assigns
+      // `preference.crypto` afterwards — which is the ordinary way to choose a
+      // configuration — would otherwise have its policy read before it set one.
+      rotationPolicy: (ns) =>
+          CryptoConfig.forClient(_atClient).nskeyRotationPolicy(ns),
     );
     root = PqSigningRoot(_atClient, keysIo: keysIo);
     chain = PqSigningChain(_atClient);
@@ -288,6 +295,17 @@ class PqClientBootstrap {
   Future<void> startup() async {
     if (_started) return startupComplete;
     _started = true;
+
+    // Hand the content-key manager the one thing it cannot build for itself:
+    // replacing a namespace key needs the substrate that conveys the successor
+    // to every authorised enrollment, and the manager holds only what it needs
+    // to seal. Assigned here rather than in the constructor because the
+    // configuration is resolved per client and an application that names one
+    // does so after construction.
+    CryptoConfig.forClient(_atClient).ckManager?.rotateOwnNamespaceKeyIfAsked =
+        (namespace) => seeding.rotateIfPolicyAsks(
+            _atClient.getCurrentAtSign()!, namespace);
+
     final steps = _steps;
     try {
       for (var i = 0; i < steps.length; i++) {

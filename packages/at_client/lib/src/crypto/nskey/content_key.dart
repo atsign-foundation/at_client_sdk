@@ -51,6 +51,7 @@ class ContentKeyCache {
   final Map<String, ContentKey> _byKid = {};
   final Map<String, String> _currentKidByNamespace = {};
   final Map<String, String> _currentNskeyKidByNamespace = {};
+  final Map<String, DateTime> _currentCutAtByNamespace = {};
 
   static String _scope(String owner, String namespace) => '$owner|$namespace';
 
@@ -85,13 +86,30 @@ class ContentKeyCache {
   /// advertised generation no longer matches, the current CK is stale and a
   /// fresh one must be cut, or the sender keeps sealing to a generation a
   /// revoked enrollment can still open.
+  /// [cutAt] is when this CK came into being, which is what a rotation policy
+  /// is measured against. The caller that **cut** it passes nothing and gets
+  /// this device's clock; the caller that **read it back** passes the
+  /// conveyance record's own `createdAt`, which is the atServer's date and the
+  /// only one two devices can agree on.
   void putAsCurrent(
-      String owner, String namespace, ContentKey ck, String nskeyKid) {
+      String owner, String namespace, ContentKey ck, String nskeyKid,
+      {DateTime? cutAt}) {
     put(owner, namespace, ck);
     final scope = _scope(owner, namespace);
     _currentKidByNamespace[scope] = ck.ckKid;
     _currentNskeyKidByNamespace[scope] = nskeyKid;
+    _currentCutAtByNamespace[scope] = cutAt ?? DateTime.now().toUtc();
   }
+
+  /// When the current CK for `(owner, namespace)` was cut, or null if there is
+  /// no current CK.
+  ///
+  /// Held here rather than read per write: the record carries the authoritative
+  /// date and is already read on the one path that recovers a CK this process
+  /// did not cut, so keeping it beside the key costs no lookup on the write
+  /// path.
+  DateTime? currentCutAt(String owner, String namespace) =>
+      _currentCutAtByNamespace[_scope(owner, namespace)];
 
   /// The nskey generation the current CK was conveyed to, or null if there is
   /// no current CK for `(owner, namespace)`.
@@ -129,6 +147,7 @@ class ContentKeyCache {
     if (_currentKidByNamespace[scope] == ckKid) {
       _currentKidByNamespace.remove(scope);
       _currentNskeyKidByNamespace.remove(scope);
+      _currentCutAtByNamespace.remove(scope);
     }
   }
 }

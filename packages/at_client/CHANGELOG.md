@@ -1,5 +1,30 @@
 ## 3.15.0-rc1
 
+- feat: **key rotation asks the application, rather than the SDK keeping a
+  schedule.** Two closures on `CryptoConfig`, so an application can answer
+  differently for different namespaces — and differently for content keys and
+  namespace keys, which cost very different amounts to replace.
+  - **`ckRotationPolicy`** is asked on the write path, before an existing
+    content key is used again, and defaults to **`rotateCkAfterOneWeek`**. A
+    `true` cuts a fresh content key and conveys it; the superseded conveyance
+    record is retained, as it always was, so an enrollment that joins later can
+    still read history. Seven days rather than one because every replacement
+    writes a record that is then kept: an atSign writing to a hundred peers
+    accumulates about 5,200 a year at a week, and 36,500 at a day.
+  - **`nskeyRotationPolicy`** is asked about a namespace key **this atSign
+    owns**, and defaults to **`neverRotateNskey`**. Replacing one conveys to
+    every authorised enrollment and makes every peer cut a fresh content key,
+    so nothing fires it on a clock — it fires on a cause, and an application
+    deciding it is time is one. Asked at two points, because neither reaches
+    every application alone: before a content key is conveyed to a key of this
+    atSign's own, and once per authorised namespace at every client start.
+  - Both take a `FutureOr<bool>`, so a policy may await and one that does not
+    costs nothing. ⚠️ A slow policy makes every encrypting write slow.
+  - The content key's age comes from the record that carries it — its own
+    `createdAt` where this client read it back, and this device's clock where
+    this client cut it — so it survives a restart. Nothing new is read on the
+    write path and no stored shape changed.
+
 - fix: **an nskey advertisement carrying more than one key is now addressable
   entry by entry.** `NskeyProvider` asked the *advertisement* which algorithm
   it was, and `NskeyAdvertisement.alg`, `.publicKey` and `.nskeyKid` all answer

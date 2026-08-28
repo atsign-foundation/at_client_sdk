@@ -62,15 +62,27 @@ void main() {
     List<String?> providerIds,
     List<bool?> routings,
     InMemoryCkPointer pointer,
-    CkManager Function(ContentKeyCache) coldManager,
+    DateTime conveyanceCreatedAt,
+    CkManager Function(ContentKeyCache,
+        {CkRotationPolicy ckRotationPolicy}) coldManager,
     void Function() failNextWrite,
-  }) client({int failWrites = 0, bool failDeletes = false}) {
+  }) client(
+      {int failWrites = 0,
+      bool failDeletes = false,
+      CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
     var writesLeftToFail = failWrites;
+    // A fixed, unmistakable date: an assertion that matched `now` would pass
+    // whether the age came from the record or from this device's clock.
+    final conveyanceCreatedAt = DateTime.utc(2026, 3, 4, 5, 6, 7);
     final cache = ContentKeyCache();
     final ring = InMemoryNskeyKeyRing();
     final nskey = NskeyProvider(keyRing: ring, cache: cache);
     final pointer = InMemoryCkPointer();
-    final manager = CkManager(cache: cache, keyRing: ring, pointer: pointer);
+    final manager = CkManager(
+        cache: cache,
+        keyRing: ring,
+        pointer: pointer,
+        ckRotationPolicy: ckRotationPolicy);
     // A restart replaces the whole config — provider and manager share one
     // cache in production, so a cold manager needs a cold provider with it.
     // Reads must decrypt through whichever is live, or the recovered CK lands
@@ -145,7 +157,12 @@ void main() {
       return activeNskey
           .decrypt(CryptoContext(atClient: mockAtClient),
               conveyedKeys[key.toString()]!, ciphertext)
-          .then((plain) => AtValue()..value = plain);
+          // With the record's own metadata, because a resumed CK takes its
+          // cut-time from exactly this: the atServer's date for the record
+          // that carries it, which is the only date two devices can agree on.
+          .then((plain) => AtValue()
+            ..value = plain
+            ..metadata = (Metadata()..createdAt = conveyanceCreatedAt));
     });
     when(() => mockAtClient.get(any())).thenAnswer((inv) {
       final key = inv.positionalArguments[0] as AtKey;
@@ -154,7 +171,13 @@ void main() {
       return activeNskey
           .decrypt(CryptoContext(atClient: mockAtClient),
               conveyedKeys[key.toString()]!, ciphertext)
-          .then((plain) => AtValue()..value = plain);
+          // ⚠️ THIS is the overload the resume path takes — one argument, no
+          // request options. Stamping the record's date on the other stub and
+          // not this one leaves the resume reading a record with no metadata,
+          // which is indistinguishable from an atServer that sent none.
+          .then((plain) => AtValue()
+            ..value = plain
+            ..metadata = (Metadata()..createdAt = conveyanceCreatedAt));
     });
 
     return (
@@ -163,9 +186,15 @@ void main() {
       ring: ring,
       cache: cache,
       pointer: pointer,
-      coldManager: (ContentKeyCache c) {
+      conveyanceCreatedAt: conveyanceCreatedAt,
+      coldManager: (ContentKeyCache c,
+          {CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek}) {
         activeNskey = NskeyProvider(keyRing: ring, cache: c);
-        return CkManager(cache: c, keyRing: ring, pointer: pointer);
+        return CkManager(
+            cache: c,
+            keyRing: ring,
+            pointer: pointer,
+            ckRotationPolicy: ckRotationPolicy);
       },
       written: written,
       deleted: deleted,
@@ -245,6 +274,80 @@ void main() {
           reason: 'sealing to a superseded generation is what a revoked '
               'enrollment can still open — the re-check is the whole point');
       expect(c.cache.currentNskeyKid(owner, namespace), secondGen);
+    });
+
+    test('the default policy leaves a fresh content key alone', () async {
+      // The control for the arm below, and for the default itself: the same
+      // fixture, the same two writes, under rotateCkAfterOneWeek. A key cut a
+      // moment ago is not a week old, so nothing is re-cut.
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      await c.manager.ensureCurrent(c.context, selfValue('other'));
+
+      expect(c.written, hasLength(1));
+    });
+
+    test('a policy that says yes cuts a fresh content key', () async {
+      final asked = <CkRotationContext>[];
+      final c = client(ckRotationPolicy: (ck) {
+        asked.add(ck);
+        return true;
+      });
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      final first = c.cache.current(owner, namespace)!.ckKid;
+      expect(asked, isEmpty,
+          reason: 'there was no content key to have an opinion about — the '
+              'first call cuts one, and asking would be asking about nothing');
+
+      await c.manager.ensureCurrent(c.context, selfValue('other'));
+
+      expect(c.written, hasLength(2),
+          reason: 'the second write found a current CK against an unchanged '
+              'generation, which is exactly the case the policy decides');
+      expect(c.cache.current(owner, namespace)!.ckKid, isNot(first));
+
+      expect(asked, hasLength(1));
+      expect(asked.single.destination, owner);
+      expect(asked.single.namespace, namespace);
+      expect(asked.single.ckKid, first,
+          reason: 'the policy is told which key it is deciding about, or an '
+              'application cannot answer differently for different ones');
+      expect(asked.single.age.isNegative, isFalse,
+          reason: 'and how old it is, measured against a now the caller passes '
+              'so a policy needs no clock of its own');
+    });
+
+    test('the namespace-key hook is asked only where this atSign owns the key',
+        () async {
+      // A content key is sealed to the DESTINATION's namespace key, so a
+      // sender cannot replace a peer's — asking would put a question to the
+      // application it could not act on.
+      final asked = <String>[];
+      final c = client();
+      c.manager.rotateOwnNamespaceKeyIfAsked = (ns) async {
+        asked.add(ns);
+        return false;
+      };
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      c.ring.seedPublicOnly(bob, namespace, publicKey: bobNskey.publicKeyBytes);
+
+      await c.manager.ensureCurrent(c.context, sharedValue('pact'));
+      expect(asked, isEmpty,
+          reason: 'the destination is @bob, whose namespace key is his');
+
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+      expect(asked, [namespace],
+          reason: 'and asked once for this atSign\'s own, which it can act on');
     });
 
     test('scopes the CK to the recipient, not the sender', () async {
@@ -623,6 +726,36 @@ void main() {
           reason: 'without the pointer a rotation from a freshly started '
               'client supersedes nothing and leaves the old conveyance live — '
               'the FS it was asked for silently not done');
+    });
+
+    test('a resumed content key takes its age from the record, not this clock',
+        () async {
+      final c = client();
+      c.ring.seedKeypair(owner, namespace,
+          publicKey: aliceNskey.publicKeyBytes,
+          privateKey: aliceNskey.privateKeyBytes);
+      await c.manager.ensureCurrent(c.context, selfValue('treaty'));
+
+      // A restart: a fresh cache and manager, with only the pointer surviving.
+      // The CK is recovered from its conveyance record, and that record's own
+      // createdAt is what the policy must be told — this process never saw the
+      // key cut, so its own clock says nothing about how old the key is.
+      final asked = <CkRotationContext>[];
+      final cold = c.coldManager(ContentKeyCache(), ckRotationPolicy: (ck) {
+        asked.add(ck);
+        return false;
+      });
+
+      await cold.ensureCurrent(c.context, selfValue('treaty'));
+      expect(asked, isEmpty, reason: 'the resume itself decides nothing');
+
+      await cold.ensureCurrent(c.context, selfValue('other'));
+
+      expect(asked.single.cutAt, c.conveyanceCreatedAt,
+          reason: 'the atServer\'s date for the record that carries the key. '
+              'Taking this process\'s clock instead would report a key cut '
+              'weeks ago as brand new, and a policy measured in days would '
+              'never fire on any client that restarts');
     });
 
     test('a destination with no published nskey cannot be rotated', () async {

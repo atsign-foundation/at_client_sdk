@@ -49,11 +49,34 @@ class CkManager {
   /// one is the deployment choosing to refuse.
   final List<String> sealsToKeyAlgorithms;
 
+  /// Asked, on the write path, whether the current content key should be
+  /// replaced before anything else is written under it.
+  ///
+  /// Defaulted to [rotateCkAfterOneWeek] here for the same reason
+  /// [sealsToKeyAlgorithms] is defaulted: a caller building a manager without
+  /// an application's configuration in hand has no basis to choose, and the
+  /// SDK's own answer is what an application that said nothing meant.
+  final CkRotationPolicy ckRotationPolicy;
+
+  /// Asked, before a content key is conveyed to a namespace key **this atSign
+  /// owns**, whether that namespace key should be replaced first.
+  ///
+  /// Supplied by the client rather than built here, because replacing one needs
+  /// the substrate that conveys the successor to every authorised enrollment
+  /// and this class holds only what it needs to seal. Null asks nothing, which
+  /// is what a manager built without a client does.
+  ///
+  /// Only where the destination is this atSign: a content key is sealed to the
+  /// *destination's* namespace key, and a sender cannot replace a peer's.
+  /// Returns whether a replacement happened, so the caller knows to re-resolve.
+  Future<bool> Function(String namespace)? rotateOwnNamespaceKeyIfAsked;
+
   CkManager(
       {required this.cache,
       required this.keyRing,
       NskeyResolver? resolver,
       this.sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
+      this.ckRotationPolicy = rotateCkAfterOneWeek,
       this.pointer = const CurrentCkPointer()})
       : resolver = resolver ??
             NskeyResolver(keyRing, sealsToKeyAlgorithms: sealsToKeyAlgorithms);
@@ -88,7 +111,26 @@ class CkManager {
     final current = cache.current(owner, ckNs);
     if (current != null &&
         cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid) {
-      return;
+      // The generation has not moved, so the only thing left that can make this
+      // key stale is the application's own policy. Asked here rather than
+      // anywhere earlier: everything above decides whether a CK exists at all,
+      // and there is nothing to have an opinion about until one does.
+      //
+      // A cut-time is recorded whenever a CK becomes current, so its absence
+      // means this cache entry predates that — treated as "no opinion" rather
+      // than as age zero, which would say a key is fresh when nothing knows.
+      final cutAt = cache.currentCutAt(owner, ckNs);
+      if (cutAt == null) return;
+      final replace = await ckRotationPolicy(CkRotationContext(
+        destination: owner,
+        namespace: ckNs,
+        ckKid: current.ckKid,
+        cutAt: cutAt,
+        now: DateTime.now().toUtc(),
+      ));
+      if (!replace) return;
+      _logger.info('The rotation policy asked for a fresh content key for '
+          '$owner:$ckNs, replacing ${current.ckKid} cut at $cutAt');
     }
 
     // Nothing cached — but this process may simply have restarted. Recovering
@@ -102,9 +144,28 @@ class CkManager {
     }
 
     // Either there is no CK for this destination, or the one we have was sealed
-    // to a generation the destination has since rotated away from.
-    await _cutAndConvey(context, valueKey, owner, ckNs, advertised.nskeyKid,
-        keyAlgo: advertised.alg, useRemoteAtServer: useRemoteAtServer);
+    // to a generation the destination has since rotated away from — so a
+    // conveyance is about to happen either way.
+    //
+    // Which makes this the moment to ask whether the namespace key itself
+    // should be replaced, where this atSign owns it: doing it now costs ONE
+    // conveyance, because the fresh content key is then sealed to the fresh
+    // generation. Asking earlier would put the question on every write; asking
+    // later would seal to a generation about to be superseded.
+    var target = advertised;
+    final rotate = rotateOwnNamespaceKeyIfAsked;
+    if (rotate != null && owner == context.atClient.getCurrentAtSign()) {
+      if (await rotate(ckNs)) {
+        // Re-resolve rather than assume: the rotation published a new
+        // generation, and sealing to the one read before it would hand every
+        // peer a content key conveyed to a key this atSign has moved off.
+        final refreshed = await resolver.resolve(owner, ckNs);
+        if (refreshed != null) target = refreshed;
+      }
+    }
+
+    await _cutAndConvey(context, valueKey, owner, ckNs, target.nskeyKid,
+        keyAlgo: target.alg, useRemoteAtServer: useRemoteAtServer);
   }
 
   /// Rotates the content key for the destination [valueKey] addresses: cuts a
@@ -257,9 +318,16 @@ class CkManager {
 
     // Reading the conveyance record routes back through the at/nskey provider,
     // which decapsulates and caches the CK as a side effect.
+    DateTime? conveyedAt;
     try {
-      await context.atClient.get(SymmetricAesGcmProvider.conveyanceKeyFor(
-          valueKey, remembered.ckKid, ckNs));
+      final record = await context.atClient.get(
+          SymmetricAesGcmProvider.conveyanceKeyFor(
+              valueKey, remembered.ckKid, ckNs));
+      // The atServer's date for the record that carries this CK — when it was
+      // conveyed, which is when it was cut. Taken here because this is the one
+      // path that recovers a CK this process did not cut, and it is already
+      // reading the record; every other route knows the cut time first hand.
+      conveyedAt = record.metadata?.createdAt?.toUtc();
     } catch (e) {
       // The record is gone or will not open. Minting is the right answer, and
       // the caller does that next.
@@ -270,7 +338,7 @@ class CkManager {
 
     final resumed = cache.get(owner, ckNs, remembered.ckKid);
     if (resumed == null) return false;
-    cache.putAsCurrent(owner, ckNs, resumed, nskeyKid);
+    cache.putAsCurrent(owner, ckNs, resumed, nskeyKid, cutAt: conveyedAt);
     return true;
   }
 

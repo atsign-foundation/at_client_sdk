@@ -3,7 +3,11 @@ import 'dart:convert' show base64Encode;
 
 import 'package:at_client/src/client/at_client_spec.dart' show AtClient;
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
-import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart' show NskeySeed;
+import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart'
+    show NskeyAdvertisement, NskeySeed;
+import 'package:at_client/src/crypto/nskey/nskey_rotation.dart'
+    show NskeyRotation;
+import 'package:at_client/src/crypto/nskey/rotation_policy.dart';
 import 'package:at_client/src/crypto/nskey/published_nskey_key_ring.dart';
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
     show PairwiseSecretSharing;
@@ -44,11 +48,24 @@ class NskeySeeding {
   /// than a value held only in this call.
   final NskeyPrivateFiling? privateFiling;
 
+  /// Asked, once per authorised namespace at every client start, whether this
+  /// atSign's namespace key should be replaced.
+  ///
+  /// This is one of the two points the question is put — the other is before a
+  /// content key is conveyed to this atSign's own namespace — and it is the one
+  /// that reaches an application which only ever writes to peers, because such
+  /// an application never conveys a content key to a key of its own.
+  ///
+  /// Defaulted to [neverRotateNskey] here rather than left null so every call
+  /// site asks unconditionally; a client passes its configuration's.
+  final NskeyRotationPolicy rotationPolicy;
+
   NskeySeeding({
     required this.atClient,
     required this.ring,
     this.sharing,
     this.privateFiling,
+    this.rotationPolicy = neverRotateNskey,
   });
 
   /// The namespaces this client should hold a key for.
@@ -156,7 +173,9 @@ class NskeySeeding {
     // The atServer, not local storage: a namespace another enrollment minted a
     // moment ago is absent locally until sync catches up, and reading that
     // absence as a cold start is what publishes a second key over the first.
-    if (await ring.publishedAdvertisement(owner, namespace) != null) {
+    final published = await ring.publishedAdvertisement(owner, namespace);
+    if (published != null) {
+      await rotateIfPolicyAsks(owner, namespace, published: published);
       return false;
     }
     final advertisement = await ring.mintAndPublish(namespace);
@@ -182,6 +201,86 @@ class NskeySeeding {
           'it at their next start. Peers can seal here either way: $e');
     }
     return true;
+  }
+
+  /// Puts [rotationPolicy] the question for a namespace that already has a
+  /// generation, and replaces it if the answer is yes. Returns whether it did.
+  ///
+  /// **The one implementation, asked from two places.** Once per authorised
+  /// namespace at every client start, from [seedNamespace]; and before a
+  /// content key is conveyed to a namespace key this atSign owns, from the
+  /// manager that cuts it. Neither point reaches every application alone — an
+  /// application that only writes to peers never conveys to a key of its own,
+  /// and a process that never restarts is never seeded again.
+  ///
+  /// [published] is the generation already read, where the caller has it;
+  /// otherwise it is read here.
+  ///
+  /// Returns false rather than throwing on any failure. What a caller is doing
+  /// when it asks is reaching this atSign or writing to it, and neither is
+  /// broken by a rotation that did not happen: the published generation stays
+  /// published, and the question is put again at the next start.
+  @experimental
+  Future<bool> rotateIfPolicyAsks(String owner, String namespace,
+      {NskeyAdvertisement? published}) async {
+    final generation =
+        published ?? await ring.publishedAdvertisement(owner, namespace);
+    // Nothing published is a cold start, which is a mint rather than a
+    // replacement — and there is no generation to have an opinion about.
+    if (generation == null) return false;
+
+    final bool replace;
+    try {
+      replace = await rotationPolicy(NskeyRotationContext(
+        namespace: namespace,
+        nskeyKid: generation.nskeyKid,
+        createdAt: generation.createdAt,
+        now: DateTime.now().toUtc(),
+      ));
+    } catch (e) {
+      _logger.warning('The nskey rotation policy threw for $owner:$namespace, '
+          'so nothing was rotated: $e');
+      return false;
+    }
+    if (!replace) return false;
+
+    // Asked BEFORE this check, deliberately. Replacing a namespace key conveys
+    // the successor to every authorised enrollment, so a client with nowhere
+    // to convey would publish a generation only it can open — worse than not
+    // replacing one. Checking first would be cheaper and would make an
+    // application's yes disappear without trace; this way it is refused out
+    // loud, which is what an application that configured a policy and sees
+    // nothing happen needs to read.
+    final substrate = sharing;
+    final filing = privateFiling;
+    if (substrate == null || filing == null) {
+      _logger.warning('The rotation policy asked for a fresh namespace key for '
+          '$owner:$namespace and this client has no substrate to convey the '
+          'successor over, so nothing was replaced: a generation only this '
+          'client could open would be worse than the one already published');
+      return false;
+    }
+
+    _logger.info('The rotation policy asked for a fresh namespace key for '
+        '$owner:$namespace, replacing generation ${generation.nskeyKid} '
+        'minted at ${generation.createdAt}');
+    try {
+      await NskeyRotation(
+        atClient: atClient,
+        ring: ring,
+        privateFiling: filing,
+        sharing: substrate,
+      ).rotateNamespaceKey(namespace);
+      return true;
+    } catch (e) {
+      // The commonest cause is the mint lock: another enrollment rotated or
+      // minted within its cooldown, which means the thing the policy asked for
+      // has just happened or is about to.
+      _logger.warning('The rotation policy asked for a fresh namespace key for '
+          '$owner:$namespace and it did not happen; the published generation '
+          'is unchanged and the next start will ask again: $e');
+      return false;
+    }
   }
 
   /// Primes the in-memory secret store with the nskey privates this client

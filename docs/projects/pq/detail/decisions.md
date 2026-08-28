@@ -12495,3 +12495,161 @@ on records already in the field.
 model does not expose `parentEnrollmentId` today even though the wire carries it.
 
 **Status:** ruled, unbuilt.
+
+## 122. Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy (2026-08-28)
+
+**In brief:** *age is not an nskey trigger; the CK lever consults an injectable
+policy, age-based and 7 days by default*
+
+**The two levers cost very different amounts and were about to be given one
+answer.** Rotating a content key is O(1) — one conveyance record, which every
+authorised client unwraps with the namespace private it already holds. Rotating
+the nskey keypair is O(n): one conveyance per enrollment, plus every peer re-cuts
+its own CK at its next `ensureCurrent` because every `kid` changed. Neither had a
+production caller; both were invoked only from their own files.
+
+### The nskey lever fires on cause, and an application is a cause
+
+**Age is not a trigger** (gkc, 2026-08-28). The SDK carries no clock, no default
+cadence and no age input for the nskey keypair. What fires it is a *cause*: a
+revocation, or **an application deciding it is time and requesting one** — which
+is a cause, not a schedule. `NskeyRotation.rotateNamespaceKey` and
+`revokeEnrollmentAndRotate` are the levers.
+
+**And the application gets asked, in the same shape as the CK's** (gkc,
+2026-08-28), so that "the application decides" does not mean "the application
+remembers to call something":
+
+```dart
+typedef NskeyRotationPolicy =
+    FutureOr<bool> Function(NskeyRotationContext ns);
+
+class NskeyRotationContext {
+  final String namespace;
+  final String nskeyKid;
+  final DateTime createdAt;   // the advertisement's own
+  final DateTime now;
+}
+```
+
+**The default is "always no"** — a real policy rather than a null to check, so
+every call site asks unconditionally and the SDK's own default rotates nothing.
+
+**It is asked at two points, because neither covers the fleet alone.** Before a
+CK is conveyed, **and only when the destination is this client's own atSign**: a
+CK is sealed to the *destination's* namespace key and `ensureCurrent` runs on the
+sender, so for a peer destination the client could not act on a yes — it is not
+its key. That leaves an application which only ever writes to peers never asked,
+so the second point is `NskeySeeding.seed`, which runs at every client start,
+walks the namespaces this enrollment is authorised for, and already returns early
+the moment it finds a generation published. One closure, asked from both.
+
+**Why a closure rather than a duration** (gkc, 2026-08-28): an application can
+then decide differently for different namespaces, and differently for nskeys and
+CKs — which a single number on a preference cannot express. Both contexts carry
+the namespace for that reason, and the CK's carries the destination too, so its
+policy can be per `(destination, namespace)`.
+
+⚠️ **So [119](#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27)'s
+"an application policy such as the generation's age" was an example, not a
+requirement**, and the age half of UC-G2.5 c6 comes out of the catalogue.
+
+**What that costs, stated rather than hidden.** Fresh-only makes rotation the
+garbage collection, so an atSign that never rotates goes on advertising its
+oldest algorithm indefinitely: after a fleet takes rollout 2 and stops *sending*
+under the old algorithm, the recipient goes on *offering* it until something
+rotates. That is the application's call to make, which is the point.
+
+### UC-G2.6 c7 is dropped, and its reason belongs to c2
+
+c7 said an add is refused on a generation already due for rotation. With age
+gone, "due" can only mean "created before a revocation", and nothing carries a
+revocation timestamp — so the clause was unprovable. **Examined rather than
+waived**, and it comes out because the hazard is covered elsewhere:
+
+- **Concurrent rotation and add: the mint lock orders them.** c3 already makes
+  the add take the same lock and re-read inside it. Rotation first: the add
+  re-reads after the cooldown and adds to the fresh generation. Add first: it
+  mints fresh material and conveys it to the roster — which `enroll:listns`
+  builds from **approved** enrollments, so a revoked one receives nothing — and
+  the rotation then discards the generation. Wasted work, no exposure.
+- **Sequential — a revocation on Monday, a rotation on Friday, adds in between —
+  the lock never sees two actors, and what keeps it safe is c2.** An add
+  preserves the generation's identity, `createdAt` included, so the generation
+  still reads as pre-revocation and the rotation still fires. **The hazard c7
+  actually named is an add that REFRESHED `createdAt`**: the generation would
+  read as post-revocation, the trigger would never fire, and the revoked
+  enrollment would go on opening everything. c2 forbids exactly that, and now
+  says so.
+
+⛔ **One thing neither covers, and it is not c7's.** A revoked enrollment's
+self-spawned children keep `approved` — `parentEnrollmentId` is written by the
+retrofit and read by nothing — so they stay on the roster, and `NskeySeeding`'s
+conveyance calls `pushSecretToNamespaceMembers` with **no exclusion set at all**.
+An add therefore hands the attacker's surviving child freshly minted material.
+That is UC-G2.5 c4's subtree gap by another route, and c4 now names the add as
+well as the rotation.
+
+### The CK lever asks a policy
+
+**The SDK asks "should I rotate this CK?" before using it** (gkc, 2026-08-28),
+rather than carrying a schedule of its own.
+
+```dart
+typedef CkRotationPolicy = FutureOr<bool> Function(CkRotationContext ck);
+
+class CkRotationContext {
+  final String destination;   // the atSign the CK is scoped to
+  final String namespace;     // the level the nskey resolved to
+  final String ckKid;
+  final DateTime cutAt;
+  final DateTime now;         // passed in, so a test needs no clock
+}
+```
+
+- **It lives on `CryptoConfig`.** That is the application's injected crypto
+  configuration, and `CryptoConfig._nskeySet` already constructs the `CkManager`
+  and the shared `ContentKeyCache` together — the coupling `CryptoConfig.nskey`
+  exists to enforce. ⚠️ `CryptoRuntime` was considered and rejected: it is built
+  ad hoc as `CryptoRuntime(_atClient)` at each call site and carries no injected
+  state, so a policy there would have to come from somewhere else regardless.
+- **`FutureOr`, so an application may await** and a policy that does not costs
+  nothing. The risk is named rather than designed out: a slow policy makes every
+  encrypting write slow, and would present as the atServer being slow.
+- **The context is a record of the CK, not of the write.** An `AtKey` was
+  considered and rejected: a CK is scoped to `(destination, namespace)`, so a
+  policy keyed on the key being written decides about a shared thing from one
+  writer's view, and two writes to the same namespace could disagree within a
+  millisecond.
+- **The default is age-based, at 7 days.** Chosen against what being wrong
+  costs: every rotation writes one `__ck` conveyance record per
+  `(destination, namespace)`, and `deleteSuperseded` is default **off** —
+  retaining the superseded record is what lets a late joiner read history — so
+  the records accumulate. A daily default would leave an atSign writing to a
+  hundred peers with 36,500 retained records a year; a weekly one, 5,200. Seven
+  days is also a period this design already thinks in: it is the envelope ttl.
+- **It is consulted in `ensureCurrent`, immediately before the already-current
+  return**, and a `true` falls through to the existing `_cutAndConvey` — a fresh
+  CK, conveyed, superseded record retained. Nothing new writes or deletes.
+
+**Where `cutAt` comes from, and it needed no new stored field.** ⚠️ **A first
+reading of this said "nothing records when a CK was cut" and that the client's
+`get` never populates record timestamps. Both were wrong**, and the second was a
+grep over `at_client_impl.dart` and the response classes rather than over the
+capability: `AtClientUtil.prepareMetadata` populates `createdAt` and `updatedAt`
+from the record's metadata map, and `GetResponseTransformer` sets them on the
+`AtValue`. Every keystore record carries its own `createdAt` (gkc, 2026-08-28).
+
+So the record is the authority and the cache carries the answer:
+`ContentKeyCache` holds a `cutAt` beside each CK, set at the only two points one
+arrives — `now` when it is cut, and the `__ck` conveyance record's own
+`createdAt` when `_resumeCurrent` reads it, which that path already does. **No
+stored shape changes and nothing new is read on the hot path.** One wrinkle
+accepted rather than solved: a process that cuts stamps its own clock while one
+that resumes stamps the atServer's, so two devices can disagree by their clock
+skew about when a rotation is due — noise against a multi-day policy.
+
+**Out of scope and not re-opened:** what each lever *means*. The CK lever is what
+governs access to a namespace's past, which is why a late joiner is handed every
+held generation; `deleteSuperseded` stays default off on that ruling.
+

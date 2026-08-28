@@ -5,6 +5,7 @@ import 'package:at_client/src/crypto/nskey/ck_manager.dart';
 import 'package:at_client/src/crypto/nskey/content_key.dart';
 import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/nskey_provider.dart';
+import 'package:at_client/src/crypto/nskey/rotation_policy.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show symmetricAesGcmCryptoProviderId;
 import 'package:at_client/src/crypto/nskey/symmetric_aes_gcm_provider.dart';
@@ -37,6 +38,7 @@ export 'package:at_client/src/crypto/nskey/nskey_records.dart'
         nskeyProviderFamily,
         symmetricAesGcmCryptoProviderId;
 export 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
+export 'package:at_client/src/crypto/nskey/rotation_policy.dart';
 export 'package:at_client/src/crypto/nskey/nskey_rotation.dart';
 export 'package:at_client/src/crypto/nskey/pq_signing_chain.dart';
 export 'package:at_client/src/crypto/nskey/pq_signing_root.dart';
@@ -146,17 +148,37 @@ class CryptoConfig {
   /// providers happen to be registered.
   final NskeyKeyRing? keyRing;
 
+  /// Asked, on the write path, whether the content key for a destination and
+  /// namespace should be replaced before anything else is written under it.
+  ///
+  /// A closure rather than a duration so that an application can answer
+  /// differently for different namespaces, and differently from how it answers
+  /// for [nskeyRotationPolicy]. Defaults to [rotateCkAfterOneWeek].
+  final CkRotationPolicy ckRotationPolicy;
+
+  /// Asked whether a namespace key this atSign owns should be replaced.
+  ///
+  /// Defaults to [neverRotateNskey]: replacing one costs a conveyance to every
+  /// authorised enrollment and makes every peer cut a fresh content key, so
+  /// nothing in the SDK fires it on a schedule. An application that wants it on
+  /// a cadence says so here.
+  final NskeyRotationPolicy nskeyRotationPolicy;
+
   const CryptoConfig({
     required this.defaultProviderId,
     this.providers = const [],
     this.keyRing,
+    this.ckRotationPolicy = rotateCkAfterOneWeek,
+    this.nskeyRotationPolicy = neverRotateNskey,
   });
 
   /// Legacy-only — the default for un-migrated apps.
   const CryptoConfig.legacy()
       : defaultProviderId = legacyCryptoProviderId,
         providers = const [],
-        keyRing = null;
+        keyRing = null,
+        ckRotationPolicy = rotateCkAfterOneWeek,
+        nskeyRotationPolicy = neverRotateNskey;
 
   /// The distinguished "the app named nothing" marker — the default value of
   /// [AtClientPreference.crypto].
@@ -199,8 +221,11 @@ class CryptoConfig {
   /// basis to narrow it.
   factory CryptoConfig.nskey(
           {required NskeyKeyRing keyRing,
-          List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos}) =>
-      _nskeySet(keyRing, symmetricAesGcmCryptoProviderId, sealsToKeyAlgorithms);
+          List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
+          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek,
+          NskeyRotationPolicy nskeyRotationPolicy = neverRotateNskey}) =>
+      _nskeySet(keyRing, symmetricAesGcmCryptoProviderId, sealsToKeyAlgorithms,
+          ckRotationPolicy, nskeyRotationPolicy);
 
   /// The nskey providers wired for **reading**, with writes still going out
   /// under [legacyCryptoProviderId].
@@ -219,17 +244,26 @@ class CryptoConfig {
   /// read side goes first everywhere, and the write side flips once.
   factory CryptoConfig.readsNskeyWritesLegacy(
           {required NskeyKeyRing keyRing,
-          List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos}) =>
-      _nskeySet(keyRing, legacyCryptoProviderId, sealsToKeyAlgorithms);
+          List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
+          CkRotationPolicy ckRotationPolicy = rotateCkAfterOneWeek,
+          NskeyRotationPolicy nskeyRotationPolicy = neverRotateNskey}) =>
+      _nskeySet(keyRing, legacyCryptoProviderId, sealsToKeyAlgorithms,
+          ckRotationPolicy, nskeyRotationPolicy);
 
   /// One [ContentKeyCache] shared by the manager and both providers — the
   /// coupling [CryptoConfig.nskey] exists to enforce.
-  static CryptoConfig _nskeySet(NskeyKeyRing keyRing, String defaultProviderId,
-      List<String> sealsToKeyAlgorithms) {
+  static CryptoConfig _nskeySet(
+      NskeyKeyRing keyRing,
+      String defaultProviderId,
+      List<String> sealsToKeyAlgorithms,
+      CkRotationPolicy ckRotationPolicy,
+      NskeyRotationPolicy nskeyRotationPolicy) {
     final cache = ContentKeyCache();
     return CryptoConfig(
       defaultProviderId: defaultProviderId,
       keyRing: keyRing,
+      ckRotationPolicy: ckRotationPolicy,
+      nskeyRotationPolicy: nskeyRotationPolicy,
       providers: [
         // One conveyance provider per key-establishment algorithm, each with
         // its own wire id. Reads route by the id the record carries, so a
@@ -248,7 +282,8 @@ class CryptoConfig {
           ckManager: CkManager(
               cache: cache,
               keyRing: keyRing,
-              sealsToKeyAlgorithms: sealsToKeyAlgorithms),
+              sealsToKeyAlgorithms: sealsToKeyAlgorithms,
+              ckRotationPolicy: ckRotationPolicy),
         ),
       ],
     );
@@ -324,6 +359,20 @@ class CryptoConfig {
   ContentKeyCache? get contentKeyCache {
     for (final provider in providers) {
       if (provider is NskeyProvider) return provider.cache;
+    }
+    return null;
+  }
+
+  /// The [CkManager] the configured providers share, or null if this config
+  /// has no nskey data path.
+  ///
+  /// Found the same way [contentKeyCache] is, and for the same reason: the
+  /// manager is built inside the provider set so that the set can share one,
+  /// and a client that has to reach it — to give it the namespace-key
+  /// replacement it cannot build for itself — has nowhere else to look.
+  CkManager? get ckManager {
+    for (final provider in providers) {
+      if (provider is SymmetricAesGcmProvider) return provider.ckManager;
     }
     return null;
   }

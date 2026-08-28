@@ -3391,17 +3391,27 @@ is where its missing lever lives.
     self-spawned: on at_server `origin/trunk` the child keeps `approved`, keeps
     authenticating, and keeps its grants — so a rotation excluding only the named
     id **conveys the new private straight to the attacker's surviving child**.
-    The exclusion set is the whole subtree, walked over `parentEnrollmentId`;
+    The exclusion set is the whole subtree, walked over `parentEnrollmentId` —
+    and it is owed by the **add** as well as the rotation. ⚠️ An add's
+    conveyance passes no exclusion set at all today (`NskeySeeding` calls
+    `pushSecretToNamespaceMembers` with none), so freshly minted material
+    reaches the same surviving child by the same route; [UC-G2.6](#176-uc-g26--a-client-adds-its-own-missing-algorithm-to-the-current-generation)
+    carried a clause refusing an add for this reason and it was dropped on
+    2026-08-28 as the wrong home for it;
   - every peer's cached content key is superseded, because every `kid` in the
     advertisement has changed. That is how a peer learns a rotation happened at
     all: a sender never sees a recipient's decapsulation fail;
   - **a client decides a rotation is due without coordinating with another
-    client**, which is what lets any of them act. The *age* half it settles from
-    the advertisement alone, comparing `createdAt` against the application's own
-    policy. The *revocation* half it settles from **the durable record the
-    revoker wrote** — naming the namespace, the moment, and the enrollments to
-    exclude. ⚠️ **This clause said the advertisement alone answered both, until
-    2026-08-28**; it cannot, because nothing anywhere carries a revocation
+    client**, which is what lets any of them act. It settles that from **the
+    durable record the revoker wrote** — naming the namespace, the moment, and
+    the enrollments to exclude — or because the application asked for one.
+    ⚠️ **This clause carried an *age* half until 2026-08-28**, settled from the
+    advertisement's `createdAt` against an application policy; [`decisions.md`
+    122](detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28)
+    ruled that **age is not an nskey trigger at all** — the SDK carries no clock
+    for this lever, and an application deciding it is time is a *cause* rather
+    than a schedule. ⚠️ Before that it said the advertisement alone answered
+    both halves, which it cannot: nothing anywhere carries a revocation
     timestamp;
   - **a client that fails to take the mint lock does not queue and does not retry
     blindly.** It backs off, re-reads after the cooldown and re-decides — finding
@@ -3427,7 +3437,11 @@ is where its missing lever lives.
   - the material joins the **current** generation in place. No new generation is
     created, so no peer is made to re-cut a content key it has no reason to;
   - everything already in the generation is untouched — the existing `kid`s,
-    their statuses, and the generation's own identity;
+    their statuses, and the generation's own identity, **`createdAt` included.**
+    That is what keeps a revocation's rotation trigger correct: an add that
+    refreshed `createdAt` would make a pre-revocation generation read as
+    post-revocation, the rotation would never fire, and the revoked enrollment
+    would go on opening everything;
   - the add takes the **same mint lock** as a rotation, because two clients
     adding at once is a read-mutate-write on shared durable state. A client that
     fails the lock backs off and re-reads rather than writing, and finds either
@@ -3444,11 +3458,17 @@ is where its missing lever lives.
     enrollment's `_apsk`, so an advertisement's signer is a property of the
     document rather than of the generation. *Which* enrollments may write it at
     all is the atServer's gate on the record, never the reader's;
-  - **an add is refused on a generation that is already due for rotation**, and
-    the client rotates instead. Adding to a generation that predates a revocation
-    would leave it half pre-revocation and half post, and *created after the
-    revocation* would stop characterising it — the trigger and the document would
-    no longer be about the same thing.
+
+  ⚠️ **A clause refusing an add on a generation already due for rotation was
+  dropped on 2026-08-28** ([`decisions.md`
+  122](detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28)).
+  With age retired as a trigger it could only have meant *created before a
+  revocation*, and the hazard it named is covered twice over: the **mint lock**
+  orders a rotation and an add that overlap, and **c2's `createdAt`** keeps the
+  revocation trigger correct when they do not. What neither covers — an add
+  conveying to a revoked enrollment's surviving child — belongs to
+  [UC-G2.5](#175-uc-g25--an-nskey-rotation-mints-fresh-material-and-carries-nothing-forward)
+  c4, which now names the add as well as the rotation.
 
 ### 17.7 UC-G2.7 — A retired entry stops being offered and still opens history
 
