@@ -76,16 +76,40 @@ void main() {
     await AtClientSecretSharing.forClient(approver).register();
   });
 
-  Future<EnrolledClient> enrol(String device) => enrolAndAuthenticate(
-        approver: approver,
-        atSign: atSign,
-        namespace: namespace,
-        preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
-        rootDomain: 'vip.ve.atsign.zone',
-        rootPort: TestUtils.rootServerPort,
-        deviceName: '$device-$runId',
-        namespaces: {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
-      );
+  /// An enrollment with its **own** local store.
+  ///
+  /// `TestUtils.getPreference` keys `hiveStoragePath` on the atSign alone, so
+  /// without this every enrollment of one atSign lands in one directory. That
+  /// matters here beyond tidiness: the notification replay watermark is a
+  /// `local:` record in that store, so a shared store is a shared watermark —
+  /// and a self notification reaches **every** listening monitor of the
+  /// atSign, so the sibling's monitor would receive the one below, advance the
+  /// shared watermark past it, and the disconnected client's reconnect would
+  /// ask the atServer for everything *after* the notification it missed.
+  ///
+  /// ⚠️ Naming separate paths was not enough until 2026-08-29
+  /// ([ruling 125](../../../docs/projects/pq/detail/decisions.md)): a box's
+  /// identity was the global Hive registry plus its name, and names derive
+  /// from the atSign, so the second client silently attached to the first's
+  /// box whatever path it asked for. Only the encryption-secret file landed
+  /// where it was told.
+  Future<EnrolledClient> enrol(String device) {
+    final preference =
+        TestUtils.getPreference(atSign, posture: PqPosture.legacy);
+    preference
+      ..hiveStoragePath = 'test/hive/client/$atSign/$device-$runId'
+      ..commitLogPath = 'test/hive/client/$atSign/$device-$runId';
+    return enrolAndAuthenticate(
+      approver: approver,
+      atSign: atSign,
+      namespace: namespace,
+      preference: preference,
+      rootDomain: 'vip.ve.atsign.zone',
+      rootPort: TestUtils.rootServerPort,
+      deviceName: '$device-$runId',
+      namespaces: {'*': 'rw', '__manage': 'rw', namespace: 'rw'},
+    );
+  }
 
   test('a self notification reaches a second enrollment and decrypts',
       timeout: Timeout(Duration(minutes: 3)),
@@ -244,6 +268,11 @@ void main() {
     // sibling enrollment does not.
     final seen = <String>[];
     final received = Completer<AtNotification>();
+    // The one sent while this listener's monitor is closed. Declared up here
+    // because the listener has to be watching before it is sent — the
+    // atServer's inbound stream is a broadcast with no backlog, which is the
+    // same reason the readiness gate below exists.
+    final queued = Completer<AtNotification>();
     final monitorProvenLive = Completer<void>();
     final subscription =
         notifications.subscribe(shouldDecrypt: true).listen((n) {
@@ -251,6 +280,9 @@ void main() {
       if (!monitorProvenLive.isCompleted) monitorProvenLive.complete();
       if (n.key.contains('treaty$runId') && !received.isCompleted) {
         received.complete(n);
+      }
+      if (n.key.contains('queued$runId') && !queued.isCompleted) {
+        queued.complete(n);
       }
     });
     addTearDown(subscription.cancel);
@@ -395,5 +427,70 @@ void main() {
             'the nskey private conveyed to it at approval — the advertisement '
             'resolves, the conveyance landed, and the read path finds the '
             'generation the record names');
+
+    // UC-A3.4's offline clause, and it is the COMPOSITION the row states
+    // rather than either half alone. `monitor_reconnect_live_test.dart` shows
+    // a queued notification surviving an outage, but with one client notifying
+    // itself. Everything above shows a second enrollment opening a content
+    // key, but with its monitor up throughout. Neither says that a value
+    // sealed to the namespace key while a SIBLING ENROLLMENT was disconnected
+    // still opens when that enrollment returns — a laptop that was shut.
+    //
+    // Deliberately last: everything above has passed, so the pair is known
+    // good before the connection is taken away and a failure here is the
+    // outage rather than the fixture.
+    expect(notifications.monitor.lookUp.isNotifying, isTrue,
+        reason: 'the monitor must be demonstrably up before it is dropped, or '
+            '"it reconnected" and "it never connected" are the same green');
+
+    await notifications.monitor.lookUp.close();
+
+    final queuedKey = AtKey()
+      ..key = 'queued$runId'
+      ..sharedBy = atSign
+      ..sharedWith = atSign
+      ..namespace = namespace;
+    const queuedValue = 'sealed while the sibling enrollment was offline';
+
+    // Sent on the SENDER's verb connection — a different socket from the
+    // receiver's monitor — so `delivered` here means the atServer took it for
+    // a listener that is not currently there.
+    expect(
+        (await sender.client.notificationService.notify(
+                NotificationParams.forUpdate(queuedKey,
+                    value: queuedValue,
+                    cryptoProviderId: symmetricAesGcmCryptoProviderId)))
+            .notificationStatusEnum,
+        NotificationStatusEnum.delivered,
+        reason: 'the send must succeed while the receiving enrollment has no '
+            'monitor at all — it does not travel that connection');
+
+    final afterOutage = await queued.future.timeout(
+      Duration(seconds: 120),
+      onTimeout: () => throw StateError(
+          'the notification sent while the second enrollment was disconnected '
+          'never arrived, and the notify reported `delivered`. Either the '
+          'monitor did not come back, or it came back with a watermark that '
+          'asked only for what followed the reconnect — which is what happened '
+          'while the two enrollments shared one store, because the SENDER\'s '
+          'monitor received this and moved the shared watermark past it.\n'
+          '  the monitor saw ${seen.length}: $seen'),
+    );
+
+    expect(afterOutage.metadata?.appMetadata?.providerId,
+        symmetricAesGcmCryptoProviderId,
+        reason: 'it must come back on the nskey data path. Without this the '
+            'value below could decrypt for a reason that has nothing to do '
+            'with the namespace key — a legacy fallback opens for every '
+            'enrollment of this atSign, because the self encryption key is '
+            'atSign-wide');
+
+    expect(afterOutage.value, queuedValue,
+        reason: 'the queued notification still decrypts on later delivery: the '
+            'nskey private this enrollment was conveyed at approval still '
+            'opens a content key sealed while it was disconnected. ⚠️ This is '
+            'an outage of the CONNECTION, not of the process — it says nothing '
+            'about the private surviving a restart, which is a separate claim '
+            'belonging to the filing tests');
   });
 }

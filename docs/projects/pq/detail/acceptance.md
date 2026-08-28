@@ -1169,7 +1169,6 @@ Rows that genuinely need the wire are also the only route that raises
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
 | **UC-A2.1** c4 | `alice2` **authenticates PQ**. The self-data half closed 2026-08-28 in `nskey_self_notify_live_test.dart`, but that file's enrollments hold RSA-2048 APKAM keypairs — `enrolAndAuthenticate` defaults to `rsa2048` — so a second enrollment reading self data under **ML-DSA** PKAM is still unexercised | `nskey_self_notify_live_test.dart` |
-| **UC-A3.4** c3 | Offline `alice2`: … (key still held) | `monitor_reconnect_live_test.dart` |
 | **UC-A4.1** c3 | an unauthorised `@bob` enrollment cannot fetch the ciphertext (server-gated) nor decrypt | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.3** c1 | **whichever of alice's enrollments wrote it** — the test runs one alice client against two of bob's, so the sending side is not varied at all, and the row's Given names aE1 and aE2. ⚠️ This row said the missing arm was "all of alice's authorised enrollments read the self-copy" until 2026-08-28; that requirement was removed from the clause on 2026-08-27 when `put` was found to write no self-copy | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.4** c1 | on **every** authorised bob enrollment — the live cross-atSign notify delivers to a single bob client | `nskey_notify_test.dart` |

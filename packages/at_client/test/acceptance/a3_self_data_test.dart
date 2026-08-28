@@ -371,15 +371,25 @@ void main() {
       // difference matters for.
       provenIn('tests/at_functional_test/test/nskey_self_notify_live_test.dart',
           'a self notification reaches a second enrollment and decrypts',
-          proves: 'both clauses against a real atServer and a genuinely '
+          proves: 'three clauses against a real atServer and a genuinely '
               'second enrollment: the delivered frame carries providerId in '
               'its own appMetadata, and the value opens with the nskey '
               'private conveyed at approval. A mocked frame can show neither '
               '— it hands the receiver a value it never had to decrypt, and '
-              'a providerId the test itself wrote',
+              'a providerId the test itself wrote. The offline clause is the '
+              'same file\'s last arm: the receiving enrollment\'s monitor '
+              'socket is destroyed, the sender notifies over its own verb '
+              'connection, and the value arrives and decrypts after the '
+              'reconnect. ⚠️ That arm was unwritable until the two '
+              'enrollments could hold separate stores — a shared store is a '
+              'shared replay watermark, and the SENDER\'s monitor received '
+              'the notification and advanced it past what the receiver had '
+              'missed. Putting both enrollments back on one path reddens it '
+              'with exactly that diagnosis',
           clauses: [
             'same provider routing as a put',
             'on the notification frame',
+            'still decrypts on later delivery',
           ]);
       provenHere(
         proves: 'the signal-only arm, asserted above: a notification carrying '
