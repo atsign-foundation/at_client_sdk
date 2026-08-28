@@ -425,8 +425,12 @@ void main() {
     final root = PqSigningRoot(c.client, keysIo: io);
 
     expect(await root.mintIfAbsent(isFullyPrivileged: true), isNull,
-        reason: 'another of this atSign\'s enrollments is minting; this one '
-            'waits to be given the root rather than treating it as a failure');
+        reason: 'the lock is held, so this one waits to be given the root '
+            'rather than treating it as a failure. ⚠️ That is right when the '
+            'holder is another enrollment and merely quiet when it is this '
+            'enrollment\'s own token from a run inside the cooldown, where '
+            'nobody is minting and nothing is coming — see '
+            'mint_lock_self_contention_test.dart');
 
     expect(c.published, isEmpty,
         reason: 'and it must not have written the record. With the record '

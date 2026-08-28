@@ -341,8 +341,14 @@ class PqSigningRoot {
       // Deliberately not a wait. The winner ends with a root published, so a
       // later start reads it; and this enrollment's route to the private is
       // the pull, which does not depend on having minted anything.
-      _logger.info('Not minting a signing root for $atSign: another of this '
-          'atSign\'s enrollments holds the mint lock');
+      // Not "another enrollment": this path does not pass
+      // `ownLockIsNotContention`, so the lock's value is never read and the
+      // holder may equally be this enrollment's own previous run inside the
+      // two-minute cooldown — in which case no winner is coming and the pull
+      // named below has nobody to ask.
+      _logger.info('Not minting a signing root for $atSign: the mint lock is '
+          'already held, by another of this atSign\'s enrollments or by this '
+          'one from a run inside the last couple of minutes');
       return null;
     }
     final publicKey = outcome.publicKey;

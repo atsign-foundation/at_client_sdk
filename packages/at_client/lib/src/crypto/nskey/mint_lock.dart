@@ -99,9 +99,16 @@ class MintLock {
 
   /// Runs [mint] holding [lockKey], and returns its result.
   ///
-  /// Returns null when another of this atSign's enrollments holds the lock —
-  /// so a caller whose [mint] can itself return null should return something
-  /// non-null from it, or the two answers become one.
+  /// Returns null when the lock is already held — so a caller whose [mint]
+  /// can itself return null should return something non-null from it, or the
+  /// two answers become one.
+  ///
+  /// ⚠️ **"Held" is not the same as "another enrollment is minting".** The
+  /// winner never releases and the ttl is two minutes, so a client that took
+  /// the lock and exited before publishing loses to its OWN token on its next
+  /// start, and keeps losing for the rest of the ttl — with nothing in flight
+  /// anywhere. Unless [ownLockIsNotContention] is set, nothing here reads the
+  /// lock's value, so this cannot tell the two apart and does not claim to.
   ///
   /// The loser deliberately does **not** wait: whatever the winner is doing
   /// ends with a record published, so re-reading is both cheaper and more
@@ -166,8 +173,15 @@ class MintLock {
       final leaseFrom = DateTime.now();
       if (!await _take(lockKey,
           ownLockIsNotContention: ownLockIsNotContention)) {
-        _logger.info('Another enrollment holds $lockKey; re-reading rather '
-            'than waiting for it');
+        // Deliberately not "another enrollment holds it". Where the caller
+        // did not opt in, nothing read the lock's value, so whose it is was
+        // never established — and one of the cases is this same enrollment's
+        // previous run, still inside the cooldown, with nobody minting at
+        // all. Naming a second enrollment there sends a reader looking for a
+        // process that does not exist.
+        _logger.info('$lockKey is already held; re-reading rather than '
+            'waiting for it. Whether the holder is another enrollment or '
+            'this one from an earlier run was not established');
         return null;
       }
       return await mint(
