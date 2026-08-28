@@ -356,7 +356,8 @@ void main() {
       provenIn(
         'packages/at_client/test/nskey_rotation_test.dart',
         'an unmintable set never reaches the mint — the preference refuses it',
-        proves: 'where the "only what it implements" rule is actually enforced, '
+        proves:
+            'where the "only what it implements" rule is actually enforced, '
             'which is not in the ring: AtClientPreference refuses an algorithm '
             'this build does not implement, and an empty list, both at '
             'construction. Asserted here so that the ring having no guard of '

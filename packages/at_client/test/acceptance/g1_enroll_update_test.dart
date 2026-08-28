@@ -34,7 +34,25 @@ void main() {
         proves: 'the record read back from the atServer after the rotation. '
             'It asserts the new key actually landed before asserting what '
             'did not move, so a server that accepted the request and did '
-            'nothing fails rather than passes');
+            'nothing fails rather than passes. The _apsk half is asserted at '
+            'WHICH KEY is advertised rather than at the value, and that is '
+            'the clause as it now stands: what the exchange does not do. '
+            '⚠️ The record itself can still change, and not only in spelling '
+            '- publishPublicSigningKey republishes whenever what is published '
+            'differs from what the client holds, and for an enrollment with '
+            'no signing key of its own that is the APKAM AUTHENTICATION key, '
+            'which a rekey has just replaced. The cited enrollment holds its '
+            'own signing key, so the advertised key is unaffected',
+        clauses: [
+          'Nothing in this exchange rewrites',
+        ]);
+    provenIn('packages/at_auth/test/enrollment_update_test.dart',
+        'a rotation sends the new public key, its algorithm and the proof',
+        proves: 'the client half of the same clause, as a CLOSED set: the '
+            'command a rekey emits carries exactly enrollmentId, '
+            'apkamPublicKey, signingAlgo and apkamPublicKeySignature. An '
+            'assertion that apsk is absent would be satisfied by a request '
+            'that carried nothing; the equality is satisfied by neither');
   });
 
   test('UC-G1.11 · proof of possession is required', () {

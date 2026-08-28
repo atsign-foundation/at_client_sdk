@@ -2996,9 +2996,22 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   and a valid `apkamPublicKeySignature`.
   *Then* the record's key is replaced, the id, appName, deviceName, namespaces
   and approval state are untouched, and the **new** key authenticates while the
-  old one no longer does. `_apsk` is **not** rewritten: this request names three
-  fields and `apsk` is not one of them, so the client sends none and the
-  atServer leaves the record's own value alone.
+  old one no longer does. **Nothing in this exchange rewrites `_apsk`**: a rekey
+  names `apkamPublicKey`, `signingAlgo` and the possession proof, the client
+  sends no `apsk`, and the atServer leaves the record's own value alone.
+
+  ⚠️ **That second clause said `_apsk` "is not rewritten", full stop, until
+  2026-08-28 — a claim about the RECORD where only the claim about the
+  EXCHANGE is true.** `publishPublicSigningKey` republishes `_apsk` whenever
+  what is published differs from what the client holds, and for an enrollment
+  that holds no signing key of its own `heldSigningKeys` falls back to the
+  APKAM **authentication** keypair while `apskEntries` advertises exactly that.
+  So a rekey on such an enrollment changes the advertised key, and this
+  client's own next start rewrites `_apsk` — **necessarily**, since it would
+  otherwise go on advertising a key that no longer authenticates. Where the
+  enrollment does hold its own signing key the advertised key is unaffected,
+  which is the case the live test runs and why it compares *which key* is
+  advertised rather than the value.
 
   ⚠️ **This row claimed "`_apsk` is rewritten from the request's `apsk`"**,
   which its own *When* forbids — a rotation sends `apkamPublicKey`,
