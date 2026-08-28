@@ -1169,7 +1169,7 @@ Rows that genuinely need the wire are also the only route that raises
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
 | **UC-A2.1** c4 | `alice2` **authenticates PQ**. The self-data half closed 2026-08-28 in `nskey_self_notify_live_test.dart`, but that file's enrollments hold RSA-2048 APKAM keypairs — `enrolAndAuthenticate` defaults to `rsa2048` — so a second enrollment reading self data under **ML-DSA** PKAM is still unexercised | `nskey_self_notify_live_test.dart` |
-| **UC-A2.3** c1 | `alice3` gets `pq_signing_root@alice⁻¹` (root — universal) | `enrollment_namespace_gate_test.dart` |
+| **UC-A2.3** c1 | "`alice3` can read/write `app_1.my_apps` but not `app_2.my_apps`" — the ordinary-data half. The cited test writes only `__ssenv` envelope records, so what it establishes is the delivery channel, not that a scoped enrollment can use the namespace it was granted and cannot use the one it was not. ⚠️ **This row read "`alice3` gets `pq_signing_root@alice⁻¹` (root — universal)" until 2026-08-28** — the wording the clause itself struck on 2026-08-27, and whose OPPOSITE the clause now states. A reader working the row top-down would have written a test asserting a scoped enrollment receives the root, which the tree refuses on both routes; that arm is already proven live in `enrollment_chain_link_live_test.dart`, where the privileged enrollment receives exactly one envelope more than the scoped one and both grants are asserted to have differed | `enrollment_namespace_gate_test.dart` |
 | **UC-A3.4** c3 | Offline `alice2`: … (key still held) | `monitor_reconnect_live_test.dart` |
 | **UC-A4.1** c3 | an unauthorised `@bob` enrollment cannot fetch the ciphertext (server-gated) nor decrypt | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.3** c1 | **whichever of alice's enrollments wrote it** — the test runs one alice client against two of bob's, so the sending side is not varied at all, and the row's Given names aE1 and aE2. ⚠️ This row said the missing arm was "all of alice's authorised enrollments read the self-copy" until 2026-08-28; that requirement was removed from the clause on 2026-08-27 when `put` was found to write no self-copy | `nskey_multi_enrollment_test.dart` |
@@ -1180,7 +1180,6 @@ Rows that genuinely need the wire are also the only route that raises
 | **UC-B0.1** c1 | "(The atServer's immutable write is long-standing and present even here — it is **not** a PQ-only verb.)" — nothing exercises an immutable… | `legacy_server_abort_test.dart` |
 | **UC-B1.1** c3 | **capped** to `min(now + grace, expiry)` | `retrofit_retirement_e2e_test.dart` |
 | **UC-B1.2** c1 | it mints its **own** PQ APKAM keypair | `retrofit_e2e_test.dart` |
-| **UC-B1.3** c1 | a restricted E2 receives only its authorised subset of `nskey` keys | `retrofit_e2e_test.dart` |
 | **UC-B2.2** c1 | legacy auth survives until `min(now + grace, expiry)` | `retrofit_retirement_e2e_test.dart` |
 | **UC-B4.3** c1 | "which `alice2` cannot read" — nothing establishes that a pre-capability (legacy-only) install FAILS to read a record stamped `at/symmetric… | `nskey_cross_atsign_test.dart` |
 | **UC-B5.1** c1 | "`pq_signing_root` is root (no namespace), so it has **no** `enroll:listns` push" — and, within the second arm, "(persists until one answer… | `signing_root_pull_two_enrollments_test.dart` |

@@ -106,6 +106,53 @@ void main() {
             'root is untouched — no private held, the pull declines, and no '
             'root link is published. Read off the server enrollment record, '
             'against B1.1\'s privileged arm asserted the same way',
+        clauses: ['a scoped E2 does not request the root at all'],
+      );
+
+      // The reason the decline gives, which the return value cannot carry:
+      // 0 is equally what an enrollment already holding the root returns and
+      // what one with no enrollment id returns, so an operator asking why a
+      // device never obtained it has only the log to tell the three apart.
+      provenIn(
+        'packages/at_client/test/pq_signing_root_test.dart',
+        'a restricted enrollment says why it is not asking',
+        proves: 'the decline names entitlement rather than declining '
+            'silently, with the privileged arm of the same method as a '
+            'control so an unbound recorder is reported as unbound instead of '
+            'passing by matching nothing. Its sibling "a restricted '
+            'enrollment asks nobody" carries the no-broadcast half, against a '
+            'privileged arm that asks two key packages',
+        clauses: ['logging that it is not entitled to hold it'],
+      );
+
+      // The namespaced half of the row, and it is a different guarantee from
+      // the root: the root is withheld from a scoped enrollment entirely,
+      // while nskey privates are FILTERED to what it was granted. Cited at
+      // both layers deliberately — the sender is asserted not to send across
+      // the boundary, and the atServer is asserted to hold it anyway.
+      provenIn(
+        'packages/at_client/test/secret_sharing_approver_test.dart',
+        'only secrets whose namespace the recipient enrollment is',
+        proves: 'the sender-side filter, as a real differential: the approver '
+            'holds secrets in two namespaces and the recipient is granted '
+            'one, so exactly one envelope is written and it is the granted '
+            'namespace\'s. The sibling "without a namespace filter, all '
+            'secrets are shared" returns 2, which is what proves the approver '
+            'had something to withhold rather than only one secret to begin '
+            'with',
+        clauses: [
+          'a restricted E2 receives only its authorised subset of `nskey` keys'
+        ],
+      );
+      provenIn(
+        'tests/at_functional_test/test/enrollment_namespace_gate_test.dart',
+        'a scoped enrollment cannot read the envelope channel of a namespace',
+        proves: 'the same boundary held by the atServer rather than by the '
+            'sender, which is what makes it a gate: the scoped enrollment is '
+            'refused an __ssenv record in an ungranted namespace while '
+            'reading the granted one on the same connection, and the approver '
+            'reads both — so the refusal is a gate rather than an absent '
+            'record',
       );
     });
 

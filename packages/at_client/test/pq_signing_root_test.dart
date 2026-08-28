@@ -16,6 +16,7 @@ import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -70,7 +71,10 @@ bool _bytesEqual(Uint8List a, Uint8List b) {
 void main() {
   const atSign = '@alice';
 
+  final logs = RecordedLogs();
+
   setUpAll(() {
+    logs.installOn();
     registerFallbackValue(FakeUpdateVerbBuilder());
     registerFallbackValue(FakeAtKey());
   });
@@ -1487,6 +1491,45 @@ void main() {
               'vouches for every enrollment on the atSign. Asking would be '
               'refused anyway, and asking announces to every holder that '
               'something unentitled is looking for it');
+    });
+
+    test('a restricted enrollment says why it is not asking', () async {
+      // The return value cannot carry a reason: 0 is also what an enrollment
+      // that already holds the root returns, and what one with no enrollment
+      // id returns. So an operator wondering why a device never obtained the
+      // root has nothing but this line to tell those three apart, and a
+      // silent decline is indistinguishable from a broadcast nobody answered.
+      final io = await keysIo();
+
+      // The control runs FIRST and is deliberately not drawn from the
+      // property under test: the privileged arm of the same method logs
+      // whatever the restricted arm does. It stays green if the decline stops
+      // explaining itself, and goes red if the recorder never bound — which
+      // is the failure that would otherwise let an empty recorder satisfy the
+      // assertion below by matching nothing.
+      logs.records.clear();
+      await PqSigningRoot(client().client, keysIo: io).requestPrivateIfAbsent(
+        isFullyPrivileged: () async => true,
+        sharing: _RecordingSharing(),
+        namespace: 'buzz',
+      );
+      expect(logs.at('INFO').where((m) => m.contains('for the signing root')),
+          isNotEmpty,
+          reason: 'if this is empty the recorder is not bound and the '
+              'assertion below measured nothing');
+
+      logs.records.clear();
+      await PqSigningRoot(client().client, keysIo: io).requestPrivateIfAbsent(
+        isFullyPrivileged: () async => false,
+        sharing: _RecordingSharing(),
+        namespace: 'buzz',
+      );
+
+      expect(logs.at('INFO').where((m) => m.contains('not fully privileged')),
+          hasLength(1),
+          reason: 'the decline has to name entitlement as the reason, or the '
+              'only diagnosis left is the one that sends an operator looking '
+              'for a holder that never answered');
     });
 
     test('a client authenticating with the atSign\'s own keys asks nobody',

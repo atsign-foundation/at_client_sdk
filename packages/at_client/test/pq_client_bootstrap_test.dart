@@ -13,7 +13,7 @@ import 'package:at_client/src/preference/at_client_preference.dart'
     show AtClientPreference;
 import 'package:at_client/src/response/enrollment.dart' show Enrollment;
 import 'package:at_commons/atsign.dart' show AtsignString;
-import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
+import 'package:at_utils/at_utils.dart' show AtSignLogger;
 import 'package:at_client/src/crypto/crypto.dart';
 import 'package:at_client/src/enroll/privilege_resolver.dart';
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart';
@@ -21,30 +21,9 @@ import 'package:at_client/src/service/enrollment_privilege_resolver.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
-
-/// Captures what the bootstrap logs, so a claim about a log LEVEL can be
-/// asserted rather than eyeballed.
-///
-/// `AtSignLogger.defaultLoggingHandler` is a settable static and each
-/// `AtSignLogger` binds its handler at construction, so this must be installed
-/// **before** the bootstrap under test is built.
-///
-/// The parameter is `dynamic` rather than `LogRecord` on purpose: overriding
-/// with a supertype is legal, and it keeps `package:logging` — which at_client
-/// does not depend on and imports nowhere — out of the dependency list for the
-/// sake of one test.
-class _RecordedLogs implements LoggingHandler {
-  final List<({String level, String message})> records = [];
-
-  @override
-  void call(dynamic record) => records
-      .add((level: '${record.level.name}', message: '${record.message}'));
-
-  Iterable<String> at(String level) =>
-      records.where((r) => r.level == level).map((r) => r.message);
-}
 
 // AtKeysIo itself is sealed; its abstract written flavour is the mockable
 // face.
@@ -204,7 +183,7 @@ void main() {
       // party. That is the same reason a dropped delivery-loop event logs at
       // warning, and this line logged at `info` until 2026-08-27 — among 31
       // other info lines in a 15-second run, measured.
-      final logs = _RecordedLogs();
+      final logs = RecordedLogs();
       final previousHandler = AtSignLogger.defaultLoggingHandler;
       final previousLevel = AtSignLogger.root_level;
       AtSignLogger.defaultLoggingHandler = logs;

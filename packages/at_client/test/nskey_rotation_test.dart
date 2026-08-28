@@ -12,11 +12,11 @@ import 'package:at_client/src/signing/envelope_signature.dart'
     show EnvelopeType, SignedEnvelope;
 import 'package:at_client/src/secret_sharing/secret_store.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_utils/at_utils.dart' show AtSignLogger, LoggingHandler;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:mocktail/mocktail.dart';
 import 'package:test/test.dart';
 import 'test_utils/mocks.dart';
+import 'test_utils/recorded_logs.dart';
 
 class MockAtClient extends Mock implements AtClient {}
 
@@ -27,46 +27,20 @@ class FakeSecret extends Fake implements Secret {}
 class FakeEnrollmentRequestDecision extends Fake
     implements EnrollmentRequestDecision {}
 
-/// Captures what this library logs, so a claim about a log LEVEL is asserted
-/// rather than eyeballed.
-///
-/// `NskeyRotation`'s logger is a top-level `final`, so it is built the first
-/// time anything in that library logs and binds whatever
-/// `AtSignLogger.defaultLoggingHandler` is *then*. Installing this from
-/// `setUpAll` — before any test body runs — is what makes it the one that
-/// binds. `root_level` is pinned here too rather than inherited, so a level
-/// set elsewhere cannot silently empty the recorder and turn every absence
-/// assertion below into a pass.
-///
-/// `dynamic` rather than `LogRecord`: overriding with a supertype is legal,
-/// and it keeps `package:logging` — which at_client depends on nowhere — out
-/// of the dependency list for the sake of one test.
-class _RecordedLogs implements LoggingHandler {
-  final List<({String level, String message})> records = [];
-
-  @override
-  void call(dynamic record) => records
-      .add((level: '${record.level.name}', message: '${record.message}'));
-
-  Iterable<String> at(String level) =>
-      records.where((r) => r.level == level).map((r) => r.message);
-}
-
 /// The nskey-keypair rotation lever (design.md §1.7 B5b) and the revocation it
 /// composes with (B6).
 void main() {
   const atSign = '@alice';
   const namespace = 'app_1.my_apps';
 
-  final logs = _RecordedLogs();
+  final logs = RecordedLogs();
 
   setUpAll(() {
     registerFallbackValue(AtKey());
     registerFallbackValue(FakeUpdateVerbBuilder());
     registerFallbackValue(FakeSecret());
     registerFallbackValue(FakeEnrollmentRequestDecision());
-    AtSignLogger.defaultLoggingHandler = logs;
-    AtSignLogger.root_level = 'info';
+    logs.installOn();
   });
 
   /// A client whose remote verbs succeed, recording an ordered trace of what
