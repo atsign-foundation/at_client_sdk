@@ -164,6 +164,7 @@ void main() {
         // Assert .atKeys file is generated for the atSign
         expect(await atKeysFile.exists(), true);
         if (cleanup) {
+          await quiesceStartupTail(atOnboardingService);
           await atKeysFile.delete();
           expect(await atKeysFile.exists(), false);
         }
@@ -249,6 +250,38 @@ void main() {
       await tearDownFunc();
     });
   });
+}
+
+/// Waits for the client an onboard brought up to finish its startup tail,
+/// before a test deletes the `.atKeys` file that tail is still writing to.
+///
+/// A post-quantum activation — which is what the default posture asks for,
+/// since `PqPosture.pqReady` authenticates with `mldsa65` — creates the
+/// atSign's signing root, and that needs an `AtClient`. Building one fires the
+/// PQ startup as an unawaited task, and its steps file key material through
+/// `AtKeysIo.update`. That call reads the keyfile and then writes it back, and
+/// the write recreates the file when it has gone in between: a delete landing
+/// mid-update is undone, and the next onboard then refuses at
+/// `AtFileUtil.ensureWritable` — the first statement of `onboard` — instead of
+/// reaching the activation check the test is asserting on. The tail and the
+/// test share one isolate, so every `await` between the two is a point where
+/// they can interleave.
+///
+/// Nothing here needs the tail to have *succeeded*: `startupComplete` answers
+/// "has the startup finished", and a step that failed is logged rather than
+/// thrown. All this waits for is that nothing is left writing to the keyfile.
+///
+/// `AtClient.ensureReachable` is the supported wait and is deliberately not
+/// used: it waits for one namespace's advertisement to be published, which is
+/// a single startup step, while what has to be quiet here is every step that
+/// touches the keyfile. Reaching the experimental `pqBootstrap` is the only
+/// way to ask the question this needs answered.
+Future<void> quiesceStartupTail(AtOnboardingService service) async {
+  final client = service.atClient;
+  if (client is AtClientImpl) {
+    // ignore: experimental_member_use
+    await client.pqBootstrap?.startupComplete;
+  }
 }
 
 AtOnboardingPreference getPreferences(String atSign) {
