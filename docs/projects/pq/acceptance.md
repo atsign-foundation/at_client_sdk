@@ -1660,7 +1660,7 @@ one of them eventually does.*
   and the retry is the next client start, which is where minting is triggered
   from anyway.
 
-- **Cross-ref:** `design.md` §  the nskey mint lock; `seal-spec.md` (kid addressing).
+- **Cross-ref:** `design.md`'s nskey mint lock; `seal-spec.md` (kid addressing).
 - **Impl/verify:** **SS-4** (mint) + **B-1** (provider routing).
 
 ### 12.5 UC-B5.5 — The mint lock has no release but its ttl

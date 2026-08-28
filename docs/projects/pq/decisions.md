@@ -179,7 +179,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [119] | Crypto agility: each advertisement adds, and the signer chooses                              | 2026-08-27 | AMENDED 2026-08-28        |
 | [120] | A signing migration is three steps, and the third has no lever                               | 2026-08-28 | LIVE                      |
 | [121] | A revocation publishes what it obliges                                                       | 2026-08-28 | LIVE                      |
-| [122] | Rotation cadence: the nskey fires on cause, the CK asks a policy                             | 2026-08-28 | LIVE                      |
+| [122] | Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy                 | 2026-08-28 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
