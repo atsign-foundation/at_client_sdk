@@ -2,7 +2,6 @@ import 'dart:async' show unawaited;
 import 'dart:convert' show jsonDecode;
 import 'dart:typed_data' show Uint8List;
 
-import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/crypto/crypto.dart'
     show FiledNskeyPrivate, SignalsPrivateFiling;
 import 'package:at_client/src/client/at_client_spec.dart';
@@ -12,6 +11,7 @@ import 'package:at_client/src/crypto/nskey/nskey_key_ring.dart';
 import 'package:at_client/src/crypto/nskey/mint_lock.dart';
 import 'package:at_client/src/crypto/nskey/nskey_records.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+import 'package:at_client/src/secret_sharing/key_package.dart' show PackageKey;
 import 'package:at_client/src/secret_sharing/algo_ids.dart'
     show SecretSharingAlgos;
 import 'package:at_client/src/secret_sharing/at_client_secret_sharing.dart'
@@ -24,7 +24,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'package:at_commons/at_builders.dart';
 import 'package:at_commons/at_commons.dart';
 import 'package:at_utils/at_logger.dart';
-import 'package:meta/meta.dart' show visibleForTesting;
+import 'package:meta/meta.dart' show experimental, visibleForTesting;
 
 final _logger = AtSignLogger('PublishedNskeyKeyRing');
 
@@ -208,6 +208,22 @@ class ApkamSignedAdvertisedKeys implements AdvertisedKeyVerifier {
 ///
 /// Own privates are held in memory here; conveying them per-APKAM over the
 /// secret-sharing substrate is what supplies them instead of [mintAndPublish].
+/// One freshly minted key: the seed that is filed, and the pair it derives.
+typedef _MintedKey = ({
+  String keyAlgo,
+  NskeySeed seed,
+  Uint8List publicKey,
+  Uint8List secretKey,
+});
+
+/// Everything a mint computes **before** it holds the lock — the keys, the
+/// advertisement built from them, and this enrollment's signature over it.
+typedef _PreparedMint = ({
+  List<_MintedKey> minted,
+  NskeyAdvertisement advertisement,
+  String signedPayload,
+});
+
 class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   final AtClient _atClient;
   final AdvertisedKeyVerifier verifier;
@@ -493,17 +509,8 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         'or healed');
   }
 
-  Future<NskeyAdvertisement> _mintUnlessPublished(
-      String owner,
-      String namespace,
-      MintLease lease,
-      ({
-        String keyAlgo,
-        NskeySeed seed,
-        ({Uint8List publicKey, Uint8List secretKey}) pair,
-        NskeyAdvertisement advertisement,
-        String signedPayload,
-      }) prepared) async {
+  Future<NskeyAdvertisement> _mintUnlessPublished(String owner,
+      String namespace, MintLease lease, _PreparedMint prepared) async {
     final published = await publishedAdvertisement(owner, namespace);
     if (published == null) return _mint(owner, namespace, lease, prepared);
     _logger.info(
@@ -571,6 +578,117 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     return (rotated: rotated, superseded: superseded);
   }
 
+  /// Adds this client's missing key-establishment material to the **current**
+  /// generation, in place. Returns the advertisement now published, or null if
+  /// nothing was added.
+  ///
+  /// **Not a rotation, and the difference is what it costs.** A rotation mints
+  /// a whole fresh generation, so every peer that had fetched the old one cuts
+  /// and conveys a new content key at its next write. An add leaves every
+  /// existing key, id and status exactly where it was — the generation keeps
+  /// its own identity, `createdAt` included — so a peer sealing under an
+  /// algorithm that was already there notices nothing and re-cuts nothing.
+  ///
+  /// **Why it exists at all.** Only a build that *implements* an algorithm can
+  /// mint material for it, so a client cannot mint on another version's behalf
+  /// however much it knows about the fleet. A generation therefore assembles
+  /// incrementally: whichever client rotates writes the algorithms it can do,
+  /// and each client that finds one of its own missing adds it. Reaching the
+  /// same set by successive rotations would make every peer re-cut once per
+  /// algorithm, for something cryptographically new to only one of them.
+  ///
+  /// **Takes the same mint lock as a rotation**, because two clients adding at
+  /// once is a read-mutate-write over one durable record and the loser would
+  /// overwrite the winner's entry. A client that fails the lock adds nothing
+  /// and returns null; the next start asks again, by which time either another
+  /// client has added what this one wanted or it still has to.
+  ///
+  /// **Conveys only what it minted.** The authorised enrollments already hold
+  /// everything else in the generation.
+  ///
+  /// ⚠️ **The conveyance excludes nobody.** A revoked enrollment is off the
+  /// roster, but a child it self-spawned before being revoked is not — so an
+  /// add after a revocation reaches that child, exactly as a rotation
+  /// excluding only the named id does.
+  @experimental
+  Future<NskeyAdvertisement?> add(String namespace) async {
+    final owner = _atClient.getCurrentAtSign()!;
+    final current = await publishedAdvertisement(owner, namespace);
+    if (current == null) {
+      // Nothing published is a cold start, which wants a whole generation
+      // rather than an addition to one. Saying so rather than minting here:
+      // `mintAndPublish` resolves a lost election by adopting, and an add must
+      // never adopt — it would report success having added nothing.
+      _logger.info('Not adding to the nskey for $owner:$namespace: nothing is '
+          'published there, so what it needs is a mint');
+      return null;
+    }
+
+    final missing = _missingAlgorithms(current);
+    if (missing.isEmpty) return current;
+
+    // Prepared before the lock, for the reason [_prepareMint] gives: a keygen
+    // and a signature are the expensive parts and neither needs the lock, so a
+    // client that loses the election throws away work that is local and cheap
+    // rather than holding a remote, ttl-bounded window open across it.
+    final prepared = await _prepareMint(owner, namespace,
+        algorithms: missing,
+        retaining: current.keys,
+        createdAt: current.createdAt);
+
+    final added = await mintLock.withLock(
+        nskeyMintLockKey(owner, namespace, ttl: lockTtl), (lease) async {
+      // Re-read INSIDE the lock, which is what the lock is worth taking for:
+      // the check above ran outside it, and a rotation that landed in the
+      // window between the two would leave this client about to publish an
+      // advertisement built from a generation that no longer exists —
+      // silently rolling the rotation back.
+      final fresh = await publishedAdvertisement(owner, namespace);
+      if (fresh == null || !_sameGeneration(fresh, current)) {
+        _logger.info('Not adding to the nskey for $owner:$namespace: the '
+            'generation changed between deciding to add and taking the lock, '
+            'so the prepared material belongs to a generation that is gone. '
+            'The next start re-decides against whatever is published then');
+        return null;
+      }
+      return _mint(owner, namespace, lease, prepared);
+    });
+
+    if (added == null) {
+      _logger.info('Did not add ${missing.join(', ')} to the nskey for '
+          '$owner:$namespace this time; the next start asks again');
+      return null;
+    }
+    _logger.info('Added ${missing.join(', ')} to the nskey generation for '
+        '$owner:$namespace, minted at ${current.createdAt}: '
+        '${added.keys.map((k) => '${k.alg}/${k.kid}').join(', ')}');
+    return added;
+  }
+
+  /// Which of this client's configured algorithms [current] offers no key for.
+  ///
+  /// A **retired** entry does not count as offering one: it is kept so that
+  /// what it sealed still opens, and adding beside it is how the generation
+  /// regains something to seal *to*.
+  List<String> _missingAlgorithms(NskeyAdvertisement current) =>
+      wantedKeyAlgorithms()
+          .where((alg) => !current.keys.any((key) =>
+              key.alg == alg &&
+              key.use == SecretSharingAlgos.useEnc &&
+              key.offeredForNewOperations))
+          .toList();
+
+  /// Whether [a] and [b] are the same generation.
+  ///
+  /// By `createdAt` **and** the set of key ids, not by `nskeyKid`: that getter
+  /// names whichever entry a sender with no preference would take, so on a
+  /// generation carrying two it would call one that had gained a third
+  /// unchanged.
+  static bool _sameGeneration(NskeyAdvertisement a, NskeyAdvertisement b) =>
+      a.createdAt.isAtSameMomentAs(b.createdAt) &&
+      a.keys.map((k) => k.kid).toSet().containsAll(b.keys.map((k) => k.kid)) &&
+      a.keys.length == b.keys.length;
+
   /// Everything a mint can compute **before** it holds the lock: the keypair,
   /// the advertisement built from it, and the signature over that
   /// advertisement.
@@ -587,39 +705,48 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
   /// election, or finds a sibling published while it was racing, throws this
   /// away. That is the right trade: the work is local and cheap, while the
   /// lock window it removes is remote and bounded.
-  Future<
-      ({
-        String keyAlgo,
-        NskeySeed seed,
-        ({Uint8List publicKey, Uint8List secretKey}) pair,
-        NskeyAdvertisement advertisement,
-        String signedPayload,
-      })> _prepareMint(String owner, String namespace) async {
-    // The primary, because an nskey is one key: only the enrollment's own key
-    // package advertises the whole configured list.
-    final String keyAlgo =
-        _atClient.getPreferences()?.keyEstablishmentAlgorithms.first ??
-            SecretSharingAlgos.xWing;
-    final AtKemAlgorithm? kem = SecretSharingAlgos.kemFor(keyAlgo);
-    if (kem == null) {
-      throw StateError(
-          'cannot mint an nskey for $owner:$namespace under "$keyAlgo" — this '
-          'build has no implementation for it. Supported: '
-          '${SecretSharingAlgos.keyAlgos}');
+  Future<_PreparedMint> _prepareMint(String owner, String namespace,
+      {List<String>? algorithms,
+      List<PackageKey> retaining = const [],
+      DateTime? createdAt}) async {
+    final wanted = algorithms ?? wantedKeyAlgorithms();
+
+    // Minted before the advertisement is built, because the advertisement is
+    // built FROM the keys: its `suites` is what this generation can open, and
+    // that is fixed by the KEMs it actually holds rather than by what this
+    // build implements.
+    final minted = <_MintedKey>[];
+    for (final keyAlgo in wanted) {
+      final kem = SecretSharingAlgos.kemFor(keyAlgo)!;
+      // The SEED is what is filed and what everything re-derives from; for
+      // ML-KEM the decapsulation key is expanded and cannot be turned back
+      // into a public half, so filing it would leave the generation unopenable
+      // after a restart.
+      final seed = NskeySeed(kem.newSeed());
+      final pair = await kem.keyPairFromSeed(seed.bytes);
+      minted.add((
+        keyAlgo: keyAlgo,
+        seed: seed,
+        publicKey: pair.publicKey,
+        secretKey: pair.secretKey,
+      ));
     }
 
-    // The SEED is what is filed and what everything re-derives from; for
-    // ML-KEM the decapsulation key is expanded and cannot be turned back into
-    // a public half, so filing it would leave the generation unopenable after
-    // a restart.
-    final seed = NskeySeed(kem.newSeed());
-    final pair = await kem.keyPairFromSeed(seed.bytes);
-    final advertisement = NskeyAdvertisement.single(
-      publicKey: pair.publicKey,
-      alg: keyAlgo,
-      // Derived from the key, never stated from the build's own list: what
-      // this generation can open is fixed by the KEM it is a key for.
-      suites: SecretSharingAlgos.openableSuitesFor(keyAlgo),
+    final advertisement = NskeyAdvertisement(
+      v: nskeyAdvertisementVersion,
+      // Carried across for an ADD, which joins the current generation in
+      // place: refreshing it would make a generation minted before a
+      // revocation read as one minted after, and the rotation that revocation
+      // is owed would never fire.
+      createdAt: createdAt ?? DateTime.now().toUtc(),
+      keys: [
+        ...retaining,
+        for (final key in minted)
+          PackageKey.fromBytes(
+              use: SecretSharingAlgos.useEnc,
+              alg: key.keyAlgo,
+              pub: key.publicKey),
+      ],
     );
 
     // One codec, both directions. Each entry carries its own `alg`, without
@@ -632,29 +759,47 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
         type: EnvelopeType.nskeyRing);
 
     return (
-      keyAlgo: keyAlgo,
-      seed: seed,
-      pair: pair,
+      minted: minted,
       advertisement: advertisement,
       signedPayload: signedPayload,
     );
+  }
+
+  /// The key-establishment algorithms this client mints for, in the
+  /// preference's own order.
+  ///
+  /// **Every configured algorithm, not the first.** A generation holds a key
+  /// per algorithm the fleet needs, and only a build that *implements* one can
+  /// mint material for it — so a client configured for two and able to do both
+  /// mints both, and the fleet's set assembles from what its members can
+  /// actually produce.
+  ///
+  /// **Nothing is filtered here.** `AtClientPreference` refuses an empty list
+  /// and refuses any algorithm this build does not implement, both at
+  /// construction — so a preference that exists names a non-empty set this
+  /// build can mint. Repeating either guard would be a claim about that class
+  /// rather than a check, and would be unreachable.
+  ///
+  /// A duplicate is dropped, because two entries under one algorithm are two
+  /// keys where a sender takes the first and the second is minted, filed and
+  /// conveyed for nobody.
+  @visibleForTesting
+  List<String> wantedKeyAlgorithms() {
+    final configured = _atClient.getPreferences()?.keyEstablishmentAlgorithms ??
+        const [SecretSharingAlgos.xWing];
+    final wanted = <String>[];
+    for (final keyAlgo in configured) {
+      if (!wanted.contains(keyAlgo)) wanted.add(keyAlgo);
+    }
+    return wanted;
   }
 
   Future<NskeyAdvertisement> _mint(
     String owner,
     String namespace,
     MintLease lease,
-    ({
-      String keyAlgo,
-      NskeySeed seed,
-      ({Uint8List publicKey, Uint8List secretKey}) pair,
-      NskeyAdvertisement advertisement,
-      String signedPayload,
-    }) prepared,
+    _PreparedMint prepared,
   ) async {
-    final keyAlgo = prepared.keyAlgo;
-    final seed = prepared.seed;
-    final pair = prepared.pair;
     final advertisement = prepared.advertisement;
     final payload = prepared.signedPayload;
 
@@ -669,16 +814,24 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
     // key, it does not decrypt the past.
     final filing = privateFiling;
     if (filing != null) {
-      final stored = await filing.store(
-        namespace: namespace,
-        nskeyKid: advertisement.nskeyKid,
-        seed: seed,
-        keyAlgo: keyAlgo,
-      );
-      if (!stored) {
-        throw StateError(
-            'could not store the nskey private for $owner:$namespace, so its '
-            'public half is deliberately not published');
+      // Every key this mint produced, each under its own id. A generation can
+      // hold a key per algorithm the fleet needs, and one filed under the
+      // generation's "primary" id would leave every other entry advertised
+      // with no private anywhere — peers sealing to something the owner
+      // cannot open.
+      for (final key in prepared.minted) {
+        final stored = await filing.store(
+          namespace: namespace,
+          nskeyKid: nskeyKidOf(key.publicKey),
+          seed: key.seed,
+          keyAlgo: key.keyAlgo,
+        );
+        if (!stored) {
+          throw StateError(
+              'could not store the ${key.keyAlgo} nskey private for '
+              '$owner:$namespace, so its public half is deliberately not '
+              'published');
+        }
       }
     } else {
       // No filing and no key source to build one from, so this generation is
@@ -745,8 +898,10 @@ class PublishedNskeyKeyRing implements NskeyKeyRing, SignalsPrivateFiling {
       ..value = payload);
 
     _ownCurrent[_scope(owner, namespace)] = advertisement;
-    _ownPrivates[_generation(owner, namespace, advertisement.nskeyKid)] =
-        NskeyDecapsulationKey(pair.secretKey);
+    for (final key in prepared.minted) {
+      _ownPrivates[_generation(owner, namespace, nskeyKidOf(key.publicKey))] =
+          NskeyDecapsulationKey(key.secretKey);
+    }
     return advertisement;
   }
 

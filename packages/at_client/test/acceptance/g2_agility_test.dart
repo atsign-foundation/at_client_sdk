@@ -260,9 +260,25 @@ void main() {
             'would read as a clean rotation. Mutation-proven: carrying the '
             'superseded keys into the successor reddens it. ⚠️ It is one key '
             'per generation today, so this is the single-algorithm case of '
-            'the clause and will need re-reading when the mint goes plural',
+            'the clause. ⚠️ That caveat is spent: the mint went plural on '
+            '2026-08-28 and the sibling arm below runs the same assertion '
+            'over two algorithms',
         clauses: [
           'a revoked enrollment gains nothing from the rotation',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_rotation_test.dart',
+        'a rotation mints the whole configured set afresh',
+        proves: '"whatever algorithms that generation named", which could not '
+            'be asserted while a generation held one key: a client configured '
+            'for both mints both, rotates, and NO key in the successor is one '
+            'the predecessor carried - compared at the advertised keys, with '
+            'the predecessor asserted non-empty because two empty lists '
+            'intersect emptily. A rotation that carried one algorithm forward '
+            'would hand an excluded enrollment a key it already held',
+        clauses: [
+          'the new generation holds **only** material this client minted now',
         ],
       );
       provenIn(
@@ -301,10 +317,56 @@ void main() {
       //       lock; nothing already there moves; only the new private is
       //       conveyed.
       //
-      // ⛔ The clauses are UNPINNED: there is no add operation at all, not even
-      // behind a flag. What is cited is the interlock the add must take, which
-      // exists and is proven live - so a change to it surfaces here rather than
-      // in whatever builds the add later.
+      // ⚠️ This block said "there is no add operation at all, not even behind
+      // a flag" until 2026-08-28, when PublishedNskeyKeyRing.add landed. Three
+      // clauses are pinned below; what stays unpinned is c4 (only the new
+      // private is conveyed) and c6 (the added document is re-signed by the
+      // adding enrollment), neither of which any assertion reaches yet.
+      provenIn(
+        'packages/at_client/test/nskey_rotation_test.dart',
+        'joins the current generation in place, keeping its identity',
+        proves: 'the in-place half, over the rollout-1 case the row describes: '
+            'a generation minted by a build configured for one algorithm, and '
+            'the same install upgraded to a build configured for two. The '
+            'existing entry keeps its kid and its key bytes, and the '
+            'generation keeps its createdAt - refreshing that would make a '
+            'generation minted before a revocation read as one minted after, '
+            'and the rotation that revocation is owed would never fire. One '
+            'fixture with a swappable preference, because two fixtures have '
+            'two APKAM keypairs and the second cannot verify the first\'s '
+            'advertisement',
+        clauses: [
+          'the material joins the **current** generation in place',
+          'everything already in the generation is untouched',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_rotation_test.dart',
+        'a client that loses the mint lock adds nothing',
+        proves: 'that the add takes the SAME lock and writes nothing when it '
+            'loses: the lock is taken by another enrollment between this '
+            'client deciding to add and getting there, and the add publishes '
+            'no record at all. Its control is the mint that preceded it in the '
+            'same fixture, so an add that wrote nothing because the fixture '
+            'was inert would fail that first',
+        clauses: [
+          'the add takes the **same mint lock** as a rotation',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_rotation_test.dart',
+        'an unmintable set never reaches the mint — the preference refuses it',
+        proves: 'where the "only what it implements" rule is actually enforced, '
+            'which is not in the ring: AtClientPreference refuses an algorithm '
+            'this build does not implement, and an empty list, both at '
+            'construction. Asserted here so that the ring having no guard of '
+            'its own is a decision rather than an oversight - a repeated check '
+            'there would be unreachable, and would be a claim about this class '
+            'rather than a check',
+        clauses: [
+          'a client can only add material for an algorithm it implements',
+        ],
+      );
       provenIn(
         'tests/at_functional_test/test/nskey_mint_lock_live_test.dart',
         'two CONCURRENT mints by one enrolment publish one advertisement',

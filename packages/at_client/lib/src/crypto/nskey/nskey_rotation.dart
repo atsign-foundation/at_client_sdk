@@ -155,22 +155,28 @@ class NskeyRotation {
     // same discipline the mint-time push uses. The SEED, never the expanded
     // decapsulation key — the receiver re-derives the published public half
     // from what arrives, which only the seed can do.
-    final private =
-        await privateFiling.readSeed(namespace, advertisement.nskeyKid);
-    if (private == null) {
-      throw StateError(
-          'rotated $owner:$namespace to ${advertisement.nskeyKid} but cannot '
-          'read the successor private back, so it is deliberately not conveyed '
-          '— the other enrollments keep the superseded generation and a later '
-          'rotation supersedes this one');
+    // One secret per KEY the successor carries, not one per generation. A
+    // generation can hold a key per algorithm the fleet needs, and conveying
+    // only the id the advertisement's own getter names would leave every other
+    // entry advertised with its private held by this client alone — peers
+    // sealing under it, and nobody else able to open what they sent.
+    final secrets = <Secret>[];
+    for (final key in advertisement.keys) {
+      final private = await privateFiling.readSeed(namespace, key.kid);
+      if (private == null) {
+        throw StateError(
+            'rotated $owner:$namespace to a generation carrying ${key.alg} '
+            '${key.kid} but cannot read that private back, so NOTHING is '
+            'conveyed — the other enrollments keep the superseded generation '
+            'whole rather than a part of the successor, and a later rotation '
+            'supersedes this one');
+      }
+      secrets.add(Secret(
+        namespace: namespace,
+        name: '${NskeyPrivateFiling.secretNamePrefix}${key.kid}',
+        value: base64Encode(private.bytes),
+      ));
     }
-
-    final secret = Secret(
-      namespace: namespace,
-      name: '${NskeyPrivateFiling.secretNamePrefix}'
-          '${advertisement.nskeyKid}',
-      value: base64Encode(private.bytes),
-    );
 
     // Into this client's own store before the fan-out, for the same reason
     // the mint-time convey does it: the request-answer path serves from the
@@ -188,19 +194,25 @@ class NskeyRotation {
     // ask for the successor and be answered. Rotation-to-exclude is therefore
     // not a revocation on its own; revoking the enrollment is what stops it
     // being on the roster the answer path resolves against.
-    await sharing.secretStore.putIfNewer(secret);
+    for (final secret in secrets) {
+      await sharing.secretStore.putIfNewer(secret);
+    }
 
     // Outside the mint lock deliberately. The lock serialises *minting*, and a
     // concurrent rotation is already refused by the time this runs; holding it
     // across a per-enrollment fan-out would make an atSign's lock-held window
     // scale with its enrollment count for no interlock gained.
-    final conveyedTo = await sharing.pushSecretToNamespaceMembers(
-      secret,
-      excludeEnrollmentIds: excludeEnrollmentIds,
-    );
+    var conveyedTo = 0;
+    for (final secret in secrets) {
+      conveyedTo = await sharing.pushSecretToNamespaceMembers(
+        secret,
+        excludeEnrollmentIds: excludeEnrollmentIds,
+      );
+    }
 
-    _logger.info('Rotated $owner:$namespace to ${advertisement.nskeyKid} and '
-        'conveyed the successor to $conveyedTo key package(s)'
+    _logger.info('Rotated $owner:$namespace to a generation carrying '
+        '${advertisement.keys.map((k) => '${k.alg}/${k.kid}').join(', ')} and '
+        'conveyed ${secrets.length} private(s) to $conveyedTo key package(s)'
         '${excludeEnrollmentIds.isEmpty ? '' : ', excluding '
             '${excludeEnrollmentIds.join(', ')}'}');
 

@@ -175,7 +175,12 @@ class NskeySeeding {
     // absence as a cold start is what publishes a second key over the first.
     final published = await ring.publishedAdvertisement(owner, namespace);
     if (published != null) {
-      await rotateIfPolicyAsks(owner, namespace, published: published);
+      // A rotation mints every algorithm this client is configured for, so an
+      // add after one would find nothing missing. Only the namespace that was
+      // left alone needs the second question.
+      if (!await rotateIfPolicyAsks(owner, namespace, published: published)) {
+        await _addMissing(owner, namespace, published);
+      }
       return false;
     }
     final advertisement = await ring.mintAndPublish(namespace);
@@ -193,7 +198,13 @@ class NskeySeeding {
     // refuses that without APKAM authentication. Measured 2026-08-27, where it
     // turned a successful publish into a reported failure.
     try {
-      await _convey(namespace, advertisement.nskeyKid);
+      // Every key the mint produced, each under its own id. A generation can
+      // hold one per algorithm the fleet needs, and conveying only the id the
+      // advertisement's own getter names would leave the others held by this
+      // client alone — peers sealing to entries nobody else can open.
+      for (final key in advertisement.keys) {
+        await _convey(namespace, key.kid);
+      }
     } catch (e) {
       _logger.warning(
           'Published the nskey for $owner:$namespace, but could not convey '
@@ -201,6 +212,46 @@ class NskeySeeding {
           'it at their next start. Peers can seal here either way: $e');
     }
     return true;
+  }
+
+  /// Adds this client's own missing key-establishment material to a generation
+  /// that already exists, and conveys **only what was added**.
+  ///
+  /// The other enrollments already hold everything else in the generation, and
+  /// re-sending it would be one envelope each for material they can already
+  /// open.
+  ///
+  /// Failure is logged, not thrown, for [seedNamespace]'s reason: this atSign
+  /// is reachable either way. What an add buys is that a peer configured for
+  /// the added algorithm can seal under it — a peer that was not is unaffected.
+  Future<void> _addMissing(
+      String owner, String namespace, NskeyAdvertisement published) async {
+    final before = published.keys.map((key) => key.kid).toSet();
+    final NskeyAdvertisement? widened;
+    try {
+      widened = await ring.add(namespace);
+    } catch (e) {
+      _logger.warning('Could not add this client\'s missing key material to '
+          'the nskey for $owner:$namespace; the generation already published '
+          'is unchanged and the next start tries again: $e');
+      return;
+    }
+    if (widened == null) return;
+
+    for (final key in widened.keys) {
+      // Only what this add minted. `before` is the generation as it stood when
+      // the decision was made, so an entry already in it is one the authorised
+      // enrollments were conveyed when it was minted.
+      if (before.contains(key.kid)) continue;
+      try {
+        await _convey(namespace, key.kid);
+      } catch (e) {
+        _logger.warning('Added ${key.alg} to the nskey for $owner:$namespace '
+            'but could not convey its private to this atSign\'s other '
+            'enrollments — they will pull it at their next start. Peers can '
+            'seal under it either way: $e');
+      }
+    }
   }
 
   /// Puts [rotationPolicy] the question for a namespace that already has a

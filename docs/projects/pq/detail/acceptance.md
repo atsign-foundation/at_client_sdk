@@ -1197,14 +1197,18 @@ a `## TODO` row in [the plan](../implementation-plan.md#todo). What follows is
 the mapping from clause to row. **Measured 2026-08-28**, by reading the
 production paths named:
 
-- **The nskey mint is singular.** `PublishedNskeyKeyRing` exposes
-  `mintAndPublish` and `rotate` and nothing else that writes an advertisement;
-  `_mint` takes one `keyAlgo`, one `NskeySeed` and one keypair. So **UC-G2.6**
-  entirely — every clause of it is about an `add` that does not exist — and
-  **UC-G2.11** c1 and c2, which turn on an add having happened. **UC-G2.5** c1
-  and c2 are assertable today only in a degenerate form: "the new generation
-  carries nothing forward" has nothing to carry while a generation holds one
-  key, and becomes a real assertion when the mint goes plural.
+- ~~**The nskey mint is singular.**~~ ✅ **Both landed 2026-08-28.** The mint
+  now writes a key for every configured algorithm and files each private under
+  its own kid; `PublishedNskeyKeyRing.add` puts one client's newly minted
+  material into the **current** generation in place, under the same mint lock,
+  preserving every existing kid and the generation's `createdAt`. **UC-G2.6**
+  c1, c2, c3 and c5 are pinned, and **UC-G2.5** c1 stopped being degenerate —
+  "whatever algorithms that generation named" is now asserted over two.
+  ⛔ **What is left of that row**: c4 (only the newly minted private is
+  conveyed) and c6 (the added document is re-signed by the *adding* enrollment)
+  want the same fixture — a generation minted by one enrollment and added to by
+  another — which is a live shape rather than a unit one. **UC-G2.11** c1 and
+  c2 are the same live shape seen from the reader's side.
 - **A rotation excludes the enrollment named and nothing else.**
   `revokeEnrollmentAndRotate` passes `excludeEnrollmentIds: {enrollmentId}`.
   So **UC-G2.5** c4, the subtree exclusion.

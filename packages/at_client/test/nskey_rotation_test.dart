@@ -52,8 +52,23 @@ void main() {
     List<String> trace,
     List<String> published,
     Map<String, String> advertised,
-  }) client({bool lockAlreadyHeld = false}) {
+    void Function(List<String>) configure,
+    void Function() holdTheMintLock,
+  }) client(
+      {bool lockAlreadyHeld = false,
+      List<String>? keyEstablishmentAlgorithms}) {
+    var lockHeld = lockAlreadyHeld;
     final atClient = MockAtClient();
+    // Swappable within one fixture, because two fixtures cannot stand in for
+    // two builds of the same atSign: each has its own APKAM keypair, so the
+    // second serves its own `_apsk` and the first's signed advertisement fails
+    // verification. Same atSign, same key, different configuration is what a
+    // rollout actually looks like.
+    var preference = keyEstablishmentAlgorithms == null
+        ? null
+        : AtClientPreference(
+            keyEstablishmentAlgorithms: keyEstablishmentAlgorithms);
+    when(() => atClient.getPreferences()).thenAnswer((_) => preference);
     final secondary = MockRemoteSecondary();
     final lookUp = MockAtLookUp();
     final trace = <String>[];
@@ -93,7 +108,7 @@ void main() {
       if (builder is UpdateVerbBuilder) {
         final key = builder.atKey.key;
         if (key == '_nskeylock') {
-          if (lockAlreadyHeld) {
+          if (lockHeld) {
             // What the atServer says to the loser of the race.
             throw AtLookUpException(
                 'AT0023', 'Immutable records may not be updated');
@@ -111,6 +126,9 @@ void main() {
       trace: trace,
       published: published,
       advertised: advertised,
+      configure: (List<String> algorithms) => preference =
+          AtClientPreference(keyEstablishmentAlgorithms: algorithms),
+      holdTheMintLock: () => lockHeld = true,
     );
   }
 
@@ -496,6 +514,163 @@ void main() {
         reason: 'the successor private would live only in memory and die with '
             'the process, leaving every peer sealing to a generation this '
             'atSign can no longer open — strictly worse than not rotating');
+  });
+
+  group('a generation holds a key per configured algorithm', () {
+    test('a mint writes one key for each, and files each private', () async {
+      // ⚠️ The mint wrote ONE key until 2026-08-28, under
+      // keyEstablishmentAlgorithms.first — so an atSign configured for two
+      // advertised one, and a peer that could only use the other was refused.
+      final c = client(keyEstablishmentAlgorithms: const [
+        SecretSharingAlgos.xWing,
+        SecretSharingAlgos.mlKem1024,
+      ]);
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+
+      final minted = await ring.mintAndPublish(namespace);
+
+      expect(minted.keys.map((k) => k.alg).toList(),
+          [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024],
+          reason: 'in the preference\'s own order, which is the order a sender '
+              'with no narrowing takes them in');
+      for (final key in minted.keys) {
+        expect(await filer.read(namespace, key.kid), isNotNull,
+            reason: '${key.alg} is advertised, so its private must be filed '
+                'under its own kid — an entry peers seal to and nobody can '
+                'open is worse than one that was never advertised');
+      }
+      expect(minted.suites.length, greaterThan(1),
+          reason: 'what the generation can open is derived from the keys it '
+              'holds, so a second key widens it');
+    });
+
+    test('a rotation mints the whole configured set afresh', () async {
+      final c = client(keyEstablishmentAlgorithms: const [
+        SecretSharingAlgos.xWing,
+        SecretSharingAlgos.mlKem1024,
+      ]);
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      final first = await ring.mintAndPublish(namespace);
+
+      final second = (await ring.rotate(namespace)).rotated;
+
+      expect(second.keys.map((k) => k.alg).toList(),
+          first.keys.map((k) => k.alg).toList());
+      expect(
+          second.keys
+              .map((k) => k.pub)
+              .toSet()
+              .intersection(first.keys.map((k) => k.pub).toSet()),
+          isEmpty,
+          reason: 'fresh-only applies per key, not per generation: a rotation '
+              'that carried one algorithm forward would hand an excluded '
+              'enrollment a key it already held');
+      expect(first.keys, isNotEmpty, reason: 'the positive control');
+    });
+
+    test('an unmintable set never reaches the mint — the preference refuses it',
+        () {
+      // Where the guard lives, asserted so the ring's absence of one is a
+      // decision rather than an oversight. A ring that re-checked would be
+      // making a claim about this class rather than a check of its own, and
+      // the branch would be unreachable.
+      expect(
+          () => AtClientPreference(
+              keyEstablishmentAlgorithms: const ['kem-from-the-future']),
+          throwsA(isA<ArgumentError>()
+              .having((e) => '$e', 'message', contains('this build mints'))));
+      expect(
+          () => AtClientPreference(keyEstablishmentAlgorithms: const []),
+          throwsA(isA<ArgumentError>().having((e) => '$e', 'message',
+              contains('can receive nothing sealed to it'))));
+    });
+  });
+
+  group('the add lever', () {
+    List<String> both() => const [
+          SecretSharingAlgos.xWing,
+          SecretSharingAlgos.mlKem1024,
+        ];
+
+    test('joins the current generation in place, keeping its identity',
+        () async {
+      // The rollout-1 case: a generation minted by a build configured for one
+      // algorithm, and the same install upgraded to a build configured for two
+      // finding its own missing.
+      final c =
+          client(keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing]);
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      final before = await ring.mintAndPublish(namespace);
+      expect(before.keys, hasLength(1));
+
+      c.configure(both());
+      final widened = await ring.add(namespace);
+
+      expect(widened, isNotNull);
+      expect(widened!.keys.map((k) => k.alg).toList(),
+          [SecretSharingAlgos.xWing, SecretSharingAlgos.mlKem1024]);
+      expect(widened.keys.first.kid, before.keys.single.kid,
+          reason: 'the existing entry keeps its id, or every peer holding a '
+              'content key sealed to it re-cuts for nothing');
+      expect(widened.keys.first.pub, before.keys.single.pub);
+      expect(widened.createdAt, before.createdAt,
+          reason: 'and the generation keeps its own createdAt. Refreshing it '
+              'would make a generation minted before a revocation read as one '
+              'minted after, and the rotation that revocation is owed would '
+              'never fire');
+      expect(await filer.read(namespace, widened.keys.last.kid), isNotNull,
+          reason: 'the added private is filed under its own kid');
+    });
+
+    test('adds nothing when the generation already carries the set', () async {
+      final c = client(keyEstablishmentAlgorithms: both());
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      final minted = await ring.mintAndPublish(namespace);
+      final publishes = c.trace.where((t) => t.startsWith('publish')).length;
+
+      final again = await ring.add(namespace);
+
+      expect(again!.keys.map((k) => k.kid).toList(),
+          minted.keys.map((k) => k.kid).toList());
+      expect(c.trace.where((t) => t.startsWith('publish')).length, publishes,
+          reason: 'a no-op add must not rewrite the record: every rewrite is a '
+              'chance for a concurrent rotation to be rolled back');
+    });
+
+    test('a namespace with nothing published is a mint, not an add', () async {
+      final c = client(keyEstablishmentAlgorithms: both());
+      final ring =
+          PublishedNskeyKeyRing(c.client, privateFiling: await filing());
+
+      expect(await ring.add(namespace), isNull);
+      expect(c.trace.where((t) => t.startsWith('publish')), isEmpty,
+          reason: 'mintAndPublish resolves a lost election by ADOPTING, which '
+              'an add must never do — it would report success having added '
+              'nothing');
+    });
+
+    test('a client that loses the mint lock adds nothing', () async {
+      final c =
+          client(keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing]);
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+      await ring.mintAndPublish(namespace);
+      c.trace.clear();
+
+      // Another enrollment takes the lock between this client deciding to add
+      // and getting there — the race the lock exists for.
+      c.holdTheMintLock();
+      c.configure(both());
+
+      expect(await ring.add(namespace), isNull,
+          reason: 'two clients adding at once is a read-mutate-write over one '
+              'record, and the loser would overwrite the winner\'s entry');
+      expect(c.trace.where((t) => t.startsWith('publish')), isEmpty);
+    });
   });
 
   group('the revocation composition', () {

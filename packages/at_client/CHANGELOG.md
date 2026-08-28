@@ -1,5 +1,30 @@
 ## 3.15.0-rc1
 
+- feat: **a namespace key generation now holds one key per configured
+  key-establishment algorithm, and a client can add its own to an existing
+  one.** The mint took `keyEstablishmentAlgorithms.first` and wrote a single
+  key, so an atSign configured for two advertised one — and a peer that could
+  only use the other was refused with nothing to do about it.
+  - `PublishedNskeyKeyRing.mintAndPublish` and `rotate` now mint across the
+    whole configured list, file each private under its own `kid`, and convey
+    each; the advertisement's `suites` widens to what the keys it actually
+    holds can open.
+  - **`PublishedNskeyKeyRing.add(namespace)`** is new: it mints only what this
+    client's configuration has and the current generation lacks, and joins it
+    to that generation **in place** — every existing `kid`, status and the
+    generation's own `createdAt` survive, so no peer re-cuts a content key it
+    had no reason to. It takes the same mint lock as a rotation and re-reads
+    inside it; a client that loses the lock writes nothing and tries again at
+    its next start. Only the newly minted private is conveyed.
+  - Called at every client start, once per authorised namespace, for the
+    namespace that was not rotated. Only a build that *implements* an algorithm
+    can mint material for it, so a fleet's set assembles from what its members
+    can actually produce rather than from any one client's view of it.
+  - ⚠️ **A rotation carries nothing forward**, per algorithm as well as per
+    generation: the successor shares no key with the predecessor, which is what
+    makes the previous generation worth nothing to an enrollment excluded from
+    the rotation.
+
 - feat: **key rotation asks the application, rather than the SDK keeping a
   schedule.** Two closures on `CryptoConfig`, so an application can answer
   differently for different namespaces — and differently for content keys and
