@@ -826,6 +826,16 @@ void main() {
           .value as String;
       final envelope = SignedEnvelope.fromJson(jsonDecode(raw) as Map);
 
+      // The round trip itself, asserted rather than printed. Verification
+      // takes the STRONGEST shared signature, so an envelope that lost one of
+      // two on the way through the atServer would verify exactly as well as
+      // one that did not — every cell below would stay green while the
+      // receiver was reading something other than what the sender emitted.
+      expect([for (final sig in envelope.signatures) sig.alg],
+          emitted[senderName],
+          reason: '$senderName: the algorithms the receiver reads back must '
+              'be the ones the sender emitted');
+
       for (final receiverName in receivers) {
         final verifier = _GridEnvelopeSigner(cells[receiverName]!.client);
         await verifier.verifyEnvelopeSignature(envelope, signerAtSign: sender);

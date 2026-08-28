@@ -345,5 +345,55 @@ void main() {
             'private conveyed to it at approval — this is the half a mocked '
             'frame cannot show, because the mock hands the receiver a value it '
             'never had to decrypt');
+
+    // UC-A3.2's other half, on the same pair and at no extra fixture cost: a
+    // STORED self record rather than a notification. The frame above shows
+    // the second enrollment can open a content key it was handed; this shows
+    // it can open one it has to fetch from the atServer for itself, which is
+    // what "alice2 obtains the nskey private and reads" says about self data.
+    //
+    // Nothing in the tree exercised that pairing before 2026-08-28: the
+    // multi-enrollment reads were all cross-atSign, and the self direction
+    // was only ever a notification.
+    final stored = AtKey()
+      ..key = 'ledger$runId'
+      ..sharedBy = atSign
+      ..sharedWith = atSign
+      ..namespace = namespace
+      ..metadata = (Metadata()..ttr = 60000);
+    const storedValue = 'self data sealed to the namespace key';
+
+    // Written remote-first and with the provider named per call, for the same
+    // reasons as the notify above: these enrollments run the migration
+    // posture, so the write scheme is a per-call decision, and a local-first
+    // write would reach the atServer only when sync got round to it.
+    expect(
+        await sender.client.put(stored, storedValue,
+            putRequestOptions: PutRequestOptions()
+              ..useRemoteAtServer = true
+              ..cryptoProviderId = symmetricAesGcmCryptoProviderId),
+        isTrue);
+
+    // Read off the record before reading the value: without this the assertion
+    // below passes for a legacy self write, which every enrollment of this
+    // atSign can open because the self encryption key is atSign-wide rather
+    // than per-enrollment — true, and not this clause.
+    final asWritten = await sender.client.get(stored,
+        getRequestOptions: GetRequestOptions()..useRemoteAtServer = true);
+    expect(asWritten.metadata?.appMetadata?.providerId,
+        symmetricAesGcmCryptoProviderId,
+        reason: 'the record must be on the nskey data path for the read below '
+            'to say anything about holding the namespace private');
+
+    expect(
+        (await receiver.client.get(stored,
+                getRequestOptions: GetRequestOptions()
+                  ..useRemoteAtServer = true))
+            .value,
+        storedValue,
+        reason: 'the second enrollment fetches the record and opens it with '
+            'the nskey private conveyed to it at approval — the advertisement '
+            'resolves, the conveyance landed, and the read path finds the '
+            'generation the record names');
   });
 }

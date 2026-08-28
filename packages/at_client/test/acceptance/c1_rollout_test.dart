@@ -131,13 +131,25 @@ void main() {
     provenIn(
         'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
         'the pqActive posture decides an argless retrofit',
-        proves: 'the live arm: posture-resolved ML-DSA against a real '
-            'atServer');
+        proves: 'the pqActive half, against a real atServer: an argless '
+            'selfRetrofit on a keyfile of its own comes back with '
+            'signingAlgoOf == mldsa65, which is the authentication algorithm '
+            'the resulting client resolves from that keyfile — nothing in the '
+            'arm named an algorithm, so the posture is the only thing that '
+            'could have chosen it',
+        clauses: [
+          'the minted enrollment is ML-DSA',
+        ]);
     provenIn(
         'tests/at_functional_test/test/self_enrollment_retrofit_live_test.dart',
         'an argless retrofit under the default preference stays rsa2048',
-        proves: 'the legacy column\'s red: a consult replaced by a '
-            'constant fails this arm');
+        proves: 'the legacy half of the same clause, which is what makes the '
+            'first half mean something: the identical argless call under the '
+            'legacy posture resolves rsa2048. A consult replaced by a '
+            'constant passes the ML-DSA arm and fails this one',
+        clauses: [
+          'the minted enrollment is ML-DSA',
+        ]);
   });
 
   test('UC-C1.6 · the grouped posture: one value sets every axis', () {

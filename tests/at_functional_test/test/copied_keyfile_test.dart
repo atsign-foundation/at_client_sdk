@@ -122,6 +122,17 @@ void main() {
             'this compares two local objects and tells us nothing about what '
             'senders will seal to');
 
+    // The same id is not on its own enough to say a secret opens on both
+    // hosts: opening decapsulates with the KEM seed the keyfile carries, so
+    // an id that survived the round trip while the seed did not would leave
+    // the second host advertising a key package it cannot open anything with
+    // — and the failure would surface at the first secret conveyed to it,
+    // long after the copy was made.
+    expect(copiedMaterial!.bytes.bytes, originalMaterial.bytes.bytes,
+        reason: 'the copy must hold the same KEM private half, or "one '
+            'recipient" is true of the advertisement and false of what can '
+            'actually be opened');
+
     // Same APKAM keypair, so the same enrollment — which is what makes
     // revocation cover both hosts. There is one enrollment id, so an operator
     // revoking it cannot miss the copy.
@@ -152,6 +163,50 @@ void main() {
               'whole claim');
     } finally {
       await copyLookup.close();
+    }
+
+    // And the consequence that makes the identity matter: revoking the one
+    // enrollment cuts the copy too, without the operator having to know a
+    // copy exists. The successful authentication above is this arm's control
+    // — the same keyfile, the same enrollment id, over a connection built the
+    // same way, refused only after the revoke.
+    final revoked = await atClient.enrollmentService!.revoke(
+        EnrollmentRequestDecision.revoked(response.enrollmentId, atSign));
+    // The acknowledgement, asserted rather than discarded: an `error:`
+    // response would throw out of the line above, but a `data:` response
+    // naming a different enrollment or another status would not — and then
+    // "the copy is refused" would be equally explained by the revoke never
+    // having taken.
+    expect(revoked.enrollmentId, response.enrollmentId);
+    expect(revoked.enrollStatus, EnrollmentStatus.revoked);
+
+    final afterRevoke =
+        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
+          ..enrollmentId = response.enrollmentId
+          ..atChops = AtChopsImpl(AtChopsKeys.create(
+            AtEncryptionKeyPair.create(
+                copiedKeys.defaultEncryptionPublicKey!.toString(), ''),
+            AtPkamKeyPair.create(copiedKeys.apkamPublicKey!.toString(),
+                copiedKeys.apkamPrivateKey!.toString()),
+          ));
+    try {
+      // Named, not `throwsA(anything)`: this is a live connection, so a reset,
+      // a timeout and a malformed command all throw too, and a catch-all
+      // would pass for the copy failing to reach the atServer at all.
+      // `AT0027 … is revoked` is what the atServer answers, and it is the
+      // only refusal this arm may pass on. Revocation is immediate — the
+      // non-error acknowledgement above means the credential is already
+      // unavailable — so there is nothing to poll for.
+      await expectLater(
+          afterRevoke.pkamAuthenticate(enrollmentId: response.enrollmentId),
+          throwsA(predicate(
+              (e) => '$e'.contains('AT0027') && '$e'.contains('is revoked'))),
+          reason: 'revocation is per-enrollment, so one revoke cuts every '
+              'host sharing the copy at once. The keypair in the copied file '
+              'is untouched and was accepted moments ago — what changed is '
+              'the enrollment record it authenticates against');
+    } finally {
+      await afterRevoke.close();
     }
   });
 }

@@ -613,6 +613,7 @@ clause against the tree:
 | [the partial clauses](detail/acceptance.md#the-partial-clauses--objective-1s-remaining-work) | count the table | a test exercises the clause and does not establish it as written. **The in-process ones are all closed**; all that remain are live and are the only route that raises server-proven. ⚠️ **Read the array-shape warning above before writing a test for any of them** — three of the six examined on 2026-08-27 were superseded clauses rather than test gaps |
 | [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 0 | proven, but no citation names the proof. ⚠️ **Was 33, then 1, and is now empty** — the last, UC-A2.4's `pqSeal ver 0x03`, was withheld until the live test stopped asserting the byte against the function that generates it. Pinned to the raw literal 2026-08-27, with the discrimination measured against a consistent wire renumbering rather than reasoned about |
 | [pinned but partial](detail/acceptance.md#clauses-pinned-in-the-tree-that-the-map-calls-partial) | 1 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls. ⚠️ **Was 2**: UC-G1.1 c2 was closed 2026-08-27 by an arm on a *retrofitted* keyfile, the only shape where the flat field and the resolver both answer and disagree. It defends the figure rather than raising it — the clause was already counted, by a test that never called `authenticate` |
+| [section 17's clauses](detail/acceptance.md#section-17--the-crypto-agility-clauses-and-what-each-waits-on) | count them | never mapped, and the **bulk of what is unproven**. Most are not test gaps: they describe the plural nskey mint, the `add`, the signature key identifier, the durable revocation record and step 3's verifier lever — each an open `## TODO` row above. The subsection maps clause to row, measured 2026-08-28 against the production paths, and says which six have not been read against the tree at all |
 
 ⛔ **Nothing MAPPED is untested.** Every clause the 2026-08-23 mapping walked has
 something exercising it, and the single absence it found was refuted; for those,
@@ -622,7 +623,9 @@ clauses — count them, do not read a figure here; it said "seventeen" until
 2026-08-28 when there were 53 — were added by
 [decisions.md 119](detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27),
 and several of them have nothing exercising them at all — the nskey mint they
-describe is unbuilt. Re-derive rather than reading this paragraph as current.
+describe is unbuilt. **What each one waits on is now enumerated**, in
+[section 17's own subsection](detail/acceptance.md#section-17--the-crypto-agility-clauses-and-what-each-waits-on).
+Re-derive rather than reading this paragraph as current.
 
 ⛔ **And a clause can be FALSE rather than imprecise, which no instrument here
 reports as anything but a test gap.** A sweep of the 29 partials on 2026-08-27

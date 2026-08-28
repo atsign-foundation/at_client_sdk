@@ -82,7 +82,29 @@ void main() {
             'that id is the one the enrollment advertised, and the copy '
             'authenticates against the live atServer as the same enrollment '
             'id. One enrollment and one recipient, so there is a single thing '
-            'to revoke and an operator cannot miss the second host',
+            'to revoke and an operator cannot miss the second host. The '
+            'openable-on-both half is asserted at the KEM private half rather '
+            'than at the id: an id that survived the round trip while the '
+            'seed did not would leave the second host advertising a key '
+            'package it can open nothing with, and the failure would surface '
+            'at the first secret conveyed to it',
+        clauses: [
+          'Secrets already sealed to that key package are openable on both',
+        ],
+      );
+      provenIn(
+        'tests/at_functional_test/test/copied_keyfile_test.dart',
+        'a copied keyfile is the same enrollment and the same recipient',
+        proves: 'the revocation consequence, live and as a before/after pair '
+            'on one connection shape: the copy authenticates, the enrollment '
+            'is revoked, and the same copy is refused. The keypair in the '
+            'file is untouched throughout, so what changed is the enrollment '
+            'record — which is why one revoke reaches a host the operator '
+            'never knew about',
+        clauses: [
+          'Revocation is per-enrollment (`enroll:revoke`), so revoking E1 '
+              'cuts every host',
+        ],
       );
       provenIn(
         'packages/at_client/test/pq_signing_root_test.dart',

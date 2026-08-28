@@ -30,7 +30,14 @@ void main() {
             'keypair in it is untouched and still valid, so the lockout is the '
             'enrollment\'s expiry cap and not a per-key delete. The sibling '
             'legacy enrollment that never retrofitted still authenticates in '
-            'the same run, so the refusal is attributable to the cap',
+            'the same run, so the refusal is attributable to the cap. And the '
+            'remedy is asserted rather than left as advice: a fresh OTP '
+            'enrollment on the same atSign authenticates moments later, which '
+            'is what "must re-enroll" means and what distinguishes a capped '
+            'credential from a broken atSign',
+        clauses: [
+          'never minted its own PQ keypair',
+        ],
       );
     });
 

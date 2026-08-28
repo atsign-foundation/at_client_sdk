@@ -1088,6 +1088,54 @@ write the missing arm *with a control*, then **mutate the production code and
 confirm the failure quotes your own assertion's reason**, revert, and pin. A
 green test that has not been shown to discriminate proves nothing.
 
+✅ **Seven more closed on 2026-08-28**, and the shape of the work was the same
+each time: read the cited test, find the one arm it exercises but does not
+assert, and assert it.
+
+- **UC-C1.5** c1 needed nothing at all — the clause had been rewritten since the
+  row was written, and the two live arms already cited (an argless retrofit
+  under `pqActive` resolving `mldsa65`, and the same call under `legacy`
+  resolving `rsa2048`) establish it as it now stands. The row went on naming an
+  idempotence-pool arm the clause no longer has, which is what
+  [the wording warning above](#the-partial-clauses--objective-1s-remaining-work)
+  says to expect.
+- **UC-A2.2** c1 and c3 are two new arms in `copied_keyfile_test.dart`: the
+  copy's KEM private half compared byte-for-byte (an id that survived the round
+  trip while the seed did not would leave the second host advertising a key
+  package it can open nothing with), and a revoke-then-reauthenticate pair on
+  one connection shape, whose control is the same copy authenticating a moment
+  earlier.
+- **UC-A3.2** c1 is a stored self record read by a **second enrollment** of the
+  same atSign, added to `nskey_self_notify_live_test.dart` where that pair
+  already exists. ⚠️ **Nothing in the tree paired those two before**: every
+  multi-enrollment read was cross-atSign, and the self direction was only ever a
+  notification. The record's `providerId` is asserted first, without which the
+  read passes for a legacy self write — which every enrollment opens, because
+  the self encryption key is atSign-wide rather than per-enrollment.
+- **UC-B2.1** c1 is a fresh OTP enrollment authenticating moments after the
+  capped one was refused, in `retrofit_retirement_e2e_test.dart`. That is what
+  *"must re-enroll"* means, and it distinguishes a capped credential from a
+  broken atSign.
+- **UC-G1.15** c1 is one assertion in `pq_posture_grid_test.dart`: the
+  algorithms read back off the atServer equal the ones the sender emitted. It
+  was printed and not asserted, and verification cannot stand in for it —
+  `verifyEnvelope` passes on the *strongest shared* signature, so an envelope
+  that lost one on the way through would verify exactly as well as one that did
+  not, leaving all nine cells green.
+- **UC-G1.12** c2 is a new test in at_auth, `nothing this API can compose names
+  namespaces or an approval state`. ⚠️ **The live test's client half was green
+  for the wrong reason** and is now deleted: it built an `EnrollVerbBuilder`
+  that named no namespaces and observed that its command carried none. That
+  builder *does* carry a `namespaces` field — `enroll:request` needs one — so
+  the assertion said only that the test had not set it, and would have stayed
+  green for a production composer that filled it in. The replacement drives
+  `AtEnrollmentImpl().update` with every field `EnrollmentUpdateRequest` has
+  and pins the emitted keys as a **closed set**, because `namespaces` has a
+  spelling to look for and an approval state does not: a check for `status` or
+  `approval` is a tautology no change to that package could redden.
+  Mutation-proven — making the composer emit a namespaces entry reddens it,
+  quoting the set.
+
 #### In-process — none left
 
 ⛔ **The in-process ones were all closed on 2026-08-27.** Every remaining partial needs a
@@ -1101,18 +1149,25 @@ virtualenv run, and is therefore also the only route that raises
 gaps** — read that verdict table first. This one is left whole because a row
 still names the test a corrected clause would be proven by.
 
-These are also the only route that raises **server-proven**.
+⚠️ **The Test column names where the clause is CITED, not where it must be
+proven**, and a row sitting here does not make a virtualenv run necessary.
+UC-G1.12 c2 was in this table against a live test and closed on 2026-08-28 by a
+**unit** test in at_auth, because the arm it was missing is about what the
+client composes — which a live atServer cannot witness any better than a
+capturing mock can, and which the live arm had been asserting on a builder it
+never populated. Ask what would witness the missing arm before assuming the
+answer is the cited pack.
+
+Rows that genuinely need the wire are also the only route that raises
+**server-proven**.
 
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
-| **UC-A2.1** c4 | decrypts `@alice`'s `app_1.my_apps` self data | `enrollment_namespace_gate_test.dart` |
-| **UC-A2.2** c1 | Secrets already sealed to that key package are openable on both. | `copied_keyfile_test.dart` |
-| **UC-A2.2** c3 | so revoking E1 cuts every host sharing the copy at once | `nskey_rotation_live_test.dart` |
+| **UC-A2.1** c4 | `alice2` **authenticates PQ**. The self-data half closed 2026-08-28 in `nskey_self_notify_live_test.dart`, but that file's enrollments hold RSA-2048 APKAM keypairs — `enrolAndAuthenticate` defaults to `rsa2048` — so a second enrollment reading self data under **ML-DSA** PKAM is still unexercised | `nskey_self_notify_live_test.dart` |
 | **UC-A2.3** c1 | `alice3` gets `pq_signing_root@alice⁻¹` (root — universal) | `enrollment_namespace_gate_test.dart` |
-| **UC-A3.2** c1 | `alice2` obtains the nskey private and reads | `nskey_seeding_live_test.dart` |
 | **UC-A3.4** c3 | Offline `alice2`: … (key still held) | `monitor_reconnect_live_test.dart` |
 | **UC-A4.1** c3 | an unauthorised `@bob` enrollment cannot fetch the ciphertext (server-gated) nor decrypt | `nskey_multi_enrollment_test.dart` |
-| **UC-A4.3** c1 | all of alice's authorised enrollments read the self-copy | `nskey_multi_enrollment_test.dart` |
+| **UC-A4.3** c1 | **whichever of alice's enrollments wrote it** — the test runs one alice client against two of bob's, so the sending side is not varied at all, and the row's Given names aE1 and aE2. ⚠️ This row said the missing arm was "all of alice's authorised enrollments read the self-copy" until 2026-08-28; that requirement was removed from the clause on 2026-08-27 when `put` was found to write no self-copy | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.4** c1 | on **every** authorised bob enrollment — the live cross-atSign notify delivers to a single bob client | `nskey_notify_test.dart` |
 | **UC-A4.4** c3 | Offline-then-online **bob** (a cross-atSign recipient on the nskey path) ... or pulled if it arrived meanwhile | `monitor_reconnect_live_test.dart` |
 | **UC-A4.6** c5 | where they had exchanged `0x01`, with no readers-upgrade-first migration — and that is what later made it safe to drop `0x01` outright | `secret_sharing_delivery_test.dart` |
@@ -1121,15 +1176,68 @@ These are also the only route that raises **server-proven**.
 | **UC-B1.1** c3 | **capped** to `min(now + grace, expiry)` | `retrofit_retirement_e2e_test.dart` |
 | **UC-B1.2** c1 | it mints its **own** PQ APKAM keypair | `retrofit_e2e_test.dart` |
 | **UC-B1.3** c1 | a restricted E2 receives only its authorised subset of `nskey` keys | `retrofit_e2e_test.dart` |
-| **UC-B2.1** c1 | `alice1b` must re-enroll | `retrofit_retirement_e2e_test.dart` |
 | **UC-B2.2** c1 | legacy auth survives until `min(now + grace, expiry)` | `retrofit_retirement_e2e_test.dart` |
 | **UC-B4.3** c1 | "which `alice2` cannot read" — nothing establishes that a pre-capability (legacy-only) install FAILS to read a record stamped `at/symmetric… | `nskey_cross_atsign_test.dart` |
 | **UC-B5.1** c1 | "`pq_signing_root` is root (no namespace), so it has **no** `enroll:listns` push" — and, within the second arm, "(persists until one answer… | `signing_root_pull_two_enrollments_test.dart` |
 | **UC-B5.6** c1 | "and saying the retry must wait the ttl out — the one thing the caller can act on" (and, in the tail, "logs `severe`") | `nskey_rotation_live_test.dart` |
-| **UC-C1.5** c1 | the two postures resolve into different per-algorithm idempotence pools, which is what tells them apart live | `self_enrollment_retrofit_live_test.dart` |
 | **UC-G1.10** c1 | `_apsk` is **not** rewritten: … so the client sends none and the atServer leaves the record's own value alone | `enroll_update_live_test.dart` |
-| **UC-G1.12** c2 | or approval state at all — i.e. that the update request carries no field for the APPROVAL STATE | `enroll_update_live_test.dart` |
-| **UC-G1.15** c1 | the algorithms the receiver saw are the ones the sender emitted | `pq_posture_grid_test.dart` |
+
+#### Section 17 — the crypto-agility clauses, and what each waits on
+
+⛔ **These were never in the mapping above.** Section 17 was written on
+2026-08-27 from
+[decisions.md 119](decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27),
+120 and 121, long after the 2026-08-23 walk that produced the table above, so
+"nothing MAPPED is untested" says nothing about them. **Count them by running
+the suite**, not from a figure here — they are the bulk of what is unproven.
+
+**Most of them are not test gaps.** They describe mechanisms the tree does not
+have, so no assertion can close them until something is built, and each waits on
+a `## TODO` row in [the plan](../implementation-plan.md#todo). What follows is
+the mapping from clause to row. **Measured 2026-08-28**, by reading the
+production paths named:
+
+- **The nskey mint is singular.** `PublishedNskeyKeyRing` exposes
+  `mintAndPublish` and `rotate` and nothing else that writes an advertisement;
+  `_mint` takes one `keyAlgo`, one `NskeySeed` and one keypair. So **UC-G2.6**
+  entirely — every clause of it is about an `add` that does not exist — and
+  **UC-G2.11** c1 and c2, which turn on an add having happened. **UC-G2.5** c1
+  and c2 are assertable today only in a degenerate form: "the new generation
+  carries nothing forward" has nothing to carry while a generation holds one
+  key, and becomes a real assertion when the mint goes plural.
+- **A rotation excludes the enrollment named and nothing else.**
+  `revokeEnrollmentAndRotate` passes `excludeEnrollmentIds: {enrollmentId}`.
+  So **UC-G2.5** c4, the subtree exclusion.
+- **Nothing anywhere carries a revocation timestamp**, which is why
+  [decisions.md 121](decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28)
+  ruled that the revoker writes a durable record. So **UC-G2.5** c6, whose own
+  ⚠️ says the advertisement cannot answer the revocation half.
+- **A signature names its signing enrollment, not its key.** The protected
+  header is `{alg, typ, kid, v}` and `kid` is the enrollment id
+  (`envelope_signature.dart`). So **UC-G2.8** c2 and c3, and **UC-G2.7** c3
+  where it turns on the same field.
+- **A verifier has no accept lever for signatures.** `AtClientPreference` has
+  four algorithm levers — `dataSigningKeyAlgorithms`,
+  `authenticationKeyAlgorithm`, `sealsToKeyAlgorithms` and
+  `keyEstablishmentAlgorithms` — and only the last is an accept side, on the
+  encryption half. So **UC-G2.9** c4, and c1 and c2 which state the consequence.
+
+**What is left really is a test gap**, and the mechanism each needs is already
+in the tree:
+
+- **UC-G2.8** c1 — `verifyEnvelope` resolves `SigningAlgoType.strongestOf` over
+  the intersection (`envelope_signature.dart:709`), so "the strongest shared,
+  not the first match" is assertable now.
+- **UC-G2.5** c3 and c5, and **UC-G2.9** c3 — the excluded enrollment keeping
+  only the previous generation, every `kid` changing on a rotation, and the
+  refusal message naming both sides of an empty intersection.
+- **UC-G2.10** c1, c3 and c4 — the cross-atSign ladder either side of rollout 2.
+
+⚠️ **UC-G2.7** c4 and c5, **UC-G2.9** c2, **UC-G2.10** c5 and c6 and
+**UC-G2.11** c3 have **not** been read against the tree. They are commentary
+clauses — they contrast two mechanisms, or name which of two failures is the
+better one — and whether a test can express any of them is an open question
+rather than a known gap. Read them before writing anything.
 
 ### The proven clauses still owed a citation
 

@@ -63,12 +63,27 @@ void main() {
     //       for namespaces or approval state at all.
     provenIn('tests/at_functional_test/test/enroll_update_live_test.dart',
         'UC-G1.12 · namespaces stay out of reach',
-        proves: 'both halves — the built command carries no namespace, and a '
-            'raw request that does carry one is refused with the record '
-            'unchanged afterwards. The row used to pair this with an approval '
-            'state, which has no wire representation to refuse',
+        proves: 'the server half: a raw request naming namespaces is refused '
+            'by that guard\'s own named error — beside a valid field, so the '
+            'request is well-formed and only the namespaces entry can be what '
+            'refuses it — and the record is unchanged afterwards. ⚠️ It used '
+            'to claim the client half too, on an EnrollVerbBuilder this test '
+            'built and never populated; that builder does carry a namespaces '
+            'field, so the assertion said only that the test had not set one',
         clauses: [
           'the atServer refuses it by its own named error, not by',
+        ]);
+    provenIn('packages/at_auth/test/enrollment_update_test.dart',
+        'nothing this API can compose names namespaces or an approval state',
+        proves: 'the client half, over the command AtEnrollmentImpl().update '
+            'emits for a request naming every field EnrollmentUpdateRequest '
+            'has — as a CLOSED SET of keys rather than two named absences. '
+            'namespaces has a spelling to look for; an approval state does '
+            'not, so checking for one would be a tautology no change to the '
+            'package could redden. Mutation-proven: making the composer emit '
+            'a namespaces entry reddens it, quoting the set',
+        clauses: [
+          'carries no field for namespaces or approval state at all',
         ]);
   });
 

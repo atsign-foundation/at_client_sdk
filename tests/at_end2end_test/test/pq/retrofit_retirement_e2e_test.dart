@@ -166,6 +166,17 @@ void main() {
             'same moment and never a parent of any retrofit, must be '
             'unaffected — this is what makes the lockout attributable');
 
+    // The remedy, asserted rather than left as advice: a device stranded past
+    // the window comes back by an ordinary OTP enrollment. Without this the
+    // row says only that a credential stopped working — which is also what a
+    // broken atSign looks like — and the clause's "must re-enroll" would rest
+    // on nothing.
+    await mintLegacyEnrollment('l1c');
+    expect((await authenticateLegacy('l1c')).isSuccessful, isTrue,
+        reason: 'a fresh enrollment authenticates on the same atSign moments '
+            'after the capped one was refused: the route back is enrolling '
+            'again, and nothing about the atSign itself is broken');
+
     // And the upgraded credential itself keeps working: the retrofit retires
     // the old enrollment, not the device.
     final scan =

@@ -143,6 +143,22 @@ void main() {
           clauses: [
             'a later start adopts the published advertisement rather than '
                 'minting over it',
+            'exists and resolves on a `plookup`',
+          ]);
+      provenIn('tests/at_functional_test/test/nskey_self_notify_live_test.dart',
+          'a self notification reaches a second enrollment and decrypts',
+          proves: 'the second half of the same clause — a SECOND enrollment '
+              'of this atSign fetching a stored self record from the '
+              'atServer and opening it with the nskey private conveyed to it '
+              'at approval. The record is checked to be on the nskey data '
+              'path first, without which the read passes for a legacy self '
+              'write that every enrollment can open because the self '
+              'encryption key is atSign-wide. ⚠️ Nothing in the tree paired '
+              'those two before 2026-08-28: every multi-enrollment read was '
+              'cross-atSign, and the self direction was only ever a '
+              'notification',
+          clauses: [
+            'exists and resolves on a `plookup`',
           ]);
       provenIn(
         'tests/at_functional_test/test/underscore_public_key_hiding_test.dart',

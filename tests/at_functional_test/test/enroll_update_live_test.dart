@@ -331,19 +331,16 @@ void main() {
     final client = await enrol('g112-ns');
     final before = await fetch(client);
 
-    // The client half: the request type carries no field for either, so a
-    // caller cannot name one even by mistake. Asserted against the wire the
-    // production builder emits rather than by reading the class, because what
-    // reaches the atServer is whatever the builder copies in.
-    final builder = EnrollVerbBuilder()
-      ..enrollmentId = client.enrollmentId
-      ..operation = EnrollOperationEnum.update
-      ..metadata = {'note': 'g112'};
-    expect(builder.buildCommand(), isNot(contains('namespace')),
-        reason: 'the update this client can compose names no namespaces at '
-            'all — the escalation is refused on the wire below, and is also '
-            'unreachable from the API');
-
+    // ⚠️ The client half is NOT asserted here, and it used to be — by
+    // building an `EnrollVerbBuilder` that named no namespaces and observing
+    // that its command carried none. That builder does carry a `namespaces`
+    // field, because `enroll:request` needs one, so the assertion said only
+    // that this test had not set it: it would have stayed green for a
+    // production composer that filled it in. It is asserted properly in
+    // at_auth's `enrollment_update_test.dart`, over the command
+    // `AtEnrollmentImpl().update` actually emits for a request naming every
+    // field it has, as a closed set of keys.
+    //
     // The server half: the privilege-escalation guard, refused by its own
     // named error rather than by a generic failure.
     //

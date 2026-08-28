@@ -43,6 +43,12 @@ void main() {
             'not. Measured 2026-08-18 — mutating rollout2 to resolve as '
             'rollout1 leaves ALL NINE cells passing, because a sender signing '
             'RSA verifies everywhere too, so the algorithm assertion is the '
-            'only thing that discriminates');
+            'only thing that discriminates. The round trip itself is asserted '
+            'rather than printed: verification passes on the STRONGEST shared '
+            'signature, so an envelope that lost one on the way through the '
+            'atServer would verify exactly as well as one that did not',
+        clauses: [
+          'the algorithms the receiver saw are the ones the sender emitted',
+        ]);
   });
 }
