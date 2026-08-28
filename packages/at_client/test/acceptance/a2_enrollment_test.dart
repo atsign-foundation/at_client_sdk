@@ -149,6 +149,27 @@ void main() {
             'and the key, while the same enrollment reads the granted '
             'namespace on the same connection and the approver reads both — '
             'so the refusal is a gate rather than an absent record',
+        clauses: ['enforced at the atServer `__ssenv` namespace-delivery gate'],
+      );
+
+      // The row's last sentence, and a separate claim from the one above:
+      // that one is about DELIVERY of conveyed material over the __ssenv
+      // channel, this is about the ordinary records an application reads and
+      // writes. The __ssenv channel could have been special-cased without the
+      // same gate standing over an app's own keys.
+      provenIn(
+        'tests/at_functional_test/test/enrollment_namespace_gate_test.dart',
+        'a scoped enrollment can read and write the namespace it was granted',
+        proves: 'both verbs against a live atServer, because "read/write" is '
+            'two authorisations and the atServer answers them separately: an '
+            'llookup and an update of an ordinary record in the ungranted '
+            'namespace are each refused under their own verb, naming the '
+            'enrollment and the key, while both succeed in the granted one on '
+            'the same connection. The approver reads both records first, so '
+            'the refusals are a gate rather than an absent record. A gate '
+            'refusing reads while accepting writes would let a scoped '
+            'enrollment plant records in a namespace it cannot see',
+        clauses: ['can read/write `app_1.my_apps` but not `app_2.my_apps`'],
       );
       provenIn(
         'tests/at_functional_test/test/enrollment_chain_link_live_test.dart',
@@ -156,13 +177,17 @@ void main() {
         proves: 'the signing-root private is conveyed to a fully privileged '
             'enrollment and withheld from a scoped one, with the grant '
             'asserted to have actually differed between the two arms',
+        clauses: ['gets **no** `pq_signing_root'],
       );
       provenIn(
         'packages/at_client/test/secret_sharing_approver_test.dart',
         'shares namespace-authorized secrets with the approved enrollment',
         proves: 'the sender-side half — shareAllSecretsWith forwards only the '
             'secrets the approved namespaces authorize, so a private for an '
-            'ungranted namespace is never put on the wire in the first place',
+            'ungranted namespace is never put on the wire in the first place. '
+            'The approver holds secrets in two namespaces and the enrollment '
+            'is authorised for one, so the count is the discriminator',
+        clauses: ['nskey is never delivered'],
       );
     });
 

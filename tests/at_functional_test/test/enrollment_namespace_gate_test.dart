@@ -218,4 +218,121 @@ void main() {
       await enrolleeLookup.close();
     }
   });
+
+  test(
+      'a scoped enrollment can read and write the namespace it was granted, '
+      'and neither in the one it was not', () async {
+    // The envelope arm above is about DELIVERY — whether conveyed key
+    // material reaches an enrollment. This one is about ordinary records,
+    // which is the half an application sees, and it is a separate claim: the
+    // `__ssenv` channel could have been special-cased without the same gate
+    // standing over `dataprobe.wh…@alice`. Both verbs, because "read/write"
+    // is two authorisations and the atServer answers them separately —
+    // observed refusing `llookup` and `update` under different wording.
+    final scoped = await enrolScoped({granted: 'rw'});
+
+    expect(EnrollmentServiceImpl.isFullyPrivileged(scoped.grantedNamespaces),
+        isFalse,
+        reason: 'a privileged enrollment is authorised for everything and '
+            'would pass both arms legally, making this a comparison of one '
+            'case with itself');
+    expect(scoped.grantedNamespaces?.keys, contains(granted));
+    expect(scoped.grantedNamespaces?.keys, isNot(contains(withheld)));
+
+    AtKey record(String ns) => AtKey()
+      ..key = 'dataprobe${Uuid().v4().hashCode}'
+      ..namespace = ns
+      ..sharedBy = atSign
+      ..metadata = Metadata();
+
+    final allowed = record(granted);
+    final forbidden = record(withheld);
+    for (final key in [allowed, forbidden]) {
+      await atClient.getRemoteSecondary()!.executeVerb(UpdateVerbBuilder()
+        ..atKey = key
+        ..value = 'data-payload');
+    }
+
+    // The control the refusals rest on, and it is not drawn from the property
+    // under test: an enrollment authorised for everything reads BOTH records
+    // on this atSign. Without it, "the scoped enrollment could not read it"
+    // is equally explained by the record never having been written.
+    for (final key in [allowed, forbidden]) {
+      expect(
+          await atClient
+              .getRemoteSecondary()!
+              .executeCommand('llookup:${key.toString()}\n', auth: true),
+          contains('data-payload'),
+          reason: 'the approver must read ${key.namespace}, or the scoped '
+              'enrollment\'s failure below is an absent record rather than a '
+              'gate');
+    }
+
+    final enrolleeLookup =
+        AtLookupImpl(atSign, 'vip.ve.atsign.zone', TestUtils.rootServerPort)
+          ..enrollmentId = scoped.enrollmentId
+          ..atChops = AtChopsImpl(AtChopsKeys.create(
+            AtEncryptionKeyPair.create(
+                scoped.keys.defaultEncryptionPublicKey!.toString(), ''),
+            AtPkamKeyPair.create(scoped.keys.apkamPublicKey!.toString(),
+                scoped.keys.apkamPrivateKey!.toString()),
+          ));
+
+    try {
+      expect(
+          await enrolleeLookup.pkamAuthenticate(
+              enrollmentId: scoped.enrollmentId),
+          true,
+          reason: 'an enrollment that cannot connect fails every arm below '
+              'and says nothing about namespaces');
+
+      expect(
+          await enrolleeLookup.executeCommand('llookup:${allowed.toString()}\n',
+              auth: true),
+          contains('data-payload'),
+          reason: 'a scoped enrollment must be able to USE the namespace it '
+              'was granted, or the grant buys it nothing and the refusal '
+              'below is a wall rather than a boundary');
+
+      final written = await enrolleeLookup.executeCommand(
+          'update:${record(granted).toString()} written-by-scoped\n',
+          auth: true);
+      expect(written, startsWith('data:'),
+          reason: 'and it must be able to write there too — the row says '
+              'read/write, and an enrollment that can only read would satisfy '
+              'a test asserting only the read');
+
+      // Matched on the reason rather than merely on throwing: a bare throwsA
+      // is satisfied by a dropped connection or a malformed key, and the test
+      // would then be green for the absence of an answer. The atServer names
+      // the enrollment, the key and — this is the part that separates the two
+      // arms — the VERB it refused.
+      await expectLater(
+          enrolleeLookup.executeCommand('llookup:${forbidden.toString()}\n',
+              auth: true),
+          throwsA(predicate((e) =>
+              e is AtLookUpException &&
+              '$e'.contains('not authorized to llookup') &&
+              '$e'.contains(scoped.enrollmentId) &&
+              '$e'.contains(withheld))),
+          reason: 'the atServer must refuse the READ as an authorization '
+              'decision naming this enrollment and this namespace');
+
+      await expectLater(
+          enrolleeLookup.executeCommand(
+              'update:${record(withheld).toString()} written-by-scoped\n',
+              auth: true),
+          throwsA(predicate((e) =>
+              e is AtLookUpException &&
+              '$e'.contains('not authorized to update') &&
+              '$e'.contains(scoped.enrollmentId) &&
+              '$e'.contains(withheld))),
+          reason: 'and the WRITE separately, under its own verb. A gate that '
+              'refused reads and accepted writes would let a scoped '
+              'enrollment plant records in a namespace it cannot see, which '
+              'is worse than reading one');
+    } finally {
+      await enrolleeLookup.close();
+    }
+  }, timeout: const Timeout(Duration(minutes: 3)));
 }
