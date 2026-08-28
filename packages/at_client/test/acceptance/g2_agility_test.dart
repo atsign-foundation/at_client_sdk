@@ -390,7 +390,9 @@ void main() {
         proves: 'the count, from held key material: an enrollment holding two '
             'signing keys emits two signatures, under ML-DSA-65 and RS256. '
             'This is the mechanism the overlap would use',
-        clauses: ['one signature per active signing key'],
+        // ⛔ Clause fragment WITHDRAWN 2026-08-28 with the overlap it
+        // described - see decisions.md 120. The arm still pins the count from
+        // held material, which is what the removal will change.
       );
       provenIn(
         'packages/at_client/test/signing_key_minting_test.dart',
@@ -407,10 +409,12 @@ void main() {
             'selector return only the strongest held key reddens the '
             'two-signature assertion by its own reason string and leaves the '
             'control green',
-        clauses: [
-          'a verifier implementing only one of the two takes the strongest algorithm',
-          'the single-member build emits **exactly one** signature',
-        ],
+        // ⛔ Clause fragments WITHDRAWN 2026-08-28. This pinned two clauses
+        // about the two-signature overlap, and decisions.md 120 retired the
+        // overlap: the three-step ladder replaces it, because double-signing
+        // covers nothing a verifier can insist on. The test is KEPT and
+        // untouched - it pins the multi-signature writer as it stands, so it
+        // goes red the day that writer is removed, which is the signal.
       );
       provenIn(
         'packages/at_client/test/jws_envelope_test.dart',

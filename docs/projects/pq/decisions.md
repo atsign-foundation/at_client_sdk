@@ -176,7 +176,9 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [116] | Proposals rejected on evidence                                                              | 2026-08-23 | LIVE                      |
 | [117] | Measurements that closed a question                                                         | 2026-08-23 | LIVE                      |
 | [118] | The retrofit cap is armed by the child, not by the retrofit                                  | 2026-08-27 | LIVE                      |
-| [119] | Crypto agility: each advertisement adds, and the signer chooses                              | 2026-08-27 | LIVE                      |
+| [119] | Crypto agility: each advertisement adds, and the signer chooses                              | 2026-08-27 | AMENDED 2026-08-28        |
+| [120] | A signing migration is three steps, and the third has no lever                               | 2026-08-28 | LIVE                      |
+| [121] | A revocation publishes what it obliges                                                       | 2026-08-28 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -298,3 +300,5 @@ first, `enroll:updateMetadata`, and they still resolve.
 [117]: detail/decisions.md#117-measurements-that-closed-a-question-2026-08-23
 [118]: detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27
 [119]: detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27
+[120]: detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28
+[121]: detail/decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28

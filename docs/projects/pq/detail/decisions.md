@@ -12096,9 +12096,13 @@ What an installation can *handle* moves first; what it *produces* moves second:
 | **what it produces** | unchanged — still the old | **move to the new** |
 
 For encryption the levers are `keyEstablishmentAlgorithms` and
-`sealsToKeyAlgorithms`; for signing, the same shape with
-`dataSigningKeyAlgorithms`. **In both the two levers move in different releases,
-and that is the whole recipe.** The cost is fixed — it does not grow with the
+`sealsToKeyAlgorithms`, moving in different releases — and for encryption that is
+the whole recipe. ⚠️ **This said signing was "the same shape with
+`dataSigningKeyAlgorithms`" until 2026-08-28, and that was false**: a signing key
+cannot be minted without being signed with, so signing's *can handle* half is the
+**build** rather than a configuration field, and signing needs a **third** step
+that encryption does not. See
+[120](#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28). The cost is fixed — it does not grow with the
 number of algorithms, the fleet, or how many peers an atSign has — and it is
 uniform across all three advertisements, which is what makes it explainable.
 
@@ -12241,9 +12245,14 @@ of an algorithm that arrives later.** So 108 stands for the transition it was
 made for, and is **not** a general rule: a transition introducing an algorithm
 some verifier in the fleet may lack gets an **overlap**.
 
-**Which of the two a deployment takes is the developer's choice, and the SDK
-provides the hook rather than the policy** (gkc, 2026-08-27): sign twice for one
-release, or stage the rollouts carefully. The lever is
+⚠️ **SUPERSEDED 2026-08-28 by
+[120](#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28).**
+This offered the developer a choice — sign twice for one release, or stage the
+rollouts carefully — and the first option buys nothing verifiable: an attacker
+strips the stronger signature, `shared` collapses to the weaker algorithm, and
+the verifier accepts, because nothing lets it insist. The three-step ladder
+replaces the choice with one path. What follows is kept because it is why the
+overlap looked right. The lever is
 `AtClientPreference.dataSigningKeyAlgorithms`, a `Set` that is final at
 construction and refuses an algorithm this build cannot sign under. ⚠️ **Its
 dartdoc does not say this is what a two-member set is for**, which is owed.
@@ -12294,3 +12303,140 @@ rewritten to the ruled behaviour on 2026-08-27 and unproven until the mint
 changes. ⚠️ **Item 2 was itself corrected the same day**: its first draft had a
 generation gaining a key in place, which gkc had not agreed and which no
 mechanism in the tree supports. What the catalogue states is the rotation.
+
+## 120. A signing migration is three steps, and the third has no lever (2026-08-28)
+
+**In brief:** *relax, then tighten what you produce, then tighten what you
+accept — and only the first two exist today*
+
+**Ruled by gkc, 2026-08-28**, after [119](#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27)
+stated the encryption ladder and asserted signing followed the same two steps.
+It does not. A signing migration is:
+
+| | step 1 | step 2 | step 3 |
+| --- | --- | --- | --- |
+| **verify** | old **and** new | old and new | **new only** |
+| **sign** | old only | **new only** | new only |
+
+**The rule that generalises it, and the reason there are three.** A release may
+**relax** what it accepts, or **tighten what it produces** — but **tightening
+what it accepts must be its own release**. Step 1 relaxes, so it is safe in any
+order and strands nobody. Step 2 tightens production, safe because everyone still
+accepts both. Step 3 tightens acceptance, safe only once nothing signs the old.
+Folding 2 and 3 together performs two tightenings at once, and the second is
+sound only after the first has finished on **every** install — the atomic fleet
+flip this whole design exists because nobody can perform.
+
+**Why encryption needs no third step.** You stop being sealed to under an old
+algorithm by not advertising it, and no peer can force you. Anyone can present an
+old-algorithm **signature**, and a retired signing key stays advertised precisely
+so history verifies — so acceptance is bounded by **policy** for signing and by
+**key possession** for encryption. That asymmetry is the whole of it.
+
+⛔ **A retired signing key is therefore a standing forgery surface.** Nothing
+dates an envelope, so "it must be old" is not checkable: whoever breaks the
+retired algorithm can mint an envelope that verifies. Step 3 is where that
+closes, and step 3 is the step with nothing to do it with.
+
+**What the tree cannot express, measured 2026-08-28:**
+
+- **Step 1 cannot publish the new signing key without signing with it.** An
+  envelope carries one signature per **active** signing key
+  (`envelope_signature.dart`: *"a signer emits one signature per active"*), and
+  `reconcileSigningKeys` mints exactly what `dataSigningKeyAlgorithms` names. So
+  there is no state *holds `mldsa65`, signs `rsa2048` only*. **Step 1's content
+  is the BUILD** — shipping code that can verify the new algorithm — and it
+  publishes nothing. A verifier fetches the signer's `_apsk` when it verifies, so
+  it needs no advance warning.
+- **Step 3 has no lever at all.** `verifyEnvelope` resolves
+  `SigningAlgoType.strongestOf(shared)` where `shared` is the intersection of the
+  advertised keys and **the signatures the envelope actually carries**. There is
+  no minimum-algorithm check, no signature-count check, and no verifier-side
+  accepted-algorithms field anywhere in `AtClientPreference` — its three
+  algorithm axes are all about what this client *produces* or *seals to*.
+
+**So the lever step 3 needs is owed**, mirroring `sealsToKeyAlgorithms` on the
+encryption side: a set the verifier will accept a signature under, narrowing
+`shared` before `strongestOf`, and refusing with a message naming both sides when
+the intersection is empty. ⚠️ **Not every caller may be narrowed** — verifying
+one's own advertisement is not the same act as verifying a peer's data, and the
+call sites differ.
+
+**Double-signing is not needed by this ladder, and does not work anyway.** 119
+item 3 kept a two-member `dataSigningKeyAlgorithms` as the escape hatch for a
+fleet that cannot be sequenced. It buys nothing verifiable: an attacker strips
+the stronger signature, `shared` collapses to the weaker algorithm, and the
+verifier accepts — because there is no way to insist on the stronger. A verifier
+that *could* insist has done step 3 and needs no overlap. **The three-step ladder
+replaces it.** ⛔ Whether the multi-signature *writer* is removed from the code is
+a separate question, pending a blast-radius measurement: the signing root and the
+chain links may emit multi-signature envelopes for reasons of their own.
+
+**Status:** ruled, unbuilt. Step 3's lever does not exist; steps 1 and 2 are
+expressible today.
+
+## 121. A revocation publishes what it obliges (2026-08-28)
+
+**In brief:** *the revoker is the only actor that knows which nskeys must rotate,
+so it writes that down*
+
+**Ruled by gkc, 2026-08-28.** Revocation is performed by an enrolled client that
+holds the authority for it, and the atServer makes that authority total over the
+revoked enrollment: `_handleApproveDenyRevokeUnrevoke` iterates **every** namespace
+the target holds and refuses unless the caller is authorised for each at the
+target's access level —
+
+```dart
+for (MapEntry<String, String> entry in enVal!.namespaces.entries) {
+  bool isAuthorised = await isAuthorized(inboundConnectionMetadata,
+      namespace: entry.key, enrolledNamespaceAccess: entry.value,
+      operation: operation);
+  if (isAuthorised == false) { throw UnAuthorizedException(...); }
+}
+```
+
+— for `approve`, `deny`, `revoke` and `unrevoke` alike. **So a revoker holds a
+superset of what it revokes**, and it composes down the subtree, because a
+self-enrollment's grants are a subset of its parent's.
+
+**The revoker is therefore the only actor that can name the work**, and it writes
+a **durable record** of the revocation: which namespaces must rotate, from when,
+and which enrollments the rotation must exclude. It may then perform the
+rotations itself, leave them to whoever picks the record up, or both.
+
+**Why the record rather than a derived trigger.** Nothing server-side carries a
+revocation timestamp — `EnrollDataStoreValue` has no time field,
+`EnrollApproval` is `{state}` alone, and `enroll:list` serialises the value plus
+status without the record's `AtMetaData`. A later client therefore cannot ask
+*when* a revocation happened, and cannot derive what a rotation owes. The fact has
+to be published by the party that knows it. ⚠️ **This also supersedes the
+suggestion of adding a server-side revocation timestamp**: a work record is
+strictly better, because it is scoped to the namespaces that matter rather than a
+global instant every client compares everything against, and it needs no atServer
+change.
+
+**The exclusion set is the whole SUBTREE, and that is not optional.** Revoking a
+parent does not revoke what it self-spawned: on at_server `origin/trunk`
+`parentEnrollmentId` is written at `enroll_verb_handler.dart:436` and read by
+nothing outside the generated serializer — the field's own dartdoc says *"the
+cascade itself is the revoke path's to implement"*. So a descendant keeps
+`approved`, keeps authenticating, and keeps its grants. ⛔ **A rotation excluding
+only the named id would convey the new private straight to the attacker's
+surviving child**, which is the exact failure the field exists to make fixable.
+The subtree is walked over `parentEnrollmentId`, which `enroll:list` returns
+because it serialises the record whole; `enroll:fetch` does not carry it.
+
+**Order of work** (gkc's ruling, same day): **client-side subtree exclusion
+first, the atServer cascade after.** Neither alone suffices — the record does not
+stop a descendant authenticating, and the cascade does not tell a later client
+what to rotate. The client half is correct today and stays correct once the
+cascade lands.
+
+⚠️ **Nothing has ever read `parentEnrollmentId` in production**, so whichever
+half lands first is also the first test of whether the recorded links are correct
+on records already in the field.
+
+**What is unbuilt:** the record, the subtree walk, and the cascade. The client
+model does not expose `parentEnrollmentId` today even though the wire carries it.
+
+**Status:** ruled, unbuilt.

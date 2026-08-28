@@ -172,7 +172,7 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G2.6   | A client adds its own missing algorithm to the current generation                  | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.7   | A retired entry stops being offered and still opens history                        | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.8   | A verifier resolves the algorithm by name and only then walks the keys under it    | PROVEN    | `g2_agility_test.dart` |
-| UC-G2.9   | A verifier gap is covered by two signatures, and the developer chooses             | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.9   | Step 3 has no lever, so a retired signing key verifies forever                     | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.10  | The ladder across atSigns: safe through rollout 1, refused after rollout 2         | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.11  | The ladder within one atSign: safe through rollout 1, broken after rollout 2       | PROVEN    | `g2_agility_test.dart` |
 
@@ -3195,24 +3195,28 @@ it is safe to switch, because the peers are other people's apps. **Nothing tells
 them when that is.** The ladder trades an unbounded wait with no signal for a
 bounded, ordered pair of releases that can be explained in two lines.
 
-⛔ **A MIGRATION is still two releases, and it is the SAME two every time**
-(gkc, 2026-08-27 and 2026-08-28). What an installation can *handle* moves first;
-what it *produces* moves second. Encryption and signing differ only in the verbs:
+⛔ **A MIGRATION is never one release, and the rule behind it is one line: a
+release may RELAX what it accepts, or TIGHTEN what it produces — but tightening
+what it ACCEPTS must be its own release** (gkc, 2026-08-27 and 2026-08-28).
+Encryption needs two steps; **signing needs three**, and the difference is not a
+quirk of the levers.
 
-| | rollout 1 | rollout 2 |
-| --- | --- | --- |
-| **what it can handle** | **add the new** — mint its key, and ship the build that reads or verifies it | unchanged |
-| **what it produces** | unchanged — still the old | **move to the new** |
+| | step 1 | step 2 | step 3 |
+| --- | --- | --- | --- |
+| **what it can handle** | **add the new** | unchanged | **drop the old** — signing only |
+| **what it produces** | unchanged — still the old | **move to the new** | unchanged |
 
 For **encryption** that reads *mint both, seal only to the old*, then *mint only
 the new, seal only to the new*. Two configuration levers,
 `keyEstablishmentAlgorithms` and `sealsToKeyAlgorithms`, moving in different
 releases — and that is the whole recipe.
 
-⚠️ **Signing is the same ladder with a different first lever, and it has a THIRD
-step.** This passage claimed *"mint both and verify both, sign only with the
-old"* and that signing had two levers of the same shape, until 2026-08-28. Both
-were false. **A signing key cannot be minted without being signed with**: an
+For **signing** it reads *ship a build that verifies both, sign only the old*,
+then *sign only the new*, then *verify only the new* —
+[`decisions.md` 120](detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28).
+⚠️ **This passage claimed *"mint both and verify both, sign only with the old"*
+and that signing had two levers of the same shape, until 2026-08-28. Both were
+false.** **A signing key cannot be minted without being signed with**: an
 envelope carries one signature per *active* signing key, and
 `reconcileSigningKeys` mints exactly what `dataSigningKeyAlgorithms` names — so
 there is no state "holds `mldsa65`, signs `rsa2048` only". Signing's *can handle*
@@ -3240,7 +3244,7 @@ so offering two in the advertisement protects no verifier that lacks the
 algorithm used — only a plural **signature** does, at twice every envelope. That
 is the option a deployment takes when it *cannot* sequence the two rollouts
 across its fleet, not an alternative pattern:
-[UC-G2.9](#179-uc-g29--a-verifier-gap-is-covered-by-two-signatures-and-the-developer-chooses).
+[UC-G2.9](#179-uc-g29--step-3-has-no-lever-so-a-retired-signing-key-verifies-forever).
 
 ### 17.1 UC-G2.1 — A key package reader keeps the entry it cannot use
 
@@ -3476,26 +3480,41 @@ across its fleet, not an alternative pattern:
     opting into an overlap emits. The array is therefore needed by every
     deployment, not by the ones that double-sign.
 
-### 17.9 UC-G2.9 — A verifier gap is covered by two signatures, and the developer chooses
+### 17.9 UC-G2.9 — Step 3 has no lever, so a retired signing key verifies forever
 
 - **Given:** a transition to a signing algorithm some verifier in the fleet may
-  not implement.
-- **When:** an app sets a two-member `AtClientPreference.dataSigningKeyAlgorithms`
-  and signs; and separately, an app leaves the posture's single-member default.
+  not implement, and an enrollment whose `_apsk` advertises a retired key beside
+  its active one.
+- **When:** a verifier checks an envelope; and separately, an attacker who has
+  broken the retired algorithm presents one signed under it.
 - **Then:**
-  - the two-member build emits **one signature per active signing key**, and a
-    verifier implementing only one of the two takes the strongest algorithm the
-    two documents share and verifies against it;
-  - the single-member build emits **exactly one** signature — no posture on the
-    ladder emits two, and the plural writer is a capability an app opts into
-    rather than a position on the ladder;
+  - a verifier **cannot decline an algorithm it implements**. `verifyEnvelope`
+    resolves `strongestOf(shared)` over the intersection of the advertised keys
+    and the signatures the envelope carries; there is no minimum-algorithm check,
+    no signature-count check, and no accepted-algorithms field anywhere in
+    `AtClientPreference` — its three algorithm axes all govern what this client
+    *produces* or *seals to*;
+  - so **a retired signing key is a standing forgery surface.** It stays
+    advertised precisely so history verifies, and nothing dates an envelope — so
+    "it must be old" is not checkable, and whoever breaks that algorithm can mint
+    one that verifies;
   - a verifier sharing **no** algorithm with the envelope is refused, with a
     message naming what the envelope carries and what the `_apsk` advertises —
     never a fallback to a key derived some other way;
-  - **which of the two a deployment takes is the developer's**: sign twice for
-    one release, or stage the rollouts carefully. The SDK provides the lever and
-    not the policy.
-- **Cross-ref:** [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18),
+  - **step 3 closes this and needs a lever that does not exist**: a set the
+    verifier will accept a signature under, narrowing `shared` before
+    `strongestOf`. ⚠️ **Not every caller may be narrowed** — verifying one's own
+    advertisement is not the same act as verifying a peer's data.
+
+  ⚠️ **This row asserted the opposite until 2026-08-28.** It was *"a verifier gap
+  is covered by two signatures, and the developer chooses"* — sign twice for a
+  release, or sequence the rollouts. Double-signing covers nothing verifiable:
+  an attacker strips the stronger signature, `shared` collapses to the weaker
+  algorithm, and the verifier accepts, because it has no way to insist. A
+  verifier that *could* insist has done step 3 and needs no overlap.
+
+- **Cross-ref:** [`decisions.md` 120](detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28);
+  [108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18),
   whose swap is specific to a transition with no verifier gap.
 
 ### 17.10 UC-G2.10 — The ladder across atSigns: safe through rollout 1, refused after rollout 2
