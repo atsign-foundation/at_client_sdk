@@ -114,7 +114,7 @@ const liveProofExempt = <String, String>{};
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 133;
+const provenClauseCount = 134;
 
 /// See [provenClauseCount].
 const serverProvenClauseCount = 61;
@@ -133,11 +133,15 @@ const liveProofOwed = <String, String>{
   'UC-G2.3':
       'feasible and additive for the same reason: the _apsk values here are hand-built strings. A live arm would publish one carrying an unknown alg and prove the atServer serves it to a verifier verbatim',
   'UC-G2.5':
+      'nothing proves this row at all, live or in-process: today the mint produces one key so "carries nothing forward" is trivially true of it, and the only citation names the wire pin that will go red when the mint changes',
+  'UC-G2.7':
       'every citation is in-process and a live test is feasible; the retired-key arms all run over hand-built advertisements rather than one an atServer served',
-  'UC-G2.6':
-      'nothing anywhere drives a two-member dataSigningKeyAlgorithms through to an envelope, live or otherwise, and no test asserts a one-algorithm verifier VERIFYING a two-signature envelope',
   'UC-G2.8':
-      'no pack runs two enrollments of one atSign at different algorithm configurations, which is the whole of what this row asserts',
+      'every citation is in-process and a live test is feasible; the multi-key _apsk is assembled in the test rather than published by a real rotation and fetched back',
+  'UC-G2.9':
+      'the preference-to-envelope path was proven in-process on 2026-08-28 and had rested on nothing before that; what is still owed is a LIVE arm, where the _apsk a one-algorithm verifier reads is one an atServer served rather than one the test published into a fake',
+  'UC-G2.11':
+      'no pack runs two enrollments of one atSign at different algorithm configurations, which is the whole of what this row asserts. The rollout-2 half needs the same pair with the sender at the new posture, and would assert a refusal rather than a success',
   'UC-A3.1':
       'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
   'UC-A3.5':

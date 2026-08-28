@@ -107,6 +107,21 @@ class AtClientPreference {
   /// still exist?" without an answer. A [Set] rather than a list because
   /// membership is the whole of the meaning — the order signatures are emitted
   /// in is the strongest-first order the keyfile is read in, never this one.
+  ///
+  /// **A two-member set is the migration lever, and it is the only one.** An
+  /// envelope carries one signature per active signing key, so naming two
+  /// algorithms here makes every envelope this client writes verifiable by a
+  /// peer that implements either — which is what a migration to an algorithm
+  /// some verifier may not have needs, and what a swap cannot give it. It costs
+  /// every envelope a second signature, so it is a transition state rather than
+  /// a resting one.
+  ///
+  /// The pairing is with [sealsToKeyAlgorithms] on the encryption side, and the
+  /// two move in **different releases**: publish the capability first — mint
+  /// both algorithms while still sealing and verifying against the old — and
+  /// change what is sent only once the material is everywhere. No posture on
+  /// the rollout ladder sets two members; it is an application's deliberate
+  /// choice for the length of a transition.
   final Set<SigningAlgoType> dataSigningKeyAlgorithms;
 
   /// The algorithm this client's APKAM **authentication** key is minted under

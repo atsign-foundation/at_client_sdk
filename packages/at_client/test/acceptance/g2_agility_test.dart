@@ -222,20 +222,81 @@ void main() {
             'lands beside its retired predecessor rather than displacing it, so '
             'the advertisement grows where a naive writer would overwrite',
       );
-      // ⛔ The nskey clause is deliberately UNPINNED, and it says something
-      // different from this row's other three: a generation reaches its full
-      // set in TWO steps, not one. A rotation mints only new material and
-      // carries nothing forward; a client that then finds its own algorithm
-      // missing mints it and ADDS it to the current generation in place.
+    });
+
+    test('UC-G2.5 · an nskey rotation mints fresh and carries nothing forward',
+        () {
+      // GIVEN a generation holding keys for one or more algorithms, and a
+      //       rotation due by age policy or because it predates a revocation.
+      // WHEN  a client takes the mint lock and rotates.
+      // THEN  the new generation holds only material minted now; an algorithm
+      //       nobody still runs never returns; a revoked enrollment gains
+      //       nothing; every kid changes, which is how peers learn.
       //
-      // Neither step exists. PublishedNskeyKeyRing._prepareMint still takes
-      // keyEstablishmentAlgorithms.first, so no generation in the tree has ever
-      // held two keys, and there is no add operation at all. Nothing can prove
-      // this clause until both land - see decisions.md 119 item 2.
+      // ⛔ WHOLLY UNPINNED, deliberately. Today's rotation mints ONE key, under
+      // keyEstablishmentAlgorithms.first, so "carries nothing forward" is
+      // trivially true of it and proves nothing about the ruled behaviour -
+      // which is about a generation that can hold several. Nothing citable here
+      // would go red if the ruling were implemented wrongly. See decisions.md
+      // 119 item 2.
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'the published advertisement emits its exact wire shape — raw literals',
+        proves:
+            'ONLY the wire shape as it stands: hand-written raw literals over a '
+            'keys list of length one. It is named here as the test that goes '
+            'RED the day the mint stops taking the first configured algorithm, '
+            'which is the signal this row waits for - not as evidence for any '
+            'clause above',
+      );
+    });
+
+    test('UC-G2.6 · a client adds its own missing algorithm to the generation',
+        () {
+      // GIVEN a current generation lacking an algorithm this client needs.
+      // WHEN  this client mints that material and adds it.
+      // THEN  it joins the CURRENT generation in place, under the same mint
+      //       lock; nothing already there moves; only the new private is
+      //       conveyed.
+      //
+      // ⛔ The clauses are UNPINNED: there is no add operation at all, not even
+      // behind a flag. What is cited is the interlock the add must take, which
+      // exists and is proven live - so a change to it surfaces here rather than
+      // in whatever builds the add later.
+      provenIn(
+        'tests/at_functional_test/test/nskey_mint_lock_live_test.dart',
+        'two CONCURRENT mints by one enrolment publish one advertisement',
+        proves:
+            'that the interlock this row depends on actually prevents the lost '
+            'update, live: two concurrent writers reach one advertisement '
+            'rather than one overwriting the other. That is the exact hazard an '
+            'add creates - read, mutate, write on shared durable state - so the '
+            'add takes this lock rather than a new one. It is evidence for the '
+            'lock, not for any clause above',
+      );
+      provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'a tampered advertisement is rejected',
+        proves: 'that the signature is verified per DOCUMENT rather than per '
+            'generation: the reader resolves the signer from the envelope kid '
+            'and checks it before reading a key. That is what makes an add '
+            'signable by an enrollment other than the one that minted the '
+            'generation - nothing in the read path assumes one signer per '
+            'generation, and this is the arm that would go red if one were '
+            'introduced',
+      );
+      provenIn(
+        'tests/at_functional_test/test/nskey_mint_lock_live_test.dart',
+        'a client that meets another holder\'s lock refuses to mint',
+        proves:
+            'the back-off half: a client meeting a held lock refuses rather '
+            'than proceeding, which is what makes "fails the lock, backs off '
+            'and re-reads" a behaviour rather than an intention',
+      );
     });
 
     test(
-        'UC-G2.5 · a retired entry stops being offered and still opens history',
+        'UC-G2.7 · a retired entry stops being offered and still opens history',
         () {
       // GIVEN an advertiser that has retired an entry — the _apsk swap at
       //       pqActive, or a rotated nskey generation.
@@ -265,6 +326,32 @@ void main() {
         clauses: ['the retired entry is **not selected** for anything new'],
       );
       provenIn(
+        'packages/at_client/test/published_nskey_key_ring_test.dart',
+        'a retired entry is not what a sender is pointed at',
+        proves:
+            'the nskey arm of the same asymmetry, over an advertisement holding '
+            'a retired X-Wing entry beside an active ML-KEM one, arranged so '
+            'that preference order ALONE would pick the retired key. A selector '
+            'consulting only the sender\'s order fails here',
+      );
+    });
+
+    test('UC-G2.8 · a verifier resolves the algorithm, then walks the keys',
+        () {
+      // GIVEN an _apsk advertising more than one key under the algorithm an
+      //       envelope is signed with - the ordinary state of any enrollment
+      //       that has ever rotated its signing key.
+      // WHEN  a verifier checks the envelope.
+      //
+      // ⛔ The key-identifier clauses are UNPINNED: decisions.md 119 item 4
+      // rules that a signature names the key it was made with, and no such
+      // field exists. What IS pinned is the fallback the ruling preserves - the
+      // walk, and its counted refusal - because that is what an older verifier
+      // goes on doing once the field ships, unbumped, beside it.
+      // THEN  it resolves the algorithm from what the two documents share and
+      //       walks every key advertised under it, current first; the refusal
+      //       names how many were tried.
+      provenIn(
         'packages/at_client/test/signing_key_minting_test.dart',
         'an envelope signed before the withdrawal still verifies',
         proves: 'the ordinary case rather than the overlap: a real '
@@ -286,22 +373,11 @@ void main() {
             '2 mldsa65 key(s)". A verifier that stopped at the first key would '
             'report a bad signature here instead, so the count is what '
             'distinguishes walking from guessing',
-        clauses: [
-          'a verifier matches a signature to its key by trial, not by name'
-        ],
-      );
-      provenIn(
-        'packages/at_client/test/published_nskey_key_ring_test.dart',
-        'a retired entry is not what a sender is pointed at',
-        proves:
-            'the nskey arm of the same asymmetry, over an advertisement holding '
-            'a retired X-Wing entry beside an active ML-KEM one, arranged so '
-            'that preference order ALONE would pick the retired key. A selector '
-            'consulting only the sender\'s order fails here',
+        clauses: ['names how many were tried'],
       );
     });
 
-    test('UC-G2.6 · a verifier gap is covered by two signatures', () {
+    test('UC-G2.9 · a verifier gap is covered by two signatures', () {
       // GIVEN a transition to a signing algorithm some verifier may not have.
       // WHEN  an app sets a two-member dataSigningKeyAlgorithms and signs; and
       //       separately an app leaves the posture's single-member default.
@@ -315,6 +391,26 @@ void main() {
             'signing keys emits two signatures, under ML-DSA-65 and RS256. '
             'This is the mechanism the overlap would use',
         clauses: ['one signature per active signing key'],
+      );
+      provenIn(
+        'packages/at_client/test/signing_key_minting_test.dart',
+        'a two-member in-use set signs twice, and a one-algorithm verifier ',
+        proves: 'the row\'s central claim, and it rested on nothing until '
+            '2026-08-28: a two-member dataSigningKeyAlgorithms driven through '
+            'reconcileSigningKeys and the production selector produces a '
+            'two-signature envelope, and an _apsk advertising only ONE of the '
+            'two - the record as it stood before the second algorithm was '
+            'minted, which is what an un-upgraded verifier would be served - '
+            'still verifies it. A single-member control runs first, so the '
+            'pair is attributable to the SET rather than to this client always '
+            'signing with everything it holds. Mutation-proven: making the '
+            'selector return only the strongest held key reddens the '
+            'two-signature assertion by its own reason string and leaves the '
+            'control green',
+        clauses: [
+          'a verifier implementing only one of the two takes the strongest algorithm',
+          'the single-member build emits **exactly one** signature',
+        ],
       );
       provenIn(
         'packages/at_client/test/jws_envelope_test.dart',
@@ -346,7 +442,7 @@ void main() {
     });
 
     test(
-        'UC-G2.7 · one rollout, self→other: an un-upgraded peer notices nothing',
+        'UC-G2.10 · one rollout, self→other: an un-upgraded peer notices nothing',
         () {
       // GIVEN @bob upgrades and publishes a widened advertisement; @alice is
       //       still on the old build.
@@ -374,19 +470,31 @@ void main() {
             'swapping the arguments swaps the answer. An un-upgraded sender '
             'therefore takes what it knows without the recipient being asked',
       );
-      // ⛔ The un-upgraded-SENDER arm is UNPINNED. Every live arm above varies
-      // the sender's preference ORDER over algorithms both builds implement.
-      // None runs a sender that cannot use the recipient's newer entry at all,
-      // which is the case the row is about.
+      // ⛔ Two clauses are UNPINNED, and they are the same gap seen twice.
+      //
+      // Every live arm above varies the sender's preference ORDER over
+      // algorithms BOTH builds implement. None runs a sender that cannot use
+      // the recipient's newer entry at all - which is the case the row is
+      // about, and why the row now states outright that omitting an algorithm
+      // and not implementing one are different routes to one refusal.
+      //
+      // "The recipient does nothing further" is unpinned too: the amendment
+      // test proves an envelope sealed BEFORE still opens after, which is the
+      // consequence, but nothing asserts the absence - no re-seal, no
+      // conveyance fired. An absence needs its own arm, and a test that merely
+      // succeeds at reading is satisfied either way.
     });
 
     test(
-        'UC-G2.8 · one rollout, self→self: an un-upgraded enrollment notices nothing',
+        'UC-G2.11 · one rollout, self→self: an un-upgraded enrollment notices nothing',
         () {
-      // GIVEN @alice has two enrollments; alice1 configures a second algorithm
-      //       and alice2 is still on the old build.
+      // GIVEN @alice has two enrollments sharing a namespace. alice1 runs the
+      //       app's ROLLOUT 1 build - mints both algorithms, seals only to the
+      //       old. alice2 is still on the previous build.
       // WHEN  alice1 writes a self record alice2 reads, and then the reverse.
-      // THEN  both directions succeed across the mixed pair.
+      // THEN  both directions succeed, so rollout 1 can be taken one install at
+      //       a time; and after ROLLOUT 2 an install that never took rollout 1
+      //       is refused, which is the ladder working rather than a defect.
       provenIn(
         'packages/at_client/test/nskey_resolver_test.dart',
         'the default reaches an owner advertising either KEM',

@@ -50,7 +50,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**80 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 81 use cases and 91 scenarios —
+**83 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 84 use cases and 94 scenarios —
 several rows carry more than one.
 
 ⚠️ **This sentence said `50 · 2 · 1` across 53 until 2026-08-18**, when a cold
@@ -159,10 +159,13 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G2.2   | An nskey advertisement reader walks the list                                       | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.3   | An `_apsk` reader tolerates an unknown algorithm and distrusts an unknown status   | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.4   | An add moves nothing peers already address                                         | PROVEN    | `g2_agility_test.dart` |
-| UC-G2.5   | A retired entry stops being offered and still opens history                        | PROVEN    | `g2_agility_test.dart` |
-| UC-G2.6   | A verifier gap is covered by two signatures, and the developer chooses             | PROVEN    | `g2_agility_test.dart` |
-| UC-G2.7   | One rollout, self→other: an un-upgraded peer notices nothing                       | PROVEN    | `g2_agility_test.dart` |
-| UC-G2.8   | One rollout, self→self: an un-upgraded enrollment notices nothing                  | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.5   | An nskey rotation mints fresh material and carries nothing forward                 | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.6   | A client adds its own missing algorithm to the current generation                  | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.7   | A retired entry stops being offered and still opens history                        | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.8   | A verifier resolves the algorithm by name and only then walks the keys under it    | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.9   | A verifier gap is covered by two signatures, and the developer chooses             | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.10  | One rollout, self→other: an un-upgraded peer notices nothing                       | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.11  | One rollout, self→self: an un-upgraded enrollment notices nothing                  | PROVEN    | `g2_agility_test.dart` |
 
 ---
 
@@ -3160,18 +3163,34 @@ that an algorithm upgrade is an **ADD by the advertiser**. Nobody coordinates a
 flag day. The rows here assert that property once, across all three, rather than
 three times in three clusters.
 
-**Why it is worth a section: the rollout count.** With a singular advertisement a
-deployment moving from one algorithm to another needs two releases — one that can
-*read* the new algorithm, and a later one that switches to it — and the second
-cannot ship until every peer has the first. The peers are other people's apps, so
-**nothing tells the developer when that is**. With an array there is one release.
+**Why it is worth a section: the rollout count.** With a singular advertisement,
+*every* change to an advertisement is a switch — the new value replaces the old —
+so a peer that cannot read the new one is stranded, and the developer cannot know
+when it is safe because the peers are other people's apps. **Nothing tells them
+when that is.** An array removes that: adding costs no peer anything, so it takes
+one release and needs no coordination.
+
+⛔ **A MIGRATION is still two releases, and deliberately so** (gkc, 2026-08-27).
+Adding an algorithm and retiring one are different operations with different
+risk, and only the first is free:
+
+| | mint | seal to |
+| --- | --- | --- |
+| **rollout 1** | old **and** new | **old only** |
+| **rollout 2** | new only | new only |
+
+Rollout 1 populates every advertisement with the new algorithm while changing
+nothing about what senders do, so it cannot strand anybody. Rollout 2 changes the
+send policy once the material is everywhere, and from then on a peer that never
+took rollout 1 is refused — loudly, and correctly. It is the same ladder this
+project walks itself, one layer down: capability first, default second.
 
 ⚠️ **The signature case is not the encryption case.** For encryption the *sender*
 picks from the recipient's advertised set, so offering two costs the advertiser
 nothing. For a signature the *signer* picks and the verifier must cope with
 whatever arrives, so an advertisement offering two protects no verifier that
 lacks the algorithm used — only a plural **signature** does, and that costs every
-envelope twice. [UC-G2.6](#176-uc-g26--a-verifier-gap-is-covered-by-two-signatures-and-the-developer-chooses)
+envelope twice. [UC-G2.9](#179-uc-g29--a-verifier-gap-is-covered-by-two-signatures-and-the-developer-chooses)
 is where that difference lives.
 
 ### 17.1 UC-G2.1 — A key package reader keeps the entry it cannot use
@@ -3263,51 +3282,138 @@ is where that difference lives.
     verifies afterwards, so the add destroys no history and needs no re-seal;
   - the advertisement's `suites` **widens** to cover both, derived from the keys
     the holder actually advertises rather than from what the writing build
-    happens to support;
-  - ⛔ **an nskey generation reaches its full set in two steps, and this row's
-    other three clauses are about the two advertisements that reach theirs in
-    one.** A **rotation** mints only new material and carries nothing forward —
-    which is what makes rotation the garbage collection, since an algorithm
-    nobody still runs never comes back. A client that then finds the current
-    generation missing an algorithm it needs mints that material and **adds** it
-    to the generation in place, under the mint lock. Only a build implementing an
-    algorithm can mint it, so no rotating client can assemble the fleet's set on
-    its own and the population is necessarily incremental.
-- **Cross-ref:** [UC-A2.5](#35-uc-a25--an-enrollment-amends-its-own-key-package-enrollupdate)
-  proves this live for a key package.
+    happens to support.
 
-### 17.5 UC-G2.5 — A retired entry stops being offered and still opens history
+### 17.5 UC-G2.5 — An nskey rotation mints fresh material and carries nothing forward
+
+- **Given:** a namespace whose current generation holds keys for one or more
+  algorithms, and a rotation is due — by the application's own policy, such as
+  the generation's age, or because the generation was created before a
+  revocation.
+- **When:** a client takes the mint lock and rotates.
+- **Then:**
+  - the new generation holds **only** material this client minted now. Nothing
+    from the previous generation is carried into it, whatever algorithms that
+    generation named;
+  - **so rotation is the garbage collection.** An algorithm no running client
+    still needs is never added back, and its removal happens with nobody
+    deciding it — where carrying material forward would leave nothing able to
+    remove one at all;
+  - a revoked enrollment gains nothing from the rotation: it holds privates for
+    the previous generation only, and no key in the new one is one it has ever
+    held. This is why fresh-only needs no special revocation path — there is
+    nothing to suppress;
+  - every peer's cached content key is superseded, because every `kid` in the
+    advertisement has changed. That is how a peer learns a rotation happened at
+    all: a sender never sees a recipient's decapsulation fail;
+  - **a client decides a rotation is due from the current advertisement alone** —
+    its age against the application's own policy, and its `createdAt` against the
+    last revocation. No client coordinates with another to reach the same answer,
+    which is what lets any of them act;
+  - **a client that fails to take the mint lock does not queue and does not retry
+    blindly.** It backs off, re-reads after the cooldown and re-decides — finding
+    either that another client has done what was needed or that it still must.
+    That is what makes several clients converge rather than storm.
+
+  ⚠️ **The revocation half of the trigger is not computable today.** Nothing
+  carries a revocation timestamp: `EnrollDataStoreValue` has no time field at
+  all, `EnrollApproval` is `{state}` alone, and `enroll:list` serialises the
+  value plus status without the record's metadata — so a client cannot ask when
+  a revocation happened. The age half is computable now, from `createdAt`.
+
+### 17.6 UC-G2.6 — A client adds its own missing algorithm to the current generation
+
+- **Given:** a current generation that does not carry an algorithm this client
+  needs — because whichever client rotated could not mint it.
+- **When:** this client mints that material and adds it.
+- **Then:**
+  - the material joins the **current** generation in place. No new generation is
+    created, so no peer is made to re-cut a content key it has no reason to;
+  - everything already in the generation is untouched — the existing `kid`s,
+    their statuses, and the generation's own identity;
+  - the add takes the **same mint lock** as a rotation, because two clients
+    adding at once is a read-mutate-write on shared durable state. A client that
+    fails the lock backs off and re-reads rather than writing, and finds either
+    that another client added what it wanted or that it still must;
+  - only the **newly minted** private is conveyed to authorised enrollments;
+    they already hold the rest;
+  - ⚠️ **a client can only add material for an algorithm it implements.** That
+    single fact is why the fleet's set assembles incrementally rather than in one
+    rotation, and why no scheme that reads the fleet's capabilities up front can
+    replace it;
+  - **the added document is re-signed by the adding enrollment**, which need not
+    be the one that minted the generation. Nothing assumes otherwise: a reader
+    resolves the signer from the envelope's own `kid` and verifies against that
+    enrollment's `_apsk`, so an advertisement's signer is a property of the
+    document rather than of the generation. *Which* enrollments may write it at
+    all is the atServer's gate on the record, never the reader's;
+  - **an add is refused on a generation that is already due for rotation**, and
+    the client rotates instead. Adding to a generation that predates a revocation
+    would leave it half pre-revocation and half post, and *created after the
+    revocation* would stop characterising it — the trigger and the document would
+    no longer be about the same thing.
+
+### 17.7 UC-G2.7 — A retired entry stops being offered and still opens history
 
 - **Given:** an advertiser that has retired an entry — the `_apsk` swap at
   `pqActive`, or a rotated nskey generation.
 - **When:** a new operation runs, and separately an old record is read.
 - **Then:**
   - the retired entry is **not selected** for anything new;
-  - it stays **advertised**, and what it produced still verifies or opens. A
-    verifier walks every key advertised under the resolved algorithm in
-    published order, so the current one answers first and a retired one is
-    reached only by a record old enough to need it;
+  - it stays **advertised**, and what it produced still verifies or opens;
   - **removal is therefore a two-step, never one.** An entry withdrawn from the
     advertisement outright would destroy the ability to read what it produced,
     which is the failure this row exists to make impossible;
-  - **this is the ordinary case, not the overlap case.** An app that signs only
-    once still changes *what* it signs with over time, so its `_apsk`
-    accumulates advertised keys by rotation alone. A plural **advertisement** is
-    what every app that has ever rotated carries; a plural **signature** is what
-    only an app opting into an overlap emits. The array is therefore needed by
-    every deployment, not by the ones that double-sign;
-  - **a verifier matches a signature to its key by trial, not by name.** The
-    envelope's `kid` is the signing **enrollment**, never a key, so the verifier
-    resolves the algorithm from what the two documents share and then walks
-    every key advertised under it in published order. The refusal, when no key
-    works, names how many were tried — so a verifier that stopped at the first
-    goes red rather than reporting a bad signature;
-  - a **retirement** is not a **compromise**, and only the first is what this
-    row is about — an entry withdrawn from verifying history too is
+  - ⚠️ **an nskey entry is never retired in place, and its retirement is
+    GENERATIONAL.** A rotation simply does not mint that algorithm again, and
+    what opens history is the previous generation's private, still held — not a
+    retired entry in the current advertisement. The nskey reader handles a
+    retired entry and **no writer produces one**: the three that do are the key
+    package's mint, the signing key's mint and the signing root's. So the two
+    substrates reach the same guarantee by different mechanisms, and a reader
+    generalising from one to the other is wrong;
+  - a **retirement** is not a **compromise**, and only the first is what this row
+    is about — an entry withdrawn from verifying history too is
     [UC-G2.3](#173-uc-g23--an-_apsk-reader-tolerates-an-unknown-algorithm-and-distrusts-an-unknown-status)'s
     unknown-status clause, and the two must not be conflated.
 
-### 17.6 UC-G2.6 — A verifier gap is covered by two signatures, and the developer chooses
+### 17.8 UC-G2.8 — A verifier resolves the algorithm by name and only then walks the keys under it
+
+- **Given:** an `_apsk` advertising more than one key under the algorithm an
+  envelope is signed with — the ordinary state of any enrollment that has ever
+  rotated its signing key.
+- **When:** a verifier checks the envelope.
+- **Then:**
+  - **the algorithm is identified, never guessed.** Every signature names its own
+    algorithm in the protected header and every advertised entry names its own,
+    so the verifier takes the algorithm the two documents share and resolves in
+    one pass. Where an envelope carries more than one signature it takes the
+    **strongest** shared, not the first match, so neither side's ordering alone
+    decides;
+  - **the signature also names the key it was made with**, so a verifier that
+    understands the field selects in one step rather than trying candidates.
+    JOSE's `kid` is already spent on the signing **enrollment**, so this is a
+    second field beside `alg`;
+  - ⛔ **that field does NOT bump `envelopeVersion`, and an older verifier
+    ignores it and walks instead** — the current one first, a retired one reached
+    only by a record old enough to need it. The walk is what the field replaces,
+    not what it contradicts, so both behaviours are correct at once and no
+    verifier is stranded. A version bump would make every older verifier refuse
+    every new envelope, because the version mismatch is a refusal;
+  - a signature naming a key the advertisement does not carry is **refused,
+    naming that key** — a better diagnosis than a count, which cannot
+    distinguish a wrong key from a bad signature. Where the field is absent and
+    the walk is taken, the refusal instead **names how many were tried**, so a
+    verifier that stopped at the first goes red rather than reporting a bad
+    signature;
+  - **this is the ordinary case, not the overlap case.** An app that signs only
+    once still changes *what* it signs with over time, so its `_apsk` accumulates
+    advertised keys by rotation alone. A plural **advertisement** is what every
+    app that has ever rotated carries; a plural **signature** is what only an app
+    opting into an overlap emits. The array is therefore needed by every
+    deployment, not by the ones that double-sign.
+
+### 17.9 UC-G2.9 — A verifier gap is covered by two signatures, and the developer chooses
 
 - **Given:** a transition to a signing algorithm some verifier in the fleet may
   not implement.
@@ -3329,7 +3435,7 @@ is where that difference lives.
 - **Cross-ref:** [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18),
   whose swap is specific to a transition with no verifier gap.
 
-### 17.7 UC-G2.7 — One rollout, self→other: an un-upgraded peer notices nothing
+### 17.10 UC-G2.10 — One rollout, self→other: an un-upgraded peer notices nothing
 
 - **Given:** `@bob` upgrades to a build configuring a second algorithm and
   publishes the widened advertisement; `@alice` is still on the old build.
@@ -3338,20 +3444,42 @@ is where that difference lives.
   - `alice1` seals under the entry it understands and `@bob` opens it — nothing
     fails, nothing is refused, and `@alice` is never asked to upgrade first;
   - an `@alice` that *has* upgraded seals under the new entry **immediately**,
-    with no further release on `@bob`'s side.
+    with no further release on `@bob`'s side;
+  - **the recipient does nothing further.** Having published the widened
+    advertisement, `@bob` re-seals nothing, re-conveys nothing, and never learns
+    whether `@alice` upgraded. The upgrade is invisible to the party that made it
+    possible, which is what stops "one rollout" from needing two ends to agree on
+    timing;
+  - ⚠️ **a sender that OMITS an algorithm and a sender that cannot IMPLEMENT one
+    reach the same refusal by different routes, and only the first is exercised
+    anywhere.** Omitting is `sealsToKeyAlgorithms` policy; not implementing is
+    the build. Every arm covering this row varies a preference over algorithms
+    both builds hold, so the coverage reads stronger than it is.
 
   The two ends move independently, and that is the whole of what "one rollout"
   means.
 
-### 17.8 UC-G2.8 — One rollout, self→self: an un-upgraded enrollment notices nothing
+### 17.11 UC-G2.11 — One rollout, self→self: an un-upgraded enrollment notices nothing
 
-- **Given:** `@alice` has two enrollments; `alice1` runs a build configuring a
-  second algorithm and `alice2` is still on the old one.
-- **When:** `alice1` writes a self record both must read, and `alice2` reads it;
-  then `alice2` writes and `alice1` reads.
+- **Given:** `@alice` has two enrollments sharing a namespace. `alice1` runs the
+  app's **rollout 1** build — it mints both the old and the new algorithm and
+  seals only to the **old**. `alice2` is still on the previous build, which
+  implements only the old.
+- **When:** `alice1` writes a self record `alice2` must read, and then `alice2`
+  writes one `alice1` must read.
 - **Then:**
-  - both directions succeed across the mixed pair, so an atSign may upgrade its
-    installs one at a time.
+  - **both directions succeed.** `alice1`'s add put the new algorithm into the
+    shared generation without changing what it seals to, so `alice2` finds what
+    it has always found;
+  - so an atSign may take **rollout 1** one install at a time, in any order, with
+    no window in which the pair cannot talk. That is the whole benefit of minting
+    ahead of sending;
+  - ⛔ **after rollout 2 this stops being true, and correctly so.** An `alice1`
+    that mints only the new algorithm and seals only to it writes records
+    `alice2` cannot open. **The two-rollout dance is the only safe way** (gkc,
+    2026-08-28): rollout 1 moves the receive capability, rollout 2 moves the send
+    posture, and nothing in the SDK removes the need to do them in that order on
+    every install. A refusal after rollout 2 is the ladder working, not a defect.
 
   ⚠️ **The configured list and the published advertisement are different things,
   and this is the row where confusing them shows.** With one atSign both belong

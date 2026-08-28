@@ -585,6 +585,65 @@ void main() {
       await verifyEnvelope(envelope,
           signerPublicKey: published.last, expecting: EnvelopeType.app);
     });
+
+    /// UC-G2.9 — the overlap a migration with a verifier gap needs.
+    ///
+    /// The gap this closes: a two-member `dataSigningKeyAlgorithms` is set in
+    /// exactly two tests elsewhere and NEITHER reaches an envelope — one
+    /// asserts mint order, the other set equality. So nothing established that
+    /// the PREFERENCE, rather than hand-supplied key material, is what produces
+    /// a two-signature envelope. And the direction the overlap exists for — a
+    /// verifier implementing one of the two ACCEPTING such an envelope — was
+    /// asserted nowhere; only the refusal was.
+    test(
+        'a two-member in-use set signs twice, and a one-algorithm verifier '
+        'still verifies', () async {
+      when(() => atLookUp.enrollmentId).thenReturn(null);
+      final published = <String>[];
+      when(() => atClient.get(any(),
+          getRequestOptions: any(named: 'getRequestOptions'))).thenAnswer((_) {
+        if (published.isEmpty) throw AtKeyNotFoundException('not there');
+        return Future.value(AtValue()..value = published.last);
+      });
+      when(() => atClient.put(any(), any(),
+          putRequestOptions: any(named: 'putRequestOptions'))).thenAnswer((i) {
+        published.add(i.positionalArguments[1] as String);
+        return Future.value(true);
+      });
+
+      // The control, and it has to come first: without it "two signatures"
+      // would be satisfied by a build that emits every key it holds whatever
+      // the set says.
+      inUse({SigningAlgoType.rsa2048});
+      await minter().reconcileSigningKeys();
+      final one = signEnvelope('one member',
+          keys: await minter().signingKeys, type: EnvelopeType.app);
+      expect(one.signatures.map((s) => s.alg).toList(), ['RS256'],
+          reason: 'the control: a single-member set emits exactly one '
+              'signature, so the pair below is attributable to the SET rather '
+              'than to this client always signing with everything it holds');
+      final rsaOnlyApsk = published.last;
+
+      inUse({SigningAlgoType.rsa2048, SigningAlgoType.mldsa65});
+      await minter().reconcileSigningKeys();
+      final two = signEnvelope('two members',
+          keys: await minter().signingKeys, type: EnvelopeType.app);
+      expect(two.signatures.map((s) => s.alg).toList(), ['ML-DSA-65', 'RS256'],
+          reason: 'one signature per active signing key, strongest first — '
+              'and reached through the PREFERENCE and the production selector, '
+              'not from key material handed to signEnvelope by the test');
+
+      // The direction the overlap exists for. `rsaOnlyApsk` is the record as
+      // it stood before the second algorithm was minted, which is exactly what
+      // a verifier that has not upgraded would have been served.
+      await verifyEnvelope(two,
+          signerPublicKey: rsaOnlyApsk, expecting: EnvelopeType.app);
+
+      // And a verifier served the current record takes the STRONGEST shared
+      // rather than the first entry, so the upgrade takes effect for it.
+      await verifyEnvelope(two,
+          signerPublicKey: published.last, expecting: EnvelopeType.app);
+    });
   });
 
   group('what a caller sees when publishing fails', () {

@@ -12166,12 +12166,21 @@ the behaviour wanted, not churn.
 **The window, and whose it is to manage.** Between a rotation and the adds that
 repopulate it, the generation is a strict subset of what the fleet needs, so a
 sender whose policy refuses everything in it is refused outright. **Mitigation is
-the application owner's, by the ladder this project uses on itself**: roll out the
-new *receive* capability first, so receivers begin minting the new material into
-the current generation while senders still seal to the least-preferred member of
-their allowed set; roll out the new *send* policy second. After the second
-rollout a loud refusal is the right answer rather than a defect. ⚠️ This belongs
-in a best-practices document for application owners, and there is not one.
+the application owner's**, and gkc gave the recipe on 2026-08-27:
+
+- **rollout 1 — mint both the old and the new algorithms; seal only to the old.**
+  Every advertisement gains the new material while nothing about what senders do
+  changes, so this release cannot strand anybody.
+- **rollout 2 — mint only the new; send only to the new.** The send policy moves
+  once the material is everywhere, and rotation's garbage collection then retires
+  the old algorithm by itself, because no running client asks for it any more.
+
+After rollout 2 a loud refusal to a peer that never took rollout 1 is the right
+answer rather than a defect. In `AtClientPreference` terms the two levers are
+`keyEstablishmentAlgorithms` (what this atSign mints) and `sealsToKeyAlgorithms`
+(what this client will seal to) — and the whole recipe is that they move in
+*different* releases. ⚠️ This belongs in a best-practices document for
+application owners, and there is not one.
 
 **Two things make the reader's half free, each read rather than assumed.**
 `NskeyAdvertisement.usableFor` walks `keys[]`, and `fromPayload` skips malformed
@@ -12211,6 +12220,36 @@ advertised under the resolved algorithm in published order — which is what kee
 envelopes signed before a swap verifiable. Its own dartdoc records the inversion:
 *"This used to take the one advertised key and require the envelope to match it,
 whose diagnostic ... states the singular assumption outright."*
+
+### 4. A signature names the key it was made with, not only the algorithm
+
+**Ruled by gkc, 2026-08-28.** A verifier today resolves the *algorithm* directly
+— every signature names its own in the protected header and every advertised
+entry names its own — but then **walks every advertised key under that
+algorithm** in published order, because nothing says which one signed. That
+residual walk exists only because a rotation *within* one algorithm leaves two
+entries under it. The protected header gains a **key identifier** beside `alg`,
+and a verifier that understands it selects in one step.
+
+⚠️ **JOSE's `kid` is already spent**, on the signing *enrollment* — `'kid':
+enrollmentId`, and `SignedEnvelope.fromJson` refuses an envelope whose signatures
+carry differing kids. So this is a second field, not a reuse of that one.
+
+⛔ **It must NOT bump `envelopeVersion`, and that is the whole compatibility
+story.** `verifyEnvelope` refuses outright on `entry.version != envelopeVersion`
+— *"refusing rather than reading it as a shape it may not be"* — so a bump would
+make every older verifier reject every new envelope. Left unbumped, an older
+verifier ignores the field it does not know and keeps walking, **which stays
+correct**: the walk is what the field replaces, not what it contradicts. The
+field is additive, the fallback is the old behaviour, and both live at once —
+the same add-don't-replace discipline this ruling is about, one layer down.
+
+**What the verifier does when the named key is not advertised:** refuse, naming
+the key. That is a better diagnosis than today's *"does not verify against any of
+the N key(s)"*, which cannot distinguish a wrong key from a bad signature.
+
+**Status:** ruled, unbuilt. It removes work rather than adding a guarantee: what
+is verified is unchanged, and only how the key is found moves.
 
 **Status:** ruled; item 1 needs only tests, items 2 and 3 are unbuilt.
 ⚠️ **It falsifies a clause already in the catalogue** — UC-A4.5's *"an nskey
