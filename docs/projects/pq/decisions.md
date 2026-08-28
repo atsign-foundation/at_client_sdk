@@ -180,6 +180,8 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [120] | A signing migration is three steps, and the third has no lever                               | 2026-08-28 | LIVE                      |
 | [121] | A revocation publishes what it obliges                                                       | 2026-08-28 | LIVE                      |
 | [122] | Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy                 | 2026-08-28 | LIVE                      |
+| [123] | `AtKeysIo.update` never creates, so a keyfile deleted mid-flight stays deleted               | 2026-08-28 | LIVE                      |
+| [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -304,3 +306,5 @@ first, `enroll:updateMetadata`, and they still resolve.
 [120]: detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28
 [121]: detail/decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28
 [122]: detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28
+[123]: detail/decisions.md#123-atkeysioupdate-never-creates-so-a-keyfile-deleted-mid-flight-stays-deleted-2026-08-28
+[124]: detail/decisions.md#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28

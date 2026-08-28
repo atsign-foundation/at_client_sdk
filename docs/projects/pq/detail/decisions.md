@@ -12665,3 +12665,84 @@ skew about when a rotation is due — noise against a multi-day policy.
 governs access to a namespace's past, which is why a late joiner is handed every
 held generation; `deleteSuperseded` stays default off on that ruling.
 
+
+## 123. `AtKeysIo.update` never creates, so a keyfile deleted mid-flight stays deleted (2026-08-28)
+
+**In brief:** *`update` is a read-modify-write of material that must already be
+there; it now refuses rather than writing back a file that vanished under it*
+
+**Proposed, rejected, then re-opened the same day, and the reversal is the
+interesting part.** `FileAtKeysIo.update` took the keyfile lock, read, applied
+the caller's mutation and wrote — and its writer took a create-if-absent branch,
+so a delete landing between the read and the write was silently undone. Probed
+2026-08-28: write a keyfile, call `update`, delete the file inside the mutate;
+the file is back when `update` returns.
+
+The first ruling was to leave the product alone and fix the test that had
+tripped over it. gkc reversed it once the diagnosis showed the *cause* of the
+deletion was unproven: a test-side wait guards one recreator, while a refusal in
+`update` guards whichever it turns out to be.
+
+**Why this is not a behaviour change so much as an inconsistency fix.**
+`update`'s own `read` already throws `AtKeysSourceAbsentException` when the file
+is absent at the *start*. Completing by writing a file that is absent at the
+*end* contradicted the call it began, and every caller already had to handle
+that exception from that same call. `flush` is untouched and still creates: it
+means "persist these keys", and creating the file is its first job.
+
+**What it was silently undoing.** The keyfile is the credential, and deleting it
+is how a device is decommissioned. A background task mid-`update` put it back.
+
+**Pinned** by two arms in `packages/at_auth/test/at_keys_update_test.dart` — the
+refusal, and `flush` still creating, which is the arm that would go red if the
+writer were made to refuse outright. Three mutations, one per assertion: drop
+the flag and no refusal is thrown; throw but write anyway and the
+not-resurrected assertion fails; make the writer refuse always and only the
+`flush` arm reddens.
+
+## 124. The signing root's mint lock is sized against starvation, not contention (2026-08-28)
+
+**In brief:** *`signingRootMintLockTtl` is 15 seconds, not the shared two
+minutes, because the root path pays the cooldown without the protection that
+makes it cheap*
+
+**The ttl decides two things and was sized against only one.** `MintLock`'s
+winner never releases — expiry does — so the ttl is both how long a winner may
+take and how long the *next* attempt is refused. Where a caller passes
+`ownLockIsNotContention`, the second cost is near zero: a client meeting its own
+token proceeds. `PublishedNskeyKeyRing.mintAndPublish` passes it.
+`PqSigningRoot`'s mint does not, so a client that takes the root lock and exits
+before publishing loses to **its own token** on its next start, and a client
+whose lifetime is shorter than the ttl never mints a root at all. Its documented
+consolation — pull the private from another enrollment — has nobody to ask when
+this is the atSign's first or only enrollment.
+
+**gkc's ruling (2026-08-28):** *"there will never be a normal situation where two
+minters are both trying to mint the root signing key at the same time"*. The
+cooldown is being paid for a race that does not occur, while the starvation it
+causes is real.
+
+**The floor was measured, because the ttl is also the winner's own budget** — it
+carries the matching `MintLease` and abandons rather than publishing once spent.
+A full root mint is **25/24/24 ms** across three runs with the network mocked
+(`pq_signing_root_test.dart`), so fifteen seconds leaves room for several round
+trips on a slow link and a far slower CPU. An overrun costs a retry at the next
+start, not damage, so erring short is the safe direction.
+
+⚠️ **The residual, and the network term is an estimate.** Shortening the ttl
+shortens the anti-double-mint window by the same amount: two enrollments
+starting more than fifteen seconds apart with no root published could both mint,
+which needs a mint to outlive its lease — a broken link rather than a slow one.
+And the 25ms is CPU only; the round trips it does not include are the reason
+fifteen was chosen rather than something tighter.
+
+**The better fix is a protocol one, not a constant.** A sequential,
+abort-on-failure `batch` collapses the mint's round trips into one, which would
+leave the floor dominated by the measured 25ms — and *take the lock, publish
+only if that succeeded* becomes one atomic step rather than two round trips
+bridged by a client-side lease check. That bridge is exactly where a dying
+process leaves the lock held and nothing published.
+
+**Not taken:** opting the root path into `ownLockIsNotContention`, which would
+need `_mintUnderLock` to re-read inside the lock the way `_mintUnlessPublished`
+does. It remains the way to make the window zero rather than short.

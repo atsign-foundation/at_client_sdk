@@ -909,14 +909,16 @@ already takes a lock against a live atServer, releases it and re-takes it. A
 fourth test doing that with `nskeyMintLockKey` is the same shape against a
 different key.
 
-⚠️ **It touches the open P0.** [A client that exits during its startup tail
-abandons seeding](../implementation-plan.md#a-client-that-exits-during-its-startup-tail-abandons-seeding)
-records the self-perpetuating interlock as *"reasoned from the code, not
+⚠️ **It touches the seeding failure mode.** [A client that exits during its
+startup tail abandons seeding](../implementation-plan.md#a-client-that-exits-during-its-startup-tail-abandons-seeding)
+described the self-perpetuating interlock as *"reasoned from the code, not
 measured"* — a short-lived client that dies after the lock lands leaves an
 immutable key with a 120-second ttl that nothing deletes, and a successor that
-finds it held with nothing published throws rather than minting. The
-measurement that row is missing and the citation this row is missing are the
-same measurement.
+finds it held with nothing published throws rather than minting. ⚠️ **The
+in-process half was measured on 2026-08-28** (`mint_lock_self_contention_test.dart`),
+so what is left here is the LIVE citation, not the measurement. The 120 seconds
+still describes `_nskeylock`; the signing root's own lock dropped to 15 seconds
+under [ruling 124](decisions.md#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28).
 
 #### F17 — the security clause of `advertised recipient keys are signed and verified` was described, not cited — ✅ CLOSED
 
