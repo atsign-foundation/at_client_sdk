@@ -164,8 +164,8 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G2.7   | A retired entry stops being offered and still opens history                        | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.8   | A verifier resolves the algorithm by name and only then walks the keys under it    | PROVEN    | `g2_agility_test.dart` |
 | UC-G2.9   | A verifier gap is covered by two signatures, and the developer chooses             | PROVEN    | `g2_agility_test.dart` |
-| UC-G2.10  | One rollout, self→other: an un-upgraded peer notices nothing                       | PROVEN    | `g2_agility_test.dart` |
-| UC-G2.11  | One rollout, self→self: an un-upgraded enrollment notices nothing                  | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.10  | The ladder across atSigns: safe through rollout 1, refused after rollout 2         | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.11  | The ladder within one atSign: safe through rollout 1, broken after rollout 2       | PROVEN    | `g2_agility_test.dart` |
 
 ---
 
@@ -3163,35 +3163,64 @@ that an algorithm upgrade is an **ADD by the advertiser**. Nobody coordinates a
 flag day. The rows here assert that property once, across all three, rather than
 three times in three clusters.
 
-**Why it is worth a section: the rollout count.** With a singular advertisement,
-*every* change to an advertisement is a switch — the new value replaces the old —
-so a peer that cannot read the new one is stranded, and the developer cannot know
-when it is safe because the peers are other people's apps. **Nothing tells them
-when that is.** An array removes that: adding costs no peer anything, so it takes
-one release and needs no coordination.
+**What the arrays buy: agility in SDK terms** (gkc, 2026-08-28). Adding an
+algorithm stops being an architectural change and becomes a configuration one —
+no new record shape, no new verb, no coordinated flag day, and nothing for an
+application to re-plumb. Every advertisement is already a list, every reader
+already walks it, and a new algorithm is one more entry in it.
 
-⛔ **A MIGRATION is still two releases, and deliberately so** (gkc, 2026-08-27).
-Adding an algorithm and retiring one are different operations with different
-risk, and only the first is free:
+**A migration costs two rollouts, and that cost is fixed.** It does not grow with
+the number of algorithms, the size of the fleet, or how many peers an atSign has.
+What an application developer changes is two configuration fields, moved in
+different releases. That the change is small matters less than that it is
+**uniform**: the same ladder, in the same order, for encryption and for signing
+alike — which is why this section states it once rather than three times.
 
-| | mint | seal to |
+⚠️ **What it replaces, and why the arrays earn their place.** With a singular
+advertisement *every* change is a switch — the new value replaces the old — so a
+peer that cannot read the new one is stranded, and the developer cannot know when
+it is safe to switch, because the peers are other people's apps. **Nothing tells
+them when that is.** The ladder trades an unbounded wait with no signal for a
+bounded, ordered pair of releases that can be explained in two lines.
+
+⛔ **A MIGRATION is still two releases, and it is the SAME two every time**
+(gkc, 2026-08-27 and 2026-08-28). What an installation can *handle* moves first;
+what it *produces* moves second. Encryption and signing differ only in the verbs:
+
+| | rollout 1 | rollout 2 |
 | --- | --- | --- |
-| **rollout 1** | old **and** new | **old only** |
-| **rollout 2** | new only | new only |
+| **what it can handle** | **add the new** — mint its key, and ship the build that reads or verifies it | unchanged |
+| **what it produces** | unchanged — still the old | **move to the new** |
 
-Rollout 1 populates every advertisement with the new algorithm while changing
-nothing about what senders do, so it cannot strand anybody. Rollout 2 changes the
-send policy once the material is everywhere, and from then on a peer that never
-took rollout 1 is refused — loudly, and correctly. It is the same ladder this
-project walks itself, one layer down: capability first, default second.
+For encryption that reads *mint both, seal only to the old*, then *mint only the
+new, seal only to the new*; the levers are `keyEstablishmentAlgorithms` and
+`sealsToKeyAlgorithms`. For signing it reads *mint both and verify both, sign
+only with the old*, then *sign with the new*; the levers are the same shape, one
+of them `dataSigningKeyAlgorithms`. **In both cases the two levers move in
+different releases, and that is the whole recipe.**
 
-⚠️ **The signature case is not the encryption case.** For encryption the *sender*
-picks from the recipient's advertised set, so offering two costs the advertiser
-nothing. For a signature the *signer* picks and the verifier must cope with
-whatever arrives, so an advertisement offering two protects no verifier that
-lacks the algorithm used — only a plural **signature** does, and that costs every
-envelope twice. [UC-G2.9](#179-uc-g29--a-verifier-gap-is-covered-by-two-signatures-and-the-developer-chooses)
-is where that difference lives.
+Rollout 1 changes nothing anyone observes, so it can be deployed in any order and
+cannot strand anybody. Rollout 2 changes what is produced once the capability is
+everywhere, and from then on a peer that never took rollout 1 fails — correctly.
+It is the ladder this project walks itself, one layer down: capability first,
+default second.
+
+⚠️ **Rollout 1 is only safe in any order because every reader tolerates entries
+it does not understand.** That is what
+[17.1](#171-uc-g21--a-key-package-reader-keeps-the-entry-it-cannot-use)–[17.3](#173-uc-g23--an-_apsk-reader-tolerates-an-unknown-algorithm-and-distrusts-an-unknown-status)
+assert, one per advertisement, and it is the load-bearing half of the whole
+design: without it, adding an entry could break an older peer and the ladder
+would collapse back into a coordinated flag day.
+
+⚠️ **The pattern is identical for signatures; what differs is the escape hatch.**
+For encryption the *sender* picks from the recipient's advertised set, so an
+advertiser offering two costs nobody anything and no escape hatch is needed. For
+a signature the *signer* picks and the verifier must cope with whatever arrives,
+so offering two in the advertisement protects no verifier that lacks the
+algorithm used — only a plural **signature** does, at twice every envelope. That
+is the option a deployment takes when it *cannot* sequence the two rollouts
+across its fleet, not an alternative pattern:
+[UC-G2.9](#179-uc-g29--a-verifier-gap-is-covered-by-two-signatures-and-the-developer-chooses).
 
 ### 17.1 UC-G2.1 — A key package reader keeps the entry it cannot use
 
@@ -3435,7 +3464,7 @@ is where that difference lives.
 - **Cross-ref:** [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18),
   whose swap is specific to a transition with no verifier gap.
 
-### 17.10 UC-G2.10 — One rollout, self→other: an un-upgraded peer notices nothing
+### 17.10 UC-G2.10 — The ladder across atSigns: safe through rollout 1, refused after rollout 2
 
 - **Given:** `@bob` upgrades to a build configuring a second algorithm and
   publishes the widened advertisement; `@alice` is still on the old build.
@@ -3450,6 +3479,19 @@ is where that difference lives.
     whether `@alice` upgraded. The upgrade is invisible to the party that made it
     possible, which is what stops "one rollout" from needing two ends to agree on
     timing;
+  - ⛔ **after `@alice` takes rollout 2 this stops being true, and the failure is
+    a REFUSAL at the sender.** Sealing only to the new algorithm against a
+    `@bob` that never took rollout 1 leaves no entry the two share, so `@alice`
+    is refused before anything is written, with a message naming what she will
+    seal to and what he advertises;
+  - ⚠️ **that is the better of the two failures, and the contrast with
+    [UC-G2.11](#1711-uc-g211--the-ladder-within-one-atsign-safe-through-rollout-1-broken-after-rollout-2)
+    is the point.** Across atSigns the sender holds the policy and reads the
+    recipient's advertisement, so a mis-sequenced rollout 2 fails **loudly, at
+    the party that got it wrong, before any record exists**. Within one atSign
+    the writer seals to its own atSign's advertisement — which contains the new
+    algorithm, because the writer put it there — so nothing refuses it, and the
+    failure surfaces later, at a sibling install, on a record already written;
   - ⚠️ **a sender that OMITS an algorithm and a sender that cannot IMPLEMENT one
     reach the same refusal by different routes, and only the first is exercised
     anywhere.** Omitting is `sealsToKeyAlgorithms` policy; not implementing is
@@ -3459,7 +3501,7 @@ is where that difference lives.
   The two ends move independently, and that is the whole of what "one rollout"
   means.
 
-### 17.11 UC-G2.11 — One rollout, self→self: an un-upgraded enrollment notices nothing
+### 17.11 UC-G2.11 — The ladder within one atSign: safe through rollout 1, broken after rollout 2
 
 - **Given:** `@alice` has two enrollments sharing a namespace. `alice1` runs the
   app's **rollout 1** build — it mints both the old and the new algorithm and

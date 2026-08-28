@@ -441,9 +441,7 @@ void main() {
       // currently rests on nothing.
     });
 
-    test(
-        'UC-G2.10 · one rollout, self→other: an un-upgraded peer notices nothing',
-        () {
+    test('UC-G2.10 · the ladder across atSigns: safe through rollout 1', () {
       // GIVEN @bob upgrades and publishes a widened advertisement; @alice is
       //       still on the old build.
       // WHEN  alice1 shares toward @bob, and @bob reads it.
@@ -485,9 +483,7 @@ void main() {
       // succeeds at reading is satisfied either way.
     });
 
-    test(
-        'UC-G2.11 · one rollout, self→self: an un-upgraded enrollment notices nothing',
-        () {
+    test('UC-G2.11 · the ladder within one atSign: safe through rollout 1', () {
       // GIVEN @alice has two enrollments sharing a namespace. alice1 runs the
       //       app's ROLLOUT 1 build - mints both algorithms, seals only to the
       //       old. alice2 is still on the previous build.

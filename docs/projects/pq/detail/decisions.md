@@ -12081,24 +12081,61 @@ upgrade is an **ADD by the advertiser**. Nobody coordinates a flag day; apps
 upgrade through successive rollouts and the wire moves when both ends happen to
 be ready.
 
-**Why it is worth building rather than merely tidy: the rollout count.** With a
-singular advertisement, a deployment moving from one algorithm to another needs
-two releases — one that can *read* the new algorithm, and a later one that
-switches to it. The second cannot ship until every peer has the first, and the
-peers are other people's apps, so **nothing tells the developer when that is**.
-It is not two rollouts; it is two rollouts separated by an unbounded wait with no
-signal. With an array there is one: the new build advertises both, an old peer
-goes on picking the entry it understands, and a new peer prefers the new one the
-moment it sees it.
+**What it buys: agility in SDK terms** (gkc, 2026-08-28). Adding an algorithm
+stops being an architectural change and becomes a configuration one — no new
+record shape, no new verb, nothing for an application to re-plumb. Every
+advertisement is already a list and every reader already walks it, so a new
+algorithm is one more entry.
 
-**The asymmetry that makes the signature case different, and it is the whole of
-why this is three rulings rather than one.** For **encryption** the *sender*
-picks from the recipient's advertised set, so an advertiser offering two costs
-nothing at send time and each peer takes what it understands. For a **signature**
-the *signer* picks and the verifier must cope with whatever arrives, so an
-advertisement offering two protects no verifier that lacks the algorithm used.
-The only cover across a verifier gap is a plural **signature**, which costs every
-envelope twice.
+**⛔ A migration still costs two rollouts, and it is the SAME two every time.**
+What an installation can *handle* moves first; what it *produces* moves second:
+
+| | rollout 1 | rollout 2 |
+| --- | --- | --- |
+| **what it can handle** | **add the new** — mint its key, and ship the build that reads or verifies it | unchanged |
+| **what it produces** | unchanged — still the old | **move to the new** |
+
+For encryption the levers are `keyEstablishmentAlgorithms` and
+`sealsToKeyAlgorithms`; for signing, the same shape with
+`dataSigningKeyAlgorithms`. **In both the two levers move in different releases,
+and that is the whole recipe.** The cost is fixed — it does not grow with the
+number of algorithms, the fleet, or how many peers an atSign has — and it is
+uniform across all three advertisements, which is what makes it explainable.
+
+**The analogy gkc uses, and it is worth keeping because it also explains the
+asymmetry** (2026-08-28). A company's official language is English and it wants
+to change to French. **Rollout 1 teaches everyone to speak and understand French,
+and they go on speaking English. Rollout 2 is when everyone speaks French.** Doing
+them the other way round means talking to people who have not learnt it yet.
+
+The two substrates extend it exactly. **Encryption is a conversation**: you ask
+the person in front of you which languages they speak and pick one, so you never
+say anything twice — which is why an advertiser offering two costs nobody
+anything and no escape hatch is needed. **Signing is a notice on the wall**: you
+do not know who will read it, so covering a reader who has not learnt French
+means posting it in **both** languages, at twice the paper. That is the plural
+signature, and why only the signing side has that option at all.
+
+**What it replaces.** With a singular advertisement every change is a switch, so
+a peer that cannot read the new value is stranded and the developer cannot know
+when it is safe, because the peers are other people's apps: **two rollouts
+separated by an unbounded wait with no signal**. The ladder trades that for a
+bounded, ordered pair of releases.
+
+**Rollout 1 is safe in any order only because every reader tolerates entries it
+does not understand** — `usableFor` walking `keys[]`, `fromPayload` skipping what
+it cannot parse, an unknown `alg` kept rather than dropped. That is the
+load-bearing half; without it, adding an entry could break an older peer and the
+ladder collapses back into a coordinated flag day.
+
+**The pattern is identical for signatures; what differs is the escape hatch.**
+For **encryption** the *sender* picks from the recipient's advertised set, so an
+advertiser offering two costs nothing and no escape hatch is needed. For a
+**signature** the *signer* picks and the verifier must cope with whatever
+arrives, so an advertisement offering two protects no verifier lacking the
+algorithm used — only a plural **signature** does, at twice every envelope. That
+is what a deployment reaches for when it **cannot sequence** the two rollouts
+across its fleet, not an alternative pattern; see item 3.
 
 ### 1. Enrollment key packages — nothing to rule, nothing to build
 
@@ -12166,21 +12203,14 @@ the behaviour wanted, not churn.
 **The window, and whose it is to manage.** Between a rotation and the adds that
 repopulate it, the generation is a strict subset of what the fleet needs, so a
 sender whose policy refuses everything in it is refused outright. **Mitigation is
-the application owner's**, and gkc gave the recipe on 2026-08-27:
-
-- **rollout 1 — mint both the old and the new algorithms; seal only to the old.**
-  Every advertisement gains the new material while nothing about what senders do
-  changes, so this release cannot strand anybody.
-- **rollout 2 — mint only the new; send only to the new.** The send policy moves
-  once the material is everywhere, and rotation's garbage collection then retires
-  the old algorithm by itself, because no running client asks for it any more.
-
-After rollout 2 a loud refusal to a peer that never took rollout 1 is the right
-answer rather than a defect. In `AtClientPreference` terms the two levers are
-`keyEstablishmentAlgorithms` (what this atSign mints) and `sealsToKeyAlgorithms`
-(what this client will seal to) — and the whole recipe is that they move in
-*different* releases. ⚠️ This belongs in a best-practices document for
-application owners, and there is not one.
+the application owner's, and it is the ladder above** — nothing specific to the
+nskey. Rollout 1 mints both algorithms and goes on sealing to the old, so it
+cannot strand anybody; rollout 2 moves the send policy once the material is
+everywhere, and rotation's garbage collection then retires the old algorithm by
+itself because no running client asks for it any more. After rollout 2 a loud
+refusal to a peer that never took rollout 1 is the right answer rather than a
+defect. ⚠️ This belongs in a best-practices document for application owners, and
+there is not one.
 
 **Two things make the reader's half free, each read rather than assumed.**
 `NskeyAdvertisement.usableFor` walks `keys[]`, and `fromPayload` skips malformed
