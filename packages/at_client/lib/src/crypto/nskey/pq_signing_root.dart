@@ -25,9 +25,9 @@ import 'package:at_client/src/crypto/nskey/mint_lock.dart'
 import 'package:at_client/src/crypto/nskey/nskey_records.dart'
     show
         pqSigningRootKey,
-        mintLockTtl,
         pqSigningRootMintLockKey,
-        pqSigningRootRecordName;
+        pqSigningRootRecordName,
+        signingRootMintLockTtl;
 import 'package:at_client/src/crypto/nskey/pq_signing_chain.dart'
     show PqSigningChain;
 import 'package:at_client/src/secret_sharing/pairwise_secret_sharing.dart'
@@ -167,7 +167,7 @@ class PqSigningRoot {
   final MintLock mintLock;
 
   PqSigningRoot(this.atClient,
-      {this.keysIo, MintLock? mintLock, this.lockTtl = mintLockTtl})
+      {this.keysIo, MintLock? mintLock, this.lockTtl = signingRootMintLockTtl})
       : mintLock = mintLock ?? MintLock(atClient);
 
   /// How long this client holds the root's mint lock once it has taken it.
@@ -344,8 +344,9 @@ class PqSigningRoot {
       // Not "another enrollment": this path does not pass
       // `ownLockIsNotContention`, so the lock's value is never read and the
       // holder may equally be this enrollment's own previous run inside the
-      // two-minute cooldown — in which case no winner is coming and the pull
-      // named below has nobody to ask.
+      // cooldown — in which case no winner is coming and the pull named below
+      // has nobody to ask. `signingRootMintLockTtl` is kept short for exactly
+      // that case.
       _logger.info('Not minting a signing root for $atSign: the mint lock is '
           'already held, by another of this atSign\'s enrollments or by this '
           'one from a run inside the last couple of minutes');

@@ -89,7 +89,7 @@ class MintLock {
   /// ⚠️ **Deliberately NOT fixed by making the wire token per-instance.** That
   /// would break the case [_isOwnLock] exists for: a client restarting inside
   /// the cooldown is a *new* instance and would no longer recognise the lock
-  /// it took two minutes ago, so it would take the loser path and refuse to
+  /// it took a moment ago, so it would take the loser path and refuse to
   /// mint for the rest of the ttl. The distinction that matters is not "which
   /// instance" but "is one already in flight here", and only this process can
   /// answer that.
@@ -104,10 +104,13 @@ class MintLock {
   /// two answers become one.
   ///
   /// ⚠️ **"Held" is not the same as "another enrollment is minting".** The
-  /// winner never releases and the ttl is two minutes, so a client that took
-  /// the lock and exited before publishing loses to its OWN token on its next
-  /// start, and keeps losing for the rest of the ttl — with nothing in flight
-  /// anywhere. Unless [ownLockIsNotContention] is set, nothing here reads the
+  /// winner never releases, so a client that took the lock and exited before
+  /// publishing loses to its OWN token on its next start, and keeps losing for
+  /// the rest of the ttl — with nothing in flight anywhere. **How long that
+  /// lasts is per-lock, deliberately**: `mintLockTtl` is two minutes and the
+  /// nskey path can afford it because it opts in below, while
+  /// `signingRootMintLockTtl` is fifteen seconds precisely because the root
+  /// path does not. Unless [ownLockIsNotContention] is set, nothing here reads the
   /// lock's value, so this cannot tell the two apart and does not claim to.
   ///
   /// The loser deliberately does **not** wait: whatever the winner is doing
@@ -234,8 +237,9 @@ class MintLock {
   /// client that mints and then re-enters loses the election to *itself*, and
   /// takes the loser path: it re-reads the advertisement rather than
   /// reconciling, and a loser is not guaranteed to hold the private half of
-  /// what it reads. With a two-minute ttl that window covers an ordinary
-  /// restart, so the case is not exotic.
+  /// what it reads. At `mintLockTtl`'s two minutes — the value on the lock
+  /// every caller that reaches this method takes — that window covers an
+  /// ordinary restart, so the case is not exotic.
   ///
   /// Proceeding here is safe because the critical section is idempotent: every
   /// caller reads what is published before minting, so an owner re-entering

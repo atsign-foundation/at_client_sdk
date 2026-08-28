@@ -83,9 +83,36 @@ AtKey nskeyMintLockKey(String owner, String namespace,
 /// mint abandons rather than writing over the enrollment that won the next
 /// election.
 ///
-/// One value for every lock, because the thing it is sized against — how long
-/// a mint can legitimately take — does not vary by which record is minted.
+/// ⚠️ **Not one value for every lock any more, and this comment said it was.**
+/// Sizing purely against "how long a mint can legitimately take" ignores the
+/// other thing the ttl decides: how long a client that took the lock and
+/// exited before publishing is refused on its next start. Where the caller
+/// opts out of [MintLock]'s own-lock check, that refusal lasts the whole ttl
+/// with nothing minting anywhere — see [signingRootMintLockTtl], which is
+/// sized against that instead.
+///
+/// This value still governs the **nskey** lock, where the cost of a long
+/// cooldown is bounded: `mintAndPublish` passes `ownLockIsNotContention`, so a
+/// client meeting its own token proceeds rather than waiting the ttl out.
 const Duration mintLockTtl = Duration(minutes: 2);
+
+/// How long the **signing root's** mint lock is held.
+///
+/// Much shorter than [mintLockTtl], and sized against a different risk. The
+/// root mint does not pass `ownLockIsNotContention`, so a client that takes
+/// this lock and exits before publishing loses to its own token for the whole
+/// ttl — and a client whose lifetime is shorter than the ttl never mints a
+/// root at all. Two of an atSign's enrollments racing to mint the root, which
+/// is what the cooldown guards, is not a situation normal operation produces;
+/// a short-lived client relaunching is.
+///
+/// **The floor is how long a mint may legitimately take**, because the winner
+/// carries the matching `MintLease` and abandons rather than publishing once
+/// it is spent. Measured at **25ms** for keygen, filing and the publish call
+/// with the network mocked (`pq_signing_root_test.dart`, three runs), so this
+/// leaves room for several round trips on a slow link and a far slower CPU. An
+/// overrun costs a retry at the next start, not damage.
+const Duration signingRootMintLockTtl = Duration(seconds: 15);
 
 /// The leading segment of the current-CK pointer record:
 /// `__ckcur.<destination>.<ckNs>@<atSign>`.
@@ -139,7 +166,8 @@ const String pqSigningRootMintLockRecordName = '_rootlock';
 /// The metadata is contract, not tuning, for the same reason
 /// [nskeyMintLockKey]'s is: the refusal of a second **immutable** create is
 /// the interlock, and [ttl] is what releases it.
-AtKey pqSigningRootMintLockKey(String atSign, {Duration ttl = mintLockTtl}) =>
+AtKey pqSigningRootMintLockKey(String atSign,
+        {Duration ttl = signingRootMintLockTtl}) =>
     AtKey()
       ..key = pqSigningRootMintLockRecordName
       ..sharedBy = atSign

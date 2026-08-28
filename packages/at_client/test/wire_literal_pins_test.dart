@@ -73,7 +73,7 @@ void main() {
 
     test(
         'the signing-root mint lock is _rootlock@<atSign>, immutable, '
-        '2-minute ttl', () {
+        '15-second ttl', () {
       final key = pqSigningRootMintLockKey('@alice');
       // No namespace: the root is atSign-level, which is what distinguishes it
       // from an nskey. Single underscore, so it is hidden from every scan and
@@ -83,7 +83,14 @@ void main() {
       expect(key.metadata.immutable, isTrue,
           reason: 'the refusal of a second immutable create is the whole '
               'interlock now that the root record itself is mutable');
-      expect(key.metadata.ttl, 120000);
+      expect(key.metadata.ttl, 15000,
+          reason: 'deliberately NOT the shared two-minute mintLockTtl that the '
+              'nskey lock above still carries. This path does not pass '
+              'ownLockIsNotContention, so the ttl is also how long a client '
+              'that took the lock and exited before publishing is refused on '
+              'its next start — and two enrollments racing to mint the root is '
+              'not a situation normal operation produces, while a short-lived '
+              'client relaunching is');
       expect(key.metadata.isPublic, isFalse,
           reason: 'a self key — nobody but the owner writes the owner\'s '
               'records, so there is nothing to share');
