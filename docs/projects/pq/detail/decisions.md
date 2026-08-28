@@ -12803,6 +12803,15 @@ path, and box lifecycle and type-adapter registration run on it.
   around an injected keystore has no path and never needed one, and refusing
   it would withdraw a capability existing callers have.
 
+**Where the proof is.** `packages/at_persistence_secondary_server/test/hive_instances_test.dart`
+in at_server — different paths do not share a box, one path keeps one box, and
+two spellings of a path are one instance. And
+`packages/at_client/test/side_by_side_storage_test.dart` here, which proves it
+end to end for two AtClients of one atSign: separate keystores, separate sync
+queues. ⚠️ Named here because **no rail can see either** — at_client_sdk's two
+naming rails cover `pq_*_test.dart` files and files a `provenIn` citation
+names, and this is neither.
+
 **Two traps recorded because both cost a full cycle.** Rewriting eight
 `registerAdapter` calls as a loop erases the per-call-site inference of
 `registerAdapter<T>`, so adapters register under the wrong type and writes
@@ -12815,3 +12824,16 @@ one's values back; `HiveInstances.closeAll()` exists for that.
 **Where it lives.** at_server `gkc-multiple-stores`. Until it is published,
 at_client_sdk carries a `dependency_overrides` entry at the workspace root
 pointing at that branch, which must come out before this merges.
+
+⛔ **PROPOSED, BUILT, AND REVERTED — do not re-implement.** Before the storage
+route was found, the fix considered was keying the notification replay
+watermark on `(atSign, enrollmentId)`: `AtKey.local('lastreceivednotification',
+atSign)` gains the enrollment id, with a non-deleting seed from the shared key
+so siblings could each migrate. gkc ruled for it, then reversed once it became
+clear the storage paths could be separated properly — and the reversal is
+right, because the watermark was one symptom of a shared store and fixing it
+alone would have left every other per-client record in that store still
+shared. It was implemented and green (65 tests) before being reverted; nothing
+of it remains in the tree. If the symptom reappears, the question is which box
+is still being opened on the global instance, not which key needs an
+enrollment id.
