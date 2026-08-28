@@ -636,35 +636,97 @@ void main() {
     // owed while it sat green in the tree — and a plan worked top-down
     // rebuilds what it says is owed. A filename is the cheapest thing to
     // check and the one that rots without anything going red.
+    /// Every `.md` under docs/projects/pq, concatenated.
+    ///
+    /// Read once per test rather than hoisted: these two rails are the only
+    /// readers, and a shared field would be built even for a run that selects
+    /// neither.
+    String docSet() => _pq()
+        .listSync(recursive: true)
+        .whereType<File>()
+        .where((f) => f.path.endsWith('.md'))
+        .map((f) => f.readAsStringSync())
+        .join('\n');
+
     test('each pq_*_test.dart is named somewhere under docs/projects/pq', () {
-      final names = Directory('${repoRoot().path}/tests')
-          .listSync(recursive: true)
-          .whereType<File>()
-          .map((f) => f.uri.pathSegments.last)
-          .where((n) => n.startsWith('pq_') && n.endsWith('_test.dart'))
-          .toSet();
+      // Both roots. `tests/` alone was the original scope and it left every
+      // `pq_*` file in a PACKAGE's own test tree outside the rail — six of
+      // them, including `pq_client_bootstrap_test.dart`, which nothing cites
+      // and no document named. A file is no less rebuildable for living
+      // beside the code it tests.
+      final names = <String>{};
+      for (final root in ['tests', 'packages']) {
+        final dir = Directory('${repoRoot().path}/$root');
+        if (!dir.existsSync()) continue;
+        names.addAll(dir
+            .listSync(recursive: true)
+            .whereType<File>()
+            // `/test/` in the path, so a `pq_`-prefixed file that is not a
+            // test file cannot widen this by accident.
+            .where((f) => f.path.contains('${Platform.pathSeparator}test'
+                '${Platform.pathSeparator}'))
+            .map((f) => f.uri.pathSegments.last)
+            .where((n) => n.startsWith('pq_') && n.endsWith('_test.dart')));
+      }
 
       // The enumeration is what this rail rests on, so it is asserted rather
       // than assumed: an empty walk satisfies every check below while
       // measuring nothing at all.
-      expect(names.length, greaterThanOrEqualTo(8),
-          reason: 'the live packs held 11 such files on 2026-08-24. A sharp '
-              'drop means this walk stopped finding them, not that the tests '
-              'went away — fix the walk before believing the green');
+      expect(names.length, greaterThanOrEqualTo(14),
+          reason: 'the two roots held 19 such files on 2026-08-28 — 14 under '
+              'tests/ and 6 under packages/*/test, one name common to both. A '
+              'sharp drop means this walk stopped finding them, not that the '
+              'tests went away — fix the walk before believing the green');
 
-      final docs = _pq()
-          .listSync(recursive: true)
-          .whereType<File>()
-          .where((f) => f.path.endsWith('.md'))
-          .map((f) => f.readAsStringSync())
-          .join('\n');
-
+      final docs = docSet();
       final unnamed = names.where((n) => !docs.contains(n)).toList()..sort();
       expect(unnamed, isEmpty,
           reason: 'name each of these under docs/projects/pq/ — in the '
               'catalogue row it proves, or the plan entry that built it — so '
               'that a reader working the plan top-down cannot rebuild work '
               'that already exists:\n${unnamed.join('\n')}');
+    });
+
+    test('every test a citation names is named in the doc set', () {
+      // The sharper half of the rail above, and the one that reaches files no
+      // filename convention would catch. A cited test is PQ-relevant by
+      // construction — a row leans on it for its verdict — while the doc set
+      // names only the acceptance SCENARIO file in its status table, so the
+      // test actually carrying the proof appears nowhere a reader looks.
+      // Measured 2026-08-28: 81 files cited, 74 named, and the seven that
+      // were not included one cited by six separate rows and two in
+      // packages/at_auth, a package neither this rail nor a widened
+      // directory walk had ever looked at.
+      final cited = citedTestPaths();
+
+      expect(cited.length, greaterThanOrEqualTo(60),
+          reason: 'the acceptance sources named 81 distinct files on '
+              '2026-08-28. A sharp drop means this parse stopped finding '
+              'them, not that the citations went away');
+
+      // Settled here so a vanished file is reported as a vanished file.
+      // provenIn already refuses one while its scenario runs, but this rail
+      // reads the sources rather than a run, and without this check a deleted
+      // test would surface below as "no document names it" — sending the
+      // reader to write a doc line for something that no longer exists.
+      final absent = cited
+          .where((p) => !File('${repoRoot().path}/$p').existsSync())
+          .toList()
+        ..sort();
+      expect(absent, isEmpty,
+          reason: 'cited but not on disk: ${absent.join(', ')}');
+
+      final docs = docSet();
+      final unnamed = cited
+          .where((p) => !docs.contains(p.split('/').last))
+          .toList()
+        ..sort();
+
+      expect(unnamed, isEmpty,
+          reason: 'a test the catalogue leans on for a verdict, that no '
+              'document names, is work the next reader rebuilds — and the '
+              'burn-down cannot be audited without being able to find it. '
+              'Name each under docs/projects/pq/:\n${unnamed.join('\n')}');
     });
   });
 }

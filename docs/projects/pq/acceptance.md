@@ -1907,6 +1907,31 @@ place to build test out."* So the problem is legibility rather than coverage.
 | **`tests/at_onboarding_cli_functional_tests`** | CRAM activation through the CLI, and the only place a client is built from a `PqPosture` in two arms. |
 | **`tests/at_onboarding_cli_functional_tests_proxy`** | the CLI against a proxied atServer. |
 
+#### The in-package files the citations lean on
+
+The table above names *packs*; a row's actual proof is often a single unit
+file inside one, and the status table names only the acceptance scenario that
+cites it. So the file carrying the evidence appeared nowhere a reader looks,
+and two rails now refuse that — one over every `pq_*_test.dart` in either
+`tests/` or a package's own `test/` tree, one over every file a `provenIn`
+citation names. Measured 2026-08-28: 81 files cited, and these are the ones no
+document had named.
+
+| File | What it carries |
+|---|---|
+| `packages/at_client/test/published_nskey_key_ring_test.dart` | the nskey advertisement itself — cited by **six** rows (UC-A3.5, UC-A4.5, UC-G2.2, UC-G2.6, UC-G2.7 and the cross-cutting *advertised recipient keys are signed and verified*), and named nowhere until this line. |
+| `packages/at_client/test/key_package_minting_test.dart` | the key package's mint under a configured KEM, its `enroll:update` amendment, and the sender following the recipient (UC-A2.4, UC-A2.5, UC-A4.5). |
+| `packages/at_client/test/nskey_private_filing_test.dart` | how an nskey private is filed and read back, under UC-A3.5. |
+| `packages/at_client/test/at_client_impl_test.dart` | the era axis — a postured client writing PQ by default (UC-C1.1). |
+| `packages/at_auth/test/at_auth_test.dart` | the keyfile derivation being offered rather than applied (UC-G1.1). ⚠️ In **at_auth**, which neither rail's predecessor looked at. |
+| `packages/at_auth/test/at_self_enrollment_test.dart` | a retrofit leaving one active auth key and touching nothing legacy (UC-G1.2). |
+| `tests/at_functional_test/test/pkam_record_authoritative_test.dart` | the cross-cutting invariant that ML-DSA APKAM auth is record-authoritative. |
+| `packages/at_client/test/pq_client_bootstrap_test.dart` | the PQ startup itself, and cited by nothing: the step order, what a `stop()` between steps halts, that an abandoned startup says so at WARNING naming what it skipped, when `mintSettled` settles, and the enrollment snapshot's grant handling. |
+
+⚠️ **Being listed here is not a claim that a file is fully exercised** — it is
+the address of the evidence, so that a reader auditing a verdict can reach it
+and a reader working the plan cannot rebuild what already exists.
+
 **Baseline (already shipped, not pending work).** The primitive layer is
 published: **#1930** (M0 crypto seam) and **#1993 / at_chops 3.3.0**
 (`pqSeal`/`pqOpen`), with **PR #2035** (design fixes) merged. at_chops-vector

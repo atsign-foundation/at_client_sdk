@@ -430,6 +430,27 @@ Map<String, List<SourceCitation>> citationDetailsByUseCase() {
   return out;
 }
 
+/// Every test file a `provenIn` citation names, repo-relative.
+///
+/// Deliberately NOT derived from [citationDetailsByUseCase], which keys each
+/// citation to a `UC-` id read off the enclosing scenario's name — so it
+/// cannot see a cross-cutting invariant's citations at all, section 13's rows
+/// being unnumbered by design. A guard over *everything cited* has to read
+/// every call, and one built on the keyed map would silently exempt the
+/// citations nobody thought to number.
+Set<String> citedTestPaths() {
+  final out = <String>{};
+  for (final file in scenarioFiles) {
+    for (final match in _anyCitation.allMatches(_read(file))) {
+      // A `provenHere` names no path — the proof is the acceptance file
+      // itself, which needs no separate mention anywhere.
+      final path = match.group(1);
+      if (path != null) out.add(path);
+    }
+  }
+  return out;
+}
+
 /// The `clauses:` fragments in one `provenIn(...)` call.
 ///
 /// Scanned rather than split on commas. A fragment is a sentence of the
