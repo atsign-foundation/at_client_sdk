@@ -27,6 +27,81 @@ void _dropCachedClients(String atSign) {
 }
 
 void main() {
+  /// A self-retrofit changes the enrollment a client authenticates as, and the
+  /// old id keeps existing — the atServer caps it rather than deleting it, and
+  /// any caller that captured it earlier still holds one. The cache has to send
+  /// that caller to the client that superseded it.
+  group('a superseded enrollment id', () {
+    const atSign = '@alice';
+    AtClientPreference pref() => AtClientPreference()
+      ..hiveStoragePath = 'test/hive'
+      ..commitLogPath = 'test/hive/commit'
+      ..isLocalStoreRequired = true;
+
+    setUp(() {
+      _dropCachedClients(atSign);
+      AtClientImpl.supersededInstanceKeys.clear();
+    });
+    tearDown(() {
+      _dropCachedClients(atSign);
+      AtClientImpl.supersededInstanceKeys.clear();
+    });
+
+    test('resolves to the client that superseded it', () async {
+      final settled = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-new');
+      // What the retrofit records at the moment it re-authenticates.
+      AtClientImpl.supersededInstanceKeys['$atSign|enroll-old'] =
+          '$atSign|enroll-new';
+
+      final again = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-old');
+
+      expect(identical(again, settled), isTrue,
+          reason: 'naming the id captured BEFORE a retrofit must reach the '
+              'client that retrofitted, not build a second one for the same '
+              'enrollment — a second connection, a second _init and a second '
+              'startup tail taking the same mint locks, filed over the first');
+      expect(
+          AtClientImpl.atClientInstanceMap.keys
+              .where((k) => k is String && k.startsWith('$atSign|')),
+          hasLength(1),
+          reason: 'and one enrollment must still be one cache entry');
+    });
+
+    test('with no supersession recorded, the two are different clients',
+        () async {
+      // The control. It has to be able to stay green while the assertion above
+      // goes red, or that test would show only that create() returns something.
+      final first = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-new');
+      final other = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-old');
+
+      expect(identical(other, first), isFalse,
+          reason: 'two enrollment ids with nothing linking them are two '
+              'principals, which is what the cache key exists to keep apart');
+    });
+
+    test('a supersession pointing at nothing leaves the caller where it was',
+        () async {
+      // Tests clear and remove from the instance map directly, so a stale
+      // supersession is ordinary. It must not send a caller to a key nothing
+      // answers for.
+      AtClientImpl.supersededInstanceKeys['$atSign|enroll-old'] =
+          '$atSign|evicted';
+
+      final built = await AtClientImpl.create(atSign, 'wavi', pref(),
+          enrollmentId: 'enroll-old');
+
+      expect((built as AtClientImpl).enrollmentId, 'enroll-old');
+      expect(AtClientImpl.atClientInstanceMap.containsKey('$atSign|enroll-old'),
+          isTrue,
+          reason: 'it built and filed under what was asked for, rather than '
+              'following a supersession whose target has been evicted');
+    });
+  });
+
   group('A group of at client impl create tests', () {
     final String atSign = '@alice';
     setUp(() async {

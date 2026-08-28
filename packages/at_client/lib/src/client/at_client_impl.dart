@@ -397,6 +397,54 @@ class AtClientImpl implements AtClient {
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
+  /// Instance keys this process has seen superseded, old key to new key.
+  ///
+  /// A self-retrofit replaces the enrollment a client authenticates as, and the
+  /// old id does not stop existing: the atServer caps it rather than deleting
+  /// it, and any caller that captured it earlier still holds it. Without this,
+  /// naming the old id misses the cache and builds a **second** client for the
+  /// same enrollment — a second connection, a second `_init`, a second startup
+  /// tail taking the same mint locks — which is then filed over the first,
+  /// leaving the original alive and unreachable.
+  ///
+  /// Measured 2026-08-28 against a live atServer: `create` naming the
+  /// superseded id returned a client that was not `identical` to the first,
+  /// carrying the same settled enrollment id, and the instance map came back
+  /// with the same single key — the second had replaced the first.
+  ///
+  /// ⚠️ **No caller in this repository names a superseded id**; the path was
+  /// found by probe. It is closed for the application that persists an
+  /// enrollment id — displays it, stores it in config — and builds a client
+  /// with it after a retrofit has moved on.
+  ///
+  /// Deliberately a separate map rather than an alias entry in
+  /// [atClientInstanceMap]: an alias would make one client look like two to
+  /// the enrolled-client count in [_resolveCacheKey], whose whole job is to
+  /// tell "exactly one enrolled client" from "several".
+  @visibleForTesting
+  static final Map<String, String> supersededInstanceKeys = <String, String>{};
+
+  /// Follows [asked] through any supersessions to the key a client is actually
+  /// filed under.
+  ///
+  /// Only ever moves to a key [atClientInstanceMap] holds. Tests clear and
+  /// remove from that map directly, so a supersession whose target has been
+  /// evicted must leave the caller where it started rather than send it to a
+  /// key nothing answers for.
+  static String _currentInstanceKey(String asked) {
+    var key = asked;
+    final seen = <String>{asked};
+    while (true) {
+      final next = supersededInstanceKeys[key];
+      if (next == null ||
+          !atClientInstanceMap.containsKey(next) ||
+          !seen.add(next)) {
+        return key;
+      }
+      key = next;
+    }
+  }
+
   /// The cache key for a client of [atSign] authenticated as [enrollmentId].
   ///
   /// **Identity here is `(atSign, enrollmentId)`, not the atSign alone.** A
@@ -445,7 +493,7 @@ class AtClientImpl implements AtClient {
   /// so the failure simply moved to the first verb and lost its explanation on
   /// the way.
   static String _resolveCacheKey(String atSign, String? enrollmentId) {
-    final asked = instanceKey(atSign, enrollmentId);
+    final asked = _currentInstanceKey(instanceKey(atSign, enrollmentId));
     if (enrollmentId != null || atClientInstanceMap.containsKey(asked)) {
       return asked;
     }
@@ -1790,6 +1838,11 @@ class AtClientImpl implements AtClient {
         return;
       }
 
+      // Recorded before anything else, so a caller naming the id it captured
+      // before this retrofit reaches THIS client rather than building a
+      // duplicate of it.
+      supersededInstanceKeys[instanceKey(_atSign, id)] =
+          instanceKey(_atSign, newId);
       enrollmentId = newId;
       await _rederiveFromEnrollment(previousEnrollmentId: id);
       _logger.info('Retrofitted $id to $newId; this client runs as $newId');

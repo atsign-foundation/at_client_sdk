@@ -39,11 +39,19 @@ final _logger = AtSignLogger('selfRetrofit');
 /// AtChops and signing algorithm from the keyfile; then build the client for
 /// the new id via [AtClientManager.fromAuthSession].
 ///
-/// **The enrollment never changes under a live client.** The switched-to
+/// **The enrollment never changes under a live client _on this path_.** The
+/// switched-to
 /// client is a NEW instance under the `(atSign, enrollmentId)` cache key, so
 /// every per-client cache (secret sharing, key-package registration) starts
 /// fresh for the new identity by construction — nothing is re-keyed in
-/// place, and the old client is not mutated. On the default
+/// place, and the old client is not mutated. ⚠️ **That is a claim about
+/// [retrofitIdentity] as a standalone switch, NOT an invariant of the SDK.**
+/// `AtClientImpl` retrofits itself at start-up through this same function and
+/// then DOES mutate in place — it assigns its own `enrollmentId` and rebuilds
+/// what derives from it. Safe there and only there, because it happens inside
+/// `_init`, before the client has been filed in the instance map or handed to
+/// any caller. Read as a global invariant, this sentence sends a reader
+/// looking for a stale cache entry that does not exist. On the default
 /// [AtClientManager.getInstance] manager the previous client is stopped by
 /// the switch; pass a dedicated [manager] (the `AtClientManager(atSign)`
 /// constructor) to keep the legacy client live alongside, e.g. to drain
