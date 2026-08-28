@@ -414,6 +414,17 @@ void main() {
             'the extra kid',
         clauses: ['private is conveyed to authorised enrollments'],
       );
+      provenIn(
+        'packages/at_client/test/nskey_minting_test.dart',
+        'UC-G2.6 c6 \u00b7 the added document is re-signed by the ADDING enrollment',
+        proves: 'the generation is signed by one enrollment and added to by '
+            'another, and the republished envelope carries the ADDER\'s kid. '
+            'Both halves are asserted: a control reads the signer off the '
+            'document before the add and finds the minter, so the assertion '
+            'measures a change rather than a constant. A mutation making the '
+            'signer claim another enrollment reddens it naming both ids',
+        clauses: ['re-signed by the adding enrollment'],
+      );
     });
 
     test(

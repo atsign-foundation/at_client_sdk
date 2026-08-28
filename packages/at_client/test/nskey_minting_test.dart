@@ -490,6 +490,70 @@ void main() {
           ).toPayload(),
           type: EnvelopeType.nskeyRing);
 
+  test('UC-G2.6 c6 · the added document is re-signed by the ADDING enrollment',
+      () async {
+    // The generation is minted and signed by ANOTHER enrollment, and this
+    // client adds to it. c6 says the republished document carries the adder's
+    // signature, not the minter's: an advertisement's signer is a property of
+    // the document rather than of the generation, so a reader resolves it from
+    // the envelope's own kid.
+    final c = client();
+    // Same chops as the fixture — the fixture serves one `_apsk` for every
+    // enrollment, so this verifies while claiming a different kid, which is
+    // exactly the situation under test.
+    final other = MockAtClient();
+    final otherSecondary = MockRemoteSecondary();
+    final otherLookUp = MockAtLookUp();
+    when(() => other.atChops).thenReturn(c.client.atChops);
+    when(() => other.getCurrentAtSign()).thenReturn(atSign);
+    when(() => other.getRemoteSecondary()).thenReturn(otherSecondary);
+    when(() => otherSecondary.atLookUp).thenReturn(otherLookUp);
+    when(() => otherLookUp.enrollmentId).thenReturn('enroll-minter');
+
+    final xWing = SecretSharingAlgos.kemFor(SecretSharingAlgos.xWing)!;
+    final minted = await xWing.keyPairFromSeed(xWing.newSeed());
+    c.advertised[namespace] =
+        await AtClientEnvelopeSigner(other).wrapAndSignAndJsonEncode(
+            NskeyAdvertisement.single(
+              publicKey: minted.publicKey,
+              alg: SecretSharingAlgos.xWing,
+              suites: SecretSharingAlgos.openableSuitesFor(
+                  SecretSharingAlgos.xWing),
+            ).toPayload(),
+            type: EnvelopeType.nskeyRing);
+
+    expect(
+        SignedEnvelope.fromJson(
+                jsonDecode(c.advertised[namespace]!) as Map<String, dynamic>)
+            .signerEnrollmentId,
+        'enroll-minter',
+        reason: 'the control: the generation starts out signed by somebody '
+            'else, so the assertion below measures a change rather than a '
+            'constant');
+
+    // This client implements an algorithm the generation lacks, so it has
+    // something to add.
+    when(() => c.client.getPreferences()).thenReturn(AtClientPreference(
+        keyEstablishmentAlgorithms: const [
+          SecretSharingAlgos.xWing,
+          SecretSharingAlgos.mlKem1024
+        ],
+        posture: PqPosture.pqReady));
+
+    final added = await PublishedNskeyKeyRing(c.client).add(namespace);
+    expect(added, isNotNull, reason: 'the add had work to do');
+
+    expect(
+        SignedEnvelope.fromJson(
+                jsonDecode(c.values['__nskey']!) as Map<String, dynamic>)
+            .signerEnrollmentId,
+        'enroll-a',
+        reason: 'c6: the republished document is signed by the ADDING '
+            'enrollment. A reader resolves the signer from the envelope\'s own '
+            'kid and verifies against THAT enrollment\'s _apsk, so a document '
+            'still claiming the minter would be checked against the wrong key');
+  });
+
   test('every advertisement read on the mint path goes to the atServer',
       () async {
     // Row 1. The sender's read (`currentPublic`) stays local-first on purpose —
