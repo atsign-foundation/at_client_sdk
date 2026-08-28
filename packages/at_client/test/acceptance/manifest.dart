@@ -139,7 +139,7 @@ const liveProofOwed = <String, String>{
   'UC-G2.8':
       'every citation is in-process and a live test is feasible; the multi-key _apsk is assembled in the test rather than published by a real rotation and fetched back',
   'UC-G2.9':
-      'the preference-to-envelope path was proven in-process on 2026-08-28 and had rested on nothing before that; what is still owed is a LIVE arm, where the _apsk a one-algorithm verifier reads is one an atServer served rather than one the test published into a fake',
+      'nothing proves this row, live or in-process, and nothing can: it asserts that a verifier CANNOT decline an algorithm it implements, and the lever that would let it does not exist. The citations here pin the multi-signature writer that decisions.md 120 retired, so they go red when it is removed rather than proving any clause above',
   'UC-G2.11':
       'no pack runs two enrollments of one atSign at different algorithm configurations, which is the whole of what this row asserts. The rollout-2 half needs the same pair with the sender at the new posture, and would assert a refusal rather than a success',
   'UC-A3.1':

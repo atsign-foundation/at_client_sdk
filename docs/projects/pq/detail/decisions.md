@@ -12254,8 +12254,13 @@ the verifier accepts, because nothing lets it insist. The three-step ladder
 replaces the choice with one path. What follows is kept because it is why the
 overlap looked right. The lever is
 `AtClientPreference.dataSigningKeyAlgorithms`, a `Set` that is final at
-construction and refuses an algorithm this build cannot sign under. ⚠️ **Its
-dartdoc does not say this is what a two-member set is for**, which is owed.
+construction and refuses an algorithm this build cannot sign under. ⚠️ **This
+said its dartdoc "does not say this is what a two-member set is for, which is
+owed" — twice falsified.** The dartdoc was written to say exactly that on
+2026-08-27, and then
+[120](#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28)
+retired the two-member set the next day, so the dartdoc was rewritten again to
+state the three releases instead.
 
 **The verifier already copes, and this was read rather than assumed.**
 `verifyEnvelope` intersects the algorithms the `_apsk` advertises with those the

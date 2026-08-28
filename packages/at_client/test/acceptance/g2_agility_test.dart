@@ -377,13 +377,14 @@ void main() {
       );
     });
 
-    test('UC-G2.9 · a verifier gap is covered by two signatures', () {
-      // GIVEN a transition to a signing algorithm some verifier may not have.
-      // WHEN  an app sets a two-member dataSigningKeyAlgorithms and signs; and
-      //       separately an app leaves the posture's single-member default.
-      // THEN  one signature per active signing key; a verifier implementing one
-      //       of the two takes the strongest shared algorithm; a verifier
-      //       sharing none is refused naming both sides.
+    test('UC-G2.9 · step 3 has no lever, so a retired key verifies forever',
+        () {
+      // GIVEN an _apsk advertising a retired key beside its active one.
+      // WHEN  a verifier checks an envelope, and separately an attacker who has
+      //       broken the retired algorithm presents one signed under it.
+      // THEN  the verifier cannot decline an algorithm it implements, so the
+      //       retired key is a standing forgery surface; step 3 would close it
+      //       and has no lever.
       provenIn(
         'packages/at_client/test/apkam_signing_keys_test.dart',
         'one signature per held key, all naming this enrollment',
@@ -426,23 +427,20 @@ void main() {
             'signature does not rescue a corrupt ML-DSA one, so "pick one that '
             'verifies" is not the rule — the strongest shared is',
       );
-      // ⛔ TWO clauses of this row are deliberately UNPINNED, and the gap is
-      // the shape this project has been caught by before: a preference field
-      // whose only exercise never reaches the path it modifies.
+      // ⛔ This row's clauses are UNPINNED because the lever they describe does
+      // not exist: there is no accepted-algorithms set anywhere in
+      // AtClientPreference, so a verifier cannot decline an algorithm it
+      // implements and nothing can assert that it does. See decisions.md 120.
       //
-      // Nothing anywhere builds an AtClientPreference with a two-member
-      // dataSigningKeyAlgorithms and then asserts what the ENVELOPE carries.
-      // The field appears with two members in exactly two tests — one asserts
-      // mint order and the _apsk entry order, the other asserts set equality —
-      // and neither touches an envelope. The two-signature envelopes that do
-      // exist are built from hand-supplied key material, bypassing the
-      // preference entirely.
+      // The citations above are kept deliberately. They pin the multi-signature
+      // WRITER as it stands, so they go red the day it is removed — which
+      // decisions.md 120 makes possible and a separate plan row tracks.
       //
-      // And the direction the row exists for is untested outright: a verifier
-      // implementing only one of the two algorithms is asserted to REFUSE a
-      // mismatched envelope, and never asserted to VERIFY a two-signature one.
-      // That is the whole of what an overlap buys, so the row's central claim
-      // currently rests on nothing.
+      // ⚠️ This block used to say the row's central claim "rests on nothing"
+      // because no test drove a two-member preference through to an envelope.
+      // One was written on 2026-08-28 and then the row changed underneath it:
+      // the overlap it proved is retired, so the test now pins behaviour the
+      // design has moved away from rather than behaviour it relies on.
     });
 
     test('UC-G2.10 · the ladder across atSigns: safe through rollout 1', () {

@@ -2387,9 +2387,17 @@ one piece of state all three read, `AtClientPreference.dataSigningKeyAlgorithms`
 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18)).
 Each stage's default set holds at most one algorithm — `{}`, `{rsa2048}`,
 `{mldsa65}` — so **no posture this SDK ships emits a two-signature envelope**.
-`wrapAndSign`'s "all of them rather than the strongest" is a capability an
-application reaches by passing an explicit two-member set, not a position on
-the ladder. It is safe to swap because *reading* is not staged: a client at
+`wrapAndSign`'s "all of them rather than the strongest" is reachable by passing
+an explicit two-member set, and is not a position on the ladder. ⚠️ **That
+capability was RETIRED on 2026-08-28 by
+[`decisions.md` 120](detail/decisions.md#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28)**,
+which found it covers nothing a verifier can insist on: an attacker strips the
+stronger signature and the verifier accepts the weaker one. A signing migration
+is three releases — verify both, then sign the new, then accept only the new —
+and the writer's plurality is a separate change with its own plan row. ⛔ **The
+multi-signature READER stays regardless**: its differing-`kid` and
+differing-`typ` refusals stop an attacker appending an entry in flight, which a
+single-key writer does nothing to prevent. It is safe to swap because *reading* is not staged: a client at
 `pqReady` verifies a `pqActive` peer's `mldsa65` envelope perfectly well, so
 there is no verifier an overlap would rescue. What a swap does not lose is
 history — the retired key stays advertised, which is what keeps envelopes

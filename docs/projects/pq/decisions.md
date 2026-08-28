@@ -165,7 +165,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [105] | The nskey mint elects a winner                                                              | 2026-08-16 | LIVE                      |
 | [106] | A notification that outruns its key is dropped, not parked                                  | 2026-08-16 | AMENDED 2026-08-17        |
 | [107] | A `local:` record is not encrypted, and the legacy refusal exempts it                       | 2026-08-17 | AMENDED 2026-08-17        |
-| [108] | The signing rollout swaps algorithms; it never overlaps them                                | 2026-08-18 | AMENDED 2026-08-27        |
+| [108] | The signing rollout swaps algorithms; it never overlaps them                                | 2026-08-18 | AMENDED 2026-08-28        |
 | [109] | at_chops 3.6.0 stays a minor; no major bump for this release                                | 2026-08-18 | AMENDED 2026-08-18        |
 | [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | AMENDED 2026-08-20        |
 | [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
