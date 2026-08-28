@@ -12125,7 +12125,7 @@ bounded, ordered pair of releases.
 **Rollout 1 is safe in any order only because every reader tolerates entries it
 does not understand** — `usableFor` walking `keys[]`, `fromPayload` skipping what
 it cannot parse, an unknown `alg` kept rather than dropped. That is the
-load-bearing half; without it, adding an entry could break an older peer and the
+essential half; without it, adding an entry could break an older peer and the
 ladder collapses back into a coordinated flag day.
 
 **The pattern is identical for signatures; what differs is the escape hatch.**
@@ -12156,8 +12156,14 @@ algorithm the fleet needs, and it gets there in two separate steps.**
 1. **A rotation mints only NEW material**, never carrying anything forward. What
    triggers one is unchanged: an application policy such as the generation's age,
    or a revocation — where the rule is that the generation must have been created
-   after the revocation's timestamp, which a client can settle by inspecting the
-   advertisement.
+   after the revocation's timestamp. ⚠️ **The age half is computable today and
+   the revocation half is NOT**, and this passage said a client could settle both
+   by inspecting the advertisement until 2026-08-28. Nothing carries a revocation
+   timestamp: `EnrollDataStoreValue` has no time field, `EnrollApproval` is
+   `{state}` alone, and `enroll:list` serialises the value plus status without
+   the record's `AtMetaData`. So the revocation trigger has nothing to fire on
+   until an atServer change lands — it is a plan row, and the catalogue's
+   UC-G2.5 states the gap.
 2. **A client that finds the current generation missing an algorithm it needs
    mints that material and ADDS it to the current generation**, in place, under
    the same lock. This is a different operation from a rotation and does not

@@ -42,7 +42,13 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 **Generated from the scenarios, not written by hand.** A use case is:
 
 - **PROVEN** — a scenario in `packages/at_client/test/acceptance/` asserts it
-  and runs.
+  and runs. ⚠️ **It is a statement about the ROW, never about its clauses.** A
+  row is PROVEN when a scenario claims it; whether each individual THEN clause
+  is pinned is the burn-down's question, and the two are far apart — UC-G2.5 and
+  UC-G2.6 read PROVEN here while their scenarios say *"WHOLLY UNPINNED,
+  deliberately"*, because the mechanism they describe is unbuilt. A cold read on
+  2026-08-28 was misled by exactly this, having read this definition first, so
+  the definition alone was not doing the job.
 - **BLOCKED** — its scenario exists but is skipped against a named constant in
   `blockers.dart`, so something is recorded as owing it.
 - **WITHDRAWN** — the catalogue withdrew the row and kept the heading, so the
@@ -3208,7 +3214,7 @@ default second.
 ⚠️ **Rollout 1 is only safe in any order because every reader tolerates entries
 it does not understand.** That is what
 [17.1](#171-uc-g21--a-key-package-reader-keeps-the-entry-it-cannot-use)–[17.3](#173-uc-g23--an-_apsk-reader-tolerates-an-unknown-algorithm-and-distrusts-an-unknown-status)
-assert, one per advertisement, and it is the load-bearing half of the whole
+assert, one per advertisement, and it is the essential half of the whole
 design: without it, adding an entry could break an older peer and the ladder
 would collapse back into a coordinated flag day.
 
