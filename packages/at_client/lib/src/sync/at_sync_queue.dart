@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
+import 'package:at_persistence_secondary_server/src/impl/hive/hive_instances.dart';
 import 'package:meta/meta.dart';
 
 /// On-the-wire op carried in the sync queue's persisted record. The
@@ -85,9 +86,9 @@ class SyncQueueEntry {
 /// order across restarts.
 ///
 /// Lifecycle: construct → [open] → use → [close]. [open] is idempotent.
-/// Hive must already have been initialised (via the keystore's
-/// `HiveAtPersistenceFactory.initialize(...)`); this class never calls
-/// `Hive.init` itself.
+/// The box is opened on the Hive instance owning the storage path this queue
+/// is constructed with, so two clients of one atSign in one process keep
+/// separate queues when they are given separate paths.
 class AtSyncQueue {
   static const String _boxNamePrefix = 'syncqueue_';
 
@@ -105,8 +106,27 @@ class AtSyncQueue {
 
   bool _opened = false;
 
-  AtSyncQueue({required String atSign})
+  /// The directory this queue's box lives in, or null for the package-global
+  /// Hive instance.
+  ///
+  /// **Required but nullable**, and both halves are deliberate. Required so
+  /// the compiler names every call site: a default would be silently wrong for
+  /// the caller that most needs it — a second client of one atSign — and
+  /// nothing would go red, because a box resolved from the wrong place still
+  /// opens and still works.
+  ///
+  /// Nullable because a caller may legitimately have no directory to name. A
+  /// `LocalSecondary` built around an injected keystore has no
+  /// `hiveStoragePath` and never needed one; refusing it would withdraw a
+  /// capability those callers already have. Null keeps exactly the behaviour
+  /// they have today — the global instance — and with it the collision:
+  /// a caller that names no directory cannot be separated from another that
+  /// names none either.
+  final String? _storagePath;
+
+  AtSyncQueue({required String atSign, required String? storagePath})
       : _atSign = atSign,
+        _storagePath = storagePath,
         _logger = AtSignLogger('AtSyncQueue ($atSign)');
 
   /// Returns the Hive box name this queue uses, derived
@@ -121,16 +141,20 @@ class AtSyncQueue {
   /// in `ts`-ascending order. Idempotent — calling [open] twice is a
   /// no-op after the first.
   ///
-  /// Hive.init must already have been called by the surrounding
-  /// keystore initialisation. If [injectedBox] is supplied (test
-  /// seam), it is used instead of opening one via Hive — letting
-  /// tests provide an in-memory box without calling Hive.init at all.
+  /// The box is opened on the instance owning this queue's storage path, not
+  /// on the package-global `Hive`. The box name derives from the atSign alone,
+  /// and Hive resolves open boxes by name within an instance — so opening on
+  /// the global meant two clients of one atSign in one process shared one sync
+  /// queue however different the paths they were given. If [injectedBox] is
+  /// supplied (test seam) it is used instead, and no instance is touched.
   Future<void> open({Box<String>? injectedBox}) async {
     if (_opened) return;
     if (injectedBox != null) {
       _box = injectedBox;
     } else {
-      _box = await Hive.openBox<String>(boxNameForAtSign(_atSign));
+      final path = _storagePath;
+      final hive = path == null ? Hive : HiveInstances.forPath(path);
+      _box = await hive.openBox<String>(boxNameForAtSign(_atSign));
     }
     _replayIntoMemory();
     _opened = true;

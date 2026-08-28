@@ -12746,3 +12746,72 @@ process leaves the lock held and nothing published.
 **Not taken:** opting the root path into `ownLockIsNotContention`, which would
 need `_mintUnderLock` to re-read inside the lock the way `_mintUnlessPublished`
 does. It remains the way to make the window zero rather than short.
+
+## 125. A Hive store's identity is its storage path, not its atSign (2026-08-28)
+
+**In brief:** *`hiveStoragePath` was silently ignored for the second AtClient
+of an atSign in one process, so co-located clients shared one keystore and one
+sync queue — fixed by giving each path its own Hive instance, with no box
+renamed and no data moved*
+
+**What was wrong.** A Hive box's identity is `(instance registry, box name)`.
+Both the registry and the home path are *instance* fields of `HiveImpl`;
+`package:hive` merely exposes one global instance, and
+at_persistence_secondary_server ran everything through it. Box names there
+derive from the atSign alone (`openBox(getShaForAtSign(atSign))`), so two
+stores for one atSign in one process always resolved to one box, however
+different the paths they were handed. The second silently attached to the
+first's, and its own `storagePath` reached nothing but the encryption-secret
+file beside it — visible on disk as a lone `<sha>.hash` in the second
+directory while the real `<sha>.hive` sat elsewhere.
+
+**How it failed: silently, in both directions.** A write through one client
+was visible to the other, and a notification replay watermark advanced by one
+was consumed from the other. Nothing threw and nothing logged, because no
+component did anything wrong. It surfaced as a notification sent while a
+sibling enrollment's monitor was down never arriving — the sibling's monitor
+had received it and moved the shared watermark past it.
+
+**The ruling (gkc, 2026-08-28).** Two enrollments of one atSign in one process
+is a **test shape**, not a deployment: it simulates clients that would normally
+run in separate processes with their own storage paths. So the fix is not to
+key storage by `(atSign, enrollmentId)` — which would rename every existing
+box and is a silent data-migration event — but to make `hiveStoragePath` mean
+what it says.
+
+**What was built.** `HiveInstances.forPath(...)` in
+at_persistence_secondary_server hands out one Hive instance per canonical
+path, and box lifecycle and type-adapter registration run on it.
+`AtSyncQueue` takes the path too, because it opens its own box
+(`syncqueue_<sha>`) and had the same collision.
+
+- **Same path is unchanged.** One instance, one box, nothing renamed, no data
+  moved. That is every existing deployment.
+- **Shared per path rather than per store, deliberately.** Two instances over
+  one directory neither throw nor lock each other out; they open two
+  independent boxes over the same files whose in-memory views diverge
+  silently. Measured — after a write through the second, the first still read
+  its own older value.
+- **The global `Hive.init` call stays**, purely for consumers that depend on
+  it as a side effect of keystore initialisation. at_client says so in
+  `LocalSecondary` and `AtSyncQueue`; dropping it failed 42 of at_client's
+  tests with *"You need to initialize Hive or provide a path to store the
+  box"*. A box a consumer opens on the global instance therefore still
+  collides — that is why `AtSyncQueue` had to move.
+- **`AtSyncQueue`'s `storagePath` is required but nullable.** Required so the
+  compiler names every call site; nullable because a `LocalSecondary` built
+  around an injected keystore has no path and never needed one, and refusing
+  it would withdraw a capability existing callers have.
+
+**Two traps recorded because both cost a full cycle.** Rewriting eight
+`registerAdapter` calls as a loop erases the per-call-site inference of
+`registerAdapter<T>`, so adapters register under the wrong type and writes
+dispatch to the wrong one — it compiles and fails at runtime with *"type
+'MessageType' is not a subtype of type 'AtNotification'"*. And a teardown that
+calls only the global `Hive.close()` leaves per-path boxes open over a deleted
+directory, so the next test reopens the cached box and reads the previous
+one's values back; `HiveInstances.closeAll()` exists for that.
+
+**Where it lives.** at_server `gkc-multiple-stores`. Until it is published,
+at_client_sdk carries a `dependency_overrides` entry at the workspace root
+pointing at that branch, which must come out before this merges.

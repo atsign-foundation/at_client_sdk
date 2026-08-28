@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_persistence_secondary_server/src/impl/hive/hive_instances.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
@@ -630,6 +631,11 @@ Future<void> setupLocalStorage(String storageDir, String atSign) async {
 
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
+    // Both registries: the keystore's boxes live on a per-path instance that
+    // Hive.close() does not reach, and would stay open over the directory
+    // deleted below — the next test then reopens the cached box and reads
+    // this one's values back, with nothing thrown.
+    await HiveInstances.closeAll();
     await Hive.close();
     AtClientImpl.atClientInstanceMap.clear();
     var isExists = await Directory(storageDir).exists();

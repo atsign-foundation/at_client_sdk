@@ -135,7 +135,18 @@ void main() {
         reason: 'could not authenticate from the ladder keyfile as '
             '$enrollmentId');
 
-    final storage = 'test/hive/ladder/$runId-${posture.hashCode}';
+    // ⚠️ ONE directory for the whole ladder, and that is the point of the row.
+    // This used to be per-posture (`$runId-${posture.hashCode}`), which is what
+    // an install moving its storage on every upgrade would do — and no install
+    // does. The durability assertion below only means something if the later
+    // rung reads the SAME store the earlier one wrote to.
+    //
+    // It passed anyway until 2026-08-28, because `hiveStoragePath` was ignored
+    // for the second client of an atSign in one process: every rung silently
+    // shared one Hive box whatever path it named, so "readable after the
+    // advance" was true because the rungs were one store rather than because
+    // anything survived. Honouring the path is what exposed it.
+    final storage = 'test/hive/ladder/$runId';
     final preference = TestUtils.getPreference(atSign, posture: posture)
       ..hiveStoragePath = storage
       ..commitLogPath = storage;

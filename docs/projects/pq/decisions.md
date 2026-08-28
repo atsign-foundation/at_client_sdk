@@ -182,6 +182,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [122] | Rotation cadence: the nskey lever fires on cause, the CK lever asks a policy                 | 2026-08-28 | LIVE                      |
 | [123] | `AtKeysIo.update` never creates, so a keyfile deleted mid-flight stays deleted               | 2026-08-28 | LIVE                      |
 | [124] | The signing root's mint lock is sized against starvation, not contention                     | 2026-08-28 | LIVE                      |
+| [125] | A Hive store's identity is its storage path, not its atSign                                  | 2026-08-28 | LIVE                      |
 
 [1]: detail/decisions.md#1-adr-0001--d1-as-two-tiers-superseded
 [2]: detail/decisions.md#2-adr-0002--d1-is-single-tier-nskey-atpqmls-is-d2-accepted
@@ -308,3 +309,4 @@ first, `enroll:updateMetadata`, and they still resolve.
 [122]: detail/decisions.md#122-rotation-cadence-the-nskey-lever-fires-on-cause-the-ck-lever-asks-a-policy-2026-08-28
 [123]: detail/decisions.md#123-atkeysioupdate-never-creates-so-a-keyfile-deleted-mid-flight-stays-deleted-2026-08-28
 [124]: detail/decisions.md#124-the-signing-roots-mint-lock-is-sized-against-starvation-not-contention-2026-08-28
+[125]: detail/decisions.md#125-a-hive-stores-identity-is-its-storage-path-not-its-atsign-2026-08-28

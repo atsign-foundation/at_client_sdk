@@ -131,7 +131,12 @@ class LocalSecondary implements Secondary {
           'set; AtClientManager.setCurrentAtSign must run first',
         );
       }
-      final q = AtSyncQueue(atSign: atSign);
+      // Null is a legal answer, not a failure: a LocalSecondary built around
+      // an injected keystore has no hiveStoragePath and never needed one.
+      // AtSyncQueue then uses the global instance, exactly as it always did.
+      final q = AtSyncQueue(
+          atSign: atSign,
+          storagePath: _atClient.getPreferences()?.hiveStoragePath);
       await q.open();
       _syncQueue = q;
       return q;

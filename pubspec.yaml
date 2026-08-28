@@ -120,3 +120,23 @@ dev_dependencies:
   plugin_platform_interface: ^2.1.6
   test: ^1.25.0
   test_process: ^2.1.0
+
+# TEMPORARY, and it must come out before this branch merges.
+#
+# Points at_persistence_secondary_server at the at_server branch carrying
+# "a store honours the storagePath it is given" (gkc-multiple-stores). Until
+# that is published, a second AtClient for one atSign in this process silently
+# attaches to the first's Hive box whatever hiveStoragePath it was given —
+# which is what makes two co-located enrollments share one notification replay
+# watermark, so one consumes the other's offline backlog with nothing logged.
+#
+# Workspace root only, deliberately: `dependency_overrides` are honoured here
+# and reach every member listed under `workspace:` above. tests/pq_matrix/*
+# are NOT members by design — they resolve the released at_client from pub.dev
+# as the matrix's control arm — so they neither get this nor should.
+dependency_overrides:
+  at_persistence_secondary_server:
+    git:
+      url: https://github.com/atsign-foundation/at_server.git
+      ref: gkc-multiple-stores
+      path: packages/at_persistence_secondary_server

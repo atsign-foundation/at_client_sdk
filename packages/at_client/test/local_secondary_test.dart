@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
 import 'package:at_persistence_secondary_server/at_persistence_secondary_server.dart';
+import 'package:at_persistence_secondary_server/src/impl/hive/hive_instances.dart';
 import 'package:crypton/crypton.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
@@ -976,6 +977,14 @@ Future<void> setupLocalStorage(String storageDir, String atSign) async {
 Future<void> tearDownLocalStorage(String storageDir) async {
   try {
     // Close every Hive box BEFORE deleting storage (open file handles).
+    //
+    // BOTH registries, and both are needed. `Hive.close()` reaches only the
+    // package-global instance; the keystore's own boxes live on a per-path
+    // instance (at_persistence_secondary_server's `HiveInstances`), so
+    // closing just the global leaves them open over the directory deleted
+    // below. The next test then reopens the cached box and reads the previous
+    // test's values back — no error, just the wrong data.
+    await HiveInstances.closeAll();
     await Hive.close();
 
     var isExists = await Directory(storageDir).exists();

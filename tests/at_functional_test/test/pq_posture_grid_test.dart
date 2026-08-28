@@ -345,6 +345,28 @@ void main() {
     for (final entry in storagePaths.entries) {
       expect(Directory(entry.value).existsSync(), isTrue,
           reason: '${entry.key}: no store at ${entry.value}');
+
+      // ⚠️ A DIRECTORY IS NOT A STORE, and this test was named for something
+      // it did not check until 2026-08-29. `hiveStoragePath` used to be
+      // ignored for the second client of an atSign in one process — every
+      // client attached to the first one's Hive box — and yet each named
+      // directory still appeared, because the encryption-secret file
+      // `<sha>.hash` is written at the path a client asks for even when its
+      // box is opened somewhere else entirely. So "each with its own store"
+      // was green while all six shared one.
+      //
+      // The `.hive` file is the store. Asserting it is what makes this row
+      // mean its own name.
+      final files = Directory(entry.value)
+          .listSync()
+          .whereType<File>()
+          .map((f) => f.uri.pathSegments.last)
+          .toList();
+      expect(files.where((n) => n.endsWith('.hive')), isNotEmpty,
+          reason: '${entry.key}: ${entry.value} holds no .hive file, so this '
+              'client is not storing here — its box is open somewhere else '
+              'and this directory has only the secret beside it. Found: '
+              '$files');
     }
     expect(
         cells.values.map((c) => c.client.enrollmentId).toSet(),

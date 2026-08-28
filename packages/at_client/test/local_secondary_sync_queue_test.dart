@@ -11,6 +11,7 @@ import 'dart:io';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/src/sync/at_sync_queue.dart';
 import 'package:at_commons/at_builders.dart';
+import 'package:at_persistence_secondary_server/src/impl/hive/hive_instances.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
@@ -39,6 +40,12 @@ void main() {
     try {
       // Close every Hive box (including the sync-queue box) so the next
       // setUp doesn't reattach to leftover in-memory state.
+      //
+      // BOTH registries. The keystore's boxes and the sync queue's now live on
+      // the instance owning `storageDir`, which `Hive.close()` does not reach
+      // — they would stay open over the directory deleted below, and the next
+      // test would find the previous one's queue entries still in memory.
+      await HiveInstances.closeAll();
       await Hive.close();
       AtClientImpl.atClientInstanceMap.remove(atSign);
       final dir = Directory(storageDir);
