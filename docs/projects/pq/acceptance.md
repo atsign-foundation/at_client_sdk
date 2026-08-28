@@ -1139,8 +1139,18 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Given:** enrollment E2 compromised (it holds exactly one APKAM keypair).
 - **When:** operator revokes E2.
-- **Then:** E2's APKAM keypair is cut at auth; pair with `nskey`-keypair rotation
-  excluding E2 (UC-A5.1(b)) to deny new-data keys.
+- **Then:**
+  - E2's APKAM keypair is cut at auth; pair with `nskey`-keypair rotation
+    excluding E2 (UC-A5.1(b)) to deny new-data keys;
+  - ⛔ **and the exclusion is E2's whole SUBTREE, not E2.** Revoking a parent
+    does not revoke what it self-spawned — a lost keyfile is exactly the case
+    that can self-enroll children, and on at_server `origin/trunk`
+    `parentEnrollmentId` is written by the retrofit and read by nothing. So a
+    descendant keeps `approved`, stays on every roster `enroll:listns` returns,
+    and by this section's own clarification below **is answered when it asks a
+    holder for the generation it can see published**. Rotating while excluding
+    only E2 therefore hands the attacker's surviving child the new key. See
+    [`decisions.md` 121](detail/decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28).
 
 - **Cross-ref:** `decisions.md` (FS levers, Decision #F); `design.md`
   (forward-secrecy / rotation levers, nskey-keypair rotation).
