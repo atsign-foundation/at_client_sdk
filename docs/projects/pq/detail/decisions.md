@@ -12072,8 +12072,8 @@ expiry on the enroll responses that return details, which gkc banded post-D1 on
 
 ## 119. Crypto agility: each advertisement adds, and the signer chooses (2026-08-27)
 
-**In brief:** *the nskey stops being the exception; `_apsk`'s swap is
-transition-specific; key packages already did it*
+**In brief:** *an nskey rotation mints fresh and clients add what they need;
+`_apsk`'s swap is transition-specific; key packages already did it*
 
 **The property, as gkc states it.** All three advertisements — enrollment key
 packages, nskeys and `_apsk` — converged on an array so that an algorithm
@@ -12110,53 +12110,81 @@ second, **the original kid stays `active`**, `suites` widens, and an envelope
 already sealed to the old kid still opens. What is owed here is coverage — the
 rest of the matrix and the self→self direction — not a decision.
 
-### 2. The nskey — a generation, holding a key for every configured algorithm
+### 2. The nskey — a rotation mints fresh, and a client ADDS what it needs
 
 `PublishedNskeyKeyRing._prepareMint` takes `keyEstablishmentAlgorithms.first`,
-and the code says why: *"an nskey is one key"*. **That is now wrong in one
-respect only.** A namespace key is still a **generation** — rotation is still
-what retires one and still what carries revocation — but a generation holds a key
-per configured algorithm.
+and the code says why: *"an nskey is one key"*. **A generation holds a key per
+algorithm the fleet needs, and it gets there in two separate steps.**
 
-Three things make it cheaper than it looks, each read rather than assumed:
+1. **A rotation mints only NEW material**, never carrying anything forward. What
+   triggers one is unchanged: an application policy such as the generation's age,
+   or a revocation — where the rule is that the generation must have been created
+   after the revocation's timestamp, which a client can settle by inspecting the
+   advertisement.
+2. **A client that finds the current generation missing an algorithm it needs
+   mints that material and ADDS it to the current generation**, in place, under
+   the same lock. This is a different operation from a rotation and does not
+   produce a new generation.
 
-- **The reader already does its half.** `NskeyAdvertisement.usableFor` walks
-  `keys[]`, and `fromPayload` skips malformed entries deliberately — *"a newer
-  writer may advertise entries spelled with fields this version does not know"*.
-- **The shape is already supported and documented as intended.**
-  `NskeyAdvertisement.single`'s dartdoc: the list *"exists so that an atSign can
-  advertise a second algorithm's key beside the first, not because it usually
-  does"*. Only the mint is singular.
-- **The generation already has a name that is not a key's kid.** `createdAt` is a
-  **mandatory** wire field — `fromPayload` throws *"carries no mint time"*
-  without it — so no format change is needed.
+**Why the two must be separate** (gkc, 2026-08-27): a rotation makes every peer
+re-cut and re-convey its content keys, and assembling the fleet's superset by
+successive rotations would pay that cost once per algorithm for something
+cryptographically new only to one of them.
 
-**The order is part of the ruling.** The identity move comes first, and is safe
-alone because one key is one kid today, so the two comparisons agree:
+**Why population is necessarily incremental, and no design avoids it.** Only a
+build that *implements* an algorithm can mint material for it. A rotating client
+cannot mint on another version's behalf however much it knows about the fleet, so
+every "compute the superset up front" scheme is foreclosed — including reading
+the authorised enrollments' key packages, which was examined and rejected for
+exactly this reason.
 
-1. **`CkManager.ensureCurrent` compares GENERATIONS, not kids.** Today it returns
-   early when `cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid`, with
-   `_resumeCurrent` and `_cutAndConvey` keyed the same way. `ResolvedNskey`'s
-   `nskeyKid` is **preference-narrowed** — built from
-   `hit.usableFor(sealsToKeyAlgorithms)` — so with two keys one generation would
-   answer to a different kid depending on which algorithm the *asking* client
-   prefers. ⛔ **That comparison is also how a peer learns of a rotation**:
-   `ensureCurrent`'s dartdoc says the re-fetch is *"the only way it learns"*,
-   because a sender never sees a recipient's decapsulation fail. Left on the kid,
-   revocation and algorithm choice become the same event. Moved onto the
-   generation the signal is strictly better, because a generation id cannot move
-   for an algorithm reason.
-2. **`_prepareMint` mints the whole configured list.** Its keygen-and-sign hoist
-   before the lock is the right place and stays; it becomes N keygens in that
-   pre-lock window. One signature covers the document however many entries, and
-   the mint lock is per `(owner, namespace)` regardless.
-3. **Conveyance carries EVERY private in the generation to every authorised
-   enrollment.** The alternative — conveying only what the receiving enrollment
-   can currently use — creates a state nothing has a trigger to resolve: *this
-   enrollment holds part of a generation*, needing a back-fill path that notices
-   a build upgrade. Conveying all of it means an enrollment that upgrades needs
-   nothing. The cost is linear volume in a place already under watch, and it is
-   accepted knowingly.
+**The worked sequence.** at_talk v1 notices a rotation is due, takes the lock and
+rotates; the new generation holds v1's algorithms alone. at_talk v2 is second,
+fails the lock, waits out the cooldown, re-reads, sees the rotation happened and
+that KEM-B is absent — so it mints KEM-B, takes the lock and **adds** it. at_talk
+v3 arrives later, sees a rotated generation with KEM-B present, and does nothing.
+
+**Rotation is also the garbage collection, which is why fresh-only is right.**
+Each generation starts empty, and only algorithms whose clients still run are
+added back; one nobody needs never returns. Removal therefore happens with nobody
+deciding it, and nothing flaps, because an add never removes. ⚠️ **An earlier
+draft of this ruling had a rotation carry old material forward.** That was
+corrected by gkc on 2026-08-27: it left nothing to ever remove an algorithm, and
+it made a revocation rotation hand the revoked enrollment back the private it
+already held. Fresh-only removes both problems at once, and with it the
+separately-named revocation rotation that draft required.
+
+**⛔ No change to what `CkManager.ensureCurrent` compares.** An earlier draft
+moved it off `advertised.nskeyKid` and onto the generation. Fresh-only material
+makes that unnecessary and the existing comparison correct: a rotation changes
+every `kid`, so every peer re-cuts; an add changes the preference-narrowed `kid`
+only for clients that prefer the added algorithm, so exactly those clients take
+it up and no others churn. The one remaining case — a client whose own
+`sealsToKeyAlgorithms` changed re-cutting against an unchanged generation — is
+the behaviour wanted, not churn.
+
+**The window, and whose it is to manage.** Between a rotation and the adds that
+repopulate it, the generation is a strict subset of what the fleet needs, so a
+sender whose policy refuses everything in it is refused outright. **Mitigation is
+the application owner's, by the ladder this project uses on itself**: roll out the
+new *receive* capability first, so receivers begin minting the new material into
+the current generation while senders still seal to the least-preferred member of
+their allowed set; roll out the new *send* policy second. After the second
+rollout a loud refusal is the right answer rather than a defect. ⚠️ This belongs
+in a best-practices document for application owners, and there is not one.
+
+**Two things make the reader's half free, each read rather than assumed.**
+`NskeyAdvertisement.usableFor` walks `keys[]`, and `fromPayload` skips malformed
+entries deliberately — *"a newer writer may advertise entries spelled with fields
+this version does not know"*. And `NskeyAdvertisement.single`'s dartdoc already
+says the list *"exists so that an atSign can advertise a second algorithm's key
+beside the first, not because it usually does"*. Only the mint is singular.
+
+**What is owed:** the `add` operation, which does not exist; a mint that produces
+more than one key where the client configures more than one; and — because two
+clients adding concurrently is a read-mutate-write on shared durable state — the
+add taking the mint lock, whose cooldown then paces population at one algorithm
+per cooldown.
 
 ### 3. `_apsk` — 108's swap is transition-specific, and the developer chooses
 
@@ -12188,4 +12216,6 @@ whose diagnostic ... states the singular assumption outright."*
 ⚠️ **It falsifies a clause already in the catalogue** — UC-A4.5's *"an nskey
 generation carries the **first** of that list, because a mint writes one key"* —
 rewritten to the ruled behaviour on 2026-08-27 and unproven until the mint
-changes.
+changes. ⚠️ **Item 2 was itself corrected the same day**: its first draft had a
+generation gaining a key in place, which gkc had not agreed and which no
+mechanism in the tree supports. What the catalogue states is the rotation.

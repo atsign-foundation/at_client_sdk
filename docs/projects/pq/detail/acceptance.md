@@ -948,7 +948,7 @@ reddens the suite with a message quoting the citation and its `proves:` prose.
 citation.* It reads like one, it is usually true, and the ledger — the artefact
 this whole gate exists to produce — counts none of it.
 
-## The clause burn-down — what each of the 135 clauses needs
+## The clause burn-down — what each clause needs
 
 Measured 2026-08-27 by reading every clause against the tree. **Every clause has
 something exercising it; none is untested** — the single absence the mapping

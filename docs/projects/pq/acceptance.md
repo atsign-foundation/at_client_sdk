@@ -33,6 +33,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 - [14. Test harness & impl/verify mapping](#14-test-harness--implverify-mapping)
 - [15. C1 · The rollout posture (capstone of `decisions.md` 56.4)](#15-c1--the-rollout-posture-capstone-of-decisionsmd-564)
 - [16. G1 · Signature agility and the rollout matrix](#16-g1--signature-agility-and-the-rollout-matrix)
+- [17. G2 · Crypto agility — add, never replace](#17-g2--crypto-agility--add-never-replace)
 
 ---
 
@@ -49,7 +50,7 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 
 There is no "in progress" state, because nothing in the tree can express one: a
 scenario either runs or is skipped against a named blocker. Today that is
-**72 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 73 use cases and 83 scenarios —
+**80 PROVEN · 0 BLOCKED · 1 WITHDRAWN** across 81 use cases and 91 scenarios —
 several rows carry more than one.
 
 ⚠️ **This sentence said `50 · 2 · 1` across 53 until 2026-08-18**, when a cold
@@ -154,6 +155,14 @@ cd packages/at_client && dart test test/acceptance --concurrency=1
 | UC-G1.13  | `enroll:update` is self-only                                                       | PROVEN    | `g1_enroll_update_test.dart` |
 | UC-G1.14  | pqReady is invisible to a deployed peer                                            | PROVEN    | `g1_rollout_matrix_test.dart` |
 | UC-G1.15  | Every rollout stage verifies every other stage's envelope                          | PROVEN    | `g1_rollout_matrix_test.dart` |
+| UC-G2.1   | A key package reader keeps the entry it cannot use                                 | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.2   | An nskey advertisement reader walks the list                                       | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.3   | An `_apsk` reader tolerates an unknown algorithm and distrusts an unknown status   | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.4   | An add moves nothing peers already address                                         | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.5   | A retired entry stops being offered and still opens history                        | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.6   | A verifier gap is covered by two signatures, and the developer chooses             | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.7   | One rollout, self→other: an un-upgraded peer notices nothing                       | PROVEN    | `g2_agility_test.dart` |
+| UC-G2.8   | One rollout, self→self: an un-upgraded enrollment notices nothing                  | PROVEN    | `g2_agility_test.dart` |
 
 ---
 
@@ -952,9 +961,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   one** KEM. An enrollment's key package carries a key for **every** algorithm
   `AtClientPreference.keyEstablishmentAlgorithms` names, minted beside the ones it already
   holds ([UC-A2.4](#34-uc-a24--the-key-package-advertises-the-kem-the-deployment-configured)),
-  and an **nskey generation carries a key for every algorithm on that list too** — a
-  generation is the unit that rotates, not the unit that holds one key. What is absent is
-  a *negotiation*: nothing is exchanged at seal time. A sender walks
+  and an **nskey generation ends up holding a key for every algorithm the owner's
+  installs need** — minted fresh by whichever client rotates, then added to in place by
+  each client that finds its own algorithm missing. What is absent is a *negotiation*:
+  nothing is exchanged at seal time. A sender walks
   its own fixed strongest-first `sealsToKeyAlgorithms` across the recipient's
   **APKAM-signed** advertised set and takes the first match, so an owner offering both is
   sealed to under the better one without either side stating a preference, and an attacker
@@ -1932,7 +1942,7 @@ and the burn-down below now do.
 acceptance suite:**
 
 ```
-BURN-DOWN  clauses proven: <N> of 135   server-proven: <M> of 135
+BURN-DOWN  clauses proven: <N> of <T>   server-proven: <M> of <T>
 ```
 
 A row-level verdict cannot express what *done* means here, because a row reads
@@ -3139,3 +3149,211 @@ what is gone is the claim that this matrix demonstrates it.
   is the **form**, and only a released reader can settle that. Byte-identity
   was a claim about our own writer; this is a measurement against the reader
   that actually matters.
+
+## 17. G2 · Crypto agility — add, never replace
+
+Acceptance for [`decisions.md` 119](detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27).
+
+**The property.** All three advertisements — an enrollment's **key package**, a
+namespace's **nskey** generation, and an enrollment's **`_apsk`** — are arrays so
+that an algorithm upgrade is an **ADD by the advertiser**. Nobody coordinates a
+flag day. The rows here assert that property once, across all three, rather than
+three times in three clusters.
+
+**Why it is worth a section: the rollout count.** With a singular advertisement a
+deployment moving from one algorithm to another needs two releases — one that can
+*read* the new algorithm, and a later one that switches to it — and the second
+cannot ship until every peer has the first. The peers are other people's apps, so
+**nothing tells the developer when that is**. With an array there is one release.
+
+⚠️ **The signature case is not the encryption case.** For encryption the *sender*
+picks from the recipient's advertised set, so offering two costs the advertiser
+nothing. For a signature the *signer* picks and the verifier must cope with
+whatever arrives, so an advertisement offering two protects no verifier that
+lacks the algorithm used — only a plural **signature** does, and that costs every
+envelope twice. [UC-G2.6](#176-uc-g26--a-verifier-gap-is-covered-by-two-signatures-and-the-developer-chooses)
+is where that difference lives.
+
+### 17.1 UC-G2.1 — A key package reader keeps the entry it cannot use
+
+- **Given:** an enrollment key package advertising two keys, one under an `alg`
+  this build does not implement, beside a malformed entry and a non-map entry.
+- **When:** this build reads it and picks a key to seal to.
+- **Then:**
+  - the key this build understands is selected, under the **caller's** algorithm
+    order and never the package's — the package states what the holder can open,
+    the caller states what it prefers;
+  - an entry whose `alg` this build does not know is **kept**, never dropped. It
+    is the holder's statement about itself, and a later build of this same
+    package must be able to use it;
+  - a malformed entry is **skipped** and a non-map entry ignored, rather than
+    failing the document — a newer writer may spell an entry with fields this
+    version has never heard of;
+  - a package naming **no** `suites` is **refused**, not read as the oldest
+    construction. Absence is not a licence to assume;
+  - **an entry is addressed by its `kid`, and a `kid` is a function of the key
+    itself** — the SHA-256 prefix of its public bytes, by one derivation with no
+    second spelling. So a `kid` a reader has not seen is a **new key** and never
+    the old one relocated, and a reader tells an ADD from a REPLACE without
+    being told which it was. It is also why an add cannot quietly rehome a
+    peer's existing address: doing so would need different bytes under the same
+    `kid`, which the derivation forbids.
+
+### 17.2 UC-G2.2 — An nskey advertisement reader walks the list
+
+- **Given:** a signed nskey advertisement whose `keys` list carries an entry this
+  build cannot use **first**.
+- **When:** a sender resolves the advertisement to seal to it.
+- **Then:**
+  - the usable entry is found although an unusable one precedes it. A reader
+    that stopped at the head would pass on a list ordered the other way, so the
+    order is the assertion;
+  - an advertisement of **only** unusable entries is **refused**. There is
+    nothing to seal to, and inventing a target some other way would produce a
+    record the owner can never open;
+  - an advertisement that **retires every key it names** is refused for the same
+    reason: retirement withdraws the future, so a generation with no live key is
+    not something to address;
+  - **the APKAM signature over the document is checked before a single key is
+    read out of it.** An attacker can therefore neither **add** a weak entry nor **strip**
+    a strong one — which is what the whole add-never-replace design rests on. An
+    offer editable in transit would make a widened advertisement a downgrade
+    surface rather than an upgrade path, and the widening is exactly what this
+    section asks advertisers to do.
+
+### 17.3 UC-G2.3 — An `_apsk` reader tolerates an unknown algorithm and distrusts an unknown status
+
+- **Given:** an `_apsk` array carrying an entry under an unknown `alg` beside an
+  `rsa2048` one; and separately, an entry carrying a `status` token this build
+  has never seen.
+- **When:** a verifier parses it.
+- **Then:**
+  - the entry this build understands is **used**, and the array is not refused
+    for carrying the other. This is what makes an ADD safe to publish before any
+    verifier is upgraded;
+  - an array of **nothing understood** is refused, not fallen back from — a
+    signature checked against a key derived some other way attests to nothing;
+  - ⚠️ **an unknown `status` is treated as the opposite of an unknown `alg`, and
+    the asymmetry is the point.** An unknown algorithm is skipped and the rest of
+    the document trusted; an unknown status makes its entry **not a verification
+    candidate at all**. Unknown means *more* restrictive, never less — which is
+    what lets a later build withdraw a key from verifying **history**, a
+    compromise rather than a retirement, without a flag day and without an older
+    build going on trusting it;
+  - the unknown token is carried through **verbatim** rather than flattened, so
+    an older build that re-reads and republishes the record does not weaken what
+    its owner said about a key. Flattening it on the way out would publish the
+    owner as saying something they did not say — and the record is rebuilt from
+    stored state on every reconcile, so the flattening would be silent;
+  - ⚠️ **`_apsk` is the only one of the three whose wire SHAPE changes with the
+    number of entries.** A single active `rsa2048` key is spelled as a **bare
+    string**; a second key, or a single non-`rsa2048` key, forces the array. So
+    an ADD here changes the document's shape rather than only its length, and a
+    reader must accept both spellings of the same thing.
+
+### 17.4 UC-G2.4 — An add moves nothing peers already address
+
+- **Given:** an advertiser whose peers are already sealing or verifying against
+  its single existing entry; a second algorithm is configured.
+- **When:** the advertiser adds a key for it.
+- **Then:**
+  - the existing entry keeps its `kid` and stays **`active`** — an add joins a
+    key, it does not supersede one. Supersession is rotation's shape;
+  - anything already sealed or signed against the existing entry still opens or
+    verifies afterwards, so the add destroys no history and needs no re-seal;
+  - the advertisement's `suites` **widens** to cover both, derived from the keys
+    the holder actually advertises rather than from what the writing build
+    happens to support;
+  - ⛔ **an nskey generation reaches its full set in two steps, and this row's
+    other three clauses are about the two advertisements that reach theirs in
+    one.** A **rotation** mints only new material and carries nothing forward —
+    which is what makes rotation the garbage collection, since an algorithm
+    nobody still runs never comes back. A client that then finds the current
+    generation missing an algorithm it needs mints that material and **adds** it
+    to the generation in place, under the mint lock. Only a build implementing an
+    algorithm can mint it, so no rotating client can assemble the fleet's set on
+    its own and the population is necessarily incremental.
+- **Cross-ref:** [UC-A2.5](#35-uc-a25--an-enrollment-amends-its-own-key-package-enrollupdate)
+  proves this live for a key package.
+
+### 17.5 UC-G2.5 — A retired entry stops being offered and still opens history
+
+- **Given:** an advertiser that has retired an entry — the `_apsk` swap at
+  `pqActive`, or a rotated nskey generation.
+- **When:** a new operation runs, and separately an old record is read.
+- **Then:**
+  - the retired entry is **not selected** for anything new;
+  - it stays **advertised**, and what it produced still verifies or opens. A
+    verifier walks every key advertised under the resolved algorithm in
+    published order, so the current one answers first and a retired one is
+    reached only by a record old enough to need it;
+  - **removal is therefore a two-step, never one.** An entry withdrawn from the
+    advertisement outright would destroy the ability to read what it produced,
+    which is the failure this row exists to make impossible;
+  - **this is the ordinary case, not the overlap case.** An app that signs only
+    once still changes *what* it signs with over time, so its `_apsk`
+    accumulates advertised keys by rotation alone. A plural **advertisement** is
+    what every app that has ever rotated carries; a plural **signature** is what
+    only an app opting into an overlap emits. The array is therefore needed by
+    every deployment, not by the ones that double-sign;
+  - **a verifier matches a signature to its key by trial, not by name.** The
+    envelope's `kid` is the signing **enrollment**, never a key, so the verifier
+    resolves the algorithm from what the two documents share and then walks
+    every key advertised under it in published order. The refusal, when no key
+    works, names how many were tried — so a verifier that stopped at the first
+    goes red rather than reporting a bad signature;
+  - a **retirement** is not a **compromise**, and only the first is what this
+    row is about — an entry withdrawn from verifying history too is
+    [UC-G2.3](#173-uc-g23--an-_apsk-reader-tolerates-an-unknown-algorithm-and-distrusts-an-unknown-status)'s
+    unknown-status clause, and the two must not be conflated.
+
+### 17.6 UC-G2.6 — A verifier gap is covered by two signatures, and the developer chooses
+
+- **Given:** a transition to a signing algorithm some verifier in the fleet may
+  not implement.
+- **When:** an app sets a two-member `AtClientPreference.dataSigningKeyAlgorithms`
+  and signs; and separately, an app leaves the posture's single-member default.
+- **Then:**
+  - the two-member build emits **one signature per active signing key**, and a
+    verifier implementing only one of the two takes the strongest algorithm the
+    two documents share and verifies against it;
+  - the single-member build emits **exactly one** signature — no posture on the
+    ladder emits two, and the plural writer is a capability an app opts into
+    rather than a position on the ladder;
+  - a verifier sharing **no** algorithm with the envelope is refused, with a
+    message naming what the envelope carries and what the `_apsk` advertises —
+    never a fallback to a key derived some other way;
+  - **which of the two a deployment takes is the developer's**: sign twice for
+    one release, or stage the rollouts carefully. The SDK provides the lever and
+    not the policy.
+- **Cross-ref:** [`decisions.md` 108](detail/decisions.md#108-the-signing-rollout-swaps-algorithms-it-never-overlaps-them-2026-08-18),
+  whose swap is specific to a transition with no verifier gap.
+
+### 17.7 UC-G2.7 — One rollout, self→other: an un-upgraded peer notices nothing
+
+- **Given:** `@bob` upgrades to a build configuring a second algorithm and
+  publishes the widened advertisement; `@alice` is still on the old build.
+- **When:** `alice1` shares `@bob:<k>.app_1.my_apps@alice`, and `@bob` reads it.
+- **Then:**
+  - `alice1` seals under the entry it understands and `@bob` opens it — nothing
+    fails, nothing is refused, and `@alice` is never asked to upgrade first;
+  - an `@alice` that *has* upgraded seals under the new entry **immediately**,
+    with no further release on `@bob`'s side.
+
+  The two ends move independently, and that is the whole of what "one rollout"
+  means.
+
+### 17.8 UC-G2.8 — One rollout, self→self: an un-upgraded enrollment notices nothing
+
+- **Given:** `@alice` has two enrollments; `alice1` runs a build configuring a
+  second algorithm and `alice2` is still on the old one.
+- **When:** `alice1` writes a self record both must read, and `alice2` reads it;
+  then `alice2` writes and `alice1` reads.
+- **Then:**
+  - both directions succeed across the mixed pair, so an atSign may upgrade its
+    installs one at a time.
+
+  ⚠️ **The configured list and the published advertisement are different things,
+  and this is the row where confusing them shows.** With one atSign both belong
+  to it, so a client consulting its own configuration where it should consult
+  the advertisement is invisible in every other row.

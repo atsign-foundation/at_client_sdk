@@ -160,7 +160,7 @@ record working. Do not "tidy" one to match the other.
 | Item | What is owed | Blocked on |
 | ---- | ------------ | ---------- |
 | **`at_libraries` CI went red at `9414f8bd2`, and the window is this session** | **Diagnose it. ⛔ Do not call it a flake — the evidence points inward.** `at_onboarding_cli_functional_tests`' *Onboard and verify failure modes* expected `AtActivateException('already activated')` on its third onboard and got `AtKeysFileOverwriteException: Keys file already exists`, after the previous step had deleted that file and asserted it gone. The workflow was green on this branch for **five consecutive runs** and red on the first one after 2026-08-27's changes, so the window is those commits. ⚠️ **A HYPOTHESIS, unmeasured:** `AtOnboardingServiceImpl.onboard` brings up an `AtClientManager`, so `AtClientImpl._init` fires `PqClientBootstrap.startup()` **unawaited**, and that tail files key material into the keyfile — a tail still running when the test deletes the file and onboards again would recreate it. The negative-cache fix lengthens exactly that tail on a cold namespace, because a resolution that finds nothing now re-walks the levels the memory skipped. **What would test it:** the tail is already observable — `seeding_tail_runs_live_test.dart` and its abandoned twin exist — so an arm that deletes a keyfile while a tail is in flight would name the mechanism or kill the hypothesis. ⛔ **The "cannot be reproduced locally" reason this row first gave was retracted 25 minutes before the row was written** — it pointed at the at_onboarding_cli harness row, which had already been corrected: that pack HAS a `runLocal.sh` and passes locally, **19 tests, exit 0**, on both `at_virtual_env:local` and CI's `dev_env`. The failure is not un-reproducible for want of a harness; it simply did not reproduce. A re-dispatch is in flight to bound the rate; **N=1 bounds nothing** | Nothing |
-| [the clause burn-down: every THEN clause proven](#the-clause-burn-down-every-then-clause-proven) | **The definition of done, and the campaign to reach it** (gkc, 2026-08-27). **Objective 1:** every one of the **135** THEN clauses proven by some test. **Objective 2:** every clause proven only in-process gains a proof against a real atServer wherever feasible. Read the meter by running the acceptance suite: it prints `BURN-DOWN  clauses proven: N of 135   server-proven: M of 135`. ⚠️ **A pin is a claim, not a run** — `tool/acceptance_ledger.dart` is what says the cited test passed. This row **absorbs the old "what the citation audit left owed"**, whose five findings (F16, F15, F8, F1, F3) are clause gaps by another name | Nothing |
+| [the clause burn-down: every THEN clause proven](#the-clause-burn-down-every-then-clause-proven) | **The definition of done, and the campaign to reach it** (gkc, 2026-08-27). **Objective 1:** every THEN clause in the catalogue proven by some test. **Objective 2:** every clause proven only in-process gains a proof against a real atServer wherever feasible. Read the meter by running the acceptance suite: it prints `BURN-DOWN  clauses proven: N of T   server-proven: M of T`. ⚠️ **A pin is a claim, not a run** — `tool/acceptance_ledger.dart` is what says the cited test passed. This row **absorbs the old "what the citation audit left owed"**, whose five findings (F16, F15, F8, F1, F3) are clause gaps by another name | Nothing |
 | [a client that exits during its startup tail abandons seeding](#a-client-that-exits-during-its-startup-tail-abandons-seeding) | ✅ **Reproduced 2026-08-27** — `seeding_tail_runs_live_test.dart` and `seeding_tail_abandoned_live_test.dart`, a two-file differential. ✅ **FIXED 2026-08-27** — the abandonment logs at `warning` naming what it skipped, and `AtClient.ensureReachable(namespace)` is the supported way to wait for reachability, on the interface rather than on `@experimental` `pqBootstrap` (gkc's ruling). ⚠️ **What is left is the LOOP RATE only**: whether a short-lived client relaunched repeatedly could be starved by the lock's cooldown. Both of failure mode 2's mechanisms were **measured 2026-08-27** (`nskey_mint_lock_live_test.dart`); do not rebuild them. A short-lived client at a seeding posture takes the mint interlock and dies before publishing, so the atSign has no namespace key and no peer can seal to it — it sends post-quantum and cannot receive. Confirmed live in both directions on 2026-08-26. ⛔ **Nothing tells the caller**, and the only symptom is at the FAR end, where a different atSign reports the wrong party as unseeded | Nothing. ⚠️ **The reproduction is DONE** (2026-08-27) — this cell said "three in-tree attempts failed" until then, one cell away from the sentence that superseded it. What is left is the loop rate |
 | [14.18](#1418-the-remaining-d1-initial-development-sequence) **the release train** | **gkc publishes at_auth 4.0.0-rc1**, then carve at_client (stacked) → at_client_flutter → at_onboarding_cli. Six of the eight positions are through by merge; what is left is publishes | gkc. ⚠️ **Merged is not published, and only the publishes gate anything now** |
 | **at_chops 3.6.1** | **Publish it.** [PR #2181](https://github.com/atsign-foundation/at_client_sdk/pull/2181) merged to trunk on 2026-08-24 and pub.dev still tops out at `3.6.0`. Independent of at_auth and of the spike | gkc |
@@ -172,12 +172,13 @@ record working. Do not "tidy" one to match the other.
 | [14.11](#1411-deprecated_member_use-findings-across-the-workspace) **bucket B** | Migrate the **88** credential-ladder uses (`enrollmentId` 75, `signingAlgoType` 13) onto the `AtAuthenticator` seam. 26 in `lib/`, 62 in `test/`, across at_client, at_onboarding_cli, at_client_flutter and at_auth. It is what "that package's own work is done" means in [14.18](#1418-the-remaining-d1-initial-development-sequence), so it gates the carves | Nothing |
 | **advertisement fetch volume, ttr and client caching** | Three questions, one subject, raised by gkc 2026-08-26 after a wire capture showed **110 `_apsk` lookups in a single short client run** — more than either control atSign made. (1) Why are there so many? Establish what re-fetches, and whether anything is re-reading per operation what it could hold. (2) Should an advertisement carry a `ttr`, and if so how long — it is a public record that peers must not read stale after a rotation, and rotation is the revocation lever. (3) How should a client cache advertisements it has fetched, and for how long? ⛔ **These interact**: a client-side cache with no server-side `ttr` is a rotation that does not take effect, and a `ttr` shorter than a session is the fetch volume in (1) by design.<br><br>⚠️ **A change on 2026-08-27 moved this baseline and the measurement must be taken after it, not before.** `NskeyResolver` no longer answers null from a remembered miss: when a walk finds nothing *and* the memory made it skip a level, it re-walks the skipped levels for real. That is deliberately paid only where a resolution is about to return null — for a write, one about to throw — so a repeated write that *resolves* is unchanged. But a client repeatedly writing toward a recipient who has published nothing now re-probes each time instead of once per window, which is exactly the shape question (1) is counting. Read [the write-up](#how-the-negative-cache-falsified-three-clauses) before attributing any number here | Nothing. It needs a measurement, then a ruling |
 | **the PQ upgrade guide does not exist** | The cleanup deliverable, ruled instructions-not-tooling by [decisions.md 118](detail/decisions.md#118-the-retrofit-cap-is-armed-by-the-child-not-by-the-retrofit-2026-08-27), which names the content it must carry. [Decision 40](detail/decisions.md#40-rf-srv-is-the-mechanism-the-whole-model-stands-on-2026-08-05) item 7 routed that content to a guide on 2026-08-05 and `docs/projects/pq/` has no such file. It is here rather than in the catalogue because a document is not a THEN clause | gkc, on where it lives |
-| **an nskey cannot be ADDED to — agility's one exception** | **A ruling from gkc, and it gates the agility use cases.** All three advertisements are arrays so that an algorithm upgrade is an *add* by the advertiser and no flag day is needed. Key packages do that; `_apsk` is shaped for it; **an nskey is not** — `PublishedNskeyKeyRing._prepareMint` mints under `keyEstablishmentAlgorithms.first` and says why: *"an nskey is one key"*. So a namespace upgrades by **rotation**, which is O(n) per enrollment and moves the `nskeyKid` peers address, where the other two upgrade by adding, which moves nothing. ⛔ **Do not write a use case asserting "add, never replace" until this is settled** — stated across all three it would assert something the tree contradicts for one, which is the exact shape of the eleven specification defects found on 2026-08-27. Three answers are open: teach the mint to write every configured algorithm (the reader already copes); rule that a namespace key is deliberately singular and rotation is its upgrade path; or make it a posture-gated choice. See [the write-up](#crypto-agility-and-the-matrices-that-would-prove-it) | gkc's ruling |
+| **the nskey mint is singular, and there is no `add` at all** | ✅ **RULED 2026-08-27** as [decisions.md 119](detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27) item 2; what is left is the code. Two operations are owed and neither exists: a mint that produces a key for **every** algorithm the client configures rather than `keyEstablishmentAlgorithms.first`, and an **add** that puts one client's newly minted material into the **current** generation in place, under the mint lock — a rotation mints fresh and carries nothing forward, so the fleet's set assembles incrementally because only a build implementing an algorithm can mint it. ⚠️ **Two clients adding at once is a read-mutate-write on shared durable state**, so the add takes the same lock, whose cooldown then paces population at one algorithm per cooldown. ⛔ **No change to `CkManager.ensureCurrent`** — an earlier draft of the ruling owed one and fresh-only material removed the need. It gates UC-G2.4's nskey clause | Nothing |
+| **there is no best-practices guide for application owners** | **The mitigation for the repopulation window, and it is the only one** (gkc, 2026-08-27). Between an nskey rotation and the adds that repopulate it, a sender whose policy refuses everything in the generation is refused outright. The guidance is the ladder this project uses on itself: roll out the new **receive** capability first, so receivers begin minting the new material while senders still seal to the least-preferred member of their allowed set; roll out the new **send** policy second, after which a loud refusal is the right answer rather than a defect. It must also say that `AtClientPreference.sealsToKeyAlgorithms` **is** the send-policy lever — an ordered list where omitting an algorithm refuses it — which its dartdoc does not say today. ⚠️ **Distinct from the PQ upgrade guide row**, which is about retrofit cleanup; whether they are one document is unsettled | gkc, on whether it joins the upgrade guide |
 | **the `_apsk` sign/verify matrix is untested** | **Tests, asked for by gkc 2026-08-27**, the same shape as the encrypt/decrypt matrix and for the same reason: `_apsk` is an array so that a signing-algorithm upgrade is an *add*. Sign **and** verify, self→self and self→other, against an advertiser offering `rsa2048` only, both, or `mldsa65` only. Nothing today asserts that adding an entry leaves the existing one verifying, or that a one-algorithm reader accepts a two-entry advertisement — ⛔ **and `bareApskValueOf` makes this sharper than it looks**: a single active `rsa2048` entry serialises as a **bare string** and everything else as the array, so the one-entry and two-entry cases are different wire shapes, not different lengths | Nothing |
 | **the secret-sharing substrate's matrix is untested** | **Tests, asked for by gkc 2026-08-27.** The third operation pair: encrypt/decrypt through the pairwise substrate — key packages and `__ssenv` — against a recipient whose key package advertises x-wing only, both, or ml-kem-1024 only. UC-A2.5 proves the *add* live (a package gains a second key, the original kid stays active, an envelope at the old kid still opens) and `key_package_amendment_live_test.dart`'s negotiation arm proves a sender picks by its own order over a both-advertising recipient. What is missing is the rest of the grid, and the self→self direction entirely | Nothing |
 | **the advertised-algorithm matrix is untested** | **Tests, asked for by gkc 2026-08-27.** Send **and** receive, **self→self** and **self→other**, against a receiver advertising **x-wing only**, **both**, or **ml-kem-1024 only** — twelve cells, and today almost none of them run. What exists is one live negotiation arm over a **both**-advertising recipient (`key_package_amendment_live_test.dart`, two senders differing only in `sealsToKeyAlgorithms` order) and unit coverage of the selector; there is no live x-wing-only or ml-kem-only *recipient* anywhere, and nothing at all for the self→self direction. ⚠️ **The self→self cells are the ones a bug hides in**: with one atSign the configured `keyEstablishmentAlgorithms` and the published advertisement both belong to it, so a client consulting the wrong one is invisible — see [the mirrors](#the-four-missing-self-to-self-mirrors), whose UC-A4.5 row is this matrix's specification half. ⛔ **The receive side is not the send side reversed**: a holder opens every construction its KEM supports (`openableSuitesFor`), while a sender takes the first of its own order the recipient offers, so an ml-kem-only recipient and an ml-kem-only *sender* exercise different code.<br><br>**How to build it** (gkc, 2026-08-27): **one namespace per variation**, not one atSign per variation — an nskey is scoped to `(owner, namespace)`, so a single recipient can advertise x-wing for one namespace and ML-KEM for another by setting `keyEstablishmentAlgorithms` before each `mintAndPublish`. That keeps the whole matrix on the atSigns a pack already has, and avoids the exclusive-atSign trap (a test that publishes a signing root poisons rows asserting its absence). ⚠️ **The "both" column needs checking before it is planned as a namespace.** `PublishedNskeyKeyRing` mints under `keyEstablishmentAlgorithms.first` — **one key per nskey generation** — while an enrollment *key package* carries a key for every configured algorithm, which is what UC-A2.5 proves live. So a both-advertising **key package** is producible by minting and a both-advertising **nskey** may not be; the reader side already handles a multi-entry advertisement (`usableFor` walks `keys[]`), so the gap, if it is one, is on the writer | Nothing |
 | **no rail resolves a cross-file `#anchor`** | **A rail, and it would guard a property that currently HOLDS rather than fix a break.** Found by a cold read 2026-08-27, whose manual pass was the first time this doc set's cross-file anchors had ever been resolved — every link in both live docs resolved. `docs_structure_test.dart` checks that no *linked* heading slug is duplicated, that the ledger index and its bodies correspond, and that the catalogue's counts agree; it never opens a link's target. The edit-time hook catches a bad anchor in the file being written, so the hole is **a heading renamed in one file and linked from another** — which happened on 2026-08-27 (`Two clauses pinned…` → `Clauses pinned…`) and was caught only because the same session moved the pointer. ⚠️ Scripted doc edits bypass the hook entirely.<br><br>⚠️ **Evidence arrived the same day the row was written: I wrote TWO broken anchors on 2026-08-27**, both after that cold read had flagged exactly this shape. One pointed at a **table row**, which is not a heading and can never be one; the other was invented outright for a section that does not exist. Both were caught only by resolving every anchor by hand, which is the check this row proposes. ⛔ **So it is no longer "a rail guarding a property that holds"** — the property does not hold reliably, it is held up by whoever remembers to check | Nothing |
-| [the four missing self-to-self mirrors](#the-four-missing-self-to-self-mirrors) | **A ruling from gkc on which become catalogue rows**, then the rows and their scenarios. He set the rule 2026-08-27: a `put`/`notify` row — or a `get`/notification-receipt row — is about self→self **or** self→other, never both, and where one direction has a row so should the other. Five pairs already hold; **four self→other rows have no self→self mirror** and they are not equally worth having. The section ranks them with what each would assert and whether the tree can tell it apart: UC-A4.5's and UC-A4.7's mirrors both have live production paths that nothing exercises for self, and UC-A4.7's is *commented for exactly that case*. ⛔ **Landing any of them raises the denominator above 135** and the burn-down percentage falls, which is correct — the clauses were always owed and their absence flattered the figure | gkc's ruling |
+| [the four missing self-to-self mirrors](#the-four-missing-self-to-self-mirrors) | **A ruling from gkc on which become catalogue rows**, then the rows and their scenarios. He set the rule 2026-08-27: a `put`/`notify` row — or a `get`/notification-receipt row — is about self→self **or** self→other, never both, and where one direction has a row so should the other. Five pairs already hold; **four self→other rows have no self→self mirror** and they are not equally worth having. The section ranks them with what each would assert and whether the tree can tell it apart: UC-A4.5's and UC-A4.7's mirrors both have live production paths that nothing exercises for self, and UC-A4.7's is *commented for exactly that case*. ⛔ **Landing any of them raises the denominator** and the burn-down percentage falls, which is correct — the clauses were always owed and their absence flattered the figure | gkc's ruling |
 | [the at_client carve stack](#the-at_client-carve-stack) | Get the nine-layer stack plan into git, and make the **five decisions** it cannot make for itself. A file in no layer never lands | Whoever cuts the stack |
 | [arm 1 vs arm 3 bucketing](#arm-1-vs-arm-3-bucketing) | **A ruling from gkc** — the measuring is done. Arm 3 cannot be scoped and the catalogue's count table stays wrong until it is settled | gkc's ruling. Nothing else |
 | [a wildcard enrolment seeds nothing](#a-wildcard-enrolment-seeds-nothing) | **A ruling from gkc** on whether an atSign reachable only through a wildcard (`*`) enrolment is expected to publish namespace keys. Today it publishes none, so nobody can seal to it in any namespace, and the doc comment that said otherwise was false | gkc's ruling. The measuring is done |
@@ -354,71 +355,47 @@ happen to be ready. **Add, never replace** is the whole design.
 | **`_apsk`** | ✅ **Structurally yes** — `apskAdvertisement({required List<ApskSigningKey> keys})`, and `bareApskValueOf` collapses to a bare string only for a single active `rsa2048` entry, so the array is the general case | ⚠️ **Untested as an agility property.** **Five** producers write it — three call `apskAdvertisement` directly (`enrollment_submitter`, `enrollment_updater`, `pq_signing_root`) and two go through `apskValueOf`, the function that *chooses the wire shape* (`signing_key_minting.dart`, `apkam_signing.dart`). ⚠️ It said "three" until 2026-08-27, counting only the direct callers and omitting the minting path — the one a matrix author most needs. Nothing asserts that adding an entry leaves the existing one verifying, or that a one-algorithm reader accepts a two-entry advertisement |
 | **nskey** | ⛔ **NO.** `PublishedNskeyKeyRing._prepareMint` takes `keyEstablishmentAlgorithms.**first**`, and the code says why in as many words: *"an nskey is one key: only the enrollment's own key package advertises the whole configured list"* | The **reader** already handles many (`NskeyAdvertisement.usableFor` walks `keys[]`) — reader-ships-first, correctly. No writer produces one |
 
-**What a multi-key nskey would cost** (investigated 2026-08-27 at gkc's ask, by
-reading; nothing was built). ⛔ **The expensive part is not the mint — it is that
-`nskeyKid` stops being a generation's identity.**
+✅ **RULED 2026-08-27, and the investigation below it is superseded** — see
+[decisions.md 119](detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27).
+An nskey generation reaches its full set in **two** steps: a **rotation** mints
+only new material and carries nothing forward, and a client that then finds its
+own algorithm missing mints it and **adds** it to the current generation in
+place, under the mint lock. Rotation is therefore also the garbage collection —
+an algorithm nobody still runs never comes back — and an add never removes, so
+nothing flaps.
 
-A `kid` is a SHA-256 prefix of the **public half** (`nskeyKidOf` → at_auth's
-`publicKeyKid`), so one key is one kid, and two keys in a generation are two.
-There are **two** `nskeyKid`s and they are not the same thing.
-`NskeyAdvertisement.nskeyKid` is a singular getter over `_usable`, which asks
-`usableFor(SecretSharingAlgos.keyAlgos)` — a **build constant**, so it does *not*
-vary with a client's preference, and its own dartdoc says so. The one that does
-is `ResolvedNskey.nskeyKid`, built in `NskeyResolver` from
-`hit.usableFor(sealsToKeyAlgorithms)` — preference-narrowed — and **that** is
-what `CkManager` compares. So with two keys **the same generation answers to a
-different kid depending on which algorithm the asking client prefers**, via the
-resolver rather than via the advertisement. ⚠️ **This paragraph cited the
-advertisement getter until 2026-08-27, and that getter's dartdoc refutes the
-sentence naming it** — a true conclusion reached from a false premise, which a
-reader who checked the citation would have taken as the section being wrong. Four
-things use that kid as a proxy for "which generation", and each stops meaning
-what it says:
+⚠️ **Three conclusions this section used to carry were retracted in reaching
+that, and each is worth keeping because each looked right.**
 
-1. **The CK currency check.** `CkManager.ensureCurrent` returns early when
-   `cache.currentNskeyKid(owner, ckNs) == advertised.nskeyKid`. Two clients with
-   different `sealsToKeyAlgorithms`, or one client whose preference changed,
-   would disagree about the current kid and cut fresh content keys against an
-   unchanged generation. Churn rather than breakage — but silent.
-2. **Rotation detection, which is the sharp one.** That same comparison *is* how
-   a peer learns of a rotation: `ensureCurrent`'s dartdoc says the re-fetch is
-   "the only way it learns", because a sender never sees a recipient's
-   decapsulation fail. If a kid can change without a rotation — because the
-   *sender's* preference changed — then "the kid moved" no longer means "rotate",
-   and the signal that carries revocation is conflated with algorithm choice.
-   **A multi-key nskey therefore needs a generation identity separate from any
-   key's kid** (`createdAt` is the only existing candidate) before it is safe.
-3. **Conveyance volume doubles.** A private is filed and conveyed per
-   `nskeyKid` (`nskey_private_filing.dart` alone names it on **42 lines** —
-   `grep -c`, which is lines; `grep -o | wc -l` says 44 occurrences, and the two
-   are not the same measurement), and a
-   namespace key is pushed to **every** authorised enrollment. Two algorithms
-   means two privates per generation per enrollment, so the `__ssenv` traffic
-   this design already watches — see the advertisement-fetch-volume row — grows
-   with the square of nothing, but linearly in a place that is already a concern.
-4. **The mint's CPU hoist doubles.** `_prepareMint` does keygen and signature
-   before taking the lock, deliberately; two algorithms is two keygens in that
-   pre-lock window. That is the *right* place for it and no interlock changes.
+- *"The expensive part is that `nskeyKid` stops being a generation's identity,
+  so `CkManager.ensureCurrent` must compare generations."* **False under the
+  ruled design.** Fresh-only material means a rotation changes every `kid`, so
+  every peer re-cuts; an add changes the preference-narrowed `kid` only for
+  clients that prefer the added algorithm, so exactly those take it up. The
+  existing comparison is correct and no change is owed.
+- *"A rotation could carry the old keys forward."* Ruled out: it leaves nothing
+  to ever remove an algorithm, and it hands a revoked enrollment back the private
+  it already holds, because `revokeEnrollmentAndRotate` reaches the mint through
+  the same `rotateNamespaceKey`.
+- *"The minting client could compute the fleet's superset from the authorised
+  enrollments' key packages."* Impossible: **only a build that implements an
+  algorithm can mint material for it**, so no client can mint on another
+  version's behalf. That single fact forecloses every pre-population scheme and
+  is why population is incremental.
 
-**What does NOT cost anything:** the reader (`usableFor` already walks `keys[]`),
-the advertisement's signature (one signature covers the document however many
-entries), and the mint lock itself (one lock per `(owner, namespace)` regardless).
+**What survives:** a private is filed and conveyed per `nskeyKid`, so more
+algorithms means more `__ssenv` traffic — read the advertisement-fetch-volume row
+before attributing any number there. The reader costs nothing (`usableFor`
+already walks `keys[]`), one signature covers the document however many entries,
+and the mint lock is one per `(owner, namespace)` regardless.
 
-**So the ruling is narrower than "should nskeys carry two keys".** It is:
-*is a namespace's key a generation, or a set?* If a generation, rotation is
-correctly its upgrade path and the catalogue should say so plainly. If a set,
-the kid must stop being the generation's name first — and that is the change,
-not the mint.
-
-**So for a namespace the upgrade path is a ROTATION, not an add** — and the two
-are not interchangeable. A rotation is O(n) per enrollment, it moves the
-`nskeyKid` that peers address, and a peer that has not re-`plookup`ed is still
-sealing to the superseded generation. An add moves nothing and costs nothing.
-⚠️ **That asymmetry is the thing to rule on before any use case asserts
-"add, never replace" as a general property**, because a catalogue that states it
-across all three advertisements would be stating something the tree contradicts
-for one of them — which is precisely the failure mode the 2026-08-27 sweep spent
-eleven clauses on.
+**The window, and whose it is.** Between a rotation and the adds that repopulate
+it, the generation is a strict subset of what the fleet needs, so a sender whose
+policy refuses everything in it is refused outright. That is the application
+owner's to manage, by the ladder this project uses on itself: roll out the new
+**receive** capability first, so receivers begin minting the new material while
+senders still seal to the least-preferred member of their allowed set; roll out
+the new **send** policy second, after which a loud refusal is the right answer.
 
 **The use cases this section would become** (drafted, not landed):
 
@@ -472,7 +449,7 @@ self→self mirror**, and they are not equally worth having:
 | **UC-A4.3** — multi-enrollment both ends | Every authorised enrollment of this atSign reads this atSign's own self data | **Weakest.** Largely covered already: UC-A3.1's Given has `alice1, alice2` both holding the private, approval-time conveyance is UC-A2.3, and an enrollment that missed the mint healing from a holder is UC-B5.11. A row would restate rather than add |
 
 ⛔ **The denominator moves and that is the honest direction.** Landing any of
-these raises the total above 135 with the new clauses unproven, so the burn-down
+these raises the total with the new clauses unproven, so the burn-down
 percentage falls. That is what it should do: the clauses were always owed and
 their absence was flattering the figure.
 
@@ -587,7 +564,7 @@ Two columns, tracked separately, both printed by the acceptance suite on every
 run:
 
 ```
-BURN-DOWN  clauses proven: <N> of 135   server-proven: <M> of 135
+BURN-DOWN  clauses proven: <N> of <T>   server-proven: <M> of <T>
 ```
 
 ⚠️ **`<N>` and `<M>` are deliberate.** Both figures were written out here and in
@@ -596,7 +573,7 @@ each other, 95 against 93, while the tree said 99. A number with two homes and n
 rail over either is a number that lies; the live figures are in `manifest.dart`,
 where a guard fails in both directions if they drift from the tree.
 
-- **proven** — some citation pins the clause. Objective 1 is 135 of 135.
+- **proven** — some citation pins the clause. Objective 1 is every clause.
 - **server-proven** — the citation pinning it drove a real atServer.
   Objective 2 is to raise this wherever a live test is feasible, which
   [the evidence standard](acceptance.md#0-purpose-scope--how-to-read-this-doc)
@@ -606,7 +583,7 @@ where a guard fails in both directions if they drift from the tree.
 establishes it *as written*. Clauses routinely carry several arms in one
 sentence — a value and a refusal, a shape and its control — and a test proving
 two arms of three leaves the clause unpinned with the missing arm recorded.
-Pinning generously would make 135 of 135 worth nothing.
+Pinning generously would make a full burn-down worth nothing.
 
 ⚠️ **A pin is a claim, not a run**, and the two guards say different things.
 `catalogue_test.dart` checks that every pin resolves to exactly one clause and
@@ -623,9 +600,14 @@ clause against the tree:
 | [clauses owed a citation](detail/acceptance.md#the-proven-clauses-still-owed-a-citation) | 0 | proven, but no citation names the proof. ⚠️ **Was 33, then 1, and is now empty** — the last, UC-A2.4's `pqSeal ver 0x03`, was withheld until the live test stopped asserting the byte against the function that generates it. Pinned to the raw literal 2026-08-27, with the discrimination measured against a consistent wire renumbering rather than reasoned about |
 | [pinned but partial](detail/acceptance.md#clauses-pinned-in-the-tree-that-the-map-calls-partial) | 1 | pins that predate the mapping, where the cited test misses an arm. Candidate over-claims — if they do not survive review the recorded figure falls. ⚠️ **Was 2**: UC-G1.1 c2 was closed 2026-08-27 by an arm on a *retrofitted* keyfile, the only shape where the flat field and the resolver both answer and disagree. It defends the figure rather than raising it — the clause was already counted, by a test that never called `authenticate` |
 
-⛔ **Nothing is untested.** All 135 clauses have something exercising them; the
-single absence the mapping found was refuted. The gap is the precision of
-assertions, not the absence of tests.
+⛔ **Nothing MAPPED is untested.** Every clause the 2026-08-23 mapping walked has
+something exercising it, and the single absence it found was refuted; for those,
+the gap is the precision of assertions rather than the absence of tests.
+⚠️ **That is no longer a statement about the whole catalogue.** Section 17's
+seventeen clauses were added on 2026-08-27 by
+[decisions.md 119](detail/decisions.md#119-crypto-agility-each-advertisement-adds-and-the-signer-chooses-2026-08-27),
+and several of them have nothing exercising them at all — the nskey mint they
+describe is unbuilt. Re-derive rather than reading this paragraph as current.
 
 ⛔ **And a clause can be FALSE rather than imprecise, which no instrument here
 reports as anything but a test gap.** A sweep of the 29 partials on 2026-08-27

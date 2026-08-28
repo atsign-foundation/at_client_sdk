@@ -50,6 +50,7 @@ const scenarioFiles = <String>[
   'g1_wire_test.dart',
   'g1_enroll_update_test.dart',
   'g1_rollout_matrix_test.dart',
+  'g2_agility_test.dart',
   'cross_cutting_test.dart',
 ];
 
@@ -113,10 +114,10 @@ const liveProofExempt = <String, String>{};
 /// ```bash
 /// dart test test/acceptance/catalogue_test.dart --concurrency=1
 /// ```
-const provenClauseCount = 110;
+const provenClauseCount = 133;
 
 /// See [provenClauseCount].
-const serverProvenClauseCount = 57;
+const serverProvenClauseCount = 61;
 
 /// Rows with no live proof yet, each pointing at what owes it.
 ///
@@ -125,6 +126,18 @@ const serverProvenClauseCount = 57;
 /// deleted. Collapsing them into one map would make a permanent waiver and an
 /// unpaid debt indistinguishable, which is the state this rail exists to end.
 const liveProofOwed = <String, String>{
+  'UC-G2.1':
+      'feasible AND it would add something these citations cannot: they parse hand-built payloads, so nothing establishes that an atServer STORES and SERVES a key-package entry it has no code for, verbatim. That is the other half of reader-ships-first, and it is reachable by publishing such a package with enroll:update and reading it back',
+  'UC-G2.2':
+      'feasible and additive for the same reason: the advertisements here are composed and signed inside the test. A live arm would publish one carrying an unusable entry and prove the atServer returns it unchanged, which is what a sender actually reads',
+  'UC-G2.3':
+      'feasible and additive for the same reason: the _apsk values here are hand-built strings. A live arm would publish one carrying an unknown alg and prove the atServer serves it to a verifier verbatim',
+  'UC-G2.5':
+      'every citation is in-process and a live test is feasible; the retired-key arms all run over hand-built advertisements rather than one an atServer served',
+  'UC-G2.6':
+      'nothing anywhere drives a two-member dataSigningKeyAlgorithms through to an envelope, live or otherwise, and no test asserts a one-algorithm verifier VERIFYING a two-signature envelope',
+  'UC-G2.8':
+      'no pack runs two enrollments of one atSign at different algorithm configurations, which is the whole of what this row asserts',
   'UC-A3.1':
       'a live test exists and this row names none — nskey_data_path_live_test.dart. Owed a citation, not a test',
   'UC-A3.5':
