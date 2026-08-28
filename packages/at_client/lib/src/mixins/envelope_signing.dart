@@ -63,16 +63,20 @@ mixin EnvelopeSigning on ApkamSigning {
       //
       // All of them rather than the strongest, because the verifier is the one
       // that chooses: it takes the strongest algorithm the envelope and the
-      // `_apsk` SHARE. Signing only under this build's strongest would be
-      // unverifiable to any peer that does not implement it — an envelope
-      // carrying both is readable by the peer that has upgraded and by the
-      // peer that has not.
+      // `_apsk` SHARE.
+      //
+      // ⛔ This used to add that "an envelope carrying both is readable by the
+      // peer that has upgraded and by the peer that has not", offering the
+      // plural signature as the way across a verifier gap. It is not one: an
+      // attacker strips the stronger signature and the verifier accepts the
+      // weaker, because nothing lets it insist on the stronger. A signing
+      // migration takes three releases instead — verify both, then sign the
+      // new, then accept only the new.
       //
       // In practice this list holds one key: every rollout stage's default
-      // in-use set names a single algorithm, and the ladder swaps rather than
-      // overlaps, because verification is not staged and so no peer needs the
-      // older signature. Two signatures are reachable only where an
-      // application asks for two algorithms explicitly.
+      // in-use set names a single algorithm. Two signatures are reachable only
+      // where an application asks for two algorithms explicitly, and nothing
+      // in the tree does.
       return signEnvelope(
         payload,
         keys: keys,

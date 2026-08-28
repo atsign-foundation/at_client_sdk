@@ -117,7 +117,11 @@ void main() {
       // GIVEN enrollment E2 compromised (it holds exactly one APKAM keypair).
       // WHEN  the operator revokes E2.
       // THEN  E2's APKAM keypair is cut at auth; paired with nskey-keypair
-      //       rotation excluding E2 (UC-A5.1b) to deny new-data keys.
+      //       rotation excluding E2's whole SUBTREE (UC-A5.1b) to deny
+      //       new-data keys. Revoking a parent does not revoke what it
+      //       self-spawned, so excluding only E2 conveys the new private to a
+      //       surviving child - the subtree clause is UNPINNED, and the cited
+      //       test exercises no self-enrolment at all.
       provenIn('tests/at_functional_test/test/nskey_rotation_live_test.dart',
           'UC-A5.3 · revokeEnrollmentAndRotate revokes first',
           proves: 'the composition run against a live atServer by a privileged '

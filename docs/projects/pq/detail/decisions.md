@@ -10578,6 +10578,14 @@ deployment takes is the developer's choice, through
 `AtClientPreference.dataSigningKeyAlgorithms`: sign twice for one release, or
 stage the rollouts carefully. The SDK provides the hook, not the policy.
 
+⛔ **AMENDED AGAIN 2026-08-28 by
+[120](#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28),
+which removes the choice above.** Signing twice buys nothing verifiable — an
+attacker strips the stronger signature and the verifier accepts the weaker one,
+because nothing lets it insist. A signing migration is three releases: verify
+both, then sign the new, then accept only the new. The paragraph above is kept
+because it is why the overlap looked like an option.
+
 **Why a swap is safe where an overlap would be needed.** The staging exists so
 a build never *writes* something the fleet cannot *read*, and reading is not
 staged: this tree's verifier is ungated, so a client sitting at `rollout1` —
@@ -12117,8 +12125,12 @@ the person in front of you which languages they speak and pick one, so you never
 say anything twice — which is why an advertiser offering two costs nobody
 anything and no escape hatch is needed. **Signing is a notice on the wall**: you
 do not know who will read it, so covering a reader who has not learnt French
-means posting it in **both** languages, at twice the paper. That is the plural
-signature, and why only the signing side has that option at all.
+means posting it in **both** languages, at twice the paper. ⚠️ **That reading —
+the plural signature as signing's answer — was retired the same day by
+[120](#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28).**
+Posting both languages does not work here, because a passer-by can tear the
+French half down and the reader accepts the English one. What signing needs
+instead is a third step: stop accepting English at all, once nothing writes it.
 
 **What it replaces.** With a singular advertisement every change is a switch, so
 a peer that cannot read the new value is stranded and the developer cannot know
@@ -12138,8 +12150,11 @@ advertiser offering two costs nothing and no escape hatch is needed. For a
 **signature** the *signer* picks and the verifier must cope with whatever
 arrives, so an advertisement offering two protects no verifier lacking the
 algorithm used — only a plural **signature** does, at twice every envelope. That
-is what a deployment reaches for when it **cannot sequence** the two rollouts
-across its fleet, not an alternative pattern; see item 3.
+was what a deployment was told to reach for when it could not sequence the
+rollouts. ⚠️ **Retired 2026-08-28 by
+[120](#120-a-signing-migration-is-three-steps-and-the-third-has-no-lever-2026-08-28)**:
+it covers nothing a verifier can insist on. Signing takes three releases
+instead.
 
 ### 1. Enrollment key packages — nothing to rule, nothing to build
 
@@ -12166,8 +12181,11 @@ algorithm the fleet needs, and it gets there in two separate steps.**
    timestamp: `EnrollDataStoreValue` has no time field, `EnrollApproval` is
    `{state}` alone, and `enroll:list` serialises the value plus status without
    the record's `AtMetaData`. So the revocation trigger has nothing to fire on
-   until an atServer change lands — it is a plan row, and the catalogue's
-   UC-G2.5 states the gap.
+   until something publishes the fact. ⚠️ **This said "until an atServer change
+   lands", and
+   [121](#121-a-revocation-publishes-what-it-obliges-2026-08-28) supersedes
+   that**: the **revoker** writes a durable record instead, which is scoped to
+   the namespaces that matter and needs no atServer change at all.
 2. **A client that finds the current generation missing an algorithm it needs
    mints that material and ADDS it to the current generation**, in place, under
    the same lock. This is a different operation from a rotation and does not
@@ -12357,11 +12375,18 @@ closes, and step 3 is the step with nothing to do it with.
   `SigningAlgoType.strongestOf(shared)` where `shared` is the intersection of the
   advertised keys and **the signatures the envelope actually carries**. There is
   no minimum-algorithm check, no signature-count check, and no verifier-side
-  accepted-algorithms field anywhere in `AtClientPreference` — its three
-  algorithm axes are all about what this client *produces* or *seals to*.
+  accepted-algorithms field for **signatures** anywhere in `AtClientPreference`.
+  ⚠️ **This said "its three algorithm axes are all about what this client
+  produces or seals to", and that was wrong twice over** — there are more than
+  three, and `keyEstablishmentAlgorithms` is precisely an accept-side lever: its
+  own dartdoc says *"The receiver's side of the choice. `sealsToKeyAlgorithms` is
+  the sender's."* **The correction sharpens the asymmetry rather than softening
+  it**: encryption has BOTH a produce lever and an accept lever; signing has only
+  the produce one.
 
-**So the lever step 3 needs is owed**, mirroring `sealsToKeyAlgorithms` on the
-encryption side: a set the verifier will accept a signature under, narrowing
+**So the lever step 3 needs is owed**, mirroring `keyEstablishmentAlgorithms` —
+the encryption side's *accept* lever, not `sealsToKeyAlgorithms`, which is its
+producer: a set the verifier will accept a signature under, narrowing
 `shared` before `strongestOf`, and refusing with a message naming both sides when
 the intersection is empty. ⚠️ **Not every caller may be narrowed** — verifying
 one's own advertisement is not the same act as verifying a peer's data, and the

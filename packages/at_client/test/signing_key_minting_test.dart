@@ -586,7 +586,11 @@ void main() {
           signerPublicKey: published.last, expecting: EnvelopeType.app);
     });
 
-    /// UC-G2.9 — the overlap a migration with a verifier gap needs.
+    /// UC-G2.9 — the overlap a migration with a verifier gap was thought to
+    /// need. ⛔ RETIRED by decisions.md 120 on 2026-08-28: an attacker strips
+    /// the stronger signature and the verifier accepts the weaker, because
+    /// nothing lets it insist. This test is KEPT so it goes red the day the
+    /// multi-signature writer is removed.
     ///
     /// The gap this closes: a two-member `dataSigningKeyAlgorithms` is set in
     /// exactly two tests elsewhere and NEITHER reaches an envelope — one

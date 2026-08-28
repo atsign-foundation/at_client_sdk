@@ -44,11 +44,13 @@ concrete at-keys, the protocol **Steps**, and the **impl/verify** harness.
 - **PROVEN** — a scenario in `packages/at_client/test/acceptance/` asserts it
   and runs. ⚠️ **It is a statement about the ROW, never about its clauses.** A
   row is PROVEN when a scenario claims it; whether each individual THEN clause
-  is pinned is the burn-down's question, and the two are far apart — UC-G2.5 and
-  UC-G2.6 read PROVEN here while their scenarios say *"WHOLLY UNPINNED,
-  deliberately"*, because the mechanism they describe is unbuilt. A cold read on
-  2026-08-28 was misled by exactly this, having read this definition first, so
-  the definition alone was not doing the job.
+  is pinned is the burn-down's question, and the two are far apart — **four G2
+  rows are wholly unpinned and all four read PROVEN here**: UC-G2.5, UC-G2.6,
+  UC-G2.9 and UC-G2.11, because the mechanisms they describe are unbuilt. ⚠️
+  **This said "UC-G2.5 and UC-G2.6" and quoted both as saying *"WHOLLY UNPINNED,
+  deliberately"* — an undercount, and a misquote: only UC-G2.5's scenario uses
+  that phrase.** A cold read was misled by this definition even after it was
+  written, so the definition alone is not doing the job.
 - **BLOCKED** — its scenario exists but is skipped against a named constant in
   `blockers.dart`, so something is recorded as owing it.
 - **WITHDRAWN** — the catalogue withdrew the row and kept the heading, so the
@@ -66,16 +68,18 @@ the scenarios and cannot drift, and this line is prose that nothing checked. It
 is checked now — `docs_structure_test.dart` derives all four numbers from the
 table and from `manifest.dart`, and fails when they disagree.
 
-⚠️ **That correction is itself dated, and so was its replacement — this said the
-scenario figure was 83 until 2026-08-28, when the headline ten lines above said
-94.** Read the headline, never this paragraph; it is kept for the mistake it
-records and its numbers have now rotted twice. ⛔ **The rail parses only the
-headline sentence, so nothing catches a figure written down here.**
-The figure was **79, not 70**: my first correction inferred it from
-the old sentence's own arithmetic (`53 use cases and 53 scenarios — UC-A5.1 has
-two`), which is the same mistake in the other direction. It comes from
-`scenarioCount()`, which counts every registered file — including the ten
-cross-cutting rows whose test names carry no `UC-` at all.
+⛔ **No figures in this paragraph, and that is deliberate.** It carried a
+scenario count three times and the count was wrong three times — the last of
+them still saying 83 while the headline ten lines above said 94. **Read the
+headline; the rail parses only that sentence, so nothing catches a number
+written down here.**
+
+The lesson it is kept for, which needs no number: **a correction that infers a
+figure from the arithmetic of the sentence it is replacing repeats the original
+mistake in the other direction.** Measure instead — the figure comes from
+`scenarioCount()`, which counts every registered file including the cross-cutting
+rows whose test names carry no `UC-` at all, and that is exactly the term an
+inference from "use cases" will miss.
 
 ⚠️ **This table is an index. The `###` headings below are the definitions** —
 `manifest.dart` parses them, and `catalogue_test.dart` fails when they and the
@@ -1129,11 +1133,20 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
 
 - **Given:** `@alice` pq-native; the keyfile holding E2's APKAM keypair is lost.
 - **When:** operator runs `enroll:revoke` on E2.
-- **Then:** E2's one APKAM keypair can no longer authenticate; `alice1` unaffected; E2
-  gets no new secrets — excluded at **both** discovery+push (`excludeEnrollmentIds` on
-  `enroll:listns`/serve) **and** the `requestSecret` pull serve (the
-  revocation guard). (Under 1:1:1 "revoke E2's APKAM key" == revoke its enrollment;
-  there is no per-pubkey delete.)
+- **Then:**
+  - E2's one APKAM keypair can no longer authenticate; `alice1` unaffected; E2
+    gets no new secrets — excluded at **both** discovery+push (`excludeEnrollmentIds` on
+    `enroll:listns`/serve) **and** the `requestSecret` pull serve (the
+    revocation guard). (Under 1:1:1 "revoke E2's APKAM key" == revoke its enrollment;
+    there is no per-pubkey delete.)
+  - ⛔ **"E2 gets no new secrets" holds for E2 and NOT for what E2 spawned**, and
+    this row's Given — *the keyfile holding E2's APKAM keypair is lost* — is
+    exactly the case that can self-enroll children. A descendant keeps
+    `approved`, so it stays on the roster `enroll:listns` returns and is answered
+    when it asks a holder for the published generation. The exclusion set is the
+    subtree; see
+    [UC-A5.3](#63-uc-a53--enrollment-revocation) and
+    [`decisions.md` 121](detail/decisions.md#121-a-revocation-publishes-what-it-obliges-2026-08-28).
 
 ### 6.3 UC-A5.3 — Enrollment revocation
 
@@ -1158,7 +1171,10 @@ Start state for A2: `@alice` pq-native; `pq_signing_root` published; `alice1` (E
   ([decisions 47](detail/decisions.md#47-b-2-lands-two-levers-and-the-difference-between-excluding-and-revoking-2026-08-06)).
   A5.1(a) is proven live by `tests/at_functional_test/test/content_key_rotation_live_test.dart`
   (both positions of the retention knob); A5.1(b), A5.2 and A5.3 by
-  `tests/at_functional_test/test/nskey_rotation_live_test.dart`.
+  `tests/at_functional_test/test/nskey_rotation_live_test.dart`. ⚠️ **That test
+  exercises no self-enrollment, no child and no `parentEnrollmentId`, so it says
+  nothing about the subtree clauses added to A5.2 and A5.3 on 2026-08-28** —
+  those are unpinned, and this paragraph overstated until it said so.
   **One clarification the live run forced, and it belongs in this catalogue
   rather than only in the code:** "excluded at **both** discovery+push and the
   `requestSecret` pull serve" (UC-A5.2) is achieved by the **revocation**, not
@@ -3191,12 +3207,14 @@ no new record shape, no new verb, no coordinated flag day, and nothing for an
 application to re-plumb. Every advertisement is already a list, every reader
 already walks it, and a new algorithm is one more entry in it.
 
-**A migration costs two rollouts, and that cost is fixed.** It does not grow with
-the number of algorithms, the size of the fleet, or how many peers an atSign has.
-What an application developer changes is two configuration fields, moved in
-different releases. That the change is small matters less than that it is
-**uniform**: the same ladder, in the same order, for encryption and for signing
-alike — which is why this section states it once rather than three times.
+**A migration's cost is fixed, and small.** It does not grow with the number of
+algorithms, the size of the fleet, or how many peers an atSign has: what an
+application developer changes is one or two configuration fields, moved in
+different releases. ⚠️ **It is not the same count for both substrates, and this
+said it was** — *"two rollouts… the same ladder, in the same order, for
+encryption and for signing alike"*, until 2026-08-28. **Encryption takes two
+releases and signing takes three**, for a reason that is not a quirk of the
+levers; the table and the paragraphs below give both.
 
 ⚠️ **What it replaces, and why the arrays earn their place.** With a singular
 advertisement *every* change is a switch — the new value replaces the old — so a
@@ -3251,10 +3269,12 @@ For encryption the *sender* picks from the recipient's advertised set, so an
 advertiser offering two costs nobody anything and no escape hatch is needed. For
 a signature the *signer* picks and the verifier must cope with whatever arrives,
 so offering two in the advertisement protects no verifier that lacks the
-algorithm used — only a plural **signature** does, at twice every envelope. That
-is the option a deployment takes when it *cannot* sequence the two rollouts
-across its fleet, not an alternative pattern:
-[UC-G2.9](#179-uc-g29--step-3-has-no-lever-so-a-retired-signing-key-verifies-forever).
+algorithm used. ⚠️ **A plural signature was offered here as the answer for a
+fleet that cannot be sequenced, until 2026-08-28 — and it is not one.** An
+attacker strips the stronger signature and the verifier accepts the weaker,
+because nothing lets it insist. Signing's answer is the **third** release, and
+[UC-G2.9](#179-uc-g29--step-3-has-no-lever-so-a-retired-signing-key-verifies-forever)
+is where its missing lever lives.
 
 ### 17.1 UC-G2.1 — A key package reader keeps the entry it cannot use
 
@@ -3501,9 +3521,11 @@ across its fleet, not an alternative pattern:
   - a verifier **cannot decline an algorithm it implements**. `verifyEnvelope`
     resolves `strongestOf(shared)` over the intersection of the advertised keys
     and the signatures the envelope carries; there is no minimum-algorithm check,
-    no signature-count check, and no accepted-algorithms field anywhere in
-    `AtClientPreference` — its three algorithm axes all govern what this client
-    *produces* or *seals to*;
+    no signature-count check, and no accepted-algorithms field for **signatures**
+    anywhere in `AtClientPreference`. ⚠️ The encryption side has one —
+    `keyEstablishmentAlgorithms`, *"the receiver's side of the choice"* by its own
+    dartdoc — so what signing lacks is an accept lever its counterpart already
+    has;
   - so **a retired signing key is a standing forgery surface.** It stays
     advertised precisely so history verifies, and nothing dates an envelope — so
     "it must be old" is not checkable, and whoever breaks that algorithm can mint
