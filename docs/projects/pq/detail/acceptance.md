@@ -1046,8 +1046,10 @@ proceeds **independently** either way" — which turned out to describe
 conveyance. **Ruled 2026-08-27 (gkc): AtCollection is a consumer and these rows
 do not assert its behaviour** — a row about `put` or `notify` is about self→self
 **or** self→other, never both — so the reference came out of UC-A4.1's steps,
-UC-A4.1's Then, UC-A4.3 c1, UC-B4.1 c1 and UC-B4.3 c1. UC-A4.3 c1 stops being a
-specification defect in the same edit and is an ordinary gap.
+UC-A4.1's Then, UC-A4.3 c1, UC-B4.1 c1 and UC-B4.3 c1. UC-A4.3 c1 stopped being
+a specification defect in the same edit and became an ordinary gap; it was
+**closed on 2026-08-29** by varying the sending side, and its row is gone from
+the table below.
 
 ⚠️ **These are the mapping agents' judgements**, spot-checked at 7 of 91 with
 one over-call found. Verify a row against the test before acting on it; the
@@ -1170,7 +1172,6 @@ Rows that genuinely need the wire are also the only route that raises
 |---|---|---|
 | **UC-A2.1** c4 | `alice2` **authenticates PQ**. The self-data half closed 2026-08-28 in `nskey_self_notify_live_test.dart`, but that file's enrollments hold RSA-2048 APKAM keypairs — `enrolAndAuthenticate` defaults to `rsa2048` — so a second enrollment reading self data under **ML-DSA** PKAM is still unexercised | `nskey_self_notify_live_test.dart` |
 | **UC-A4.1** c3 | an unauthorised `@bob` enrollment cannot fetch the ciphertext (server-gated) nor decrypt. ⚠️ **Measured 2026-08-29: `nskey_multi_enrollment_test.dart` holds ONE test and no unauthorised arm at all**, so this is build work rather than a missing pin. It needs an e2e arm: a scoped enrollment of the RECIPIENT refused the shared record by the atServer, with the approver reading it as the control. The same-atSign shape of that gate is already proven in `enrollment_namespace_gate_test.dart` under UC-A2.3 — including that the refusal names the verb — so the cross-atSign arm is the remaining half | `nskey_multi_enrollment_test.dart` |
-| **UC-A4.3** c1 | **whichever of alice's enrollments wrote it** — the test runs one alice client against two of bob's, so the sending side is not varied at all, and the row's Given names aE1 and aE2. ⚠️ This row said the missing arm was "all of alice's authorised enrollments read the self-copy" until 2026-08-28; that requirement was removed from the clause on 2026-08-27 when `put` was found to write no self-copy | `nskey_multi_enrollment_test.dart` |
 | **UC-A4.4** c1 | on **every** authorised bob enrollment — the live cross-atSign notify delivers to a single bob client | `nskey_notify_test.dart` |
 | **UC-A4.4** c3 | Offline-then-online **bob** (a cross-atSign recipient on the nskey path) ... or pulled if it arrived meanwhile | `monitor_reconnect_live_test.dart` |
 | **UC-A4.6** c5 | where they had exchanged `0x01`, with no readers-upgrade-first migration — and that is what later made it safe to drop `0x01` outright | `secret_sharing_delivery_test.dart` |

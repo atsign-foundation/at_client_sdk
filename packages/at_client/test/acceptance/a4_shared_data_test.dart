@@ -106,19 +106,30 @@ void main() {
       // GIVEN alice (aE1, aE2) and bob (bE1, bE2) all PQ; bob has
       //       public:__nskey.app_1.my_apps@bob.
       // WHEN  alice2 shares with @bob.
-      // THEN  all of bob's authorised enrollments read; all of alice's
-      //       authorised enrollments read the self-copy; no authorised
-      //       enrollment is left unable to decrypt.
+      // THEN  all of bob's authorised enrollments read the shared record,
+      //       whichever of alice's enrollments wrote it; no authorised
+      //       enrollment on the receiving side is left unable to decrypt.
       provenIn(
         'tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart',
-        'UC-A4.3: every authorised enrollment of the recipient reads the share',
-        proves: 'a second, genuinely distinct APKAM enrollment of @bob — its '
-            'own enrollment id, APKAM keypair and client, asserted not '
-            'identical to the first — reads the same record alice sealed '
-            'once. The conveyance metadata read off the atServer names '
-            'recipientKind nskey and the generation @bob advertised, which is '
-            'the structural reason enrollment count is irrelevant: the seal is '
-            'to (owner, namespace), not to a device',
+        'UC-A4.3: whichever alice enrollment writes, every bob enrollment '
+            'reads',
+        proves: 'both sides vary against one record each. RECIPIENT: a second, '
+            'genuinely distinct APKAM enrollment of @bob — its own enrollment '
+            'id, APKAM keypair and client, asserted not identical to the '
+            'first — reads the record alice sealed once, and the conveyance '
+            'metadata read off the atServer names recipientKind nskey and the '
+            'generation @bob advertised. SENDER: a second enrollment of '
+            '@alice, with a store of its own, writes a second record that '
+            'both of @bob\'s enrollments then read. It carries a DIFFERENT '
+            'ckKid, which is what establishes that alice2 minted and conveyed '
+            'its own content key rather than resuming the current-CK pointer '
+            'alice1 left behind — mutating that write back onto alice1 '
+            'reddens exactly that assertion. Together: readability is a '
+            'property of (owner, namespace) on the receiving side and carries '
+            'no sender identity a reader has to hold',
+        clauses: [
+          'whichever of alice\'s enrollments wrote it',
+        ],
       );
     });
 
