@@ -64,7 +64,36 @@ void main() {
             'the successor private to the survivor\'s keyfile, drops the '
             'excluded enrollment from the roster the push enumerates (with the '
             'unexcluded control arm), and retains the superseded private so '
-            'records sealed to it still open.',
+            'records sealed to it still open. It then writes on the nskey data '
+            'path either side of the rotation and reads which generation each '
+            'content key\'s conveyance was sealed to: the first names the '
+            'generation published at the time, the second names the successor, '
+            'and they differ. Same client, same ring, same namespace — the '
+            'rotation is the only thing that changed between the two writes, '
+            'which is what tells a writer that MOVED from one that was always '
+            'going to name that kid. Without it a rotation whose successor no '
+            'writer used would satisfy every assertion above while leaving '
+            'every new record sealed to the generation the excluded enrollment '
+            'still holds.',
+        clauses: [
+          'new CKs are sealed to the successor nskey',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/ck_manager_test.dart',
+        'cuts a fresh CK when the destination has rotated its nskey',
+        proves: 'the peer half of the same clause, which the live arm above '
+            'does not reach: a sender that has already conveyed a CK to one '
+            'generation re-checks on its next ensureCurrent, sees the '
+            'advertised kid has changed, and cuts a fresh CK to the successor '
+            'rather than going on sealing to the superseded one — asserted as '
+            'a COUNT of conveyances written, so a re-seal shows up as a second '
+            'entry instead of being invisible. In-process because there is no '
+            'atServer in the decision: the input is an advertisement and the '
+            'output is whether a fresh key was cut.',
+        clauses: [
+          'new CKs are sealed to the successor nskey',
+        ],
       );
       provenIn(
         'packages/at_client/test/nskey_self_heal_test.dart',
