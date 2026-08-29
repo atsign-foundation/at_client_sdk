@@ -394,6 +394,23 @@ class AtClientImpl implements AtClient {
   static SigningAlgoType signingAlgoOf(AtClient atClient) =>
       resolved_algo.signingAlgoOf(atClient);
 
+  /// Every client this PROCESS has built, keyed by [instanceKey] — the
+  /// `(atSign, enrollmentId)` pair, since two enrollments of one atSign are
+  /// different principals and must not share a client.
+  ///
+  /// It is static, so it outlives any individual [AtClientManager]:
+  /// `AtClientManager.reset()` nulls the manager's current client and drops its
+  /// listeners, and every entry here survives that. [create] consults this
+  /// before building anything, which is why passing different arguments for an
+  /// atSign already built does not produce a different client — see [create].
+  ///
+  /// ⚠️ **Clearing an entry does not stop what it held.** This is a plain map:
+  /// removing a client drops the reference and nothing else, so its keystore
+  /// timers, data-event stream, sync and notification services and open Hive
+  /// boxes all keep running, unreferenced. A test that clears this to force a
+  /// fresh build should stop the clients it is discarding first, or accept that
+  /// they go on doing work for the rest of the process — and must not clear it
+  /// while another service has an operation in flight.
   @visibleForTesting
   static final Map atClientInstanceMap = <String, AtClient>{};
 
@@ -552,6 +569,49 @@ class AtClientImpl implements AtClient {
             'signing and enrolling under a stage it thinks it has left');
   }
 
+  /// Refuses a preference naming a different [AtClientPreference.hiveStoragePath]
+  /// from the one this client's store is already open at.
+  ///
+  /// Separate from [refuseChangedRolloutAxes] because it is a different kind of
+  /// claim: the rollout axes decide what a client *writes*, this decides
+  /// *where*. `rolloutDifferencesFrom` says in its own dartdoc that what it
+  /// compares is the whole of what a posture can change, and a storage path is
+  /// not one of those.
+  ///
+  /// **Why refusing rather than adopting.** `StorageManager` opens the Hive
+  /// bundle once, at the first path it is given, and nothing reopens it — so a
+  /// later path is not applied however it is delivered. Adopting it silently
+  /// leaves the caller believing its data is going somewhere it is not, and
+  /// [setPreferences] is worse still: it would make the client *report* a path
+  /// it never used. That is the same failure the rollout guard beside this one
+  /// exists to stop, and it gets the same answer.
+  ///
+  /// A null [AtClientPreference.hiveStoragePath] on [asked] is not a conflict:
+  /// a caller that named no path is not asking for a different one.
+  ///
+  /// An [ArgumentError] for the same reason as its sibling — two places in one
+  /// app disagreeing about where this atSign's data lives is a caller
+  /// programming error, not something the atServer did.
+  static void refuseChangedStoragePath({
+    required AtClientPreference? running,
+    required AtClientPreference asked,
+    required String cacheKey,
+  }) {
+    if (running == null) return;
+    final was = running.hiveStoragePath;
+    final now = asked.hiveStoragePath;
+    if (was == null || now == null || was == now) return;
+    throw ArgumentError.value(
+        'hiveStoragePath (asked $now, running $was)',
+        'preference',
+        'the client for $cacheKey already has its local store open at $was, '
+            'and nothing reopens it — so $now would never be used. Stop that '
+            'client before building one somewhere else, or give this '
+            'preference the path it is running under. Ignoring the difference '
+            'would leave this caller believing its data is at a path it is '
+            'not.');
+  }
+
   static final Finalizer<String> _finalizer = Finalizer((service) {
     _staticLogger.finer('Outgoing $service has been garbage collected');
   });
@@ -605,6 +665,36 @@ class AtClientImpl implements AtClient {
     return c;
   }
 
+  /// Returns the client for `(currentAtSign, enrollmentId)`, building one only
+  /// if this process has not built one already.
+  ///
+  /// ⚠️ **On a cache hit almost every argument here is ignored, silently.** The
+  /// cache is static and keyed only by that pair, so a second call naming the
+  /// same atSign and enrollment hands back the FIRST client — built with the
+  /// first caller's preference, storage path, collaborators and key source.
+  /// What the second caller passed is dropped without a log line, and the only
+  /// thing adopted from it is `preferences.crypto`, so that providers added
+  /// after first creation take effect.
+  ///
+  /// Concretely, on a cache hit these do nothing: [remoteSecondary],
+  /// [encryptionService], [localSecondaryKeyStore], [atChops], [atKeysIo],
+  /// [atLookUp], and every field of [preferences] except `crypto`. An extended
+  /// `AtKeys` is meant to be born at construction and immutable after, which is
+  /// why the key source in particular is not re-read.
+  ///
+  /// Two mismatches are **refused** rather than ignored, because accepting them
+  /// would leave a caller believing something that is not true: a preference
+  /// naming different rollout axes, and one naming a different
+  /// `hiveStoragePath` — see [refuseChangedRolloutAxes] and
+  /// [refuseChangedStoragePath]. Everything else in the list above fails
+  /// quietly, so a test or an app that needs a genuinely different client must
+  /// not rely on passing different arguments here.
+  ///
+  /// Nothing in this library ever removes an entry from that cache, so a client
+  /// that has been stopped is returned from here and restarted rather than
+  /// rebuilt. A process that needs a second, genuinely separate client for one
+  /// atSign — which a test driving several CLI-style operations does — cannot
+  /// get it from this method at all.
   static Future<AtClient> create(
     String currentAtSign,
     String? namespace,
@@ -634,6 +724,10 @@ class AtClientImpl implements AtClient {
       // that names different ones is asking for something this cannot give.
       refuseChangedRolloutAxes(
           running: atClientImpl!.getPreferences(),
+          asked: preferences,
+          cacheKey: cacheKey);
+      refuseChangedStoragePath(
+          running: atClientImpl.getPreferences(),
           asked: preferences,
           cacheKey: cacheKey);
       await atClientImpl.start();
@@ -810,8 +904,10 @@ class AtClientImpl implements AtClient {
     // publishes — as one ordered fire-and-forget task. Deliberately not
     // awaited: neither a round trip nor a publish is something a client's
     // startup should wait on or fail for, and anything a step missed is
-    // retried at the next start. Awaitable via [pqBootstrap]'s
-    // `startupComplete` for callers that need the tail to have run.
+    // retried at the next start. A caller needing the tail to have run can
+    // await [pqBootstrap]'s `startupComplete` — but that getter is on this
+    // class, not on the `AtClient` interface, so reaching it means casting to
+    // `AtClientImpl`. There is no interface-level handle for the tail.
     unawaited(_pqBootstrap!.startup());
   }
 
@@ -1182,6 +1278,10 @@ class AtClientImpl implements AtClient {
   @override
   void setPreferences(AtClientPreference preference) async {
     refuseChangedRolloutAxes(
+        running: _preference,
+        asked: preference,
+        cacheKey: instanceKey('$_atSign', enrollmentId));
+    refuseChangedStoragePath(
         running: _preference,
         asked: preference,
         cacheKey: instanceKey('$_atSign', enrollmentId));

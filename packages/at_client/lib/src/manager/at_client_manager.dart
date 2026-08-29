@@ -92,6 +92,18 @@ class AtClientManager {
   /// Use [AtClient.stop] only when permanently finished with an atSign (e.g.,
   /// logout or app shutdown).
   ///
+  /// ⚠️ **A call naming the atSign that is already current usually recreates
+  /// nothing.** When no [atChops], [atKeysIo], [atLookUp] or [enrollmentId]
+  /// override is supplied and the current client is not stopped, this returns
+  /// that client as it stands. That is deliberate: the stop-and-recreate path
+  /// would briefly run two sync services against one Hive store. But it means
+  /// that of [preference], only `crypto` is adopted — a caller changing
+  /// anything else and expecting it to take effect gets nothing, silently. The
+  /// two exceptions are a changed rollout axis and a changed
+  /// `hiveStoragePath`, which are refused outright rather than dropped, because
+  /// neither could be honoured and both would otherwise leave the caller
+  /// believing its data is somewhere it is not.
+  ///
   /// * [serviceFactory] - Overrides service creation (primarily for testing).
   /// * [atChops] - Shared crypto context for the new services.
   Future<AtClientManager> setCurrentAtSign(
@@ -146,6 +158,10 @@ class AtClientManager {
       final existing = _currentAtClient;
       if (existing is AtClientImpl) {
         AtClientImpl.refuseChangedRolloutAxes(
+            running: existing.getPreferences(),
+            asked: preference,
+            cacheKey: AtClientImpl.instanceKey(atSign, existing.enrollmentId));
+        AtClientImpl.refuseChangedStoragePath(
             running: existing.getPreferences(),
             asked: preference,
             cacheKey: AtClientImpl.instanceKey(atSign, existing.enrollmentId));

@@ -242,16 +242,31 @@ void main() {
 
   /// The atSign's primary, holding a registered key package in [namespace].
   ///
-  /// One per cell rather than one per atSign: `register()` takes no namespace
-  /// and files into the client's own, and pq-mode approval has the approver
-  /// mint the enrollment's symmetric key and seal it to the enrollee's
-  /// advertised package — so the approver must hold one itself.
+  /// ⚠️ **One per atSign, and the code cannot give one per cell.**
+  /// `AtClientImpl.atClientInstanceMap` is **static** and keyed by
+  /// `(atSign, enrollmentId)`, so the second call for an atSign gets the first
+  /// call's client whatever preference it is handed — the public
+  /// `AtClientManager` constructor separates the managers, not the clients.
+  /// Memoised here so that is explicit rather than accidental.
+  ///
+  /// This said "one per cell rather than one per atSign" until 2026-08-29 and
+  /// asked for a per-cell `hiveStoragePath` that was silently dropped: every
+  /// approver after the first ran on the first cell's store. It surfaced when
+  /// `AtClientImpl.refuseChangedStoragePath` started refusing exactly that,
+  /// and nothing else in the suite would have shown it — the grid was green
+  /// throughout.
+  ///
+  /// `register()` takes no namespace and files into the client's own, and is
+  /// idempotent (it logs "have already published"), so one registration for
+  /// the atSign is what the cells need and all they ever got.
   ///
   /// Built through `AtClientManager`'s PUBLIC constructor. The singleton's
   /// `setCurrentAtSign` stops the outgoing client, so the singleton route
   /// would stop each of these as the next one came up.
-  Future<AtClient> approverFor(String name, String atSign,
-      String namespace) async {
+  final approvers = <String, AtClient>{};
+  Future<AtClient> approverFor(String atSign, String namespace) async {
+    final memoised = approvers[atSign];
+    if (memoised != null) return memoised;
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final loader = AtEncryptionKeysLoader.getInstance();
@@ -265,12 +280,13 @@ void main() {
         // and moving its private into the approver's keyfile. Every readback
         // assertion would then pass for the wrong reason, and nothing would
         // go red.
-        preferenceFor(name, atSign,
+        preferenceFor(slug(atSign), atSign,
             role: 'approver', posture: PqPosture.legacy),
         atKeysIo: keysIo,
         atChops: loader.createAtChopsFromDemoKeys(atSign));
     await loader.setEncryptionKeys(manager.atClient, atSign);
     await AtClientSecretSharing.forClient(manager.atClient).register();
+    approvers[atSign] = manager.atClient;
     return manager.atClient;
   }
 
@@ -305,8 +321,7 @@ void main() {
       final approverNamespace = spec.namespaces.keys.first;
       stdout.writeln('##GRID## building $name on ${spec.atSign} '
           'in ${spec.namespaces.keys.join("+")}');
-      final approver =
-          await approverFor('ap-$name', spec.atSign, approverNamespace);
+      final approver = await approverFor(spec.atSign, approverNamespace);
       final keysIo = InMemoryAtKeysIo();
       await keysIo.write(spec.atSign, AtKeys());
       keyfiles[name] = keysIo;

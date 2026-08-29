@@ -1,5 +1,23 @@
 ## 3.15.0-rc1
 
+- fix: **a client that already exists refuses a preference naming a different
+  `hiveStoragePath`, where it used to ignore it silently.** `StorageManager`
+  opens the local store once, at the first path it is given, and nothing
+  reopens it — so a later path was never applied however it was delivered, and
+  `setPreferences` made it worse by adopting the value anyway, leaving the
+  client *reporting* a path it had never used.
+  - `AtClientImpl.refuseChangedStoragePath` throws `ArgumentError` naming both
+    paths, from the three places that hand a preference to a client that
+    already exists: `AtClientImpl.create`'s cached branch, `setPreferences`,
+    and `AtClientManager.setCurrentAtSign`'s same-atSign short circuit.
+  - Same reasoning as the rollout-axis refusal beside it, and deliberately
+    separate from it: those axes decide what a client writes, this decides
+    where. A caller that names no path is not asking for a different one and
+    is unaffected.
+  - ⚠️ **Previously-working callers can now throw.** An app that re-created a
+    client for one atSign and enrollment with a different storage path kept
+    working by accident, on the first path. It now fails loudly instead.
+
 - feat: **`PqPosture.legacy` now stands in for a build that predates the
   post-quantum providers, rather than a current build configured
   conservatively.** It configures none of them, so a record stamped with one is

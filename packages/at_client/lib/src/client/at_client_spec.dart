@@ -155,8 +155,19 @@ abstract class AtClient {
 
   /// Whether this client has been stopped via `AtClientManager`.
   ///
-  /// Once true, the instance is unusable — all sub-services have been torn down
-  /// and the instance has been removed from the internal cache.
+  /// Once true, this instance's background services have been torn down — the
+  /// keystore-event timers, the data-event stream, and the sync and
+  /// notification services — so it does no work of its own until it is resumed.
+  ///
+  /// ⚠️ **A stopped instance is NOT removed from the internal cache.** Nothing
+  /// in this library removes an entry from it: the only write that cache ever
+  /// takes is the insert made when a client is first built. So a later
+  /// `AtClientManager.setCurrentAtSign` for the same atSign hands back THIS
+  /// instance, clears the flag, and wires fresh services onto it against the
+  /// still-open local keystore — which is what [stop] describes from the other
+  /// side. A caller expecting a stopped client to be discarded, or expecting
+  /// the next one for that atSign to be newly built with the preference it
+  /// passes, is expecting something that does not happen.
   bool get isStopped;
 
   /// Stops all background services for this atSign: cancels the

@@ -53,6 +53,72 @@ void main() {
     keyEstablishmentAlgorithms: const [SecretSharingAlgos.xWing],
   );
 
+  group('the storage path of a client that already exists', () {
+    AtClientPreference at(String? path) => AtClientPreference()
+      ..hiveStoragePath = path
+      ..commitLogPath = 'test/hive/path';
+
+    test('a different path is refused, not silently ignored', () {
+      // StorageManager opens the Hive bundle once, at the first path it is
+      // given, and nothing reopens it. Adopting a later path would leave the
+      // caller believing its data is somewhere it is not.
+      expect(
+          () => AtClientImpl.refuseChangedStoragePath(
+              running: at('test/hive/a'),
+              asked: at('test/hive/b'),
+              cacheKey: '@alice'),
+          throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
+              contains('would never be used'))),
+          reason: 'the whole point: a path that cannot take effect must not '
+              'be accepted as though it had');
+    });
+
+    test('the refusal names both paths', () {
+      // An operator has to be able to see which path won; a refusal naming
+      // neither cannot be acted on.
+      try {
+        AtClientImpl.refuseChangedStoragePath(
+            running: at('test/hive/a'),
+            asked: at('test/hive/b'),
+            cacheKey: '@alice');
+        fail('should have been refused');
+      } on ArgumentError catch (e) {
+        expect('${e.invalidValue}', contains('test/hive/a'));
+        expect('${e.invalidValue}', contains('test/hive/b'));
+      }
+    });
+
+    test('the same path is not a conflict', () {
+      // Control 1: it keys on the paths differing, not on there being two
+      // preferences. The e2e pack hands over a fresh preference object on
+      // every call, so refusing those would be a break rather than a check.
+      expect(
+          () => AtClientImpl.refuseChangedStoragePath(
+              running: at('test/hive/a'),
+              asked: at('test/hive/a'),
+              cacheKey: '@alice'),
+          returnsNormally);
+    });
+
+    test('a caller naming no path is not asking for a different one', () {
+      // Control 2: null on the incoming side is "I did not specify", not
+      // "move my data". Refusing it would break every caller that builds a
+      // partial preference.
+      expect(
+          () => AtClientImpl.refuseChangedStoragePath(
+              running: at('test/hive/a'), asked: at(null), cacheKey: '@alice'),
+          returnsNormally);
+    });
+
+    test('no running client is not a conflict', () {
+      // Control 3: the first client of an atSign has nothing to disagree with.
+      expect(
+          () => AtClientImpl.refuseChangedStoragePath(
+              running: null, asked: at('test/hive/b'), cacheKey: '@alice'),
+          returnsNormally);
+    });
+  });
+
   group('what counts as the same settings', () {
     test('two separately built default preferences are interchangeable', () {
       // The case that decides the whole design. Callers hand over a FRESH
