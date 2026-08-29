@@ -17,11 +17,11 @@ void main() {
       //       both sides.
       // WHEN  alice1 does put @bob:<k>.app_1.my_apps@alice (shouldEncrypt).
       // THEN  bob's clients decapsulate bob's CK record with bob's nskey private
-      //       and read; alice's clients decapsulate the self-copy's CK — a
-      //       SECOND CK in her own scope, since CKs are per recipient — with
-      //       alice's nskey private. PQ end to end — no RSA on any path. An
-      //       unauthorised @bob enrollment can neither fetch the ciphertext
-      //       (server-gated) nor decrypt it.
+      //       and read; which of bob's enrollments reads is immaterial, the
+      //       reads differing by record-owner rather than by key. PQ end to
+      //       end — no RSA on any path. Every authorised reader on both
+      //       atSigns decrypts, and an unauthorised @bob enrollment can
+      //       neither fetch the ciphertext (server-gated) nor decrypt it.
       provenIn('tests/at_end2end_test/test/pq/nskey_cross_atsign_test.dart',
           'alice shares with bob, and bob reads it with his own nskey private',
           proves:
@@ -41,6 +41,35 @@ void main() {
         clauses: [
           'data values `providerId = at/symmetric/AES/GCM`, CK '
               'conveyances'
+        ],
+      );
+      provenIn(
+        'tests/at_end2end_test/test/pq/nskey_multi_enrollment_test.dart',
+        'UC-A4.3: whichever alice enrollment writes, every bob enrollment '
+            'reads',
+        proves: 'both halves of the last clause, in one test named for the '
+            'row next door because it is that row\'s fixture the arm needs — '
+            'two live enrollments of @bob, one of them scoped. AUTHORISED: '
+            '@alice reads back what she wrote and both of @bob\'s '
+            'enrollments read it, which is every authorised reader on both '
+            'atSigns. UNAUTHORISED: @alice shares a second post-quantum '
+            'record into a namespace @bob\'s second enrollment was never '
+            'granted, and @bob\'s atServer refuses that enrollment the fetch '
+            'as an authorization decision naming the verb, the enrollment id '
+            'and the namespace — so it never holds the ciphertext, and "nor '
+            'decrypt" is what follows rather than a second mechanism. The '
+            'differential is tight: the SAME client reads the granted '
+            'namespace and is refused the withheld one, so only the grant '
+            'varies. Mutation-proven: making the fully privileged client the '
+            'one refused reddens it, printing the decrypted value and the '
+            'at/symmetric/AES/GCM routing — the refusal is a property of the '
+            'reader, not of the record. ⚠️ The refusal cannot be shown by '
+            '`llookup` on @bob\'s atServer: a record @alice shares lives on '
+            'ALICE\'s atServer, so that verb answers "does not exist in '
+            'keystore" whatever the grants are, which is an absent record '
+            'dressed as a gate',
+        clauses: [
+          'cannot fetch the ciphertext (server-gated) nor decrypt',
         ],
       );
     });
