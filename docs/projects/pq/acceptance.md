@@ -3526,11 +3526,19 @@ is where its missing lever lives.
     retired entry and **no writer produces one**: the three that do are the key
     package's mint, the signing key's mint and the signing root's. So the two
     substrates reach the same guarantee by different mechanisms, and a reader
-    generalising from one to the other is wrong;
-  - a **retirement** is not a **compromise**, and only the first is what this row
-    is about — an entry withdrawn from verifying history too is
-    [UC-G2.3](#173-uc-g23--an-_apsk-reader-tolerates-an-unknown-algorithm-and-distrusts-an-unknown-status)'s
-    unknown-status clause, and the two must not be conflated.
+    generalising from one to the other is wrong.
+
+⚠️ **The sentence below was a THEN clause until 2026-08-29 and is deliberately
+no longer one** (gkc). It scopes the row rather than asserting a behaviour of
+its own, so nothing could close it: after a retirement and after a compromise
+the key material is in the same state, and the two differ only in the status
+token — of which there is one today. Pinning it against an unknown token would
+prove UC-G2.3's clause under this row's name, which is the conflation the
+sentence exists to forbid. It stays here as guidance: a **retirement** is not a
+**compromise**, and only the first is what this row is about — an entry
+withdrawn from verifying history too is
+[UC-G2.3](#173-uc-g23--an-_apsk-reader-tolerates-an-unknown-algorithm-and-distrusts-an-unknown-status)'s
+unknown-status clause, and the two must not be conflated.
 
 ### 17.8 UC-G2.8 — A verifier resolves the algorithm by name and only then walks the keys under it
 
