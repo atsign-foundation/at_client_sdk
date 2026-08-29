@@ -18,7 +18,8 @@ import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 
-/// A share read by more than one of the recipient's enrollments.
+/// A share read by more than one of the recipient's enrollments, written by
+/// more than one of the sender's.
 ///
 /// The property under test is that readability follows the **namespace key**,
 /// not the enrollment. A content key is sealed once, to `(owner, namespace)` —
@@ -41,6 +42,11 @@ void main() {
   /// an earlier run or the conveyance below proves nothing.
   final sharedNamespace = 'multi${DateTime.now().microsecondsSinceEpoch}';
 
+  /// Distinguishes this run's device names. An enrollment is one-shot per
+  /// `(appName, deviceName)` — a second run reusing a name is refused by the
+  /// atServer, not silently reused — so a fixed name would pass once.
+  final runStamp = DateTime.now().microsecondsSinceEpoch;
+
   setUpAll(() async {
     alice = ConfigUtil.getYaml()['atSign']['firstAtSign'];
     bob = ConfigUtil.getYaml()['atSign']['secondAtSign'];
@@ -51,7 +57,11 @@ void main() {
         .testInitializer(bob, namespace, authType, posture: PqPosture.legacy);
   });
 
-  test('UC-A4.3: every authorised enrollment of the recipient reads the share',
+  // Named as one string literal on purpose: `provenIn` matches a citation
+  // against the SOURCE, and adjacent literals the compiler would join are not
+  // contiguous there — a split name reads to it as a renamed test.
+  test(
+      'UC-A4.3: whichever alice enrollment writes, every bob enrollment reads',
       () async {
     // Both atSigns live at once, each with its own AtClientManager. Through
     // the singleton, bringing alice up would tear bob's client down — his
@@ -71,8 +81,10 @@ void main() {
         .syncData(bobPrimary.syncService, atSign: bob);
 
     // The approver seals the enrollee's symmetric key to its own key package,
-    // so it must have one registered before it can approve anything.
+    // so it must have one registered before it can approve anything. Both
+    // atSigns approve an enrollment below, so both register.
     await AtClientSecretSharing.forClient(bobPrimary).register();
+    await AtClientSecretSharing.forClient(aliceClient).register();
 
     // A second enrollment of @bob, genuinely distinct: its own enrollment id,
     // its own APKAM keypair, its own client.
@@ -168,5 +180,87 @@ void main() {
         reason: 'and so does the second enrollment — it holds the same '
             'namespace private, which is the whole point of scoping the seal '
             'to (owner, namespace) rather than to a device');
-  });
+
+    // ── The sending side, varied ─────────────────────────────────────────
+    //
+    // Everything above holds alice fixed and varies bob. The clause also says
+    // "whichever of alice's enrollments wrote it", which is a claim about the
+    // SENDER: readability follows @bob's namespace key, so it cannot depend on
+    // which of alice's enrollments did the sealing. Nothing establishes that
+    // until a second alice client writes the same kind of record.
+    final alicePreference = aliceClient.getPreferences()!;
+    final aliceSecond = await enrolAndAuthenticate(
+      approver: aliceClient,
+      atSign: alice,
+      namespace: sharedNamespace,
+      // A store of its own, unlike bobSecond above. It matters here and not
+      // there: a content key is a client-side cache, so an alice2 sharing
+      // alice1's store could seal with the key alice1 already minted and this
+      // would be alice1's conveyance under a second name. bobSecond needs no
+      // such separation — nskey privates are filed through `AtKeysIo`, and its
+      // enrollment carries an in-memory one of its own, so it cannot inherit
+      // bob's namespace private through a shared store either way.
+      preference: TestPreferences.getInstance().forCoLocatedClient(alice,
+          posture: PqPosture.legacy, device: 'alice2-$runStamp'),
+      rootDomain: alicePreference.rootDomain,
+      rootPort: alicePreference.rootPort,
+      deviceName: 'alice2-$runStamp',
+    );
+
+    expect(aliceSecond.client.enrollmentId, isNotNull,
+        reason: 'the sender must genuinely be an enrollment, or "whichever of '
+            'alice\'s enrollments wrote it" is not what varied');
+    expect(aliceSecond.client.enrollmentId, isNot(aliceClient.enrollmentId),
+        reason: 'and a different one from the client that wrote the first '
+            'record');
+
+    // alice2 mints NOTHING for itself. A sender seals to the recipient's
+    // published namespace key, so it needs no generation of its own — and
+    // asserting that by not providing one is stronger than asserting it in
+    // prose.
+    final aliceSecondRing = PublishedNskeyKeyRing(aliceSecond.client);
+    aliceSecond.client.getPreferences()!.crypto =
+        CryptoConfig.nskey(keyRing: aliceSecondRing);
+
+    final secondKeyName = 'multishare2${DateTime.now().microsecondsSinceEpoch}';
+    const secondPlaintext = 'written by alice\'s other enrollment';
+    AtKey fromAliceSecond() => AtKey()
+      ..key = secondKeyName
+      ..namespace = sharedNamespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+
+    expect(await aliceSecond.client.put(fromAliceSecond(), secondPlaintext),
+        true);
+    await E2ESyncService.getInstance()
+        .syncData(aliceSecond.client.syncService, atSign: alice);
+
+    final secondAsWritten = await aliceSecond.client.get(fromAliceSecond());
+    expect(secondAsWritten.metadata?.appMetadata?.providerId,
+        symmetricAesGcmCryptoProviderId,
+        reason: 'alice2 must be on the same nskey data path as alice1, or the '
+            'two records differ in more than the enrollment that wrote them');
+    final secondConveyanceKid =
+        secondAsWritten.metadata?.appMetadata?.additional?['ckKid'];
+    expect(secondConveyanceKid, isNotNull);
+    expect(secondConveyanceKid, isNot(conveyanceKid),
+        reason: 'alice2 sealed a content key of its own. Had this matched, the '
+            'record would be carrying alice1\'s conveyance and the sending '
+            'side would not have varied at all');
+
+    // Both of @bob's enrollments read the record alice's OTHER enrollment
+    // wrote — which is the clause, in full.
+    await E2ESyncService.getInstance()
+        .syncData(bobPrimary.syncService, atSign: bob);
+    expect((await bobPrimary.get(fromAliceSecond())).value, secondPlaintext,
+        reason: 'the enrollment that minted the namespace key reads what '
+            'alice2 sealed to it');
+    expect(
+        (await bobSecond.client.get(fromAliceSecond())).value, secondPlaintext,
+        reason: 'and so does bob\'s second enrollment. No authorised '
+            'enrollment on the receiving side is left unable to decrypt, and '
+            'it did not matter which of alice\'s enrollments wrote the '
+            'record — the seal is to (owner, namespace) on the RECIPIENT side '
+            'and carries no sender identity a reader has to hold');
+  }, timeout: Timeout(Duration(minutes: 5)));
 }

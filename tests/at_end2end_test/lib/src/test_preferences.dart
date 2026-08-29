@@ -134,6 +134,45 @@ class TestPreferences {
     atClientPreferencesMap[atSign] = atClientPreference;
     return atClientPreference;
   }
+
+  /// A preference for a SECOND client of [atSign] living in this same process.
+  ///
+  /// [getPreference] memoises one preference per atSign, so every client of
+  /// that atSign otherwise shares one `hiveStoragePath` — and a Hive store's
+  /// identity is its storage path, so one path is one store. Two enrollments
+  /// sharing a store read each other's cached material instead of the material
+  /// their own conveyance delivered, which turns a test about the product into
+  /// a test of the fixture. Separate paths are what a deployment has anyway:
+  /// two enrollments normally run as two processes.
+  ///
+  /// Returned as a **separate object** rather than the memoised one with its
+  /// path reassigned. `AtSyncQueue` reads `hiveStoragePath` off the preference
+  /// when the queue is first opened rather than when the client is built, so
+  /// reassigning the shared object would move whichever client opens its queue
+  /// after the reassignment — including the first one.
+  ///
+  /// [device] must be unique within the run: it is the whole of what keeps two
+  /// co-located clients apart on disk.
+  ///
+  /// ⚠️ Naming separate paths was not enough until 2026-08-29
+  /// (`docs/projects/pq/detail/decisions.md`, ruling 125): a box's identity was
+  /// the global Hive registry plus its name, and names derive from the atSign,
+  /// so a second client silently attached to the first's box whatever path it
+  /// asked for.
+  AtClientPreference forCoLocatedClient(String atSign,
+      {required PqPosture posture, required String device}) {
+    // Also the posture check: this refuses a second client asking for an era
+    // the first one is not at.
+    final shared = getPreference(atSign, posture: posture);
+    final preference = AtClientPreference(posture: posture)
+      ..hiveStoragePath = 'test/hive/client/$atSign/$device'
+      ..commitLogPath = 'test/hive/client/$atSign/$device/commit'
+      ..rootDomain = shared.rootDomain
+      ..rootPort = shared.rootPort
+      ..syncRegex = shared.syncRegex;
+    refuseDurableWritesToLongLivedAtSigns(atSign, preference);
+    return preference;
+  }
 }
 
 /// A posture's name, for a refusal message.
