@@ -30,8 +30,15 @@ void main() {
           'new writes default to the nskey data path (the AES-GCM provider)',
         ]);
     provenIn('packages/at_client/test/at_client_impl_test.dart',
-        'the legacy posture keeps writes legacy in the adopted era set',
-        proves: 'the 3.x arm: same provider set, writes stay legacy');
+        'the default posture keeps writes legacy in the adopted era set',
+        proves: 'the 3.x arm: the post-quantum providers registered, writes '
+            'stay legacy');
+    provenIn('packages/at_client/test/at_client_impl_test.dart',
+        'the legacy posture configures no post-quantum providers',
+        proves: 'and the arm below it: the earliest stage registers none of '
+            'them, so "a migration-postured client\'s writes stay legacy" is '
+            'a claim about the middle stage rather than about every stage '
+            'that writes legacy');
     provenIn('tests/at_functional_test/test/pq_stage_arm_test.dart',
         'UC-C1.1 · the era default follows the stage on a live client',
         proves: 'all three stages side by side on real clients: the middle '
@@ -180,7 +187,8 @@ void main() {
             'argument to try, so what is asserted is that no combination of '
             'the arguments that DO exist changes it',
         clauses: [
-          'except `disallowLegacyEncryption`, which the posture alone moves'
+          'except `disallowLegacyEncryption` and `configuresPqProviders`, '
+              'which the posture alone moves'
         ]);
   });
 

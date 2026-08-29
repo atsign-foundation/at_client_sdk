@@ -1,6 +1,8 @@
 import 'package:at_chops/at_chops.dart';
 import 'package:at_client/src/client/at_client_spec.dart';
 import 'package:at_client/src/crypto/crypto.dart';
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show pqCryptoProviderIds;
 import 'package:at_client/src/preference/pq_posture.dart';
 import 'package:at_client/src/secret_sharing/algo_ids.dart';
 import 'package:at_client/src/signing/envelope_signature.dart'
@@ -73,8 +75,8 @@ class AtClientPreference {
   /// Individual axes still win: an explicit [authenticationKeyAlgorithm] or
   /// [dataSigningKeyAlgorithms] argument, an assigned [crypto], or a per-call
   /// algorithm each override the posture's value for that one axis.
-  /// [disallowLegacyEncryption] is the deliberate exception and is settable
-  /// only through the posture.
+  /// [disallowLegacyEncryption] and [PqPosture.configuresPqProviders] are the deliberate
+  /// exceptions and are settable only through the posture.
   ///
   /// Final at construction, like [disallowLegacyEncryption] and for the same
   /// reason: what a client writes must not change meaning mid-run. A client
@@ -215,10 +217,16 @@ class AtClientPreference {
   /// so comparing two of them is an identity test, and a caller writing
   /// `PqPosture.legacy` without `const` gets an instance that is not
   /// the canonical one. Two behaviourally identical postures would then read as
-  /// a mismatch. What is compared is the pair of posture fields nothing else
-  /// carries — [PqPosture.writesPqByDefault] and
+  /// a mismatch. What is compared is the three posture fields nothing else
+  /// carries — [PqPosture.writesPqByDefault], [PqPosture.configuresPqProviders] and
   /// [PqPosture.keyExchangeMode] — beside the three effective axes, which
   /// is the whole of what a posture can change.
+  ///
+  /// [PqPosture.configuresPqProviders] is here because it decides a **capability**: a
+  /// client built without the post-quantum providers keeps them absent for its
+  /// whole life, so a caller handing over a preference that reads post-quantum
+  /// data and being given that client back would go on failing every such read
+  /// with nothing having said no.
   ///
   /// [seedNamespaceKeys] is not compared: it is mutable, so it was never one
   /// of the axes fixed at construction that this refusal exists to protect.
@@ -238,6 +246,8 @@ class AtClientPreference {
 
     compare('posture.writesPqByDefault', other.posture.writesPqByDefault,
         posture.writesPqByDefault);
+    compare('posture.configuresPqProviders',
+        other.posture.configuresPqProviders, posture.configuresPqProviders);
     compare('posture.keyExchangeMode', other.posture.keyExchangeMode.name,
         posture.keyExchangeMode.name);
     compare('authenticationKeyAlgorithm', other.authenticationKeyAlgorithm.name,
@@ -499,7 +509,43 @@ class AtClientPreference {
   /// Assign a config to opt out — to register a custom provider, or to hold a
   /// specific scheme deliberately. Custom providers are initialised by the
   /// client implementation before sync and notification services start.
-  CryptoConfig crypto = const CryptoConfig.eraDefault();
+  ///
+  /// ⚠️ **Assigning a post-quantum config is refused when [posture] configures
+  /// no post-quantum providers.** The two say opposite things about the same
+  /// client, and silently letting either win is worse than refusing: a client
+  /// standing in for a build that predates those schemes must not be handed
+  /// them, and an app that asked for them must not quietly not get them. A
+  /// custom provider of the app's own is unaffected — only the ids in
+  /// [pqCryptoProviderIds] are declined.
+  ///
+  /// ⚠️ **Checked when the config is assigned, and not after.**
+  /// [CryptoConfig.providers] is held by reference, so a caller that keeps the
+  /// list it passed can add a post-quantum provider to it afterwards and this
+  /// will not fire again. That is not a hole worth closing on the read path —
+  /// resolution happens per operation and re-checking there would cost every
+  /// caller — but it does mean the refusal answers "was this config
+  /// post-quantum when you handed it over", not "is it now".
+  CryptoConfig get crypto => _crypto;
+
+  set crypto(CryptoConfig config) {
+    if (!posture.configuresPqProviders) {
+      final refused =
+          config.providers.map((p) => p.id).where(pqCryptoProviderIds.contains);
+      if (refused.isNotEmpty) {
+        throw ArgumentError.value(
+            refused.join(', '),
+            'crypto',
+            'this preference runs a posture that configures no post-quantum '
+                'providers, and this config registers them. A client cannot '
+                'both stand in for a build that predates these schemes and be '
+                'given them. Name a posture that configures them, or a config '
+                'that does not register them');
+      }
+    }
+    _crypto = config;
+  }
+
+  CryptoConfig _crypto = const CryptoConfig.eraDefault();
 
   /// Whether a write that cannot go out under [crypto]'s scheme may fall back
   /// to legacy encryption instead of failing.

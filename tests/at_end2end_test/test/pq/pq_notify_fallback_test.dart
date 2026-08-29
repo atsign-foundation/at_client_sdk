@@ -8,6 +8,7 @@ library;
 import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/concurrent_clients.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
 
 /// UC-A4.4's scheme-decision clause: the opted-in legacy fallback governs a
@@ -83,7 +84,7 @@ void main() {
 
     final clients = await ConcurrentClients.open(
         writer, recipient, ns, authType,
-        posture: PqPosture.legacy);
+        posture: legacyPlusPqProviders);
     addTearDown(clients.close);
     final writerClient = clients.first;
 

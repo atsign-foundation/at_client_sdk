@@ -69,8 +69,17 @@ class EnrolledClient {
   /// The key package id this enrollment advertised, which is the address
   /// anything sealed to it is written under.
   ///
-  /// Throws for a **legacy-mode** enrollment, which advertises no key package
-  /// at all — that is the point of the mode, not a gap. A throwing getter
+  /// Throws for a **legacy-mode** enrollment, whose creation request carried
+  /// no key package — that is the point of the mode, not a gap.
+  ///
+  /// ⚠️ **"No key package on the request" is not "no key package ever".** The
+  /// enrollment acquires one at its first client start, because
+  /// `reconcileKeyPackage` mints against `keyEstablishmentAlgorithms` whatever
+  /// the posture, and it is then conveyed secrets like any other enrollment.
+  /// What this getter reports is the value the request advertised, which is
+  /// the address a test sealing at approval time needs. Reading it as a
+  /// statement about the enrollment's lifetime is a mistake that has been made
+  /// from this comment. A throwing getter
   /// rather than a nullable field because every existing reader is a test
   /// about key packages, so `null` would only have been forced away with `!`
   /// at each one; this way the failure names what happened. Use [kpidOrNull]

@@ -170,7 +170,7 @@ first, `enroll:updateMetadata`, and they still resolve.
 | [110] | The `0x01` seal version is retired; stop emitting before removing                           | 2026-08-18 | AMENDED 2026-08-20        |
 | [111] | A key ring files where its client files                                                     | 2026-08-18 | LIVE                      |
 | [112] | An unreadable key source is not an empty one                                                | 2026-08-18 | LIVE                      |
-| [113] | PqPosture: three postures, and the rollout they drive                                       | 2026-08-18 | AMENDED 2026-08-27        |
+| [113] | PqPosture: three postures, and the rollout they drive                                       | 2026-08-18 | AMENDED 2026-08-29        |
 | [114] | A signer waits for its own mint; the mint alone does not                                    | 2026-08-21 | LIVE                      |
 | [115] | The acceptance suite is 4 arms and a ledger, not one grid                                   | 2026-08-23 | 3 ARMS AMENDED 2026-08-24 |
 | [116] | Proposals rejected on evidence                                                              | 2026-08-23 | LIVE                      |

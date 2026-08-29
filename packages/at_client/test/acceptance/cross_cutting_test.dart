@@ -22,8 +22,11 @@ import 'proven_elsewhere.dart';
 void main() {
   group('cross-cutting invariants', () {
     test('reads are universal', () async {
-      // A client decrypts anything ever written to it (all providers retained);
-      // upgrading only ever ADDS read-capability.
+      // A client decrypts anything ever written to it under any scheme its
+      // stage configures, and upgrading only ever ADDS read-capability. This
+      // test names its own CryptoConfig, so it is about provider RESOLUTION
+      // rather than about which providers a posture configures — see the
+      // legacy arm in at_client_impl_test.dart for that half.
       //
       // The mechanism is that `legacy` is a *built-in* fallback rather than an
       // entry in `providers` — so it survives a config that lists only the PQ

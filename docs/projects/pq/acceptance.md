@@ -1801,8 +1801,25 @@ answer is the only thing standing between them.
 
 These invariants are testable against **every** UC above:
 
-- **Reads are universal.** A client decrypts anything ever written to it (all
-  providers retained); upgrading only ever **adds** read-capability.
+- **Reads are universal.** A client decrypts anything ever written to it under
+  any scheme its stage configures, and upgrading only ever **adds**
+  read-capability — the legacy provider is a *built-in* fallback rather than an
+  entry in `providers`, so no config can drop it by omission.
+  ⚠️ **This read "a client decrypts anything ever written to it" with no
+  qualification until 2026-08-29**, and that stopped being true when
+  `PqPosture.legacy` became a genuine pre-capability install: it configures no
+  post-quantum provider, so a record stamped with one is refused by name with
+  `CryptoProviderNotRegistered`, exactly as a build predating those providers
+  refuses it. The carve-out is a deliberate configuration and nothing more: the
+  stage withholds the *providers*, not the *keys*. Such a client still
+  advertises a key package and is still conveyed nskey privates — it simply
+  declines to use them.
+  ⚠️ **This paragraph argued until 2026-08-29 that a legacy key-exchange
+  enrollment advertises no key package and so could be conveyed nothing.** That
+  is false: a key package is advertised in every mode, and `reconcileKeyPackage`
+  mints one at every client start whatever the posture. No post-quantum key is
+  conveyed under RSA in any mode either — every conveyance is KEM-sealed with
+  no classical branch — so neither of the reasons once given here holds.
 - **No silent scheme substitution, in either direction.** The SDK never chooses
   post-quantum behind the app's back (writing PQ is the app's release decision —
   a capability-stage client writes legacy however much it can read), and never
@@ -2042,17 +2059,29 @@ prefix-match a real test.
 
 ### Why a posture grid is the wrong default
 
-`PqPosture` declares 9 axes and only 6 vary across the 3 stages.
+`PqPosture` declares 10 axes (`grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart`) and only 7 vary across the 3 stages.
 `mintLegacyMaterial`, `sealsToKeyAlgorithms` and `keyEstablishmentAlgorithms`
 are byte-identical at legacy, pqReady and pqActive, and the last one's dartdoc
 calls it a deployment decision rather than a stage decision. Any row whose
 clauses turn on those three is posture-invariant by construction.
 
 A3 is the clearest case. The live proof in `nskey_data_path_live_test.dart`
-builds its client from a bare `AtClientPreference` — therefore
-`PqPosture.legacy` — and then sets `..crypto = CryptoConfig.nskey(...)`. Every
-clause it asserts is already proven at the legacy stage and is identical at the
-other two. What the posture decides is not what the data path guarantees, but
+builds its client at a fixture posture holding every writing axis at `legacy`
+while configuring the post-quantum providers, and then sets
+`..crypto = CryptoConfig.nskey(...)`. Every clause it asserts is already proven
+with no writing axis moved and is identical at the other two stages.
+
+⚠️ **Two things in this paragraph were wrong and are corrected above.** It said
+the test builds "a bare `AtClientPreference` — therefore `PqPosture.legacy`":
+a bare preference has been `PqPosture.pqReady` since the default moved, so the
+inference never held. And on 2026-08-29 `PqPosture.legacy` stopped configuring
+the post-quantum providers at all, which makes `legacy` + `CryptoConfig.nskey`
+a combination `AtClientPreference.crypto` now refuses outright — so the
+construction the argument rested on can no longer be built. **Whether the
+"3 of 5 do not vary" classification still holds is therefore open**: it was
+derived from a posture-invariance that one axis no longer has. Left as it was
+rather than re-ruled here.
+ What the posture decides is not what the data path guarantees, but
 whether an app that configures nothing enters it. 3 of the 5 A3 rows do not vary
 at all; the 2 that do are [UC-A3.2](#42-uc-a32--a-client-mints-and-publishes-the-nskey-for-each-namespace-it-is-authorised-for),
 because `seedNamespaceKeys` is false at legacy so whether the mint fires is a
@@ -2194,12 +2223,21 @@ write to `@bob:k.<ns>@alice` is resolved at `(owner: bob, namespace: ns)`, and
 both sides, every sender finds its peer seeded. Measured 2026-08-24 under the
 old layout: **all seven cross-atSign writes succeeded and none refused.**
 
-**The receiver's posture is not the second axis.** `PqPosture` says why:
-verification and decryption are *maximal under every posture and not settable
-at all*, so the only thing a receiver's posture changes for a write toward it
-is whether it published a namespace key. That is a property of
-`(receiver, namespace)`. The axis is **readiness**, and it is expressed by
-which namespace the write targets.
+**The receiver's posture is not the second axis for a WRITE.** What decides
+whether a write toward a receiver succeeds is whether that receiver published a
+namespace key — a property of `(receiver, namespace)` rather than of the
+receiver's stage. The axis is **readiness**, and it is expressed by which
+namespace the write targets.
+
+⚠️ **The reason given here was that "verification and decryption are maximal
+under every posture and not settable at all", quoting `PqPosture`, until
+2026-08-29.** That is no longer true: `PqPosture.legacy` configures no
+post-quantum provider, so a receiver's stage does decide what it can READ. The
+conclusion survives because it was always a claim about the write — a sender is
+refused for a missing advertised key, never for the recipient's stage — and the
+read side is now exercised separately by the grid's readback row, where
+`r-legacy` is refused on the crypto path and `r-pqReading` on the
+key-acquisition path.
 
 So the data path grid is **sender posture × receiver readiness**, and the
 envelope grid stays **sender posture × receiver posture** — because there the
@@ -2707,7 +2745,8 @@ on failure.
   retrofits are built from that one preference.
 - **Then:** every axis runs the last stage's values — the pinned columns of the
   `decisions.md` 56.4 table — and each remains individually overridable
-  **except `disallowLegacyEncryption`, which the posture alone moves**
+  **except `disallowLegacyEncryption` and `configuresPqProviders`, which the
+  posture alone moves**
   (UC-C1.1, C1.2, C1.4, C1.5 and C1.7 prove the arms; C1.3 is withdrawn and
   its axis no longer exists). ⚠️ **This said "each remains individually
   overridable" until 2026-08-27 and overstated the tree**, which asserts the
@@ -2722,9 +2761,12 @@ on failure.
 ⚠️ **This row said "all seven axes" until 2026-08-26, in four places, and the
 number was never re-derived after it stopped being true.** It was correct when
 written (`f22ec76e7`) and falsified hours later by `824508719`, which added
-`sealsToKeyAlgorithms` as an eighth. Today `PqPosture` carries **9** final
-fields, its own dartdoc enumerates **8** under "The axes", and only **6** differ
+`sealsToKeyAlgorithms` as an eighth. Today `PqPosture` carries **10** final
+fields, its own dartdoc enumerates **9** under "The axes", and only **7** differ
 between `legacy` and `pqActive` — so "seven" was not any of the three readings.
+⚠️ **And these three moved again on 2026-08-29** when `configuresPqProviders`
+landed, which is the second time this paragraph has gone stale. Re-derive the
+first with `grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart`.
 Re-derive rather than restating a number:
 `grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart`.
 

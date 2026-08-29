@@ -499,8 +499,9 @@ reason string.
 #### F5 — "all seven axes" was stale in six places — ✅ CLOSED
 
 UC-C1.6's title, heading, THEN clause, the section intro, the scenario file's
-dartdoc and its test name all said **seven**. `PqPosture` carries **9** final
-fields; its own dartdoc enumerates **8** under "The axes"; and only **6** differ
+dartdoc and its test name all said **seven**. As of that closure `PqPosture`
+carried **9** final fields; its own dartdoc enumerated **8** under "The axes";
+and only **6** differed
 between `legacy` and `pqActive`. Seven was none of the three.
 
 **It was correct when written and falsified within hours.** `f22ec76e7` wrote

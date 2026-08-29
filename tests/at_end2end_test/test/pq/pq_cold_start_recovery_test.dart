@@ -11,6 +11,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/concurrent_clients.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:test/test.dart';
 
 /// Cold start ends the moment the recipient publishes — UC-B4.1 and UC-B4.4.
@@ -85,7 +86,7 @@ void main() {
 
     final clients = await ConcurrentClients.open(
         writer, recipient, ns, authType,
-        posture: PqPosture.legacy);
+        posture: legacyPlusPqProviders);
     addTearDown(clients.close);
     final writerClient = clients.first;
     final recipientClient = clients.second;
@@ -208,7 +209,7 @@ void main() {
 
     final clients = await ConcurrentClients.open(
         writer, recipient, ns, authType,
-        posture: PqPosture.legacy);
+        posture: legacyPlusPqProviders);
     addTearDown(clients.close);
     final writerClient = clients.first;
     final recipientClient = clients.second;

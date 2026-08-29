@@ -46,6 +46,7 @@ void main() {
     seedNamespaceKeys: false,
     keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
     writesPqByDefault: true,
+    configuresPqProviders: true,
     disallowLegacyEncryption: true,
     mintLegacyMaterial: true,
     sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
@@ -74,6 +75,7 @@ void main() {
         seedNamespaceKeys: false,
         keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
         writesPqByDefault: false,
+        configuresPqProviders: false,
         disallowLegacyEncryption: false,
         mintLegacyMaterial: true,
         sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
@@ -160,7 +162,7 @@ void main() {
     });
 
     test('a posture difference is named by what it means', () {
-      // The posture is compared through the two fields nothing else carries.
+      // The posture is compared through the three fields nothing else carries.
       // Its other axes reach behaviour as authenticationKeyAlgorithm,
       // dataSigningKeyAlgorithms and disallowLegacyEncryption, which is why
       // they are listed beside it rather than instead of it.
@@ -176,7 +178,7 @@ void main() {
             contains('disallowLegacyEncryption'),
             contains('dataSigningKeyAlgorithms'),
           ]),
-          reason: 'one posture moves five compared axes, and a diagnostic '
+          reason: 'one posture moves six compared axes, and a diagnostic '
               'naming only the first would send a reader looking for one '
               'setting');
     });

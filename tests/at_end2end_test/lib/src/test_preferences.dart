@@ -2,6 +2,39 @@ import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 
+/// Legacy in every axis, with the post-quantum providers configured — the
+/// combination the post-quantum tests in this pack need, and one **no
+/// deployment should ever have**.
+///
+/// ⛔ **Not a rollout stage, and deliberately not one of `PqPosture`'s named
+/// constants** — the ladder names three positions and this is not one of them.
+///
+/// ⚠️ **It is not an impossible combination, and nothing here should be read
+/// as saying so.** A real client built this way works: an enrollment
+/// advertises a key package in every key-exchange mode, and
+/// `reconcileKeyPackage` mints one at every client start whatever the posture,
+/// so such a client is conveyed nskey privates like any other. Some tests
+/// using this posture mint their own ring in-process; others read a private
+/// that reached them by conveyance. What keeps it out of `PqPosture` is that
+/// the release programme does not offer it as a stage, not that it could not
+/// exist.
+///
+/// An earlier version of this comment claimed such a client "could never
+/// acquire a key to use" and that these tests "bypass conveyance entirely".
+/// Both were false.
+final legacyPlusPqProviders = PqPosture(
+  authenticationKeyAlgorithm: PqPosture.legacy.authenticationKeyAlgorithm,
+  dataSigningKeyAlgorithms: PqPosture.legacy.dataSigningKeyAlgorithms,
+  seedNamespaceKeys: PqPosture.legacy.seedNamespaceKeys,
+  keyExchangeMode: PqPosture.legacy.keyExchangeMode,
+  writesPqByDefault: PqPosture.legacy.writesPqByDefault,
+  configuresPqProviders: true,
+  disallowLegacyEncryption: PqPosture.legacy.disallowLegacyEncryption,
+  mintLegacyMaterial: PqPosture.legacy.mintLegacyMaterial,
+  sealsToKeyAlgorithms: PqPosture.legacy.sealsToKeyAlgorithms,
+  keyEstablishmentAlgorithms: PqPosture.legacy.keyEstablishmentAlgorithms,
+);
+
 class TestPreferences {
   final atClientPreferencesMap = <String, AtClientPreference>{};
 
@@ -181,6 +214,7 @@ class TestPreferences {
 /// three constants do not name.
 String _describe(PqPosture posture) {
   if (posture == PqPosture.legacy) return 'PqPosture.legacy';
+  if (posture == legacyPlusPqProviders) return 'legacyPlusPqProviders';
   if (posture == PqPosture.pqReady) return 'PqPosture.pqReady';
   if (posture == PqPosture.pqActive) return 'PqPosture.pqActive';
   return 'a posture none of the three constants names';

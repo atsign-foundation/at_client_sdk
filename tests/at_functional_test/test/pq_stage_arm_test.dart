@@ -201,13 +201,22 @@ void main() {
     for (final stage in stages.keys) {
       final resolved = CryptoConfig.forClient(clientAt(stage));
 
-      // Reads are maximal under every posture and are not settable at all, so
-      // this holds in all three cells — including the one that writes legacy.
-      expect(resolved.lookup(symmetricAesGcmCryptoProviderId), isNotNull,
-          reason: '$stage: an inbound post-quantum record names this '
-              'provider, and a client that cannot resolve it fails on data '
-              'already sent to it');
-      expect(resolved.lookup(nskeyCryptoProviderId), isNotNull,
+      // Both arms of the axis in one loop. A stage that configures the
+      // post-quantum providers resolves an inbound record stamped with one;
+      // a stage that does not must resolve NEITHER, which is what makes it a
+      // stand-in for a build predating those schemes rather than a current
+      // build writing old data.
+      final configures = stages[stage]!.configuresPqProviders;
+      final resolvable = configures ? isNotNull : isNull;
+      expect(resolved.lookup(symmetricAesGcmCryptoProviderId), resolvable,
+          reason: configures
+              ? '$stage: an inbound post-quantum record names this provider, '
+                  'and a client that cannot resolve it fails on data already '
+                  'sent to it'
+              : '$stage configures no post-quantum providers, so resolving '
+                  'this one would let it read what a pre-capability install '
+                  'cannot — and the refusal is the point of the stage');
+      expect(resolved.lookup(nskeyCryptoProviderId), resolvable,
           reason: '$stage: and the content key it cites is conveyed under '
               'this one');
     }
@@ -215,8 +224,8 @@ void main() {
     // What the stage does decide: which provider a new write defaults to.
     expect(CryptoConfig.forClient(clientAt('legacy')).defaultProviderId,
         legacyCryptoProviderId,
-        reason: 'the default stage reads post-quantum and still writes '
-            'legacy — moving this is a fleet-wide commitment');
+        reason: 'the pre-capability stage writes legacy, and does not read '
+            'post-quantum data either — moving either is a deliberate step');
     expect(CryptoConfig.forClient(clientAt('pqReady')).defaultProviderId,
         legacyCryptoProviderId,
         reason: 'the middle stage moves the credentials and not the data '

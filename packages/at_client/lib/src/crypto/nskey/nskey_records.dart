@@ -300,3 +300,19 @@ const String nskeyProviderFamily = 'at/nskey';
 /// crypto-agility. A future `at/symmetric/AES/SIV` coexists with it, and values
 /// written under this id keep their tag forever.
 const String symmetricAesGcmCryptoProviderId = 'at/symmetric/AES/GCM';
+
+/// Every provider id this SDK ships for the post-quantum data path.
+///
+/// The set a posture with `configuresPqProviders` false is declining, so a
+/// fourth scheme belongs here in the same commit as its id: a config naming an
+/// id this set does not hold would pass that refusal and hand a client meant
+/// to stand in for a pre-post-quantum build exactly the provider it is meant
+/// not to have.
+///
+/// [legacyCryptoProviderId] is deliberately absent — it is the built-in
+/// fallback every client resolves, whatever its posture.
+const Set<String> pqCryptoProviderIds = {
+  nskeyCryptoProviderId,
+  mlKemNskeyCryptoProviderId,
+  symmetricAesGcmCryptoProviderId,
+};

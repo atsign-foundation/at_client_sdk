@@ -32,11 +32,19 @@ final _logger = AtSignLogger('NskeyPrivateFiling');
 /// and into [AtKeys], where key material that must survive a restart belongs.
 ///
 /// The substrate carries opaque secrets and knows nothing about keys; this is
-/// the crypto layer recognising its own material on the way past. Two things
-/// follow from filing it here rather than leaving it in the `SecretStore`:
-/// it lands under `AtKeysIo`'s never-lose contract with the at-rest protection
-/// those implementations already provide, and no app-supplied persistence
-/// backend ever ends up holding this atSign's namespace private keys.
+/// the crypto layer recognising its own material on the way past. Filing it
+/// here rather than leaving it in the `SecretStore` puts it under `AtKeysIo`'s
+/// never-lose contract, which is what the rest of the crypto layer reads from.
+///
+/// ⛔ **Two claims that stood here until 2026-08-29 were false.** It said the
+/// private lands "with the at-rest protection those implementations already
+/// provide": `FileAtKeysIo` encrypts nothing without a passphrase, and typed
+/// post-quantum material is not among the four legacy fields it
+/// self-encrypts, so with no passphrase this is written as plaintext base64.
+/// And it said "no app-supplied persistence backend ever ends up holding this
+/// atSign's namespace private keys": filing does not remove the secret from
+/// the `SecretStore`, which persists to whatever backend an app supplied —
+/// see [SecretStorePersistence].
 ///
 /// Losing an nskey private is not recoverable: every conveyance record sealed
 /// to it becomes unopenable, and with it every value those content keys

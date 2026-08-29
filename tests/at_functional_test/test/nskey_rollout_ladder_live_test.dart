@@ -30,7 +30,7 @@ import 'test_utils.dart';
 /// it should consult the advertisement is invisible in every other row — and a
 /// fixture serving both from one place would hide it here too.
 ///
-/// ⚠️ **Both enrollments run `PqPosture.legacy` and the seeding is driven by
+/// ⚠️ **Both enrollments run `legacyPlusPqProviders` and the seeding is driven by
 /// hand.** Not because the posture is the subject, but because of the mint
 /// lock: a seeding posture makes each client's unawaited startup tail take
 /// `_nskeylock` at the production two-minute ttl, and nothing releases a mint
@@ -62,7 +62,7 @@ void main() {
     final keysIo = InMemoryAtKeysIo();
     await keysIo.write(atSign, AtKeys());
     final manager = await TestUtils.initAtClient(atSign, namespace,
-        atKeysIo: keysIo, posture: PqPosture.legacy);
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -82,7 +82,7 @@ void main() {
         atSign: atSign,
         namespace: namespace,
         preference: TestUtils.getPreference(atSign,
-            posture: PqPosture.legacy,
+            posture: legacyPlusPqProviders,
             keyEstablishmentAlgorithms: mints,
             sealsToKeyAlgorithms: sealsTo),
         rootDomain: 'vip.ve.atsign.zone',

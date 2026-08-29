@@ -9,6 +9,7 @@ import 'package:at_client/at_client.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/concurrent_clients.dart';
 import 'package:at_end2end_test/src/sync_initializer.dart';
+import 'package:at_end2end_test/src/test_preferences.dart';
 import 'package:at_end2end_test/utils/test_constants.dart';
 import 'package:test/test.dart';
 
@@ -61,7 +62,7 @@ void main() {
     // singleton bringing him up would tear alice's client down.
     final clients =
         await ConcurrentClients.open(alice, bob, namespace, authType,
-            posture: PqPosture.legacy);
+            posture: legacyPlusPqProviders);
     addTearDown(clients.close);
     final aliceClient = clients.first;
     final bobClient = clients.second;

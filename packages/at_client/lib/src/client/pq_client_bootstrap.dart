@@ -32,12 +32,20 @@ import 'package:meta/meta.dart' show experimental, visibleForTesting;
 /// Gates for the PQ startup's ACTIVE steps — the ones that write to the
 /// atServer on the client's own initiative.
 ///
-/// Every default is on: this object is the *seam* for a passive-by-default
-/// posture, not the posture itself — flipping defaults is a later, deliberate
-/// rollout decision. The two read-precondition steps (hydrating held secrets and
-/// collecting conveyed key material) deliberately have no gate here:
-/// gating them breaks *decryption*, not quietens writes — the collect sweep
-/// is the only route by which a conveyed nskey private reaches the keyfile.
+/// Every default is on, and the posture turns two of them off. `AtClientImpl`
+/// passes [reconcileKeyPackage] and [requestMissingPrivates] as false when
+/// `PqPosture.configuresPqProviders` is false, so a stage standing in for a
+/// build that predates the post-quantum providers neither advertises a key
+/// package nor asks for privates it has no provider to use. Every other
+/// default is still on for every stage.
+///
+/// The two read-precondition steps (hydrating held secrets and collecting
+/// conveyed key material) deliberately have no gate here: gating them breaks
+/// *decryption*, not quietens writes — the collect sweep is the only route by
+/// which a conveyed nskey private reaches the keyfile. A client that cannot
+/// resolve the providers fails before it needs one either way, so leaving them
+/// on costs it nothing and keeps the sweep available the moment a posture that
+/// does configure them is adopted.
 ///
 /// Two of 14.13's active sites live outside the startup and are not gated
 /// by this object: `KeyPackageRegistration.register()`'s
@@ -220,6 +228,14 @@ class PqClientBootstrap {
   final EnrollmentPrivilegeResolver _privilege;
   final Future<int> Function() _sweepUnanchored;
   final PqStartupGates _gates;
+
+  /// The gates this startup is running under.
+  ///
+  /// Exposed because which steps a posture switches off is a contract a test
+  /// has to be able to read: the alternative is asserting on the absence of a
+  /// wire write, which passes just as well when the step ran and failed.
+  @visibleForTesting
+  PqStartupGates get gates => _gates;
   late final AtSignLogger _logger;
 
   /// The one key ring this client's crypto config and startup steps share.

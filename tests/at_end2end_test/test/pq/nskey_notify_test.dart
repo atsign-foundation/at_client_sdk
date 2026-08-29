@@ -53,7 +53,7 @@ void main() {
       timeout: Timeout(Duration(minutes: 5)), () async {
     final clients =
         await ConcurrentClients.open(alice, bob, namespace, authType,
-            posture: PqPosture.legacy);
+            posture: legacyPlusPqProviders);
     addTearDown(clients.close);
 
     // Bob first: alice's pre-pass discovers his published nskey by plookup, so
@@ -94,7 +94,7 @@ void main() {
       atSign: bob,
       namespace: namespace,
       preference: TestPreferences.getInstance()
-          .forCoLocatedClient(bob, posture: PqPosture.legacy, device: 'bob2-$id'),
+          .forCoLocatedClient(bob, posture: legacyPlusPqProviders, device: 'bob2-$id'),
       rootDomain: bobPreference.rootDomain,
       rootPort: bobPreference.rootPort,
       deviceName: 'bob2-$id',

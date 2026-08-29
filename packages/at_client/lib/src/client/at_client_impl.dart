@@ -778,9 +778,22 @@ class AtClientImpl implements AtClient {
     // Built before the crypto config adopts its era default, because the
     // config's nskey providers read through the bootstrap's key ring — the
     // same ring the startup steps mint into and file from.
+    // A stage that configures no post-quantum providers advertises no key
+    // package and asks for no privates. Both steps are otherwise ungated by
+    // posture, which left such a client minting an X-Wing package, publishing
+    // it, asking peers for privates, filing the answers and then refusing to
+    // use any of it. The advertisement is the harmful half: a peer reads it
+    // and seals to an atSign whose client then declines the record, so the
+    // write is lost to a reader that advertised capability it had switched
+    // off. `KeyPackageStatus.absent` is what the substrate documents for "an
+    // older client", which is exactly what this stage stands in for.
     _pqBootstrap = PqClientBootstrap(
       this,
       keysIo: _atKeysIo,
+      gates: (_preference?.posture.configuresPqProviders ?? true)
+          ? const PqStartupGates()
+          : const PqStartupGates(
+              reconcileKeyPackage: false, requestMissingPrivates: false),
       privilege: EnrollmentRecordPrivilegeResolver(this,
           listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
               .fetchEnrollmentRequests),
@@ -802,8 +815,9 @@ class AtClientImpl implements AtClient {
     unawaited(_pqBootstrap!.startup());
   }
 
-  /// Gives this client the era's crypto default: the nskey providers wired for
-  /// reading, with writes still going out legacy.
+  /// Gives this client the era's crypto default: normally the nskey providers
+  /// wired for reading, with writes still going out legacy — or, for a posture
+  /// that does not read post-quantum data, no post-quantum providers at all.
   ///
   /// **Why the SDK builds this rather than the app.** An app that had to name a
   /// `CryptoConfig` to have one would be pinned to whatever was current the day
@@ -830,6 +844,21 @@ class AtClientImpl implements AtClient {
     // the default. Both read everything. An app-named `crypto` still wins —
     // adoptEraDefault leaves it alone either way.
     final writesPq = _preference?.posture.writesPqByDefault ?? false;
+    // A posture that does not read post-quantum data registers none of those
+    // providers: the era default is the legacy set, so a record stamped with a
+    // post-quantum provider id has nothing to resolve to and the read throws
+    // instead of opening.
+    //
+    // The `?? true` cannot fire: `_preference!` is dereferenced earlier in
+    // construction, so a client reaching here always has one. It is written
+    // this way to match the six neighbouring `_preference?.` reads rather than
+    // to describe a reachable state — do not read it as "a client with no
+    // preference keeps the providers".
+    final readsPq = _preference?.posture.configuresPqProviders ?? true;
+    if (!readsPq) {
+      CryptoConfig.adoptEraDefault(this, const CryptoConfig.legacy());
+      return;
+    }
     // The one caller that HAS a preference, so the one that narrows the
     // seal-to list if this deployment asked for that. Everywhere further down
     // defaults to the full list, which refuses nobody.

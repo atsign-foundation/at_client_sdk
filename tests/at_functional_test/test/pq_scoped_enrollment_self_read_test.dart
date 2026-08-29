@@ -62,7 +62,7 @@ void main() {
     // The approver stays on the migration posture: what it is willing to write
     // is what the enrollment handshake depends on, and posture is per-client.
     final manager = await TestUtils.initAtClient(atSign, granted,
-        atKeysIo: keysIo, posture: PqPosture.legacy);
+        atKeysIo: keysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
     // The approver seals the enrollee's symmetric key to its own key package,
     // so it must have one registered before it can approve anything.
@@ -113,7 +113,7 @@ void main() {
     final enrolleeKeysIo = InMemoryAtKeysIo();
     await enrolleeKeysIo.write(atSign, AtKeys());
     final preference = TestUtils.getPreference(atSign,
-        posture: PqPosture.legacy,
+        posture: legacyPlusPqProviders,
         authenticationKeyAlgorithm: SigningAlgoType.mldsa65)
       // A store of its own. Two clients of one atSign sharing a storage path
       // share their keystore, and this one is supposed to hold only what its

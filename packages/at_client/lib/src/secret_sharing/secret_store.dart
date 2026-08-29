@@ -62,12 +62,26 @@ class Secret {
 /// lifetime (platform keystore, biometric storage, etc. — the app's
 /// concern). Without one, the store is in-memory only.
 ///
-/// The SDK deliberately ships no implementation. Key material the SDK itself
-/// needs to survive a restart — an APKAM keypair, a key package's KEM
-/// private half, an nskey private — is filed into `AtKeys` instead, where the
-/// `AtKeysIo` implementations already handle at-rest protection. That keeps
-/// this store free of anything whose loss would be unrecoverable, and keeps
-/// the atSign's private keys out of whatever backend an app happens to supply.
+/// The SDK deliberately ships no implementation. Key material the SDK needs to
+/// survive a restart — an APKAM keypair, a key package's KEM private half, an
+/// nskey private — is filed into `AtKeys`, which is where it is read back
+/// from.
+///
+/// ⛔ **It is also written here, and an app that supplies a backend receives
+/// it.** This paragraph claimed the opposite until 2026-08-29 — that filing
+/// into `AtKeys` "keeps the atSign's private keys out of whatever backend an
+/// app happens to supply" — and five sites falsify it: every held nskey
+/// private, re-primed at each client start (`NskeySeeding.hydrateStoreFromFiling`),
+/// a freshly minted one and a rotated one, the atSign-level signing-root
+/// **private**, and every arriving conveyed secret. [SecretStore.putSecret]
+/// persists on every write, and [save] receives the complete list with each
+/// `Secret.value` as plaintext base64.
+///
+/// So a backend supplied here holds this atSign's namespace private keys and
+/// its signing-root private, and must be chosen on that basis — a platform
+/// keystore or biometric storage, not a convenience cache. Whether the
+/// behaviour or the promise should move is an open ruling; until it is made,
+/// this comment describes the behaviour.
 ///
 /// [save] receives the complete secret list and replaces whatever was stored.
 /// It is never called concurrently: [SecretStore] serialises saves, because a

@@ -1,5 +1,30 @@
 ## 3.15.0-rc1
 
+- feat: **`PqPosture.legacy` now stands in for a build that predates the
+  post-quantum providers, rather than a current build configured
+  conservatively.** It configures none of them, so a record stamped with one is
+  refused by name with `CryptoProviderNotRegistered` — the same refusal, from
+  the same place, that a build without those providers gives. Reading was
+  previously unconditional across every stage.
+  - **`PqPosture.configuresPqProviders`** is a new axis, false in `legacy`
+    alone. Settable only through a posture, like `disallowLegacyEncryption`:
+    a capability the SDK is asked to withhold is not per-app policy.
+  - **Assigning a post-quantum `CryptoConfig` to a preference whose posture
+    configures none is refused** at `AtClientPreference.crypto`. The two say
+    opposite things about one client, and silently letting either win is worse
+    than refusing. A provider of the app's own is unaffected — only the ids in
+    `pqCryptoProviderIds` are declined.
+  - `AtClientPreference.rolloutDifferencesFrom` compares the new axis, so a
+    cached client cannot be handed a preference promising a capability it was
+    not built with.
+  - **`legacy` is the only stage that configures none of them**, and a test
+    pins that. The stage withholds the *providers*, not the *keys*: such a
+    client still advertises a key package and is still conveyed nskey privates,
+    and then declines to use them — which is what makes it a faithful stand-in
+    for a build that predates the providers rather than a broken client.
+  - ⚠️ A client that already holds nskey privates in its keyfile — seeded
+    earlier under a stronger posture — can no longer use them at `legacy`.
+    Adopt `pqReady` if you hold the keys.
 - feat: **a namespace key generation now holds one key per configured
   key-establishment algorithm, and a client can add its own to an existing
   one.** The mint took `keyEstablishmentAlgorithms.first` and wrote a single
@@ -1014,8 +1039,8 @@ hunting for a constructor argument that never existed in a release. -->
     are read at a startup that has already run, so accepting one would leave
     the client reporting a stage it never applied.
   - Compared by **value**, never identity — callers hand over a fresh
-    preference object on every call. The posture is compared by the two fields
-    nothing else carries rather than as an object, since it declares no `==`
+    preference object on every call. The posture is compared by the three
+    fields nothing else carries rather than as an object, since it declares no `==`
     and only `const` instances are canonicalized.
   - `crypto`, `namespace` and `rootDomain` stay out of it: the first is
     adopted by a re-used client, and re-scoping one is an existing pattern.

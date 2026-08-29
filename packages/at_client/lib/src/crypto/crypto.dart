@@ -36,6 +36,7 @@ export 'package:at_client/src/crypto/nskey/nskey_records.dart'
         nskeyAdvertisementKey,
         nskeyCryptoProviderId,
         nskeyProviderFamily,
+        pqCryptoProviderIds,
         symmetricAesGcmCryptoProviderId;
 export 'package:at_client/src/crypto/nskey/nskey_resolver.dart';
 export 'package:at_client/src/crypto/nskey/rotation_policy.dart';
@@ -241,7 +242,11 @@ class CryptoConfig {
   /// so a client that cannot resolve that id fails on data someone already
   /// sent it. Writing is a fleet-wide commitment: the first client to write PQ
   /// produces records every other client must already be able to read. So the
-  /// read side goes first everywhere, and the write side flips once.
+  /// read side goes first, and the write side flips once.
+  ///
+  /// "First" rather than "everywhere": a posture whose `configuresPqProviders` is false
+  /// gets [CryptoConfig.legacy] instead of this set, and is exactly the client
+  /// that has not taken the read side yet.
   factory CryptoConfig.readsNskeyWritesLegacy(
           {required NskeyKeyRing keyRing,
           List<String> sealsToKeyAlgorithms = SecretSharingAlgos.keyAlgos,
@@ -298,13 +303,13 @@ class CryptoConfig {
   /// to have one would be pinned to whatever was current on the day it was
   /// written, and would sit out the migration it was supposed to ride.
   ///
-  /// The era default is chosen by the client's `PqPosture` at
-  /// construction, on the one axis that decides it:
-  /// [CryptoConfig.readsNskeyWritesLegacy] wherever `writesPqByDefault` is
-  /// false, which is both `PqPosture.legacy` and `PqPosture.pqReady`, and
+  /// The era default is chosen by the client's `PqPosture` at construction, on
+  /// the two axes that decide it: [CryptoConfig.legacy] wherever `configuresPqProviders`
+  /// is false, which is `PqPosture.legacy` and registers no post-quantum
+  /// provider at all; otherwise [CryptoConfig.readsNskeyWritesLegacy] wherever
+  /// `writesPqByDefault` is false, which is `PqPosture.pqReady`; and
   /// [CryptoConfig.nskey] under `PqPosture.pqActive` — built once per client,
-  /// adopted by
-  /// [adoptEraDefault], and looked up here. Moving the fleet default is
+  /// adopted by [adoptEraDefault], and looked up here. Moving the fleet default is
   /// therefore an edit to the default posture and nowhere else. It stopped
   /// being a constant because the nskey providers hold per-atSign state
   /// (a [ContentKeyCache], a key ring bound to one client), so one shared

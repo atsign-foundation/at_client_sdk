@@ -24,8 +24,42 @@ void main() {
       expect(p.seedNamespaceKeys, false);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.legacy);
       expect(p.writesPqByDefault, false);
+      expect(p.configuresPqProviders, false,
+          reason: 'the axis that makes this a stand-in for a build predating '
+              'the post-quantum providers rather than a current build '
+              'configured conservatively: an inbound record stamped with one '
+              'of them is refused, as a released pre-capability build '
+              'refuses it');
       expect(p.disallowLegacyEncryption, false);
       expect(p.mintLegacyMaterial, true);
+    });
+
+    test('legacy is the only stage that configures no post-quantum providers',
+        () {
+      // The contract the ladder states: exactly one stage stands in for a
+      // build that predates the providers, and it is the earliest.
+      //
+      // ⚠️ This row replaced one asserting that no stage reads post-quantum
+      // data without also moving the key exchange, whose stated reason — that
+      // a legacy key-exchange enrollment advertises no key package and so
+      // could be conveyed nothing — is FALSE. A key package is advertised in
+      // every mode, and `reconcileKeyPackage` mints one at every client start
+      // whatever the posture, so such a client acquires the privates and then
+      // declines to use them. The assertion happened to hold; its reason did
+      // not, and a pin defended by a false reason is worse than no pin.
+      final withoutProviders = [
+        PqPosture.legacy,
+        PqPosture.pqReady,
+        PqPosture.pqActive
+      ].where((p) => !p.configuresPqProviders).toList();
+
+      expect(withoutProviders, hasLength(1),
+          reason: 'more than one such stage, or none, means the ladder no '
+              'longer has exactly one pre-capability position');
+      expect(identical(withoutProviders.single, PqPosture.legacy), isTrue,
+          reason: 'and it must be the earliest stage — a later one declining '
+              'the providers would be a downgrade rather than a starting '
+              'point');
     });
 
     test('pqReady moves the credentials and not the data path', () {
@@ -43,21 +77,26 @@ void main() {
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(p.writesPqByDefault, false,
           reason: 'the whole point of this stage: keys move, data does not');
+      expect(p.configuresPqProviders, true);
       expect(p.disallowLegacyEncryption, false);
       expect(p.mintLegacyMaterial, true);
     });
 
     test('pqActive is post-quantum by default', () {
-      // The seven axes that MOVE between stages, as raw literals, like the two
-      // above: this is the stage an app adopts when it wants tomorrow's
-      // defaults today, and reading a value back through the type would follow
-      // an accidental edit silently.
+      // The eight axes pinned here, as raw literals, like the two above: this
+      // is the stage an app adopts when it wants tomorrow's defaults today,
+      // and reading a value back through the type would follow an accidental
+      // edit silently.
       //
-      // ⚠️ **NOT "every axis", which this said until 2026-08-26.** `PqPosture`
-      // carries nine fields. The two that hold the same value at every
+      // ⚠️ **NOT "every axis", which this said until 2026-08-26, and NOT
+      // "seven", which it said until 2026-08-29** — `configuresPqProviders`
+      // was added without sweeping either count. `PqPosture` carries ten
+      // fields; derive it with
+      // `grep -c '^  final ' lib/src/preference/pq_posture.dart` rather than
+      // reading it here. The two that hold the same value at every
       // released stage — `sealsToKeyAlgorithms` and
       // `keyEstablishmentAlgorithms` — are pinned once each in the 'seal-to
-      // list' group below, across all three stages, rather than three times
+      // list' group below, across every stage, rather than once per stage
       // here. `keyEstablishmentAlgorithms` had NO pin at all until a mutation
       // showed the whole suite staying green while it changed.
       const p = PqPosture.pqActive;
@@ -69,6 +108,7 @@ void main() {
       expect(p.seedNamespaceKeys, true);
       expect(p.keyExchangeMode, EnrollmentKeyExchangeMode.pq);
       expect(p.writesPqByDefault, true);
+      expect(p.configuresPqProviders, true);
       expect(p.disallowLegacyEncryption, true);
       expect(p.mintLegacyMaterial, true);
     });
@@ -87,6 +127,7 @@ void main() {
       expect(p.authenticationKeyAlgorithm, before.authenticationKeyAlgorithm);
       expect(p.seedNamespaceKeys, before.seedNamespaceKeys);
       expect(p.keyExchangeMode, before.keyExchangeMode);
+      expect(p.configuresPqProviders, before.configuresPqProviders);
       expect(p.mintLegacyMaterial, before.mintLegacyMaterial);
       // Refusing legacy writes is what "the PQ path is the default" means from
       // the other side, so it moves WITH writesPqByDefault rather than being a
@@ -117,6 +158,7 @@ void main() {
         seedNamespaceKeys: true,
         keyExchangeMode: EnrollmentKeyExchangeMode.pq,
         writesPqByDefault: true,
+        configuresPqProviders: true,
         disallowLegacyEncryption: false,
         mintLegacyMaterial: false,
         sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
@@ -142,6 +184,7 @@ void main() {
                 seedNamespaceKeys: true,
                 keyExchangeMode: EnrollmentKeyExchangeMode.pq,
                 writesPqByDefault: false,
+                configuresPqProviders: true,
                 disallowLegacyEncryption: true,
                 mintLegacyMaterial: true,
                 sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
@@ -162,6 +205,7 @@ void main() {
             seedNamespaceKeys: true,
             keyExchangeMode: EnrollmentKeyExchangeMode.pq,
             writesPqByDefault: true,
+            configuresPqProviders: true,
             disallowLegacyEncryption: false,
             mintLegacyMaterial: true,
             sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
@@ -234,6 +278,86 @@ void main() {
             ..seedNamespaceKeys = false,
           isA<AtClientPreference>()
               .having((p) => p.seedNamespaceKeys, 'seedNamespaceKeys', false));
+    });
+  });
+
+  group('a posture that configures no post-quantum providers', () {
+    AtClientPreference at(PqPosture posture) =>
+        AtClientPreference(posture: posture)
+          ..hiveStoragePath = 'test/hive'
+          ..commitLogPath = 'test/hive/path';
+
+    test('refuses a crypto config that registers them', () {
+      // The guard was written and left unexercised: every existing `.crypto =`
+      // site in the repo either sits on a configuring posture or registers a
+      // non-post-quantum id, so the whole refusal could be deleted with the
+      // unit suite and all three live packs staying green. This is the row
+      // that fails if it is.
+      expect(
+          () => at(PqPosture.legacy).crypto =
+              CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()),
+          throwsA(isA<ArgumentError>().having((e) => '${e.message}', 'message',
+              contains('configures no post-quantum providers'))),
+          reason: 'a client standing in for a build that predates these '
+              'schemes must not be handed them');
+    });
+
+    test('the refusal names the ids it declined', () {
+      // An operator has to be able to see WHICH provider was the problem;
+      // a refusal naming none of them cannot be acted on.
+      try {
+        at(PqPosture.legacy).crypto =
+            CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing());
+        fail('the assignment should have been refused');
+      } on ArgumentError catch (e) {
+        expect('${e.invalidValue}', contains(symmetricAesGcmCryptoProviderId));
+        expect('${e.invalidValue}', contains(nskeyCryptoProviderId));
+      }
+    });
+
+    test('a configuring posture takes the same config', () {
+      // Control 1: the refusal keys on the posture, not on the config. Without
+      // this the row above passes for a guard that refuses every caller.
+      expect(
+          () => at(PqPosture.pqReady).crypto =
+              CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing()),
+          returnsNormally);
+    });
+
+    test('the same posture takes a config with no post-quantum providers', () {
+      // Control 2: it keys on the config, not on the posture. The two controls
+      // together are what make the refusal a discriminator rather than a
+      // blanket.
+      expect(() => at(PqPosture.legacy).crypto = const CryptoConfig.legacy(),
+          returnsNormally);
+    });
+
+    test('the declined set covers every provider the SDK builds', () {
+      // The set states an enumeration duty in its dartdoc and nothing enforced
+      // it: a fourth post-quantum scheme added without touching the set would
+      // pass the refusal silently, handing a pre-capability client exactly the
+      // provider it is meant not to have. This is that duty, checked.
+      final built = CryptoConfig.nskey(keyRing: InMemoryNskeyKeyRing())
+          .providers
+          .map((p) => p.id)
+          .toSet();
+      expect(built, isNotEmpty,
+          reason: 'if the set assembled nothing, the row below compares two '
+              'empty sets and passes having measured nothing');
+      expect(pqCryptoProviderIds, containsAll(built),
+          reason: 'every provider CryptoConfig.nskey registers must be one the '
+              'refusal knows to decline; add the new id to pqCryptoProviderIds '
+              'in the same commit as the provider');
+    });
+
+    test("an app's own provider is not declined", () {
+      // The extension seam survives: only the ids this SDK ships for the
+      // post-quantum path are refused, so an app registering a provider of its
+      // own on the earliest stage is unaffected.
+      expect(
+          () => at(PqPosture.legacy).crypto =
+              const CryptoConfig(defaultProviderId: legacyCryptoProviderId),
+          returnsNormally);
     });
   });
 

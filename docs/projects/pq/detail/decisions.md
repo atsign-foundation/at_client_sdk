@@ -9027,9 +9027,11 @@ Two shapes the build settled that the ruling did not state:
   `PqPosture` declares no `==`, so comparing two of them is an identity
   test, and only `const` instances are canonicalized: a caller writing
   `PqPosture.legacy` without `const` would be refused over a
-  difference that does not exist. What is compared is the two posture fields
-  nothing else carries — `writesPqByDefault` and `keyExchangeMode` — beside the
-  three effective axes, which is the whole of what a posture can change.
+  difference that does not exist. What is compared is the three posture fields
+  nothing else carries — `writesPqByDefault`, `configuresPqProviders` and
+  `keyExchangeMode` — beside the three effective axes, which is the whole of
+  what a posture can change. (`configuresPqProviders` joined them 2026-08-29;
+  this said "the two posture fields" and named only the first and last.)
 
 The diagnostic names **every** differing axis rather than the first, because
 naming a stage moves the set it derives: asking for `signingRollout: rollout1`
@@ -10937,6 +10939,16 @@ must.
 
 ## 113. PqPosture: three postures, and the rollout they drive (2026-08-18)
 
+⚠️ **Amended 2026-08-29 — `configuresPqProviders` is a tenth axis**, and the
+table below gains a row for it. It is false in `legacy` alone, which is what
+makes that stage a stand-in for a build predating the post-quantum providers
+rather than a current build configured conservatively. The ruling's shape is
+unchanged: still three constants, still an axis per decision. gkc ruled against
+a fourth constant for the read-without-key-exchange combination — not because
+such a client could not work (it can: a key package is advertised in every mode
+and the privates are conveyed as normal) but because the release programme
+offers three positions and that combination is not one of them.
+
 **Ruled by gkc**, in a grilling on 2026-08-18. The rollout posture class —
 `ReleasePosture` until this ruling renamed it — becomes **`PqPosture`**: one
 class, an axis per decision, three pre-built constants, and a program may build
@@ -10952,6 +10964,7 @@ its own and inject it. The three constants are `legacy`
 | `seedNamespaceKeys` | false | true | true |
 | Key package published for secret sharing | no | yes | yes |
 | `keyExchangeMode` | legacy | pq | pq |
+| `configuresPqProviders` | false | true | true |
 | `writesPqByDefault` | false | false | true |
 | `disallowLegacyEncryption` | false | false | true |
 | `mintLegacyMaterial` | true | true | true |
@@ -11183,8 +11196,13 @@ everywhere"*. It was written for `pqReady` before `pqReady` had a name.
    KE-2"; the receiver-side list landed with KE-2's writer as
    `keyEstablishmentAlgorithms`), and a **sender-side** list of what it is prepared to seal to
    (today `SecretSharingAlgos.keyAlgos` and `suites`, both `static const`).
-   Verification and decryption stay maximal and are never posture-settable, so
-   cross-cutting invariant 1, *reads are universal*, holds by construction.
+   Verification stays maximal and is never posture-settable. ⚠️ **Decryption
+   stopped being so on 2026-08-29**: `PqPosture.configuresPqProviders` is false
+   in `legacy`, so that stage registers no post-quantum provider and is refused
+   by name. Cross-cutting invariant 1, *reads are universal*, still holds from
+   the capability stage onward. The carve-out is a configuration choice and not
+   a limit on what such a client could obtain: it is conveyed nskey privates
+   like any other enrollment and declines to use them.
 
 **A deliberate asymmetry, recorded so it is not read as an oversight.**
 `disallowLegacyEncryption` is posture-only with no escape hatch while the
@@ -11361,18 +11379,32 @@ prefix-match a real test — but the rail cannot tell a test from prose.
 
 ### A grid is the right shape for 3 rows
 
-`PqPosture` declares 9 axes and only 6 vary across the 3 stages
-(`packages/at_client/lib/src/preference/pq_posture.dart`).
+`PqPosture` declares 10 axes and only 7 vary across the 3 stages — re-derive
+the first with `grep -c '^  final ' packages/at_client/lib/src/preference/pq_posture.dart` rather than trusting this sentence, which has been stale
+twice.
 `mintLegacyMaterial`, `sealsToKeyAlgorithms` and `keyEstablishmentAlgorithms`
 are byte-identical at legacy, pqReady and pqActive, and the last one's dartdoc
 calls it a deployment decision rather than a stage decision. Every row whose
 clauses turn on those three is posture-invariant by construction.
 
 gkc's suspicion about A3 holds and is sharper than he put it. The live proof in
-`nskey_data_path_live_test.dart` builds its client from a bare
-`AtClientPreference` — therefore `PqPosture.legacy` — and then sets
-`..crypto = CryptoConfig.nskey(...)`. Every clause it asserts is already proven
-at the legacy stage and is identical at the other two. What the posture decides
+`nskey_data_path_live_test.dart` builds its client at a fixture posture holding
+every writing axis at `legacy` while configuring the post-quantum providers,
+and then sets `..crypto = CryptoConfig.nskey(...)`. Every clause it asserts is
+already proven with no writing axis moved and is identical at the other two
+stages.
+
+⚠️ **Two things in this paragraph were wrong and are corrected above.** It said
+the test builds "a bare `AtClientPreference` — therefore `PqPosture.legacy`":
+a bare preference has been `PqPosture.pqReady` since the default moved, so the
+inference never held. And on 2026-08-29 `PqPosture.legacy` stopped configuring
+the post-quantum providers at all, which makes `legacy` + `CryptoConfig.nskey`
+a combination `AtClientPreference.crypto` now refuses outright — so the
+construction the argument rested on can no longer be built. **Whether the
+"3 of 5 do not vary" classification still holds is therefore open**: it was
+derived from a posture-invariance that one axis no longer has. Left as it was
+rather than re-ruled here.
+ What the posture decides
 is not what the data path guarantees, but whether an app that configures
 nothing enters it. 3 of the 5 A3 rows do not vary; the 2 that do are UC-A3.2
 (whether the mint fires at all) and UC-A3.3 (whose escape hatch pqActive

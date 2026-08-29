@@ -281,8 +281,9 @@ void main() {
     // Durability across BOTH advances, for both earlier rungs.
     expect((await atPqActive.get(wroteAtLegacy)).value, 'written-at-legacy',
         reason: 'the record written at legacy is unreadable two rungs later. '
-            'Reads are maximal under every posture, and a ladder that loses '
-            'its own earliest write means an upgrading install loses data');
+            'Upgrading only ever ADDS read-capability, and a ladder that '
+            'loses its own earliest write means an upgrading install loses '
+            'data');
     expect((await atPqActive.get(wroteAtPqReady)).value, 'written-at-pqready',
         reason: 'the record written at pqReady is unreadable after the move '
             'to pqActive');

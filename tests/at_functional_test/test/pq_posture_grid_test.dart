@@ -104,6 +104,7 @@ void main() {
     seedNamespaceKeys: true,
     keyExchangeMode: PqPosture.pqActive.keyExchangeMode,
     writesPqByDefault: true,
+    configuresPqProviders: true,
     disallowLegacyEncryption: false,
     mintLegacyMaterial: true,
     sealsToKeyAlgorithms: PqPosture.pqActive.sealsToKeyAlgorithms,
@@ -133,9 +134,8 @@ void main() {
   /// The namespace the RECEIVER has never seeded.
   ///
   /// The receiver's posture is not the second axis of a data-path grid, and
-  /// this namespace is why. Reads and decryption are maximal under every
-  /// posture and are not settable at all, so the only thing a receiver's
-  /// posture changes for a write *toward* it is whether it published a
+  /// this namespace is why. What a receiver's posture changes for a write
+  /// *toward* it is only whether it published a
   /// namespace key. That is a property of `(receiver, namespace)`, not of
   /// which enrollment eventually reads — so the axis is **readiness**, and it
   /// is expressed by which namespace the write targets.
@@ -181,12 +181,20 @@ void main() {
     namespaces: {nsReady: 'rw', nsUnready: 'rw'},
   );
 
-  // The receiver side. Three postures in ONE namespace is deliberate: it is
+  // The receiver side. Four postures in ONE namespace is deliberate: it is
   // both what makes [nsReady] seeded and the two-installs-of-one-app shape,
   // and the second enrollment to start must ADOPT the published key rather
   // than mint a rival generation.
+  //
+  // `legacy` and `pqReading` fail to read for DIFFERENT reasons, and keeping
+  // both is what stops one masking the other: `legacy` configures no
+  // post-quantum provider, so it is refused on the crypto path before any key
+  // is looked for; `pqReading` configures them and never seeds, so it is
+  // refused on the key-acquisition path. With only the first, nothing here
+  // would exercise the second at all.
   for (final entry in <String, PqPosture>{
     'legacy': PqPosture.legacy,
+    'pqReading': legacyPlusPqProviders,
     'pqReady': PqPosture.pqReady,
     'pqActive': PqPosture.pqActive,
   }.entries) {
@@ -511,7 +519,7 @@ void main() {
     // What this asserts is the pair arm 3 needs an after-state for: exactly
     // one reader reads, and the others fail for the conveyance-pending reason
     // SPECIFICALLY rather than for any reason at all.
-    final readers = ['r-legacy', 'r-pqReady', 'r-pqActive'];
+    final readers = ['r-legacy', 'r-pqReading', 'r-pqReady', 'r-pqActive'];
     final stamp = DateTime.now().microsecondsSinceEpoch;
     final senderName = 's-pqActive';
 
@@ -538,10 +546,19 @@ void main() {
                 'written, which is neither a read nor a pending conveyance');
         read.add(readerName);
       } on Object catch (e) {
-        expect('$e', contains('no nskey private held'),
-            reason: '$readerName failed for a reason that is NOT a pending '
-                'conveyance. Reads are maximal under every posture by '
-                'construction, so any other failure here is a real one: $e');
+        // Which refusal is itself a claim about the stage, so it is asserted
+        // rather than accepted: a reader that configures the providers can
+        // only be short of the key, and one that does not can only be short
+        // of the provider. Accepting either message for either reader would
+        // pass for a client failing on the wrong layer.
+        final expected =
+            cellSpec[readerName]!.posture.configuresPqProviders
+                ? 'no nskey private held'
+                : 'is not registered';
+        expect('$e', contains(expected),
+            reason: '$readerName failed for a reason that is neither a '
+                'pending conveyance nor the refusal its own stage implies, '
+                'so this is a real failure: $e');
         pending.add(readerName);
       }
     }
@@ -556,9 +573,11 @@ void main() {
     //
     // That is not a hole: it is the pre-capability install of UC-B4.3, whose
     // remedy is upgrading that install, and it is why a rollout seeds a stage
-    // BEFORE it switches writes over. "Reads are maximal under every posture"
-    // is a statement about the crypto path, and this is the key-acquisition
-    // path — a distinction nothing else in the suite exercises.
+    // BEFORE it switches writes over. Two routes reach it, and the grid holds
+    // one reader for each — the crypto path, where a stage configuring no
+    // post-quantum provider is refused before any key is sought, and the
+    // key-acquisition path, where a stage that configures them never acquired
+    // the namespace private. Nothing else in the suite exercises the second.
     final shouldRead = [
       for (final r in readers)
         if (cellSpec[r]!.posture.seedNamespaceKeys) r
@@ -590,9 +609,10 @@ void main() {
     for (final r in shouldNotRead) {
       expect(pending, contains(r),
           reason: '$r does not seed, so it can never have acquired the '
-              'namespace private and must be pending. If it READ, the '
-              'pre-capability install of UC-B4.3 is not the failure mode the '
-              'catalogue says it is');
+              'namespace private and must have failed — on the crypto path '
+              'or the key-acquisition one. If it READ, the pre-capability '
+              'install of UC-B4.3 is not the failure mode the catalogue says '
+              'it is');
     }
     expect(shouldRead, isNotEmpty,
         reason: 'no reader was expected to read, so this cell discriminates '
@@ -745,8 +765,9 @@ void main() {
       expect(notification.value, value,
           reason: "$name's notification arrived but its value did not "
               'decrypt to what was sent. The receiver decrypts with whatever '
-              'the sender sealed with, and reads are maximal under every '
-              'posture — so a mismatch here is a real cross-posture failure');
+              'the sender sealed with, and every receiver in this grid '
+              'configures the providers its senders use — so a mismatch here '
+              'is a real cross-posture failure');
       stdout.writeln('##GRID## notify $name: delivered and decrypted');
     }
 

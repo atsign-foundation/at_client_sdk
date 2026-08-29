@@ -508,8 +508,13 @@ void main() {
               'the preference still holds the untouched marker');
     });
 
-    test('the legacy posture keeps writes legacy in the adopted era set',
+    test('the default posture keeps writes legacy in the adopted era set',
         () async {
+      // A bare preference, which is `PqPosture.pqReady` — NOT legacy, though
+      // this test was named for it until the default moved. The distinction
+      // is the whole of the row below: pqReady reads post-quantum records and
+      // legacy does not, so a test claiming to cover legacy while building
+      // the default covers neither.
       AtClientPreference preferences = AtClientPreference()
         ..hiveStoragePath = 'test/hive'
         ..commitLogPath = 'test/hive/path';
@@ -524,9 +529,81 @@ void main() {
 
       final config = CryptoConfig.eraDefaultFor(ac)!;
       expect(config.defaultProviderId, legacyCryptoProviderId,
-          reason: 'the 3.x posture: read everything, write legacy');
+          reason: 'the 3.x default: read everything, write legacy');
       expect(config.lookup(symmetricAesGcmCryptoProviderId), isNotNull,
-          reason: 'reading PQ records is unconditional in every posture');
+          reason: 'the default posture configures the post-quantum providers, '
+              'so a record already sent to this client opens');
+    });
+
+    test('the legacy posture advertises no key package and asks for nothing',
+        () async {
+      // The startup's two ACTIVE post-quantum steps are otherwise ungated by
+      // posture, which left this stage minting a key package, publishing it,
+      // and asking peers for privates it would then refuse to use. The
+      // advertisement is the harmful half — a peer seals to it and the record
+      // comes back refused.
+      AtClientPreference preferences =
+          AtClientPreference(posture: PqPosture.legacy)
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/path';
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac = await AtClientImpl.create('@alice', 'buzz', preferences,
+          remoteSecondary: mockRemoteSecondary, atChops: chops);
+
+      final gates = (ac as AtClientImpl).pqBootstrap!.gates;
+      expect(gates.reconcileKeyPackage, isFalse,
+          reason: 'advertising an encapsulation key it will not decapsulate '
+              'with invites peers to seal records this client refuses');
+      expect(gates.requestMissingPrivates, isFalse,
+          reason: 'and asking for privates it has no provider to use files '
+              'material that can only sit there');
+      expect(gates.sweepUnanchoredEnrollments, isTrue,
+          reason: 'the control: the posture switches off exactly the two '
+              'post-quantum steps, not the startup generally');
+    });
+
+    test('a configuring posture leaves both steps on', () async {
+      // The other arm. Without it the rows above pass for a build that gated
+      // the steps for every posture.
+      AtClientPreference preferences =
+          AtClientPreference(posture: PqPosture.pqReady)
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/path';
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac = await AtClientImpl.create('@bob', 'buzz', preferences,
+          remoteSecondary: mockRemoteSecondary, atChops: chops);
+
+      final gates = (ac as AtClientImpl).pqBootstrap!.gates;
+      expect(gates.reconcileKeyPackage, isTrue);
+      expect(gates.requestMissingPrivates, isTrue);
+    });
+
+    test('the legacy posture configures no post-quantum providers', () async {
+      // The arm the row above was named for and never covered. A client at
+      // this stage stands in for a build that predates those providers, so an
+      // inbound record naming one has nothing to resolve to.
+      AtClientPreference preferences =
+          AtClientPreference(posture: PqPosture.legacy)
+            ..hiveStoragePath = 'test/hive'
+            ..commitLogPath = 'test/hive/path';
+      AtChops chops = AtChopsImpl(mockAtChopsKeys);
+      AtClient ac = await AtClientImpl.create(
+        '@alice',
+        'buzz',
+        preferences,
+        remoteSecondary: mockRemoteSecondary,
+        atChops: chops,
+      );
+
+      final config = CryptoConfig.eraDefaultFor(ac)!;
+      expect(config.defaultProviderId, legacyCryptoProviderId);
+      expect(config.lookup(symmetricAesGcmCryptoProviderId), isNull,
+          reason: 'the axis that makes this stage a stand-in for a '
+              'pre-capability build rather than a conservatively configured '
+              'current one');
+      expect(config.lookup(nskeyCryptoProviderId), isNull,
+          reason: 'and the conveyance provider with it — half a set would let '
+              'a record resolve one hop and fail at the next');
     });
 
     test('the pqActive posture makes PQ writes the adopted era default',

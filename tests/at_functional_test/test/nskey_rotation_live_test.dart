@@ -52,7 +52,7 @@ void main() {
     await keysIo.write(atSign, AtKeys());
     final manager =
         await TestUtils.initAtClient(atSign, namespace, atKeysIo: keysIo,
-            posture: PqPosture.legacy);
+            posture: legacyPlusPqProviders);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -90,7 +90,7 @@ void main() {
         approver: approver,
         atSign: atSign,
         namespace: namespace,
-        preference: TestUtils.getPreference(atSign, posture: PqPosture.legacy),
+        preference: TestUtils.getPreference(atSign, posture: legacyPlusPqProviders),
         rootDomain: 'vip.ve.atsign.zone',
         rootPort: TestUtils.rootServerPort,
         deviceName: '$device-$runId',

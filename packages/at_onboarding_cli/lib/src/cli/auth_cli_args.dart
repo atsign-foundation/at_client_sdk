@@ -384,7 +384,9 @@ class AuthCliArgs {
     // pin itself to the stage that was current on the day it was written.
     p.addOption(argNamePosture,
         help: 'How far into the post-quantum rollout to run. legacy drives no '
-            'upgrade; pqReady moves the credentials and keeps writes legacy; '
+            'upgrade and configures no post-quantum providers, so it cannot '
+            'read post-quantum data; pqReady moves the credentials and keeps '
+            'writes legacy; '
             'pqActive makes post-quantum writes the default. Defaults to the '
             'built-in default of the at_client this was built against',
         mandatory: false,

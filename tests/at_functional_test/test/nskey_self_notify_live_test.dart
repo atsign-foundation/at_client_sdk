@@ -71,7 +71,7 @@ void main() {
     // and the enrollment handshake depends on those writes. Only the SENDER
     // needs to write PQ, and posture is per-client.
     final manager = await TestUtils.initAtClient(atSign, namespace,
-        atKeysIo: approverKeysIo, posture: PqPosture.legacy);
+        atKeysIo: approverKeysIo, posture: legacyPlusPqProviders);
     approver = manager.atClient;
     await AtClientSecretSharing.forClient(approver).register();
   });
@@ -95,7 +95,7 @@ void main() {
   /// where it was told.
   Future<EnrolledClient> enrol(String device) {
     final preference =
-        TestUtils.getPreference(atSign, posture: PqPosture.legacy);
+        TestUtils.getPreference(atSign, posture: legacyPlusPqProviders);
     preference
       ..hiveStoragePath = 'test/hive/client/$atSign/$device-$runId'
       ..commitLogPath = 'test/hive/client/$atSign/$device-$runId';

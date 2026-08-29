@@ -14,12 +14,18 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart';
 /// or a test drive the whole rollout, without hunting down the knobs one by
 /// one.
 ///
-/// **A posture is a floor, never a downgrade.** Key material wins for
-/// authenticating and reading: [legacy] means "do not drive an upgrade", not
-/// "return to legacy", so a client built against an older at_client cannot
-/// un-retrofit an atSign that has already moved. Verification and decryption
-/// are maximal under every posture and are not settable here at all, which is
-/// what makes reads universal by construction rather than by agreement.
+/// **A posture is a floor for what a client DRIVES, never a downgrade of what
+/// an atSign already holds.** Key material wins for authenticating: [legacy]
+/// means "do not drive an upgrade", not "return to legacy", so a client built
+/// against an older at_client cannot un-retrofit an atSign that has already
+/// moved.
+///
+/// ⚠️ **Reading is the exception, and it is a capability rather than a
+/// default.** [configuresPqProviders] is false under [legacy] alone, and a client that
+/// registers no post-quantum providers cannot open a record a post-quantum
+/// peer sent it. Nothing about reading is settable beside the posture, so
+/// "can this client read that" is answered by the stage an app chose and never
+/// by a knob it left alone.
 ///
 /// The axes:
 ///
@@ -35,6 +41,8 @@ import 'package:at_client/src/secret_sharing/algo_ids.dart';
 /// - **Whether namespace keys are seeded** — [seedNamespaceKeys], minting and
 ///   publishing the encapsulation keys other atSigns seal to.
 /// - **How an enrollment's `apkamSymmetricKey` travels** — [keyExchangeMode].
+/// - **Whether the post-quantum providers are configured at all** —
+///   [configuresPqProviders], which decides what this client can *read*.
 /// - **What encrypts new data** — [writesPqByDefault] selects the era
 ///   `CryptoConfig` a client adopts at construction: the nskey provider set
 ///   with writes still legacy, or with post-quantum writes the default. An
@@ -103,6 +111,43 @@ class PqPosture {
   /// everything (`CryptoConfig.readsNskeyWritesLegacy`).
   final bool writesPqByDefault;
 
+  /// Whether this client configures the post-quantum crypto providers at all —
+  /// and therefore whether it can **read** post-quantum-encrypted data.
+  ///
+  /// ⚠️ **The one axis that removes a capability rather than deferring one.**
+  /// Every other axis decides what this client *does*; this decides what it
+  /// *can* do. False means the era `CryptoConfig` registers no post-quantum
+  /// providers, so a record stamped with one of their ids has nothing to
+  /// resolve to and the read throws `CryptoProviderNotRegistered` naming the
+  /// id — the same refusal, from the same place, as a build that predates
+  /// those providers.
+  ///
+  /// That fidelity is why it is settable. Data another atSign has already sent
+  /// is the one thing a rollout position cannot take back, so a client turning
+  /// this off is choosing to be an un-upgraded reader rather than choosing a
+  /// default. It is false under [legacy] and true under [pqReady] and
+  /// [pqActive].
+  ///
+  /// ⚠️ **What this is NOT.** Turning it off does not make key material
+  /// unreachable — an enrollment advertises a key package in **every**
+  /// key-exchange mode (`AtEnrollmentRequest`'s own dartdoc says so, and
+  /// `reconcileKeyPackage` mints one at every client start regardless of
+  /// posture), so a client at [legacy] still acquires conveyed nskey privates
+  /// and then declines to use them. The axis withholds the *providers*, not
+  /// the *keys*. Anything reading it as a statement about what a client could
+  /// obtain is wrong.
+  ///
+  /// **Settable only here**, like [disallowLegacyEncryption]: a capability the
+  /// SDK is asked to withhold is not the same kind of thing as a per-app
+  /// preference, and an escape hatch beside it would make "this client cannot
+  /// read post-quantum data" a claim about two values rather than one. A
+  /// deployment wanting another combination builds a posture that says so.
+  ///
+  /// Writing post-quantum data without reading it is **refused at
+  /// construction**: a client sealing records its own atSign cannot open is a
+  /// configuration with no use.
+  final bool configuresPqProviders;
+
   /// Whether new data is refused rather than encrypted with the legacy
   /// provider.
   ///
@@ -116,7 +161,7 @@ class PqPosture {
   /// Whether onboarding an atSign mints the classical key material beside the
   /// post-quantum material.
   ///
-  /// True in all three released stages: the ecosystem floor decides when an
+  /// True in every released stage: the ecosystem floor decides when an
   /// atSign can stop holding legacy keys, and no client-side stage can know
   /// that. It is an axis so that the stop-release, and a deployment that
   /// controls every client of its namespaces, can flip it deliberately.
@@ -139,7 +184,7 @@ class PqPosture {
   /// cost — the two atSigns then cannot exchange data at all. Which is why the
   /// default never imposes it.
   ///
-  /// Identical in all three released stages, deliberately: which KEM is
+  /// Identical in every released stage, deliberately: which KEM is
   /// acceptable is a **deployment** decision, not a rollout position, so the
   /// stages have nothing to say about it. It is an axis so a deployment can
   /// state it in the same place as everything else it states.
@@ -163,7 +208,7 @@ class PqPosture {
   /// that key rather than deleting it: envelopes already sealed to it still
   /// open, and senders stop addressing it.
   ///
-  /// Identical in all three released stages, for the same reason
+  /// Identical in every released stage, for the same reason
   /// [sealsToKeyAlgorithms] is: which KEM an atSign publishes is a
   /// **deployment** decision rather than a rollout position. It is an axis so
   /// that a deployment states it where it states everything else.
@@ -180,6 +225,7 @@ class PqPosture {
     required bool seedNamespaceKeys,
     required EnrollmentKeyExchangeMode keyExchangeMode,
     required bool writesPqByDefault,
+    required bool configuresPqProviders,
     required bool disallowLegacyEncryption,
     required bool mintLegacyMaterial,
     required List<String> sealsToKeyAlgorithms,
@@ -199,12 +245,20 @@ class PqPosture {
           'a posture that refuses legacy writes while writing legacy by '
               'default refuses its own writes; set writesPqByDefault too');
     }
+    if (writesPqByDefault && !configuresPqProviders) {
+      throw ArgumentError.value(
+          configuresPqProviders,
+          'configuresPqProviders',
+          'a posture that writes post-quantum data it cannot read seals '
+              'records its own atSign cannot open; set configuresPqProviders too');
+    }
     return PqPosture._(
       authenticationKeyAlgorithm: authenticationKeyAlgorithm,
       dataSigningKeyAlgorithms: dataSigningKeyAlgorithms,
       seedNamespaceKeys: seedNamespaceKeys,
       keyExchangeMode: keyExchangeMode,
       writesPqByDefault: writesPqByDefault,
+      configuresPqProviders: configuresPqProviders,
       disallowLegacyEncryption: disallowLegacyEncryption,
       mintLegacyMaterial: mintLegacyMaterial,
       sealsToKeyAlgorithms: sealsToKeyAlgorithms,
@@ -218,25 +272,40 @@ class PqPosture {
     required this.seedNamespaceKeys,
     required this.keyExchangeMode,
     required this.writesPqByDefault,
+    required this.configuresPqProviders,
     required this.disallowLegacyEncryption,
     required this.mintLegacyMaterial,
     required this.sealsToKeyAlgorithms,
     required this.keyEstablishmentAlgorithms,
   });
 
-  /// The default: classical throughout, and driving no upgrade.
+  /// A client built before any of this: classical throughout, driving no
+  /// upgrade, and unable to read post-quantum data at all.
   ///
-  /// Reads are fully post-quantum-capable — they are under every posture — but
-  /// nothing this client writes, enrolls or retrofits outruns what the rest of
+  /// Nothing this client writes, enrolls or retrofits outruns what the rest of
   /// the fleet can read. The enrollment holds no signing key of its own, its
   /// APKAM authentication key signs, and `_apsk` advertises that key as the
   /// bare public key string everything deployed can parse.
+  ///
+  /// ⚠️ **It reads no post-quantum data either**, which is what separates this
+  /// stage from "the current build configured conservatively". A peer sealing
+  /// to this atSign's namespace key produces a record this client refuses with
+  /// `CryptoProviderNotRegistered`, as a released build from before those
+  /// providers existed refuses it. An app that needs to read post-quantum data
+  /// wants [pqReady].
+  ///
+  /// ⚠️ The refusal is a *configuration* choice, not an inability: this
+  /// enrollment still advertises a key package and can still be conveyed the
+  /// privates it is declining to use. That is what makes the stage a faithful
+  /// stand-in rather than a broken client, and it is also why nothing here
+  /// argues from key availability.
   static const PqPosture legacy = PqPosture._(
     authenticationKeyAlgorithm: SigningAlgoType.rsa2048,
     dataSigningKeyAlgorithms: {},
     seedNamespaceKeys: false,
     keyExchangeMode: EnrollmentKeyExchangeMode.legacy,
     writesPqByDefault: false,
+    configuresPqProviders: false,
     disallowLegacyEncryption: false,
     mintLegacyMaterial: true,
     sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
@@ -262,6 +331,7 @@ class PqPosture {
     seedNamespaceKeys: true,
     keyExchangeMode: EnrollmentKeyExchangeMode.pq,
     writesPqByDefault: false,
+    configuresPqProviders: true,
     disallowLegacyEncryption: false,
     mintLegacyMaterial: true,
     sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,
@@ -305,6 +375,7 @@ class PqPosture {
     seedNamespaceKeys: true,
     keyExchangeMode: EnrollmentKeyExchangeMode.pq,
     writesPqByDefault: true,
+    configuresPqProviders: true,
     disallowLegacyEncryption: true,
     mintLegacyMaterial: true,
     sealsToKeyAlgorithms: SecretSharingAlgos.keyAlgos,

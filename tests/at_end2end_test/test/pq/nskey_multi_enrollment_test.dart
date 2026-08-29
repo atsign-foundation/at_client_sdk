@@ -58,9 +58,9 @@ void main() {
     bob = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final authType = ConfigUtil.getYaml()['authType'];
     await TestSuiteInitializer.getInstance()
-        .testInitializer(alice, namespace, authType, posture: PqPosture.legacy);
+        .testInitializer(alice, namespace, authType, posture: legacyPlusPqProviders);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(bob, namespace, authType, posture: PqPosture.legacy);
+        .testInitializer(bob, namespace, authType, posture: legacyPlusPqProviders);
   });
 
   test(
@@ -72,7 +72,7 @@ void main() {
     // failure would surface much later, far from its cause.
     final clients = await ConcurrentClients.open(
         alice, bob, sharedNamespace, ConfigUtil.getYaml()['authType'],
-            posture: PqPosture.legacy);
+            posture: legacyPlusPqProviders);
     final aliceClient = clients.first;
     final bobPrimary = clients.second;
 
@@ -96,7 +96,7 @@ void main() {
       atSign: bob,
       namespace: sharedNamespace,
       preference: TestPreferences.getInstance().getPreference(bob,
-          posture: PqPosture.legacy),
+          posture: legacyPlusPqProviders),
       rootDomain: bobPreference.rootDomain,
       rootPort: bobPreference.rootPort,
       deviceName: 'bob2-${DateTime.now().microsecondsSinceEpoch}',
@@ -210,7 +210,7 @@ void main() {
       // enrollment carries an in-memory one of its own, so it cannot inherit
       // bob's namespace private through a shared store either way.
       preference: TestPreferences.getInstance().forCoLocatedClient(alice,
-          posture: PqPosture.legacy, device: 'alice2-$runStamp'),
+          posture: legacyPlusPqProviders, device: 'alice2-$runStamp'),
       rootDomain: alicePreference.rootDomain,
       rootPort: alicePreference.rootPort,
       deviceName: 'alice2-$runStamp',

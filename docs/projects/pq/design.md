@@ -645,8 +645,11 @@ keypair, its own namespaces. Apps migrate independently and never have to agree.
    ([`decisions.md` 56.4](detail/decisions.md#564-from-the-pq-projects-view-40-is-final-3x-with-different-flag-defaults)).
 
 `appMetadata.providerId` on each stored value **and** on the notification frame
-tells the recipient which provider opens it; **reads are universal** regardless of
-the writer's scheme. The only write-path gate is **cold start**
+tells the recipient which provider opens it; **reads are universal** across the
+schemes a client's stage configures, regardless of the writer's. (A
+`PqPosture.legacy` client configures none of the post-quantum ones and is
+refused by name; see the cross-cutting invariant in section 13 of
+`acceptance.md`.) The only write-path gate is **cold start**
 ([§1.6](#16-the-uniform-data-flow--cold-start--resolutionordering)): a destination
 with no published nskey for the namespace is refused by name, with
 `allowLegacyCryptoFallback` as the explicit escape hatch.

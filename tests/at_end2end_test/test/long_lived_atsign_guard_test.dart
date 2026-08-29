@@ -8,8 +8,8 @@
 /// to — so a mis-postured client there does not fail, it arms a failure for
 /// somewhere else later.
 ///
-/// Pinning `PqPosture.legacy` at every call site is a convention, and a
-/// convention is what this file exists to replace. Pure local inspection; it
+/// Pinning a posture that writes nothing durable at every call site is a
+/// convention, and a convention is what this file exists to replace. Pure local inspection; it
 /// talks to no atServer.
 library;
 

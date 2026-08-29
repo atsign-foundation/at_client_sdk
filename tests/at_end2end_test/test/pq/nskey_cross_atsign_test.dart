@@ -37,9 +37,9 @@ void main() {
     bob = ConfigUtil.getYaml()['atSign']['secondAtSign'];
     final authType = ConfigUtil.getYaml()['authType'];
     await TestSuiteInitializer.getInstance()
-        .testInitializer(alice, namespace, authType, posture: PqPosture.legacy);
+        .testInitializer(alice, namespace, authType, posture: legacyPlusPqProviders);
     await TestSuiteInitializer.getInstance()
-        .testInitializer(bob, namespace, authType, posture: PqPosture.legacy);
+        .testInitializer(bob, namespace, authType, posture: legacyPlusPqProviders);
   });
 
   /// Bring an atSign up on the nskey data path, minting and publishing its
@@ -48,7 +48,7 @@ void main() {
   Future<({AtClient client, PublishedNskeyKeyRing ring})> nskeyClient(
       String atSign) async {
     final preference = TestPreferences.getInstance().getPreference(atSign,
-        posture: PqPosture.legacy);
+        posture: legacyPlusPqProviders);
     final manager = await AtClientManager.getInstance()
         .setCurrentAtSign(atSign, namespace, preference);
     final client = manager.atClient;
@@ -138,7 +138,7 @@ void main() {
     // sharedWith.
     await AtClientManager.getInstance().setCurrentAtSign(
         bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: PqPosture.legacy));
+            posture: legacyPlusPqProviders));
     await E2ESyncService.getInstance().syncData(bobSide.client.syncService);
 
     final received = await bobSide.client.get(AtKey()
@@ -208,7 +208,7 @@ void main() {
     // it holds is ciphertext, not the plaintext alice passed.
     await AtClientManager.getInstance().setCurrentAtSign(
         bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: PqPosture.legacy));
+            posture: legacyPlusPqProviders));
     final listed = (await bobSide.client.notifyList(regex: keyName))
         .replaceFirst('data:', '');
     final frames = jsonDecode(listed) as List;
@@ -292,7 +292,7 @@ void main() {
 
     await AtClientManager.getInstance().setCurrentAtSign(
         bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: PqPosture.legacy));
+            posture: legacyPlusPqProviders));
     await E2ESyncService.getInstance().syncData(bobSide.client.syncService);
 
     final received = await bobSide.client.get(AtKey()
@@ -329,7 +329,7 @@ void main() {
     // Bob rotates. Alice is told nothing — the whole point.
     await AtClientManager.getInstance().setCurrentAtSign(
         bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: PqPosture.legacy));
+            posture: legacyPlusPqProviders));
     final rotated = await bobSide.ring.mintAndPublish(namespace);
     expect(rotated.nskeyKid, isNotNull);
 
@@ -369,7 +369,7 @@ void main() {
 
     await AtClientManager.getInstance().setCurrentAtSign(
         alice, namespace, TestPreferences.getInstance().getPreference(alice,
-            posture: PqPosture.legacy));
+            posture: legacyPlusPqProviders));
     await E2ESyncService.getInstance().syncData(aliceSide.client.syncService);
 
     final received = await aliceSide.client.get(AtKey()
@@ -399,7 +399,7 @@ void main() {
 
     await AtClientManager.getInstance().setCurrentAtSign(
         bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: PqPosture.legacy));
+            posture: legacyPlusPqProviders));
     await bobSide.ring.mintAndPublish(unusedNs);
 
     // A fresh sender. ⚠️ This said it was so the answer came "from bob's
@@ -436,7 +436,7 @@ void main() {
 
     await AtClientManager.getInstance().setCurrentAtSign(
         bob, namespace, TestPreferences.getInstance().getPreference(bob,
-            posture: PqPosture.legacy));
+            posture: legacyPlusPqProviders));
 
     // Bob asks alice's atServer for the conveyance carrying her self CK. It is
     // a self key of alice's, so he is not a party to it at all.

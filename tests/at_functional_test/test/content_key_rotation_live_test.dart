@@ -43,12 +43,12 @@ void main() {
     // Writes go out on the nskey data path, not legacy — the era default reads
     // PQ and writes legacy, and this scenario is about a PQ-written value.
     final preference = TestUtils.getPreference(atSign,
-        posture: PqPosture.legacy)
+        posture: legacyPlusPqProviders)
       ..crypto = CryptoConfig.nskey(keyRing: ring);
 
     atClientManager =
         await TestUtils.initAtClient(atSign, namespace, preference: preference,
-            posture: PqPosture.legacy);
+            posture: legacyPlusPqProviders);
     atClient = atClientManager.atClient;
 
     // The manager the providers were wired with, so the rotation runs over the

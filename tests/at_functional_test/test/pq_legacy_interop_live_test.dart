@@ -56,7 +56,7 @@ void main() {
   String keysFilePath(String atSign) => 'test/testData/$atSign.atKeys';
 
   AtClientPreference preferenceFor(String atSign) =>
-      TestUtils.getPreference(atSign, posture: PqPosture.legacy)
+      TestUtils.getPreference(atSign, posture: legacyPlusPqProviders)
         ..rootDomain = rootDomain.rootDomain
         ..rootPort = rootDomain.rootPort
         ..namespace = namespace;
