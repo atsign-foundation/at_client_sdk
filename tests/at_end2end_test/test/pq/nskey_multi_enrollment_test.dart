@@ -42,6 +42,12 @@ void main() {
   /// an earlier run or the conveyance below proves nothing.
   final sharedNamespace = 'multi${DateTime.now().microsecondsSinceEpoch}';
 
+  /// A namespace @bob's second enrollment is never granted, used to show what
+  /// an UNAUTHORISED enrollment of the recipient can reach. @bob publishes a
+  /// namespace key for it too, so the record withheld below is a post-quantum
+  /// share exactly like the ones above and differs only in the grant.
+  final withheldNamespace = 'held${DateTime.now().microsecondsSinceEpoch}';
+
   /// Distinguishes this run's device names. An enrollment is one-shot per
   /// `(appName, deviceName)` — a second run reusing a name is refused by the
   /// atServer, not silently reused — so a fixed name would pass once.
@@ -127,6 +133,12 @@ void main() {
     // write would be readable by both enrollments for entirely different
     // reasons and this test would pass for the wrong one.
     final asWritten = await aliceClient.get(shared);
+    // The sender is an authorised reader too, and the clause says every
+    // authorised reader on BOTH atSigns decrypts. She holds the content key
+    // she cut, so this is her own decrypt and not a plaintext copy.
+    expect(asWritten.value, plaintext,
+        reason: 'alice reads back what she wrote — the sending atSign is one '
+            'of the two the clause covers');
     expect(asWritten.metadata?.appMetadata?.providerId,
         symmetricAesGcmCryptoProviderId,
         reason: 'the share must be on the nskey data path for the rest of this '
@@ -262,5 +274,62 @@ void main() {
             'it did not matter which of alice\'s enrollments wrote the '
             'record — the seal is to (owner, namespace) on the RECIPIENT side '
             'and carries no sender identity a reader has to hold');
-  }, timeout: Timeout(Duration(minutes: 5)));
+
+    // ── And what an UNAUTHORISED enrollment of @bob can reach ─────────────
+    //
+    // Everything above is about authorised readers. The other half of the
+    // clause is that a bob enrollment which was never granted the namespace
+    // cannot fetch the ciphertext at all — the atServer refuses it, rather
+    // than the record arriving and failing to open. That distinction is the
+    // whole point: a reader handed ciphertext it cannot decrypt today is a
+    // reader holding ciphertext, and `bobSecond` is granted `sharedNamespace`
+    // and nothing else.
+    //
+    // The same shape same-atSign is proven in the functional pack's
+    // `enrollment_namespace_gate_test.dart`; this is the cross-atSign half,
+    // where the record is INBOUND and owned by @alice.
+    await bobRing.mintAndPublish(withheldNamespace);
+    await E2ESyncService.getInstance()
+        .syncData(bobPrimary.syncService, atSign: bob);
+
+    final withheldName = 'withheld${DateTime.now().microsecondsSinceEpoch}';
+    const withheldPlaintext = 'in a namespace bob2 was never granted';
+    AtKey withheld() => AtKey()
+      ..key = withheldName
+      ..namespace = withheldNamespace
+      ..sharedWith = bob
+      ..sharedBy = alice;
+
+    expect(await aliceClient.put(withheld(), withheldPlaintext), true);
+    await E2ESyncService.getInstance()
+        .syncData(aliceClient.syncService, atSign: alice);
+
+    // The control, and it is not drawn from the property under test: a client
+    // authorised for everything reads this record. Without it, "bob2 could not
+    // read it" is equally explained by the record never having arrived.
+    //
+    // ⚠️ Read through the client rather than by `llookup`. A record @alice
+    // shares with @bob lives on ALICE's atServer, and `llookup` only ever
+    // answers for records the atServer it is asked already holds — so an
+    // `llookup` on @bob's atServer returns "does not exist in keystore"
+    // whatever the grants are, which is an absent record dressed as a gate.
+    expect((await bobPrimary.get(withheld())).value, withheldPlaintext,
+        reason: 'the approver must read the withheld record, or bob2\'s '
+            'failure below is an absent record rather than a gate');
+
+    // Matched on the REASON rather than on throwing: a bare throwsA is
+    // satisfied by a dropped connection or a malformed key, and the test would
+    // then be green for the absence of an answer.
+    await expectLater(
+        bobSecond.client.get(withheld()),
+        throwsA(predicate((e) =>
+            '$e'.contains('not authorized to lookup') &&
+            '$e'.contains(bobSecond.client.enrollmentId!) &&
+            '$e'.contains(withheldNamespace))),
+        reason: 'the atServer must refuse the fetch as an authorization '
+            'decision naming this enrollment and this namespace. An '
+            'unauthorised enrollment of the RECIPIENT never holds the '
+            'ciphertext, so "nor decrypt" is not a second mechanism — it is '
+            'what follows from having nothing to decrypt');
+  }, timeout: Timeout(Duration(minutes: 6)));
 }
