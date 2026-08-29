@@ -8,6 +8,10 @@ import 'dart:async';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
+// The monitor's socket is what an outage takes away, and nothing public
+// reaches it.
+// ignore: implementation_imports
+import 'package:at_client/src/service/notification_service_impl.dart';
 import 'package:at_end2end_test/config/config_util.dart';
 import 'package:at_end2end_test/src/concurrent_clients.dart';
 import 'package:at_end2end_test/src/enrolled_client.dart';
@@ -112,6 +116,10 @@ void main() {
     final secondSeen = <String>[];
     final secondReceived = Completer<AtNotification>();
     final secondMonitorLive = Completer<void>();
+    // Declared here because the listener has to be watching before the
+    // notification it waits for is sent, and that send happens after this
+    // monitor's socket has been taken away.
+    final queued = Completer<AtNotification>();
     final secondSubscription = bobSecond.client.notificationService
         .subscribe(shouldDecrypt: true)
         .listen((n) {
@@ -119,6 +127,9 @@ void main() {
       if (!secondMonitorLive.isCompleted) secondMonitorLive.complete();
       if (n.key.contains('nskeynotify$id') && !secondReceived.isCompleted) {
         secondReceived.complete(n);
+      }
+      if (n.key.contains('queued$id') && !queued.isCompleted) {
+        queued.complete(n);
       }
     });
     addTearDown(secondSubscription.cancel);
@@ -188,5 +199,106 @@ void main() {
             'every authorised enrollment of @bob opens it and none is left '
             'out. Sealing per device would deliver to both monitors and '
             'decrypt on only one');
+
+    // ── Offline, then online ─────────────────────────────────────────────
+    //
+    // The clause's other half: a value sealed while @bob was disconnected
+    // still opens when he comes back. `monitor_reconnect_live_test.dart`
+    // shows a queued notification surviving an outage, with one atSign
+    // notifying itself and no namespace key in it; everything above shows a
+    // cross-atSign nskey notification opening, with the monitor up
+    // throughout. Neither says that a CK sealed to @bob's namespace key while
+    // his monitor was down still opens on his return.
+    //
+    // Deliberately last: everything above has passed, so the pair is known
+    // good before the connection is taken away and a failure here is the
+    // outage rather than the fixture.
+    final secondNotifications =
+        bobSecond.client.notificationService as NotificationServiceImpl;
+    expect(secondNotifications.monitor.lookUp.isNotifying, isTrue,
+        reason: 'the monitor must be demonstrably up before it is dropped, or '
+            '"it reconnected" and "it never connected" are the same green');
+    // The socket really going away is what makes the arm below an outage,
+    // and it has to be watched for before it is taken away — the stream is a
+    // broadcast with no backlog.
+    //
+    // ⚠️ `isNotifying` cannot answer this and reads as though it can. It is a
+    // SESSION flag, cleared only by `stopNotifications`, and the reconnect
+    // loop reads it to decide whether to keep trying — so it stays true
+    // across exactly the drop being staged here. Asserting it false after a
+    // close fails against a monitor that did go down.
+    final connectionEvents = <bool>[];
+    final wentDown = Completer<void>();
+    final connectionWatch = secondNotifications.monitor.lookUp
+        .notificationConnectionUp
+        .listen((up) {
+      connectionEvents.add(up);
+      if (!up && !wentDown.isCompleted) wentDown.complete();
+    });
+    addTearDown(connectionWatch.cancel);
+
+    await secondNotifications.monitor.lookUp.close();
+
+    await wentDown.future.timeout(
+      Duration(seconds: 30),
+      onTimeout: () => throw StateError(
+          'closing the monitor socket emitted no connection-down event, so '
+          'there was no outage — and without one the arm below is green '
+          'either way: a notification handed to a live monitor and one '
+          'replayed to a reconnecting one satisfy the same assertion. '
+          'Saw: $connectionEvents'),
+    );
+
+    final queuedKey = AtKey()
+      ..key = 'queued$id'
+      ..sharedWith = bob
+      ..sharedBy = alice
+      ..namespace = namespace
+      ..metadata = (Metadata()..ttr = 60000);
+    const queuedValue = 'sealed while bob had no monitor';
+
+    // @alice sends this on her own client's connection, which is a different
+    // socket on a different atServer from the one just closed — so
+    // `delivered` means @bob's atServer took it for a listener that is not
+    // currently there.
+    expect(
+        (await clients.first.notificationService
+                .notify(NotificationParams.forUpdate(queuedKey,
+                    value: queuedValue)))
+            .notificationStatusEnum,
+        NotificationStatusEnum.delivered,
+        reason: 'the send must succeed while the receiving enrollment has no '
+            'monitor at all — it does not travel that connection');
+
+    final afterOutage = await queued.future.timeout(
+      Duration(seconds: 120),
+      onTimeout: () => throw StateError(
+          'the notification @alice sent while @bob\'s second enrollment was '
+          'disconnected never arrived, and the notify reported `delivered`. '
+          'Either the monitor did not come back, or it came back with a '
+          'watermark asking only for what followed the reconnect.\n'
+          '  the monitor saw ${secondSeen.length}: $secondSeen'),
+    );
+
+    expect(afterOutage.metadata?.appMetadata?.providerId,
+        symmetricAesGcmCryptoProviderId,
+        reason: 'it must come back on the nskey data path, or the value below '
+            'could decrypt for a reason that has nothing to do with the '
+            'namespace key');
+    expect(connectionEvents.first, isFalse,
+        reason: 'the first thing this watcher saw was the connection going '
+            'down, and it was installed immediately before the close');
+    expect(connectionEvents.skip(1), contains(true),
+        reason: 'and it came back up — so the delivery above is a replay to a '
+            'reconnecting monitor, not a live hand-off. Saw: '
+            '$connectionEvents');
+
+    expect(afterOutage.value, queuedValue,
+        reason: 'offline-then-online @bob still decrypts the queued '
+            'notification. The nskey private this enrollment holds opens a '
+            'content key @alice sealed while it was disconnected. ⚠️ This is '
+            'an outage of the CONNECTION, not of the process — it says '
+            'nothing about the private surviving a restart, which is a '
+            'separate claim belonging to the filing tests');
   });
 }
