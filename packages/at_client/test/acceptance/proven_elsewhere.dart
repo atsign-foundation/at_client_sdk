@@ -79,7 +79,17 @@ void provenIn(String path, String testName,
     "'${testName.replaceAll("'", "\\'")}",
     '"${testName.replaceAll('"', '\\"')}',
   ];
-  expect(spellings.any(source.contains), isTrue,
+  // Adjacent string literals are ONE string to the compiler and two runs of
+  // characters here, so a test whose name wraps across them is not contiguous
+  // in the source this matches against. That cost two red rails on 2026-08-29,
+  // the second in a file already carrying a comment about the first — which is
+  // the tell that it wanted a fix rather than a rule.
+  //
+  // Joining them cannot make a RENAMED test match: it only removes join
+  // points, so every character of the name must still be present in order. The
+  // newline is required, so a same-line `''` is left alone.
+  final joined = source.replaceAll(RegExp(r"'\s*\n\s*'"), '');
+  expect(spellings.any((s) => source.contains(s) || joined.contains(s)), isTrue,
       reason: 'this row cites "$testName" in $path, and no test there starts '
           'with that name. A renamed test is the same loss of evidence as a '
           'deleted one — re-point the citation or re-open the row. '

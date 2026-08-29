@@ -248,8 +248,6 @@ void main() {
               'rotation');
     });
 
-    // One string literal: `provenIn` matches citations against the SOURCE,
-    // where adjacent literals the compiler would join are not contiguous.
     test('retirement here is GENERATIONAL, never an entry marked retired',
         () async {
       final c = client();

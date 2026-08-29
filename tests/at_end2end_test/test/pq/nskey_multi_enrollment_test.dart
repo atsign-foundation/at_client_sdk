@@ -63,9 +63,6 @@ void main() {
         .testInitializer(bob, namespace, authType, posture: PqPosture.legacy);
   });
 
-  // Named as one string literal on purpose: `provenIn` matches a citation
-  // against the SOURCE, and adjacent literals the compiler would join are not
-  // contiguous there — a split name reads to it as a renamed test.
   test(
       'UC-A4.3: whichever alice enrollment writes, every bob enrollment reads',
       () async {
