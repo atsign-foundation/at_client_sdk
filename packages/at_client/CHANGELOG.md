@@ -1,5 +1,26 @@
 ## 3.15.0-rc1
 
+- fix: **a signer no longer waits forever for a signing-key mint that is not
+  coming.** Everything that signs waits on a per-client barrier the PQ startup
+  settles at its mint step, and again in its `finally` as a backstop — so the
+  barrier completes on every path the startup can *return* by. What neither
+  covers is a startup that never returns: a step before the mint that blocks
+  leaves the barrier unsettled for the life of the process, and the wait was
+  unbounded.
+  - Measured: a `collectConveyedKeys` sweep (step 2 of 12) that did not return
+    held the barrier open, and an `at_activate approve` waiting to sign the
+    conveyance envelope it had just sealed never terminated — through a
+    six-minute test timeout and a seven-minute manual bound alike, with
+    nothing in the log to say why.
+  - `awaitSigningKeyMint` now bounds the wait at `signingKeyMintWait`
+    (45 seconds) and reports the elapsed bound, and the signer logs at
+    **warning** and signs with what the keyfile already holds — which is what
+    the barrier settles to when the mint will not run this session.
+  - ⚠️ **This bounds the symptom, not the cause.** A startup step before the
+    mint that blocks still blocks, and everything that step would have
+    published stays unpublished; the warning is what makes that visible
+    instead of silent.
+
 - fix: **a client that already exists refuses a preference naming a different
   `hiveStoragePath`, where it used to ignore it silently.** `StorageManager`
   opens the local store once, at the first path it is given, and nothing

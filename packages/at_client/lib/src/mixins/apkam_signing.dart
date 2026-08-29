@@ -13,7 +13,7 @@ import 'package:at_client/src/signing/envelope_signature.dart'
 import 'package:at_client/src/signing/resolved_signing_algo.dart'
     show signingAlgoOf;
 import 'package:at_client/src/signing/signing_key_mint_barrier.dart'
-    show signingKeyMintSettled;
+    show awaitSigningKeyMint;
 import 'package:at_utils/at_utils.dart' show AtSignLogger;
 
 /// The tail of each client's `_apsk` write chain, so [serialiseApskWrite] can
@@ -181,7 +181,19 @@ mixin ApkamSigning {
   /// a caller outside it.
   Future<List<ApkamSigningKeys>> get signingKeys async {
     if (awaitsSigningKeyMint) {
-      await signingKeyMintSettled(atClient);
+      final elapsed = await awaitSigningKeyMint(atClient);
+      if (elapsed != null) {
+        // The mint has neither run nor declined to run, so the startup is
+        // stuck before it. Sign with what the keyfile holds rather than wait
+        // forever: that is what the barrier settles to when the mint will not
+        // run this session, and it is an outcome a caller can act on. Waiting
+        // instead deadlocks every signer in the process, silently.
+        logger.warning(
+            'The signing-key mint did not settle within $elapsed, so this '
+            'client is signing with the keys its keyfile already holds. Its '
+            'PQ startup is stuck before the mint step, so anything that step '
+            'would have published has not been published.');
+      }
     }
     final held = await heldSigningKeys;
     if (held.isNotEmpty) return held;
