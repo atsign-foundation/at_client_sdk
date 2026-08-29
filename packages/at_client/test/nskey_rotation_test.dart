@@ -248,6 +248,43 @@ void main() {
               'rotation');
     });
 
+    // One string literal: `provenIn` matches citations against the SOURCE,
+    // where adjacent literals the compiler would join are not contiguous.
+    test('retirement here is GENERATIONAL, never an entry marked retired',
+        () async {
+      final c = client();
+      final filer = await filing();
+      final ring = PublishedNskeyKeyRing(c.client, privateFiling: filer);
+
+      final first = await ring.mintAndPublish(namespace);
+      final second = (await ring.rotate(namespace)).rotated;
+
+      // The claim, and it is an ABSENCE. The `_apsk` substrate retires an
+      // entry IN PLACE, leaving it advertised so what it produced still
+      // verifies; this one does not. It mints a fresh generation and leaves
+      // the old private in the keyfile, so a reader generalising from the
+      // signing side would look for a retired entry here and find none.
+      expect(second.keys, isNotEmpty, reason: 'the positive control');
+      for (final entry in second.keys) {
+        expect(KeyEntryStatus.offersNewOperations(entry.status), isTrue,
+            reason: 'every entry of the successor generation is offered for '
+                'new work. A retired one here would mean this substrate had '
+                'adopted the signing side\'s mechanism — and the point of the '
+                'clause is that the two reach the same guarantee by different '
+                'ones');
+      }
+
+      // What DOES open history is the previous generation's private, still
+      // held. Without this the absence above would be equally satisfied by a
+      // rotation that simply dropped the past.
+      expect(await filer.read(namespace, first.nskeyKid), isNotNull,
+          reason: 'the superseded private is what opens a retained __ck sealed '
+              'to it; on this substrate that is the whole of retirement');
+      expect(first.nskeyKid, isNot(second.nskeyKid),
+          reason: 'the control for the line above: two generations, or "the '
+              'previous private is held" is a claim about the current one');
+    });
+
     test('a rotation that loses the mint lock fails instead of adopting',
         () async {
       final c = client(lockAlreadyHeld: true);
