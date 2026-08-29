@@ -12890,7 +12890,24 @@ Two things, and the second is why the first is safe:
 2. **A legacy enrollment uses its authentication keypair for authentication AND
    for data signing, and never mints a data signing keypair of its own** —
    implemented by excluding that keypair's algorithm from the `missing` list
-   `SigningKeyMinting.reconcileSigningKeys` computes.
+   `SigningKeyMinting.reconcileSigningKeys` computes, **and only when the
+   enrollment holds no typed signing material at all**. The scope is not
+   decoration; see the trap below.
+
+⚠️ **The exclusion must be scoped to `heldSigningKeys.isEmpty`, or it collapses
+the split it exists to protect.** `authenticationSigningKey.algorithm` is
+`signingAlgoOf(atClient)` — the recorded key-material resolution — so on a
+**retrofitted** enrollment it reports mldsa65, not rsa2048. An unscoped
+"exclude every algorithm the authentication keypair satisfies" therefore fires
+on row 4 of the table below: at `pqActive` `wanted` is `{mldsa65}`, `missing`
+collapses to empty while `superseded` is still `[rsa2048]`, and the enrollment
+retires its working rsa2048 data signing keypair without minting the ML-DSA one.
+`_apsk` stays coherent — `apskEntries` re-advertises the authentication keypair
+whenever `signing` is empty, and `signingKeys` falls back to the same key — so
+nothing goes unverifiable and nothing goes red. What is lost is the auth/signing
+split itself, silently, on the posture that exists to create it. Scoping the
+exclusion to an enrollment holding no typed signing material leaves all four
+rows correct.
 
 ### The naming that settled it
 

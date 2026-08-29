@@ -2065,8 +2065,13 @@ advertised are one rule and cannot drift apart.
 It follows that **a legacy enrollment never mints a data signing keypair** — it
 already has one. `AtKeys.signingKeysFor` cannot see it, because that method reads
 typed per-enrollment material and a legacy keyfile carries flat fields, so
-`SigningKeyMinting.reconcileSigningKeys` excludes from `missing` every algorithm
-the authentication keypair already satisfies. Without the exclusion the mint
+`SigningKeyMinting.reconcileSigningKeys` **is to exclude** from `missing` every
+algorithm the authentication keypair satisfies **when the enrollment holds no
+typed signing material at all** — the scope matters, because on a retrofitted
+enrollment that keypair reports mldsa65 and an unscoped exclusion would stop
+`pqActive` minting its ML-DSA signing key. ⛔ **Not yet built** — the change is
+the P0 row *"Delete the signing-key mint barrier …"* in
+[`implementation-plan.md`](implementation-plan.md#todo). Without the exclusion the mint
 generates a second rsa2048 keypair of no additional strength, publishes it to
 `_apsk.<enrollmentId>` by `enroll:update`, and drops the original — leaving the
 advertisement naming a key the enrollment record has never seen, as a side effect
