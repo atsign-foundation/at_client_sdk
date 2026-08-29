@@ -3,7 +3,7 @@ import 'dart:convert';
 
 import 'package:at_utils/at_utils.dart';
 import 'package:hive/hive.dart';
-import 'package:at_persistence_secondary_server/src/impl/hive/hive_instances.dart';
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:meta/meta.dart';
 
 /// On-the-wire op carried in the sync queue's persisted record. The

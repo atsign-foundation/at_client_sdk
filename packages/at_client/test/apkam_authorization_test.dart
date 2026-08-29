@@ -3,7 +3,7 @@ import 'dart:io';
 
 import 'package:at_client/at_client.dart';
 import 'package:at_commons/at_builders.dart';
-import 'package:at_persistence_secondary_server/src/impl/hive/hive_instances.dart';
+import 'package:at_persistence_secondary_server/hive.dart';
 import 'package:hive/hive.dart';
 import 'package:test/test.dart';
 
