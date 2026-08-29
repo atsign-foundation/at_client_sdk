@@ -11264,7 +11264,14 @@ verifier, it is writing the first one.
   It wants the signer's `_apsk` cached, or every public read pays a remote
   lookup on someone else's atServer.
 
-## 114. A signer waits for its own mint; the mint alone does not (2026-08-21)
+## 114. A signer waits for its own mint; the mint alone does not (SUPERSEDED)
+> ⛔ **SUPERSEDED outright by [126](#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30)
+> (2026-08-30).** The barrier this ruling built is deleted. Its premise — that a
+> mint withdraws a key a signer may already have used — holds in no state the
+> product reaches, and the one state that looked like it does strands nothing.
+> The body stays because the three candidates weighed below are the ones that
+> keep being re-proposed, and because candidate 3's rejection is still correct
+> for the reason given.
 
 **Ruled by gkc, 2026-08-21**, closing the race
 [14.48](implementation-plan.md#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
@@ -12869,3 +12876,130 @@ shared. It was implemented and green (65 tests) before being reverted; nothing
 of it remains in the tree. If the symptom reappears, the question is which box
 is still being opened on the global instance, not which key needs an
 enrollment id.
+
+## 126. The mint barrier is deleted: legacy authentication and data signing are one keypair (2026-08-30)
+
+**Ruled by gkc, 2026-08-30**, superseding
+[114](#114-a-signer-waits-for-its-own-mint-the-mint-alone-does-not-superseded).
+Two things, and the second is why the first is safe:
+
+1. **The signing-key mint barrier is deleted** — `signing_key_mint_barrier.dart`
+   entire, `ApkamSigning.awaitsSigningKeyMint` and its two overrides, the wait in
+   `signingKeys`, `PqClientBootstrap.mintSettled` and the `finally` that settles
+   it, and the 45-second bound added on 2026-08-29 with its test file.
+2. **A legacy enrollment uses its authentication keypair for authentication AND
+   for data signing, and never mints a data signing keypair of its own** —
+   implemented by excluding that keypair's algorithm from the `missing` list
+   `SigningKeyMinting.reconcileSigningKeys` computes.
+
+### The naming that settled it
+
+Stated by gkc, and the tree does not implement the third line:
+
+> Each enrollment has an authentication keypair and at least one data signing
+> keypair. On legacy enrollments they are the same keypair, rsa2048. On
+> retrofitted enrollments they are different — authentication mldsa65, data
+> signing rsa2048, minted before the request and stored by the atServer in
+> `_apsk` as a bare string.
+
+### What the barrier was guarding, state by state
+
+The barrier exists so that no signer signs with a key the mint is about to
+withdraw from `_apsk`. Walking every state:
+
+| state | `heldSigningKeys` | what `reconcileSigningKeys` does | does any key leave `_apsk`? |
+| ----- | ----------------- | -------------------------------- | --------------------------- |
+| legacy enrollment, `legacy` posture | empty | `dataSigningKeyAlgorithms` is `{}` → returns `nothing` at the first guard | no — it never runs |
+| legacy enrollment, `pqReady` posture | empty | the client retrofits at `_init` instead, and the new enrollment's data signing keypair is minted **and filed** before the request | no |
+| retrofitted enrollment, `pqReady` | `{rsa2048}` | `held == wanted` → `missing` and `superseded` both empty → `nothing` | no |
+| retrofitted enrollment, `pqReady` → `pqActive` | `{rsa2048}` | mints mldsa65, **retires** rsa2048 | no — a retired key stays advertised and keeps verifying what it signed |
+
+In every state the mint either does not run, or only adds a key and
+retires-but-retains the old one. **It never withdraws a key anything could have
+signed with**, which is the single condition the barrier was built for.
+
+Two properties make the last row safe, and both are in the tree already:
+`SigningKeyMinting._publish` composes `withdrawn` from the keys being retired
+*plus* `withdrawnSigningKeys`, so retirements accumulate rather than replace;
+and `verifyEnvelope` tries every advertised key for the resolved algorithm with
+no status filter, so a retired entry still verifies.
+
+### Why the tree looked as though the barrier had a job
+
+`heldSigningKeys` reads `AtKeys.signingKeysFor(enrollmentId)`, which iterates
+`materialsByKeyId` and keeps only `sign`-role keyIds — **typed** per-enrollment
+material. A legacy keyfile carries flat fields and no typed signing material, so
+`signingKeysFor` returns empty and the mint concludes the enrollment holds no
+data signing keypair. It holds one: its authentication keypair, doing both jobs.
+Nothing in the tree states gkc's rule that on a legacy enrollment the two are
+the same keypair, so the mint generates a **second** rsa2048 keypair, publishes
+it into `_apsk.<legacyId>` by `enroll:update`, and drops the original.
+
+That is the only state in which a mint withdraws a key, and it is reachable two
+ways: transiently whenever `_settleEnrollmentIdentity` fails (it swallows every
+error and comes up on the old enrollment — *"tries again next start"*), and
+persistently if `authenticationKeyAlgorithm` is overridden to rsa2048 under a
+posture whose `dataSigningKeyAlgorithms` is `{rsa2048}`, which makes
+`retrofitIsDue` false forever.
+
+**And it strands nothing**, which is what makes deletion safe rather than merely
+tidy. A legacy enrollment publishes no key package (`legacy` posture sets
+`keyExchangeMode: legacy`, and only the `pq` branch of `sendEnrollRequest`
+attaches `enrollmentKeyPackageBuilder`), and outside its own file and tests
+`verifyEnvelope` has exactly two callers — `envelope_signing.dart` and
+`enrollment_symmetric_key.dart` — both PQ secret-sharing paths. A legacy
+enrollment has signed nothing that `_apsk` is ever used to verify. Minting the
+second keypair buys nothing, since the algorithm is identical; it leaves `_apsk`
+naming a key the enrollment record has never seen; and it does it as a side
+effect of a **failure path**. Rule 2 removes it.
+
+### The deadlock that started this is positional, with no crypto in it
+
+`PqClientBootstrap`'s constructor registered the barrier, so from that moment
+every signer in the process waited on it, and only step 4
+(`mintInUseSigningKeys`) settled it. Step 2 (`collectConveyedKeys` → `sweepOnce`)
+answers an inbound request envelope by sealing and **signing** a reply, so it
+waited for a step that could not start until it returned. Step 3
+(`startEnvelopeListener` → `startListening`) ends with an awaited `sweepOnce`
+and has the same shape — the surface was two steps, not one.
+
+Measured: `at_activate approve` did not exit within its two-minute bound and was
+killed, in eight separate runs. In the approver's case the mint it was waiting
+for would have returned `nothing` immediately, so the process hung on a step
+that had no work to do.
+
+### Rejected on the way, with the reason, so they are not re-proposed
+
+- **Retain the authentication keypair in `_apsk` as withdrawn.** Candidate 3 of
+  ruling 114, re-derived and rejected again. It forces the JSON array where a
+  bare rsa2048 value would do, on exactly the enrollments most likely to have
+  un-upgraded peers. Unnecessary once rule 2 means the keypair is never
+  withdrawn.
+- **Reorder the mint ahead of the sweeps.** Would have made
+  `_mintInUseSigningKeys`' own dartdoc true — it claims to run *"before every
+  step that signs … and the sweep"*, and does not. But it treats a symptom: the
+  mint has nothing to guard, so its position does not matter. The dartdoc's
+  false clause is corrected rather than the order changed.
+- **Make the startup's sweeps collect-only, deferring answers past the mint.**
+  Needs a third outcome in `sweepOnce` that neither deletes the envelope nor
+  re-emits it, and delays answering a peer for no gain.
+- **Adopt: file the authentication keypair as typed rsa2048 signing material.**
+  Argued for on the grounds that a later `pqReady → pqActive` move would then
+  *retire* rather than drop it. That transition does not occur: `pqActive` sets
+  `authenticationKeyAlgorithm: mldsa65`, so a still-legacy enrollment retrofits
+  instead of minting, and the enrollment that actually makes the move is a
+  retrofitted one which already holds typed material. Skipping the mint is
+  enough; filing a duplicate of one keypair in two roles is not needed.
+
+### Left open beneath ruling 114, and now closed
+
+114 left open *"whether any deployment holds durable auth-fallback-signed
+envelopes from before a first mint"*. Closed: on a legacy enrollment there are
+none, because a legacy enrollment signs nothing `_apsk` verifies. The
+composer's own premise in `apskEntries` — *"an enrollment that holds signing
+keys held them from birth, so this key signed nothing that outlives the
+transition"* — is **false in general**, but not for any state rule 2 leaves
+reachable. Where it is false is a separate defect, recorded as its own row and
+not fixed by this ruling: an enrollment created by `sendEnrollRequest` carries
+no data signing keypair, so its key package is signed by its authentication
+keypair and the first mint strands it.

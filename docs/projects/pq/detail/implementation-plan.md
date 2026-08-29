@@ -5854,8 +5854,11 @@ child's `exit(0)` means nothing lingers across cells):
 - **The child awaits the mint settled before signing** (bounded, loud) — a
   guard now that cells start pre-minted, and the harness-side twin of the
   race [14.48](#1448-a-primary-client-can-sign-with-a-key-its-own-advertisement-just-withdrew)
-  recorded — since closed product-side by ruling 114 (the sign path awaits
-  the mint), which makes this guard redundant-but-harmless.
+  recorded — closed product-side by ruling 114 (the sign path awaits
+  the mint), which made this guard redundant-but-harmless. ⛔ **Ruling 114 is
+  SUPERSEDED by 126 (2026-08-30): the sign path no longer awaits anything, and
+  the barrier is deleted.** The harness-side guard is now the only thing of that
+  shape left, and it is still harmless.
 - The receiver is handed the sender's enrollment id — an `_apsk` address is
   `(atSign, enrollment)`, and a reader handed only the atSign would read a
   record an enrolled sender never writes.
@@ -6261,6 +6264,10 @@ decision goes.
 
 **Ruled by gkc, 2026-08-21: candidate 1 — the sign path awaits the mint.
 Built the same day; the mechanism and evidence are decisions.md 114.**
+⛔ **SUPERSEDED by 126 (2026-08-30) — the barrier is deleted.** Candidate 3
+(retained auth-key entry) stays rejected for the reason given below; what
+changed is that no mint withdraws the authentication keypair at all, so
+neither candidate is needed. The reasoning is in decisions.md 126.
 `signingKeys` waits on a per-client barrier the bootstrap settles at its
 mint step (and on stop, failure and gated-off); the mint itself is the one
 exempt signer. Differential and mutation runs green, unit 1495/1495, one

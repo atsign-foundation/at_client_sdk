@@ -2055,6 +2055,24 @@ PKAM verification is record-authoritative, so the atServer reads
 `_apsk` is a client-side artefact that the server merely stores and writes,
 which is why its format can change without a server release.
 
+**On a legacy enrollment the two roles are one keypair.** An enrollment created
+before the split holds a single rsa2048 keypair: the atServer verifies it for
+PKAM, and `_apsk` advertises it as what signs. `ApkamSigning.signingKeys` falls
+back to it when the enrollment holds no signing material of its own, and
+`apskEntries` advertises it on exactly that condition, so what signs and what is
+advertised are one rule and cannot drift apart.
+
+It follows that **a legacy enrollment never mints a data signing keypair** — it
+already has one. `AtKeys.signingKeysFor` cannot see it, because that method reads
+typed per-enrollment material and a legacy keyfile carries flat fields, so
+`SigningKeyMinting.reconcileSigningKeys` excludes from `missing` every algorithm
+the authentication keypair already satisfies. Without the exclusion the mint
+generates a second rsa2048 keypair of no additional strength, publishes it to
+`_apsk.<enrollmentId>` by `enroll:update`, and drops the original — leaving the
+advertisement naming a key the enrollment record has never seen, as a side effect
+of the path taken when a retrofit *fails*. Ruled in
+[`decisions.md` 126](detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30).
+
 ### 9.2 The keyfile
 
 `CryptographicMaterialRole` gains `privateAuthentication` and
@@ -2181,6 +2199,25 @@ atServer stores it verbatim on the enrollment record, writes its JSON encoding
 unaltered at approval, and rewrites it when `enroll:update` carries a new one.
 Absent means no `_apsk` is published at all. Capped by the atServer at 20KB
 encoded; a longer value is refused rather than truncated.
+
+**No mint ever withdraws a key, and that is what makes the advertisement safe to
+read at any moment.** A mint adds the algorithms the in-use set names and the
+enrollment lacks, and retires the ones it no longer names — and a retired entry
+stays advertised, because `SigningKeyMinting._publish` composes `withdrawn` from
+the keys being retired *plus* everything the keyfile already records as
+withdrawn, and `verifyEnvelope` tries every advertised key for the resolved
+algorithm without filtering on status. The one case that would have withdrawn a
+key — a legacy enrollment minting a second keypair beside the one it already
+signs with — is removed by the rule in [section 9.1](#91-the-two-roles).
+
+**So no signer waits for a mint.** A barrier making every signer in a process
+await its own client's mint step existed between 2026-08-21 and 2026-08-30 and
+is deleted: it ordered signing *within one process's startup*, while the only
+material that can be stranded by an advertisement change was signed in an earlier
+process — at enrollment time, or on a previous run. It also deadlocked, because
+the startup answers inbound secret requests at steps 2 and 3 by signing a reply,
+and the step that released signers was step 4. Ruled in
+[`decisions.md` 126](detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30).
 
 ### 9.4 The envelope
 
