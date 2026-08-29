@@ -1222,6 +1222,21 @@ production paths named:
   `keyEstablishmentAlgorithms` — and only the last is an accept side, on the
   encryption half. So **UC-G2.9** c4, and c1 and c2 which state the consequence.
 
+⛔ **One question the triage did not settle, left for gkc.** **UC-G2.9** c1
+and c2 are absence claims that are TRUE of the tree today — there is no
+minimum-algorithm check, no signature-count check and no accepted-algorithms
+field for signatures in `AtClientPreference`. They could be pinned now by a
+guard that reddens exactly when step 3's accept lever lands, which is either a
+useful tripwire or a clause counted proven for describing a hole. The list
+above files them as waiting on the lever, and that is unchanged until ruled on.
+
+⛔ **Two clauses now wait on the same piece of TOOLING, not on a test.**
+**UC-B4.3** c1 and **UC-G2.10** c6 both need a client that genuinely lacks a
+capability rather than a preference that declines to use one, which means a
+package resolving a PUBLISHED `at_client` from pub.dev — this workspace pins it
+by path. One package would serve both, and until it exists neither clause is a
+test gap in the ordinary sense.
+
 **The eight the list above does not reach, triaged 2026-08-29** — six test gaps, one needing a differently-built client, and one withdrawn. Triaged by reading the
 production path each one names. The verdict column is the one that matters: a
 clause the tree CONTRADICTS and a clause nothing tests look identical to every
