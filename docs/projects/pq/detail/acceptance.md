@@ -1222,6 +1222,29 @@ production paths named:
   `keyEstablishmentAlgorithms` — and only the last is an accept side, on the
   encryption half. So **UC-G2.9** c4, and c1 and c2 which state the consequence.
 
+**The eight the list above does not reach, triaged 2026-08-29** by reading the
+production path each one names. The verdict column is the one that matters: a
+clause the tree CONTRADICTS and a clause nothing tests look identical to every
+instrument here, and only the second is a test gap.
+
+| Clause | Verdict | What was read |
+|---|---|---|
+| **UC-G2.5** c2 | **test gap, and newly reachable** | the clause's content is that a rotation does not mint an algorithm the configured set has dropped. `nskey_rotation_test.dart`'s *a rotation mints the whole configured set afresh* already proves material is not carried forward, over two algorithms — but it holds the set CONSTANT (`second.keys.map(alg)` equals `first`'s), so nothing exercises a narrowing. The missing arm rotates with a narrowed set and asserts the dropped algorithm is absent |
+| **UC-G2.5** c7 | **test gap** — the mechanism exists | `mint_lock.dart` carries the loser path in production: *"the caller takes its ordinary loser path: it re-reads what … the re-read is what every caller already does"*, and it logs `is already held; re-reading rather than …`. The refusal is pinned (*a rotation inside the mint lock's cooldown is refused*, *a client that loses the mint lock adds nothing*); the back-off-and-re-decide half is not |
+| **UC-G2.7** c4 | **test gap, guard-shaped** | it names exactly which writers may produce a retired entry — the key package's mint, the signing key's mint and the signing root's — and asserts the nskey writers produce none. That is a checkable claim about the source, of the kind `architecture_guard_test.dart` already holds |
+| **UC-G2.7** c5 | ⛔ **not an assertion** | *"a retirement is not a compromise, and only the first is what this row is about"* scopes the row against UC-G2.3's unknown-status clause in the catalogue. It states no observable of its own, so no test can close it and its presence in the denominator is a judgement rather than a gap |
+| **UC-G2.10** c3 | **test gap** | *the recipient does nothing further* is an absence over @bob's behaviour after publishing a widened advertisement — no re-seal, no re-conveyance, no learning whether @alice upgraded. Testable by counting what @bob writes after the publish; nothing counts it today |
+| **UC-G2.10** c5 | **test gap, two-sided** | both failure modes are behaviours: across atSigns the sender reads the recipient's advertisement and refuses **before any record exists**; within one atSign the writer seals to its own advertisement, nothing refuses, and a sibling install meets it later. The second half is UC-G2.11 c3's shape |
+| **UC-G2.10** c6 | ⛔ **needs a differently-BUILT client** | omitting an algorithm is `sealsToKeyAlgorithms` policy and is exercised; not implementing one is the build, and every arm covering this row varies a preference over algorithms both builds hold. Same shape as **UC-B4.3** c1 above, and the same answer: a package resolving a published at_client, not a preference |
+| **UC-G2.11** c3 | **test gap** | an `alice1` that mints only the new algorithm writes records `alice2` cannot open, and the refusal is the ladder working. `nskey_rollout_ladder_live_test.dart` already runs two enrollments of one atSign at different algorithm configurations, which is the fixture this needs |
+
+⚠️ **`liveProofOwed['UC-G2.5']` was stale when this was written**, and is
+corrected in the same commit. It said *"today the mint produces one key so
+'carries nothing forward' is trivially true of it"* — while the list above
+records the plural mint landing on 2026-08-28 and `nskey_rotation_test.dart`
+proving it over two algorithms. One fact, two homes, and the one nobody was
+editing rotted. The reason a row is owed decays exactly like a count.
+
 **Six were ordinary test gaps and are closed** (2026-08-28). Each is named
 below with the test that closed it, because a test no document names is work
 the next reader rebuilds:
