@@ -302,7 +302,8 @@ void main() {
       );
       provenIn(
         'tests/at_end2end_test/test/pq/nskey_notify_test.dart',
-        'UC-A4.4: providerId travels on the frame and bob decrypts by it',
+        'UC-A4.4: providerId travels on the frame and every bob enrollment '
+            'decrypts by it',
         proves: 'and the notification path routes by the same provider id',
       );
 

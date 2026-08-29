@@ -147,9 +147,25 @@ void main() {
       //       signal-only notifications are unaffected.
       provenIn(
         'tests/at_end2end_test/test/pq/nskey_notify_test.dart',
-        'UC-A4.4: providerId travels on the frame and bob decrypts by it',
-        proves:
-            'providerId is read off the notification frame bob\'s monitor delivered, and the value decrypts through the nskey route',
+        'UC-A4.4: providerId travels on the frame and every bob enrollment '
+            'decrypts by it',
+        proves: 'providerId is read off the notification frame each of @bob\'s '
+            'monitors delivered, and the value decrypts through the nskey '
+            'route on BOTH of his authorised enrollments — the second one a '
+            'genuinely distinct APKAM enrollment with its own store, its own '
+            'monitor connection and no nskey private of its own, so opening '
+            'the value means the namespace private reached it by conveyance. '
+            'Its monitor is gated on a notification actually arriving before '
+            'anything is sent, because subscribe() returns before the socket '
+            'has written `monitor:` and the monitor asks for no backlog. '
+            'Mutation-proven: subscribing that enrollment with '
+            'shouldDecrypt false reddens the value assertion with the '
+            'ciphertext while the frame still arrives, which is the failure '
+            'this clause guards against — delivered to both monitors, '
+            'readable on one',
+        clauses: [
+          'The value decrypts on every authorised bob enrollment',
+        ],
       );
       provenIn(
         'tests/at_end2end_test/test/pq/pq_notify_fallback_test.dart',
