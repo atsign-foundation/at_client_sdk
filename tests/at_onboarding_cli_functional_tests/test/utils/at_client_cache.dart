@@ -72,6 +72,15 @@ void evictCachedAtClients() {
 /// its entire log with it — which is precisely what made an earlier hang here
 /// undiagnosable. And [cliCommandTimeout] bounds the wait so a stuck command
 /// names itself instead of consuming the test's whole deadline in silence.
+///
+/// ⚠️ **A child's log is nearly empty by default, and that is the CLI's own
+/// doing, not a symptom.** `auth_cli` sets `AtSignLogger.root_level` to
+/// `shout` unless the command carries `-v` (`info`) or `--debug` (`finest`).
+/// A silenced child is indistinguishable from a stalled one in the captured
+/// output — and the INFO lines interleaved around it belong to the TEST
+/// process, which is louder, so the transcript reads as though the child ran
+/// and stopped. Add `--debug` to [args] before concluding anything about where
+/// a CLI command got to.
 Future<int> runCliCommand(List<String> args) async {
   final proc = await Process.start(
       Platform.resolvedExecutable, ['run', _activateCli, ...args]);
