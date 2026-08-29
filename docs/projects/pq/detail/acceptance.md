@@ -1170,7 +1170,6 @@ Rows that genuinely need the wire are also the only route that raises
 
 | Clause | The arm nothing establishes | Test |
 |---|---|---|
-| **UC-A2.1** c4 | `alice2` **authenticates PQ**. The self-data half closed 2026-08-28 in `nskey_self_notify_live_test.dart`, but that file's enrollments hold RSA-2048 APKAM keypairs — `enrolAndAuthenticate` defaults to `rsa2048` — so a second enrollment reading self data under **ML-DSA** PKAM is still unexercised | `nskey_self_notify_live_test.dart` |
 | **UC-A4.6** c5 | where they had exchanged `0x01`, with no readers-upgrade-first migration — and that is what later made it safe to drop `0x01` outright | `secret_sharing_delivery_test.dart` |
 | **UC-A5.1** c2 | "new CKs are sealed to the successor nskey and their conveyances carry the new `nskeyKid`" — nothing asserts that a conveyance written AFTE… | `nskey_rotation_live_test.dart` |
 | **UC-B0.1** c1 | "(The atServer's immutable write is long-standing and present even here — it is **not** a PQ-only verb.)" — nothing exercises an immutable… | `legacy_server_abort_test.dart` |

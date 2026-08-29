@@ -63,6 +63,36 @@ void main() {
             'is accepted before the revocation as the control',
         clauses: ['distinct, individually-revocable record'],
       );
+      provenIn(
+        'tests/at_functional_test/test/pq_scoped_enrollment_self_read_test.dart',
+        'UC-A2.1: a scoped ML-DSA enrollment reads its own namespace and is '
+            'refused the key channel of another',
+        proves: 'both halves of that clause in one enrollment, which is what '
+            'nothing did before: the two were each covered separately and '
+            'never together. PQ AUTH: the enrollment is submitted with an '
+            'ML-DSA-65 APKAM keypair, has already PKAM-authenticated by the '
+            'time the client exists, and the keyfile holds ML-DSA-65 typed '
+            'material under the id it is still running as — submitting the '
+            'same enrollment as rsa2048 reddens it, because the client then '
+            'retrofits onto a replacement. DECRYPTS: it opens @alice\'s own '
+            'record in its granted namespace, read from the atServer since it '
+            'has a store of its own, and the record is asserted to be on the '
+            'nskey data path first — a legacy write is readable by every '
+            'enrollment of the atSign for an unrelated reason. REFUSED: the '
+            'atServer refuses it the envelope channel of the namespace it was '
+            'not granted, naming the verb, the enrollment id and the '
+            'namespace, with the approver reading BOTH channels as the '
+            'control and the same client reading the granted one on the same '
+            'verb — so only the namespace varies. ⚠️ The scoped enrollment '
+            'cannot heal a missing private by pulling: the per-enrollment '
+            'secret request gate serves only fully privileged requesters, so '
+            'what this proves is the approval-time PUSH. The read must be '
+            'made after `pqBootstrap.startupComplete`, because the sweep that '
+            'files an arriving private is a fire-and-forget startup step',
+        clauses: [
+          'authenticates PQ and decrypts',
+        ],
+      );
     });
 
     test('UC-A2.2 · second host using the same (copied) keyfile', () {
