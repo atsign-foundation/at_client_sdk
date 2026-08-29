@@ -52,7 +52,39 @@ void main() {
         'UC-B2.1/B2.2: the retrofit caps its parent',
         proves:
             'the legacy enrollment is capped and ages out rather than being '
-            'deleted by key — the THEN clause this row shares with B2',
+            'deleted by key — the THEN clause this row shares with B2. It runs '
+            'on an atSign configured with a ZERO-hour grace, which is what '
+            'makes the ageing-out observable inside a test and also what stops '
+            'it saying anything about the VALUE: at zero grace the min always '
+            'takes `now`, so an atServer that set the expiry unconditionally '
+            'would satisfy every assertion in it. The row beside this one '
+            'carries that half',
+      );
+      provenIn(
+        'tests/at_end2end_test/test/pq/retrofit_cap_value_e2e_test.dart',
+        'UC-B1.1: the cap is min(now + grace, the enrollment\'s own remaining '
+            'lifetime)',
+        proves: 'the cap as a VALUE, at the deployment\'s ordinary grace, with '
+            'three parents whose lifetimes straddle it — and every comparison '
+            'is between two values the ATSERVER produced, never against this '
+            'process\'s clock, which would be measuring clock agreement '
+            'between two machines. A parent expiring in an hour keeps its own '
+            'expiry (the grace is the larger candidate, so the min takes the '
+            'lifetime); a parent expiring in 2000 hours is pulled in by more '
+            'than a day (the grace is the smaller); and a parent with NO '
+            'expiry gains one, which is the case a cap that merely shortened '
+            'an existing lifetime would leave untouched. The two dated arms '
+            'cannot both be satisfied by one behaviour — one tolerates under '
+            '30 seconds of movement and the other demands more than a day — '
+            'and the record\'s version is asserted to have moved, so '
+            '"unchanged" cannot be an enrollment the retrofit never reached. '
+            'The control is the two un-retrofitted siblings, still at version '
+            '1: the cap lands on the enrollment its own child came from and '
+            'nowhere else, which is also what makes it safe on a shared '
+            'atSign',
+        clauses: [
+          'min(now + grace, its own remaining lifetime)',
+        ],
       );
       provenIn(
         'tests/at_functional_test/test/pq_advance_ladder_test.dart',
