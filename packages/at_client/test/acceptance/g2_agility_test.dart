@@ -465,6 +465,31 @@ void main() {
             'a retired X-Wing entry beside an active ML-KEM one, arranged so '
             'that preference order ALONE would pick the retired key. A selector '
             'consulting only the sender\'s order fails here',
+        clauses: [
+          'The nskey reader handles a retired entry',
+        ],
+      );
+      provenIn(
+        'packages/at_client/test/nskey_rotation_test.dart',
+        'retirement here is GENERATIONAL, never an entry marked retired',
+        proves: 'the half the citation above cannot reach, and the one the '
+            'clause turns on: this substrate never retires in place. After a '
+            'rotation EVERY entry of the successor generation is still offered '
+            'for new work — an absence, so it is asserted over the whole list '
+            'with the list proven non-empty — and what opens history is the '
+            'previous generation\'s private, still filed. A reader '
+            'generalising from the `_apsk` side would look for a retired entry '
+            'in the current advertisement and find none, which is the '
+            '"different mechanisms" sentence made mechanical. The two '
+            'generations are asserted distinct, or "the previous private is '
+            'held" would be a claim about the current one. ⚠️ The clause named '
+            'THREE writers that produce a retired entry until 2026-08-29; the '
+            'signing root is not one — its only writer publishes a '
+            'single-entry list carrying no status, and no root rotation exists '
+            'to add a second',
+        clauses: [
+          'The nskey reader handles a retired entry',
+        ],
       );
     });
 

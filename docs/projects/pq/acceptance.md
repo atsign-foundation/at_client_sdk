@@ -3523,10 +3523,19 @@ is where its missing lever lives.
     GENERATIONAL.** A rotation simply does not mint that algorithm again, and
     what opens history is the previous generation's private, still held — not a
     retired entry in the current advertisement. The nskey reader handles a
-    retired entry and **no writer produces one**: the three that do are the key
-    package's mint, the signing key's mint and the signing root's. So the two
-    substrates reach the same guarantee by different mechanisms, and a reader
-    generalising from one to the other is wrong.
+    retired entry and **no writer produces one**: the two that do are the key
+    package's mint and the signing key's mint. ⚠️ **This named a third — the
+    signing root's — until 2026-08-29, and that was false.** The root's only
+    writer is `PqSigningRoot._publish`, which writes a single-entry `keys: […]`
+    list carrying no `status` at all, and production says why beside it: *"no
+    rotation exists to repair it with"*. Its reader and its `_apsk` vocabulary
+    are both ready for a retired entry — `publishedPublicKeys` takes
+    `activeOnly` — but nothing can produce one until a root rotation exists, so
+    the root belongs with the nskey side of this sentence rather than against
+    it. `_retireSlot` retires a PRIVATE in `AtKeys` on an abandoned mint and
+    publishes nothing. So the two substrates reach the same guarantee by
+    different mechanisms, and a reader generalising from one to the other is
+    wrong.
 
 ⚠️ **The sentence below was a THEN clause until 2026-08-29 and is deliberately
 no longer one** (gkc). It scopes the row rather than asserting a behaviour of
