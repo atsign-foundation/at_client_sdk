@@ -162,9 +162,23 @@ void main() {
             'shouldDecrypt false reddens the value assertion with the '
             'ciphertext while the frame still arrives, which is the failure '
             'this clause guards against — delivered to both monitors, '
-            'readable on one',
+            'readable on one. OFFLINE: that enrollment\'s monitor socket is '
+            'then closed and @alice sends again from her own client, on a '
+            'different socket to a different atServer, so `delivered` means '
+            '@bob\'s atServer took it for a listener that is not there. It '
+            'comes back and the value still opens, on the key it already '
+            'held. The outage itself is proven rather than assumed: the '
+            'connection-down event is watched for before the close and gated '
+            'on before anything is sent, because a notification handed to a '
+            'live monitor and one replayed to a reconnecting one satisfy the '
+            'same assertion — removing the close reddens that gate with an '
+            'empty event list. ⚠️ `isNotifying` cannot serve as that gate and '
+            'reads as though it can: it is a session flag cleared only by '
+            'stopNotifications, and the reconnect loop reads it, so it stays '
+            'true across the drop',
         clauses: [
           'The value decrypts on every authorised bob enrollment',
+          'Offline-then-online bob still decrypts the queued notification',
         ],
       );
       provenIn(
