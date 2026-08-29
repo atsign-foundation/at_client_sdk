@@ -5,10 +5,10 @@ import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart' as at_demos;
 import 'package:at_lookup/at_lookup.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
+import 'utils/at_client_cache.dart';
 import 'utils/onboarding_service_impl_override.dart';
 import 'utils/test_keys_dir.dart';
 
@@ -235,7 +235,7 @@ void main() {
         onboardingPreference.atKeysFilePath!,
       ];
       // perform activation of atSign
-      await auth_cli.wrappedMain(args);
+      await runCliCommand(args);
 
       /// ToDo: test should NOT exit with status 0 after activation is complete
       /// Exiting with status 0 is ideal behaviour, but for the sake of the test we need to be
@@ -243,6 +243,12 @@ void main() {
 
       // Authenticate atSign with the .atKeys file generated via the activate_cli tool
       expect(await File(onboardingPreference.atKeysFilePath!).exists(), true);
+      // The activation above built a client for this atSign at the CLI's own
+      // default path, and it is still in the static cache. Authenticating now
+      // asks for `storage/hive/client` instead, which the cache cannot honour
+      // — evict, or this authenticates the activation's client and the
+      // preference below is decoration.
+      evictCachedAtClients();
       expect(await onboardingService.authenticate(), true);
     });
 

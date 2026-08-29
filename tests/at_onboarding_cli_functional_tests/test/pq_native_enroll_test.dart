@@ -7,10 +7,10 @@ import 'package:at_client/at_client.dart' show PqPosture;
 import 'package:at_commons/at_commons.dart' show EnrollmentStatus;
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
+import 'utils/at_client_cache.dart';
 import 'utils/test_keys_dir.dart';
 
 /// An app enrolling through `at_onboarding_cli` can be post-quantum from
@@ -52,10 +52,19 @@ void main() {
             'virtualenv, so if this is not the first run against this VE, '
             'recycle it before reading anything into the failure');
 
+    // The onboard above left a client for this atSign in the static cache, at
+    // the path its own preference chose. Every CLI command below builds one
+    // through `createAtClient`, which mints a fresh
+    // `.../at_activate/<millisecondsSinceEpoch>` per call — a path the cache
+    // can never honour — and each enrolment builds its own service for the same
+    // atSign too. Evict, or they all run against the onboard's client and its
+    // store.
+    evictCachedAtClients();
+
     // A semi-permanent passcode, so each enrolment below does not need its own
     // freshly fetched OTP — the same shape the other CLI command tests use.
     expect(
-        await auth_cli.wrappedMain([
+        await runCliCommand([
           'spp', '-s', 'ABC123', //
           '-a', atSign, '-r', 'vip.ve.atsign.zone', //
           '-k', masterKeysFilePath,
@@ -86,7 +95,7 @@ void main() {
     // Approved by the real CLI, so the approver half of this is the shipped
     // code path rather than a hand-built call.
     expect(
-        await auth_cli.wrappedMain([
+        await runCliCommand([
           'approve', '-a', atSign, //
           '-r', 'vip.ve.atsign.zone', //
           '-i', enrollmentId, '-k', masterKeysFilePath,
@@ -200,7 +209,7 @@ void main() {
 
     // The reported command, on the retrofitted keyfile.
     expect(
-        await auth_cli.wrappedMain([
+        await runCliCommand([
           'list', '-a', atSign, //
           '-r', 'vip.ve.atsign.zone', //
           '-k', legacy.keysFilePath,
@@ -244,7 +253,7 @@ void main() {
     // Read off the atServer with the master keys rather than through the
     // retrofitted client: the question is what the atSign PUBLISHED, and a
     // client that failed to publish would answer from its own cache.
-    final published = await auth_cli.wrappedMain([
+    final published = await runCliCommand([
       'list', '-a', atSign, '-r', 'vip.ve.atsign.zone', //
       '-k', masterKeysFilePath,
     ]);

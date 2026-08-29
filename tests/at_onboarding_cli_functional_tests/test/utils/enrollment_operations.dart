@@ -6,11 +6,24 @@ import 'package:at_client/at_client.dart';
 
 import 'package:at_client/src/service/enrollment_service_impl.dart';
 
+import 'at_client_cache.dart';
 import 'test_keys_dir.dart';
 
 /// Contains methods that perform common enrollment operations like getOtp, approve, etc.
 ///
 /// Each method requires an atKeysFile that has authorization to perform operations
+///
+/// ⚠️ **Every method here builds its own client at `$storageDir/hive/<atSign>/1`,
+/// and must evict the cache first.** These run inside tests that have already
+/// built a client for the same atSign somewhere else, and
+/// `AtClientImpl.atClientInstanceMap` is static and keyed only by
+/// `(atSign, enrollmentId)` — so without [evictCachedAtClients] the service
+/// below silently reuses the caller's client and its storage path, and every
+/// operation runs against a store this class did not choose.
+///
+/// The `AtClientManager.getInstance().reset()` at the end of each method does
+/// not cover this: it runs after the damage, and it does not clear the static
+/// map. See [evictCachedAtClients] for why.
 class EnrollmentOperations {
   late String atsign;
   String storageDir = 'test/storage/temp';
@@ -18,6 +31,7 @@ class EnrollmentOperations {
   EnrollmentOperations(this.atsign);
 
   Future<String?> getOtp(String atKeysFilePath) async {
+    evictCachedAtClients();
     AtOnboardingService? onboardingService = AtOnboardingServiceImpl(
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
@@ -38,6 +52,7 @@ class EnrollmentOperations {
       String? encApkamSymmetricKey,
       String? appName,
       String? deviceName}) async {
+    evictCachedAtClients();
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();
@@ -80,6 +95,7 @@ class EnrollmentOperations {
       String? enrollmentId,
       String? appName,
       String? deviceName}) async {
+    evictCachedAtClients();
     AtOnboardingService onboardingService = AtOnboardingServiceImpl(
         atsign, getOnboardingPreference(atKeysFilePath: atKeysFilePath));
     await onboardingService.authenticate();

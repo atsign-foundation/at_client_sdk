@@ -5,10 +5,10 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_demo_data/at_demo_data.dart';
 import 'package:at_onboarding_cli/at_onboarding_cli.dart';
-import 'package:at_onboarding_cli/src/cli/auth_cli.dart' as auth_cli;
 import 'package:at_utils/at_utils.dart';
 import 'package:test/test.dart';
 
+import 'utils/at_client_cache.dart';
 import 'utils/test_keys_dir.dart';
 
 /// An [AtOnboardingService] binds to the enrollment it last authenticated as:
@@ -38,6 +38,11 @@ void main() {
 
     bool onboardingStatus = await onboardingService.onboard();
     expect(onboardingStatus, true);
+    // The onboard left a client for this atSign in the static cache at its own
+    // path; every CLI command below asks for a freshly minted one, and the
+    // cache key carries only `(atSign, enrollmentId)`. Evict, or those commands
+    // run against the onboard's client rather than their own.
+    evictCachedAtClients();
     // Set SPP
     List<String> args = [
       'spp',
@@ -50,7 +55,7 @@ void main() {
       '-k',
       masterKeysFilePath
     ];
-    var res = await auth_cli.wrappedMain(args);
+    var res = await runCliCommand(args);
     // Zero indicates successful completion.
     expect(res, 0);
   });
@@ -94,7 +99,7 @@ void main() {
         '-k',
         masterKeysFilePath
       ];
-      var res = await auth_cli.wrappedMain(args);
+      var res = await runCliCommand(args);
       expect(res, 0);
       logger.info('Approved enrollment with enrollmentId: $enrollmentId');
 
@@ -121,7 +126,7 @@ void main() {
         '-k',
         masterKeysFilePath
       ];
-      res = await auth_cli.wrappedMain(args);
+      res = await runCliCommand(args);
       expect(res, 0);
       logger.info('Revoked enrollment with enrollmentId: $enrollmentId');
 
@@ -159,7 +164,7 @@ void main() {
         '-k',
         masterKeysFilePath
       ];
-      res = await auth_cli.wrappedMain(args);
+      res = await runCliCommand(args);
       expect(res, 0);
       logger.info('Un-Revoked enrollment with enrollmentId: $enrollmentId');
 
@@ -201,7 +206,7 @@ void main() {
         '-k',
         masterKeysFilePath
       ];
-      var res = await auth_cli.wrappedMain(args);
+      var res = await runCliCommand(args);
       expect(res, 0);
       logger.info('Approved enrollment with enrollmentId: $enrollmentId');
 
@@ -230,7 +235,7 @@ void main() {
         '-k',
         passwordProtectedKeysFilePath
       ];
-      res = await auth_cli.wrappedMain(args);
+      res = await runCliCommand(args);
       // Zero indicate successful completion.
       expect(res, 0);
     });
