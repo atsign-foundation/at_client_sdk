@@ -12,6 +12,10 @@ import 'package:at_chops/at_chops.dart';
 import 'package:at_client/at_client.dart';
 import 'package:at_client/at_client_mixins.dart';
 import 'package:at_client/src/crypto/nskey/nskey_private_filing.dart';
+// The conveyance's address is built by the production helper rather than
+// spelled here: getting it wrong reads as a missing record.
+import 'package:at_client/src/crypto/nskey/nskey_records.dart'
+    show ckConveyanceKey;
 import 'package:at_client/src/crypto/nskey/nskey_rotation.dart';
 import 'package:at_functional_test/src/config_util.dart';
 import 'package:at_functional_test/src/enrolled_client.dart';
@@ -127,6 +131,45 @@ void main() {
     );
   }
 
+  /// Writes [name] on the nskey data path and answers which nskey generation
+  /// the content key's conveyance was sealed to.
+  ///
+  /// Read through `getMeta`, which does not decrypt, and read LOCALLY. A self
+  /// conveyance is written local-first and reaches the atServer when sync gets
+  /// round to it, so asking the atServer here races the push and fails with
+  /// "does not exist in keystore" — the address right, the record not yet
+  /// travelled. Nothing in this pack syncs, and the routing metadata the
+  /// writer stamped is the same bytes either side of the push.
+  Future<String?> sealedGeneration(AtClient client, String name) async {
+    final key = AtKey()
+      ..key = name
+      ..namespace = namespace
+      ..sharedBy = atSign
+      ..sharedWith = atSign;
+    expect(await client.put(key, 'sealed under whichever generation is live'),
+        true);
+
+    final written = await client.get(key);
+    expect(written.metadata?.appMetadata?.providerId,
+        symmetricAesGcmCryptoProviderId,
+        reason: '$name must be on the nskey data path, or it has no content '
+            'key and no conveyance and there is no generation to read off it');
+    final ckKid =
+        written.metadata?.appMetadata?.additional?['ckKid'] as String?;
+    expect(ckKid, isNotNull);
+
+    final conveyance = ckConveyanceKey(key, ckKid!, namespace);
+    final meta = await client.getMeta(conveyance);
+    expect(meta, isNotNull,
+        reason: 'the content key for $name must have a conveyance at '
+            '${conveyance.toString()}');
+    final sealedTo = meta!.appMetadata?.additional?['nskeyKid'] as String?;
+    expect(sealedTo, isNotNull,
+        reason: 'the conveyance must name the generation it was sealed to, or '
+            'no reader can tell which private opens it');
+    return sealedTo;
+  }
+
   test(
       'UC-A5.1(b) · a rotation publishes a successor, pushes it to the '
       'survivor, and leaves the excluded enrollment on the old generation',
@@ -145,6 +188,21 @@ void main() {
     final first = await rotator.ring.mintAndPublish(namespace);
     final firstPrivate = await rotator.filing.read(namespace, first.nskeyKid);
     expect(firstPrivate, isNotNull);
+
+    // The rotator writes on the nskey data path, so that what its writes seal
+    // to can be compared either side of the rotation. The ring installed is
+    // the rotator's OWN — it holds the generations' privates and carries the
+    // filing; a bare `PublishedNskeyKeyRing(client)` built over the top would
+    // take the filing and the read path's self-heal away with it.
+    rotator.enrolled.client.getPreferences()!.crypto =
+        CryptoConfig.nskey(keyRing: rotator.ring);
+    final beforeSealedTo =
+        await sealedGeneration(rotator.enrolled.client, 'before$runId');
+    expect(beforeSealedTo, first.nskeyKid,
+        reason: 'the baseline: before the rotation, a write seals its content '
+            'key to the generation published at the time. Without this the '
+            'assertion after the rotation cannot tell a writer that MOVED '
+            'from one that was always going to name that kid');
 
     final rotation = NskeyRotation(
       atClient: rotator.enrolled.client,
@@ -238,6 +296,27 @@ void main() {
     expect(await rotator.filing.read(namespace, first.nskeyKid), firstPrivate);
     expect(await rotator.ring.privateHalf(atSign, namespace, first.nskeyKid),
         isNotNull);
+
+    // ── And what a write does AFTER the rotation ─────────────────────────
+    //
+    // The clause's first sentence, and the half nothing asserted: new CKs are
+    // sealed to the SUCCESSOR nskey and their conveyances carry the new
+    // `nskeyKid`. Everything above is about the keys themselves — published,
+    // pushed, retained — and none of it says the data path then picks the
+    // successor up. A rotation whose successor no writer used would satisfy
+    // every assertion above while leaving every new record sealed to the
+    // generation the excluded enrollment still holds, which is the failure
+    // this row exists for.
+    final afterSealedTo = await sealedGeneration(rotator.enrolled.client, 'after$runId');
+    expect(afterSealedTo, outcome.advertisement.nskeyKid,
+        reason: 'a content key cut after the rotation is sealed to the '
+            'SUCCESSOR, and its conveyance says which generation that is');
+    expect(afterSealedTo, isNot(beforeSealedTo),
+        reason: 'and the writer MOVED. Same client, same ring, same namespace '
+            '— the rotation is the only thing that changed between the two '
+            'writes, and a writer still sealing to the superseded generation '
+            'would hand the excluded enrollment every new content key, so the '
+            'revocation would have bought nothing');
   });
 
   test('a rotation inside the mint lock\'s cooldown is refused', () async {
