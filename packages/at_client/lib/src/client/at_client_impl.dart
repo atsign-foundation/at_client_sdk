@@ -887,7 +887,14 @@ class AtClientImpl implements AtClient {
       gates: (_preference?.posture.configuresPqProviders ?? true)
           ? const PqStartupGates()
           : const PqStartupGates(
-              reconcileKeyPackage: false, requestMissingPrivates: false),
+              reconcileKeyPackage: false,
+              requestMissingPrivates: false,
+              // The sweep signs links and seals secrets, which this posture
+              // has no providers for. Gated here as well as refused in
+              // `EnrollmentServiceImpl` so the startup does not call a step
+              // that would throw: the gate is the startup's answer, the throw
+              // is every other caller's.
+              sweepUnanchoredEnrollments: false),
       privilege: EnrollmentRecordPrivilegeResolver(this,
           listEnrollments: EnrollmentServiceImpl(this, AtEnrollment.create())
               .fetchEnrollmentRequests),

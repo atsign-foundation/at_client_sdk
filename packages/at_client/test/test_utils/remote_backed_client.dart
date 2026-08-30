@@ -47,9 +47,10 @@ MockAtClient buildRemoteBackedMockClient({
   Map<String, String>? localData,
   Map<String, Metadata>? localMetadata,
   List<String>? keyEstablishmentAlgorithms,
+  PqPosture? posture,
 }) {
-  final atClient =
-      MockAtClient(keyEstablishmentAlgorithms: keyEstablishmentAlgorithms);
+  final atClient = MockAtClient(
+      keyEstablishmentAlgorithms: keyEstablishmentAlgorithms, posture: posture);
   when(() => atClient.atChops).thenReturn(AtChopsImpl(
       AtChopsKeys.create(null, AtChopsUtil.generateAtPkamKeyPair())));
   when(() => atClient.getCurrentAtSign()).thenReturn(atSign);

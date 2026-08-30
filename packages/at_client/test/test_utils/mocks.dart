@@ -54,8 +54,14 @@ class MockAtClient extends Mock implements AtClient {
   /// client.getPreferences())` does not reach `noSuchMethod` and silently
   /// stubs nothing. Both routes a test would reach for are closed; this is
   /// the one that works.
-  MockAtClient({List<String>? keyEstablishmentAlgorithms})
+  /// [posture] is a constructor argument for the same reason: it is final on
+  /// the preference, and the preference itself is unreachable through
+  /// `when(...)`. A test needing a client that configures no post-quantum
+  /// providers names `PqPosture.legacy` here; the default stays `pqReady`,
+  /// which is `AtClientPreference`'s own.
+  MockAtClient({List<String>? keyEstablishmentAlgorithms, PqPosture? posture})
       : _preference = AtClientPreference(
+            posture: posture ?? PqPosture.pqReady,
             keyEstablishmentAlgorithms: keyEstablishmentAlgorithms)
           ..namespace = 'wavi';
 

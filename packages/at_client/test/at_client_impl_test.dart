@@ -557,9 +557,16 @@ void main() {
       expect(gates.requestMissingPrivates, isFalse,
           reason: 'and asking for privates it has no provider to use files '
               'material that can only sit there');
-      expect(gates.sweepUnanchoredEnrollments, isTrue,
-          reason: 'the control: the posture switches off exactly the two '
-              'post-quantum steps, not the startup generally');
+      expect(gates.sweepUnanchoredEnrollments, isFalse,
+          reason: 'the sweep signs links and seals secrets, which this posture '
+              'has no providers for. Gated here as well as refused in '
+              'EnrollmentServiceImpl, so the startup does not call a step that '
+              'would throw');
+      expect(gates.mintInUseSigningKeys, isTrue,
+          reason: 'the control: the posture switches off exactly the three '
+              'post-quantum steps, not the startup generally. Minting stays '
+              'on, and at this posture it is a no-op for its own reason — the '
+              'in-use set is empty');
     });
 
     test('a configuring posture leaves both steps on', () async {

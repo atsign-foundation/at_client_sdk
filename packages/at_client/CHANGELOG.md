@@ -1,5 +1,22 @@
 ## 3.15.0-rc1
 
+- fix: **a client whose posture configures no post-quantum providers now
+  refuses the two jobs it cannot do**, instead of taking them on and failing
+  part-way.
+  - **Approving a request that expects its approver to mint.** Such a request
+    carries no wrapped symmetric key — that absence is the signal, not the
+    advertised key package, which rides every mode. The refusal comes before
+    the approval reaches the atServer, so the enrolment **stays pending** and
+    an approver that can service it still may. Approving and then failing
+    would leave a device authorised and holding none of the material it was
+    authorised for, with the request spent and no later approval able to
+    repair it.
+  - **The unanchored-enrolment sweep**, which signs links and seals secrets.
+    Refused in `EnrollmentServiceImpl` rather than only gated in the startup,
+    because it is a public method a caller reaches directly.
+  - A request that carries its own wrapped key is still approved normally by
+    such a client, which is the whole of what it is for.
+
 - **Breaking:** `AtClientPreference` now refuses two incoherent axis
   combinations at construction, where before it accepted them silently.
   - **An empty `dataSigningKeyAlgorithms` requires rsa2048 authentication.** An

@@ -67,10 +67,36 @@ class EnrollmentServiceImpl implements EnrollmentService {
     return enrollRequestsFormatted;
   }
 
+  /// Whether this client is configured to do post-quantum work at all.
+  ///
+  /// Permissive when there is no preference to ask, matching every other
+  /// posture consult on this path: a client built without one is not a client
+  /// that has declined post-quantum, it is one that said nothing.
+  bool get _configuresPqProviders =>
+      _atClient.getPreferences()?.posture.configuresPqProviders ?? true;
+
   /// Signs and conveys approval-chain links for approved enrollments that
   /// lack one — see [EnrollmentConveyance.sweepUnanchoredEnrollments].
-  Future<int> sweepUnanchoredEnrollments() =>
-      _conveyance.sweepUnanchoredEnrollments();
+  ///
+  /// **Refused by a client whose posture configures no post-quantum
+  /// providers.** The sweep signs links and seals secrets; a client standing in
+  /// for a build that predates the substrate has neither the providers to do it
+  /// nor a reason to. Refusing here rather than only gating the startup step
+  /// covers a direct caller too, which is how this is reached outside a start.
+  ///
+  /// `async`, so the refusal arrives as a rejected future rather than a
+  /// synchronous throw: the signature promises a `Future`, and a caller that
+  /// writes `sweep().catchError(...)` would otherwise never see it.
+  Future<int> sweepUnanchoredEnrollments() async {
+    if (!_configuresPqProviders) {
+      throw AtClientException.message(
+          'this client\'s posture configures no post-quantum providers, so it '
+          'cannot sign or convey approval-chain links. Run the sweep from a '
+          'client whose posture does — the enrollments it would have anchored '
+          'stay unanchored and a later sweep still finds them');
+    }
+    return _conveyance.sweepUnanchoredEnrollments();
+  }
 
   /// Whether [namespaces] grant `rw` on both `*` and `__manage` — the class
   /// that may hold the signing root. See [privilege.isFullyPrivileged].
@@ -91,6 +117,26 @@ class EnrollmentServiceImpl implements EnrollmentService {
     final bool mintsSymmetricKey =
         (pending?.encryptedAPKAMSymmetricKey?.isEmpty ?? true) &&
             pending?.metadata?['keyPackage'] != null;
+
+    // ⛔ **Refused before the approval reaches the atServer**, so the
+    // enrollment stays pending and an approver that CAN service it still may.
+    // Approving here would flip the record to approved and then fail to mint,
+    // seal or convey anything — leaving a device that is authorised and holds
+    // none of the material it was authorised for, which no later approval can
+    // repair because the request is spent.
+    //
+    // Keyed on `mintsSymmetricKey`, not on the advertised key package: a
+    // package rides every mode, and what actually asks this approver for
+    // post-quantum work is the ABSENCE of a wrapped symmetric key. A legacy
+    // request carries its own, needs none of this, and is still approved
+    // normally by such a client — which is the whole of what it is for.
+    if (mintsSymmetricKey && !_configuresPqProviders) {
+      throw AtClientException.message(
+          'enrollment ${enrollmentRequestDecision.enrollmentId} expects its '
+          'approver to mint and seal a symmetric key, and this client\'s '
+          'posture configures no post-quantum providers. It stays pending: '
+          'approve it from a client whose posture does');
+    }
 
     String? mintedApkamSymmetricKey;
     var decision = enrollmentRequestDecision;

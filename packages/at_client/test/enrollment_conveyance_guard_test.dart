@@ -56,9 +56,12 @@ void main() {
   setUpAll(() => registerFallbackValue(AtKey()));
   setUp(() => remoteData = {});
 
-  MockAtClient buildMockClient(String enrollmentId) =>
+  MockAtClient buildMockClient(String enrollmentId, {PqPosture? posture}) =>
       buildRemoteBackedMockClient(
-          atSign: atSign, enrollmentId: enrollmentId, remoteData: remoteData);
+          atSign: atSign,
+          enrollmentId: enrollmentId,
+          remoteData: remoteData,
+          posture: posture);
 
   /// Stubs `enroll:list` to return one pending enrollment carrying [keyPackage]
   /// and **no** `encryptedAPKAMSymmetricKey` — the shape that asks this
@@ -97,6 +100,83 @@ void main() {
               enrollmentId: enrolleeId,
               apkamSymmetricKey: AtBytes.fromString(''),
               atSign: atSign));
+
+  /// A client whose posture configures no post-quantum providers has neither
+  /// the providers to mint, seal and convey nor a reason to: it stands in for a
+  /// build that predates the substrate. Approving anyway would flip the record
+  /// to approved and then fail, leaving a device authorised and holding none of
+  /// the material it was authorised for — and the request is spent, so no later
+  /// approval repairs it.
+  group('a client configuring no post-quantum providers', () {
+    test('refuses a request that asks it to mint, and leaves it pending',
+        () async {
+      final approver = buildMockClient('approver-1', posture: PqPosture.legacy);
+      await AtClientSecretSharing.forClient(approver).register();
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
+
+      await expectLater(
+          approveWith(approver),
+          throwsA(isA<AtClientException>().having((e) => e.message, 'message',
+              contains('no post-quantum providers'))));
+
+      expect(remoteData.keys.where((k) => k.contains('.__ssenv.')), isEmpty,
+          reason: 'and nothing was conveyed — a refusal that had already '
+              'approved would be worse than no refusal at all');
+    });
+
+    test('but still approves a request that carries its own wrapped key',
+        () async {
+      // ⛔ The control, and the reason the refusal is keyed on the ABSENCE of a
+      // wrapped symmetric key rather than on the advertised key package: a
+      // package rides every mode. Approving legacy requests is the whole of
+      // what such a client is for, so a refusal that caught this too would
+      // take away its job rather than the job it cannot do.
+      final approver = buildMockClient('approver-2', posture: PqPosture.legacy);
+      final listCommand = (EnrollVerbBuilder()
+            ..operation = EnrollOperationEnum.list)
+          .buildCommand();
+      final secondary = approver.getRemoteSecondary()!;
+      when(() => secondary.executeCommand(listCommand, auth: true))
+          .thenAnswer((_) async => 'data:${jsonEncode({
+                    '$enrolleeId.new.enrollments.__manage$atSign': {
+                      'appName': 'buzz',
+                      'deviceName': 'pixel',
+                      'namespace': {'buzz': 'rw'},
+                      'encryptedAPKAMSymmetricKey': 'rsa-wrapped',
+                    }
+                  })}');
+
+      await expectLater(approveWith(approver), completes);
+    });
+
+    test('refuses the unanchored-enrollment sweep', () async {
+      final sweeper = buildMockClient('sweeper-1', posture: PqPosture.legacy);
+
+      await expectLater(
+          EnrollmentServiceImpl(sweeper, _RecordingAtEnrollment())
+              .sweepUnanchoredEnrollments(),
+          throwsA(isA<AtClientException>().having((e) => e.message, 'message',
+              contains('no post-quantum providers'))),
+          reason: 'refused in the service rather than only gated in the '
+              'startup, because this is a public method a caller reaches '
+              'directly — which is how the sweep is driven outside a start');
+    });
+
+    test('and a PQ-capable posture is refused neither', () async {
+      // The control for all three: the same calls on a client whose posture
+      // does configure the providers. Without it, a build that refused every
+      // approval and every sweep would satisfy the rows above.
+      final approver = buildMockClient('approver-3');
+      await AtClientSecretSharing.forClient(approver).register();
+      stubPendingEnrollment(approver, (await advertisedKeyPackage()).toJson());
+
+      await expectLater(approveWith(approver), completes);
+      await expectLater(
+          EnrollmentServiceImpl(approver, _RecordingAtEnrollment())
+              .sweepUnanchoredEnrollments(),
+          completes);
+    });
+  });
 
   test('an approver with no key package is told what to call', () async {
     final approver = buildMockClient('approver-1');
