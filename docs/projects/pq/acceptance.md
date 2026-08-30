@@ -3051,10 +3051,26 @@ released peer and this tree genuinely share. The signed-envelope exchange is a
   *When* the client starts.
   *Then* it mints that keypair, advertises it — by `enroll:update` where there
   is an enrollment record and by publishing `_apsk` directly where there is
-  not — and **only then** files it, so no envelope is ever signed under a key
-  the advertisement does not name. A second start mints nothing, and an empty
-  in-use set mints nothing at all.
+  not — and **only then** files it, so no other writer composing from the
+  keyfile republishes an advertisement the minted key is missing from. A
+  second start mints nothing, and an empty in-use set mints nothing at all.
   Covered by `packages/at_client/test/signing_key_minting_test.dart`.
+
+  ⚠️ **This row said "so no envelope is **ever** signed under a key the
+  advertisement does not name", and the absolute is wrong.** Publishing before
+  filing, with `serialiseApskWrite` holding both writes, closes that window
+  against another **writer** — one composing `_apsk` from a keyfile that does
+  not yet hold the key just advertised. It does not close it against a
+  **reader**: a signer calling `ApkamSigning.signingKeys` inside the window, on
+  an enrollment holding no signing key of its own, takes the
+  authentication-key fallback at the moment the advertisement stops naming
+  that key, and the envelope it produces verifies against nothing. A barrier
+  used to make every such reader wait for the mint;
+  [`decisions.md` 126](detail/decisions.md#126-the-mint-barrier-is-deleted-legacy-authentication-and-data-signing-are-one-keypair-2026-08-30) deleted it, accepting the
+  window on the grounds that no enrollment outside this tree is in that state,
+  and recording it on `signingKeys` so a reader meets it there. The citation
+  below proves the writer half, which is what "publishes BEFORE filing"
+  asserts and the whole of what it can assert. Corrected 2026-08-31.
 
 ### 16.4 `enroll:update` rows
 

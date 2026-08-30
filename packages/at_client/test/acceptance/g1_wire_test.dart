@@ -179,13 +179,15 @@ void main() {
         proves: 'the mint itself, and that the key reaches the keyfile');
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'publishes BEFORE filing',
-        proves: 'the ordering, which is the whole point: filing first makes '
-            'the client sign under a key its advertisement does not name, and '
-            'every envelope written in that window is permanently '
-            'unverifiable',
+        proves: 'the ordering, and the whole of what the ordering buys: a '
+            'second WRITER composing from the keyfile mid-mint would publish '
+            'an advertisement the minted key is missing from, and everything '
+            'signed under that key afterwards would be unverifiable. It says '
+            'nothing about a concurrent READER, which is a window ruling 126 '
+            'accepts rather than closes - see the correction on the row',
         clauses: [
-          'so no envelope is ever signed under a key the advertisement does '
-              'not name',
+          'so no other writer composing from the keyfile republishes an '
+              'advertisement the minted key is missing from',
         ]);
     provenIn('packages/at_client/test/signing_key_minting_test.dart',
         'the advertisement names the minted key and drops the auth key',
